@@ -12,6 +12,7 @@ find_package(OpenSSL REQUIRED)
 
 add_library(cpp_harness_lib
     src/agent/AgentLoop.cpp
+    src/llm/OpenAIChatClient.cpp
     src/session/JsonlSessionStore.cpp
     src/tools/BashTool.cpp
     src/tools/EditFileTool.cpp
@@ -41,6 +42,7 @@ if(CCH_BUILD_TESTS)
     add_executable(cpp_harness_tests
         tests/TestMain.cpp
         tests/agent/AgentLoopTest.cpp
+        tests/llm/OpenAIChatClientTest.cpp
         tests/session/JsonlSessionStoreTest.cpp
         tests/tools/BashToolTest.cpp
         tests/tools/FileToolsTest.cpp
