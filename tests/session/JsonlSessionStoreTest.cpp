@@ -48,6 +48,35 @@ TEST_CASE("new session writes header and appends redacted messages in order", "[
     CHECK(loaded.value().messages[1].content == "done");
 }
 
+TEST_CASE("session redacts assistant tool call arguments", "[session][u5]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "tool-args.jsonl";
+    auto store = session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store.ok());
+
+    agent::Message assistant;
+    assistant.role = agent::Role::Assistant;
+    agent::ToolCall call;
+    call.id = "call-1";
+    call.name = "write_file";
+    call.arguments = {{"path", "secret.txt"}, {"apiKey", "plain-secret-value"}, {"access_token", "second-secret-value"}};
+    call.raw_arguments = R"({"path":"secret.txt","apiKey":"plain-secret-value","access_token":"second-secret-value"})";
+    assistant.tool_calls.push_back(call);
+    REQUIRE(store.value().append(assistant).ok());
+
+    auto loaded = session::JsonlSessionStore::load(path);
+
+    REQUIRE(loaded.ok());
+    REQUIRE(loaded.value().messages.size() == 1);
+    REQUIRE(loaded.value().messages[0].tool_calls.size() == 1);
+    const auto& stored = loaded.value().messages[0].tool_calls[0];
+    CHECK(std::string(stored.arguments.at("apiKey").as_string()) == "[REDACTED]");
+    CHECK(std::string(stored.arguments.at("access_token").as_string()) == "[REDACTED]");
+    CHECK(stored.raw_arguments.find("plain-secret-value") == std::string::npos);
+    CHECK(stored.raw_arguments.find("second-secret-value") == std::string::npos);
+    CHECK(stored.raw_arguments.find("[REDACTED]") != std::string::npos);
+}
+
 TEST_CASE("header-only session resumes as empty history", "[session][u5]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "empty.jsonl";
@@ -101,6 +130,19 @@ TEST_CASE("unknown future entry type is preserved but ignored for active history
     REQUIRE(loaded.value().unknown_lines.size() == 1);
     REQUIRE(loaded.value().messages.size() == 1);
     CHECK(loaded.value().messages[0].content == "known");
+}
+
+TEST_CASE("new session refuses dangling symlink path", "[session][u5]") {
+#if defined(__unix__) || defined(__APPLE__)
+    tests::TempWorkspace workspace;
+    auto dangling = workspace.path() / "dangling.jsonl";
+    std::error_code ec;
+    std::filesystem::create_symlink(workspace.path() / "missing-target.jsonl", dangling, ec);
+    if (!ec) {
+        auto store = session::JsonlSessionStore::create_new(dangling, metadata_for(workspace));
+        CHECK_FALSE(store.ok());
+    }
+#endif
 }
 
 TEST_CASE("session path rejects symlink and public readable files", "[session][u5]") {

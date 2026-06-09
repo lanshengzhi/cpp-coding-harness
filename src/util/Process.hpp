@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <sstream>
 #include <string>
@@ -18,6 +19,9 @@ struct ProcessRequest {
     std::filesystem::path working_directory;
     std::chrono::milliseconds timeout{30000};
     std::map<std::string, std::string> environment;
+    bool use_explicit_environment{false};
+    std::size_t max_output_bytes{50 * 1024};
+    std::size_t max_output_lines{2000};
 };
 
 struct ProcessResult {
@@ -40,7 +44,7 @@ public:
             bp::ipstream output;
             bp::ipstream error;
             bp::environment child_environment = boost::this_process::environment();
-            if (!request.environment.empty()) {
+            if (request.use_explicit_environment || !request.environment.empty()) {
                 child_environment = bp::environment{};
                 for (const auto& [key, value] : request.environment) {
                     child_environment[key] = value;
@@ -55,6 +59,29 @@ public:
                 bp::std_err > error,
                 child_environment);
 
+            auto drain = [](bp::ipstream& stream, std::string& sink, std::size_t max_bytes, std::size_t max_lines, bool& truncated) {
+                std::size_t bytes = 0;
+                std::size_t lines = 0;
+                std::string line;
+                while (std::getline(stream, line)) {
+                    const auto next_bytes = bytes + line.size() + 1;
+                    if (lines < max_lines && next_bytes <= max_bytes) {
+                        sink += line;
+                        sink += '\n';
+                        bytes = next_bytes;
+                        ++lines;
+                    } else {
+                        truncated = true;
+                    }
+                }
+            };
+            std::string stdout_data;
+            std::string stderr_data;
+            bool stdout_truncated = false;
+            bool stderr_truncated = false;
+            std::thread stdout_thread(drain, std::ref(output), std::ref(stdout_data), request.max_output_bytes, request.max_output_lines, std::ref(stdout_truncated));
+            std::thread stderr_thread(drain, std::ref(error), std::ref(stderr_data), request.max_output_bytes, request.max_output_lines, std::ref(stderr_truncated));
+
             const auto deadline = std::chrono::steady_clock::now() + request.timeout;
             ProcessResult result;
             while (child.running()) {
@@ -66,17 +93,17 @@ public:
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
             child.wait();
+            if (stdout_thread.joinable()) {
+                stdout_thread.join();
+            }
+            if (stderr_thread.joinable()) {
+                stderr_thread.join();
+            }
             result.exit_code = child.exit_code();
-
-            std::ostringstream collected;
-            std::string line;
-            while (std::getline(output, line)) {
-                collected << line << '\n';
+            result.output = stdout_data + stderr_data;
+            if (stdout_truncated || stderr_truncated) {
+                result.output += "\n[output truncated]";
             }
-            while (std::getline(error, line)) {
-                collected << line << '\n';
-            }
-            result.output = collected.str();
             return Result<ProcessResult>::success(std::move(result));
         } catch (const std::exception& e) {
             return Result<ProcessResult>::failure(e.what());

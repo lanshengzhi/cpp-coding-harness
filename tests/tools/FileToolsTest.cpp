@@ -4,6 +4,7 @@
 #include "../support/TempWorkspace.hpp"
 
 #include <filesystem>
+#include <string>
 
 using namespace cch;
 
@@ -29,6 +30,23 @@ TEST_CASE("read_file returns workspace file content with path label", "[tools][u
     CHECK(result.content.find("alpha") != std::string::npos);
 }
 
+TEST_CASE("read_file stops at output cap and marks truncation", "[tools][u3]") {
+    tests::TempWorkspace workspace;
+    std::string content;
+    for (int i = 0; i < 2100; ++i) {
+        content += "line\n";
+    }
+    workspace.write("large.txt", content);
+    auto tool = tools::make_read_file_tool();
+
+    boost::json::object args;
+    args["path"] = "large.txt";
+    auto result = tool->execute(args, context_for(workspace));
+
+    REQUIRE_FALSE(result.is_error);
+    CHECK(result.content.find("[output truncated]") != std::string::npos);
+}
+
 TEST_CASE("write_file creates file after validating existing parent", "[tools][u3]") {
     tests::TempWorkspace workspace;
     auto tool = tools::make_write_file_tool();
@@ -41,6 +59,45 @@ TEST_CASE("write_file creates file after validating existing parent", "[tools][u
     REQUIRE_FALSE(result.is_error);
     CHECK(workspace.read("out.txt") == "created");
     CHECK(result.content.find(workspace.path().string()) == std::string::npos);
+}
+
+TEST_CASE("write_file does not follow dangling temporary symlinks", "[tools][u3]") {
+#if defined(__unix__) || defined(__APPLE__)
+    tests::TempWorkspace workspace;
+    auto outside = workspace.path().parent_path() / "outside-temp-target.txt";
+    auto temp_link = workspace.path() / ".out.txt.tmp-0";
+    std::error_code ec;
+    std::filesystem::create_symlink(outside, temp_link, ec);
+    if (!ec) {
+        auto tool = tools::make_write_file_tool();
+        boost::json::object args;
+        args["path"] = "out.txt";
+        args["content"] = "created";
+        auto result = tool->execute(args, context_for(workspace));
+
+        REQUIRE_FALSE(result.is_error);
+        CHECK(workspace.read("out.txt") == "created");
+        CHECK_FALSE(std::filesystem::exists(outside));
+    }
+#endif
+}
+
+TEST_CASE("write_file rejects missing content but permits explicit empty content", "[tools][u3]") {
+    tests::TempWorkspace workspace;
+    auto tool = tools::make_write_file_tool();
+
+    boost::json::object missing_content;
+    missing_content["path"] = "empty.txt";
+    auto missing = tool->execute(missing_content, context_for(workspace));
+    CHECK(missing.is_error);
+    CHECK_FALSE(std::filesystem::exists(workspace.path() / "empty.txt"));
+
+    boost::json::object empty_content;
+    empty_content["path"] = "empty.txt";
+    empty_content["content"] = "";
+    auto empty = tool->execute(empty_content, context_for(workspace));
+    REQUIRE_FALSE(empty.is_error);
+    CHECK(workspace.read("empty.txt").empty());
 }
 
 TEST_CASE("edit_file replaces one unique exact text region", "[tools][u3]") {
@@ -77,6 +134,27 @@ TEST_CASE("edit_file rejects zero and ambiguous matches", "[tools][u3]") {
     auto many = tool->execute(ambiguous, context_for(workspace));
     CHECK(many.is_error);
     CHECK(workspace.read("story.txt") == "same\nsame\n");
+}
+
+TEST_CASE("edit_file rejects missing new_text but permits explicit empty replacement", "[tools][u3]") {
+    tests::TempWorkspace workspace;
+    workspace.write("story.txt", "keep\ndelete me\n");
+    auto tool = tools::make_edit_file_tool();
+
+    boost::json::object missing_new;
+    missing_new["path"] = "story.txt";
+    missing_new["old_text"] = "delete me";
+    auto missing = tool->execute(missing_new, context_for(workspace));
+    CHECK(missing.is_error);
+    CHECK(workspace.read("story.txt") == "keep\ndelete me\n");
+
+    boost::json::object explicit_delete;
+    explicit_delete["path"] = "story.txt";
+    explicit_delete["old_text"] = "delete me";
+    explicit_delete["new_text"] = "";
+    auto deleted = tool->execute(explicit_delete, context_for(workspace));
+    REQUIRE_FALSE(deleted.is_error);
+    CHECK(workspace.read("story.txt") == "keep\n\n");
 }
 
 TEST_CASE("file tools reject traversal and final symlink escapes", "[tools][u3]") {

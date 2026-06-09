@@ -1,7 +1,5 @@
 #include "AgentLoop.hpp"
 
-#include "../util/Redactor.hpp"
-
 #include <sstream>
 #include <utility>
 
@@ -76,11 +74,7 @@ void AgentLoop::emit(std::vector<LoopEvent>& events, std::string type, std::stri
 }
 
 util::Result<void> AgentLoop::append(std::vector<Message>& messages, const Message& message) const {
-    Message redacted = message;
-    redacted.content = util::redact_text(redacted.content);
-    for (auto& call : redacted.tool_calls) {
-        call.raw_arguments = util::redact_text(call.raw_arguments);
-    }
+    Message redacted = redact_message(message);
     messages.push_back(redacted);
     if (options_.on_message) {
         return options_.on_message(redacted);
@@ -88,7 +82,7 @@ util::Result<void> AgentLoop::append(std::vector<Message>& messages, const Messa
     return util::Result<void>::success();
 }
 
-Message AgentLoop::execute_tool_call(const ToolCall& call) const {
+Message AgentLoop::execute_tool_call(const ToolCall& call) {
     Message result;
     result.role = Role::Tool;
     result.tool_call_id = call.id;
@@ -99,7 +93,7 @@ Message AgentLoop::execute_tool_call(const ToolCall& call) const {
         return result;
     }
 
-    const Tool* tool = registry_.find(call.name);
+    Tool* tool = registry_.find(call.name);
     if (tool == nullptr) {
         result.is_error = true;
         result.content = "Unknown tool: " + call.name;
@@ -109,7 +103,8 @@ Message AgentLoop::execute_tool_call(const ToolCall& call) const {
     ToolContext context;
     context.workspace = options_.workspace;
     context.bash_enabled = options_.bash_enabled;
-    ToolExecutionResult execution = const_cast<Tool*>(tool)->execute(call.arguments, context);
+    context.secret_environment_names = options_.secret_environment_names;
+    ToolExecutionResult execution = tool->execute(call.arguments, context);
     result.content = execution.content;
     result.is_error = execution.is_error;
     return result;

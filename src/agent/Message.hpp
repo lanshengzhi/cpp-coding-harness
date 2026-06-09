@@ -2,6 +2,7 @@
 
 #include <boost/json.hpp>
 
+#include "../util/Redactor.hpp"
 #include "../util/Result.hpp"
 
 #include <optional>
@@ -58,6 +59,21 @@ struct Message {
     std::string tool_call_id;
     bool is_error{false};
 };
+
+inline ToolCall redact_tool_call(ToolCall call) {
+    call.arguments = util::redact_json_object(call.arguments);
+    call.raw_arguments = call.raw_arguments.empty() ? std::string{} : util::redact_json_text(call.raw_arguments);
+    call.argument_error = util::redact_text(call.argument_error);
+    return call;
+}
+
+inline Message redact_message(Message message) {
+    message.content = util::redact_text(message.content);
+    for (auto& call : message.tool_calls) {
+        call = redact_tool_call(std::move(call));
+    }
+    return message;
+}
 
 inline boost::json::object tool_call_to_json(const ToolCall& call) {
     boost::json::object obj;

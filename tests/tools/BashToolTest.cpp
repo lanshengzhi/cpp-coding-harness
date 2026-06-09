@@ -24,10 +24,11 @@ public:
     std::vector<util::ProcessRequest> requests;
 };
 
-agent::ToolContext context_for(const tests::TempWorkspace& workspace, bool enabled) {
+agent::ToolContext context_for(const tests::TempWorkspace& workspace, bool enabled, std::vector<std::string> explicit_secret_names = {}) {
     agent::ToolContext context;
     context.workspace = workspace.path();
     context.bash_enabled = enabled;
+    context.secret_environment_names = std::move(explicit_secret_names);
     return context;
 }
 }
@@ -98,12 +99,48 @@ TEST_CASE("bash runner receives sanitized environment", "[tools][u3]") {
 
     REQUIRE_FALSE(result.is_error);
     REQUIRE(runner->requests.size() == 1);
+    CHECK(runner->requests[0].use_explicit_environment);
     CHECK(runner->requests[0].environment.find("OPENAI_API_KEY") == runner->requests[0].environment.end());
 #if defined(__unix__) || defined(__APPLE__)
     CHECK(runner->requests[0].environment.find("CCH_VISIBLE_ENV") != runner->requests[0].environment.end());
     unsetenv("OPENAI_API_KEY");
     unsetenv("CCH_VISIBLE_ENV");
 #endif
+}
+
+TEST_CASE("bash runner removes explicitly configured API key env name", "[tools][u3]") {
+#if defined(__unix__) || defined(__APPLE__)
+    setenv("CCH_CREDENTIAL", "plain-secret-value", 1);
+#endif
+    tests::TempWorkspace workspace;
+    auto runner = std::make_shared<FakeProcessRunner>();
+    runner->next.exit_code = 0;
+    auto tool = tools::make_bash_tool(runner);
+    boost::json::object args;
+    args["command"] = "env";
+
+    auto result = tool->execute(args, context_for(workspace, true, {"CCH_CREDENTIAL"}));
+
+    REQUIRE_FALSE(result.is_error);
+    REQUIRE(runner->requests.size() == 1);
+    CHECK(runner->requests[0].use_explicit_environment);
+    CHECK(runner->requests[0].environment.find("CCH_CREDENTIAL") == runner->requests[0].environment.end());
+#if defined(__unix__) || defined(__APPLE__)
+    unsetenv("CCH_CREDENTIAL");
+#endif
+}
+
+TEST_CASE("default process runner drains large output before truncation", "[tools][u3]") {
+    tests::TempWorkspace workspace;
+    auto tool = tools::make_bash_tool(std::make_shared<util::DefaultProcessRunner>());
+    boost::json::object args;
+    args["command"] = "for i in $(seq 1 20000); do echo line; done";
+    args["timeout_ms"] = 5000;
+
+    auto result = tool->execute(args, context_for(workspace, true));
+
+    REQUIRE_FALSE(result.is_error);
+    CHECK(result.content.find("[output truncated]") != std::string::npos);
 }
 
 TEST_CASE("default process runner applies sanitized environment", "[tools][u3]") {

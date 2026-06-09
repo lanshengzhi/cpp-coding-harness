@@ -84,6 +84,34 @@ TEST_CASE("CLI resume appends to an existing redacted session", "[cli][u6]") {
     CHECK(second.output.find("[assistant] fake: second") != std::string::npos);
 }
 
+TEST_CASE("CLI resume uses session workspace when workspace is omitted", "[cli][u6]") {
+    cch::tests::TempWorkspace original;
+    cch::tests::TempWorkspace other;
+    original.write("note.txt", "from-session-workspace");
+    auto session = original.path() / "resume-workspace.jsonl";
+    auto first = run_command(bin() + " --fake --workspace " + q(original.path()) + " --session " + q(session) + " first");
+    REQUIRE(first.exit_code == 0);
+
+    auto resumed = run_command(bin() + " --fake --resume " + q(session) + " read note.txt");
+
+    REQUIRE(resumed.exit_code == 0);
+    CHECK(resumed.output.find("from-session-workspace") != std::string::npos);
+}
+
+TEST_CASE("CLI resume rejects explicit workspace mismatch", "[cli][u6]") {
+    cch::tests::TempWorkspace original;
+    cch::tests::TempWorkspace other;
+    auto session = original.path() / "resume-mismatch.jsonl";
+    auto first = run_command(bin() + " --fake --workspace " + q(original.path()) + " --session " + q(session) + " first");
+    REQUIRE(first.exit_code == 0);
+
+    auto resumed = run_command(bin() + " --fake --workspace " + q(other.path()) + " --resume " + q(session) + " second");
+
+    REQUIRE(resumed.exit_code != 0);
+    CHECK(resumed.output.find("resume workspace does not match session metadata") != std::string::npos);
+    CHECK(resumed.output.find("[model-request]") == std::string::npos);
+}
+
 TEST_CASE("CLI blocks existing session path without resume before model request", "[cli][u6]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "exists.jsonl";

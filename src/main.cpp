@@ -10,6 +10,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <random>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -21,6 +22,7 @@ struct CliConfig {
     bool repl{false};
     bool enable_bash{false};
     bool help{false};
+    bool workspace_explicit{false};
     int max_turns{8};
     std::filesystem::path workspace{std::filesystem::current_path()};
     std::filesystem::path session_path;
@@ -85,6 +87,7 @@ cch::util::Result<CliConfig> parse_args(int argc, char** argv) {
             auto value = need_value(arg);
             if (!value) return cch::util::Result<CliConfig>::failure(value.error());
             config.workspace = value.value();
+            config.workspace_explicit = true;
         } else if (arg == "--session") {
             auto value = need_value(arg);
             if (!value) return cch::util::Result<CliConfig>::failure(value.error());
@@ -136,6 +139,7 @@ cch::util::Result<CliConfig> parse_args(int argc, char** argv) {
 std::string timestamp_for_path() {
     auto now = std::chrono::system_clock::now();
     auto seconds = std::chrono::system_clock::to_time_t(now);
+    const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
     std::tm tm{};
 #if defined(_WIN32)
     localtime_s(&tm, &seconds);
@@ -143,12 +147,20 @@ std::string timestamp_for_path() {
     localtime_r(&seconds, &tm);
 #endif
     std::ostringstream out;
-    out << std::put_time(&tm, "%Y%m%d-%H%M%S");
+    out << std::put_time(&tm, "%Y%m%d-%H%M%S") << '-' << std::setw(3) << std::setfill('0') << milliseconds.count();
+    return out.str();
+}
+
+std::string random_suffix() {
+    std::random_device device;
+    std::uniform_int_distribution<unsigned int> distribution(0, 0xFFFFu);
+    std::ostringstream out;
+    out << std::hex << std::setw(4) << std::setfill('0') << distribution(device);
     return out.str();
 }
 
 std::filesystem::path default_session_path() {
-    return std::filesystem::current_path() / ".cpp-harness" / "sessions" / (timestamp_for_path() + ".jsonl");
+    return std::filesystem::current_path() / ".cpp-harness" / "sessions" / (timestamp_for_path() + "-" + random_suffix() + ".jsonl");
 }
 
 class ScriptedFakeClient final : public cch::llm::ChatClient {
@@ -205,11 +217,33 @@ void print_event(const cch::agent::LoopEvent& event) {
     else if (event.type == "completed") std::cout << "[completed] " << event.detail << '\n';
 }
 
+cch::util::Result<void> validate_workspace(const std::filesystem::path& workspace) {
+    std::error_code ec;
+    if (!std::filesystem::exists(workspace, ec) || !std::filesystem::is_directory(workspace, ec)) {
+        return cch::util::Result<void>::failure("invalid workspace path: " + workspace.string());
+    }
+    return cch::util::Result<void>::success();
+}
+
+std::filesystem::path canonical_workspace(const std::filesystem::path& workspace) {
+    std::error_code ec;
+    auto canonical = std::filesystem::weakly_canonical(workspace, ec);
+    return ec ? workspace.lexically_normal() : canonical;
+}
+
+bool same_workspace(const std::filesystem::path& first, const std::filesystem::path& second) {
+    std::error_code first_ec;
+    std::error_code second_ec;
+    auto first_canonical = std::filesystem::weakly_canonical(first, first_ec);
+    auto second_canonical = std::filesystem::weakly_canonical(second, second_ec);
+    if (first_ec || second_ec) {
+        return first.lexically_normal() == second.lexically_normal();
+    }
+    return first_canonical == second_canonical;
+}
+
 cch::util::Result<void> validate_config_before_model(const CliConfig& config) {
     std::error_code ec;
-    if (!std::filesystem::exists(config.workspace, ec) || !std::filesystem::is_directory(config.workspace, ec)) {
-        return cch::util::Result<void>::failure("invalid workspace path: " + config.workspace.string());
-    }
     if (!config.fake) {
         const char* key = std::getenv(config.api_key_env.c_str());
         if (key == nullptr || *key == '\0') {
@@ -253,6 +287,23 @@ int main(int argc, char** argv) {
             std::cerr << "could not resume session: " << loaded.error() << '\n';
             return 2;
         }
+        if (!loaded.value().metadata.workspace.empty()) {
+            if (config.workspace_explicit) {
+                if (!same_workspace(config.workspace, loaded.value().metadata.workspace)) {
+                    std::cerr << "resume workspace does not match session metadata; omit --workspace to use "
+                              << loaded.value().metadata.workspace << " or start a new session\n";
+                    return 2;
+                }
+            } else {
+                config.workspace = loaded.value().metadata.workspace;
+            }
+        }
+        auto workspace_validation = validate_workspace(config.workspace);
+        if (!workspace_validation) {
+            std::cerr << workspace_validation.error() << '\n';
+            return 2;
+        }
+        config.workspace = canonical_workspace(config.workspace);
         history = loaded.value().messages;
         auto opened = cch::session::JsonlSessionStore::open_existing(config.resume_path);
         if (!opened) {
@@ -261,6 +312,12 @@ int main(int argc, char** argv) {
         }
         store = std::move(opened.value());
     } else {
+        auto workspace_validation = validate_workspace(config.workspace);
+        if (!workspace_validation) {
+            std::cerr << workspace_validation.error() << '\n';
+            return 2;
+        }
+        config.workspace = canonical_workspace(config.workspace);
         auto path = config.session_path.empty() ? default_session_path() : config.session_path;
         cch::session::SessionMetadata metadata{timestamp_for_path(), timestamp_for_path(), config.workspace, config.fake ? "fake" : "openai-compatible", config.model};
         auto created = cch::session::JsonlSessionStore::create_new(path, metadata);
@@ -289,6 +346,7 @@ int main(int argc, char** argv) {
     options.model = config.model;
     options.max_turns = config.max_turns;
     options.bash_enabled = config.enable_bash;
+    options.secret_environment_names.push_back(config.api_key_env);
     options.on_event = print_event;
     options.on_message = [&](const cch::agent::Message& message) { return store.append(message); };
 

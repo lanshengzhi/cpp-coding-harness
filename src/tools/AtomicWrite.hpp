@@ -1,0 +1,109 @@
+#pragma once
+
+#include "../util/Result.hpp"
+
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <system_error>
+
+#if defined(__unix__) || defined(__APPLE__)
+#include <cerrno>
+#include <cstring>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
+namespace cch::tools {
+
+inline std::filesystem::path atomic_temp_path(const std::filesystem::path& target, int suffix) {
+    return target.parent_path() / ("." + target.filename().string() + ".tmp-" + std::to_string(suffix));
+}
+
+inline util::Result<void> write_atomic_file(const std::filesystem::path& target, const std::string& content) {
+    std::error_code ec;
+    std::filesystem::path temp;
+#if defined(__unix__) || defined(__APPLE__)
+    mode_t mode = S_IRUSR | S_IWUSR;
+    struct stat existing_status {};
+    if (::stat(target.c_str(), &existing_status) == 0) {
+        mode = existing_status.st_mode & 0777;
+    }
+#endif
+
+    for (int suffix = 0; suffix < 100; ++suffix) {
+        auto candidate = atomic_temp_path(target, suffix);
+        auto status = std::filesystem::symlink_status(candidate, ec);
+        if (!ec && std::filesystem::is_symlink(status)) {
+            continue;
+        }
+        if (!ec && std::filesystem::exists(status)) {
+            continue;
+        }
+        if (ec && status.type() != std::filesystem::file_type::not_found) {
+            return util::Result<void>::failure("could not inspect temporary file: " + ec.message());
+        }
+        temp = candidate;
+        break;
+    }
+    if (temp.empty()) {
+        return util::Result<void>::failure("could not allocate temporary file for atomic write");
+    }
+
+#if defined(__unix__) || defined(__APPLE__)
+    int flags = O_WRONLY | O_CREAT | O_EXCL;
+#ifdef O_NOFOLLOW
+    flags |= O_NOFOLLOW;
+#endif
+    int fd = ::open(temp.c_str(), flags, mode);
+    if (fd == -1) {
+        return util::Result<void>::failure("could not create temporary file: " + std::string(std::strerror(errno)));
+    }
+    const char* data = content.data();
+    std::size_t remaining = content.size();
+    while (remaining > 0) {
+        ssize_t written = ::write(fd, data, remaining);
+        if (written < 0) {
+            const auto message = std::string(std::strerror(errno));
+            ::close(fd);
+            std::filesystem::remove(temp, ec);
+            return util::Result<void>::failure("could not write temporary file: " + message);
+        }
+        data += written;
+        remaining -= static_cast<std::size_t>(written);
+    }
+    if (::fsync(fd) != 0) {
+        const auto message = std::string(std::strerror(errno));
+        ::close(fd);
+        std::filesystem::remove(temp, ec);
+        return util::Result<void>::failure("could not flush temporary file: " + message);
+    }
+    if (::close(fd) != 0) {
+        const auto message = std::string(std::strerror(errno));
+        std::filesystem::remove(temp, ec);
+        return util::Result<void>::failure("could not close temporary file: " + message);
+    }
+#else
+    std::ofstream output(temp, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        return util::Result<void>::failure("could not open temporary file for writing");
+    }
+    output << content;
+    output.flush();
+    output.close();
+    if (!output) {
+        std::filesystem::remove(temp, ec);
+        return util::Result<void>::failure("could not write temporary file");
+    }
+#endif
+
+    std::filesystem::rename(temp, target, ec);
+    if (ec) {
+        std::filesystem::remove(temp, ec);
+        return util::Result<void>::failure("could not replace target atomically: " + ec.message());
+    }
+    return util::Result<void>::success();
+}
+
+} // namespace cch::tools

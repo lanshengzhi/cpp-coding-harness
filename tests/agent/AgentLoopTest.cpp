@@ -150,6 +150,32 @@ TEST_CASE("multiple tool calls execute sequentially in model order", "[agent][u4
     CHECK(workspace.read("b.txt") == "B");
 }
 
+TEST_CASE("tool call arguments are redacted in canonical message history", "[agent][u4]") {
+    tests::FakeChatClient client;
+    llm::ChatResponse response;
+    response.assistant_message.role = agent::Role::Assistant;
+    agent::ToolCall call;
+    call.id = "secret-args";
+    call.name = "unknown_tool";
+    call.arguments = {{"apiKey", "plain-secret-value"}, {"access_token", "second-secret-value"}, {"path", "note.txt"}};
+    call.raw_arguments = R"({"apiKey":"plain-secret-value","access_token":"second-secret-value","path":"note.txt"})";
+    response.assistant_message.tool_calls.push_back(call);
+    client.push_response(response);
+    client.push_response(tests::text_response("handled"));
+    agent::AgentLoop loop(client, agent::ToolRegistry{});
+
+    auto result = loop.run("call with secret args");
+
+    REQUIRE(result.ok());
+    REQUIRE(result.value().messages.size() >= 2);
+    const auto& stored_call = result.value().messages[1].tool_calls[0];
+    CHECK(std::string(stored_call.arguments.at("apiKey").as_string()) == "[REDACTED]");
+    CHECK(std::string(stored_call.arguments.at("access_token").as_string()) == "[REDACTED]");
+    CHECK(stored_call.raw_arguments.find("plain-secret-value") == std::string::npos);
+    CHECK(stored_call.raw_arguments.find("second-secret-value") == std::string::npos);
+    CHECK(stored_call.raw_arguments.find("[REDACTED]") != std::string::npos);
+}
+
 TEST_CASE("max turn limit stops infinite tool call loop", "[agent][u4]") {
     tests::FakeChatClient client;
     boost::json::object args;

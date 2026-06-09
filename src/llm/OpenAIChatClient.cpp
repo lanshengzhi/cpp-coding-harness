@@ -23,7 +23,9 @@ boost::json::object message_to_openai(const agent::Message& message) {
         for (const auto& call : message.tool_calls) {
             boost::json::object function;
             function["name"] = call.name;
-            function["arguments"] = call.raw_arguments.empty() ? boost::json::serialize(call.arguments) : util::redact_text(call.raw_arguments);
+            function["arguments"] = call.raw_arguments.empty()
+                ? boost::json::serialize(util::redact_json_object(call.arguments))
+                : util::redact_json_text(call.raw_arguments);
             boost::json::object call_json;
             call_json["id"] = call.id;
             call_json["type"] = "function";
@@ -78,24 +80,34 @@ util::Result<ChatResponse> parse_chat_response(const std::string& body) {
     if (auto* content = message.if_contains("content"); content && content->is_string()) {
         response.assistant_message.content = std::string(content->as_string());
     }
-    if (auto* tool_calls = message.if_contains("tool_calls"); tool_calls && tool_calls->is_array()) {
+    if (auto* tool_calls = message.if_contains("tool_calls")) {
+        if (!tool_calls->is_array()) {
+            return util::Result<ChatResponse>::failure("provider tool_calls is not an array");
+        }
         for (const auto& tool_call_value : tool_calls->as_array()) {
             if (!tool_call_value.is_object()) {
-                continue;
+                return util::Result<ChatResponse>::failure("provider tool call is not an object");
             }
             const auto& tool_call_object = tool_call_value.as_object();
             agent::ToolCall call;
             call.id = required_string(tool_call_object, "id");
+            if (call.id.empty()) {
+                return util::Result<ChatResponse>::failure("provider tool call missing id");
+            }
             auto* function_value = tool_call_object.if_contains("function");
             if (function_value == nullptr || !function_value->is_object()) {
-                call.arguments_valid = false;
-                call.argument_error = "tool call missing function object";
-                response.assistant_message.tool_calls.push_back(std::move(call));
-                continue;
+                return util::Result<ChatResponse>::failure("provider tool call missing function object");
             }
             const auto& function = function_value->as_object();
             call.name = required_string(function, "name");
-            call.raw_arguments = required_string(function, "arguments");
+            if (call.name.empty()) {
+                return util::Result<ChatResponse>::failure("provider tool call missing function name");
+            }
+            auto* arguments_value = function.if_contains("arguments");
+            if (arguments_value == nullptr || !arguments_value->is_string()) {
+                return util::Result<ChatResponse>::failure("provider tool call missing string arguments");
+            }
+            call.raw_arguments = std::string(arguments_value->as_string());
             boost::system::error_code arg_ec;
             auto parsed_args = boost::json::parse(call.raw_arguments.empty() ? "{}" : call.raw_arguments, arg_ec);
             if (arg_ec || !parsed_args.is_object()) {

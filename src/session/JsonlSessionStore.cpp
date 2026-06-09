@@ -1,7 +1,5 @@
 #include "JsonlSessionStore.hpp"
 
-#include "../util/Redactor.hpp"
-
 #include <boost/json.hpp>
 
 #include <iomanip>
@@ -9,7 +7,11 @@
 #include <system_error>
 
 #if defined(__unix__) || defined(__APPLE__)
+#include <cerrno>
+#include <cstring>
+#include <fcntl.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 namespace cch::session {
@@ -29,6 +31,63 @@ bool has_public_read(std::filesystem::perms mode) {
     return (mode & perms::others_read) != perms::none || (mode & perms::group_read) != perms::none;
 }
 
+util::Result<void> write_new_file_exclusive(const std::filesystem::path& path, const std::string& content) {
+#if defined(__unix__) || defined(__APPLE__)
+    int flags = O_WRONLY | O_CREAT | O_EXCL;
+#ifdef O_NOFOLLOW
+    flags |= O_NOFOLLOW;
+#endif
+    int fd = ::open(path.c_str(), flags, S_IRUSR | S_IWUSR);
+    if (fd == -1) {
+        return util::Result<void>::failure("could not create session file: " + std::string(std::strerror(errno)));
+    }
+    const char* data = content.data();
+    std::size_t remaining = content.size();
+    while (remaining > 0) {
+        ssize_t written = ::write(fd, data, remaining);
+        if (written < 0) {
+            const auto message = std::string(std::strerror(errno));
+            ::close(fd);
+            std::error_code ec;
+            std::filesystem::remove(path, ec);
+            return util::Result<void>::failure("could not write session header: " + message);
+        }
+        data += written;
+        remaining -= static_cast<std::size_t>(written);
+    }
+    if (::fsync(fd) != 0) {
+        const auto message = std::string(std::strerror(errno));
+        ::close(fd);
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+        return util::Result<void>::failure("could not flush session header: " + message);
+    }
+    if (::close(fd) != 0) {
+        const auto message = std::string(std::strerror(errno));
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+        return util::Result<void>::failure("could not close session file: " + message);
+    }
+    return util::Result<void>::success();
+#else
+    std::error_code ec;
+    if (std::filesystem::exists(path, ec) || std::filesystem::is_symlink(std::filesystem::symlink_status(path, ec))) {
+        return util::Result<void>::failure("session file already exists; use resume to append");
+    }
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        return util::Result<void>::failure("could not create session file");
+    }
+    output << content;
+    output.flush();
+    output.close();
+    if (!output) {
+        return util::Result<void>::failure("could not write session header");
+    }
+    return util::Result<void>::success();
+#endif
+}
+
 } // namespace
 
 util::Result<JsonlSessionStore> JsonlSessionStore::create_new(const std::filesystem::path& path, SessionMetadata metadata) {
@@ -46,12 +105,10 @@ util::Result<JsonlSessionStore> JsonlSessionStore::create_new(const std::filesys
     if (std::filesystem::exists(path, ec)) {
         return util::Result<JsonlSessionStore>::failure("session file already exists; use resume to append");
     }
-    std::ofstream output(path, std::ios::binary | std::ios::trunc);
-    if (!output) {
-        return util::Result<JsonlSessionStore>::failure("could not create session file");
+    auto header = write_new_file_exclusive(path, boost::json::serialize(header_to_json(metadata)) + '\n');
+    if (!header) {
+        return util::Result<JsonlSessionStore>::failure(header.error());
     }
-    output << boost::json::serialize(header_to_json(metadata)) << '\n';
-    output.close();
     if (auto perms = ensure_private_permissions(path, false); !perms) {
         return util::Result<JsonlSessionStore>::failure(perms.error());
     }
@@ -138,13 +195,18 @@ util::Result<void> JsonlSessionStore::append(const agent::Message& message) {
     if (!output) {
         return util::Result<void>::failure("could not append to session file");
     }
-    agent::Message redacted = message;
-    redacted.content = util::redact_text(redacted.content);
+    agent::Message redacted = agent::redact_message(message);
     boost::json::object entry;
     entry["type"] = "message";
-    entry["entry_id"] = "m" + std::to_string(next_entry_id_++);
+    entry["entry_id"] = "m" + std::to_string(next_entry_id_);
     entry["message"] = agent::message_to_json(redacted);
     output << boost::json::serialize(entry) << '\n';
+    output.flush();
+    output.close();
+    if (!output) {
+        return util::Result<void>::failure("could not persist session entry");
+    }
+    ++next_entry_id_;
     return util::Result<void>::success();
 }
 

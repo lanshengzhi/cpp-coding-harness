@@ -96,6 +96,21 @@ TEST_CASE("invalid provider tool arguments become structured malformed tool call
     CHECK(response.value().assistant_message.tool_calls[0].argument_error.find("invalid JSON") != std::string::npos);
 }
 
+TEST_CASE("provider tool calls missing linkage fields are rejected", "[llm][u2]") {
+    auto transport = std::make_shared<FakeHttpTransport>();
+    transport->response.body = R"({"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","tool_calls":[{"type":"function","function":{"name":"read_file","arguments":"{}"}}]}}]})";
+    llm::OpenAIConfig config;
+    config.api_key = "sk-test-api-key";
+    llm::OpenAIChatClient client(transport, config);
+    llm::ChatRequest request;
+    request.messages.push_back({agent::Role::User, "read"});
+
+    auto response = client.complete(request);
+
+    REQUIRE_FALSE(response.ok());
+    CHECK(response.error().find("missing id") != std::string::npos);
+}
+
 TEST_CASE("missing API key and provider errors are structured and redacted", "[llm][u2]") {
     auto missing_transport = std::make_shared<FakeHttpTransport>();
     llm::OpenAIConfig missing_config;
@@ -120,6 +135,34 @@ TEST_CASE("missing API key and provider errors are structured and redacted", "[l
     REQUIRE_FALSE(error.ok());
     CHECK(error.error().find("HTTP 401") != std::string::npos);
     CHECK(error.error().find("sk-123456789SECRET") == std::string::npos);
+}
+
+TEST_CASE("assistant tool call arguments are redacted in provider requests", "[llm][u2]") {
+    auto transport = std::make_shared<FakeHttpTransport>();
+    llm::OpenAIConfig config;
+    config.api_key = "sk-test-api-key";
+    llm::OpenAIChatClient client(transport, config);
+    llm::ChatRequest request;
+    agent::Message assistant;
+    assistant.role = agent::Role::Assistant;
+    agent::ToolCall call;
+    call.id = "call_1";
+    call.name = "write_file";
+    call.arguments = {{"path", "secret.txt"}, {"apiKey", "plain-secret-value"}, {"access_token", "second-secret-value"}};
+    call.raw_arguments = R"({"path":"secret.txt","apiKey":"plain-secret-value","access_token":"second-secret-value"})";
+    assistant.tool_calls.push_back(call);
+    request.messages.push_back(assistant);
+
+    auto response = client.complete(request);
+
+    REQUIRE(response.ok());
+    auto body = parse_body(*transport);
+    const auto& messages = body.at("messages").as_array();
+    const auto& function = messages[0].as_object().at("tool_calls").as_array()[0].as_object().at("function").as_object();
+    const auto arguments = std::string(function.at("arguments").as_string());
+    CHECK(arguments.find("plain-secret-value") == std::string::npos);
+    CHECK(arguments.find("second-secret-value") == std::string::npos);
+    CHECK(arguments.find("[REDACTED]") != std::string::npos);
 }
 
 TEST_CASE("request body preserves message ordering and redacts secret-looking tool output", "[llm][u2]") {

@@ -56,32 +56,42 @@ public:
         if (!input) {
             return {"could not open file for reading: " + path, true};
         }
-        std::ostringstream buffer;
-        buffer << input.rdbuf();
-        std::istringstream lines(buffer.str());
         const int offset = std::max(1, optional_int(arguments, "offset", 1));
         const int limit = optional_int(arguments, "limit", 0);
+        OutputLimit output_limit;
         std::string output;
         std::string line;
+        std::size_t bytes = 0;
+        std::size_t lines = 0;
+        bool truncated = false;
         int line_number = 1;
         int emitted = 0;
-        while (std::getline(lines, line)) {
+        while (std::getline(input, line)) {
             if (line_number++ < offset) {
                 continue;
             }
             if (limit > 0 && emitted >= limit) {
                 break;
             }
+            const auto next_bytes = bytes + line.size() + 1;
+            if (lines >= output_limit.max_lines || next_bytes > output_limit.max_bytes) {
+                truncated = true;
+                break;
+            }
             output += line;
             output += '\n';
+            bytes = next_bytes;
+            ++lines;
             ++emitted;
         }
         if (!output.empty()) {
             output.pop_back();
         }
-        auto limited = limit_output(output);
+        if (truncated) {
+            output += "\n[output truncated]";
+        }
         std::ostringstream result;
-        result << "path: " << path << "\n" << limited.text;
+        result << "path: " << path << "\n" << output;
         return {result.str(), false};
     }
 };

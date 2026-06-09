@@ -27,14 +27,19 @@ int int_arg(const boost::json::object& args, const char* key, int fallback) {
     return value && value->is_int64() ? static_cast<int>(value->as_int64()) : fallback;
 }
 
-bool secret_env_name(std::string name) {
+bool secret_env_name(std::string name, const std::vector<std::string>& explicit_secret_names = {}) {
+    for (const auto& explicit_name : explicit_secret_names) {
+        if (name == explicit_name) {
+            return true;
+        }
+    }
     std::transform(name.begin(), name.end(), name.begin(), [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
     return name.find("API_KEY") != std::string::npos || name.find("TOKEN") != std::string::npos ||
            name.find("SECRET") != std::string::npos || name.find("PASSWORD") != std::string::npos ||
            name.find("OPENAI") != std::string::npos;
 }
 
-std::map<std::string, std::string> sanitized_environment() {
+std::map<std::string, std::string> sanitized_environment(const std::vector<std::string>& explicit_secret_names = {}) {
     std::map<std::string, std::string> env;
 #if defined(__unix__) || defined(__APPLE__)
     for (char** current = environ; current != nullptr && *current != nullptr; ++current) {
@@ -44,7 +49,7 @@ std::map<std::string, std::string> sanitized_environment() {
             continue;
         }
         auto key = entry.substr(0, split);
-        if (!secret_env_name(key)) {
+        if (!secret_env_name(key, explicit_secret_names)) {
             env[key] = entry.substr(split + 1);
         }
     }
@@ -76,7 +81,8 @@ public:
         request.command = command;
         request.working_directory = context.workspace;
         request.timeout = std::chrono::milliseconds(timeout_ms);
-        request.environment = sanitized_environment();
+        request.environment = sanitized_environment(context.secret_environment_names);
+        request.use_explicit_environment = true;
         auto process = runner_->run(request);
         if (!process) {
             return {process.error(), true};

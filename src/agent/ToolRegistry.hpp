@@ -21,6 +21,14 @@ public:
         return defs;
     }
 
+    [[nodiscard]] Tool* find(const std::string& name) {
+        auto it = tools_.find(name);
+        if (it == tools_.end()) {
+            return nullptr;
+        }
+        return it->second.get();
+    }
+
     [[nodiscard]] const Tool* find(const std::string& name) const {
         auto it = tools_.find(name);
         if (it == tools_.end()) {

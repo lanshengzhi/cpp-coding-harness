@@ -1,17 +1,27 @@
 #include "Tools.hpp"
 
+#include "AtomicWrite.hpp"
 #include "PathGuard.hpp"
 #include "../util/JsonSchema.hpp"
 
-#include <fstream>
 #include <sstream>
 
 namespace cch::tools {
 namespace {
 
-std::string string_arg(const boost::json::object& args, const char* key) {
+util::Result<std::string> required_string_arg(const boost::json::object& args, const char* key, const char* label, bool allow_empty) {
     auto* value = args.if_contains(key);
-    return value && value->is_string() ? std::string(value->as_string()) : std::string{};
+    if (value == nullptr) {
+        return util::Result<std::string>::failure(std::string(label) + " is required");
+    }
+    if (!value->is_string()) {
+        return util::Result<std::string>::failure(std::string(label) + " must be a string");
+    }
+    std::string text(value->as_string());
+    if (!allow_empty && text.empty()) {
+        return util::Result<std::string>::failure(std::string(label) + " must be non-empty");
+    }
+    return util::Result<std::string>::success(std::move(text));
 }
 
 bool bool_arg(const boost::json::object& args, const char* key, bool fallback) {
@@ -30,28 +40,29 @@ public:
     }
 
     [[nodiscard]] agent::ToolExecutionResult execute(const boost::json::object& arguments, const agent::ToolContext& context) override {
-        const auto path = string_arg(arguments, "path");
-        if (path.empty()) {
-            return {"write_file.path is required", true};
+        auto path = required_string_arg(arguments, "path", "write_file.path", false);
+        if (!path) {
+            return {path.error(), true};
         }
-        const auto content = string_arg(arguments, "content");
+        auto content = required_string_arg(arguments, "content", "write_file.content", true);
+        if (!content) {
+            return {content.error(), true};
+        }
         const bool create_parents = bool_arg(arguments, "create_parents", false);
         auto guard = PathGuard::create(context.workspace);
         if (!guard) {
             return {guard.error(), true};
         }
-        auto resolved = guard.value().resolve_for_write(path, create_parents);
+        auto resolved = guard.value().resolve_for_write(path.value(), create_parents);
         if (!resolved) {
             return {resolved.error(), true};
         }
-        std::ofstream output(resolved.value(), std::ios::binary | std::ios::trunc);
-        if (!output) {
-            return {"could not open file for writing: " + path, true};
+        auto written = write_atomic_file(resolved.value(), content.value());
+        if (!written) {
+            return {written.error() + ": " + path.value(), true};
         }
-        output << content;
-        output.close();
         std::ostringstream result;
-        result << "Wrote " << content.size() << " bytes to " << path << ".";
+        result << "Wrote " << content.value().size() << " bytes to " << path.value() << ".";
         return {result.str(), false};
     }
 };

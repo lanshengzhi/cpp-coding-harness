@@ -22,6 +22,7 @@ struct LoopOptions {
     std::string model{"fake-model"};
     int max_turns{8};
     bool bash_enabled{false};
+    std::vector<std::string> secret_environment_names;
     std::function<void(const LoopEvent&)> on_event;
     std::function<util::Result<void>(const Message&)> on_message;
 };
@@ -43,7 +44,7 @@ public:
 private:
     void emit(std::vector<LoopEvent>& events, std::string type, std::string detail) const;
     util::Result<void> append(std::vector<Message>& messages, const Message& message) const;
-    [[nodiscard]] Message execute_tool_call(const ToolCall& call) const;
+    [[nodiscard]] Message execute_tool_call(const ToolCall& call);
 
     llm::ChatClient& client_;
     ToolRegistry registry_;
