@@ -1,5 +1,7 @@
 #include "AgentLoop.hpp"
 
+#include "../util/Redactor.hpp"
+
 #include <sstream>
 #include <utility>
 
@@ -74,9 +76,14 @@ void AgentLoop::emit(std::vector<LoopEvent>& events, std::string type, std::stri
 }
 
 util::Result<void> AgentLoop::append(std::vector<Message>& messages, const Message& message) const {
-    messages.push_back(message);
+    Message redacted = message;
+    redacted.content = util::redact_text(redacted.content);
+    for (auto& call : redacted.tool_calls) {
+        call.raw_arguments = util::redact_text(call.raw_arguments);
+    }
+    messages.push_back(redacted);
     if (options_.on_message) {
-        return options_.on_message(message);
+        return options_.on_message(redacted);
     }
     return util::Result<void>::success();
 }
