@@ -12,6 +12,11 @@ find_package(OpenSSL REQUIRED)
 
 add_library(cpp_harness_lib
     src/agent/AgentLoop.cpp
+    src/tools/BashTool.cpp
+    src/tools/EditFileTool.cpp
+    src/tools/ReadFileTool.cpp
+    src/tools/ToolFactories.cpp
+    src/tools/WriteFileTool.cpp
 )
 
 target_include_directories(cpp_harness_lib
@@ -35,6 +40,8 @@ if(CCH_BUILD_TESTS)
     add_executable(cpp_harness_tests
         tests/TestMain.cpp
         tests/agent/AgentLoopTest.cpp
+        tests/tools/BashToolTest.cpp
+        tests/tools/FileToolsTest.cpp
     )
     target_include_directories(cpp_harness_tests PRIVATE third_party)
     target_link_libraries(cpp_harness_tests PRIVATE cpp_harness_lib)
