@@ -37,9 +37,11 @@ util::Result<JsonlSessionStore> JsonlSessionStore::create_new(const std::filesys
         return util::Result<JsonlSessionStore>::failure(validation.error());
     }
     std::error_code ec;
-    std::filesystem::create_directories(path.parent_path(), ec);
-    if (ec) {
-        return util::Result<JsonlSessionStore>::failure("could not create session directory: " + ec.message());
+    if (!path.parent_path().empty()) {
+        std::filesystem::create_directories(path.parent_path(), ec);
+        if (ec) {
+            return util::Result<JsonlSessionStore>::failure("could not create session directory: " + ec.message());
+        }
     }
     if (std::filesystem::exists(path, ec)) {
         return util::Result<JsonlSessionStore>::failure("session file already exists; use resume to append");

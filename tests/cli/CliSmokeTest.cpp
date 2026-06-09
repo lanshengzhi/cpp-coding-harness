@@ -95,6 +95,16 @@ TEST_CASE("CLI blocks existing session path without resume before model request"
     CHECK(result.output.find("[model-request]") == std::string::npos);
 }
 
+TEST_CASE("CLI rejects invalid max turns before model request", "[cli][u6]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "bad-turns.jsonl";
+    auto result = run_command(bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " --max-turns nope hello");
+
+    REQUIRE(result.exit_code != 0);
+    CHECK(result.output.find("--max-turns must be an integer") != std::string::npos);
+    CHECK(result.output.find("[model-request]") == std::string::npos);
+}
+
 TEST_CASE("CLI fake bash request is blocked by default", "[cli][u6]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "bash.jsonl";

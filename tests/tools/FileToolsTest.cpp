@@ -104,5 +104,37 @@ TEST_CASE("file tools reject traversal and final symlink escapes", "[tools][u3]"
         auto result = write_tool->execute(args, context_for(workspace));
         CHECK(result.is_error);
     }
+
+    auto broken = workspace.path() / "broken-link.txt";
+    std::filesystem::create_symlink(workspace.path().parent_path() / "missing-outside.txt", broken, ec);
+    if (!ec) {
+        auto write_tool = tools::make_write_file_tool();
+        boost::json::object args;
+        args["path"] = "broken-link.txt";
+        args["content"] = "nope";
+        auto result = write_tool->execute(args, context_for(workspace));
+        CHECK(result.is_error);
+    }
+
+    std::filesystem::create_directories(workspace.path() / "real-dir", ec);
+    auto linked_parent = workspace.path() / "linked-dir";
+    std::filesystem::create_directory_symlink(workspace.path() / "real-dir", linked_parent, ec);
+    if (!ec) {
+        auto write_tool = tools::make_write_file_tool();
+        boost::json::object args;
+        args["path"] = "linked-dir/file.txt";
+        args["content"] = "nope";
+        auto result = write_tool->execute(args, context_for(workspace));
+        CHECK(result.is_error);
+        CHECK_FALSE(std::filesystem::exists(workspace.path() / "real-dir" / "file.txt"));
+
+        boost::json::object create_args;
+        create_args["path"] = "linked-dir/new-parent/file.txt";
+        create_args["content"] = "nope";
+        create_args["create_parents"] = true;
+        auto create_result = write_tool->execute(create_args, context_for(workspace));
+        CHECK(create_result.is_error);
+        CHECK_FALSE(std::filesystem::exists(workspace.path() / "real-dir" / "new-parent"));
+    }
     std::filesystem::remove(outside, ec);
 }

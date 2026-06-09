@@ -39,13 +39,21 @@ public:
         try {
             bp::ipstream output;
             bp::ipstream error;
+            bp::environment child_environment = boost::this_process::environment();
+            if (!request.environment.empty()) {
+                child_environment = bp::environment{};
+                for (const auto& [key, value] : request.environment) {
+                    child_environment[key] = value;
+                }
+            }
             bp::child child(
                 bp::search_path("bash"),
                 "-lc",
                 request.command,
                 bp::start_dir = request.working_directory.string(),
                 bp::std_out > output,
-                bp::std_err > error);
+                bp::std_err > error,
+                child_environment);
 
             const auto deadline = std::chrono::steady_clock::now() + request.timeout;
             ProcessResult result;

@@ -96,7 +96,15 @@ cch::util::Result<CliConfig> parse_args(int argc, char** argv) {
         } else if (arg == "--max-turns") {
             auto value = need_value(arg);
             if (!value) return cch::util::Result<CliConfig>::failure(value.error());
-            config.max_turns = std::stoi(value.value());
+            try {
+                std::size_t consumed = 0;
+                config.max_turns = std::stoi(value.value(), &consumed);
+                if (consumed != value.value().size()) {
+                    return cch::util::Result<CliConfig>::failure("--max-turns must be an integer");
+                }
+            } catch (const std::exception&) {
+                return cch::util::Result<CliConfig>::failure("--max-turns must be an integer");
+            }
         } else if (arg == "--model") {
             auto value = need_value(arg);
             if (!value) return cch::util::Result<CliConfig>::failure(value.error());

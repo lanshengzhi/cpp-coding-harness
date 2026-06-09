@@ -4,6 +4,7 @@
 #include "../support/TempWorkspace.hpp"
 
 #include <cstdlib>
+#include <memory>
 
 using namespace cch;
 
@@ -102,5 +103,25 @@ TEST_CASE("bash runner receives sanitized environment", "[tools][u3]") {
     CHECK(runner->requests[0].environment.find("CCH_VISIBLE_ENV") != runner->requests[0].environment.end());
     unsetenv("OPENAI_API_KEY");
     unsetenv("CCH_VISIBLE_ENV");
+#endif
+}
+
+TEST_CASE("default process runner applies sanitized environment", "[tools][u3]") {
+#if defined(__unix__) || defined(__APPLE__)
+    setenv("OPENAI_API_KEY", "sk-123456789SECRET", 1);
+#endif
+    tests::TempWorkspace workspace;
+    auto tool = tools::make_bash_tool(std::make_shared<util::DefaultProcessRunner>());
+    boost::json::object args;
+    args["command"] = "printf '%s' \"${OPENAI_API_KEY:-missing}\"";
+    args["timeout_ms"] = 5000;
+
+    auto result = tool->execute(args, context_for(workspace, true));
+
+    REQUIRE_FALSE(result.is_error);
+    CHECK(result.content.find("missing") != std::string::npos);
+    CHECK(result.content.find("sk-123456789SECRET") == std::string::npos);
+#if defined(__unix__) || defined(__APPLE__)
+    unsetenv("OPENAI_API_KEY");
 #endif
 }
