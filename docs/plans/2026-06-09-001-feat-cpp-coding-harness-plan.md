@@ -1,7 +1,7 @@
 ---
 title: "feat: Build Modern C++ Coding Harness MVP"
 type: "feat"
-status: "active"
+status: "completed"
 date: "2026-06-09"
 deepened: "2026-06-09"
 target_repo: "cpp-coding-harness"
