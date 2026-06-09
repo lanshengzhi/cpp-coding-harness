@@ -1,0 +1,13 @@
+{
+  "name": "cpp-coding-harness",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "boost-json",
+    "boost-process",
+    "boost-beast",
+    "boost-asio",
+    "openssl",
+    "cli11",
+    "catch2"
+  ]
+}
