@@ -121,6 +121,42 @@ TEST_CASE("tool call loop emits stable MVP event transcript", "[agent][u1][ae1]"
     CHECK(events[6].detail == "stop");
 }
 
+TEST_CASE("agent loop emits semantic lifecycle events while preserving CLI events", "[agent][u4]") {
+    tests::TempWorkspace workspace;
+    workspace.write("note.txt", "semantic context");
+    tests::FakeChatClient client;
+    boost::json::object args;
+    args["path"] = "note.txt";
+    client.push_response(tests::tool_response("call-1", "read_file", args, "reading"));
+    client.push_response(tests::text_response("done"));
+    std::vector<agent::AgentEvent> callback_events;
+
+    agent::ToolRegistry registry;
+    registry.add(tools::make_read_file_tool());
+    agent::LoopOptions options;
+    options.workspace = workspace.path();
+    options.on_agent_event = [&](const agent::AgentEvent& event) { callback_events.push_back(event); };
+    agent::AgentLoop loop(client, registry, options);
+
+    auto result = loop.run("inspect note.txt");
+
+    REQUIRE(result.ok());
+    CHECK(callback_events.size() == result.value().agent_events.size());
+    REQUIRE(result.value().agent_events.size() == 13);
+    CHECK(result.value().agent_events[0].kind == agent::AgentEventKind::AgentStart);
+    CHECK(result.value().agent_events[1].kind == agent::AgentEventKind::UserMessage);
+    CHECK(result.value().agent_events[2].kind == agent::AgentEventKind::TurnStart);
+    CHECK(result.value().agent_events[4].kind == agent::AgentEventKind::AssistantMessage);
+    CHECK(result.value().agent_events[5].kind == agent::AgentEventKind::ToolExecutionStart);
+    CHECK(result.value().agent_events[5].tool_name == "read_file");
+    CHECK(result.value().agent_events[6].kind == agent::AgentEventKind::ToolExecutionEnd);
+    CHECK_FALSE(result.value().agent_events[6].is_error);
+    CHECK(result.value().agent_events[7].kind == agent::AgentEventKind::TurnEnd);
+    CHECK(result.value().agent_events[11].kind == agent::AgentEventKind::TurnEnd);
+    CHECK(result.value().agent_events[12].kind == agent::AgentEventKind::AgentEnd);
+    CHECK(result.value().events.back().type == "completed");
+}
+
 TEST_CASE("unknown tool and malformed arguments continue as error tool results", "[agent][u4]") {
     tests::FakeChatClient client;
     boost::json::object args;

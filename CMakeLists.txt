@@ -48,7 +48,9 @@ if(CCH_BUILD_TESTS)
     include(CTest)
     add_executable(cpp_harness_tests
         tests/TestMain.cpp
+        tests/agent/AgentEventTest.cpp
         tests/agent/AgentLoopTest.cpp
+        tests/agent/AgentToolContractTest.cpp
         tests/ai/MessageContractTest.cpp
         tests/ai/ToolContractTest.cpp
         tests/ai/providers/OpenAIChatClientTest.cpp
