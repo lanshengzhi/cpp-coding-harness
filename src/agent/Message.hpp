@@ -4,6 +4,7 @@
 
 #include "../util/Redactor.hpp"
 #include "../util/Result.hpp"
+#include "../ai/Message.hpp"
 
 #include <optional>
 #include <string>
@@ -57,6 +58,7 @@ struct Message {
     std::string content;
     std::vector<ToolCall> tool_calls;
     std::string tool_call_id;
+    std::string tool_name;
     bool is_error{false};
 };
 
@@ -92,6 +94,9 @@ inline boost::json::object message_to_json(const Message& message) {
     obj["content"] = message.content;
     if (!message.tool_call_id.empty()) {
         obj["tool_call_id"] = message.tool_call_id;
+    }
+    if (!message.tool_name.empty()) {
+        obj["tool_name"] = message.tool_name;
     }
     obj["is_error"] = message.is_error;
     boost::json::array calls;
@@ -142,6 +147,9 @@ inline util::Result<Message> message_from_json(const boost::json::object& obj) {
     if (auto* v = obj.if_contains("tool_call_id"); v && v->is_string()) {
         message.tool_call_id = std::string(v->as_string());
     }
+    if (auto* v = obj.if_contains("tool_name"); v && v->is_string()) {
+        message.tool_name = std::string(v->as_string());
+    }
     if (auto* v = obj.if_contains("is_error"); v && v->is_bool()) {
         message.is_error = v->as_bool();
     }
@@ -153,6 +161,82 @@ inline util::Result<Message> message_from_json(const boost::json::object& obj) {
         }
     }
     return util::Result<Message>::success(message);
+}
+
+inline ai::ToolCall to_ai_tool_call(const ToolCall& call) {
+    ai::ToolCall converted;
+    converted.id = call.id;
+    converted.name = call.name;
+    converted.arguments = call.arguments;
+    converted.raw_arguments = call.raw_arguments;
+    converted.arguments_valid = call.arguments_valid;
+    converted.argument_error = call.argument_error;
+    return converted;
+}
+
+inline ToolCall tool_call_from_ai(const ai::ToolCall& call) {
+    ToolCall converted;
+    converted.id = call.id;
+    converted.name = call.name;
+    converted.arguments = call.arguments;
+    converted.raw_arguments = call.raw_arguments;
+    converted.arguments_valid = call.arguments_valid;
+    converted.argument_error = call.argument_error;
+    return converted;
+}
+
+inline ai::Message to_ai_message(const Message& message) {
+    ai::Message converted;
+    switch (message.role) {
+    case Role::System:
+        converted.role = ai::MessageRole::System;
+        break;
+    case Role::User:
+        converted.role = ai::MessageRole::User;
+        break;
+    case Role::Assistant:
+        converted.role = ai::MessageRole::Assistant;
+        break;
+    case Role::Tool:
+        converted.role = ai::MessageRole::ToolResult;
+        break;
+    }
+    converted.tool_call_id = message.tool_call_id;
+    converted.tool_name = message.tool_name;
+    converted.is_error = message.is_error;
+    if (!message.content.empty()) {
+        converted.content.push_back(ai::ContentBlock::from_text(message.content));
+    }
+    for (const auto& call : message.tool_calls) {
+        converted.content.push_back(ai::ContentBlock::from_tool_call(to_ai_tool_call(call)));
+    }
+    return converted;
+}
+
+inline Message message_from_ai(const ai::Message& message) {
+    Message converted;
+    switch (message.role) {
+    case ai::MessageRole::System:
+        converted.role = Role::System;
+        break;
+    case ai::MessageRole::User:
+        converted.role = Role::User;
+        break;
+    case ai::MessageRole::Assistant:
+        converted.role = Role::Assistant;
+        break;
+    case ai::MessageRole::ToolResult:
+        converted.role = Role::Tool;
+        break;
+    }
+    converted.content = ai::text_content(message);
+    converted.tool_call_id = message.tool_call_id;
+    converted.tool_name = message.tool_name;
+    converted.is_error = message.is_error;
+    for (const auto& call : ai::tool_calls(message)) {
+        converted.tool_calls.push_back(tool_call_from_ai(call));
+    }
+    return converted;
 }
 
 } // namespace cch::agent

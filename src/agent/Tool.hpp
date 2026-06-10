@@ -3,6 +3,7 @@
 #include <boost/json.hpp>
 
 #include "../util/Result.hpp"
+#include "../ai/Tool.hpp"
 #include "Message.hpp"
 
 #include <filesystem>
@@ -37,5 +38,21 @@ public:
 };
 
 using ToolPtr = std::shared_ptr<Tool>;
+
+inline ai::ToolDefinition to_ai_tool_definition(const ToolDefinition& definition) {
+    ai::ToolDefinition converted;
+    converted.name = definition.name;
+    converted.description = definition.description;
+    converted.parameters = definition.parameters;
+    return converted;
+}
+
+inline ToolDefinition tool_definition_from_ai(const ai::ToolDefinition& definition) {
+    ToolDefinition converted;
+    converted.name = definition.name;
+    converted.description = definition.description;
+    converted.parameters = definition.parameters;
+    return converted;
+}
 
 } // namespace cch::agent
