@@ -26,7 +26,9 @@ endif()
 add_library(cpp_harness_lib
     src/agent/AgentLoop.cpp
     src/ai/providers/BoostBeastHttpTransport.cpp
+    src/ai/providers/BoostBeastStreamTransport.cpp
     src/ai/providers/OpenAIChatClient.cpp
+    src/ai/providers/SseParser.cpp
     src/harness/LocalExecutionEnv.cpp
     src/harness/session/JsonlSessionStore.cpp
     src/llm/BoostBeastHttpTransport.cpp
@@ -71,7 +73,9 @@ if(CCH_BUILD_TESTS)
         tests/ai/GlazeRoundTripTest.cpp
         tests/ai/MessageContractTest.cpp
         tests/ai/ToolContractTest.cpp
+        tests/ai/providers/BoostBeastStreamTransportTest.cpp
         tests/ai/providers/OpenAIChatClientTest.cpp
+        tests/ai/providers/SseParserTest.cpp
         tests/cli/CliSmokeTest.cpp
         tests/harness/LocalExecutionEnvTest.cpp
         tests/harness/session/JsonlSessionStoreTest.cpp
