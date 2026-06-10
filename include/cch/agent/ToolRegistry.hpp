@@ -2,8 +2,8 @@
 
 #include "AgentTool.hpp"
 
+#include <algorithm>
 #include <memory>
-#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -12,7 +12,13 @@ namespace cch::agent {
 
 class AsyncToolRegistry {
 public:
-    void add(std::shared_ptr<AsyncAgentTool> tool) {
+    AsyncToolRegistry() = default;
+    AsyncToolRegistry(AsyncToolRegistry&&) noexcept = default;
+    AsyncToolRegistry& operator=(AsyncToolRegistry&&) noexcept = default;
+    AsyncToolRegistry(const AsyncToolRegistry&) = delete;
+    AsyncToolRegistry& operator=(const AsyncToolRegistry&) = delete;
+
+    void add(std::unique_ptr<AsyncAgentTool> tool) {
         if (!tool) {
             return;
         }
@@ -30,11 +36,14 @@ public:
         for (const auto& [_, tool] : tools_) {
             result.push_back(tool->definition());
         }
+        std::sort(result.begin(), result.end(), [](const ai::Tool& left, const ai::Tool& right) {
+            return left.name < right.name;
+        });
         return result;
     }
 
 private:
-    std::unordered_map<std::string, std::shared_ptr<AsyncAgentTool>> tools_;
+    std::unordered_map<std::string, std::unique_ptr<AsyncAgentTool>> tools_;
 };
 
 } // namespace cch::agent

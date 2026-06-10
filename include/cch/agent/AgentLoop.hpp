@@ -4,7 +4,7 @@
 #include "AgentEvent.hpp"
 #include "ToolRegistry.hpp"
 
-#include <cch/ai/ChatClient.hpp>
+#include "../ai/ChatClient.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
@@ -27,7 +27,7 @@ public:
         AgentEventSink sink = {});
 
 private:
-    [[nodiscard]] util::ExpectedVoid emit(const AgentEventSink& sink, const AgentLifecycleEvent& event) const;
+    [[nodiscard]] util::ExpectedVoid emit(AgentEventSink& sink, const AgentLifecycleEvent& event) const;
     [[nodiscard]] std::vector<ai::ToolCallContent> tool_calls(const ai::AssistantMessage& message) const;
 
     ai::StreamingChatClient& client_;

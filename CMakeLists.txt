@@ -9,7 +9,7 @@ option(CCH_BUILD_TESTS "Build tests" ON)
 
 include(FetchContent)
 
-find_package(Boost REQUIRED COMPONENTS json system filesystem)
+find_package(Boost REQUIRED COMPONENTS system filesystem)
 find_package(OpenSSL REQUIRED)
 find_package(glaze CONFIG QUIET)
 
@@ -33,24 +33,20 @@ add_library(cpp_harness_lib
     src/harness/LocalExecutionEnv.cpp
     src/harness/session/JsonlSessionStore.cpp
     src/tools/AsyncToolFactories.cpp
-    src/tools/BashTool.cpp
-    src/tools/EditFileTool.cpp
-    src/tools/ReadFileTool.cpp
-    src/tools/ToolFactories.cpp
-    src/tools/WriteFileTool.cpp
 )
 
 target_include_directories(cpp_harness_lib
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+    PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 target_link_libraries(cpp_harness_lib
     PUBLIC
         glaze::glaze
-        Boost::json
         Boost::system
+    PRIVATE
         Boost::filesystem
         OpenSSL::SSL
         OpenSSL::Crypto
@@ -66,6 +62,9 @@ if(CCH_BUILD_TESTS)
     include(CTest)
     add_executable(cpp_harness_tests
         tests/TestMain.cpp
+        tests/architecture/ArchitectureSurfaceScanTest.cpp
+        tests/architecture/MoveOnlyCallbackTest.cpp
+        tests/architecture/PublicHeaderBoundaryTest.cpp
         tests/agent/AsyncAgentLoopTest.cpp
         tests/ai/GlazeRoundTripTest.cpp
         tests/ai/MessageContractTest.cpp
@@ -75,11 +74,8 @@ if(CCH_BUILD_TESTS)
         tests/ai/providers/SseParserTest.cpp
         tests/cli/CliSmokeTest.cpp
         tests/harness/AsyncLocalExecutionEnvTest.cpp
-        tests/harness/LocalExecutionEnvTest.cpp
         tests/harness/session/JsonlSessionStoreTest.cpp
         tests/tools/AsyncToolsTest.cpp
-        tests/tools/BashToolTest.cpp
-        tests/tools/FileToolsTest.cpp
         tests/util/ExpectedErrorTest.cpp
     )
     target_include_directories(cpp_harness_tests PRIVATE
@@ -87,7 +83,10 @@ if(CCH_BUILD_TESTS)
         third_party
     )
     target_link_libraries(cpp_harness_tests PRIVATE cpp_harness_lib)
-    target_compile_definitions(cpp_harness_tests PRIVATE CCH_BINARY="$<TARGET_FILE:cpp_harness>")
+    target_compile_definitions(cpp_harness_tests PRIVATE
+        CCH_BINARY="$<TARGET_FILE:cpp_harness>"
+        CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    )
     target_compile_options(cpp_harness_tests PRIVATE -Wall -Wextra -Wpedantic)
     add_dependencies(cpp_harness_tests cpp_harness)
     add_test(NAME cpp_harness_tests COMMAND cpp_harness_tests)

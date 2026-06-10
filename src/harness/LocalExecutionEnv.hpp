@@ -1,6 +1,7 @@
 #pragma once
 
-#include "ExecutionEnv.hpp"
+#include "../../include/cch/harness/ExecutionEnv.hpp"
+
 #include "../util/Process.hpp"
 
 #include <memory>
@@ -8,7 +9,7 @@
 
 namespace cch::harness {
 
-class LocalExecutionEnv final : public ExecutionEnv {
+class LocalExecutionEnv final {
 public:
     LocalExecutionEnv(
         std::filesystem::path workspace,
@@ -16,13 +17,13 @@ public:
         std::vector<std::string> secret_environment_names = {},
         std::shared_ptr<util::ProcessRunner> runner = std::make_shared<util::DefaultProcessRunner>());
 
-    [[nodiscard]] const std::filesystem::path& workspace() const override { return workspace_; }
-    [[nodiscard]] bool bash_enabled() const override { return bash_enabled_; }
+    [[nodiscard]] const std::filesystem::path& workspace() const { return workspace_; }
+    [[nodiscard]] bool bash_enabled() const { return bash_enabled_; }
 
-    [[nodiscard]] util::Result<FileReadResult> read_file(const std::string& path, int offset, int limit) override;
-    [[nodiscard]] util::Result<FileWriteResult> write_file(const std::string& path, const std::string& content, bool create_parents) override;
-    [[nodiscard]] util::Result<FileEditResult> edit_file(const std::string& path, const std::string& old_text, const std::string& new_text) override;
-    [[nodiscard]] util::Result<ShellResult> run_shell(const std::string& command, std::chrono::milliseconds timeout) override;
+    [[nodiscard]] util::Expected<AsyncFileReadResult> read_file(std::string path, int offset, int limit);
+    [[nodiscard]] util::Expected<AsyncFileWriteResult> write_file(std::string path, std::string content, bool create_parents);
+    [[nodiscard]] util::Expected<AsyncFileEditResult> edit_file(std::string path, std::string old_text, std::string new_text);
+    [[nodiscard]] util::Expected<AsyncShellResult> run_shell(std::string command, std::chrono::milliseconds timeout);
 
 private:
     std::filesystem::path workspace_;

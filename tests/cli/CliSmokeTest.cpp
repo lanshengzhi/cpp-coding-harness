@@ -61,16 +61,34 @@ TEST_CASE("CLI fake one-shot prints transcript and writes session", "[cli][u6]")
     CHECK(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI async fake one-shot streams through coroutine stack", "[cli][async][u7][ae1]") {
+TEST_CASE("CLI fake one-shot streams through the current event path", "[cli][u8][ae5]") {
     cch::tests::TempWorkspace workspace;
-    auto session = workspace.path() / "async-one-shot.jsonl";
-    auto result = run_command(bin() + " --async --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " hello");
+    auto session = workspace.path() / "event-path.jsonl";
+    auto result = run_command(bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " hello");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.output.find("[model-request] turn 1") != std::string::npos);
     CHECK(result.output.find("[assistant] fake: hello") != std::string::npos);
     CHECK(result.output.find("[completed] stop") != std::string::npos);
     CHECK(std::filesystem::exists(session));
+}
+
+TEST_CASE("CLI rejects removed async compatibility flag before model request", "[cli][u8]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "removed-async.jsonl";
+    auto result = run_command(bin() + " --async --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " hello");
+
+    REQUIRE(result.exit_code != 0);
+    CHECK(result.output.find("unknown option: --async") != std::string::npos);
+    CHECK(result.output.find("[model-request]") == std::string::npos);
+}
+
+TEST_CASE("CLI help no longer advertises compatibility-only async flag", "[cli][u8]") {
+    auto result = run_command(bin() + " --help");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.output.find("--async") == std::string::npos);
+    CHECK(result.output.find("--fake") != std::string::npos);
 }
 
 TEST_CASE("CLI fake REPL preserves process history for two prompts", "[cli][u6]") {

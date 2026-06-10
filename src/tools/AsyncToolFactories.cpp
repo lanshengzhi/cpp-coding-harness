@@ -1,8 +1,7 @@
-#include <cch/tools/ToolFactories.hpp>
+#include "../../include/cch/tools/ToolFactories.hpp"
 
-#include <cch/ai/glaze/ToolSchemaDtos.hpp>
-
-#include "../util/Redactor.hpp"
+#include "../../include/cch/ai/glaze/ToolSchemaDtos.hpp"
+#include "../../include/cch/util/Json.hpp"
 
 #include <chrono>
 #include <exception>
@@ -31,9 +30,12 @@ struct EditFileArgs {
     std::string new_text;
 };
 
+constexpr int kDefaultBashTimeoutMs = 30000;
+constexpr int kMaxBashTimeoutMs = 120000;
+
 struct BashArgs {
     std::string command;
-    int timeout_ms{30000};
+    int timeout_ms{kDefaultBashTimeoutMs};
 };
 
 [[nodiscard]] agent::AsyncToolExecutionResult error_result(std::string content) {
@@ -41,11 +43,12 @@ struct BashArgs {
 }
 
 template <typename Args>
-[[nodiscard]] util::Expected<Args> parse_raw_args(std::string_view raw_arguments) {
-    if (raw_arguments.empty()) {
-        raw_arguments = "{}";
+[[nodiscard]] util::Expected<Args> parse_invocation_args(const agent::ToolInvocation& invocation) {
+    auto serialized = util::write_json(invocation.arguments);
+    if (!serialized) {
+        return std::unexpected(serialized.error());
     }
-    return util::read_json<Args>(raw_arguments);
+    return util::read_json<Args>(*serialized);
 }
 
 class AsyncToolBase : public agent::AsyncAgentTool {
@@ -84,7 +87,7 @@ public:
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
         agent::ToolInvocation invocation) override {
-        auto parsed = parse_raw_args<ReadFileArgs>(invocation.raw_arguments);
+        auto parsed = parse_invocation_args<ReadFileArgs>(invocation);
         if (!parsed || parsed->path.empty()) {
             co_return error_result("invalid read_file arguments");
         }
@@ -96,7 +99,7 @@ public:
         if (!read) {
             co_return error_result(read.error().detail.empty() ? read.error().message : read.error().detail);
         }
-        co_return agent::AsyncToolExecutionResult{util::redact_text(read->content), std::nullopt, false};
+        co_return agent::AsyncToolExecutionResult{read->content, std::nullopt, false};
     }
 };
 
@@ -121,7 +124,7 @@ public:
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
         agent::ToolInvocation invocation) override {
-        auto parsed = parse_raw_args<WriteFileArgs>(invocation.raw_arguments);
+        auto parsed = parse_invocation_args<WriteFileArgs>(invocation);
         if (!parsed || parsed->path.empty()) {
             co_return error_result("invalid write_file arguments");
         }
@@ -158,7 +161,7 @@ public:
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
         agent::ToolInvocation invocation) override {
-        auto parsed = parse_raw_args<EditFileArgs>(invocation.raw_arguments);
+        auto parsed = parse_invocation_args<EditFileArgs>(invocation);
         if (!parsed || parsed->path.empty() || parsed->old_text.empty()) {
             co_return error_result("invalid edit_file arguments");
         }
@@ -194,9 +197,15 @@ public:
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
         agent::ToolInvocation invocation) override {
-        auto parsed = parse_raw_args<BashArgs>(invocation.raw_arguments);
+        auto parsed = parse_invocation_args<BashArgs>(invocation);
         if (!parsed || parsed->command.empty()) {
             co_return error_result("invalid bash arguments");
+        }
+        if (parsed->timeout_ms <= 0) {
+            co_return error_result("invalid bash arguments: timeout_ms must be positive");
+        }
+        if (parsed->timeout_ms > kMaxBashTimeoutMs) {
+            parsed->timeout_ms = kMaxBashTimeoutMs;
         }
         auto environment = env();
         if (!environment) {
@@ -212,7 +221,7 @@ public:
             out << " timed_out=true";
         }
         if (!shell->output.empty()) {
-            out << "\n" << util::redact_text(shell->output);
+            out << "\n" << shell->output;
         }
         co_return agent::AsyncToolExecutionResult{out.str(), std::nullopt, shell->exit_code != 0 || shell->timed_out};
     }
@@ -220,20 +229,20 @@ public:
 
 } // namespace
 
-std::shared_ptr<agent::AsyncAgentTool> make_async_read_file_tool(std::shared_ptr<harness::AsyncExecutionEnv> env) {
-    return std::make_shared<AsyncReadFileTool>(std::move(env));
+std::unique_ptr<agent::AsyncAgentTool> make_async_read_file_tool(std::shared_ptr<harness::AsyncExecutionEnv> env) {
+    return std::make_unique<AsyncReadFileTool>(std::move(env));
 }
 
-std::shared_ptr<agent::AsyncAgentTool> make_async_write_file_tool(std::shared_ptr<harness::AsyncExecutionEnv> env) {
-    return std::make_shared<AsyncWriteFileTool>(std::move(env));
+std::unique_ptr<agent::AsyncAgentTool> make_async_write_file_tool(std::shared_ptr<harness::AsyncExecutionEnv> env) {
+    return std::make_unique<AsyncWriteFileTool>(std::move(env));
 }
 
-std::shared_ptr<agent::AsyncAgentTool> make_async_edit_file_tool(std::shared_ptr<harness::AsyncExecutionEnv> env) {
-    return std::make_shared<AsyncEditFileTool>(std::move(env));
+std::unique_ptr<agent::AsyncAgentTool> make_async_edit_file_tool(std::shared_ptr<harness::AsyncExecutionEnv> env) {
+    return std::make_unique<AsyncEditFileTool>(std::move(env));
 }
 
-std::shared_ptr<agent::AsyncAgentTool> make_async_bash_tool(std::shared_ptr<harness::AsyncExecutionEnv> env) {
-    return std::make_shared<AsyncBashTool>(std::move(env));
+std::unique_ptr<agent::AsyncAgentTool> make_async_bash_tool(std::shared_ptr<harness::AsyncExecutionEnv> env) {
+    return std::make_unique<AsyncBashTool>(std::move(env));
 }
 
 } // namespace cch::tools

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../Tool.hpp"
-#include "../../util/Error.hpp"
+#include "../../util/Json.hpp"
 
 #include <map>
 #include <optional>
@@ -25,25 +25,54 @@ struct FunctionToolDto {
     ToolParametersDto parameters;
 };
 
-struct ProviderToolDto {
-    std::string type{"function"};
-    FunctionToolDto function;
-};
+[[nodiscard]] inline std::string schema_type_to_string(JsonSchemaType type) {
+    switch (type) {
+    case JsonSchemaType::Object:
+        return "object";
+    case JsonSchemaType::String:
+        return "string";
+    case JsonSchemaType::Integer:
+        return "integer";
+    case JsonSchemaType::Number:
+        return "number";
+    case JsonSchemaType::Boolean:
+        return "boolean";
+    case JsonSchemaType::Array:
+        return "array";
+    case JsonSchemaType::Null:
+        return "null";
+    }
+    return "object";
+}
 
-struct ProviderToolCallFunctionDto {
-    std::string name;
-    std::string arguments;
-};
-
-struct ProviderToolCallDto {
-    std::string id;
-    std::string type{"function"};
-    ProviderToolCallFunctionDto function;
-};
+[[nodiscard]] inline std::optional<JsonSchemaType> schema_type_from_string(const std::string& value) {
+    if (value == "object") {
+        return JsonSchemaType::Object;
+    }
+    if (value == "string") {
+        return JsonSchemaType::String;
+    }
+    if (value == "integer") {
+        return JsonSchemaType::Integer;
+    }
+    if (value == "number") {
+        return JsonSchemaType::Number;
+    }
+    if (value == "boolean") {
+        return JsonSchemaType::Boolean;
+    }
+    if (value == "array") {
+        return JsonSchemaType::Array;
+    }
+    if (value == "null") {
+        return JsonSchemaType::Null;
+    }
+    return std::nullopt;
+}
 
 [[nodiscard]] inline ToolParametersDto to_tool_parameters_dto(const JsonSchema& schema) {
     ToolParametersDto dto;
-    dto.type = to_string(schema.type);
+    dto.type = schema_type_to_string(schema.type);
     dto.description = schema.description;
     if (!schema.properties.empty()) {
         std::map<std::string, ToolParametersDto> properties;
@@ -91,16 +120,12 @@ struct ProviderToolCallDto {
     return FunctionToolDto{tool.name, tool.description, to_tool_parameters_dto(tool.parameters)};
 }
 
-[[nodiscard]] inline ProviderToolDto to_provider_tool_dto(const Tool& tool) {
-    return ProviderToolDto{"function", to_function_tool_dto(tool)};
-}
-
 [[nodiscard]] inline util::Expected<std::string> write_tool_parameters_json(const JsonSchema& schema) {
     return util::write_json(to_tool_parameters_dto(schema));
 }
 
-[[nodiscard]] inline util::Expected<std::string> write_provider_tool_json(const Tool& tool) {
-    return util::write_json(to_provider_tool_dto(tool));
+[[nodiscard]] inline util::Expected<std::string> write_function_tool_json(const Tool& tool) {
+    return util::write_json(to_function_tool_dto(tool));
 }
 
 } // namespace cch::ai::glaze

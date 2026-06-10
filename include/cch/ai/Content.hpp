@@ -1,6 +1,6 @@
 #pragma once
 
-#include <glaze/glaze.hpp>
+#include "../util/JsonValue.hpp"
 
 #include <optional>
 #include <string>
@@ -27,7 +27,7 @@ struct ImageContent {
 struct ToolCallContent {
     std::string id;
     std::string name;
-    std::optional<glz::generic> arguments;
+    std::optional<util::JsonValue> arguments;
     std::string raw_arguments;
     std::optional<std::string> thought_signature;
     bool arguments_valid{true};
@@ -52,7 +52,7 @@ using Content = std::variant<TextContent, ThinkingContent, ImageContent, ToolCal
     std::string id,
     std::string name,
     std::string raw_arguments,
-    std::optional<glz::generic> arguments = std::nullopt) {
+    std::optional<util::JsonValue> arguments = std::nullopt) {
     return ToolCallContent{
         std::move(id),
         std::move(name),

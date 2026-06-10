@@ -1,11 +1,8 @@
 #pragma once
 
-#include <glaze/glaze.hpp>
-
 #include <expected>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <utility>
 
 namespace cch::util {
@@ -73,36 +70,6 @@ using ExpectedVoid = std::expected<void, Error>;
     std::string detail = {},
     std::optional<std::string> context = std::nullopt) {
     return Error{code, std::move(message), std::move(detail), std::move(context)};
-}
-
-[[nodiscard]] inline Error glaze_error(
-    const glz::error_ctx& error,
-    std::string_view json,
-    ErrorCode code,
-    std::string message) {
-    return make_error(
-        code,
-        std::move(message),
-        glz::format_error(error, json),
-        std::string(json));
-}
-
-template <typename T>
-[[nodiscard]] Expected<T> read_json(std::string_view json) {
-    auto parsed = glz::read_json<T>(json);
-    if (!parsed) {
-        return std::unexpected(glaze_error(parsed.error(), json, ErrorCode::JsonParse, "failed to parse JSON"));
-    }
-    return std::move(parsed).value();
-}
-
-template <typename T>
-[[nodiscard]] Expected<std::string> write_json(const T& value) {
-    auto serialized = glz::write_json(value);
-    if (!serialized) {
-        return std::unexpected(glaze_error(serialized.error(), {}, ErrorCode::JsonSerialize, "failed to serialize JSON"));
-    }
-    return std::move(serialized).value();
 }
 
 } // namespace cch::util

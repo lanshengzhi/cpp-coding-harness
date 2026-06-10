@@ -1,17 +1,16 @@
 #include "AsyncCliRuntime.hpp"
 
-#include <cch/agent/AgentLoop.hpp>
-#include <cch/ai/providers/BoostBeastStreamTransport.hpp>
-#include <cch/ai/providers/OpenAIChatClient.hpp>
-#include <cch/harness/LocalExecutionEnv.hpp>
-#include <cch/harness/session/JsonlSessionStore.hpp>
-#include <cch/tools/ToolFactories.hpp>
+#include "../include/cch/agent/AgentLoop.hpp"
+#include "../include/cch/ai/providers/BoostBeastStreamTransport.hpp"
+#include "../include/cch/ai/providers/OpenAIChatClient.hpp"
+#include "../include/cch/harness/LocalExecutionEnv.hpp"
+#include "../include/cch/harness/session/JsonlSessionStore.hpp"
+#include "../include/cch/tools/ToolFactories.hpp"
+#include "../include/cch/util/Json.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
-
-#include <glaze/glaze.hpp>
 
 #include <filesystem>
 #include <iostream>
@@ -63,7 +62,7 @@ public:
         if (prompt.rfind("read ", 0) == 0) {
             const auto path = prompt.substr(5);
             auto raw = "{\"path\":\"" + path + "\"}";
-            auto args = util::read_json<glz::generic>(raw);
+            auto args = util::read_json<util::JsonValue>(raw);
             ai::ToolCallContent call;
             call.id = "fake-read-1";
             call.name = "read_file";
@@ -72,13 +71,18 @@ public:
             assistant.content.emplace_back(ai::TextContent{"reading " + path, std::nullopt});
             assistant.content.emplace_back(std::move(call));
             assistant.stop_reason = ai::AssistantStopReason::ToolUse;
-            if (sink) sink(ai::TextDeltaEvent{0, "reading " + path, assistant});
+            if (sink) {
+                auto emitted = sink(ai::TextDeltaEvent{0, "reading " + path, assistant});
+                if (!emitted) {
+                    co_return std::unexpected(emitted.error());
+                }
+            }
             co_return assistant;
         }
         if (prompt.rfind("bash ", 0) == 0) {
             const auto command = prompt.substr(5);
             auto raw = "{\"command\":\"" + command + "\"}";
-            auto args = util::read_json<glz::generic>(raw);
+            auto args = util::read_json<util::JsonValue>(raw);
             ai::ToolCallContent call;
             call.id = "fake-bash-1";
             call.name = "bash";
@@ -87,7 +91,12 @@ public:
             assistant.content.emplace_back(ai::TextContent{"running bash", std::nullopt});
             assistant.content.emplace_back(std::move(call));
             assistant.stop_reason = ai::AssistantStopReason::ToolUse;
-            if (sink) sink(ai::TextDeltaEvent{0, "running bash", assistant});
+            if (sink) {
+                auto emitted = sink(ai::TextDeltaEvent{0, "running bash", assistant});
+                if (!emitted) {
+                    co_return std::unexpected(emitted.error());
+                }
+            }
             co_return assistant;
         }
 
@@ -99,7 +108,7 @@ public:
 private:
     boost::asio::awaitable<util::Expected<ai::AssistantMessage>> emit_text(
         ai::AssistantMessage assistant,
-        const ai::AssistantEventSink& sink) {
+        ai::AssistantEventSink& sink) {
         if (sink && !assistant.content.empty()) {
             auto text = text_from_async_content(assistant.content);
             auto emitted = sink(ai::TextDeltaEvent{0, text, assistant});
@@ -139,6 +148,8 @@ void print_async_event(const agent::AgentLifecycleEvent& event) {
             std::cout << "[completed] " << done->reason << '\n';
         } else if (done->reason == "max turns exceeded") {
             std::cout << "[max-turns] max_turns_exceeded\n";
+        } else {
+            std::cout << "[provider-error] " << done->reason << '\n';
         }
     }
 }

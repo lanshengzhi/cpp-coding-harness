@@ -1,13 +1,57 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include <cch/ai/glaze/AiJson.hpp>
+#include "../../include/cch/ai/glaze/AiJson.hpp"
+#include "../../include/cch/util/Json.hpp"
 
-#include <glaze/glaze.hpp>
-
+#include <optional>
 #include <string>
+#include <type_traits>
 #include <variant>
 
 using namespace cch;
+
+TEST_CASE("AI contracts are aggregate-friendly passive value types", "[ai][u3][contract]") {
+    static_assert(std::is_aggregate_v<ai::TextContent>);
+    static_assert(std::is_aggregate_v<ai::ToolCallContent>);
+    static_assert(std::is_aggregate_v<ai::AssistantMessage>);
+    static_assert(std::is_aggregate_v<ai::ToolResultMessage>);
+    static_assert(std::is_aggregate_v<util::Error>);
+
+    ai::ToolCallContent call{
+        .id = "call-1",
+        .name = "read_file",
+        .arguments = std::nullopt,
+        .raw_arguments = R"({"path":"README.md"})",
+        .thought_signature = std::nullopt,
+        .arguments_valid = true,
+        .argument_error = std::nullopt,
+    };
+    ai::AssistantMessage assistant{
+        .content = {ai::TextContent{.text = "checking", .text_signature = std::nullopt}, call},
+        .api = "openai-chat-completions",
+        .provider = "openai",
+        .model = "gpt-test",
+        .response_model = std::nullopt,
+        .response_id = std::nullopt,
+        .usage = std::nullopt,
+        .stop_reason = ai::AssistantStopReason::ToolUse,
+        .error_message = std::nullopt,
+        .timestamp = 1718000000999,
+    };
+    util::Error error{
+        .code = util::ErrorCode::Validation,
+        .message = "invalid contract",
+        .detail = "field is required",
+        .context = std::string{"message"},
+    };
+
+    REQUIRE(assistant.content.size() == 2);
+    CHECK(std::holds_alternative<ai::ToolCallContent>(assistant.content[1]));
+    CHECK(std::get<ai::ToolCallContent>(assistant.content[1]).name == "read_file");
+    CHECK(error.code == util::ErrorCode::Validation);
+    REQUIRE(error.context);
+    CHECK(*error.context == "message");
+}
 
 TEST_CASE("user text message serializes through explicit Glaze content tags", "[ai][u2][glaze]") {
     ai::MessageVariant original = ai::UserMessage{{ai::TextContent{"hello model", "sig-1"}}, 1718000000000};
@@ -32,7 +76,7 @@ TEST_CASE("user text message serializes through explicit Glaze content tags", "[
 }
 
 TEST_CASE("assistant text and tool-call content round-trip in order with metadata", "[ai][u2][ae2]") {
-    auto arguments = util::read_json<glz::generic>(R"({"path":"README.md","limit":20})");
+    auto arguments = util::read_json<util::JsonValue>(R"({"path":"README.md","limit":20})");
     REQUIRE(arguments);
 
     ai::AssistantMessage assistant;
@@ -75,7 +119,7 @@ TEST_CASE("assistant text and tool-call content round-trip in order with metadat
     CHECK(call.name == "read_file");
     CHECK(call.raw_arguments == R"({"path":"README.md","limit":20})");
     REQUIRE(call.arguments);
-    const auto& object = call.arguments->get<glz::generic::object_t>();
+    const auto& object = call.arguments->get<util::JsonValue::object_t>();
     CHECK(object.at("path").get_string() == "README.md");
     CHECK(static_cast<int>(object.at("limit").get<double>()) == 20);
 
@@ -105,4 +149,24 @@ TEST_CASE("unknown content discriminator returns a typed JSON error", "[ai][u2][
     CHECK(parsed.error().code == util::ErrorCode::JsonParse);
     CHECK(parsed.error().message == "unknown content discriminator");
     CHECK(parsed.error().detail.find("audio") != std::string::npos);
+}
+
+TEST_CASE("missing required content payload fields return typed JSON errors", "[ai][u2][glaze]") {
+    auto missing_text = ai::glaze::read_message_json(
+        R"({"role":"user","content":[{"type":"text"}],"timestamp":1718000000000})");
+    REQUIRE_FALSE(missing_text);
+    CHECK(missing_text.error().code == util::ErrorCode::JsonParse);
+    CHECK(missing_text.error().detail.find("text") != std::string::npos);
+
+    auto missing_tool_id = ai::glaze::read_message_json(
+        R"({"role":"assistant","content":[{"type":"toolCall","name":"read_file","rawArguments":"{}"}],"timestamp":1718000000000})");
+    REQUIRE_FALSE(missing_tool_id);
+    CHECK(missing_tool_id.error().code == util::ErrorCode::JsonParse);
+    CHECK(missing_tool_id.error().detail.find("id") != std::string::npos);
+
+    auto missing_tool_result_link = ai::glaze::read_message_json(
+        R"({"role":"toolResult","content":[{"type":"text","text":"ok"}],"timestamp":1718000000000})");
+    REQUIRE_FALSE(missing_tool_result_link);
+    CHECK(missing_tool_result_link.error().code == util::ErrorCode::JsonParse);
+    CHECK(missing_tool_result_link.error().detail.find("toolCallId") != std::string::npos);
 }

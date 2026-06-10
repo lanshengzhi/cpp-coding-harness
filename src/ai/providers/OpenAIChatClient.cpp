@@ -1,9 +1,9 @@
-#include <cch/ai/providers/OpenAIChatClient.hpp>
+#include "../../../include/cch/ai/providers/OpenAIChatClient.hpp"
 
-#include <cch/ai/glaze/ProviderDtos.hpp>
-#include <cch/ai/providers/SseParser.hpp>
-
-#include "../../util/Redactor.hpp"
+#include "../glaze/ProviderDtos.hpp"
+#include "../../../include/cch/ai/glaze/AiJson.hpp"
+#include "../../../include/cch/ai/providers/SseParser.hpp"
+#include "../../../include/cch/util/Json.hpp"
 
 #include <cstdlib>
 #include <map>
@@ -44,7 +44,7 @@ struct ToolCallAccumulator {
             calls.push_back(ai::glaze::ProviderToolCallDto{
                 call->id,
                 "function",
-                ai::glaze::ProviderToolCallFunctionDto{call->name, util::redact_json_text(call->raw_arguments)},
+                ai::glaze::ProviderToolCallFunctionDto{call->name, call->raw_arguments},
             });
         }
     }
@@ -55,10 +55,10 @@ struct ToolCallAccumulator {
     return std::visit(
         Overloaded{
             [](const ai::SystemMessage& system) {
-                return ai::glaze::OpenAIChatMessageDto{"system", util::redact_text(system.content), std::nullopt, std::nullopt};
+                return ai::glaze::OpenAIChatMessageDto{"system", system.content, std::nullopt, std::nullopt};
             },
             [](const ai::UserMessage& user) {
-                return ai::glaze::OpenAIChatMessageDto{"user", util::redact_text(content_text(user.content)), std::nullopt, std::nullopt};
+                return ai::glaze::OpenAIChatMessageDto{"user", content_text(user.content), std::nullopt, std::nullopt};
             },
             [](const ai::AssistantMessage& assistant) {
                 auto calls = tool_calls_from_content(assistant.content);
@@ -68,7 +68,7 @@ struct ToolCallAccumulator {
                 }
                 return ai::glaze::OpenAIChatMessageDto{
                     "assistant",
-                    util::redact_text(content_text(assistant.content)),
+                    content_text(assistant.content),
                     std::nullopt,
                     std::move(tool_calls),
                 };
@@ -76,7 +76,7 @@ struct ToolCallAccumulator {
             [](const ai::ToolResultMessage& tool) {
                 return ai::glaze::OpenAIChatMessageDto{
                     "tool",
-                    util::redact_text(content_text(tool.content)),
+                    content_text(tool.content),
                     tool.tool_call_id,
                     std::nullopt,
                 };
@@ -91,7 +91,7 @@ struct ToolCallAccumulator {
     ai::glaze::OpenAIChatRequestDto dto;
     dto.model = !request.model.empty() ? request.model : (!request.context.model.empty() ? request.context.model : config.model);
     if (request.context.system_prompt) {
-        dto.messages.push_back(ai::glaze::OpenAIChatMessageDto{"system", util::redact_text(*request.context.system_prompt), std::nullopt, std::nullopt});
+        dto.messages.push_back(ai::glaze::OpenAIChatMessageDto{"system", *request.context.system_prompt, std::nullopt, std::nullopt});
     }
     for (const auto& message : request.context.messages) {
         dto.messages.push_back(message_to_openai(message));
@@ -112,10 +112,10 @@ struct ToolCallAccumulator {
     if (!finish_reason) {
         return ai::AssistantStopReason::Unknown;
     }
-    return ai::stop_reason_from_json(*finish_reason);
+    return ai::glaze::stop_reason_from_json(*finish_reason);
 }
 
-[[nodiscard]] util::ExpectedVoid emit(const ai::AssistantEventSink& sink, const ai::AssistantStreamEvent& event) {
+[[nodiscard]] util::ExpectedVoid emit(ai::AssistantEventSink& sink, const ai::AssistantStreamEvent& event) {
     if (!sink) {
         return {};
     }
@@ -123,7 +123,7 @@ struct ToolCallAccumulator {
 }
 
 [[nodiscard]] util::ExpectedVoid emit_error(
-    const ai::AssistantEventSink& sink,
+    ai::AssistantEventSink& sink,
     const util::Error& error,
     ai::AssistantMessage partial) {
     partial.stop_reason = ai::AssistantStopReason::Error;
@@ -131,11 +131,11 @@ struct ToolCallAccumulator {
     return emit(sink, ai::AssistantErrorEvent{ai::AssistantStopReason::Error, std::move(partial)});
 }
 
-[[nodiscard]] util::Expected<glz::generic> parse_tool_arguments(const std::string& raw_arguments) {
+[[nodiscard]] util::Expected<util::JsonValue> parse_tool_arguments(const std::string& raw_arguments) {
     if (raw_arguments.empty()) {
-        return util::read_json<glz::generic>("{}");
+        return util::read_json<util::JsonValue>("{}");
     }
-    return util::read_json<glz::generic>(raw_arguments);
+    return util::read_json<util::JsonValue>(raw_arguments);
 }
 
 } // namespace
@@ -189,6 +189,9 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
 
     SseParser parser;
     bool text_started = false;
+    bool saw_done = false;
+    bool saw_terminal_choice = false;
+    bool saw_assistant_payload = false;
     std::optional<std::size_t> text_index;
     std::map<std::int64_t, ToolCallAccumulator> tool_calls;
 
@@ -200,6 +203,7 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
 
         for (const auto& sse_event : *events) {
             if (sse_event.done) {
+                saw_done = true;
                 continue;
             }
             if (sse_event.data.empty()) {
@@ -234,6 +238,8 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
 
             for (const auto& choice : chunk->choices) {
                 if (choice.finish_reason) {
+                    saw_terminal_choice = true;
+                    saw_assistant_payload = true;
                     assistant.stop_reason = stop_reason_from_provider(choice.finish_reason);
                 }
                 if (!choice.delta) {
@@ -241,6 +247,7 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
                 }
 
                 if (choice.delta->content && !choice.delta->content->empty()) {
+                    saw_assistant_payload = true;
                     if (!text_started) {
                         text_started = true;
                         text_index = assistant.content.size();
@@ -259,6 +266,9 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
                 }
 
                 if (choice.delta->tool_calls) {
+                    if (!choice.delta->tool_calls->empty()) {
+                        saw_assistant_payload = true;
+                    }
                     for (const auto& call_delta : *choice.delta->tool_calls) {
                         auto [it, inserted] = tool_calls.try_emplace(
                             call_delta.index,
@@ -313,14 +323,39 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
         }
         co_return std::unexpected(final_event.error());
     }
-    if (*final_event && !(*final_event)->done && !(*final_event)->data.empty()) {
-        auto handled = handle_chunk(std::string{"data: " + (*final_event)->data + "\n\n"});
-        if (!handled) {
-            if (auto emitted = emit_error(sink, handled.error(), assistant); !emitted) {
-                co_return std::unexpected(emitted.error());
+    if (*final_event) {
+        if ((*final_event)->done) {
+            saw_done = true;
+        } else if (!(*final_event)->data.empty()) {
+            auto handled = handle_chunk(std::string{"data: " + (*final_event)->data + "\n\n"});
+            if (!handled) {
+                if (auto emitted = emit_error(sink, handled.error(), assistant); !emitted) {
+                    co_return std::unexpected(emitted.error());
+                }
+                co_return std::unexpected(handled.error());
             }
-            co_return std::unexpected(handled.error());
         }
+    }
+
+    if (!saw_done && !saw_terminal_choice) {
+        auto error = util::make_error(
+            util::ErrorCode::Provider,
+            "provider stream ended before terminal event",
+            "SSE stream ended without [DONE] or a finish_reason");
+        if (auto emitted = emit_error(sink, error, assistant); !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+        co_return std::unexpected(error);
+    }
+    if (!saw_assistant_payload) {
+        auto error = util::make_error(
+            util::ErrorCode::Provider,
+            "provider stream contained no assistant payload",
+            "SSE stream ended without content, tool calls, or a finish_reason");
+        if (auto emitted = emit_error(sink, error, assistant); !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+        co_return std::unexpected(error);
     }
 
     if (text_started && text_index) {
@@ -332,6 +367,16 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
 
     for (auto& [_, call] : tool_calls) {
         auto& block = std::get<ai::ToolCallContent>(assistant.content[call.content_index]);
+        if (block.id.empty() || block.name.empty()) {
+            auto error = util::make_error(
+                util::ErrorCode::JsonParse,
+                "malformed provider tool call",
+                "streamed tool call is missing id or function name");
+            if (auto emitted = emit_error(sink, error, assistant); !emitted) {
+                co_return std::unexpected(emitted.error());
+            }
+            co_return std::unexpected(error);
+        }
         auto parsed_args = parse_tool_arguments(block.raw_arguments);
         if (parsed_args) {
             block.arguments = std::move(*parsed_args);

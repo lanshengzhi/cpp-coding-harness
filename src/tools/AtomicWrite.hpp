@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../util/Result.hpp"
+#include "../../include/cch/util/Error.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -21,7 +21,11 @@ inline std::filesystem::path atomic_temp_path(const std::filesystem::path& targe
     return target.parent_path() / ("." + target.filename().string() + ".tmp-" + std::to_string(suffix));
 }
 
-inline util::Result<void> write_atomic_file(const std::filesystem::path& target, const std::string& content) {
+inline util::Error write_error(std::string message) {
+    return util::make_error(util::ErrorCode::Workspace, message, message);
+}
+
+inline util::ExpectedVoid write_atomic_file(const std::filesystem::path& target, const std::string& content) {
     std::error_code ec;
     std::filesystem::path temp;
 #if defined(__unix__) || defined(__APPLE__)
@@ -42,13 +46,13 @@ inline util::Result<void> write_atomic_file(const std::filesystem::path& target,
             continue;
         }
         if (ec && status.type() != std::filesystem::file_type::not_found) {
-            return util::Result<void>::failure("could not inspect temporary file: " + ec.message());
+            return std::unexpected(write_error("could not inspect temporary file: " + ec.message()));
         }
         temp = candidate;
         break;
     }
     if (temp.empty()) {
-        return util::Result<void>::failure("could not allocate temporary file for atomic write");
+        return std::unexpected(write_error("could not allocate temporary file for atomic write"));
     }
 
 #if defined(__unix__) || defined(__APPLE__)
@@ -58,7 +62,7 @@ inline util::Result<void> write_atomic_file(const std::filesystem::path& target,
 #endif
     int fd = ::open(temp.c_str(), flags, mode);
     if (fd == -1) {
-        return util::Result<void>::failure("could not create temporary file: " + std::string(std::strerror(errno)));
+        return std::unexpected(write_error("could not create temporary file: " + std::string(std::strerror(errno))));
     }
     const char* data = content.data();
     std::size_t remaining = content.size();
@@ -68,7 +72,7 @@ inline util::Result<void> write_atomic_file(const std::filesystem::path& target,
             const auto message = std::string(std::strerror(errno));
             ::close(fd);
             std::filesystem::remove(temp, ec);
-            return util::Result<void>::failure("could not write temporary file: " + message);
+            return std::unexpected(write_error("could not write temporary file: " + message));
         }
         data += written;
         remaining -= static_cast<std::size_t>(written);
@@ -77,33 +81,33 @@ inline util::Result<void> write_atomic_file(const std::filesystem::path& target,
         const auto message = std::string(std::strerror(errno));
         ::close(fd);
         std::filesystem::remove(temp, ec);
-        return util::Result<void>::failure("could not flush temporary file: " + message);
+        return std::unexpected(write_error("could not flush temporary file: " + message));
     }
     if (::close(fd) != 0) {
         const auto message = std::string(std::strerror(errno));
         std::filesystem::remove(temp, ec);
-        return util::Result<void>::failure("could not close temporary file: " + message);
+        return std::unexpected(write_error("could not close temporary file: " + message));
     }
 #else
     std::ofstream output(temp, std::ios::binary | std::ios::trunc);
     if (!output) {
-        return util::Result<void>::failure("could not open temporary file for writing");
+        return std::unexpected(write_error("could not open temporary file for writing"));
     }
     output << content;
     output.flush();
     output.close();
     if (!output) {
         std::filesystem::remove(temp, ec);
-        return util::Result<void>::failure("could not write temporary file");
+        return std::unexpected(write_error("could not write temporary file"));
     }
 #endif
 
     std::filesystem::rename(temp, target, ec);
     if (ec) {
         std::filesystem::remove(temp, ec);
-        return util::Result<void>::failure("could not replace target atomically: " + ec.message());
+        return std::unexpected(write_error("could not replace target atomically: " + ec.message()));
     }
-    return util::Result<void>::success();
+    return {};
 }
 
 } // namespace cch::tools

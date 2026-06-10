@@ -1,6 +1,7 @@
-#include <cch/agent/AgentLoop.hpp>
+#include "../../include/cch/agent/AgentLoop.hpp"
 
-#include <cch/ai/glaze/AiJson.hpp>
+#include "../../include/cch/ai/glaze/AiJson.hpp"
+#include "../../include/cch/util/Json.hpp"
 
 #include <utility>
 
@@ -28,7 +29,7 @@ namespace {
     return result;
 }
 
-[[nodiscard]] util::Expected<glz::generic> arguments_for_call(const ai::ToolCallContent& call) {
+[[nodiscard]] util::Expected<util::JsonValue> arguments_for_call(const ai::ToolCallContent& call) {
     if (!call.arguments_valid) {
         return std::unexpected(util::make_error(
             util::ErrorCode::JsonParse,
@@ -39,9 +40,9 @@ namespace {
         return *call.arguments;
     }
     if (call.raw_arguments.empty()) {
-        return util::read_json<glz::generic>("{}");
+        return util::read_json<util::JsonValue>("{}");
     }
-    return util::read_json<glz::generic>(call.raw_arguments);
+    return util::read_json<util::JsonValue>(call.raw_arguments);
 }
 
 } // namespace
@@ -92,7 +93,9 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             });
 
         if (!assistant) {
-            emit(sink, AgentEndEvent{false, assistant.error().message});
+            if (auto emitted = emit(sink, AgentEndEvent{false, assistant.error().message}); !emitted) {
+                co_return std::unexpected(emitted.error());
+            }
             co_return std::unexpected(assistant.error());
         }
 
@@ -106,7 +109,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             if (auto emitted = emit(sink, TurnEndEvent{turn, assistant->stop_reason}); !emitted) {
                 co_return std::unexpected(emitted.error());
             }
-            if (auto emitted = emit(sink, AgentEndEvent{true, ai::stop_reason_to_json(assistant->stop_reason)}); !emitted) {
+            if (auto emitted = emit(sink, AgentEndEvent{true, ai::glaze::stop_reason_to_json(assistant->stop_reason)}); !emitted) {
                 co_return std::unexpected(emitted.error());
             }
             co_return AsyncAgentRunResult{std::move(context), assistant->stop_reason, turn};
@@ -162,7 +165,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
     co_return std::unexpected(error);
 }
 
-util::ExpectedVoid AsyncAgentLoop::emit(const AgentEventSink& sink, const AgentLifecycleEvent& event) const {
+util::ExpectedVoid AsyncAgentLoop::emit(AgentEventSink& sink, const AgentLifecycleEvent& event) const {
     if (!sink) {
         return {};
     }

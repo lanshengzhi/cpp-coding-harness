@@ -1,12 +1,13 @@
 #pragma once
 
-#include "Result.hpp"
+#include "../../include/cch/util/Error.hpp"
 
 #include <boost/process.hpp>
 
 #include <chrono>
 #include <filesystem>
 #include <functional>
+#include <array>
 #include <map>
 #include <sstream>
 #include <string>
@@ -33,12 +34,12 @@ struct ProcessResult {
 class ProcessRunner {
 public:
     virtual ~ProcessRunner() = default;
-    [[nodiscard]] virtual Result<ProcessResult> run(const ProcessRequest& request) = 0;
+    [[nodiscard]] virtual Expected<ProcessResult> run(const ProcessRequest& request) = 0;
 };
 
 class DefaultProcessRunner : public ProcessRunner {
 public:
-    [[nodiscard]] Result<ProcessResult> run(const ProcessRequest& request) override {
+    [[nodiscard]] Expected<ProcessResult> run(const ProcessRequest& request) override {
         namespace bp = boost::process;
         try {
             bp::ipstream output;
@@ -62,15 +63,31 @@ public:
             auto drain = [](bp::ipstream& stream, std::string& sink, std::size_t max_bytes, std::size_t max_lines, bool& truncated) {
                 std::size_t bytes = 0;
                 std::size_t lines = 0;
-                std::string line;
-                while (std::getline(stream, line)) {
-                    const auto next_bytes = bytes + line.size() + 1;
-                    if (lines < max_lines && next_bytes <= max_bytes) {
-                        sink += line;
-                        sink += '\n';
-                        bytes = next_bytes;
-                        ++lines;
-                    } else {
+                bool line_limit_reached = max_lines == 0;
+                std::array<char, 4096> buffer{};
+                while (stream) {
+                    stream.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+                    const auto got = stream.gcount();
+                    if (got <= 0) {
+                        break;
+                    }
+
+                    std::size_t offset = 0;
+                    const auto available = static_cast<std::size_t>(got);
+                    if (!line_limit_reached && bytes < max_bytes) {
+                        while (offset < available && bytes < max_bytes && !line_limit_reached) {
+                            const char ch = buffer[offset++];
+                            sink.push_back(ch);
+                            ++bytes;
+                            if (ch == '\n') {
+                                ++lines;
+                                if (lines >= max_lines) {
+                                    line_limit_reached = true;
+                                }
+                            }
+                        }
+                    }
+                    if (offset < available) {
                         truncated = true;
                     }
                 }
@@ -104,9 +121,9 @@ public:
             if (stdout_truncated || stderr_truncated) {
                 result.output += "\n[output truncated]";
             }
-            return Result<ProcessResult>::success(std::move(result));
+            return result;
         } catch (const std::exception& e) {
-            return Result<ProcessResult>::failure(e.what());
+            return std::unexpected(make_error(ErrorCode::Process, "process execution failed", e.what()));
         }
     }
 };

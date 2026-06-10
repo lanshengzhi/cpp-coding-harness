@@ -1,9 +1,8 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include <cch/ai/glaze/AiJson.hpp>
-#include <cch/util/Error.hpp>
-
-#include <glaze/glaze.hpp>
+#include "../../include/cch/ai/glaze/AiJson.hpp"
+#include "../../include/cch/util/Error.hpp"
+#include "../../include/cch/util/Json.hpp"
 
 #include <string>
 #include <variant>
@@ -11,7 +10,7 @@
 using namespace cch;
 
 TEST_CASE("tool-result message round-trips linkage details and error state", "[ai][u2][glaze]") {
-    auto details = util::read_json<glz::generic>(R"({"exitCode":2,"stderr":"denied"})");
+    auto details = util::read_json<util::JsonValue>(R"({"exitCode":2,"stderr":"denied"})");
     REQUIRE(details);
 
     ai::ToolResultMessage result;
@@ -43,7 +42,7 @@ TEST_CASE("tool-result message round-trips linkage details and error state", "[a
     REQUIRE(std::holds_alternative<ai::ImageContent>(round_trip.content[1]));
     CHECK(std::get<ai::ImageContent>(round_trip.content[1]).mime_type == "image/png");
     REQUIRE(round_trip.details);
-    const auto& detail_object = round_trip.details->get<glz::generic::object_t>();
+    const auto& detail_object = round_trip.details->get<util::JsonValue::object_t>();
     CHECK(static_cast<int>(detail_object.at("exitCode").get<double>()) == 2);
     CHECK(detail_object.at("stderr").get_string() == "denied");
 }

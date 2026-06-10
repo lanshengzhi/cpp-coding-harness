@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../util/Result.hpp"
+#include "../../include/cch/util/Error.hpp"
 
 #include <filesystem>
 #include <string>
@@ -13,97 +13,101 @@ public:
     explicit PathGuard(std::filesystem::path workspace)
         : root_(std::filesystem::weakly_canonical(std::move(workspace))) {}
 
-    static util::Result<PathGuard> create(const std::filesystem::path& workspace) {
+    static util::Expected<PathGuard> create(const std::filesystem::path& workspace) {
         std::error_code ec;
         if (!std::filesystem::exists(workspace, ec) || !std::filesystem::is_directory(workspace, ec)) {
-            return util::Result<PathGuard>::failure("workspace does not exist or is not a directory");
+            return std::unexpected(workspace_error("workspace does not exist or is not a directory"));
         }
-        return util::Result<PathGuard>::success(PathGuard(workspace));
+        return PathGuard(workspace);
     }
 
-    [[nodiscard]] util::Result<std::filesystem::path> resolve_existing_file(const std::string& requested) const {
+    [[nodiscard]] util::Expected<std::filesystem::path> resolve_existing_file(const std::string& requested) const {
         auto target = lexical_workspace_path(requested);
         if (!target) {
-            return util::Result<std::filesystem::path>::failure(target.error());
+            return std::unexpected(target.error());
         }
         std::error_code ec;
-        auto canonical = std::filesystem::canonical(target.value(), ec);
+        auto canonical = std::filesystem::canonical(*target, ec);
         if (ec) {
-            return util::Result<std::filesystem::path>::failure("path does not exist inside workspace: " + requested);
+            return std::unexpected(workspace_error("path does not exist inside workspace: " + requested));
         }
         if (!inside(canonical)) {
-            return util::Result<std::filesystem::path>::failure("path escapes workspace: " + requested);
+            return std::unexpected(workspace_error("path escapes workspace: " + requested));
         }
         if (!std::filesystem::is_regular_file(canonical, ec)) {
-            return util::Result<std::filesystem::path>::failure("path is not a regular file: " + requested);
+            return std::unexpected(workspace_error("path is not a regular file: " + requested));
         }
-        return util::Result<std::filesystem::path>::success(canonical);
+        return canonical;
     }
 
-    [[nodiscard]] util::Result<std::filesystem::path> resolve_for_write(const std::string& requested, bool create_parents) const {
+    [[nodiscard]] util::Expected<std::filesystem::path> resolve_for_write(const std::string& requested, bool create_parents) const {
         auto target = lexical_workspace_path(requested);
         if (!target) {
-            return util::Result<std::filesystem::path>::failure(target.error());
+            return std::unexpected(target.error());
         }
         std::error_code ec;
-        auto parent = target.value().parent_path();
+        auto parent = target->parent_path();
         if (parent.empty()) {
             parent = root_;
         }
         if (!std::filesystem::exists(parent, ec)) {
             if (!create_parents) {
-                return util::Result<std::filesystem::path>::failure("parent directory does not exist: " + requested);
+                return std::unexpected(workspace_error("parent directory does not exist: " + requested));
             }
             if (has_symlink_component(parent)) {
-                return util::Result<std::filesystem::path>::failure("parent path contains a symlink: " + requested);
+                return std::unexpected(workspace_error("parent path contains a symlink: " + requested));
             }
             std::filesystem::create_directories(parent, ec);
             if (ec) {
-                return util::Result<std::filesystem::path>::failure("could not create parent directory: " + ec.message());
+                return std::unexpected(workspace_error("could not create parent directory: " + ec.message()));
             }
         }
         if (has_symlink_component(parent)) {
-            return util::Result<std::filesystem::path>::failure("parent path contains a symlink: " + requested);
+            return std::unexpected(workspace_error("parent path contains a symlink: " + requested));
         }
         auto parent_canonical = std::filesystem::canonical(parent, ec);
         if (ec || !inside(parent_canonical)) {
-            return util::Result<std::filesystem::path>::failure("parent path escapes workspace: " + requested);
+            return std::unexpected(workspace_error("parent path escapes workspace: " + requested));
         }
-        auto status = std::filesystem::symlink_status(target.value(), ec);
+        auto status = std::filesystem::symlink_status(*target, ec);
         if (ec && status.type() != std::filesystem::file_type::not_found) {
-            return util::Result<std::filesystem::path>::failure("could not inspect target: " + requested);
+            return std::unexpected(workspace_error("could not inspect target: " + requested));
         }
         if (std::filesystem::is_symlink(status)) {
-            return util::Result<std::filesystem::path>::failure("refusing to write through final symlink: " + requested);
+            return std::unexpected(workspace_error("refusing to write through final symlink: " + requested));
         }
         if (std::filesystem::exists(status) && !std::filesystem::is_regular_file(status)) {
-            return util::Result<std::filesystem::path>::failure("target is not a regular file: " + requested);
+            return std::unexpected(workspace_error("target is not a regular file: " + requested));
         }
-        return util::Result<std::filesystem::path>::success(target.value());
+        return *target;
     }
 
     [[nodiscard]] const std::filesystem::path& root() const { return root_; }
 
 private:
-    [[nodiscard]] util::Result<std::filesystem::path> lexical_workspace_path(const std::string& requested) const {
+    [[nodiscard]] static util::Error workspace_error(std::string message) {
+        return util::make_error(util::ErrorCode::Workspace, message, message);
+    }
+
+    [[nodiscard]] util::Expected<std::filesystem::path> lexical_workspace_path(const std::string& requested) const {
         if (requested.empty()) {
-            return util::Result<std::filesystem::path>::failure("path is required");
+            return std::unexpected(workspace_error("path is required"));
         }
         std::filesystem::path relative(requested);
         if (relative.is_absolute()) {
-            return util::Result<std::filesystem::path>::failure("absolute paths are not allowed: " + requested);
+            return std::unexpected(workspace_error("absolute paths are not allowed: " + requested));
         }
         auto normalized = relative.lexically_normal();
         for (const auto& part : normalized) {
             if (part == "..") {
-                return util::Result<std::filesystem::path>::failure("path escapes workspace: " + requested);
+                return std::unexpected(workspace_error("path escapes workspace: " + requested));
             }
         }
         auto target = (root_ / normalized).lexically_normal();
         if (!inside_lexically(target)) {
-            return util::Result<std::filesystem::path>::failure("path escapes workspace: " + requested);
+            return std::unexpected(workspace_error("path escapes workspace: " + requested));
         }
-        return util::Result<std::filesystem::path>::success(target);
+        return target;
     }
 
     [[nodiscard]] bool inside(const std::filesystem::path& path) const { return inside_lexically(std::filesystem::weakly_canonical(path)); }

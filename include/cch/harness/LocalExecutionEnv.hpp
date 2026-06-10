@@ -5,11 +5,6 @@
 #include <memory>
 #include <vector>
 
-namespace cch::util {
-class ProcessRunner;
-class DefaultProcessRunner;
-} // namespace cch::util
-
 namespace cch::harness {
 
 class AsyncLocalExecutionEnv final : public AsyncExecutionEnv {
@@ -17,8 +12,7 @@ public:
     AsyncLocalExecutionEnv(
         std::filesystem::path workspace,
         bool bash_enabled = false,
-        std::vector<std::string> secret_environment_names = {},
-        std::shared_ptr<util::ProcessRunner> runner = nullptr);
+        std::vector<std::string> secret_environment_names = {});
 
     [[nodiscard]] const std::filesystem::path& workspace() const override;
     [[nodiscard]] bool bash_enabled() const override;

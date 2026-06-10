@@ -1,6 +1,7 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include <cch/util/Error.hpp>
+#include "../../include/cch/util/Error.hpp"
+#include "../../include/cch/util/Json.hpp"
 
 #include <expected>
 #include <string>

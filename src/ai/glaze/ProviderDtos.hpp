@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ToolSchemaDtos.hpp"
+#include "../../../include/cch/ai/glaze/ToolSchemaDtos.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -8,6 +8,26 @@
 #include <vector>
 
 namespace cch::ai::glaze {
+
+struct ProviderToolDto {
+    std::string type{"function"};
+    FunctionToolDto function;
+};
+
+struct ProviderToolCallFunctionDto {
+    std::string name;
+    std::string arguments;
+};
+
+struct ProviderToolCallDto {
+    std::string id;
+    std::string type{"function"};
+    ProviderToolCallFunctionDto function;
+};
+
+[[nodiscard]] inline ProviderToolDto to_provider_tool_dto(const Tool& tool) {
+    return ProviderToolDto{"function", to_function_tool_dto(tool)};
+}
 
 struct OpenAIChatMessageDto {
     std::string role;

@@ -166,6 +166,7 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
                 std::to_string(response.head.status_code)));
         }
 
+        const bool stream_to_callback = static_cast<bool>(on_body_chunk);
         while (!parser.is_done()) {
             std::array<char, 8192> chunk{};
             parser.get().body().data = chunk.data();
@@ -182,7 +183,9 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
             const auto produced = chunk.size() - remaining;
             if (produced != 0) {
                 std::string_view body_chunk(chunk.data(), produced);
-                response.body.append(body_chunk.data(), body_chunk.size());
+                if (!stream_to_callback) {
+                    response.body.append(body_chunk.data(), body_chunk.size());
+                }
                 if (on_body_chunk) {
                     auto handled = on_body_chunk(body_chunk);
                     if (!handled) {

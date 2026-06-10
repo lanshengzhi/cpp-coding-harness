@@ -4,11 +4,11 @@
 #include "Message.hpp"
 #include "StreamEvent.hpp"
 
-#include <cch/util/Error.hpp>
+#include "../util/Callback.hpp"
+#include "../util/Error.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
-#include <functional>
 #include <string>
 
 namespace cch::ai {
@@ -18,7 +18,7 @@ struct StreamChatRequest {
     std::string model;
 };
 
-using AssistantEventSink = std::function<util::ExpectedVoid(const AssistantStreamEvent&)>;
+using AssistantEventSink = util::MoveOnlyCallback<util::ExpectedVoid(const AssistantStreamEvent&)>;
 
 class StreamingChatClient {
 public:

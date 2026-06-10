@@ -40,7 +40,7 @@ struct ToolResultMessage {
     std::string tool_call_id;
     std::string tool_name;
     std::vector<Content> content;
-    std::optional<glz::generic> details;
+    std::optional<util::JsonValue> details;
     bool is_error{false};
     TimestampMs timestamp{};
 };

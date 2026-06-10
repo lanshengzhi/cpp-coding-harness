@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cch/ai/ChatClient.hpp>
-#include <cch/ai/providers/BoostBeastStreamTransport.hpp>
+#include "../ChatClient.hpp"
+#include "StreamTransport.hpp"
 
 #include <chrono>
 #include <memory>

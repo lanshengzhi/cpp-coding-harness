@@ -4,7 +4,7 @@
 #include "../Message.hpp"
 #include "../Usage.hpp"
 #include "ToolSchemaDtos.hpp"
-#include "../../util/Error.hpp"
+#include "../../util/Json.hpp"
 
 #include <glaze/glaze.hpp>
 
@@ -55,7 +55,7 @@ struct ContentDto {
 
 struct MessageDto {
     std::string role;
-    std::vector<ContentDto> content;
+    std::optional<std::vector<ContentDto>> content;
     std::optional<std::string> api;
     std::optional<std::string> provider;
     std::optional<std::string> model;
@@ -78,6 +78,43 @@ struct ContextDto {
     std::optional<std::vector<FunctionToolDto>> tools;
 };
 
+[[nodiscard]] inline std::string stop_reason_to_json(AssistantStopReason reason) {
+    switch (reason) {
+    case AssistantStopReason::Stop:
+        return "stop";
+    case AssistantStopReason::Length:
+        return "length";
+    case AssistantStopReason::ToolUse:
+        return "toolUse";
+    case AssistantStopReason::Error:
+        return "error";
+    case AssistantStopReason::Aborted:
+        return "aborted";
+    case AssistantStopReason::Unknown:
+        return "unknown";
+    }
+    return "unknown";
+}
+
+[[nodiscard]] inline AssistantStopReason stop_reason_from_json(const std::string& reason) {
+    if (reason == "stop") {
+        return AssistantStopReason::Stop;
+    }
+    if (reason == "length") {
+        return AssistantStopReason::Length;
+    }
+    if (reason == "toolUse" || reason == "tool_use" || reason == "tool_calls") {
+        return AssistantStopReason::ToolUse;
+    }
+    if (reason == "error" || reason == "provider_error" || reason == "max_turns_exceeded") {
+        return AssistantStopReason::Error;
+    }
+    if (reason == "aborted" || reason == "abort") {
+        return AssistantStopReason::Aborted;
+    }
+    return AssistantStopReason::Unknown;
+}
+
 namespace detail {
 
 template <class... Ts>
@@ -93,6 +130,38 @@ Overloaded(Ts...) -> Overloaded<Ts...>;
         std::move(message),
         std::move(detail),
         context.empty() ? std::nullopt : std::optional<std::string>{std::string(context)});
+}
+
+[[nodiscard]] inline util::Expected<std::vector<Content>> content_from_dto(
+    const std::vector<ContentDto>& content,
+    std::string_view context);
+
+template <typename T>
+[[nodiscard]] inline util::ExpectedVoid require_field(
+    const std::optional<T>& field,
+    std::string_view discriminator,
+    std::string_view field_name,
+    std::string_view context) {
+    if (field) {
+        return {};
+    }
+    return std::unexpected(json_contract_error(
+        "missing required JSON field",
+        std::string{"missing required field '"} + std::string(field_name) + "' for " + std::string(discriminator),
+        context));
+}
+
+[[nodiscard]] inline util::Expected<std::vector<Content>> required_content_from_dto(
+    const std::optional<std::vector<ContentDto>>& content,
+    std::string_view role,
+    std::string_view context) {
+    if (!content) {
+        return std::unexpected(json_contract_error(
+            "missing required JSON field",
+            std::string{"missing required field 'content' for "} + std::string(role),
+            context));
+    }
+    return content_from_dto(*content, context);
 }
 
 [[nodiscard]] inline UsageDto to_dto(const Usage& usage) {
@@ -161,7 +230,9 @@ Overloaded(Ts...) -> Overloaded<Ts...>;
     dto.type = "toolCall";
     dto.id = content.id;
     dto.name = content.name;
-    dto.arguments = content.arguments;
+    if (content.arguments) {
+        dto.arguments = util::json_to_glaze(*content.arguments);
+    }
     dto.rawArguments = content.raw_arguments;
     dto.thoughtSignature = content.thought_signature;
     if (!content.arguments_valid) {
@@ -177,27 +248,51 @@ Overloaded(Ts...) -> Overloaded<Ts...>;
 
 [[nodiscard]] inline util::Expected<Content> content_from_dto(const ContentDto& dto, std::string_view context) {
     if (dto.type == "text") {
-        return Content{TextContent{dto.text.value_or(""), dto.textSignature}};
+        if (auto required = require_field(dto.text, "text content", "text", context); !required) {
+            return std::unexpected(required.error());
+        }
+        return Content{TextContent{*dto.text, dto.textSignature}};
     }
     if (dto.type == "thinking") {
-        return Content{ThinkingContent{dto.thinking.value_or(""), dto.thinkingSignature, dto.redacted.value_or(false)}};
+        if (auto required = require_field(dto.thinking, "thinking content", "thinking", context); !required) {
+            return std::unexpected(required.error());
+        }
+        return Content{ThinkingContent{*dto.thinking, dto.thinkingSignature, dto.redacted.value_or(false)}};
     }
     if (dto.type == "image") {
-        return Content{ImageContent{dto.data.value_or(""), dto.mimeType.value_or("")}};
+        if (auto required = require_field(dto.data, "image content", "data", context); !required) {
+            return std::unexpected(required.error());
+        }
+        if (auto required = require_field(dto.mimeType, "image content", "mimeType", context); !required) {
+            return std::unexpected(required.error());
+        }
+        return Content{ImageContent{*dto.data, *dto.mimeType}};
     }
     if (dto.type == "toolCall") {
+        if (auto required = require_field(dto.id, "toolCall content", "id", context); !required) {
+            return std::unexpected(required.error());
+        }
+        if (auto required = require_field(dto.name, "toolCall content", "name", context); !required) {
+            return std::unexpected(required.error());
+        }
+        if (!dto.rawArguments && !dto.arguments) {
+            return std::unexpected(json_contract_error(
+                "missing required JSON field",
+                "missing required field 'rawArguments' or 'arguments' for toolCall content",
+                context));
+        }
         auto raw_arguments = dto.rawArguments.value_or("");
         if (raw_arguments.empty() && dto.arguments) {
-            auto raw = util::write_json(*dto.arguments);
+            auto raw = util::write_json(util::json_from_glaze(*dto.arguments));
             if (!raw) {
                 return std::unexpected(raw.error());
             }
             raw_arguments = std::move(*raw);
         }
         return Content{ToolCallContent{
-            dto.id.value_or(""),
-            dto.name.value_or(""),
-            dto.arguments,
+            *dto.id,
+            *dto.name,
+            dto.arguments ? std::optional<util::JsonValue>{util::json_from_glaze(*dto.arguments)} : std::nullopt,
             std::move(raw_arguments),
             dto.thoughtSignature,
             dto.argumentsValid.value_or(true),
@@ -238,7 +333,7 @@ Overloaded(Ts...) -> Overloaded<Ts...>;
 [[nodiscard]] inline MessageDto to_dto(const SystemMessage& message) {
     MessageDto dto;
     dto.role = "system";
-    dto.content.push_back(to_dto(TextContent{message.content, std::nullopt}));
+    dto.content = std::vector<ContentDto>{to_dto(TextContent{message.content, std::nullopt})};
     dto.timestamp = message.timestamp;
     return dto;
 }
@@ -281,7 +376,9 @@ Overloaded(Ts...) -> Overloaded<Ts...>;
     dto.toolCallId = message.tool_call_id;
     dto.toolName = message.tool_name;
     dto.content = to_content_dtos(message.content);
-    dto.details = message.details;
+    if (message.details) {
+        dto.details = util::json_to_glaze(*message.details);
+    }
     dto.isError = message.is_error;
     dto.timestamp = message.timestamp;
     return dto;
@@ -293,7 +390,7 @@ Overloaded(Ts...) -> Overloaded<Ts...>;
 
 [[nodiscard]] inline util::Expected<MessageVariant> message_from_dto(const MessageDto& dto, std::string_view context) {
     if (dto.role == "system") {
-        auto content = content_from_dto(dto.content, context);
+        auto content = required_content_from_dto(dto.content, dto.role, context);
         if (!content) {
             return std::unexpected(content.error());
         }
@@ -307,7 +404,7 @@ Overloaded(Ts...) -> Overloaded<Ts...>;
     }
 
     if (dto.role == "user") {
-        auto content = content_from_dto(dto.content, context);
+        auto content = required_content_from_dto(dto.content, dto.role, context);
         if (!content) {
             return std::unexpected(content.error());
         }
@@ -315,7 +412,7 @@ Overloaded(Ts...) -> Overloaded<Ts...>;
     }
 
     if (dto.role == "assistant") {
-        auto content = content_from_dto(dto.content, context);
+        auto content = required_content_from_dto(dto.content, dto.role, context);
         if (!content) {
             return std::unexpected(content.error());
         }
@@ -336,15 +433,21 @@ Overloaded(Ts...) -> Overloaded<Ts...>;
     }
 
     if (dto.role == "toolResult") {
-        auto content = content_from_dto(dto.content, context);
+        auto content = required_content_from_dto(dto.content, dto.role, context);
         if (!content) {
             return std::unexpected(content.error());
         }
+        if (auto required = require_field(dto.toolCallId, "toolResult message", "toolCallId", context); !required) {
+            return std::unexpected(required.error());
+        }
+        if (auto required = require_field(dto.toolName, "toolResult message", "toolName", context); !required) {
+            return std::unexpected(required.error());
+        }
         return MessageVariant{ToolResultMessage{
-            dto.toolCallId.value_or(""),
-            dto.toolName.value_or(""),
+            *dto.toolCallId,
+            *dto.toolName,
             std::move(*content),
-            dto.details,
+            dto.details ? std::optional<util::JsonValue>{util::json_from_glaze(*dto.details)} : std::nullopt,
             dto.isError.value_or(false),
             dto.timestamp,
         }};

@@ -1,10 +1,10 @@
 #pragma once
 
-#include <cch/ai/Tool.hpp>
-#include <cch/util/Error.hpp>
+#include "../ai/Tool.hpp"
+#include "../util/Error.hpp"
+#include "../util/JsonValue.hpp"
 
 #include <boost/asio/awaitable.hpp>
-#include <glaze/glaze.hpp>
 
 #include <optional>
 #include <string>
@@ -14,13 +14,13 @@ namespace cch::agent {
 struct ToolInvocation {
     std::string call_id;
     std::string name;
-    glz::generic arguments;
+    util::JsonValue arguments;
     std::string raw_arguments;
 };
 
 struct AsyncToolExecutionResult {
     std::string content;
-    std::optional<glz::generic> details;
+    std::optional<util::JsonValue> details;
     bool is_error{false};
 };
 

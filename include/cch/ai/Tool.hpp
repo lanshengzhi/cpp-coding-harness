@@ -18,51 +18,6 @@ enum class JsonSchemaType {
     Null,
 };
 
-[[nodiscard]] inline std::string to_string(JsonSchemaType type) {
-    switch (type) {
-    case JsonSchemaType::Object:
-        return "object";
-    case JsonSchemaType::String:
-        return "string";
-    case JsonSchemaType::Integer:
-        return "integer";
-    case JsonSchemaType::Number:
-        return "number";
-    case JsonSchemaType::Boolean:
-        return "boolean";
-    case JsonSchemaType::Array:
-        return "array";
-    case JsonSchemaType::Null:
-        return "null";
-    }
-    return "object";
-}
-
-[[nodiscard]] inline std::optional<JsonSchemaType> schema_type_from_string(const std::string& value) {
-    if (value == "object") {
-        return JsonSchemaType::Object;
-    }
-    if (value == "string") {
-        return JsonSchemaType::String;
-    }
-    if (value == "integer") {
-        return JsonSchemaType::Integer;
-    }
-    if (value == "number") {
-        return JsonSchemaType::Number;
-    }
-    if (value == "boolean") {
-        return JsonSchemaType::Boolean;
-    }
-    if (value == "array") {
-        return JsonSchemaType::Array;
-    }
-    if (value == "null") {
-        return JsonSchemaType::Null;
-    }
-    return std::nullopt;
-}
-
 struct JsonSchema {
     JsonSchemaType type{JsonSchemaType::Object};
     std::optional<std::string> description;

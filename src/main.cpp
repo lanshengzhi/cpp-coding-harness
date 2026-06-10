@@ -1,5 +1,5 @@
 #include "AsyncCliRuntime.hpp"
-#include "util/Result.hpp"
+#include "../include/cch/util/Error.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -19,7 +19,6 @@ struct CliConfig {
     bool repl{false};
     bool enable_bash{false};
     bool help{false};
-    bool async_stack{true};
     bool workspace_explicit{false};
     int max_turns{8};
     std::filesystem::path workspace{std::filesystem::current_path()};
@@ -31,11 +30,14 @@ struct CliConfig {
     std::string prompt;
 };
 
+cch::util::Error cli_error(std::string message) {
+    return cch::util::make_error(cch::util::ErrorCode::Validation, message, message);
+}
+
 void print_help(std::ostream& out) {
     out << "cpp-harness [options] [prompt]\n"
         << "\nOptions:\n"
         << "  --fake                    Use deterministic fake provider (no network)\n"
-        << "  --async                   Run the coroutine/Glaze stack (default)\n"
         << "  --repl                    Read prompts interactively until exit/quit\n"
         << "  --workspace <path>        Workspace boundary for tools (default: cwd)\n"
         << "  --session <path>          Create a new JSONL session at path\n"
@@ -60,7 +62,7 @@ std::string join_prompt(const std::vector<std::string>& parts, std::size_t start
     return out.str();
 }
 
-cch::util::Result<CliConfig> parse_args(int argc, char** argv) {
+cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     CliConfig config;
     std::vector<std::string> args;
     for (int i = 1; i < argc; ++i) {
@@ -68,73 +70,71 @@ cch::util::Result<CliConfig> parse_args(int argc, char** argv) {
     }
     for (std::size_t i = 0; i < args.size(); ++i) {
         const auto& arg = args[i];
-        auto need_value = [&](const std::string& name) -> cch::util::Result<std::string> {
+        auto need_value = [&](const std::string& name) -> cch::util::Expected<std::string> {
             if (i + 1 >= args.size()) {
-                return cch::util::Result<std::string>::failure(name + " requires a value");
+                return std::unexpected(cli_error(name + " requires a value"));
             }
-            return cch::util::Result<std::string>::success(args[++i]);
+            return args[++i];
         };
         if (arg == "--help" || arg == "-h") {
             config.help = true;
         } else if (arg == "--fake") {
             config.fake = true;
-        } else if (arg == "--async") {
-            config.async_stack = true;
         } else if (arg == "--repl") {
             config.repl = true;
         } else if (arg == "--enable-bash") {
             config.enable_bash = true;
         } else if (arg == "--workspace") {
             auto value = need_value(arg);
-            if (!value) return cch::util::Result<CliConfig>::failure(value.error());
-            config.workspace = value.value();
+            if (!value) return std::unexpected(value.error());
+            config.workspace = *value;
             config.workspace_explicit = true;
         } else if (arg == "--session") {
             auto value = need_value(arg);
-            if (!value) return cch::util::Result<CliConfig>::failure(value.error());
-            config.session_path = value.value();
+            if (!value) return std::unexpected(value.error());
+            config.session_path = *value;
         } else if (arg == "--resume") {
             auto value = need_value(arg);
-            if (!value) return cch::util::Result<CliConfig>::failure(value.error());
-            config.resume_path = value.value();
+            if (!value) return std::unexpected(value.error());
+            config.resume_path = *value;
         } else if (arg == "--max-turns") {
             auto value = need_value(arg);
-            if (!value) return cch::util::Result<CliConfig>::failure(value.error());
+            if (!value) return std::unexpected(value.error());
             try {
                 std::size_t consumed = 0;
-                config.max_turns = std::stoi(value.value(), &consumed);
-                if (consumed != value.value().size()) {
-                    return cch::util::Result<CliConfig>::failure("--max-turns must be an integer");
+                config.max_turns = std::stoi(*value, &consumed);
+                if (consumed != value->size()) {
+                    return std::unexpected(cli_error("--max-turns must be an integer"));
                 }
             } catch (const std::exception&) {
-                return cch::util::Result<CliConfig>::failure("--max-turns must be an integer");
+                return std::unexpected(cli_error("--max-turns must be an integer"));
             }
         } else if (arg == "--model") {
             auto value = need_value(arg);
-            if (!value) return cch::util::Result<CliConfig>::failure(value.error());
-            config.model = value.value();
+            if (!value) return std::unexpected(value.error());
+            config.model = *value;
         } else if (arg == "--base-url") {
             auto value = need_value(arg);
-            if (!value) return cch::util::Result<CliConfig>::failure(value.error());
-            config.base_url = value.value();
+            if (!value) return std::unexpected(value.error());
+            config.base_url = *value;
         } else if (arg == "--api-key-env") {
             auto value = need_value(arg);
-            if (!value) return cch::util::Result<CliConfig>::failure(value.error());
-            config.api_key_env = value.value();
+            if (!value) return std::unexpected(value.error());
+            config.api_key_env = *value;
         } else if (!arg.empty() && arg[0] == '-') {
-            return cch::util::Result<CliConfig>::failure("unknown option: " + arg);
+            return std::unexpected(cli_error("unknown option: " + arg));
         } else {
             config.prompt = join_prompt(args, i);
             break;
         }
     }
     if (config.max_turns <= 0) {
-        return cch::util::Result<CliConfig>::failure("--max-turns must be positive");
+        return std::unexpected(cli_error("--max-turns must be positive"));
     }
     if (!config.repl && config.prompt.empty() && !config.help) {
-        return cch::util::Result<CliConfig>::failure("prompt is required unless --repl is used");
+        return std::unexpected(cli_error("prompt is required unless --repl is used"));
     }
-    return cch::util::Result<CliConfig>::success(std::move(config));
+    return config;
 }
 
 std::string timestamp_for_path() {
@@ -164,12 +164,12 @@ std::filesystem::path default_session_path() {
     return std::filesystem::current_path() / ".cpp-harness" / "sessions" / (timestamp_for_path() + "-" + random_suffix() + ".jsonl");
 }
 
-cch::util::Result<void> validate_workspace(const std::filesystem::path& workspace) {
+cch::util::ExpectedVoid validate_workspace(const std::filesystem::path& workspace) {
     std::error_code ec;
     if (!std::filesystem::exists(workspace, ec) || !std::filesystem::is_directory(workspace, ec)) {
-        return cch::util::Result<void>::failure("invalid workspace path: " + workspace.string());
+        return std::unexpected(cli_error("invalid workspace path: " + workspace.string()));
     }
-    return cch::util::Result<void>::success();
+    return {};
 }
 
 std::filesystem::path canonical_workspace(const std::filesystem::path& workspace) {
@@ -178,32 +178,25 @@ std::filesystem::path canonical_workspace(const std::filesystem::path& workspace
     return ec ? workspace.lexically_normal() : canonical;
 }
 
-bool same_workspace(const std::filesystem::path& first, const std::filesystem::path& second) {
-    std::error_code first_ec;
-    std::error_code second_ec;
-    auto first_canonical = std::filesystem::weakly_canonical(first, first_ec);
-    auto second_canonical = std::filesystem::weakly_canonical(second, second_ec);
-    if (first_ec || second_ec) {
-        return first.lexically_normal() == second.lexically_normal();
-    }
-    return first_canonical == second_canonical;
-}
-
-cch::util::Result<void> validate_config_before_model(const CliConfig& config) {
+cch::util::ExpectedVoid validate_config_before_model(const CliConfig& config) {
     std::error_code ec;
     if (!config.fake) {
         const char* key = std::getenv(config.api_key_env.c_str());
         if (key == nullptr || *key == '\0') {
-            return cch::util::Result<void>::failure("missing API key; set " + config.api_key_env + " before real-provider mode");
+            return std::unexpected(cli_error("missing API key; set " + config.api_key_env + " before real-provider mode"));
         }
     }
     if (!config.resume_path.empty() && !config.session_path.empty()) {
-        return cch::util::Result<void>::failure("use either --session or --resume, not both");
+        return std::unexpected(cli_error("use either --session or --resume, not both"));
     }
     if (!config.session_path.empty() && std::filesystem::exists(config.session_path, ec)) {
-        return cch::util::Result<void>::failure("session file already exists; use --resume to append");
+        return std::unexpected(cli_error("session file already exists; use --resume to append"));
     }
-    return cch::util::Result<void>::success();
+    return {};
+}
+
+void print_error(const cch::util::Error& error) {
+    std::cerr << (error.detail.empty() ? error.message : error.detail) << '\n';
 }
 
 } // namespace
@@ -211,24 +204,25 @@ cch::util::Result<void> validate_config_before_model(const CliConfig& config) {
 int main(int argc, char** argv) {
     auto parsed = parse_args(argc, argv);
     if (!parsed) {
-        std::cerr << parsed.error() << "\n\n";
+        print_error(parsed.error());
+        std::cerr << "\n";
         print_help(std::cerr);
         return 2;
     }
-    CliConfig config = std::move(parsed.value());
+    CliConfig config = std::move(*parsed);
     if (config.help) {
         print_help(std::cout);
         return 0;
     }
     auto validation = validate_config_before_model(config);
     if (!validation) {
-        std::cerr << validation.error() << '\n';
+        print_error(validation.error());
         return 2;
     }
 
     auto workspace_validation = validate_workspace(config.workspace);
     if (!workspace_validation) {
-        std::cerr << workspace_validation.error() << '\n';
+        print_error(workspace_validation.error());
         return 2;
     }
     config.workspace = canonical_workspace(config.workspace);

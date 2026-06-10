@@ -1,9 +1,8 @@
 #pragma once
 
-#include <cch/ai/Message.hpp>
-#include <cch/util/Error.hpp>
-
-#include <functional>
+#include "../ai/Message.hpp"
+#include "../util/Callback.hpp"
+#include "../util/Error.hpp"
 #include <string>
 #include <variant>
 
@@ -66,6 +65,6 @@ using AgentLifecycleEvent = std::variant<
     TurnEndEvent,
     AgentEndEvent>;
 
-using AgentEventSink = std::function<util::ExpectedVoid(const AgentLifecycleEvent&)>;
+using AgentEventSink = util::MoveOnlyCallback<util::ExpectedVoid(const AgentLifecycleEvent&)>;
 
 } // namespace cch::agent

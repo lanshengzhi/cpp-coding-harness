@@ -1,7 +1,8 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include <cch/agent/AgentLoop.hpp>
-#include <cch/util/Error.hpp>
+#include "../../include/cch/agent/AgentLoop.hpp"
+#include "../../include/cch/util/Error.hpp"
+#include "../../include/cch/util/Json.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -11,6 +12,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -105,7 +107,7 @@ std::size_t count_events(const std::vector<agent::AgentLifecycleEvent>& events) 
 }
 
 ai::AssistantMessage tool_call_response(std::string raw_arguments = R"({"path":"README.md"})") {
-    auto args = util::read_json<glz::generic>(raw_arguments);
+    auto args = util::read_json<util::JsonValue>(raw_arguments);
     ai::AssistantMessage message;
     message.stop_reason = ai::AssistantStopReason::ToolUse;
     ai::ToolCallContent call;
@@ -123,6 +125,29 @@ ai::AssistantMessage tool_call_response(std::string raw_arguments = R"({"path":"
 }
 
 } // namespace
+
+TEST_CASE("async tool registry owns tools and returns deterministic definitions", "[agent][u6]") {
+    static_assert(!std::is_copy_constructible_v<agent::AsyncToolRegistry>);
+    static_assert(std::is_move_constructible_v<agent::AsyncToolRegistry>);
+
+    auto zed = std::make_unique<FakeTool>(ai::Tool{"zed", "Zed tool", ai::JsonSchema::object()});
+    auto alpha = std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha tool", ai::JsonSchema::object()});
+    auto* zed_ptr = zed.get();
+    auto* alpha_ptr = alpha.get();
+
+    agent::AsyncToolRegistry registry;
+    registry.add(std::move(zed));
+    registry.add(std::move(alpha));
+
+    CHECK(registry.find("zed") == zed_ptr);
+    CHECK(registry.find("alpha") == alpha_ptr);
+    CHECK(registry.find("missing") == nullptr);
+
+    const auto definitions = registry.definitions();
+    REQUIRE(definitions.size() == 2);
+    CHECK(definitions[0].name == "alpha");
+    CHECK(definitions[1].name == "zed");
+}
 
 TEST_CASE("async agent loop emits deterministic lifecycle events for text", "[agent][async][u5]") {
     FakeStreamingClient client;
@@ -150,14 +175,14 @@ TEST_CASE("async agent loop executes tool calls and continues with tool result c
     client.responses.push_back(tool_call_response());
     client.responses.push_back(ai::assistant_text_message("done"));
 
-    auto tool = std::make_shared<FakeTool>(ai::Tool{
+    auto tool = std::make_unique<FakeTool>(ai::Tool{
         "read_file",
         "Read a workspace file",
         ai::JsonSchema::object({{"path", ai::JsonSchema::string("file path")}}, {"path"}),
     });
     auto* tool_ptr = tool.get();
     agent::AsyncToolRegistry registry;
-    registry.add(tool);
+    registry.add(std::move(tool));
     agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{4, "gpt-test"});
 
     auto run = run_loop(loop, "read");
@@ -167,7 +192,7 @@ TEST_CASE("async agent loop executes tool calls and continues with tool result c
     REQUIRE(tool_ptr->invocations.size() == 1);
     CHECK(tool_ptr->invocations[0].call_id == "call-1");
     CHECK(tool_ptr->invocations[0].name == "read_file");
-    CHECK(tool_ptr->invocations[0].arguments.get<glz::generic::object_t>().at("path").get_string() == "README.md");
+    CHECK(tool_ptr->invocations[0].arguments.get<util::JsonValue::object_t>().at("path").get_string() == "README.md");
     REQUIRE(client.requests.size() == 2);
     REQUIRE(client.requests[1].context.messages.size() == 3);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client.requests[1].context.messages.back()));
@@ -180,7 +205,7 @@ TEST_CASE("async agent loop turns malformed tool arguments into error tool resul
     client.responses.push_back(tool_call_response("not-json"));
     client.responses.push_back(ai::assistant_text_message("saw error"));
     agent::AsyncToolRegistry registry;
-    registry.add(std::make_shared<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()}));
+    registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()}));
     agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{4, "gpt-test"});
 
     auto run = run_loop(loop, "read");
@@ -197,7 +222,7 @@ TEST_CASE("async agent loop reports max turn exhaustion", "[agent][async][u5]") 
     FakeStreamingClient client;
     client.responses.push_back(tool_call_response());
     agent::AsyncToolRegistry registry;
-    registry.add(std::make_shared<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()}));
+    registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()}));
     agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{1, "gpt-test"});
 
     auto run = run_loop(loop, "read");

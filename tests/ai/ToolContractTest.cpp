@@ -1,15 +1,14 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include <cch/ai/glaze/ToolSchemaDtos.hpp>
-#include <cch/util/Error.hpp>
-
-#include <glaze/glaze.hpp>
+#include "../../include/cch/ai/glaze/ToolSchemaDtos.hpp"
+#include "../../include/cch/util/Error.hpp"
+#include "../../include/cch/util/Json.hpp"
 
 #include <string>
 
 using namespace cch;
 
-TEST_CASE("tool definitions serialize provider-compatible schema DTOs without Boost JSON", "[ai][u2][tool]") {
+TEST_CASE("tool definitions serialize function schema DTOs without Boost JSON", "[ai][u2][tool]") {
     ai::Tool read_file;
     read_file.name = "read_file";
     read_file.description = "Read a workspace file";
@@ -22,32 +21,28 @@ TEST_CASE("tool definitions serialize provider-compatible schema DTOs without Bo
         std::nullopt,
         false);
 
-    auto json = ai::glaze::write_provider_tool_json(read_file);
+    auto json = ai::glaze::write_function_tool_json(read_file);
     REQUIRE(json);
-    CHECK(json->find(R"("type":"function")") != std::string::npos);
     CHECK(json->find(R"("name":"read_file")") != std::string::npos);
     CHECK(json->find(R"("parameters")") != std::string::npos);
     CHECK(json->find(R"("additionalProperties":false)") != std::string::npos);
 
-    auto parsed = util::read_json<glz::generic>(*json);
+    auto parsed = util::read_json<util::JsonValue>(*json);
     REQUIRE(parsed);
-    const auto& root = parsed->get<glz::generic::object_t>();
-    CHECK(root.at("type").get_string() == "function");
-
-    const auto& function = root.at("function").get<glz::generic::object_t>();
+    const auto& function = parsed->get<util::JsonValue::object_t>();
     CHECK(function.at("name").get_string() == "read_file");
     CHECK(function.at("description").get_string() == "Read a workspace file");
 
-    const auto& parameters = function.at("parameters").get<glz::generic::object_t>();
+    const auto& parameters = function.at("parameters").get<util::JsonValue::object_t>();
     CHECK(parameters.at("type").get_string() == "object");
     CHECK(parameters.at("additionalProperties").get<bool>() == false);
 
-    const auto& properties = parameters.at("properties").get<glz::generic::object_t>();
-    CHECK(properties.at("path").get<glz::generic::object_t>().at("type").get_string() == "string");
-    CHECK(properties.at("path").get<glz::generic::object_t>().at("description").get_string() == "file path");
-    CHECK(properties.at("limit").get<glz::generic::object_t>().at("type").get_string() == "integer");
+    const auto& properties = parameters.at("properties").get<util::JsonValue::object_t>();
+    CHECK(properties.at("path").get<util::JsonValue::object_t>().at("type").get_string() == "string");
+    CHECK(properties.at("path").get<util::JsonValue::object_t>().at("description").get_string() == "file path");
+    CHECK(properties.at("limit").get<util::JsonValue::object_t>().at("type").get_string() == "integer");
 
-    const auto& required = parameters.at("required").get<glz::generic::array_t>();
+    const auto& required = parameters.at("required").get<util::JsonValue::array_t>();
     REQUIRE(required.size() == 1);
     CHECK(required[0].get_string() == "path");
 }

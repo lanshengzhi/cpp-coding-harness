@@ -1,13 +1,15 @@
-#include <cch/harness/session/JsonlSessionStore.hpp>
+#include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
 
-#include <cch/ai/glaze/AiJson.hpp>
+#include "../../../include/cch/ai/glaze/AiJson.hpp"
+#include "../../../include/cch/util/Json.hpp"
 
-#include <glaze/glaze.hpp>
+#include "../../util/Redactor.hpp"
 
 #include <cerrno>
 #include <cstring>
 #include <fstream>
 #include <system_error>
+#include <type_traits>
 #include <utility>
 
 #if defined(__unix__) || defined(__APPLE__)
@@ -40,14 +42,14 @@ struct MessageEntryDto {
 }
 
 [[nodiscard]] util::Expected<std::string> entry_type(std::string_view line, std::size_t line_number) {
-    auto parsed = util::read_json<glz::generic>(line);
+    auto parsed = util::read_json<util::JsonValue>(line);
     if (!parsed) {
         return std::unexpected(session_error(
             "malformed JSONL",
             "malformed JSONL at line " + std::to_string(line_number) + ": " + parsed.error().detail));
     }
     try {
-        return parsed->get<glz::generic::object_t>().at("type").get_string();
+        return parsed->get<util::JsonValue::object_t>().at("type").get_string();
     } catch (const std::exception&) {
         return std::unexpected(session_error(
             "session entry missing type",
@@ -73,6 +75,79 @@ struct MessageEntryDto {
 
 [[nodiscard]] MessageEntryDto to_dto(std::string entry_id, const ai::MessageVariant& message) {
     return MessageEntryDto{"message", std::move(entry_id), ai::glaze::to_message_dto(message)};
+}
+
+[[nodiscard]] util::JsonValue redact_json_value(const util::JsonValue& value) {
+    if (const auto* text = value.get_if<std::string>()) {
+        return util::JsonValue{util::redact_text(*text)};
+    }
+    if (const auto* values = value.get_if<util::JsonValue::array_t>()) {
+        util::JsonValue::array_t redacted;
+        redacted.reserve(values->size());
+        for (const auto& item : *values) {
+            redacted.push_back(redact_json_value(item));
+        }
+        return util::JsonValue{std::move(redacted)};
+    }
+    if (const auto* object = value.get_if<util::JsonValue::object_t>()) {
+        util::JsonValue::object_t redacted;
+        for (const auto& [key, item] : *object) {
+            if (util::looks_secret_key(key)) {
+                redacted.emplace(key, util::JsonValue{"[REDACTED]"});
+            } else {
+                redacted.emplace(key, redact_json_value(item));
+            }
+        }
+        return util::JsonValue{std::move(redacted)};
+    }
+    return value;
+}
+
+void redact_content(ai::Content& content) {
+    std::visit(
+        [](auto& block) {
+            using T = std::decay_t<decltype(block)>;
+            if constexpr (std::is_same_v<T, ai::TextContent>) {
+                block.text = util::redact_text(std::move(block.text));
+            } else if constexpr (std::is_same_v<T, ai::ThinkingContent>) {
+                block.thinking = util::redact_text(std::move(block.thinking));
+            } else if constexpr (std::is_same_v<T, ai::ToolCallContent>) {
+                if (block.arguments) {
+                    block.arguments = redact_json_value(*block.arguments);
+                }
+                block.raw_arguments = util::redact_json_text(block.raw_arguments);
+                if (block.argument_error) {
+                    block.argument_error = util::redact_text(std::move(*block.argument_error));
+                }
+            }
+        },
+        content);
+}
+
+[[nodiscard]] ai::MessageVariant redacted_message(const ai::MessageVariant& message) {
+    auto redacted = message;
+    std::visit(
+        [](auto& concrete) {
+            using T = std::decay_t<decltype(concrete)>;
+            if constexpr (std::is_same_v<T, ai::SystemMessage>) {
+                concrete.content = util::redact_text(std::move(concrete.content));
+            } else {
+                for (auto& block : concrete.content) {
+                    redact_content(block);
+                }
+                if constexpr (std::is_same_v<T, ai::AssistantMessage>) {
+                    if (concrete.error_message) {
+                        concrete.error_message = util::redact_text(std::move(*concrete.error_message));
+                    }
+                } else if constexpr (std::is_same_v<T, ai::ToolResultMessage>) {
+                    if (concrete.details) {
+                        concrete.details = redact_json_value(*concrete.details);
+                    }
+                }
+            }
+        },
+        redacted);
+    return redacted;
 }
 
 bool has_public_read(std::filesystem::perms mode) {
@@ -246,6 +321,9 @@ util::Expected<LoadedSession> JsonlSessionStore::load(const std::filesystem::pat
             loaded.unknown_lines.push_back(line);
         }
     }
+    if (input.bad()) {
+        return std::unexpected(session_error("could not read complete session file"));
+    }
     if (!saw_header) {
         return std::unexpected(session_error("session header is missing"));
     }
@@ -257,7 +335,8 @@ util::ExpectedVoid JsonlSessionStore::append(const ai::MessageVariant& message) 
     if (!output) {
         return std::unexpected(session_error("could not append to session file"));
     }
-    auto entry_json = util::write_json(to_dto("m" + std::to_string(next_entry_id_), message));
+    auto redacted = redacted_message(message);
+    auto entry_json = util::write_json(to_dto("m" + std::to_string(next_entry_id_), redacted));
     if (!entry_json) {
         return std::unexpected(entry_json.error());
     }

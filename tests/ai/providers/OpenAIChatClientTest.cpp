@@ -1,8 +1,8 @@
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
-#include <cch/ai/glaze/ProviderDtos.hpp>
-#include <cch/ai/providers/OpenAIChatClient.hpp>
-#include <cch/util/Error.hpp>
+#include "../../../include/cch/ai/providers/OpenAIChatClient.hpp"
+#include "../../../include/cch/util/Error.hpp"
+#include "../../../include/cch/util/JsonValue.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -166,7 +166,7 @@ TEST_CASE("streaming OpenAI client accumulates split tool call arguments", "[ai]
     CHECK(call.raw_arguments == R"({"path":"README.md"})");
     CHECK(call.arguments_valid);
     REQUIRE(call.arguments);
-    const auto& args = call.arguments->get<glz::generic::object_t>();
+    const auto& args = call.arguments->get<util::JsonValue::object_t>();
     CHECK(args.at("path").get_string() == "README.md");
 
     CHECK(count_events<ai::ToolCallStartEvent>(run.events) == 1);
