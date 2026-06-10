@@ -90,7 +90,7 @@ struct ParsedUrl {
 
 boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport::async_stream(
     const StreamRequest& request,
-    BodyChunkHandler on_body_chunk) const {
+    BodyChunkHandler on_body_chunk) {
     namespace asio = boost::asio;
     namespace beast = boost::beast;
     namespace http = boost::beast::http;

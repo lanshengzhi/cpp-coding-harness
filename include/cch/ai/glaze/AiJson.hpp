@@ -73,6 +73,7 @@ struct MessageDto {
 
 struct ContextDto {
     std::optional<std::string> systemPrompt;
+    std::optional<std::string> model;
     std::vector<MessageDto> messages;
     std::optional<std::vector<FunctionToolDto>> tools;
 };
@@ -370,6 +371,9 @@ Overloaded(Ts...) -> Overloaded<Ts...>;
 [[nodiscard]] inline ContextDto to_dto(const AiContext& context) {
     ContextDto dto;
     dto.systemPrompt = context.system_prompt;
+    if (!context.model.empty()) {
+        dto.model = context.model;
+    }
     for (const auto& message : context.messages) {
         dto.messages.push_back(to_dto(message));
     }
@@ -386,6 +390,7 @@ Overloaded(Ts...) -> Overloaded<Ts...>;
 [[nodiscard]] inline util::Expected<AiContext> context_from_dto(const ContextDto& dto, std::string_view context_json) {
     AiContext context;
     context.system_prompt = dto.systemPrompt;
+    context.model = dto.model.value_or("");
     for (const auto& message_dto : dto.messages) {
         auto message = message_from_dto(message_dto, context_json);
         if (!message) {

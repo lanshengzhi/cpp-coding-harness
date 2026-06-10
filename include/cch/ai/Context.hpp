@@ -11,6 +11,7 @@ namespace cch::ai {
 
 struct AiContext {
     std::optional<std::string> system_prompt;
+    std::string model;
     std::vector<MessageVariant> messages;
     std::vector<Tool> tools;
 };

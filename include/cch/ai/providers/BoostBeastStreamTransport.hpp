@@ -32,11 +32,20 @@ struct StreamResponse {
 
 using BodyChunkHandler = std::function<util::ExpectedVoid(std::string_view)>;
 
-class BoostBeastStreamTransport {
+class StreamTransport {
+public:
+    virtual ~StreamTransport() = default;
+
+    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<StreamResponse>> async_stream(
+        const StreamRequest& request,
+        BodyChunkHandler on_body_chunk) = 0;
+};
+
+class BoostBeastStreamTransport final : public StreamTransport {
 public:
     [[nodiscard]] boost::asio::awaitable<util::Expected<StreamResponse>> async_stream(
         const StreamRequest& request,
-        BodyChunkHandler on_body_chunk) const;
+        BodyChunkHandler on_body_chunk) override;
 };
 
 } // namespace cch::ai::providers

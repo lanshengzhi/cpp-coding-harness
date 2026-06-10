@@ -30,6 +30,17 @@ struct ProviderToolDto {
     FunctionToolDto function;
 };
 
+struct ProviderToolCallFunctionDto {
+    std::string name;
+    std::string arguments;
+};
+
+struct ProviderToolCallDto {
+    std::string id;
+    std::string type{"function"};
+    ProviderToolCallFunctionDto function;
+};
+
 [[nodiscard]] inline ToolParametersDto to_tool_parameters_dto(const JsonSchema& schema) {
     ToolParametersDto dto;
     dto.type = to_string(schema.type);

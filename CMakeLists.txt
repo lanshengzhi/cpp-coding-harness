@@ -28,6 +28,7 @@ add_library(cpp_harness_lib
     src/ai/providers/BoostBeastHttpTransport.cpp
     src/ai/providers/BoostBeastStreamTransport.cpp
     src/ai/providers/OpenAIChatClient.cpp
+    src/ai/providers/OpenAIStreamingChatClient.cpp
     src/ai/providers/SseParser.cpp
     src/harness/LocalExecutionEnv.cpp
     src/harness/session/JsonlSessionStore.cpp
@@ -75,6 +76,7 @@ if(CCH_BUILD_TESTS)
         tests/ai/ToolContractTest.cpp
         tests/ai/providers/BoostBeastStreamTransportTest.cpp
         tests/ai/providers/OpenAIChatClientTest.cpp
+        tests/ai/providers/OpenAIStreamingChatClientTest.cpp
         tests/ai/providers/SseParserTest.cpp
         tests/cli/CliSmokeTest.cpp
         tests/harness/LocalExecutionEnvTest.cpp
