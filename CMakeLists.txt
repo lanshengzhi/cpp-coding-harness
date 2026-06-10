@@ -12,6 +12,8 @@ find_package(OpenSSL REQUIRED)
 
 add_library(cpp_harness_lib
     src/agent/AgentLoop.cpp
+    src/ai/providers/BoostBeastHttpTransport.cpp
+    src/ai/providers/OpenAIChatClient.cpp
     src/llm/BoostBeastHttpTransport.cpp
     src/llm/OpenAIChatClient.cpp
     src/session/JsonlSessionStore.cpp
@@ -49,6 +51,7 @@ if(CCH_BUILD_TESTS)
         tests/agent/AgentLoopTest.cpp
         tests/ai/MessageContractTest.cpp
         tests/ai/ToolContractTest.cpp
+        tests/ai/providers/OpenAIChatClientTest.cpp
         tests/cli/CliSmokeTest.cpp
         tests/llm/BoostBeastHttpTransportTest.cpp
         tests/llm/OpenAIChatClientTest.cpp
