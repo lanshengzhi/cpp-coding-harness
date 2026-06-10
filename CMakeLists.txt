@@ -68,6 +68,7 @@ if(CCH_BUILD_TESTS)
         tests/agent/AgentEventTest.cpp
         tests/agent/AgentLoopTest.cpp
         tests/agent/AgentToolContractTest.cpp
+        tests/ai/GlazeRoundTripTest.cpp
         tests/ai/MessageContractTest.cpp
         tests/ai/ToolContractTest.cpp
         tests/ai/providers/OpenAIChatClientTest.cpp
@@ -81,7 +82,10 @@ if(CCH_BUILD_TESTS)
         tests/tools/FileToolsTest.cpp
         tests/util/ExpectedErrorTest.cpp
     )
-    target_include_directories(cpp_harness_tests PRIVATE third_party)
+    target_include_directories(cpp_harness_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        third_party
+    )
     target_link_libraries(cpp_harness_tests PRIVATE cpp_harness_lib)
     target_compile_definitions(cpp_harness_tests PRIVATE CCH_BINARY="$<TARGET_FILE:cpp_harness>")
     target_compile_options(cpp_harness_tests PRIVATE -Wall -Wextra -Wpedantic)

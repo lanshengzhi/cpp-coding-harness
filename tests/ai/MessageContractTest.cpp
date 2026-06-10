@@ -1,118 +1,108 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include "../../src/agent/Message.hpp"
-#include "../../src/ai/Message.hpp"
-#include "../../src/ai/StopReason.hpp"
-#include "../../src/llm/ChatClient.hpp"
+#include <cch/ai/glaze/AiJson.hpp>
+
+#include <glaze/glaze.hpp>
+
+#include <string>
+#include <variant>
 
 using namespace cch;
 
-TEST_CASE("user text message adapts to AI content blocks and back", "[ai][u2]") {
-    agent::Message legacy;
-    legacy.role = agent::Role::User;
-    legacy.content = "hello model";
+TEST_CASE("user text message serializes through explicit Glaze content tags", "[ai][u2][glaze]") {
+    ai::MessageVariant original = ai::UserMessage{{ai::TextContent{"hello model", "sig-1"}}, 1718000000000};
 
-    auto message = agent::to_ai_message(legacy);
+    auto json = ai::glaze::write_message_json(original);
+    REQUIRE(json);
+    CHECK(json->find(R"("role":"user")") != std::string::npos);
+    CHECK(json->find(R"("type":"text")") != std::string::npos);
+    CHECK(json->find(R"("timestamp":1718000000000)") != std::string::npos);
 
-    CHECK(message.role == ai::MessageRole::User);
-    REQUIRE(message.content.size() == 1);
-    CHECK(message.content[0].kind == ai::ContentKind::Text);
-    CHECK(message.content[0].text == "hello model");
+    auto parsed = ai::glaze::read_message_json(*json);
+    REQUIRE(parsed);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(*parsed));
 
-    auto round_trip = agent::message_from_ai(message);
-    CHECK(round_trip.role == agent::Role::User);
-    CHECK(round_trip.content == "hello model");
+    const auto& user = std::get<ai::UserMessage>(*parsed);
+    CHECK(user.timestamp == 1718000000000);
+    REQUIRE(user.content.size() == 1);
+    REQUIRE(std::holds_alternative<ai::TextContent>(user.content[0]));
+    CHECK(std::get<ai::TextContent>(user.content[0]).text == "hello model");
+    REQUIRE(std::get<ai::TextContent>(user.content[0]).text_signature);
+    CHECK(*std::get<ai::TextContent>(user.content[0]).text_signature == "sig-1");
 }
 
-TEST_CASE("assistant text and tool-call blocks survive legacy adapter round trip", "[ai][u2][ae2]") {
-    agent::Message legacy;
-    legacy.role = agent::Role::Assistant;
-    legacy.content = "I'll read it";
-    agent::ToolCall call;
-    call.id = "call-1";
-    call.name = "read_file";
-    call.arguments = {{"path", "README.md"}};
-    call.raw_arguments = R"({"path":"README.md"})";
-    legacy.tool_calls.push_back(call);
+TEST_CASE("assistant text and tool-call content round-trip in order with metadata", "[ai][u2][ae2]") {
+    auto arguments = util::read_json<glz::generic>(R"({"path":"README.md","limit":20})");
+    REQUIRE(arguments);
 
-    auto message = agent::to_ai_message(legacy);
+    ai::AssistantMessage assistant;
+    assistant.content.emplace_back(ai::TextContent{"I'll read it", std::nullopt});
+    assistant.content.emplace_back(ai::ToolCallContent{
+        "call-1",
+        "read_file",
+        *arguments,
+        R"({"path":"README.md","limit":20})",
+        std::nullopt,
+        true,
+        std::nullopt,
+    });
+    assistant.api = "openai-completions";
+    assistant.provider = "openai";
+    assistant.model = "gpt-test";
+    assistant.response_model = "gpt-test-2026-06";
+    assistant.response_id = "resp-1";
+    assistant.usage = ai::Usage{10, 5, 2, 1, 18, ai::UsageCost{0.1, 0.2, 0.03, 0.04, 0.37}};
+    assistant.stop_reason = ai::AssistantStopReason::ToolUse;
+    assistant.timestamp = 1718000000123;
 
-    CHECK(message.role == ai::MessageRole::Assistant);
-    REQUIRE(message.content.size() == 2);
-    CHECK(message.content[0].kind == ai::ContentKind::Text);
-    CHECK(message.content[0].text == "I'll read it");
-    CHECK(message.content[1].kind == ai::ContentKind::ToolCall);
-    CHECK(message.content[1].tool_call.id == "call-1");
-    CHECK(message.content[1].tool_call.name == "read_file");
-    CHECK(message.content[1].tool_call.raw_arguments == R"({"path":"README.md"})");
+    auto json = ai::glaze::write_message_json(ai::MessageVariant{assistant});
+    REQUIRE(json);
+    CHECK(json->find(R"("role":"assistant")") != std::string::npos);
+    CHECK(json->find(R"("type":"toolCall")") != std::string::npos);
+    CHECK(json->find(R"("stopReason":"toolUse")") != std::string::npos);
 
-    auto round_trip = agent::message_from_ai(message);
-    CHECK(round_trip.role == agent::Role::Assistant);
-    CHECK(round_trip.content == "I'll read it");
-    REQUIRE(round_trip.tool_calls.size() == 1);
-    CHECK(round_trip.tool_calls[0].id == "call-1");
-    CHECK(round_trip.tool_calls[0].name == "read_file");
-    CHECK(std::string(round_trip.tool_calls[0].arguments.at("path").as_string()) == "README.md");
-}
+    auto parsed = ai::glaze::read_message_json(*json);
+    REQUIRE(parsed);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(*parsed));
+    const auto& round_trip = std::get<ai::AssistantMessage>(*parsed);
 
-TEST_CASE("tool-result message preserves linkage metadata through AI adapter", "[ai][u2]") {
-    ai::Message message;
-    message.role = ai::MessageRole::ToolResult;
-    message.tool_call_id = "call-1";
-    message.tool_name = "read_file";
-    message.is_error = true;
-    message.content.push_back(ai::ContentBlock::from_text("could not read"));
+    REQUIRE(round_trip.content.size() == 2);
+    REQUIRE(std::holds_alternative<ai::TextContent>(round_trip.content[0]));
+    CHECK(std::get<ai::TextContent>(round_trip.content[0]).text == "I'll read it");
+    REQUIRE(std::holds_alternative<ai::ToolCallContent>(round_trip.content[1]));
+    const auto& call = std::get<ai::ToolCallContent>(round_trip.content[1]);
+    CHECK(call.id == "call-1");
+    CHECK(call.name == "read_file");
+    CHECK(call.raw_arguments == R"({"path":"README.md","limit":20})");
+    REQUIRE(call.arguments);
+    const auto& object = call.arguments->get<glz::generic::object_t>();
+    CHECK(object.at("path").get_string() == "README.md");
+    CHECK(static_cast<int>(object.at("limit").get<double>()) == 20);
 
-    auto legacy = agent::message_from_ai(message);
-
-    CHECK(legacy.role == agent::Role::Tool);
-    CHECK(legacy.tool_call_id == "call-1");
-    CHECK(legacy.tool_name == "read_file");
-    CHECK(legacy.is_error);
-    CHECK(legacy.content == "could not read");
-
-    auto round_trip = agent::to_ai_message(legacy);
-    CHECK(round_trip.role == ai::MessageRole::ToolResult);
-    CHECK(round_trip.tool_call_id == "call-1");
-    CHECK(round_trip.tool_name == "read_file");
-    CHECK(round_trip.is_error);
-}
-
-TEST_CASE("legacy chat request adapts to AI context without losing model data", "[ai][u2]") {
-    llm::ChatRequest legacy;
-    legacy.model = "gpt-test";
-    legacy.messages.push_back({agent::Role::User, "hello"});
-    legacy.tools.push_back({"read_file", "Read a file", {}});
-
-    auto request = llm::to_ai_chat_request(legacy);
-
-    CHECK(request.context.model == "gpt-test");
-    REQUIRE(request.context.messages.size() == 1);
-    CHECK(request.context.messages[0].role == ai::MessageRole::User);
-    CHECK(request.context.messages[0].content[0].text == "hello");
-    REQUIRE(request.context.tools.size() == 1);
-    CHECK(request.context.tools[0].name == "read_file");
-
-    auto round_trip = llm::chat_request_from_ai(request);
+    CHECK(round_trip.api == "openai-completions");
+    CHECK(round_trip.provider == "openai");
     CHECK(round_trip.model == "gpt-test");
-    CHECK(round_trip.messages[0].content == "hello");
-    CHECK(round_trip.tools[0].name == "read_file");
+    REQUIRE(round_trip.response_model);
+    CHECK(*round_trip.response_model == "gpt-test-2026-06");
+    REQUIRE(round_trip.response_id);
+    CHECK(*round_trip.response_id == "resp-1");
+    REQUIRE(round_trip.usage);
+    CHECK(round_trip.usage->input == 10);
+    CHECK(round_trip.usage->output == 5);
+    CHECK(round_trip.usage->cache_read == 2);
+    CHECK(round_trip.usage->cache_write == 1);
+    CHECK(round_trip.usage->total_tokens == 18);
+    CHECK(round_trip.usage->cost.total == 0.37);
+    CHECK(round_trip.stop_reason == ai::AssistantStopReason::ToolUse);
+    CHECK(round_trip.timestamp == 1718000000123);
 }
 
-TEST_CASE("stop reasons map current strings without conflating outcomes", "[ai][u2]") {
-    CHECK(ai::stop_reason_from_string("stop") == ai::StopReason::Stop);
-    CHECK(ai::stop_reason_from_string("tool_calls") == ai::StopReason::ToolUse);
-    CHECK(ai::stop_reason_from_string("tool_use") == ai::StopReason::ToolUse);
-    CHECK(ai::stop_reason_from_string("length") == ai::StopReason::Length);
-    CHECK(ai::stop_reason_from_string("error") == ai::StopReason::Error);
-    CHECK(ai::stop_reason_from_string("aborted") == ai::StopReason::Aborted);
-    CHECK(ai::stop_reason_from_string("max_turns_exceeded") == ai::StopReason::Error);
-    CHECK(ai::stop_reason_from_string("unrecognized") == ai::StopReason::Unknown);
+TEST_CASE("unknown content discriminator returns a typed JSON error", "[ai][u2][glaze]") {
+    auto parsed = ai::glaze::read_message_json(
+        R"({"role":"user","content":[{"type":"audio","data":"AAAA"}],"timestamp":1718000000000})");
 
-    CHECK(ai::to_string(ai::StopReason::Stop) == "stop");
-    CHECK(ai::to_string(ai::StopReason::ToolUse) == "tool_use");
-    CHECK(ai::to_string(ai::StopReason::Length) == "length");
-    CHECK(ai::to_string(ai::StopReason::Error) == "error");
-    CHECK(ai::to_string(ai::StopReason::Aborted) == "aborted");
-    CHECK(ai::to_string(ai::StopReason::Unknown) == "unknown");
+    REQUIRE_FALSE(parsed);
+    CHECK(parsed.error().code == util::ErrorCode::JsonParse);
+    CHECK(parsed.error().message == "unknown content discriminator");
+    CHECK(parsed.error().detail.find("audio") != std::string::npos);
 }
