@@ -30,7 +30,7 @@ public:
 
     [[nodiscard]] virtual const ai::Tool& definition() const = 0;
     [[nodiscard]] virtual boost::asio::awaitable<util::Expected<AsyncToolExecutionResult>> execute(
-        const ToolInvocation& invocation) = 0;
+        ToolInvocation invocation) = 0;
 };
 
 } // namespace cch::agent

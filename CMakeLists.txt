@@ -31,11 +31,13 @@ add_library(cpp_harness_lib
     src/ai/providers/OpenAIChatClient.cpp
     src/ai/providers/OpenAIStreamingChatClient.cpp
     src/ai/providers/SseParser.cpp
+    src/harness/AsyncLocalExecutionEnv.cpp
     src/harness/LocalExecutionEnv.cpp
     src/harness/session/JsonlSessionStore.cpp
     src/llm/BoostBeastHttpTransport.cpp
     src/llm/OpenAIChatClient.cpp
     src/session/JsonlSessionStore.cpp
+    src/tools/AsyncToolFactories.cpp
     src/tools/BashTool.cpp
     src/tools/EditFileTool.cpp
     src/tools/ReadFileTool.cpp
@@ -81,11 +83,13 @@ if(CCH_BUILD_TESTS)
         tests/ai/providers/OpenAIStreamingChatClientTest.cpp
         tests/ai/providers/SseParserTest.cpp
         tests/cli/CliSmokeTest.cpp
+        tests/harness/AsyncLocalExecutionEnvTest.cpp
         tests/harness/LocalExecutionEnvTest.cpp
         tests/harness/session/JsonlSessionStoreTest.cpp
         tests/llm/BoostBeastHttpTransportTest.cpp
         tests/llm/OpenAIChatClientTest.cpp
         tests/session/JsonlSessionStoreTest.cpp
+        tests/tools/AsyncToolsTest.cpp
         tests/tools/BashToolTest.cpp
         tests/tools/FileToolsTest.cpp
         tests/util/ExpectedErrorTest.cpp

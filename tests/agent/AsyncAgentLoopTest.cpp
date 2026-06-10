@@ -56,7 +56,7 @@ public:
     const ai::Tool& definition() const override { return definition_; }
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        const agent::ToolInvocation& invocation) override {
+        agent::ToolInvocation invocation) override {
         invocations.push_back(invocation);
         co_return agent::AsyncToolExecutionResult{"tool says ok", std::nullopt, false};
     }
