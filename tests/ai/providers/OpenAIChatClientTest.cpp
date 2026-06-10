@@ -1,106 +1,194 @@
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
-#include "../../../src/ai/providers/OpenAIChatClient.hpp"
-#include "../../../src/llm/OpenAIChatClient.hpp"
-#include "../../../src/util/JsonSchema.hpp"
+#include <cch/ai/glaze/ProviderDtos.hpp>
+#include <cch/ai/providers/OpenAIChatClient.hpp>
+#include <cch/util/Error.hpp>
 
-#include <boost/json.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/io_context.hpp>
+
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <variant>
+#include <vector>
 
 using namespace cch;
 
 namespace {
-class FakeHttpTransport final : public ai::providers::HttpTransport {
+
+std::string sse(std::string data) {
+    return "data: " + std::move(data) + "\n\n";
+}
+
+class FakeStreamTransport final : public ai::providers::StreamTransport {
 public:
-    util::Result<ai::providers::HttpResponse> send(const ai::providers::HttpRequest& request) override {
+    boost::asio::awaitable<util::Expected<ai::providers::StreamResponse>> async_stream(
+        const ai::providers::StreamRequest& request,
+        ai::providers::BodyChunkHandler on_body_chunk) override {
         requests.push_back(request);
-        if (!error.empty()) {
-            return util::Result<ai::providers::HttpResponse>::failure(error);
+        if (failure) {
+            co_return std::unexpected(*failure);
         }
-        return util::Result<ai::providers::HttpResponse>::success(response);
+        ai::providers::StreamResponse response;
+        response.head.status_code = 200;
+        for (const auto& chunk : chunks) {
+            auto handled = on_body_chunk(chunk);
+            if (!handled) {
+                co_return std::unexpected(handled.error());
+            }
+            response.body += chunk;
+        }
+        co_return response;
     }
 
-    ai::providers::HttpResponse response{200, {}, R"({"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"ok"}}]})"};
-    std::string error;
-    std::vector<ai::providers::HttpRequest> requests;
+    std::vector<std::string> chunks;
+    std::optional<util::Error> failure;
+    std::vector<ai::providers::StreamRequest> requests;
 };
 
-boost::json::object parse_body(const FakeHttpTransport& transport) {
-    REQUIRE_FALSE(transport.requests.empty());
-    auto parsed = boost::json::parse(transport.requests.back().body);
-    REQUIRE(parsed.is_object());
-    return parsed.as_object();
+struct RunResult {
+    util::Expected<ai::AssistantMessage> result;
+    std::vector<ai::AssistantStreamEvent> events;
+};
+
+RunResult run_client(ai::providers::StreamingOpenAIChatClient& client, ai::StreamChatRequest request) {
+    boost::asio::io_context io;
+    std::optional<util::Expected<ai::AssistantMessage>> result;
+    std::vector<ai::AssistantStreamEvent> events;
+
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            result = co_await client.stream(
+                request,
+                [&](const ai::AssistantStreamEvent& event) {
+                    events.push_back(event);
+                    return util::ExpectedVoid{};
+                });
+            co_return;
+        },
+        boost::asio::detached);
+
+    io.run();
+    REQUIRE(result.has_value());
+    return RunResult{std::move(*result), std::move(events)};
 }
+
+template <typename T>
+std::size_t count_events(const std::vector<ai::AssistantStreamEvent>& events) {
+    std::size_t count = 0;
+    for (const auto& event : events) {
+        if (std::holds_alternative<T>(event)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 } // namespace
 
-TEST_CASE("AI OpenAI provider serializes context to current Chat Completions payload", "[ai][provider][u3]") {
-    auto transport = std::make_shared<FakeHttpTransport>();
-    ai::providers::OpenAIConfig config;
+TEST_CASE("streaming OpenAI client serializes typed context and emits text deltas", "[ai][provider][stream][u4]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {
+        sse(R"json({"id":"resp-1","model":"gpt-test-response","choices":[{"index":0,"delta":{"role":"assistant"}}]})json"),
+        sse(R"json({"choices":[{"index":0,"delta":{"content":"hel"}}]})json"),
+        sse(R"json({"choices":[{"index":0,"delta":{"content":"lo"},"finish_reason":"stop"}]})json"),
+        sse("[DONE]"),
+    };
+
+    ai::providers::OpenAIStreamConfig config;
     config.api_key = "sk-test-api-key";
     config.base_url = "https://gateway.example/v1";
-    ai::providers::OpenAIChatClient client(transport, config);
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
 
-    ai::ChatRequest request;
-    request.context.model = "gpt-test";
-    request.context.messages.push_back(ai::Message::user_text("inspect"));
-    ai::Message tool = ai::Message::tool_result("call_1", "read_file", "token=sk-123456789SECRET", false);
-    request.context.messages.push_back(tool);
-    boost::json::object properties;
-    properties["path"] = util::string_property("file path");
-    request.context.tools.push_back({"read_file", "Read a file", util::object_schema(std::move(properties), {"path"})});
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+    request.context.system_prompt = "You are concise";
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+    request.context.tools.push_back(ai::Tool{
+        "read_file",
+        "Read a workspace file",
+        ai::JsonSchema::object({{"path", ai::JsonSchema::string("file path")}}, {"path"}),
+    });
 
-    auto response = client.complete(request);
+    auto run = run_client(client, std::move(request));
 
-    REQUIRE(response.ok());
+    REQUIRE(run.result);
+    CHECK(run.result->response_id == "resp-1");
+    REQUIRE(run.result->response_model);
+    CHECK(*run.result->response_model == "gpt-test-response");
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
+    REQUIRE(run.result->content.size() == 1);
+    REQUIRE(std::holds_alternative<ai::TextContent>(run.result->content[0]));
+    CHECK(std::get<ai::TextContent>(run.result->content[0]).text == "hello");
+
+    CHECK(count_events<ai::AssistantStartEvent>(run.events) == 1);
+    CHECK(count_events<ai::TextStartEvent>(run.events) == 1);
+    CHECK(count_events<ai::TextDeltaEvent>(run.events) == 2);
+    CHECK(count_events<ai::TextEndEvent>(run.events) == 1);
+    CHECK(count_events<ai::AssistantDoneEvent>(run.events) == 1);
+
+    REQUIRE(transport->requests.size() == 1);
     CHECK(transport->requests[0].url == "https://gateway.example/v1/chat/completions");
-    auto body = parse_body(*transport);
-    CHECK(std::string(body.at("model").as_string()) == "gpt-test");
-    const auto& messages = body.at("messages").as_array();
-    REQUIRE(messages.size() == 2);
-    CHECK(std::string(messages[0].as_object().at("role").as_string()) == "user");
-    CHECK(std::string(messages[1].as_object().at("role").as_string()) == "tool");
-    CHECK(std::string(messages[1].as_object().at("tool_call_id").as_string()) == "call_1");
-    CHECK(std::string(messages[1].as_object().at("content").as_string()).find("sk-123456789SECRET") == std::string::npos);
-    REQUIRE(body.at("tools").is_array());
-    CHECK(std::string(body.at("tools").as_array().front().as_object().at("function").as_object().at("name").as_string()) == "read_file");
+    CHECK(transport->requests[0].headers.at("Accept") == "text/event-stream");
+    CHECK(transport->requests[0].body.find(R"("model":"gpt-test")") != std::string::npos);
+    CHECK(transport->requests[0].body.find(R"("stream":true)") != std::string::npos);
+    CHECK(transport->requests[0].body.find(R"("tools")") != std::string::npos);
 }
 
-TEST_CASE("AI OpenAI provider parses tool calls to content blocks", "[ai][provider][u3][ae2]") {
-    auto transport = std::make_shared<FakeHttpTransport>();
-    transport->response.body = R"({"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","content":"I'll read it","tool_calls":[{"id":"call_1","type":"function","function":{"name":"read_file","arguments":"{\"path\":\"README.md\"}"}}]}}]})";
-    ai::providers::OpenAIConfig config;
+TEST_CASE("streaming OpenAI client accumulates split tool call arguments", "[ai][provider][stream][u4][ae2]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {
+        sse(R"json({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"read_file","arguments":"{\"pa"}}]}}]})json"),
+        sse(R"json({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"th\":\"README.md\"}"}}]},"finish_reason":"tool_calls"}]})json"),
+        sse("[DONE]"),
+    };
+
+    ai::providers::OpenAIStreamConfig config;
     config.api_key = "sk-test-api-key";
-    ai::providers::OpenAIChatClient client(transport, config);
-    ai::ChatRequest request;
-    request.context.messages.push_back(ai::Message::user_text("read"));
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
 
-    auto response = client.complete(request);
+    ai::StreamChatRequest request;
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("read")});
 
-    REQUIRE(response.ok());
-    CHECK(response.value().stop_reason == ai::StopReason::ToolUse);
-    CHECK(response.value().assistant_message.role == ai::MessageRole::Assistant);
-    REQUIRE(response.value().assistant_message.content.size() == 2);
-    CHECK(response.value().assistant_message.content[0].text == "I'll read it");
-    const auto& call = response.value().assistant_message.content[1].tool_call;
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    REQUIRE(run.result->content.size() == 1);
+    REQUIRE(std::holds_alternative<ai::ToolCallContent>(run.result->content[0]));
+    const auto& call = std::get<ai::ToolCallContent>(run.result->content[0]);
     CHECK(call.id == "call_1");
     CHECK(call.name == "read_file");
+    CHECK(call.raw_arguments == R"({"path":"README.md"})");
     CHECK(call.arguments_valid);
-    CHECK(std::string(call.arguments.at("path").as_string()) == "README.md");
+    REQUIRE(call.arguments);
+    const auto& args = call.arguments->get<glz::generic::object_t>();
+    CHECK(args.at("path").get_string() == "README.md");
+
+    CHECK(count_events<ai::ToolCallStartEvent>(run.events) == 1);
+    CHECK(count_events<ai::ToolCallDeltaEvent>(run.events) == 2);
+    CHECK(count_events<ai::ToolCallEndEvent>(run.events) == 1);
+    CHECK(count_events<ai::AssistantDoneEvent>(run.events) == 1);
 }
 
-TEST_CASE("legacy llm OpenAI adapter preserves moved provider behavior", "[ai][provider][u3]") {
-    auto transport = std::make_shared<FakeHttpTransport>();
-    transport->response.body = R"({"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","tool_calls":[{"id":"call_1","type":"function","function":{"name":"read_file","arguments":"not-json"}}]}}]})";
-    llm::OpenAIConfig config;
+TEST_CASE("streaming OpenAI client reports malformed provider JSON as typed failure", "[ai][provider][stream][u4][ae3]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {"data: {\"choices\":[}\n\n"};
+
+    ai::providers::OpenAIStreamConfig config;
     config.api_key = "sk-test-api-key";
-    llm::OpenAIChatClient client(transport, config);
-    llm::ChatRequest request;
-    request.messages.push_back({agent::Role::User, "read"});
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
 
-    auto response = client.complete(request);
+    ai::StreamChatRequest request;
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
-    REQUIRE(response.ok());
-    CHECK(response.value().stop_reason == "tool_calls");
-    REQUIRE(response.value().assistant_message.tool_calls.size() == 1);
-    CHECK_FALSE(response.value().assistant_message.tool_calls[0].arguments_valid);
-    CHECK(response.value().assistant_message.tool_calls[0].argument_error.find("invalid JSON") != std::string::npos);
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE_FALSE(run.result);
+    CHECK(run.result.error().code == util::ErrorCode::JsonParse);
+    CHECK(count_events<ai::AssistantErrorEvent>(run.events) == 1);
 }

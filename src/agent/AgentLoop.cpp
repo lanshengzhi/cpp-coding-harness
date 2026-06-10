@@ -1,151 +1,182 @@
-#include "AgentLoop.hpp"
+#include <cch/agent/AgentLoop.hpp>
 
-#include "../harness/LocalExecutionEnv.hpp"
+#include <cch/ai/glaze/AiJson.hpp>
 
-#include <sstream>
 #include <utility>
 
 namespace cch::agent {
 namespace {
 
-std::string compatible_stop_reason(ai::StopReason reason) {
-    if (reason == ai::StopReason::ToolUse) {
-        return "tool_calls";
+[[nodiscard]] std::string text_from_content(const std::vector<ai::Content>& content) {
+    std::string text;
+    for (const auto& block : content) {
+        if (const auto* text_block = std::get_if<ai::TextContent>(&block)) {
+            text += text_block->text;
+        }
     }
-    return ai::to_string(reason);
+    return text;
+}
+
+[[nodiscard]] ai::ToolResultMessage error_tool_result(
+    const ai::ToolCallContent& call,
+    std::string message) {
+    ai::ToolResultMessage result;
+    result.tool_call_id = call.id;
+    result.tool_name = call.name;
+    result.content.emplace_back(ai::TextContent{std::move(message), std::nullopt});
+    result.is_error = true;
+    return result;
+}
+
+[[nodiscard]] util::Expected<glz::generic> arguments_for_call(const ai::ToolCallContent& call) {
+    if (!call.arguments_valid) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::JsonParse,
+            "invalid tool arguments",
+            call.argument_error.value_or("tool arguments were malformed")));
+    }
+    if (call.arguments) {
+        return *call.arguments;
+    }
+    if (call.raw_arguments.empty()) {
+        return util::read_json<glz::generic>("{}");
+    }
+    return util::read_json<glz::generic>(call.raw_arguments);
 }
 
 } // namespace
 
-AgentLoop::AgentLoop(ai::ChatClient& client, ToolRegistry registry, LoopOptions options)
+AsyncAgentLoop::AsyncAgentLoop(ai::StreamingChatClient& client, AsyncToolRegistry registry, AsyncAgentOptions options)
     : client_(client), registry_(std::move(registry)), options_(std::move(options)) {}
 
-util::Result<LoopResult> AgentLoop::run(std::string user_prompt) {
-    return continue_with({}, std::move(user_prompt));
+boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::run(
+    std::string user_prompt,
+    AgentEventSink sink) {
+    co_return co_await continue_with({}, std::move(user_prompt), std::move(sink));
 }
 
-util::Result<LoopResult> AgentLoop::continue_with(std::vector<Message> existing_history, std::string user_prompt) {
-    LoopResult result;
-    result.messages = std::move(existing_history);
-    emit_agent(result.agent_events, AgentEvent::make(AgentEventKind::AgentStart));
+boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::continue_with(
+    std::vector<ai::MessageVariant> history,
+    std::string user_prompt,
+    AgentEventSink sink) {
+    ai::AiContext context;
+    context.model = options_.model;
+    context.tools = registry_.definitions();
+    context.messages = std::move(history);
 
-    Message user;
-    user.role = Role::User;
-    user.content = std::move(user_prompt);
-    if (auto appended = append(result.messages, user); !appended) {
-        return util::Result<LoopResult>::failure(appended.error());
+    if (auto emitted = emit(sink, AgentStartEvent{user_prompt}); !emitted) {
+        co_return std::unexpected(emitted.error());
     }
-    emit_agent(result.agent_events, AgentEvent::make(AgentEventKind::UserMessage, user.content));
 
-    for (int turn = 0; turn < options_.max_turns; ++turn) {
-        const int turn_number = turn + 1;
-        emit_agent(result.agent_events, AgentEvent::make(AgentEventKind::TurnStart, {}, turn_number));
-        emit_agent(result.agent_events, AgentEvent::make(AgentEventKind::ModelRequest, "turn " + std::to_string(turn_number), turn_number));
-        emit(result.events, "model_request", "turn " + std::to_string(turn_number));
+    context.messages.push_back(ai::MessageVariant{ai::user_text_message(std::move(user_prompt))});
 
-        AgentContext context = AgentContext::from_legacy(result.messages, registry_.definitions(), options_.model);
-        ai::ChatRequest request = context.chat_request();
-
-        auto response = client_.complete(request);
-        if (!response) {
-            emit_agent(result.agent_events, AgentEvent::make(AgentEventKind::ProviderError, response.error(), turn_number));
-            emit_agent(result.agent_events, AgentEvent::make(AgentEventKind::AgentEnd, response.error(), turn_number));
-            emit(result.events, "provider_error", response.error());
-            return util::Result<LoopResult>::failure(response.error());
+    for (int turn = 1; turn <= options_.max_turns; ++turn) {
+        if (auto emitted = emit(sink, TurnStartEvent{turn}); !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+        if (auto emitted = emit(sink, MessageStartEvent{turn}); !emitted) {
+            co_return std::unexpected(emitted.error());
         }
 
-        auto ai_response = response.value();
-        Message assistant = message_from_ai(ai_response.assistant_message);
-        assistant.role = Role::Assistant;
-        if (auto appended = append(result.messages, assistant); !appended) {
-            return util::Result<LoopResult>::failure(appended.error());
-        }
-        emit_agent(result.agent_events, AgentEvent::make(AgentEventKind::AssistantMessage, assistant.content, turn_number));
-        emit(result.events, "assistant", assistant.content);
+        ai::StreamChatRequest request;
+        request.context = context;
+        request.model = options_.model;
 
-        if (assistant.tool_calls.empty()) {
-            result.final_text = assistant.content;
-            result.stop_reason = compatible_stop_reason(ai_response.stop_reason);
-            emit_agent(result.agent_events, AgentEvent::make(AgentEventKind::TurnEnd, result.stop_reason, turn_number));
-            emit_agent(result.agent_events, AgentEvent::make(AgentEventKind::AgentEnd, result.stop_reason, turn_number));
-            emit(result.events, "completed", result.stop_reason);
-            return util::Result<LoopResult>::success(result);
+        auto assistant = co_await client_.stream(
+            request,
+            [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+                if (const auto* delta = std::get_if<ai::TextDeltaEvent>(&event)) {
+                    return emit(sink, MessageUpdateEvent{turn, delta->delta});
+                }
+                return {};
+            });
+
+        if (!assistant) {
+            emit(sink, AgentEndEvent{false, assistant.error().message});
+            co_return std::unexpected(assistant.error());
         }
 
-        for (const auto& call : assistant.tool_calls) {
-            emit_agent(result.agent_events, AgentEvent::tool_start(call.id, call.name, turn_number));
-            emit(result.events, "tool_call", call.name + "#" + call.id);
-            Message tool_result = execute_tool_call(call);
-            if (auto appended = append(result.messages, tool_result); !appended) {
-                return util::Result<LoopResult>::failure(appended.error());
+        if (auto emitted = emit(sink, MessageEndEvent{turn, *assistant}); !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+        context.messages.push_back(ai::MessageVariant{*assistant});
+
+        auto calls = tool_calls(*assistant);
+        if (calls.empty()) {
+            if (auto emitted = emit(sink, TurnEndEvent{turn, assistant->stop_reason}); !emitted) {
+                co_return std::unexpected(emitted.error());
             }
-            emit_agent(result.agent_events, AgentEvent::tool_end(call.id, call.name, tool_result.is_error, turn_number));
-            emit(result.events, tool_result.is_error ? "tool_error" : "tool_success", tool_result.tool_call_id);
+            if (auto emitted = emit(sink, AgentEndEvent{true, ai::stop_reason_to_json(assistant->stop_reason)}); !emitted) {
+                co_return std::unexpected(emitted.error());
+            }
+            co_return AsyncAgentRunResult{std::move(context), assistant->stop_reason, turn};
         }
-        emit_agent(result.agent_events, AgentEvent::make(AgentEventKind::TurnEnd, "tool_use", turn_number));
+
+        for (const auto& call : calls) {
+            if (auto emitted = emit(sink, ToolExecutionStartEvent{turn, call.id, call.name}); !emitted) {
+                co_return std::unexpected(emitted.error());
+            }
+
+            ai::ToolResultMessage tool_result;
+            auto* tool = registry_.find(call.name);
+            if (tool == nullptr) {
+                tool_result = error_tool_result(call, "unknown tool: " + call.name);
+            } else {
+                auto arguments = arguments_for_call(call);
+                if (!arguments) {
+                    tool_result = error_tool_result(call, arguments.error().detail);
+                } else {
+                    ToolInvocation invocation{call.id, call.name, std::move(*arguments), call.raw_arguments};
+                    auto executed = co_await tool->execute(invocation);
+                    if (!executed) {
+                        tool_result = error_tool_result(call, executed.error().detail.empty() ? executed.error().message : executed.error().detail);
+                    } else {
+                        tool_result.tool_call_id = call.id;
+                        tool_result.tool_name = call.name;
+                        tool_result.content.emplace_back(ai::TextContent{executed->content, std::nullopt});
+                        tool_result.details = executed->details;
+                        tool_result.is_error = executed->is_error;
+                    }
+                }
+            }
+
+            const auto tool_text = text_from_content(tool_result.content);
+            if (auto emitted = emit(sink, ToolExecutionEndEvent{turn, call.id, call.name, tool_result.is_error, tool_text}); !emitted) {
+                co_return std::unexpected(emitted.error());
+            }
+            context.messages.push_back(ai::MessageVariant{std::move(tool_result)});
+        }
+
+        if (auto emitted = emit(sink, TurnEndEvent{turn, ai::AssistantStopReason::ToolUse}); !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
     }
 
-    result.stop_reason = "max_turns_exceeded";
-    emit_agent(result.agent_events, AgentEvent::make(AgentEventKind::MaxTurns, result.stop_reason, options_.max_turns));
-    emit_agent(result.agent_events, AgentEvent::make(AgentEventKind::AgentEnd, result.stop_reason, options_.max_turns));
-    emit(result.events, "max_turns", result.stop_reason);
-    return util::Result<LoopResult>::failure(result.stop_reason);
+    auto error = util::make_error(
+        util::ErrorCode::Provider,
+        "max turns exceeded",
+        "agent reached max_turns before a final assistant response");
+    if (auto emitted = emit(sink, AgentEndEvent{false, error.message}); !emitted) {
+        co_return std::unexpected(emitted.error());
+    }
+    co_return std::unexpected(error);
 }
 
-void AgentLoop::emit(std::vector<LoopEvent>& events, std::string type, std::string detail) const {
-    LoopEvent event{std::move(type), std::move(detail)};
-    events.push_back(event);
-    if (options_.on_event) {
-        options_.on_event(event);
+util::ExpectedVoid AsyncAgentLoop::emit(const AgentEventSink& sink, const AgentLifecycleEvent& event) const {
+    if (!sink) {
+        return {};
     }
+    return sink(event);
 }
 
-void AgentLoop::emit_agent(std::vector<AgentEvent>& events, AgentEvent event) const {
-    events.push_back(event);
-    if (options_.on_agent_event) {
-        options_.on_agent_event(event);
+std::vector<ai::ToolCallContent> AsyncAgentLoop::tool_calls(const ai::AssistantMessage& message) const {
+    std::vector<ai::ToolCallContent> calls;
+    for (const auto& block : message.content) {
+        if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
+            calls.push_back(*call);
+        }
     }
-}
-
-util::Result<void> AgentLoop::append(std::vector<Message>& messages, const Message& message) const {
-    Message redacted = redact_message(message);
-    messages.push_back(redacted);
-    if (options_.on_message) {
-        return options_.on_message(redacted);
-    }
-    return util::Result<void>::success();
-}
-
-Message AgentLoop::execute_tool_call(const ToolCall& call) {
-    if (!call.arguments_valid) {
-        AgentToolResult result;
-        result.tool_call_id = call.id;
-        result.tool_name = call.name;
-        result.is_error = true;
-        result.content = call.argument_error.empty() ? "Malformed tool arguments" : call.argument_error;
-        return result.to_message();
-    }
-
-    Tool* tool = registry_.find(call.name);
-    if (tool == nullptr) {
-        AgentToolResult result;
-        result.tool_call_id = call.id;
-        result.tool_name = call.name;
-        result.is_error = true;
-        result.content = "Unknown tool: " + call.name;
-        return result.to_message();
-    }
-
-    ToolContext context;
-    context.workspace = options_.workspace;
-    context.bash_enabled = options_.bash_enabled;
-    context.secret_environment_names = options_.secret_environment_names;
-    context.execution_env = std::make_shared<harness::LocalExecutionEnv>(
-        context.workspace,
-        context.bash_enabled,
-        context.secret_environment_names);
-    ToolExecutionResult execution = tool->execute(call.arguments, context);
-    return to_agent_tool_result(call, execution).to_message();
+    return calls;
 }
 
 } // namespace cch::agent

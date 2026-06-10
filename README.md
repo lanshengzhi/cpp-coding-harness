@@ -1,6 +1,6 @@
-# C++ Coding Harness MVP
+# C++ Coding Harness
 
-A small C++23 coding-agent harness that mirrors the core pi-style loop:
+A small C++23 coroutine/Glaze coding-agent harness that mirrors the core pi-style loop:
 
 1. accept a prompt from CLI or REPL,
 2. send ordered messages plus JSON Schema tool definitions to an OpenAI-compatible chat API,
@@ -35,13 +35,7 @@ Run the binary with the deterministic fake provider:
 ./build/cpp_harness --fake --repl --session /tmp/cpp-repl.jsonl
 ```
 
-Run the experimental coroutine/Glaze stack with the same fake provider:
-
-```bash
-./build/cpp_harness --async --fake --session /tmp/cpp-async.jsonl "hello"
-```
-
-`--async` uses the typed `include/cch/...` contracts, the awaitable agent loop, coroutine-compatible tools, and streaming assistant events. The default CLI path still exists while the remaining legacy session/resume path is migrated.
+The CLI uses the typed `include/cch/...` contracts, the awaitable agent loop, coroutine-compatible tools, Glaze JSONL sessions, and streaming assistant events. `--async` is accepted as a no-op compatibility flag because this stack is now the default.
 
 Real-provider mode is OpenAI Chat Completions-compatible:
 
@@ -59,9 +53,7 @@ The code is split into three primary seams that mirror pi's contracts while stay
 - `include/cch/ai`: Glaze-backed message/content/tool/context contracts, SSE parsing, awaitable stream transport, and the streaming OpenAI-compatible client.
 - `include/cch/agent`: coroutine agent loop, lifecycle events, async tool registry, and expected-style tool execution contracts.
 - `include/cch/harness` and `include/cch/tools`: coroutine-compatible local execution environment and built-in tool factories.
-- `src/...`: implementation files for the public headers plus remaining legacy compatibility code.
-
-Legacy `src/llm` and `src/session` include paths still exist for the synchronous CLI/resume path during migration. New work should use `include/cch/...` and `--async` smoke tests.
+- `src/...`: implementation files for the public headers. The old `src/llm` and `src/session` compatibility facades have been removed.
 
 ## CLI states
 

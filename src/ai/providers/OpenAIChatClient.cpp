@@ -1,200 +1,379 @@
-#include "OpenAIChatClient.hpp"
+#include <cch/ai/providers/OpenAIChatClient.hpp>
+
+#include <cch/ai/glaze/ProviderDtos.hpp>
+#include <cch/ai/providers/SseParser.hpp>
 
 #include "../../util/Redactor.hpp"
 
-#include <boost/json.hpp>
-
 #include <cstdlib>
+#include <map>
 #include <sstream>
 #include <utility>
 
 namespace cch::ai::providers {
 namespace {
 
-std::string role_to_openai(ai::MessageRole role) {
-    if (role == ai::MessageRole::ToolResult) {
-        return "tool";
-    }
-    return ai::to_string(role);
-}
+template <class... Ts>
+struct Overloaded : Ts... {
+    using Ts::operator()...;
+};
+template <class... Ts>
+Overloaded(Ts...) -> Overloaded<Ts...>;
 
-boost::json::object message_to_openai(const ai::Message& message) {
-    boost::json::object obj;
-    obj["role"] = role_to_openai(message.role);
-    obj["content"] = util::redact_text(ai::text_content(message));
-    if (message.role == ai::MessageRole::ToolResult) {
-        obj["tool_call_id"] = message.tool_call_id;
-    }
-    auto calls = ai::tool_calls(message);
-    if (message.role == ai::MessageRole::Assistant && !calls.empty()) {
-        boost::json::array tool_calls;
-        for (const auto& call : calls) {
-            boost::json::object function;
-            function["name"] = call.name;
-            function["arguments"] = call.raw_arguments.empty()
-                ? boost::json::serialize(util::redact_json_object(call.arguments))
-                : util::redact_json_text(call.raw_arguments);
-            boost::json::object call_json;
-            call_json["id"] = call.id;
-            call_json["type"] = "function";
-            call_json["function"] = std::move(function);
-            tool_calls.push_back(std::move(call_json));
-        }
-        obj["tool_calls"] = std::move(tool_calls);
-    }
-    return obj;
-}
+struct ToolCallAccumulator {
+    std::string id;
+    std::string name;
+    std::string raw_arguments;
+    std::size_t content_index{};
+};
 
-boost::json::object tool_to_openai(const ai::ToolDefinition& definition) {
-    boost::json::object function;
-    function["name"] = definition.name;
-    function["description"] = definition.description;
-    function["parameters"] = definition.parameters;
-    boost::json::object tool;
-    tool["type"] = "function";
-    tool["function"] = std::move(function);
-    return tool;
-}
-
-std::string required_string(const boost::json::object& object, const char* key) {
-    auto* value = object.if_contains(key);
-    return value && value->is_string() ? std::string(value->as_string()) : std::string{};
-}
-
-util::Result<ai::ChatResponse> parse_chat_response(const std::string& body) {
-    boost::system::error_code ec;
-    auto parsed = boost::json::parse(body, ec);
-    if (ec || !parsed.is_object()) {
-        return util::Result<ai::ChatResponse>::failure("invalid provider JSON response");
-    }
-    auto& root = parsed.as_object();
-    auto* choices_value = root.if_contains("choices");
-    if (choices_value == nullptr || !choices_value->is_array() || choices_value->as_array().empty()) {
-        return util::Result<ai::ChatResponse>::failure("provider response missing choices");
-    }
-    const auto& first_choice_value = choices_value->as_array().front();
-    if (!first_choice_value.is_object()) {
-        return util::Result<ai::ChatResponse>::failure("provider choice is not an object");
-    }
-    const auto& choice = first_choice_value.as_object();
-    ai::ChatResponse response;
-    response.stop_reason = ai::stop_reason_from_string(required_string(choice, "finish_reason"));
-    auto* message_value = choice.if_contains("message");
-    if (message_value == nullptr || !message_value->is_object()) {
-        return util::Result<ai::ChatResponse>::failure("provider choice missing message");
-    }
-    const auto& message = message_value->as_object();
-    response.assistant_message.role = ai::MessageRole::Assistant;
-    if (auto* content = message.if_contains("content"); content && content->is_string()) {
-        response.assistant_message.content.push_back(ai::ContentBlock::from_text(std::string(content->as_string())));
-    }
-    if (auto* tool_calls = message.if_contains("tool_calls")) {
-        if (!tool_calls->is_array()) {
-            return util::Result<ai::ChatResponse>::failure("provider tool_calls is not an array");
-        }
-        for (const auto& tool_call_value : tool_calls->as_array()) {
-            if (!tool_call_value.is_object()) {
-                return util::Result<ai::ChatResponse>::failure("provider tool call is not an object");
-            }
-            const auto& tool_call_object = tool_call_value.as_object();
-            ai::ToolCall call;
-            call.id = required_string(tool_call_object, "id");
-            if (call.id.empty()) {
-                return util::Result<ai::ChatResponse>::failure("provider tool call missing id");
-            }
-            auto* function_value = tool_call_object.if_contains("function");
-            if (function_value == nullptr || !function_value->is_object()) {
-                return util::Result<ai::ChatResponse>::failure("provider tool call missing function object");
-            }
-            const auto& function = function_value->as_object();
-            call.name = required_string(function, "name");
-            if (call.name.empty()) {
-                return util::Result<ai::ChatResponse>::failure("provider tool call missing function name");
-            }
-            auto* arguments_value = function.if_contains("arguments");
-            if (arguments_value == nullptr || !arguments_value->is_string()) {
-                return util::Result<ai::ChatResponse>::failure("provider tool call missing string arguments");
-            }
-            call.raw_arguments = std::string(arguments_value->as_string());
-            boost::system::error_code arg_ec;
-            auto parsed_args = boost::json::parse(call.raw_arguments.empty() ? "{}" : call.raw_arguments, arg_ec);
-            if (arg_ec || !parsed_args.is_object()) {
-                call.arguments_valid = false;
-                call.argument_error = "invalid JSON arguments for tool call " + call.id;
-            } else {
-                call.arguments = parsed_args.as_object();
-            }
-            response.assistant_message.content.push_back(ai::ContentBlock::from_tool_call(std::move(call)));
+[[nodiscard]] std::string content_text(const std::vector<ai::Content>& content) {
+    std::string text;
+    for (const auto& block : content) {
+        if (const auto* text_block = std::get_if<ai::TextContent>(&block)) {
+            text += text_block->text;
         }
     }
-    return util::Result<ai::ChatResponse>::success(std::move(response));
+    return text;
+}
+
+[[nodiscard]] std::vector<ai::glaze::ProviderToolCallDto> tool_calls_from_content(const std::vector<ai::Content>& content) {
+    std::vector<ai::glaze::ProviderToolCallDto> calls;
+    for (const auto& block : content) {
+        if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
+            calls.push_back(ai::glaze::ProviderToolCallDto{
+                call->id,
+                "function",
+                ai::glaze::ProviderToolCallFunctionDto{call->name, util::redact_json_text(call->raw_arguments)},
+            });
+        }
+    }
+    return calls;
+}
+
+[[nodiscard]] ai::glaze::OpenAIChatMessageDto message_to_openai(const ai::MessageVariant& message) {
+    return std::visit(
+        Overloaded{
+            [](const ai::SystemMessage& system) {
+                return ai::glaze::OpenAIChatMessageDto{"system", util::redact_text(system.content), std::nullopt, std::nullopt};
+            },
+            [](const ai::UserMessage& user) {
+                return ai::glaze::OpenAIChatMessageDto{"user", util::redact_text(content_text(user.content)), std::nullopt, std::nullopt};
+            },
+            [](const ai::AssistantMessage& assistant) {
+                auto calls = tool_calls_from_content(assistant.content);
+                std::optional<std::vector<ai::glaze::ProviderToolCallDto>> tool_calls;
+                if (!calls.empty()) {
+                    tool_calls = std::move(calls);
+                }
+                return ai::glaze::OpenAIChatMessageDto{
+                    "assistant",
+                    util::redact_text(content_text(assistant.content)),
+                    std::nullopt,
+                    std::move(tool_calls),
+                };
+            },
+            [](const ai::ToolResultMessage& tool) {
+                return ai::glaze::OpenAIChatMessageDto{
+                    "tool",
+                    util::redact_text(content_text(tool.content)),
+                    tool.tool_call_id,
+                    std::nullopt,
+                };
+            },
+        },
+        message);
+}
+
+[[nodiscard]] ai::glaze::OpenAIChatRequestDto request_to_openai(
+    const ai::StreamChatRequest& request,
+    const OpenAIStreamConfig& config) {
+    ai::glaze::OpenAIChatRequestDto dto;
+    dto.model = !request.model.empty() ? request.model : (!request.context.model.empty() ? request.context.model : config.model);
+    if (request.context.system_prompt) {
+        dto.messages.push_back(ai::glaze::OpenAIChatMessageDto{"system", util::redact_text(*request.context.system_prompt), std::nullopt, std::nullopt});
+    }
+    for (const auto& message : request.context.messages) {
+        dto.messages.push_back(message_to_openai(message));
+    }
+    if (!request.context.tools.empty()) {
+        std::vector<ai::glaze::ProviderToolDto> tools;
+        tools.reserve(request.context.tools.size());
+        for (const auto& tool : request.context.tools) {
+            tools.push_back(ai::glaze::to_provider_tool_dto(tool));
+        }
+        dto.tools = std::move(tools);
+    }
+    dto.stream = true;
+    return dto;
+}
+
+[[nodiscard]] ai::AssistantStopReason stop_reason_from_provider(const std::optional<std::string>& finish_reason) {
+    if (!finish_reason) {
+        return ai::AssistantStopReason::Unknown;
+    }
+    return ai::stop_reason_from_json(*finish_reason);
+}
+
+[[nodiscard]] util::ExpectedVoid emit(const ai::AssistantEventSink& sink, const ai::AssistantStreamEvent& event) {
+    if (!sink) {
+        return {};
+    }
+    return sink(event);
+}
+
+[[nodiscard]] util::ExpectedVoid emit_error(
+    const ai::AssistantEventSink& sink,
+    const util::Error& error,
+    ai::AssistantMessage partial) {
+    partial.stop_reason = ai::AssistantStopReason::Error;
+    partial.error_message = error.detail.empty() ? error.message : error.detail;
+    return emit(sink, ai::AssistantErrorEvent{ai::AssistantStopReason::Error, std::move(partial)});
+}
+
+[[nodiscard]] util::Expected<glz::generic> parse_tool_arguments(const std::string& raw_arguments) {
+    if (raw_arguments.empty()) {
+        return util::read_json<glz::generic>("{}");
+    }
+    return util::read_json<glz::generic>(raw_arguments);
 }
 
 } // namespace
 
-OpenAIChatClient::OpenAIChatClient(std::shared_ptr<HttpTransport> transport, OpenAIConfig config)
+StreamingOpenAIChatClient::StreamingOpenAIChatClient(std::shared_ptr<StreamTransport> transport, OpenAIStreamConfig config)
     : transport_(std::move(transport)), config_(std::move(config)) {}
 
-util::Result<ai::ChatResponse> OpenAIChatClient::complete(const ai::ChatRequest& request) {
+boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChatClient::stream(
+    const ai::StreamChatRequest& request,
+    ai::AssistantEventSink sink) {
     auto api_key = resolve_api_key();
     if (!api_key) {
-        return util::Result<ai::ChatResponse>::failure(api_key.error());
+        co_return std::unexpected(api_key.error());
+    }
+    if (!transport_) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Network,
+            "missing stream transport",
+            "OpenAI streaming client requires a transport"));
     }
 
-    boost::json::object body;
-    body["model"] = request.context.model.empty() ? config_.model : request.context.model;
-    boost::json::array messages;
-    for (const auto& message : request.context.messages) {
-        messages.push_back(message_to_openai(message));
-    }
-    body["messages"] = std::move(messages);
-    if (!request.context.tools.empty()) {
-        boost::json::array tools;
-        for (const auto& tool : request.context.tools) {
-            tools.push_back(tool_to_openai(tool));
-        }
-        body["tools"] = std::move(tools);
+    auto body = util::write_json(request_to_openai(request, config_));
+    if (!body) {
+        co_return std::unexpected(body.error());
     }
 
-    HttpRequest http;
+    StreamRequest http;
     http.method = "POST";
     http.url = completions_url();
     http.timeout = config_.timeout;
-    http.headers["Authorization"] = "Bearer " + api_key.value();
+    http.headers["Authorization"] = "Bearer " + *api_key;
     http.headers["Content-Type"] = "application/json";
+    http.headers["Accept"] = "text/event-stream";
     if (!config_.organization.empty()) {
         http.headers["OpenAI-Organization"] = config_.organization;
     }
     if (!config_.project.empty()) {
         http.headers["OpenAI-Project"] = config_.project;
     }
-    http.body = boost::json::serialize(body);
+    http.body = std::move(*body);
 
-    auto response = transport_->send(http);
+    ai::AssistantMessage assistant;
+    assistant.api = "openai-chat-completions";
+    assistant.provider = "openai";
+    assistant.model = request.model.empty() ? (request.context.model.empty() ? config_.model : request.context.model) : request.model;
+    assistant.stop_reason = ai::AssistantStopReason::Unknown;
+
+    if (auto started = emit(sink, ai::AssistantStartEvent{assistant}); !started) {
+        co_return std::unexpected(started.error());
+    }
+
+    SseParser parser;
+    bool text_started = false;
+    std::optional<std::size_t> text_index;
+    std::map<std::int64_t, ToolCallAccumulator> tool_calls;
+
+    auto handle_chunk = [&](std::string_view bytes) -> util::ExpectedVoid {
+        auto events = parser.append(bytes);
+        if (!events) {
+            return std::unexpected(events.error());
+        }
+
+        for (const auto& sse_event : *events) {
+            if (sse_event.done) {
+                continue;
+            }
+            if (sse_event.data.empty()) {
+                continue;
+            }
+
+            auto chunk = util::read_json<ai::glaze::OpenAIStreamChunkDto>(sse_event.data);
+            if (!chunk) {
+                return std::unexpected(util::make_error(
+                    util::ErrorCode::JsonParse,
+                    "malformed provider stream JSON",
+                    chunk.error().detail,
+                    sse_event.data));
+            }
+
+            if (chunk->id) {
+                assistant.response_id = chunk->id;
+            }
+            if (chunk->model) {
+                assistant.response_model = chunk->model;
+            }
+            if (chunk->usage) {
+                assistant.usage = ai::Usage{
+                    chunk->usage->prompt_tokens,
+                    chunk->usage->completion_tokens,
+                    0,
+                    0,
+                    chunk->usage->total_tokens,
+                    {},
+                };
+            }
+
+            for (const auto& choice : chunk->choices) {
+                if (choice.finish_reason) {
+                    assistant.stop_reason = stop_reason_from_provider(choice.finish_reason);
+                }
+                if (!choice.delta) {
+                    continue;
+                }
+
+                if (choice.delta->content && !choice.delta->content->empty()) {
+                    if (!text_started) {
+                        text_started = true;
+                        text_index = assistant.content.size();
+                        assistant.content.emplace_back(ai::TextContent{"", std::nullopt});
+                        auto emitted = emit(sink, ai::TextStartEvent{*text_index, assistant});
+                        if (!emitted) {
+                            return std::unexpected(emitted.error());
+                        }
+                    }
+                    auto& text = std::get<ai::TextContent>(assistant.content[*text_index]);
+                    text.text += *choice.delta->content;
+                    auto emitted = emit(sink, ai::TextDeltaEvent{*text_index, *choice.delta->content, assistant});
+                    if (!emitted) {
+                        return std::unexpected(emitted.error());
+                    }
+                }
+
+                if (choice.delta->tool_calls) {
+                    for (const auto& call_delta : *choice.delta->tool_calls) {
+                        auto [it, inserted] = tool_calls.try_emplace(
+                            call_delta.index,
+                            ToolCallAccumulator{"", "", "", assistant.content.size()});
+                        auto& call = it->second;
+                        if (inserted) {
+                            assistant.content.emplace_back(ai::ToolCallContent{});
+                            auto emitted = emit(sink, ai::ToolCallStartEvent{call.content_index, assistant});
+                            if (!emitted) {
+                                return std::unexpected(emitted.error());
+                            }
+                        }
+                        if (call_delta.id) {
+                            call.id = *call_delta.id;
+                        }
+                        if (call_delta.function) {
+                            if (call_delta.function->name) {
+                                call.name += *call_delta.function->name;
+                            }
+                            if (call_delta.function->arguments) {
+                                call.raw_arguments += *call_delta.function->arguments;
+                                auto emitted = emit(sink, ai::ToolCallDeltaEvent{call.content_index, *call_delta.function->arguments, assistant});
+                                if (!emitted) {
+                                    return std::unexpected(emitted.error());
+                                }
+                            }
+                        }
+
+                        auto& block = std::get<ai::ToolCallContent>(assistant.content[call.content_index]);
+                        block.id = call.id;
+                        block.name = call.name;
+                        block.raw_arguments = call.raw_arguments;
+                    }
+                }
+            }
+        }
+        return {};
+    };
+
+    auto response = co_await transport_->async_stream(http, handle_chunk);
     if (!response) {
-        return util::Result<ai::ChatResponse>::failure(util::redact_text(response.error()));
+        if (auto emitted = emit_error(sink, response.error(), assistant); !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+        co_return std::unexpected(response.error());
     }
-    if (response.value().status_code < 200 || response.value().status_code >= 300) {
-        std::ostringstream error;
-        error << "provider returned HTTP " << response.value().status_code << ": " << util::redact_text(response.value().body);
-        return util::Result<ai::ChatResponse>::failure(error.str());
+
+    auto final_event = parser.finish();
+    if (!final_event) {
+        if (auto emitted = emit_error(sink, final_event.error(), assistant); !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+        co_return std::unexpected(final_event.error());
     }
-    return parse_chat_response(response.value().body);
+    if (*final_event && !(*final_event)->done && !(*final_event)->data.empty()) {
+        auto handled = handle_chunk(std::string{"data: " + (*final_event)->data + "\n\n"});
+        if (!handled) {
+            if (auto emitted = emit_error(sink, handled.error(), assistant); !emitted) {
+                co_return std::unexpected(emitted.error());
+            }
+            co_return std::unexpected(handled.error());
+        }
+    }
+
+    if (text_started && text_index) {
+        const auto& text = std::get<ai::TextContent>(assistant.content[*text_index]);
+        if (auto emitted = emit(sink, ai::TextEndEvent{*text_index, text.text, assistant}); !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+    }
+
+    for (auto& [_, call] : tool_calls) {
+        auto& block = std::get<ai::ToolCallContent>(assistant.content[call.content_index]);
+        auto parsed_args = parse_tool_arguments(block.raw_arguments);
+        if (parsed_args) {
+            block.arguments = std::move(*parsed_args);
+            block.arguments_valid = true;
+            block.argument_error = std::nullopt;
+        } else {
+            block.arguments = std::nullopt;
+            block.arguments_valid = false;
+            block.argument_error = parsed_args.error().detail.empty() ? parsed_args.error().message : parsed_args.error().detail;
+        }
+        if (auto emitted = emit(sink, ai::ToolCallEndEvent{call.content_index, block, assistant}); !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+    }
+
+    if (assistant.stop_reason == ai::AssistantStopReason::Unknown) {
+        assistant.stop_reason = tool_calls.empty() ? ai::AssistantStopReason::Stop : ai::AssistantStopReason::ToolUse;
+    }
+
+    if (auto emitted = emit(sink, ai::AssistantDoneEvent{assistant.stop_reason, assistant}); !emitted) {
+        co_return std::unexpected(emitted.error());
+    }
+
+    co_return assistant;
 }
 
-util::Result<std::string> OpenAIChatClient::resolve_api_key() const {
+util::Expected<std::string> StreamingOpenAIChatClient::resolve_api_key() const {
     if (!config_.api_key.empty()) {
-        return util::Result<std::string>::success(config_.api_key);
+        return config_.api_key;
     }
     if (!config_.api_key_env.empty()) {
         if (const char* value = std::getenv(config_.api_key_env.c_str()); value != nullptr && *value != '\0') {
-            return util::Result<std::string>::success(std::string(value));
+            return std::string(value);
         }
     }
-    return util::Result<std::string>::failure("missing API key; set " + config_.api_key_env + " or pass provider configuration");
+    return std::unexpected(util::make_error(
+        util::ErrorCode::Provider,
+        "missing API key",
+        "set " + config_.api_key_env + " or pass provider configuration"));
 }
 
-std::string OpenAIChatClient::completions_url() const {
+std::string StreamingOpenAIChatClient::completions_url() const {
     std::string base = config_.base_url;
     while (!base.empty() && base.back() == '/') {
         base.pop_back();

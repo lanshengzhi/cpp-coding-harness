@@ -1,10 +1,10 @@
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
-#include "../../../src/harness/session/JsonlSessionStore.hpp"
-#include "../../../src/session/JsonlSessionStore.hpp"
+#include <cch/harness/session/JsonlSessionStore.hpp>
 #include "../../support/TempWorkspace.hpp"
 
 #include <fstream>
+#include <variant>
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <sys/stat.h>
@@ -17,75 +17,95 @@ harness::session::SessionMetadata metadata_for(const tests::TempWorkspace& works
     return {"session-test", "2026-06-10T00:00:00Z", workspace.path(), "fake", "fake-model"};
 }
 
-agent::Message user_message(std::string content) {
-    agent::Message message;
-    message.role = agent::Role::User;
-    message.content = std::move(content);
-    return message;
-}
+ai::MessageVariant user_message(std::string content) {
+    return ai::MessageVariant{ai::user_text_message(std::move(content))};
 }
 
-TEST_CASE("harness session store loads legacy header and message entries as typed entries", "[harness][session][u6][ae3]") {
-    tests::TempWorkspace workspace;
-    auto path = workspace.path() / "legacy.jsonl";
-    {
-        std::ofstream output(path);
-        output << R"({"type":"header","version":1,"session_id":"legacy","created_at":"now","workspace":")"
-               << workspace.path().string()
-               << R"(","provider":"fake","model":"fake-model"})" << '\n';
-        output << R"({"type":"message","entry_id":"m1","message":{"role":"user","content":"first","is_error":false,"tool_calls":[]}})" << '\n';
-        output << R"({"type":"message","entry_id":"m2","message":{"role":"assistant","content":"second","is_error":false,"tool_calls":[]}})" << '\n';
+std::string text_from_message(const ai::MessageVariant& message) {
+    if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
+        const auto& text = std::get<ai::TextContent>(user->content.front());
+        return text.text;
     }
-#if defined(__unix__) || defined(__APPLE__)
-    chmod(path.c_str(), S_IRUSR | S_IWUSR);
-#endif
-
-    auto loaded = harness::session::JsonlSessionStore::load(path);
-
-    REQUIRE(loaded.ok());
-    CHECK(loaded.value().metadata.session_id == "legacy");
-    REQUIRE(loaded.value().messages.size() == 2);
-    CHECK(loaded.value().messages[0].content == "first");
-    CHECK(loaded.value().messages[1].content == "second");
-    REQUIRE(loaded.value().entries.size() == 3);
-    CHECK(loaded.value().entries[0].kind == harness::session::SessionEntryKind::Header);
-    CHECK(loaded.value().entries[1].kind == harness::session::SessionEntryKind::Message);
-    CHECK(loaded.value().entries[1].entry_id == "m1");
+    if (const auto* assistant = std::get_if<ai::AssistantMessage>(&message)) {
+        const auto& text = std::get<ai::TextContent>(assistant->content.front());
+        return text.text;
+    }
+    return {};
 }
+} // namespace
 
-TEST_CASE("harness session writes remain readable through legacy session facade", "[harness][session][u6]") {
+TEST_CASE("Glaze JSONL session writes header and typed message entries", "[harness][session][u7]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "new.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
-    REQUIRE(store.ok());
-    REQUIRE(store.value().append(user_message("hello")) .ok());
+    REQUIRE(store);
+    REQUIRE(store->append(user_message("hello")));
 
-    auto loaded = session::JsonlSessionStore::load(path);
+    auto loaded = harness::session::JsonlSessionStore::load(path);
 
-    REQUIRE(loaded.ok());
-    REQUIRE(loaded.value().messages.size() == 1);
-    CHECK(loaded.value().messages[0].content == "hello");
-    REQUIRE(loaded.value().entries.size() == 2);
-    CHECK(loaded.value().entries[1].kind == session::SessionEntryKind::Message);
+    REQUIRE(loaded);
+    CHECK(loaded->metadata.session_id == "session-test");
+    REQUIRE(loaded->messages.size() == 1);
+    CHECK(text_from_message(loaded->messages[0]) == "hello");
+    REQUIRE(loaded->entries.size() == 2);
+    CHECK(loaded->entries[0].kind == harness::session::SessionEntryKind::Header);
+    CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::Message);
 }
 
-TEST_CASE("harness session keeps unknown future entries in typed load result", "[harness][session][u6]") {
+TEST_CASE("Glaze JSONL session keeps unknown future entries", "[harness][session][u7]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "future.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
-    REQUIRE(store.ok());
+    REQUIRE(store);
     {
         std::ofstream output(path, std::ios::app);
         output << "{\"type\":\"future\",\"payload\":42}\n";
     }
-    REQUIRE(store.value().append(user_message("known")).ok());
+    REQUIRE(store->append(user_message("known")));
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
 
-    REQUIRE(loaded.ok());
-    REQUIRE(loaded.value().unknown_lines.size() == 1);
-    REQUIRE(loaded.value().entries.size() == 3);
-    CHECK(loaded.value().entries[1].kind == harness::session::SessionEntryKind::Unknown);
-    CHECK(loaded.value().entries[2].kind == harness::session::SessionEntryKind::Message);
-    CHECK(loaded.value().messages[0].content == "known");
+    REQUIRE(loaded);
+    REQUIRE(loaded->unknown_lines.size() == 1);
+    REQUIRE(loaded->entries.size() == 3);
+    CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::Unknown);
+    CHECK(loaded->entries[2].kind == harness::session::SessionEntryKind::Message);
+    CHECK(text_from_message(loaded->messages[0]) == "known");
+}
+
+TEST_CASE("Glaze JSONL session reports malformed line context", "[harness][session][u7]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "bad.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+    {
+        std::ofstream output(path, std::ios::app);
+        output << "not-json\n";
+    }
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+
+    REQUIRE_FALSE(loaded);
+    CHECK(loaded.error().code == util::ErrorCode::Session);
+    CHECK(loaded.error().detail.find("line 2") != std::string::npos);
+}
+
+TEST_CASE("Glaze JSONL session rejects symlink and public readable files", "[harness][session][u7]") {
+    tests::TempWorkspace workspace;
+    auto real = workspace.path() / "real.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(real, metadata_for(workspace));
+    REQUIRE(store);
+
+#if defined(__unix__) || defined(__APPLE__)
+    auto link = workspace.path() / "link.jsonl";
+    symlink(real.c_str(), link.c_str());
+    auto linked = harness::session::JsonlSessionStore::load(link);
+    REQUIRE_FALSE(linked);
+    CHECK(linked.error().message.find("symlink") != std::string::npos);
+
+    chmod(real.c_str(), S_IRUSR | S_IWUSR | S_IRGRP);
+    auto public_load = harness::session::JsonlSessionStore::load(real);
+    REQUIRE_FALSE(public_load);
+    CHECK(public_load.error().message.find("readable") != std::string::npos);
+#endif
 }

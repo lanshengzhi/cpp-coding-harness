@@ -1,9 +1,5 @@
-#include "agent/AgentLoop.hpp"
-#include "ai/providers/BoostBeastHttpTransport.hpp"
-#include "ai/providers/OpenAIChatClient.hpp"
-#include "harness/session/JsonlSessionStore.hpp"
-#include "tools/Tools.hpp"
 #include "AsyncCliRuntime.hpp"
+#include "util/Result.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -23,7 +19,7 @@ struct CliConfig {
     bool repl{false};
     bool enable_bash{false};
     bool help{false};
-    bool async_stack{false};
+    bool async_stack{true};
     bool workspace_explicit{false};
     int max_turns{8};
     std::filesystem::path workspace{std::filesystem::current_path()};
@@ -39,7 +35,7 @@ void print_help(std::ostream& out) {
     out << "cpp-harness [options] [prompt]\n"
         << "\nOptions:\n"
         << "  --fake                    Use deterministic fake provider (no network)\n"
-        << "  --async                   Run the experimental coroutine/Glaze stack\n"
+        << "  --async                   Run the coroutine/Glaze stack (default)\n"
         << "  --repl                    Read prompts interactively until exit/quit\n"
         << "  --workspace <path>        Workspace boundary for tools (default: cwd)\n"
         << "  --session <path>          Create a new JSONL session at path\n"
@@ -168,69 +164,6 @@ std::filesystem::path default_session_path() {
     return std::filesystem::current_path() / ".cpp-harness" / "sessions" / (timestamp_for_path() + "-" + random_suffix() + ".jsonl");
 }
 
-class ScriptedFakeClient final : public cch::ai::ChatClient {
-public:
-    cch::util::Result<cch::ai::ChatResponse> complete(const cch::ai::ChatRequest& request) override {
-        cch::ai::ChatResponse response;
-        cch::agent::Message assistant;
-        assistant.role = cch::agent::Role::Assistant;
-        if (!request.context.messages.empty()) {
-            auto last = cch::agent::message_from_ai(request.context.messages.back());
-            if (last.role == cch::agent::Role::Tool) {
-                assistant.content = "fake observed: " + last.content;
-                response.assistant_message = cch::agent::to_ai_message(assistant);
-                return cch::util::Result<cch::ai::ChatResponse>::success(response);
-            }
-        }
-        std::string prompt;
-        for (auto it = request.context.messages.rbegin(); it != request.context.messages.rend(); ++it) {
-            auto message = cch::agent::message_from_ai(*it);
-            if (message.role == cch::agent::Role::User) {
-                prompt = message.content;
-                break;
-            }
-        }
-        if (prompt.rfind("read ", 0) == 0) {
-            cch::agent::ToolCall call;
-            call.id = "fake-read-1";
-            call.name = "read_file";
-            call.arguments = {{"path", prompt.substr(5)}};
-            call.raw_arguments = boost::json::serialize(call.arguments);
-            assistant.content = "reading " + prompt.substr(5);
-            assistant.tool_calls.push_back(std::move(call));
-            response.assistant_message = cch::agent::to_ai_message(assistant);
-            response.stop_reason = cch::ai::StopReason::ToolUse;
-            return cch::util::Result<cch::ai::ChatResponse>::success(response);
-        }
-        if (prompt.rfind("bash ", 0) == 0) {
-            cch::agent::ToolCall call;
-            call.id = "fake-bash-1";
-            call.name = "bash";
-            call.arguments = {{"command", prompt.substr(5)}};
-            call.raw_arguments = boost::json::serialize(call.arguments);
-            assistant.content = "running bash";
-            assistant.tool_calls.push_back(std::move(call));
-            response.assistant_message = cch::agent::to_ai_message(assistant);
-            response.stop_reason = cch::ai::StopReason::ToolUse;
-            return cch::util::Result<cch::ai::ChatResponse>::success(response);
-        }
-        assistant.content = "fake: " + prompt;
-        response.assistant_message = cch::agent::to_ai_message(assistant);
-        return cch::util::Result<cch::ai::ChatResponse>::success(response);
-    }
-};
-
-void print_event(const cch::agent::LoopEvent& event) {
-    if (event.type == "model_request") std::cout << "[model-request] " << event.detail << '\n';
-    else if (event.type == "assistant") std::cout << "[assistant] " << event.detail << '\n';
-    else if (event.type == "tool_call") std::cout << "[tool-call] " << event.detail << '\n';
-    else if (event.type == "tool_success") std::cout << "[tool-success] " << event.detail << '\n';
-    else if (event.type == "tool_error") std::cout << "[tool-error] " << event.detail << '\n';
-    else if (event.type == "provider_error") std::cout << "[provider-error] " << event.detail << '\n';
-    else if (event.type == "max_turns") std::cout << "[max-turns] " << event.detail << '\n';
-    else if (event.type == "completed") std::cout << "[completed] " << event.detail << '\n';
-}
-
 cch::util::Result<void> validate_workspace(const std::filesystem::path& workspace) {
     std::error_code ec;
     if (!std::filesystem::exists(workspace, ec) || !std::filesystem::is_directory(workspace, ec)) {
@@ -293,118 +226,27 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-    std::vector<cch::agent::Message> history;
-    cch::harness::session::JsonlSessionStore store;
-    if (!config.resume_path.empty()) {
-        auto loaded = cch::harness::session::JsonlSessionStore::load(config.resume_path);
-        if (!loaded) {
-            std::cerr << "could not resume session: " << loaded.error() << '\n';
-            return 2;
-        }
-        if (!loaded.value().metadata.workspace.empty()) {
-            if (config.workspace_explicit) {
-                if (!same_workspace(config.workspace, loaded.value().metadata.workspace)) {
-                    std::cerr << "resume workspace does not match session metadata; omit --workspace to use "
-                              << loaded.value().metadata.workspace << " or start a new session\n";
-                    return 2;
-                }
-            } else {
-                config.workspace = loaded.value().metadata.workspace;
-            }
-        }
-        auto workspace_validation = validate_workspace(config.workspace);
-        if (!workspace_validation) {
-            std::cerr << workspace_validation.error() << '\n';
-            return 2;
-        }
-        config.workspace = canonical_workspace(config.workspace);
-        history = loaded.value().messages;
-        auto opened = cch::harness::session::JsonlSessionStore::open_existing(config.resume_path);
-        if (!opened) {
-            std::cerr << "could not open session for append: " << opened.error() << '\n';
-            return 2;
-        }
-        store = std::move(opened.value());
-    } else {
-        auto workspace_validation = validate_workspace(config.workspace);
-        if (!workspace_validation) {
-            std::cerr << workspace_validation.error() << '\n';
-            return 2;
-        }
-        config.workspace = canonical_workspace(config.workspace);
-        auto path = config.session_path.empty() ? default_session_path() : config.session_path;
-        cch::harness::session::SessionMetadata metadata{timestamp_for_path(), timestamp_for_path(), config.workspace, config.fake ? "fake" : "openai-compatible", config.model};
-        auto created = cch::harness::session::JsonlSessionStore::create_new(path, metadata);
-        if (!created) {
-            std::cerr << "could not create session: " << created.error() << '\n';
-            return 2;
-        }
-        store = std::move(created.value());
+    auto workspace_validation = validate_workspace(config.workspace);
+    if (!workspace_validation) {
+        std::cerr << workspace_validation.error() << '\n';
+        return 2;
     }
+    config.workspace = canonical_workspace(config.workspace);
 
-    if (config.async_stack) {
-        return cch::cli::run_async_cli(cch::cli::AsyncCliRuntimeConfig{
-            config.fake,
-            config.repl,
-            config.enable_bash,
-            config.max_turns,
-            config.workspace,
-            config.model,
-            config.base_url,
-            config.api_key_env,
-            config.prompt,
-        });
-    }
-
-    std::unique_ptr<cch::ai::ChatClient> client;
-    if (config.fake) {
-        client = std::make_unique<ScriptedFakeClient>();
-    } else {
-        cch::ai::providers::OpenAIConfig provider;
-        provider.base_url = config.base_url;
-        provider.api_key_env = config.api_key_env;
-        provider.model = config.model;
-        client = std::make_unique<cch::ai::providers::OpenAIChatClient>(std::make_shared<cch::ai::providers::BoostBeastHttpTransport>(), provider);
-    }
-
-    cch::agent::ToolRegistry registry;
-    cch::tools::add_all_tools(registry);
-    cch::agent::LoopOptions options;
-    options.workspace = config.workspace;
-    options.model = config.model;
-    options.max_turns = config.max_turns;
-    options.bash_enabled = config.enable_bash;
-    options.secret_environment_names.push_back(config.api_key_env);
-    options.on_event = print_event;
-    options.on_message = [&](const cch::agent::Message& message) { return store.append(message); };
-
-    cch::agent::AgentLoop loop(*client, std::move(registry), options);
-    auto run_prompt = [&](const std::string& prompt) -> bool {
-        auto result = loop.continue_with(history, prompt);
-        if (!result) {
-            std::cerr << "loop failed: " << result.error() << '\n';
-            return false;
-        }
-        history = result.value().messages;
-        std::cout << result.value().final_text << '\n';
-        return true;
-    };
-
-    if (config.repl) {
-        std::string line;
-        while (std::cout << "> " && std::getline(std::cin, line)) {
-            if (line == "exit" || line == "quit") {
-                break;
-            }
-            if (line.empty()) {
-                continue;
-            }
-            if (!run_prompt(line)) {
-                return 1;
-            }
-        }
-        return 0;
-    }
-
-    return run_prompt(config.prompt) ? 0 : 1;
+    return cch::cli::run_async_cli(cch::cli::AsyncCliRuntimeConfig{
+        config.fake,
+        config.repl,
+        config.enable_bash,
+        config.max_turns,
+        config.workspace_explicit,
+        config.workspace,
+        config.session_path.empty() ? default_session_path() : config.session_path,
+        config.resume_path,
+        timestamp_for_path(),
+        timestamp_for_path(),
+        config.model,
+        config.base_url,
+        config.api_key_env,
+        config.prompt,
+    });
 }

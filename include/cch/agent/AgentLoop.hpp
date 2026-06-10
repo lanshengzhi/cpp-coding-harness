@@ -9,6 +9,7 @@
 #include <boost/asio/awaitable.hpp>
 
 #include <string>
+#include <vector>
 
 namespace cch::agent {
 
@@ -17,6 +18,11 @@ public:
     AsyncAgentLoop(ai::StreamingChatClient& client, AsyncToolRegistry registry, AsyncAgentOptions options = {});
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> run(
+        std::string user_prompt,
+        AgentEventSink sink = {});
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> continue_with(
+        std::vector<ai::MessageVariant> history,
         std::string user_prompt,
         AgentEventSink sink = {});
 

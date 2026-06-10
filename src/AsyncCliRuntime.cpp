@@ -4,6 +4,7 @@
 #include <cch/ai/providers/BoostBeastStreamTransport.hpp>
 #include <cch/ai/providers/OpenAIChatClient.hpp>
 #include <cch/harness/LocalExecutionEnv.hpp>
+#include <cch/harness/session/JsonlSessionStore.hpp>
 #include <cch/tools/ToolFactories.hpp>
 
 #include <boost/asio/co_spawn.hpp>
@@ -12,6 +13,7 @@
 
 #include <glaze/glaze.hpp>
 
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -109,6 +111,17 @@ private:
     }
 };
 
+bool same_workspace(const std::filesystem::path& first, const std::filesystem::path& second) {
+    std::error_code first_ec;
+    std::error_code second_ec;
+    auto first_canonical = std::filesystem::weakly_canonical(first, first_ec);
+    auto second_canonical = std::filesystem::weakly_canonical(second, second_ec);
+    if (first_ec || second_ec) {
+        return first.lexically_normal() == second.lexically_normal();
+    }
+    return first_canonical == second_canonical;
+}
+
 void print_async_event(const agent::AgentLifecycleEvent& event) {
     if (const auto* turn = std::get_if<agent::TurnStartEvent>(&event)) {
         std::cout << "[model-request] turn " << turn->turn << '\n';
@@ -133,6 +146,49 @@ void print_async_event(const agent::AgentLifecycleEvent& event) {
 } // namespace
 
 int run_async_cli(const AsyncCliRuntimeConfig& config) {
+    auto workspace = config.workspace;
+    std::vector<ai::MessageVariant> history;
+    harness::session::JsonlSessionStore store;
+
+    if (!config.resume_path.empty()) {
+        auto loaded = harness::session::JsonlSessionStore::load(config.resume_path);
+        if (!loaded) {
+            std::cerr << "could not resume session: " << loaded.error().message << ": " << loaded.error().detail << '\n';
+            return 2;
+        }
+        if (!loaded->metadata.workspace.empty()) {
+            if (config.workspace_explicit && !same_workspace(workspace, loaded->metadata.workspace)) {
+                std::cerr << "resume workspace does not match session metadata; omit --workspace to use "
+                          << loaded->metadata.workspace << " or start a new session\n";
+                return 2;
+            }
+            if (!config.workspace_explicit) {
+                workspace = loaded->metadata.workspace;
+            }
+        }
+        history = loaded->messages;
+        auto opened = harness::session::JsonlSessionStore::open_existing(config.resume_path);
+        if (!opened) {
+            std::cerr << "could not open session for append: " << opened.error().message << ": " << opened.error().detail << '\n';
+            return 2;
+        }
+        store = std::move(*opened);
+    } else {
+        harness::session::SessionMetadata metadata{
+            config.session_id,
+            config.created_at,
+            workspace,
+            config.fake ? "fake" : "openai-compatible",
+            config.model,
+        };
+        auto created = harness::session::JsonlSessionStore::create_new(config.session_path, metadata);
+        if (!created) {
+            std::cerr << "could not create session: " << created.error().message << ": " << created.error().detail << '\n';
+            return 2;
+        }
+        store = std::move(*created);
+    }
+
     std::unique_ptr<ai::StreamingChatClient> client;
     if (config.fake) {
         client = std::make_unique<ScriptedStreamingFakeClient>();
@@ -146,7 +202,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
     }
 
     auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(
-        config.workspace,
+        workspace,
         config.enable_bash,
         std::vector<std::string>{config.api_key_env});
     agent::AsyncToolRegistry registry;
@@ -159,10 +215,11 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
     auto run_prompt = [&](const std::string& prompt) -> bool {
         boost::asio::io_context io;
         std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
+        const auto previous_size = history.size();
         boost::asio::co_spawn(
             io,
             [&]() -> boost::asio::awaitable<void> {
-                result = co_await loop.run(prompt, [](const agent::AgentLifecycleEvent& event) {
+                result = co_await loop.continue_with(history, prompt, [](const agent::AgentLifecycleEvent& event) {
                     print_async_event(event);
                     return util::ExpectedVoid{};
                 });
@@ -175,7 +232,14 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             std::cerr << "loop failed: " << (message == "max turns exceeded" ? "max_turns_exceeded" : message) << '\n';
             return false;
         }
-        const auto& final_message = std::get<ai::AssistantMessage>((*result)->context.messages.back());
+        history = (*result)->context.messages;
+        for (std::size_t index = previous_size; index < history.size(); ++index) {
+            if (auto appended = store.append(history[index]); !appended) {
+                std::cerr << "could not persist session entry: " << appended.error().message << ": " << appended.error().detail << '\n';
+                return false;
+            }
+        }
+        const auto& final_message = std::get<ai::AssistantMessage>(history.back());
         std::cout << text_from_async_content(final_message.content) << '\n';
         return true;
     };
