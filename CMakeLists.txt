@@ -25,6 +25,7 @@ endif()
 
 add_library(cpp_harness_lib
     src/agent/AgentLoop.cpp
+    src/agent/AsyncAgentLoop.cpp
     src/ai/providers/BoostBeastHttpTransport.cpp
     src/ai/providers/BoostBeastStreamTransport.cpp
     src/ai/providers/OpenAIChatClient.cpp
@@ -71,6 +72,7 @@ if(CCH_BUILD_TESTS)
         tests/agent/AgentEventTest.cpp
         tests/agent/AgentLoopTest.cpp
         tests/agent/AgentToolContractTest.cpp
+        tests/agent/AsyncAgentLoopTest.cpp
         tests/ai/GlazeRoundTripTest.cpp
         tests/ai/MessageContractTest.cpp
         tests/ai/ToolContractTest.cpp
