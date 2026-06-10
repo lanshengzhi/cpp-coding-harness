@@ -144,6 +144,19 @@ TEST_CASE("CLI fake bash request is blocked by default", "[cli][u6]") {
     CHECK(result.output.find("bash is disabled") != std::string::npos);
 }
 
+TEST_CASE("CLI fake read loop prints max-turn marker when turn budget is exhausted", "[cli][u1]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "max-turn.jsonl";
+    auto result = run_command(bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " --max-turns 1 read missing.txt");
+
+    REQUIRE(result.exit_code != 0);
+    CHECK(result.output.find("[model-request] turn 1") != std::string::npos);
+    CHECK(result.output.find("[tool-call] read_file#fake-read-1") != std::string::npos);
+    CHECK(result.output.find("[tool-error] fake-read-1") != std::string::npos);
+    CHECK(result.output.find("[max-turns] max_turns_exceeded") != std::string::npos);
+    CHECK(result.output.find("loop failed: max_turns_exceeded") != std::string::npos);
+}
+
 TEST_CASE("CLI real-provider mode reports missing API key before model request", "[cli][u6]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "real.jsonl";

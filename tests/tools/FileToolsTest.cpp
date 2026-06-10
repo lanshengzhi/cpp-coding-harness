@@ -100,6 +100,27 @@ TEST_CASE("write_file rejects missing content but permits explicit empty content
     CHECK(workspace.read("empty.txt").empty());
 }
 
+TEST_CASE("write_file rejects missing parents and directory targets with stable errors", "[tools][u1]") {
+    tests::TempWorkspace workspace;
+    auto tool = tools::make_write_file_tool();
+
+    boost::json::object missing_parent;
+    missing_parent["path"] = "missing/out.txt";
+    missing_parent["content"] = "created";
+    auto missing_result = tool->execute(missing_parent, context_for(workspace));
+    CHECK(missing_result.is_error);
+    CHECK(missing_result.content.find("parent directory does not exist") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(workspace.path() / "missing"));
+
+    std::filesystem::create_directory(workspace.path() / "dir-target");
+    boost::json::object directory_target;
+    directory_target["path"] = "dir-target";
+    directory_target["content"] = "nope";
+    auto directory_result = tool->execute(directory_target, context_for(workspace));
+    CHECK(directory_result.is_error);
+    CHECK(directory_result.content.find("target is not a regular file") != std::string::npos);
+}
+
 TEST_CASE("edit_file replaces one unique exact text region", "[tools][u3]") {
     tests::TempWorkspace workspace;
     workspace.write("story.txt", "one fish\ntwo fish\n");

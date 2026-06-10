@@ -44,13 +44,20 @@ TEST_CASE("chat client error becomes structured loop failure", "[agent][u1]") {
     tests::FakeChatClient client;
     client.fail_next("provider unavailable");
 
+    std::vector<agent::LoopEvent> events;
     agent::ToolRegistry registry;
-    agent::AgentLoop loop(client, registry);
+    agent::LoopOptions options;
+    options.on_event = [&](const agent::LoopEvent& event) { events.push_back(event); };
+    agent::AgentLoop loop(client, registry, options);
 
     auto result = loop.run("will fail");
 
     REQUIRE_FALSE(result.ok());
     CHECK(result.error() == "provider unavailable");
+    REQUIRE(events.size() == 2);
+    CHECK(events[0].type == "model_request");
+    CHECK(events[1].type == "provider_error");
+    CHECK(events[1].detail == "provider unavailable");
 }
 
 TEST_CASE("tool call result is appended with matching call id and fed into next model request", "[agent][u4][ae1]") {
@@ -77,6 +84,41 @@ TEST_CASE("tool call result is appended with matching call id and fed into next 
     CHECK(tool_message.role == agent::Role::Tool);
     CHECK(tool_message.tool_call_id == "call-1");
     CHECK(tool_message.content.find("agent context") != std::string::npos);
+}
+
+TEST_CASE("tool call loop emits stable MVP event transcript", "[agent][u1][ae1]") {
+    tests::TempWorkspace workspace;
+    workspace.write("note.txt", "event context");
+    tests::FakeChatClient client;
+    boost::json::object args;
+    args["path"] = "note.txt";
+    client.push_response(tests::tool_response("call-1", "read_file", args, "reading"));
+    client.push_response(tests::text_response("done"));
+    std::vector<agent::LoopEvent> events;
+
+    agent::ToolRegistry registry;
+    registry.add(tools::make_read_file_tool());
+    agent::LoopOptions options;
+    options.workspace = workspace.path();
+    options.on_event = [&](const agent::LoopEvent& event) { events.push_back(event); };
+    agent::AgentLoop loop(client, registry, options);
+
+    auto result = loop.run("inspect note.txt");
+
+    REQUIRE(result.ok());
+    REQUIRE(events.size() == 7);
+    CHECK(events[0].type == "model_request");
+    CHECK(events[1].type == "assistant");
+    CHECK(events[1].detail == "reading");
+    CHECK(events[2].type == "tool_call");
+    CHECK(events[2].detail == "read_file#call-1");
+    CHECK(events[3].type == "tool_success");
+    CHECK(events[3].detail == "call-1");
+    CHECK(events[4].type == "model_request");
+    CHECK(events[5].type == "assistant");
+    CHECK(events[5].detail == "done");
+    CHECK(events[6].type == "completed");
+    CHECK(events[6].detail == "stop");
 }
 
 TEST_CASE("unknown tool and malformed arguments continue as error tool results", "[agent][u4]") {
