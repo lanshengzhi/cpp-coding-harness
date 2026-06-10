@@ -1,2 +1,4 @@
 build/
 .cpp-harness/sessions/*.jsonl
+vcpkg_installed/
+CMakeUserPresets.json

@@ -1,5 +1,10 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.25)
 project(cpp_coding_harness VERSION 0.1.0 LANGUAGES CXX)
+
+# CMake 3.30+ removed the legacy FindBoost module; use Boost's own config-mode package.
+if(POLICY CMP0167)
+    cmake_policy(SET CMP0167 NEW)
+endif()
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -7,21 +12,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(CCH_BUILD_TESTS "Build tests" ON)
 
-include(FetchContent)
-
 find_package(Boost REQUIRED COMPONENTS system filesystem)
 find_package(OpenSSL REQUIRED)
-find_package(glaze CONFIG QUIET)
-
-if(NOT glaze_FOUND)
-    FetchContent_Declare(
-        glaze
-        GIT_REPOSITORY https://github.com/stephenberry/glaze.git
-        GIT_TAG v7.7.1
-        GIT_SHALLOW TRUE
-    )
-    FetchContent_MakeAvailable(glaze)
-endif()
+find_package(glaze CONFIG REQUIRED)
 
 add_library(cpp_harness_lib
     src/AsyncCliRuntime.cpp
@@ -46,8 +39,8 @@ target_link_libraries(cpp_harness_lib
     PUBLIC
         glaze::glaze
         Boost::system
-    PRIVATE
         Boost::filesystem
+    PRIVATE
         OpenSSL::SSL
         OpenSSL::Crypto
 )

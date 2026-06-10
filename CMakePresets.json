@@ -1,0 +1,60 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "vcpkg",
+      "displayName": "Default (vcpkg)",
+      "description": "Build with vcpkg manifest mode for self-contained dependency resolution",
+      "binaryDir": "${sourceDir}/build",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "vcpkg-release",
+      "displayName": "Release (vcpkg)",
+      "description": "Release build with vcpkg",
+      "inherits": "vcpkg",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "system",
+      "displayName": "System packages",
+      "description": "Build using system-installed dependencies (no vcpkg)",
+      "binaryDir": "${sourceDir}/build"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "vcpkg",
+      "configurePreset": "vcpkg",
+      "jobs": 4
+    },
+    {
+      "name": "vcpkg-release",
+      "configurePreset": "vcpkg-release",
+      "jobs": 4
+    },
+    {
+      "name": "system",
+      "configurePreset": "system",
+      "jobs": 4
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "vcpkg",
+      "configurePreset": "vcpkg",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "system",
+      "configurePreset": "system",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}
