@@ -1,6 +1,6 @@
 # C++ Coding Harness MVP
 
-A small C++20 coding-agent harness that mirrors the core pi-style loop:
+A small C++23 coding-agent harness that mirrors the core pi-style loop:
 
 1. accept a prompt from CLI or REPL,
 2. send ordered messages plus JSON Schema tool definitions to an OpenAI-compatible chat API,
@@ -13,9 +13,10 @@ This is a learning and experimentation harness, not a production sandbox.
 
 ## Build
 
-The project is CMake-based and uses a Boost-first dependency spine:
+The project is CMake-based, requires a C++23-capable compiler, and is moving to a typed Glaze JSON contract layer on top of the existing Boost networking/process spine. CMake 3.20 or newer is expected so the configured C++23 standard is understood by the generator.
 
-- Boost.JSON for JSON DOM/parsing/serialization
+- Glaze for typed JSON serialization/deserialization
+- Boost.JSON remains only for legacy code that is being removed by the coroutine/Glaze refactor
 - Boost.Beast/Asio + OpenSSL for HTTPS transport
 - Boost.Process for the process-execution boundary
 - CLI11 and Catch2 are declared in `vcpkg.json`; this repository also carries a tiny Catch-compatible fallback test header so the default suite can run in minimal environments.

@@ -1,14 +1,27 @@
 cmake_minimum_required(VERSION 3.20)
 project(cpp_coding_harness VERSION 0.1.0 LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(CCH_BUILD_TESTS "Build tests" ON)
 
+include(FetchContent)
+
 find_package(Boost REQUIRED COMPONENTS json system filesystem)
 find_package(OpenSSL REQUIRED)
+find_package(glaze CONFIG QUIET)
+
+if(NOT glaze_FOUND)
+    FetchContent_Declare(
+        glaze
+        GIT_REPOSITORY https://github.com/stephenberry/glaze.git
+        GIT_TAG v7.7.1
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(glaze)
+endif()
 
 add_library(cpp_harness_lib
     src/agent/AgentLoop.cpp
@@ -28,11 +41,13 @@ add_library(cpp_harness_lib
 
 target_include_directories(cpp_harness_lib
     PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 target_link_libraries(cpp_harness_lib
     PUBLIC
+        glaze::glaze
         Boost::json
         Boost::system
         Boost::filesystem
@@ -64,6 +79,7 @@ if(CCH_BUILD_TESTS)
         tests/session/JsonlSessionStoreTest.cpp
         tests/tools/BashToolTest.cpp
         tests/tools/FileToolsTest.cpp
+        tests/util/ExpectedErrorTest.cpp
     )
     target_include_directories(cpp_harness_tests PRIVATE third_party)
     target_link_libraries(cpp_harness_tests PRIVATE cpp_harness_lib)

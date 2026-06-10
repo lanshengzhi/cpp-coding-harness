@@ -2,6 +2,7 @@
   "name": "cpp-coding-harness",
   "version-string": "0.1.0",
   "dependencies": [
+    "glaze",
     "boost-json",
     "boost-process",
     "boost-beast",
