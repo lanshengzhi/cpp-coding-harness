@@ -27,10 +27,32 @@ The project is CMake-based and requires a C++23-capable compiler. CMake 3.20 or 
 - Boost.Process is used behind the process-execution capability boundary.
 - CLI11 and Catch2 are declared in `vcpkg.json`; this repository also carries a tiny Catch-compatible fallback test header so the default suite can run in minimal environments.
 
+### Using vcpkg (recommended)
+
+All dependencies are declared in `vcpkg.json` and resolved automatically via vcpkg manifest mode. No system-installed packages are required.
+
+Prerequisites: [vcpkg](https://github.com/microsoft/vcpkg) installed and `VCPKG_ROOT` environment variable set.
+
 ```bash
-cmake -S . -B build
-cmake --build build -j2
-ctest --test-dir build --output-on-failure
+# one-time vcpkg setup (if you don't have it yet)
+git clone https://github.com/microsoft/vcpkg.git ~/vcpkg
+~/vcpkg/bootstrap-vcpkg.sh
+export VCPKG_ROOT=~/vcpkg
+
+# build
+cmake --preset vcpkg
+cmake --build build -j4
+ctest --preset vcpkg
+```
+
+### Using system packages
+
+If you prefer system-installed Boost, OpenSSL, and Glaze:
+
+```bash
+cmake --preset system
+cmake --build build -j4
+ctest --preset system
 ```
 
 Run the binary with the deterministic fake provider:
