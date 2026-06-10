@@ -1,11 +1,11 @@
 #pragma once
 
-#include "../../util/Callback.hpp"
 #include "../../util/Error.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
 #include <chrono>
+#include <functional>
 #include <map>
 #include <string>
 #include <string_view>
@@ -30,7 +30,7 @@ struct StreamResponse {
     std::string body;
 };
 
-using BodyChunkHandler = util::MoveOnlyCallback<util::ExpectedVoid(std::string_view)>;
+using BodyChunkHandler = std::move_only_function<util::ExpectedVoid(std::string_view)>;
 
 class StreamTransport {
 public:

@@ -27,7 +27,7 @@ git status --short
 
 1. **数据是被动值状态**：公共 contract 使用 aggregate-friendly `struct`、`std::variant`、`std::expected` 和项目内 `util::JsonValue`。
 2. **能力跨物理边界**：Chat client、stream transport、execution env、session store、tool 都通过接口或隐藏实现细节的 concrete class 暴露。
-3. **事件是弱连接**：Agent/provider 事件 sink 使用 `util::MoveOnlyCallback`，不要回退到要求 copyable 的 `std::function`。
+3. **事件是弱连接**：Agent/provider 事件 sink 使用 `std::move_only_function`，不要回退到要求 copyable 的 `std::function`。
 4. **泛型机制局部化**：Glaze DTO、schema 转换、visitor、解析 helper 等应留在 serialization/implementation 层，不要泄漏到 domain-facing API。
 
 禁止重新引入：旧同步工具面、`util::Result`、Boost.JSON domain contract、把 `src` 当作 public include surface、兼容性空 flag。
