@@ -1,9 +1,11 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
+#include "../../src/harness/ExecutionEnv.hpp"
 #include "../../src/tools/Tools.hpp"
 #include "../support/TempWorkspace.hpp"
 
 #include <filesystem>
+#include <memory>
 #include <string>
 
 using namespace cch;
@@ -14,6 +16,37 @@ agent::ToolContext context_for(const tests::TempWorkspace& workspace) {
     context.workspace = workspace.path();
     return context;
 }
+
+class FakeExecutionEnv final : public harness::ExecutionEnv {
+public:
+    const std::filesystem::path& workspace() const override { return workspace_; }
+    bool bash_enabled() const override { return false; }
+
+    util::Result<harness::FileReadResult> read_file(const std::string& path, int offset, int limit) override {
+        read_path = path;
+        read_offset = offset;
+        read_limit = limit;
+        return util::Result<harness::FileReadResult>::success(read_result);
+    }
+
+    util::Result<harness::FileWriteResult> write_file(const std::string&, const std::string&, bool) override {
+        return util::Result<harness::FileWriteResult>::failure("not implemented");
+    }
+
+    util::Result<harness::FileEditResult> edit_file(const std::string&, const std::string&, const std::string&) override {
+        return util::Result<harness::FileEditResult>::failure("not implemented");
+    }
+
+    util::Result<harness::ShellResult> run_shell(const std::string&, std::chrono::milliseconds) override {
+        return util::Result<harness::ShellResult>::failure("not implemented");
+    }
+
+    std::filesystem::path workspace_{"/fake"};
+    harness::FileReadResult read_result{"from fake env", false};
+    std::string read_path;
+    int read_offset{0};
+    int read_limit{0};
+};
 }
 
 TEST_CASE("read_file returns workspace file content with path label", "[tools][u3]") {
@@ -28,6 +61,26 @@ TEST_CASE("read_file returns workspace file content with path label", "[tools][u
     REQUIRE_FALSE(result.is_error);
     CHECK(result.content.find("path: notes.txt") != std::string::npos);
     CHECK(result.content.find("alpha") != std::string::npos);
+}
+
+TEST_CASE("read_file can be driven by a fake execution environment", "[tools][u5]") {
+    auto fake_env = std::make_shared<FakeExecutionEnv>();
+    agent::ToolContext context;
+    context.execution_env = fake_env;
+    auto tool = tools::make_read_file_tool();
+
+    boost::json::object args;
+    args["path"] = "virtual.txt";
+    args["offset"] = 3;
+    args["limit"] = 4;
+    auto result = tool->execute(args, context);
+
+    REQUIRE_FALSE(result.is_error);
+    CHECK(result.content.find("path: virtual.txt") != std::string::npos);
+    CHECK(result.content.find("from fake env") != std::string::npos);
+    CHECK(fake_env->read_path == "virtual.txt");
+    CHECK(fake_env->read_offset == 3);
+    CHECK(fake_env->read_limit == 4);
 }
 
 TEST_CASE("read_file stops at output cap and marks truncation", "[tools][u3]") {

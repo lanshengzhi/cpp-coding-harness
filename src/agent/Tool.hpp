@@ -4,6 +4,7 @@
 
 #include "../util/Result.hpp"
 #include "../ai/Tool.hpp"
+#include "../harness/ExecutionEnv.hpp"
 #include "Message.hpp"
 
 #include <filesystem>
@@ -23,6 +24,7 @@ struct ToolContext {
     std::filesystem::path workspace;
     bool bash_enabled{false};
     std::vector<std::string> secret_environment_names;
+    std::shared_ptr<harness::ExecutionEnv> execution_env;
 };
 
 struct ToolExecutionResult {

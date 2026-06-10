@@ -1,10 +1,9 @@
 #include "Tools.hpp"
 
-#include "AtomicWrite.hpp"
-#include "PathGuard.hpp"
+#include "../harness/LocalExecutionEnv.hpp"
 #include "../util/JsonSchema.hpp"
 
-#include <fstream>
+#include <memory>
 #include <sstream>
 
 namespace cch::tools {
@@ -43,17 +42,11 @@ util::Result<std::string> required_string_arg_any(
     return util::Result<std::string>::failure(std::string(label) + " is required");
 }
 
-std::size_t count_occurrences(const std::string& haystack, const std::string& needle) {
-    if (needle.empty()) {
-        return 0;
+std::shared_ptr<harness::ExecutionEnv> execution_env_for(const agent::ToolContext& context) {
+    if (context.execution_env) {
+        return context.execution_env;
     }
-    std::size_t count = 0;
-    std::size_t pos = 0;
-    while ((pos = haystack.find(needle, pos)) != std::string::npos) {
-        ++count;
-        pos += needle.size();
-    }
-    return count;
+    return std::make_shared<harness::LocalExecutionEnv>(context.workspace, context.bash_enabled, context.secret_environment_names);
 }
 
 class EditFileTool final : public agent::Tool {
@@ -79,37 +72,13 @@ public:
         if (!new_text) {
             return {new_text.error(), true};
         }
-        auto guard = PathGuard::create(context.workspace);
-        if (!guard) {
-            return {guard.error(), true};
-        }
-        auto resolved = guard.value().resolve_existing_file(path.value());
-        if (!resolved) {
-            return {resolved.error(), true};
-        }
-        std::ifstream input(resolved.value(), std::ios::binary);
-        if (!input) {
-            return {"could not open file for editing: " + path.value(), true};
-        }
-        std::ostringstream buffer;
-        buffer << input.rdbuf();
-        auto content = buffer.str();
-        const auto matches = count_occurrences(content, old_text.value());
-        if (matches == 0) {
-            return {"old_text did not match any text in " + path.value(), true};
-        }
-        if (matches > 1) {
-            return {"old_text matched multiple regions in " + path.value() + "; edit is ambiguous", true};
-        }
-        const auto pos = content.find(old_text.value());
-        content.replace(pos, old_text.value().size(), new_text.value());
-        auto written = write_atomic_file(resolved.value(), content);
-        if (!written) {
-            return {written.error() + ": " + path.value(), true};
+        auto edited = execution_env_for(context)->edit_file(path.value(), old_text.value(), new_text.value());
+        if (!edited) {
+            return {edited.error(), true};
         }
         std::ostringstream result;
         result << "Successfully replaced 1 block(s) in " << path.value() << ".\n";
-        result << "-" << old_text.value().substr(0, 80) << "\n+" << new_text.value().substr(0, 80);
+        result << "-" << edited.value().old_preview << "\n+" << edited.value().new_preview;
         return {result.str(), false};
     }
 };

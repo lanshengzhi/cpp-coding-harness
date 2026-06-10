@@ -1,10 +1,10 @@
 #include "Tools.hpp"
 
-#include "OutputLimiter.hpp"
-#include "PathGuard.hpp"
+#include "../harness/LocalExecutionEnv.hpp"
 #include "../util/JsonSchema.hpp"
 
-#include <fstream>
+#include <algorithm>
+#include <memory>
 #include <sstream>
 
 namespace cch::tools {
@@ -29,6 +29,13 @@ int optional_int(const boost::json::object& args, const char* key, int fallback)
     return fallback;
 }
 
+std::shared_ptr<harness::ExecutionEnv> execution_env_for(const agent::ToolContext& context) {
+    if (context.execution_env) {
+        return context.execution_env;
+    }
+    return std::make_shared<harness::LocalExecutionEnv>(context.workspace, context.bash_enabled, context.secret_environment_names);
+}
+
 class ReadFileTool final : public agent::Tool {
 public:
     [[nodiscard]] agent::ToolDefinition definition() const override {
@@ -44,54 +51,14 @@ public:
         if (path.empty()) {
             return {"read_file.path is required", true};
         }
-        auto guard = PathGuard::create(context.workspace);
-        if (!guard) {
-            return {guard.error(), true};
-        }
-        auto resolved = guard.value().resolve_existing_file(path);
-        if (!resolved) {
-            return {resolved.error(), true};
-        }
-        std::ifstream input(resolved.value(), std::ios::binary);
-        if (!input) {
-            return {"could not open file for reading: " + path, true};
-        }
         const int offset = std::max(1, optional_int(arguments, "offset", 1));
         const int limit = optional_int(arguments, "limit", 0);
-        OutputLimit output_limit;
-        std::string output;
-        std::string line;
-        std::size_t bytes = 0;
-        std::size_t lines = 0;
-        bool truncated = false;
-        int line_number = 1;
-        int emitted = 0;
-        while (std::getline(input, line)) {
-            if (line_number++ < offset) {
-                continue;
-            }
-            if (limit > 0 && emitted >= limit) {
-                break;
-            }
-            const auto next_bytes = bytes + line.size() + 1;
-            if (lines >= output_limit.max_lines || next_bytes > output_limit.max_bytes) {
-                truncated = true;
-                break;
-            }
-            output += line;
-            output += '\n';
-            bytes = next_bytes;
-            ++lines;
-            ++emitted;
-        }
-        if (!output.empty()) {
-            output.pop_back();
-        }
-        if (truncated) {
-            output += "\n[output truncated]";
+        auto read = execution_env_for(context)->read_file(path, offset, limit);
+        if (!read) {
+            return {read.error(), true};
         }
         std::ostringstream result;
-        result << "path: " << path << "\n" << output;
+        result << "path: " << path << "\n" << read.value().content;
         return {result.str(), false};
     }
 };

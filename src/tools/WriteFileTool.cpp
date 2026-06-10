@@ -1,9 +1,9 @@
 #include "Tools.hpp"
 
-#include "AtomicWrite.hpp"
-#include "PathGuard.hpp"
+#include "../harness/LocalExecutionEnv.hpp"
 #include "../util/JsonSchema.hpp"
 
+#include <memory>
 #include <sstream>
 
 namespace cch::tools {
@@ -29,6 +29,13 @@ bool bool_arg(const boost::json::object& args, const char* key, bool fallback) {
     return value && value->is_bool() ? value->as_bool() : fallback;
 }
 
+std::shared_ptr<harness::ExecutionEnv> execution_env_for(const agent::ToolContext& context) {
+    if (context.execution_env) {
+        return context.execution_env;
+    }
+    return std::make_shared<harness::LocalExecutionEnv>(context.workspace, context.bash_enabled, context.secret_environment_names);
+}
+
 class WriteFileTool final : public agent::Tool {
 public:
     [[nodiscard]] agent::ToolDefinition definition() const override {
@@ -49,20 +56,12 @@ public:
             return {content.error(), true};
         }
         const bool create_parents = bool_arg(arguments, "create_parents", false);
-        auto guard = PathGuard::create(context.workspace);
-        if (!guard) {
-            return {guard.error(), true};
-        }
-        auto resolved = guard.value().resolve_for_write(path.value(), create_parents);
-        if (!resolved) {
-            return {resolved.error(), true};
-        }
-        auto written = write_atomic_file(resolved.value(), content.value());
+        auto written = execution_env_for(context)->write_file(path.value(), content.value(), create_parents);
         if (!written) {
-            return {written.error() + ": " + path.value(), true};
+            return {written.error(), true};
         }
         std::ostringstream result;
-        result << "Wrote " << content.value().size() << " bytes to " << path.value() << ".";
+        result << "Wrote " << written.value().bytes_written << " bytes to " << path.value() << ".";
         return {result.str(), false};
     }
 };

@@ -1,5 +1,7 @@
 #include "AgentLoop.hpp"
 
+#include "../harness/LocalExecutionEnv.hpp"
+
 #include <sstream>
 #include <utility>
 
@@ -129,6 +131,10 @@ Message AgentLoop::execute_tool_call(const ToolCall& call) {
     context.workspace = options_.workspace;
     context.bash_enabled = options_.bash_enabled;
     context.secret_environment_names = options_.secret_environment_names;
+    context.execution_env = std::make_shared<harness::LocalExecutionEnv>(
+        context.workspace,
+        context.bash_enabled,
+        context.secret_environment_names);
     ToolExecutionResult execution = tool->execute(call.arguments, context);
     return to_agent_tool_result(call, execution).to_message();
 }
