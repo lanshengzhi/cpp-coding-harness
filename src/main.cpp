@@ -3,6 +3,7 @@
 #include "ai/providers/OpenAIChatClient.hpp"
 #include "harness/session/JsonlSessionStore.hpp"
 #include "tools/Tools.hpp"
+#include "AsyncCliRuntime.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -22,6 +23,7 @@ struct CliConfig {
     bool repl{false};
     bool enable_bash{false};
     bool help{false};
+    bool async_stack{false};
     bool workspace_explicit{false};
     int max_turns{8};
     std::filesystem::path workspace{std::filesystem::current_path()};
@@ -37,6 +39,7 @@ void print_help(std::ostream& out) {
     out << "cpp-harness [options] [prompt]\n"
         << "\nOptions:\n"
         << "  --fake                    Use deterministic fake provider (no network)\n"
+        << "  --async                   Run the experimental coroutine/Glaze stack\n"
         << "  --repl                    Read prompts interactively until exit/quit\n"
         << "  --workspace <path>        Workspace boundary for tools (default: cwd)\n"
         << "  --session <path>          Create a new JSONL session at path\n"
@@ -79,6 +82,8 @@ cch::util::Result<CliConfig> parse_args(int argc, char** argv) {
             config.help = true;
         } else if (arg == "--fake") {
             config.fake = true;
+        } else if (arg == "--async") {
+            config.async_stack = true;
         } else if (arg == "--repl") {
             config.repl = true;
         } else if (arg == "--enable-bash") {
@@ -335,6 +340,20 @@ int main(int argc, char** argv) {
             return 2;
         }
         store = std::move(created.value());
+    }
+
+    if (config.async_stack) {
+        return cch::cli::run_async_cli(cch::cli::AsyncCliRuntimeConfig{
+            config.fake,
+            config.repl,
+            config.enable_bash,
+            config.max_turns,
+            config.workspace,
+            config.model,
+            config.base_url,
+            config.api_key_env,
+            config.prompt,
+        });
     }
 
     std::unique_ptr<cch::ai::ChatClient> client;

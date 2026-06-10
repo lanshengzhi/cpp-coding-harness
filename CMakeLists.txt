@@ -24,6 +24,7 @@ if(NOT glaze_FOUND)
 endif()
 
 add_library(cpp_harness_lib
+    src/AsyncCliRuntime.cpp
     src/agent/AgentLoop.cpp
     src/agent/AsyncAgentLoop.cpp
     src/ai/providers/BoostBeastHttpTransport.cpp

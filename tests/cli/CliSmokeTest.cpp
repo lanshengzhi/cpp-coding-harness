@@ -61,6 +61,18 @@ TEST_CASE("CLI fake one-shot prints transcript and writes session", "[cli][u6]")
     CHECK(std::filesystem::exists(session));
 }
 
+TEST_CASE("CLI async fake one-shot streams through coroutine stack", "[cli][async][u7][ae1]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "async-one-shot.jsonl";
+    auto result = run_command(bin() + " --async --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " hello");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.output.find("[model-request] turn 1") != std::string::npos);
+    CHECK(result.output.find("[assistant] fake: hello") != std::string::npos);
+    CHECK(result.output.find("[completed] stop") != std::string::npos);
+    CHECK(std::filesystem::exists(session));
+}
+
 TEST_CASE("CLI fake REPL preserves process history for two prompts", "[cli][u6]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "repl.jsonl";

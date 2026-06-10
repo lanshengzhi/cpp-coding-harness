@@ -35,6 +35,14 @@ Run the binary with the deterministic fake provider:
 ./build/cpp_harness --fake --repl --session /tmp/cpp-repl.jsonl
 ```
 
+Run the experimental coroutine/Glaze stack with the same fake provider:
+
+```bash
+./build/cpp_harness --async --fake --session /tmp/cpp-async.jsonl "hello"
+```
+
+`--async` uses the typed `include/cch/...` contracts, the awaitable agent loop, coroutine-compatible tools, and streaming assistant events. The default CLI path still exists while the remaining legacy session/resume path is migrated.
+
 Real-provider mode is OpenAI Chat Completions-compatible:
 
 ```bash
@@ -48,11 +56,12 @@ Use `--base-url` for compatible gateways that preserve the `/v1/chat/completions
 
 The code is split into three primary seams that mirror pi's contracts while staying idiomatic C++:
 
-- `src/ai`: provider-neutral message/content/tool/context contracts plus provider adapters such as `ai/providers/OpenAIChatClient`.
-- `src/agent`: agent context, semantic lifecycle events, tool-call/result contracts, registry, and loop orchestration.
-- `src/harness`: local execution environment capabilities and entry-oriented JSONL session storage.
+- `include/cch/ai`: Glaze-backed message/content/tool/context contracts, SSE parsing, awaitable stream transport, and the streaming OpenAI-compatible client.
+- `include/cch/agent`: coroutine agent loop, lifecycle events, async tool registry, and expected-style tool execution contracts.
+- `include/cch/harness` and `include/cch/tools`: coroutine-compatible local execution environment and built-in tool factories.
+- `src/...`: implementation files for the public headers plus remaining legacy compatibility code.
 
-Legacy `src/llm` and `src/session` include paths remain as compatibility facades for tests and downstream experiments, but new production wiring should prefer the `ai`, `agent`, and `harness` boundaries.
+Legacy `src/llm` and `src/session` include paths still exist for the synchronous CLI/resume path during migration. New work should use `include/cch/...` and `--async` smoke tests.
 
 ## CLI states
 
@@ -115,7 +124,8 @@ These cover:
 - AE5: the fake-client walking skeleton compiles and passes without live provider access.
 - AE6: CLI fake-provider smoke tests and this README document how messages, tools, sessions, and workspace boundaries compose.
 - AE7: provider-specific OpenAI wire mapping is isolated under `src/ai/providers` while the agent loop uses provider-neutral AI contracts.
+- Async coverage: `[ai][provider][stream][u4]`, `[agent][async][u5]`, `[tools][async][u6]`, and `[cli][async][u7]` exercise the coroutine/Glaze path without live network access.
 
 ## Deferred from MVP
 
-Not included yet: rich TUI, extensions/skills, multi-provider registries, streaming deltas, OAuth, session trees/branching/compaction, multi-replacement edits, native Windows shell semantics, parallel tool execution, subagents, MCP/RPC embedding, permission prompts, image/thinking content behavior, or OS-level sandboxing.
+Not included yet: rich TUI, extensions/skills, multi-provider registries, OAuth, session trees/branching/compaction, multi-replacement edits, native Windows shell semantics, parallel tool execution, subagents, MCP/RPC embedding, permission prompts, image/thinking content behavior, full legacy session removal, or OS-level sandboxing.
