@@ -1,5 +1,7 @@
 #include "../../include/cch/agent/AgentLoop.hpp"
 
+#include "../../src/util/ExpectedMacros.hpp"
+
 #include "../../include/cch/ai/glaze/AiJson.hpp"
 #include "../../include/cch/util/Json.hpp"
 
@@ -65,19 +67,13 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
     context.tools = registry_.definitions();
     context.messages = std::move(history);
 
-    if (auto emitted = emit(sink, AgentStartEvent{user_prompt}); !emitted) {
-        co_return std::unexpected(emitted.error());
-    }
+    CCH_TRY_VOID(emit(sink, AgentStartEvent{user_prompt}));
 
     context.messages.push_back(ai::MessageVariant{ai::user_text_message(std::move(user_prompt))});
 
     for (int turn = 1; turn <= options_.max_turns; ++turn) {
-        if (auto emitted = emit(sink, TurnStartEvent{turn}); !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
-        if (auto emitted = emit(sink, MessageStartEvent{turn}); !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
+        CCH_TRY_VOID(emit(sink, TurnStartEvent{turn}));
+        CCH_TRY_VOID(emit(sink, MessageStartEvent{turn}));
 
         ai::StreamChatRequest request;
         request.context = context;
@@ -93,32 +89,22 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             });
 
         if (!assistant) {
-            if (auto emitted = emit(sink, AgentEndEvent{false, assistant.error().message}); !emitted) {
-                co_return std::unexpected(emitted.error());
-            }
+            CCH_TRY_VOID(emit(sink, AgentEndEvent{false, assistant.error().message}));
             co_return std::unexpected(assistant.error());
         }
 
-        if (auto emitted = emit(sink, MessageEndEvent{turn, *assistant}); !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
+        CCH_TRY_VOID(emit(sink, MessageEndEvent{turn, *assistant}));
         context.messages.push_back(ai::MessageVariant{*assistant});
 
         auto calls = tool_calls(*assistant);
         if (calls.empty()) {
-            if (auto emitted = emit(sink, TurnEndEvent{turn, assistant->stop_reason}); !emitted) {
-                co_return std::unexpected(emitted.error());
-            }
-            if (auto emitted = emit(sink, AgentEndEvent{true, ai::glaze::stop_reason_to_json(assistant->stop_reason)}); !emitted) {
-                co_return std::unexpected(emitted.error());
-            }
+            CCH_TRY_VOID(emit(sink, TurnEndEvent{turn, assistant->stop_reason}));
+            CCH_TRY_VOID(emit(sink, AgentEndEvent{true, ai::glaze::stop_reason_to_json(assistant->stop_reason)}));
             co_return AsyncAgentRunResult{std::move(context), assistant->stop_reason, turn};
         }
 
         for (const auto& call : calls) {
-            if (auto emitted = emit(sink, ToolExecutionStartEvent{turn, call.id, call.name}); !emitted) {
-                co_return std::unexpected(emitted.error());
-            }
+            CCH_TRY_VOID(emit(sink, ToolExecutionStartEvent{turn, call.id, call.name}));
 
             ai::ToolResultMessage tool_result;
             auto* tool = registry_.find(call.name);
@@ -144,24 +130,18 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             }
 
             const auto tool_text = text_from_content(tool_result.content);
-            if (auto emitted = emit(sink, ToolExecutionEndEvent{turn, call.id, call.name, tool_result.is_error, tool_text}); !emitted) {
-                co_return std::unexpected(emitted.error());
-            }
+            CCH_TRY_VOID(emit(sink, ToolExecutionEndEvent{turn, call.id, call.name, tool_result.is_error, tool_text}));
             context.messages.push_back(ai::MessageVariant{std::move(tool_result)});
         }
 
-        if (auto emitted = emit(sink, TurnEndEvent{turn, ai::AssistantStopReason::ToolUse}); !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
+        CCH_TRY_VOID(emit(sink, TurnEndEvent{turn, ai::AssistantStopReason::ToolUse}));
     }
 
     auto error = util::make_error(
         util::ErrorCode::Provider,
         "max turns exceeded",
         "agent reached max_turns before a final assistant response");
-    if (auto emitted = emit(sink, AgentEndEvent{false, error.message}); !emitted) {
-        co_return std::unexpected(emitted.error());
-    }
+    CCH_TRY_VOID(emit(sink, AgentEndEvent{false, error.message}));
     co_return std::unexpected(error);
 }
 

@@ -70,6 +70,7 @@ if(CCH_BUILD_TESTS)
         tests/harness/session/JsonlSessionStoreTest.cpp
         tests/tools/AsyncToolsTest.cpp
         tests/util/ExpectedErrorTest.cpp
+        tests/util/ExpectedMacrosTest.cpp
     )
     target_include_directories(cpp_harness_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include

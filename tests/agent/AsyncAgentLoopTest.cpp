@@ -1,5 +1,7 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
+#include "../../src/util/ExpectedMacros.hpp"
+
 #include "../../include/cch/agent/AgentLoop.hpp"
 #include "../../include/cch/util/Error.hpp"
 #include "../../include/cch/util/Json.hpp"
@@ -37,10 +39,7 @@ public:
         responses.pop_front();
         for (const auto& block : response.content) {
             if (const auto* text = std::get_if<ai::TextContent>(&block)) {
-                auto emitted = sink(ai::TextDeltaEvent{0, text->text, response});
-                if (!emitted) {
-                    co_return std::unexpected(emitted.error());
-                }
+                CCH_TRY_VOID(sink(ai::TextDeltaEvent{0, text->text, response}));
             }
         }
         co_return response;

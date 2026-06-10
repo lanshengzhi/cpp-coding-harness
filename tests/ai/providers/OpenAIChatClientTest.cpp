@@ -1,5 +1,7 @@
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
+#include "../../../src/util/ExpectedMacros.hpp"
+
 #include "../../../include/cch/ai/providers/OpenAIChatClient.hpp"
 #include "../../../include/cch/util/Error.hpp"
 #include "../../../include/cch/util/JsonValue.hpp"
@@ -35,10 +37,7 @@ public:
         ai::providers::StreamResponse response;
         response.head.status_code = 200;
         for (const auto& chunk : chunks) {
-            auto handled = on_body_chunk(chunk);
-            if (!handled) {
-                co_return std::unexpected(handled.error());
-            }
+            CCH_TRY_VOID(on_body_chunk(chunk));
             response.body += chunk;
         }
         co_return response;

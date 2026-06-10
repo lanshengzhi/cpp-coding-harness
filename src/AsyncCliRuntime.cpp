@@ -1,5 +1,7 @@
 #include "AsyncCliRuntime.hpp"
 
+#include "../src/util/ExpectedMacros.hpp"
+
 #include "../include/cch/agent/AgentLoop.hpp"
 #include "../include/cch/ai/providers/BoostBeastStreamTransport.hpp"
 #include "../include/cch/ai/providers/OpenAIChatClient.hpp"
@@ -72,10 +74,7 @@ public:
             assistant.content.emplace_back(std::move(call));
             assistant.stop_reason = ai::AssistantStopReason::ToolUse;
             if (sink) {
-                auto emitted = sink(ai::TextDeltaEvent{0, "reading " + path, assistant});
-                if (!emitted) {
-                    co_return std::unexpected(emitted.error());
-                }
+                CCH_TRY_VOID(sink(ai::TextDeltaEvent{0, "reading " + path, assistant}));
             }
             co_return assistant;
         }
@@ -92,10 +91,7 @@ public:
             assistant.content.emplace_back(std::move(call));
             assistant.stop_reason = ai::AssistantStopReason::ToolUse;
             if (sink) {
-                auto emitted = sink(ai::TextDeltaEvent{0, "running bash", assistant});
-                if (!emitted) {
-                    co_return std::unexpected(emitted.error());
-                }
+                CCH_TRY_VOID(sink(ai::TextDeltaEvent{0, "running bash", assistant}));
             }
             co_return assistant;
         }
@@ -111,10 +107,7 @@ private:
         ai::AssistantEventSink& sink) {
         if (sink && !assistant.content.empty()) {
             auto text = text_from_async_content(assistant.content);
-            auto emitted = sink(ai::TextDeltaEvent{0, text, assistant});
-            if (!emitted) {
-                co_return std::unexpected(emitted.error());
-            }
+            CCH_TRY_VOID(sink(ai::TextDeltaEvent{0, text, assistant}));
         }
         co_return assistant;
     }
