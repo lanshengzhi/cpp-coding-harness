@@ -5,7 +5,7 @@
 #include "AgentTool.hpp"
 #include "Message.hpp"
 #include "ToolRegistry.hpp"
-#include "../llm/ChatClient.hpp"
+#include "../ai/ChatClient.hpp"
 #include "../util/Result.hpp"
 
 #include <functional>
@@ -41,7 +41,7 @@ struct LoopResult {
 
 class AgentLoop {
 public:
-    AgentLoop(llm::ChatClient& client, ToolRegistry registry, LoopOptions options = {});
+    AgentLoop(ai::ChatClient& client, ToolRegistry registry, LoopOptions options = {});
 
     [[nodiscard]] util::Result<LoopResult> run(std::string user_prompt);
     [[nodiscard]] util::Result<LoopResult> continue_with(std::vector<Message> existing_history, std::string user_prompt);
@@ -52,7 +52,7 @@ private:
     util::Result<void> append(std::vector<Message>& messages, const Message& message) const;
     [[nodiscard]] Message execute_tool_call(const ToolCall& call);
 
-    llm::ChatClient& client_;
+    ai::ChatClient& client_;
     ToolRegistry registry_;
     LoopOptions options_;
 };

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../src/ai/ChatClient.hpp"
 #include "../../src/llm/ChatClient.hpp"
 
 #include <deque>
@@ -9,27 +10,27 @@
 
 namespace cch::tests {
 
-class FakeChatClient : public llm::ChatClient {
+class FakeChatClient : public ai::ChatClient {
 public:
     void push_response(llm::ChatResponse response) { responses_.push_back(std::move(response)); }
     void fail_next(std::string error) { failures_.push_back(std::move(error)); }
 
-    util::Result<llm::ChatResponse> complete(const llm::ChatRequest& request) override {
-        requests.push_back(request);
+    util::Result<ai::ChatResponse> complete(const ai::ChatRequest& request) override {
+        requests.push_back(llm::chat_request_from_ai(request));
         if (!failures_.empty()) {
             auto error = failures_.front();
             failures_.pop_front();
-            return util::Result<llm::ChatResponse>::failure(error);
+            return util::Result<ai::ChatResponse>::failure(error);
         }
         if (responses_.empty()) {
             llm::ChatResponse response;
             response.assistant_message.role = agent::Role::Assistant;
             response.assistant_message.content = "fake response";
-            return util::Result<llm::ChatResponse>::success(response);
+            return util::Result<ai::ChatResponse>::success(llm::to_ai_chat_response(response));
         }
         auto response = responses_.front();
         responses_.pop_front();
-        return util::Result<llm::ChatResponse>::success(std::move(response));
+        return util::Result<ai::ChatResponse>::success(llm::to_ai_chat_response(std::move(response)));
     }
 
     std::vector<llm::ChatRequest> requests;

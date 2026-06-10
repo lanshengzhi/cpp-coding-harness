@@ -1,7 +1,7 @@
 #include "agent/AgentLoop.hpp"
-#include "llm/BoostBeastHttpTransport.hpp"
-#include "llm/OpenAIChatClient.hpp"
-#include "session/JsonlSessionStore.hpp"
+#include "ai/providers/BoostBeastHttpTransport.hpp"
+#include "ai/providers/OpenAIChatClient.hpp"
+#include "harness/session/JsonlSessionStore.hpp"
 #include "tools/Tools.hpp"
 
 #include <chrono>
@@ -163,19 +163,25 @@ std::filesystem::path default_session_path() {
     return std::filesystem::current_path() / ".cpp-harness" / "sessions" / (timestamp_for_path() + "-" + random_suffix() + ".jsonl");
 }
 
-class ScriptedFakeClient final : public cch::llm::ChatClient {
+class ScriptedFakeClient final : public cch::ai::ChatClient {
 public:
-    cch::util::Result<cch::llm::ChatResponse> complete(const cch::llm::ChatRequest& request) override {
-        cch::llm::ChatResponse response;
-        response.assistant_message.role = cch::agent::Role::Assistant;
-        if (!request.messages.empty() && request.messages.back().role == cch::agent::Role::Tool) {
-            response.assistant_message.content = "fake observed: " + request.messages.back().content;
-            return cch::util::Result<cch::llm::ChatResponse>::success(response);
+    cch::util::Result<cch::ai::ChatResponse> complete(const cch::ai::ChatRequest& request) override {
+        cch::ai::ChatResponse response;
+        cch::agent::Message assistant;
+        assistant.role = cch::agent::Role::Assistant;
+        if (!request.context.messages.empty()) {
+            auto last = cch::agent::message_from_ai(request.context.messages.back());
+            if (last.role == cch::agent::Role::Tool) {
+                assistant.content = "fake observed: " + last.content;
+                response.assistant_message = cch::agent::to_ai_message(assistant);
+                return cch::util::Result<cch::ai::ChatResponse>::success(response);
+            }
         }
         std::string prompt;
-        for (auto it = request.messages.rbegin(); it != request.messages.rend(); ++it) {
-            if (it->role == cch::agent::Role::User) {
-                prompt = it->content;
+        for (auto it = request.context.messages.rbegin(); it != request.context.messages.rend(); ++it) {
+            auto message = cch::agent::message_from_ai(*it);
+            if (message.role == cch::agent::Role::User) {
+                prompt = message.content;
                 break;
             }
         }
@@ -185,10 +191,11 @@ public:
             call.name = "read_file";
             call.arguments = {{"path", prompt.substr(5)}};
             call.raw_arguments = boost::json::serialize(call.arguments);
-            response.assistant_message.content = "reading " + prompt.substr(5);
-            response.assistant_message.tool_calls.push_back(std::move(call));
-            response.stop_reason = "tool_calls";
-            return cch::util::Result<cch::llm::ChatResponse>::success(response);
+            assistant.content = "reading " + prompt.substr(5);
+            assistant.tool_calls.push_back(std::move(call));
+            response.assistant_message = cch::agent::to_ai_message(assistant);
+            response.stop_reason = cch::ai::StopReason::ToolUse;
+            return cch::util::Result<cch::ai::ChatResponse>::success(response);
         }
         if (prompt.rfind("bash ", 0) == 0) {
             cch::agent::ToolCall call;
@@ -196,13 +203,15 @@ public:
             call.name = "bash";
             call.arguments = {{"command", prompt.substr(5)}};
             call.raw_arguments = boost::json::serialize(call.arguments);
-            response.assistant_message.content = "running bash";
-            response.assistant_message.tool_calls.push_back(std::move(call));
-            response.stop_reason = "tool_calls";
-            return cch::util::Result<cch::llm::ChatResponse>::success(response);
+            assistant.content = "running bash";
+            assistant.tool_calls.push_back(std::move(call));
+            response.assistant_message = cch::agent::to_ai_message(assistant);
+            response.stop_reason = cch::ai::StopReason::ToolUse;
+            return cch::util::Result<cch::ai::ChatResponse>::success(response);
         }
-        response.assistant_message.content = "fake: " + prompt;
-        return cch::util::Result<cch::llm::ChatResponse>::success(response);
+        assistant.content = "fake: " + prompt;
+        response.assistant_message = cch::agent::to_ai_message(assistant);
+        return cch::util::Result<cch::ai::ChatResponse>::success(response);
     }
 };
 
@@ -280,9 +289,9 @@ int main(int argc, char** argv) {
     }
 
     std::vector<cch::agent::Message> history;
-    cch::session::JsonlSessionStore store;
+    cch::harness::session::JsonlSessionStore store;
     if (!config.resume_path.empty()) {
-        auto loaded = cch::session::JsonlSessionStore::load(config.resume_path);
+        auto loaded = cch::harness::session::JsonlSessionStore::load(config.resume_path);
         if (!loaded) {
             std::cerr << "could not resume session: " << loaded.error() << '\n';
             return 2;
@@ -305,7 +314,7 @@ int main(int argc, char** argv) {
         }
         config.workspace = canonical_workspace(config.workspace);
         history = loaded.value().messages;
-        auto opened = cch::session::JsonlSessionStore::open_existing(config.resume_path);
+        auto opened = cch::harness::session::JsonlSessionStore::open_existing(config.resume_path);
         if (!opened) {
             std::cerr << "could not open session for append: " << opened.error() << '\n';
             return 2;
@@ -319,8 +328,8 @@ int main(int argc, char** argv) {
         }
         config.workspace = canonical_workspace(config.workspace);
         auto path = config.session_path.empty() ? default_session_path() : config.session_path;
-        cch::session::SessionMetadata metadata{timestamp_for_path(), timestamp_for_path(), config.workspace, config.fake ? "fake" : "openai-compatible", config.model};
-        auto created = cch::session::JsonlSessionStore::create_new(path, metadata);
+        cch::harness::session::SessionMetadata metadata{timestamp_for_path(), timestamp_for_path(), config.workspace, config.fake ? "fake" : "openai-compatible", config.model};
+        auto created = cch::harness::session::JsonlSessionStore::create_new(path, metadata);
         if (!created) {
             std::cerr << "could not create session: " << created.error() << '\n';
             return 2;
@@ -328,15 +337,15 @@ int main(int argc, char** argv) {
         store = std::move(created.value());
     }
 
-    std::unique_ptr<cch::llm::ChatClient> client;
+    std::unique_ptr<cch::ai::ChatClient> client;
     if (config.fake) {
         client = std::make_unique<ScriptedFakeClient>();
     } else {
-        cch::llm::OpenAIConfig provider;
+        cch::ai::providers::OpenAIConfig provider;
         provider.base_url = config.base_url;
         provider.api_key_env = config.api_key_env;
         provider.model = config.model;
-        client = std::make_unique<cch::llm::OpenAIChatClient>(std::make_shared<cch::llm::BoostBeastHttpTransport>(), provider);
+        client = std::make_unique<cch::ai::providers::OpenAIChatClient>(std::make_shared<cch::ai::providers::BoostBeastHttpTransport>(), provider);
     }
 
     cch::agent::ToolRegistry registry;

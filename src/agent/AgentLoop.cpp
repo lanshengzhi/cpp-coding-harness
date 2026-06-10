@@ -6,8 +6,18 @@
 #include <utility>
 
 namespace cch::agent {
+namespace {
 
-AgentLoop::AgentLoop(llm::ChatClient& client, ToolRegistry registry, LoopOptions options)
+std::string compatible_stop_reason(ai::StopReason reason) {
+    if (reason == ai::StopReason::ToolUse) {
+        return "tool_calls";
+    }
+    return ai::to_string(reason);
+}
+
+} // namespace
+
+AgentLoop::AgentLoop(ai::ChatClient& client, ToolRegistry registry, LoopOptions options)
     : client_(client), registry_(std::move(registry)), options_(std::move(options)) {}
 
 util::Result<LoopResult> AgentLoop::run(std::string user_prompt) {
@@ -34,7 +44,7 @@ util::Result<LoopResult> AgentLoop::continue_with(std::vector<Message> existing_
         emit(result.events, "model_request", "turn " + std::to_string(turn_number));
 
         AgentContext context = AgentContext::from_legacy(result.messages, registry_.definitions(), options_.model);
-        llm::ChatRequest request = llm::chat_request_from_ai(context.chat_request());
+        ai::ChatRequest request = context.chat_request();
 
         auto response = client_.complete(request);
         if (!response) {
@@ -44,7 +54,7 @@ util::Result<LoopResult> AgentLoop::continue_with(std::vector<Message> existing_
             return util::Result<LoopResult>::failure(response.error());
         }
 
-        auto ai_response = llm::to_ai_chat_response(response.value());
+        auto ai_response = response.value();
         Message assistant = message_from_ai(ai_response.assistant_message);
         assistant.role = Role::Assistant;
         if (auto appended = append(result.messages, assistant); !appended) {
@@ -55,8 +65,7 @@ util::Result<LoopResult> AgentLoop::continue_with(std::vector<Message> existing_
 
         if (assistant.tool_calls.empty()) {
             result.final_text = assistant.content;
-            auto compatible_response = llm::chat_response_from_ai(ai_response);
-            result.stop_reason = compatible_response.stop_reason.empty() ? "stop" : compatible_response.stop_reason;
+            result.stop_reason = compatible_stop_reason(ai_response.stop_reason);
             emit_agent(result.agent_events, AgentEvent::make(AgentEventKind::TurnEnd, result.stop_reason, turn_number));
             emit_agent(result.agent_events, AgentEvent::make(AgentEventKind::AgentEnd, result.stop_reason, turn_number));
             emit(result.events, "completed", result.stop_reason);

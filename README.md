@@ -43,6 +43,16 @@ export OPENAI_API_KEY=...
 
 Use `--base-url` for compatible gateways that preserve the `/v1/chat/completions` contract.
 
+## Architecture boundaries
+
+The code is split into three primary seams that mirror pi's contracts while staying idiomatic C++:
+
+- `src/ai`: provider-neutral message/content/tool/context contracts plus provider adapters such as `ai/providers/OpenAIChatClient`.
+- `src/agent`: agent context, semantic lifecycle events, tool-call/result contracts, registry, and loop orchestration.
+- `src/harness`: local execution environment capabilities and entry-oriented JSONL session storage.
+
+Legacy `src/llm` and `src/session` include paths remain as compatibility facades for tests and downstream experiments, but new production wiring should prefer the `ai`, `agent`, and `harness` boundaries.
+
 ## CLI states
 
 The CLI prints stable transcript lines:
@@ -67,16 +77,17 @@ The built-in tools are:
 - `edit_file`: perform one exact `old_text` / `new_text` replacement; zero or multiple matches are rejected.
 - `bash`: run a shell command inside the workspace only when `--enable-bash` is passed.
 
-File tools reject workspace escapes, symlink escapes, directory/file mismatches, and missing parents unless creation is explicitly requested. `bash` receives a sanitized environment that omits API-key, token, secret, password, and OpenAI-looking variables.
+File tools execute through the harness execution environment, which owns workspace containment, path validation, atomic writes, process execution, timeout handling, and output limiting. File tools reject workspace escapes, symlink escapes, directory/file mismatches, and missing parents unless creation is explicitly requested. `bash` receives a sanitized environment that omits API-key, token, secret, password, and OpenAI-looking variables.
 
 ## Sessions and safety
 
 Sessions are JSONL:
 
 1. a v1 `header` line with session/workspace/provider/model metadata,
-2. append-only `message` entries containing redacted user, assistant, and tool-result messages.
+2. append-only typed `message` entries containing redacted user, assistant, and tool-result messages,
+3. safely ignored future entry types so older resume flows keep working as the format grows.
 
-The redacted transcript is canonical for resume/replay. Exact unredacted replay is intentionally out of MVP scope. Session files are still sensitive: they can contain source text, command output, workspace paths, and provider/model metadata.
+The harness session store exposes typed entries while preserving the legacy linear message history used by CLI resume. The redacted transcript is canonical for resume/replay. Exact unredacted replay is intentionally out of MVP scope. Session files are still sensitive: they can contain source text, command output, workspace paths, and provider/model metadata.
 
 The workspace guard is not a sandbox. Prompts, file contents, and command outputs can be sent to the configured provider. Run this harness inside a VM/container if you need a real containment boundary.
 
@@ -86,9 +97,11 @@ The default test binary names the MVP behavior slices:
 
 ```bash
 ./build/cpp_harness_tests "[agent][u4][ae1]"
-./build/cpp_harness_tests "[tools][u3]"
-./build/cpp_harness_tests "[session][u5]"
-./build/cpp_harness_tests "[llm][u2]"
+./build/cpp_harness_tests "[ai][u2]"
+./build/cpp_harness_tests "[ai][provider][u3]"
+./build/cpp_harness_tests "[agent][u4]"
+./build/cpp_harness_tests "[harness][u5]"
+./build/cpp_harness_tests "[harness][session][u6]"
 ./build/cpp_harness_tests "[cli][u6]"
 ```
 
@@ -100,7 +113,8 @@ These cover:
 - AE4: JSONL resume reconstructs message ordering for the next request.
 - AE5: the fake-client walking skeleton compiles and passes without live provider access.
 - AE6: CLI fake-provider smoke tests and this README document how messages, tools, sessions, and workspace boundaries compose.
+- AE7: provider-specific OpenAI wire mapping is isolated under `src/ai/providers` while the agent loop uses provider-neutral AI contracts.
 
 ## Deferred from MVP
 
-Not included yet: rich TUI, extensions/skills, multiple provider-specific adapters, streaming, OAuth, session trees/branching, multi-replacement edits, native Windows shell semantics, parallel tool execution, subagents, MCP/RPC embedding, permission prompts, or OS-level sandboxing.
+Not included yet: rich TUI, extensions/skills, multi-provider registries, streaming deltas, OAuth, session trees/branching/compaction, multi-replacement edits, native Windows shell semantics, parallel tool execution, subagents, MCP/RPC embedding, permission prompts, image/thinking content behavior, or OS-level sandboxing.
