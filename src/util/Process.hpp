@@ -2,7 +2,7 @@
 
 #include "../../include/cch/util/Error.hpp"
 
-#include <boost/process.hpp>
+#include <boost/process/v1.hpp>
 
 #include <chrono>
 #include <filesystem>
@@ -40,7 +40,7 @@ public:
 class DefaultProcessRunner : public ProcessRunner {
 public:
     [[nodiscard]] Expected<ProcessResult> run(const ProcessRequest& request) override {
-        namespace bp = boost::process;
+        namespace bp = boost::process::v1;
         try {
             bp::ipstream output;
             bp::ipstream error;
