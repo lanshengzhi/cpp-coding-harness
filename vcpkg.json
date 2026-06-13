@@ -1,0 +1,14 @@
+{
+  "name": "cpp-coding-harness",
+  "version-string": "0.1.0",
+  "builtin-baseline": "f3e10653cc27d62a37a3763cd84b38bca07c6075",
+  "dependencies": [
+    "glaze",
+    "boost-process",
+    "boost-beast",
+    "boost-asio",
+    "openssl",
+    "cli11",
+    "catch2"
+  ]
+}
