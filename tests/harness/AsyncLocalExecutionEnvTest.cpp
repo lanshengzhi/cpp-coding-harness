@@ -120,6 +120,7 @@ TEST_CASE("async local execution env returns typed shell unavailable errors", "[
 TEST_CASE("async local execution env sanitizes shell environment through process capability", "[harness][async][u2]") {
 #if defined(__unix__) || defined(__APPLE__)
     setenv("OPENAI_API_KEY", "sk-test-secret", 1);
+    setenv("KIMI_API_KEY", "kimi-secret-value", 1);
     setenv("CCH_VISIBLE_ENV", "visible", 1);
     setenv("CCH_CREDENTIAL", "plain-secret-value", 1);
 #endif
@@ -127,7 +128,7 @@ TEST_CASE("async local execution env sanitizes shell environment through process
     auto runner = std::make_shared<FakeProcessRunner>();
     runner->next.exit_code = 0;
     runner->next.output = "ok";
-    harness::LocalExecutionEnv env(workspace.path(), true, {"CCH_CREDENTIAL"}, runner);
+    harness::LocalExecutionEnv env(workspace.path(), true, {"CCH_CREDENTIAL", "KIMI_API_KEY"}, runner);
 
     auto shell = env.run_shell("env", std::chrono::milliseconds(123));
 
@@ -137,10 +138,12 @@ TEST_CASE("async local execution env sanitizes shell environment through process
     CHECK(runner->requests[0].timeout.count() == 123);
     CHECK(runner->requests[0].use_explicit_environment);
     CHECK(runner->requests[0].environment.find("OPENAI_API_KEY") == runner->requests[0].environment.end());
+    CHECK(runner->requests[0].environment.find("KIMI_API_KEY") == runner->requests[0].environment.end());
     CHECK(runner->requests[0].environment.find("CCH_CREDENTIAL") == runner->requests[0].environment.end());
 #if defined(__unix__) || defined(__APPLE__)
     CHECK(runner->requests[0].environment.find("CCH_VISIBLE_ENV") != runner->requests[0].environment.end());
     unsetenv("OPENAI_API_KEY");
+    unsetenv("KIMI_API_KEY");
     unsetenv("CCH_VISIBLE_ENV");
     unsetenv("CCH_CREDENTIAL");
 #endif

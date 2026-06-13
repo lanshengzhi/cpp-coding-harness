@@ -74,6 +74,48 @@ export OPENAI_API_KEY=...
 
 Use `--base-url` for compatible gateways that preserve the `/v1/chat/completions` contract.
 
+### Kimi Code via the OpenAI-compatible path
+
+Kimi Code can be used through the existing OpenAI-compatible provider path. Keep the Kimi base URL, model, and API-key environment variable together because the bearer token from `--api-key-env` is sent to whichever `--base-url` you configure.
+
+```bash
+export KIMI_API_KEY=...
+./build/cpp_harness \
+  --base-url https://api.kimi.com/coding/v1 \
+  --model kimi-for-coding \
+  --api-key-env KIMI_API_KEY \
+  --session /tmp/cpp-kimi.jsonl \
+  "summarize README.md"
+```
+
+Pass the base URL (`https://api.kimi.com/coding/v1`), not the full `/chat/completions` endpoint; the harness appends `/chat/completions` for `/v1`-style base URLs.
+
+Kimi's `ANTHROPIC_BASE_URL` / `ANTHROPIC_API_KEY` examples are for Anthropic-shaped Claude Code clients. This harness does not read those variables or implement an Anthropic provider.
+
+Live Kimi usage sends prompts, file contents read by tools, and tool outputs to the configured provider. JSONL session redaction is a persistence boundary, not a guarantee that terminal output, CI logs, provider diagnostics, or provider-bound tool results are redacted. Do not paste raw credentials into prompts, files, or tool-visible content.
+
+`--resume` loads the redacted transcript and workspace metadata, but it does not restore `--base-url`, `--model`, or `--api-key-env`. Repeat all three Kimi flags when resuming a Kimi session.
+
+Troubleshooting:
+
+| Symptom | Check |
+| --- | --- |
+| `missing API key` | Export `KIMI_API_KEY` and pass `--api-key-env KIMI_API_KEY`. |
+| Authentication or authorization failure | Confirm the key is valid for Kimi Code and that the base URL is `https://api.kimi.com/coding/v1`. |
+| Invalid model | Use `--model kimi-for-coding`. |
+| Rate limit or quota error | Retry later or check Kimi Code subscription/entitlement and quota. |
+| Request unexpectedly goes to OpenAI | Ensure the Kimi `--base-url`, `--model`, and `--api-key-env` are all present. |
+| 403 Forbidden | Your key can list models but is not entitled for Kimi Code chat completions; confirm Kimi Code subscription/agent access. |
+| Provider or transport error | Re-run with harmless prompts and inspect diagnostics without printing secrets. |
+
+Optional live smoke validation is manual and never part of default `ctest`:
+
+```bash
+CCH_LIVE_KIMI=1 KIMI_API_KEY=... scripts/kimi_live_smoke.sh
+```
+
+The smoke script requires explicit opt-in, uses a throwaway workspace/session, does not enable bash, and consumes real network/quota.
+
 ## Architecture boundaries
 
 The code is split into value contracts, capability seams, and implementation adapters:

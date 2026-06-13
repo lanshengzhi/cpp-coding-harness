@@ -4,6 +4,7 @@
 
 #include "../../../include/cch/ai/providers/OpenAIChatClient.hpp"
 #include "../../../include/cch/util/Error.hpp"
+#include "../../../include/cch/util/Json.hpp"
 #include "../../../include/cch/util/JsonValue.hpp"
 
 #include <boost/asio/co_spawn.hpp>
@@ -136,6 +137,78 @@ TEST_CASE("streaming OpenAI client serializes typed context and emits text delta
     CHECK(transport->requests[0].body.find(R"("model":"gpt-test")") != std::string::npos);
     CHECK(transport->requests[0].body.find(R"("stream":true)") != std::string::npos);
     CHECK(transport->requests[0].body.find(R"("tools")") != std::string::npos);
+}
+
+TEST_CASE("streaming OpenAI client builds Kimi-compatible tool requests offline", "[ai][provider][stream][u2]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {
+        sse(R"json({"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]})json"),
+        sse("[DONE]"),
+    };
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "kimi-test-api-key";
+    config.base_url = "https://api.kimi.com/coding/v1";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::StreamChatRequest request;
+    request.model = "kimi-for-coding";
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello kimi")});
+    request.context.tools.push_back(ai::Tool{
+        "read_file",
+        "Read a workspace file",
+        ai::JsonSchema::object({{"path", ai::JsonSchema::string("file path")}}, {"path"}),
+    });
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result);
+    REQUIRE(transport->requests.size() == 1);
+    const auto& captured = transport->requests[0];
+    CHECK(captured.url == "https://api.kimi.com/coding/v1/chat/completions");
+    CHECK(captured.headers.at("Authorization") == "Bearer kimi-test-api-key");
+    CHECK(captured.body.find(R"("model":"kimi-for-coding")") != std::string::npos);
+    CHECK(captured.body.find(R"("stream":true)") != std::string::npos);
+    CHECK(captured.body.find(R"("tools")") != std::string::npos);
+    CHECK(captured.body.find(R"("type":"function")") != std::string::npos);
+    CHECK(captured.body.find(R"("functions")") == std::string::npos);
+    CHECK(captured.body.find(R"("function_call")") == std::string::npos);
+    CHECK(captured.body.find(R"("tool_calls")") == std::string::npos);
+}
+
+TEST_CASE("streaming OpenAI client normalizes Kimi trailing slash and serializes prior tool calls", "[ai][provider][stream][u2]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {
+        sse(R"json({"choices":[{"index":0,"delta":{"content":"done"},"finish_reason":"stop"}]})json"),
+        sse("[DONE]"),
+    };
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "kimi-test-api-key";
+    config.base_url = "https://api.kimi.com/coding/v1/";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    auto arguments = util::read_json<util::JsonValue>(R"({"path":"README.md"})");
+    REQUIRE(arguments);
+    ai::AssistantMessage prior_assistant;
+    prior_assistant.content.emplace_back(ai::tool_call_content("call-prev", "read_file", R"({"path":"README.md"})", *arguments));
+
+    ai::StreamChatRequest request;
+    request.model = "kimi-for-coding";
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("read README")});
+    request.context.messages.push_back(ai::MessageVariant{prior_assistant});
+    request.context.messages.push_back(ai::MessageVariant{ai::tool_result_message("call-prev", "read_file", "contents")});
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result);
+    REQUIRE(transport->requests.size() == 1);
+    const auto& captured = transport->requests[0];
+    CHECK(captured.url == "https://api.kimi.com/coding/v1/chat/completions");
+    CHECK(captured.body.find(R"("model":"kimi-for-coding")") != std::string::npos);
+    CHECK(captured.body.find(R"("tool_calls")") != std::string::npos);
+    CHECK(captured.body.find(R"("id":"call-prev")") != std::string::npos);
+    CHECK(captured.body.find(R"("functions")") == std::string::npos);
 }
 
 TEST_CASE("streaming OpenAI client accumulates split tool call arguments", "[ai][provider][stream][u4][ae2]") {

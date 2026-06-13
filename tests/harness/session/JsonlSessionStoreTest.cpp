@@ -6,7 +6,6 @@
 
 #include <fstream>
 #include <sstream>
-#include <variant>
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <sys/stat.h>
@@ -69,29 +68,32 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
     REQUIRE(store);
 
     REQUIRE(store->append(ai::MessageVariant{ai::SystemMessage{"system token=abc123", 1}}));
-    REQUIRE(store->append(user_message("user api_key=sk-secret12345")));
+    REQUIRE(store->append(user_message("user api_key=sk-secret12345 KIMI_API_KEY=kimi-user-secret")));
 
-    auto arguments = util::read_json<util::JsonValue>(R"({"api_key":"sk-toolsecret123","path":"secret.txt"})");
+    auto arguments = util::read_json<util::JsonValue>(
+        R"({"api_key":"sk-toolsecret123","KIMI_API_KEY":"kimi-secret-value","nested":{"kimi_api_key":"kimi-nested-argument"},"path":"secret.txt"})");
     REQUIRE(arguments);
     ai::AssistantMessage assistant;
-    assistant.content.emplace_back(ai::TextContent{"assistant password=hunter2", std::nullopt});
+    assistant.content.emplace_back(ai::TextContent{"assistant password=hunter2 kimi_api_key=kimi-text-secret", std::nullopt});
     assistant.content.emplace_back(ai::ToolCallContent{
         "call-1",
         "write_file",
         *arguments,
-        R"({"api_key":"sk-toolsecret123","path":"secret.txt"})",
+        R"({"api_key":"sk-toolsecret123","KIMI_API_KEY":"kimi-secret-value","path":"secret.txt"})",
         std::nullopt,
         true,
         std::nullopt,
     });
+    assistant.error_message = "provider error kimi_api_key=kimi-error-secret";
     REQUIRE(store->append(ai::MessageVariant{assistant}));
 
-    auto details = util::read_json<util::JsonValue>(R"({"token":"sk-detailsecret123","safe":"kept"})");
+    auto details = util::read_json<util::JsonValue>(
+        R"({"token":"sk-detailsecret123","safe":"kept","nested":{"KIMI_API_KEY":"kimi-detail-secret","array":[{"kimi_api_key":"kimi-array-secret"}]}})");
     REQUIRE(details);
     ai::ToolResultMessage tool;
     tool.tool_call_id = "call-1";
     tool.tool_name = "write_file";
-    tool.content.emplace_back(ai::TextContent{"tool secret=plain-secret", std::nullopt});
+    tool.content.emplace_back(ai::TextContent{"tool secret=plain-secret KIMI_API_KEY=kimi-tool-content", std::nullopt});
     tool.details = *details;
     REQUIRE(store->append(ai::MessageVariant{tool}));
 
@@ -100,6 +102,14 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
     CHECK(raw.find("sk-toolsecret123") == std::string::npos);
     CHECK(raw.find("sk-detailsecret123") == std::string::npos);
     CHECK(raw.find("hunter2") == std::string::npos);
+    CHECK(raw.find("kimi-user-secret") == std::string::npos);
+    CHECK(raw.find("kimi-secret-value") == std::string::npos);
+    CHECK(raw.find("kimi-nested-argument") == std::string::npos);
+    CHECK(raw.find("kimi-text-secret") == std::string::npos);
+    CHECK(raw.find("kimi-error-secret") == std::string::npos);
+    CHECK(raw.find("kimi-detail-secret") == std::string::npos);
+    CHECK(raw.find("kimi-array-secret") == std::string::npos);
+    CHECK(raw.find("kimi-tool-content") == std::string::npos);
     CHECK(raw.find("[REDACTED]") != std::string::npos);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);

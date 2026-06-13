@@ -89,7 +89,11 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             });
 
         if (!assistant) {
-            CCH_TRY_VOID(emit(sink, AgentEndEvent{false, assistant.error().message}));
+            std::string reason = assistant.error().message;
+            if (assistant.error().code == util::ErrorCode::Provider && !assistant.error().detail.empty()) {
+                reason += " (" + assistant.error().detail + ")";
+            }
+            CCH_TRY_VOID(emit(sink, AgentEndEvent{false, reason}));
             co_return std::unexpected(assistant.error());
         }
 

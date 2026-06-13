@@ -196,3 +196,21 @@ TEST_CASE("CLI real-provider mode reports missing API key before model request",
     CHECK(result.output.find("missing API key") != std::string::npos);
     CHECK(result.output.find("[model-request]") == std::string::npos);
 }
+
+TEST_CASE("CLI Kimi path validates KIMI_API_KEY before model request and session creation", "[cli][kimi][u3]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "kimi-missing-key.jsonl";
+    auto result = run_command(
+        "env -u KIMI_API_KEY " + bin() +
+        " --workspace " + q(workspace.path()) +
+        " --session " + q(session) +
+        " --base-url https://api.kimi.com/coding/v1"
+        " --model kimi-for-coding"
+        " --api-key-env KIMI_API_KEY hello");
+
+    REQUIRE(result.exit_code != 0);
+    CHECK(result.output.find("missing API key") != std::string::npos);
+    CHECK(result.output.find("KIMI_API_KEY") != std::string::npos);
+    CHECK(result.output.find("[model-request]") == std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(session));
+}
