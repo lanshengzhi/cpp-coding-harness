@@ -1,5 +1,7 @@
 # AGENTS.md
 
+<!-- markdownlint-disable MD013 -->
+
 本文件是本仓库的 Agent 入口路由文档。作用范围为仓库根目录及其所有子目录。
 
 ## 0. 先读顺序
@@ -7,7 +9,8 @@
 1. `README.md`：项目定位、架构边界、CLI 行为、工具和安全说明。
 2. `CMakeLists.txt`：构建目标、源文件清单、测试目标。
 3. `docs/plans/`：当前/历史重构计划；涉及架构调整时优先读最新相关计划。
-4. 按任务进入下面的路由表。
+   - 长期 pi C++ 化路线图：`docs/plans/2026-06-16-001-refactor-pi-cpp-parity-todo.md`。
+4. 涉及与 pi 对齐、模块迁移、接口契约参考时，读取参考仓库（通常是同级 `../pi`）中的对应 package/docs，再按任务进入下面的路由表。
 
 开始改动前先执行：
 
@@ -23,6 +26,8 @@ git status --short
 
 本项目不是生产沙箱，也不承诺兼容稳定 SDK。设计优先级是学习、可替换边界和反脆弱架构。
 
+长期方向：本仓库应逐步成为 pi 的 C++ 实现，优先对齐 pi 的模块划分与接口契约，而不是机械翻译 TypeScript 实现。参考 package 时使用 `pi:` 前缀表明路径来自参考仓库，例如 `pi:packages/ai/src/types.ts`；本仓库实现路径仍保持 repo-relative。
+
 ## 2. 必守架构规则
 
 1. **数据是被动值状态**：公共 contract 使用 aggregate-friendly `struct`、`std::variant`、`std::expected` 和项目内 `util::JsonValue`。
@@ -31,6 +36,19 @@ git status --short
 4. **泛型机制局部化**：Glaze DTO、schema 转换、visitor、解析 helper 等应留在 serialization/implementation 层，不要泄漏到 domain-facing API。
 
 禁止重新引入：旧同步工具面、`util::Result`、Boost.JSON domain contract、把 `src` 当作 public include surface、兼容性空 flag。
+
+## 2.5 pi C++ 化路线
+
+总体路线以 `docs/plans/2026-06-16-001-refactor-pi-cpp-parity-todo.md` 为准。后续每个迁移切片都应先确认对应 pi 契约，再在 C++ 侧建立最小、可测试、可替换的边界。
+
+| pi 参考模块 | C++ 目标区域 | 迁移原则 |
+| --- | --- | --- |
+| `pi:packages/ai` | `include/cch/ai/`, `src/ai/`, `tests/ai/` | 对齐 message/content/tool/usage/stream/provider contract；provider wire DTO 留在 provider/glaze 层。 |
+| `pi:packages/agent` | `include/cch/agent/`, `src/agent/`, `include/cch/harness/`, `src/harness/` | 对齐 agent loop、state、event、tool execution、execution env、session harness contract；保持 move-only event sink。 |
+| `pi:packages/coding-agent` | `src/AsyncCliRuntime.*`, `src/main.cpp`, 后续 runtime/config/resource 模块 | 对齐 CLI/runtime、settings、resources、skills、prompt templates、sessions、JSON/RPC surface；不要把 CLI 逻辑塞回 agent core。 |
+| `pi:packages/tui` | 后续 TUI 模块 | 仅在明确进入 TUI parity 时引入；先保护 terminal/render/keybinding/theme contract。 |
+
+迁移优先级：先做 contract inventory 与库边界，再推进 `pi-ai`、`pi-agent-core`、session/execution env、coding-agent runtime，最后考虑 resources/extensions/packages/TUI。
 
 ## 3. 目录与职责路由
 
