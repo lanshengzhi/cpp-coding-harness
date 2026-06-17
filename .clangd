@@ -1,2 +1,6 @@
 CompileFlags:
-  Add: [-std=c++23, -Iinclude, -Ibuild/_deps/glaze-src/include]
+  Add:
+    - -std=c++23
+    - -Iinclude
+    - -Ibuild/vcpkg_installed/x64-linux/include
+    - -Ibuild/_deps/glaze-src/include

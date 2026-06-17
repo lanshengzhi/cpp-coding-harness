@@ -12,7 +12,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(CCH_BUILD_TESTS "Build tests" ON)
 
-find_package(Boost REQUIRED COMPONENTS system filesystem)
+find_package(Boost REQUIRED COMPONENTS filesystem)
+find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(glaze CONFIG REQUIRED)
 find_package(CLI11 CONFIG REQUIRED)
@@ -36,8 +37,8 @@ cch_target_defaults(cch_util)
 target_link_libraries(cch_util
     PUBLIC
         glaze::glaze
-        Boost::system
         Boost::filesystem
+        Threads::Threads
 )
 
 add_library(cch_ai
@@ -98,7 +99,7 @@ add_library(cch_coding_agent_runtime
 )
 cch_target_defaults(cch_coding_agent_runtime)
 target_include_directories(cch_coding_agent_runtime
-    PUBLIC
+    PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 target_link_libraries(cch_coding_agent_runtime
