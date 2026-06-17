@@ -20,6 +20,19 @@ This TODO checklist is the durable roadmap for evolving `cpp-coding-harness` int
 
 The current C++ project already covers the core loop: provider request, tool calls, local tool execution, semantic events, CLI output, and JSONL sessions. The remaining work is to expand that seed along pi's package boundaries while preserving the repository's C++ architecture rules: passive value contracts, capability seams, move-only events, and localized serialization machinery.
 
+## Pre-Implementation Research Update (2026-06-16)
+
+Research for this roadmap found that several structural seams should be refactored before starting the T2–T9 parity slices. The focused plan is `docs/plans/2026-06-16-002-refactor-pre-implementation-cleanup-plan.md`.
+
+Confirmed pre-implementation decisions:
+
+- Split the monolithic CMake library into package-like targets before broad parity work.
+- Replace the hand-written CLI parser with CLI11, which is already declared in `vcpkg.json`.
+- Move the scripted fake provider out of CLI runtime and expose it through a provider/model registry path.
+- Replace blocking shell execution with true `boost::asio` async process I/O.
+
+The first implementation pass should execute that cleanup plan and produce the T0 contract inventory before expanding provider, agent, session, resource, or TUI parity.
+
 ## Non-Negotiable Migration Rules
 
 - [ ] Treat pi as the reference for module boundaries and interface contracts; do not invent new large subsystems without first checking the corresponding pi package.
@@ -45,31 +58,32 @@ The current C++ project already covers the core loop: provider request, tool cal
 - [ ] `src/ai/providers` remains provider-specific implementation code, with Glaze DTOs isolated under `include/cch/ai/glaze` and `src/ai/glaze`.
 - [ ] `include/cch/agent` remains the public agent orchestration surface for loop, context, events, tools, and registry behavior.
 - [ ] `include/cch/harness` remains the execution/session capability boundary.
-- [ ] `src/AsyncCliRuntime.*` and `src/main.cpp` remain the current runtime wiring until the pi-coding-agent core split is planned and tested.
+- [x] `src/AsyncCliRuntime.*`, `src/main.cpp`, and `src/coding_agent/runtime/` split current runtime wiring into CLI parsing, runtime services, session lifecycle, event printing, and agent execution seams.
 - [ ] `tests/architecture` continues to guard public header boundaries, no `src` public leakage, no old sync tool surface, no Boost.JSON domain contract, and move-only callbacks.
 
 ## TODO Roadmap
 
 ### T0. Reference Contract Inventory
 
-- [ ] Build a contract inventory that maps pi public types, events, commands, and session entries to existing or missing C++ equivalents.
+- [x] Build a contract inventory that maps pi public types, events, commands, and session entries to existing or missing C++ equivalents.
   - **References:** `pi:packages/ai/src/types.ts`, `pi:packages/agent/src/types.ts`, `pi:packages/agent/src/harness/types.ts`, `pi:packages/coding-agent/docs/session-format.md`.
-  - **Output:** a small matrix in `docs/plans/` or an update to this TODO document.
+  - **Output:** `docs/plans/2026-06-16-003-refactor-pi-cpp-contract-inventory.md`.
   - **Done when:** every future TODO item can cite either an existing C++ contract or a named missing contract.
-- [ ] Classify pi features into MVP parity, near-term parity, and intentionally deferred parity.
+- [x] Classify pi features into MVP parity, near-term parity, and intentionally deferred parity.
   - **Done when:** README and this TODO agree on which gaps are intentional: full TUI, extensions, package installation, OAuth, multi-provider registry, session tree, compaction, SDK/RPC, and sandbox/container integration.
-- [ ] Add a recurring implementation checklist for each future parity slice.
+- [x] Add a recurring implementation checklist for each future parity slice.
   - **Done when:** each slice starts by reading the relevant `pi:` contract, adding tests, implementing the smallest C++ seam, and updating docs only if behavior or public boundaries change.
 
 ### T1. Package-Style Library Boundaries
 
-- [ ] Decide whether to keep one `cpp_harness_lib` target or split into package-like targets such as AI, agent, harness, coding-agent runtime, and future TUI.
+- [x] Split `cpp_harness_lib` into package-like targets such as AI, agent, harness, tools, coding-agent runtime, and future TUI.
+  - **Decision:** confirmed in `docs/plans/2026-06-16-002-refactor-pre-implementation-cleanup-plan.md`.
   - **References:** `CMakeLists.txt`, `pi:package.json`, `pi:packages/*/package.json`.
-  - **Done when:** dependencies flow in the same direction as pi packages: coding-agent/runtime depends on agent, agent depends on AI and harness contracts, providers stay under AI.
-- [ ] Add architecture tests for forbidden dependency directions.
-  - **Files:** `tests/architecture/ArchitectureSurfaceScanTest.cpp`, `tests/architecture/PublicHeaderBoundaryTest.cpp`.
+  - **Done when:** dependencies flow in the same direction as pi packages: coding-agent/runtime depends on agent, harness, and tools; tools bridge agent contracts to harness capabilities; providers stay under AI.
+- [x] Add architecture tests for forbidden dependency directions.
+  - **Files:** `tests/architecture/ArchitectureSurfaceScanTest.cpp`, `tests/architecture/PublicHeaderBoundaryTest.cpp`, `tests/architecture/CMakeDependencyTest.cpp`.
   - **Done when:** tests fail if agent code starts depending on CLI/runtime code, or public contracts start including private implementation headers.
-- [ ] Document the package mapping in README.
+- [x] Document the package mapping in README.
   - **Files:** `README.md`.
   - **Done when:** contributors can map a pi package to the corresponding C++ module before editing code.
 
@@ -83,8 +97,8 @@ The current C++ project already covers the core loop: provider request, tool cal
   - **Files:** `include/cch/ai/StreamEvent.hpp`, `src/ai/providers/SseParser.cpp`, `tests/ai/providers/SseParserTest.cpp`.
   - **References:** `pi:packages/ai/src/types.ts`, `pi:packages/ai/src/stream.ts`, `pi:packages/ai/src/utils/event-stream.ts`.
   - **Test scenarios:** start, text delta/end, thinking delta/end, toolcall delta/end, done, and error events produce the expected final assistant message.
-- [ ] Introduce a provider/model registry seam before adding more providers.
-  - **Files:** `include/cch/ai/`, `src/ai/providers/`, `tests/ai/providers/`.
+- [x] Introduce a provider/model registry seam before adding more providers.
+  - **Files:** `include/cch/ai/ProviderRegistry.hpp`, `src/ai/ProviderRegistry.cpp`, `src/ai/providers/`, `tests/ai/ProviderRegistryTest.cpp`.
   - **References:** `pi:packages/ai/src/api-registry.ts`, `pi:packages/ai/src/models.ts`, `pi:packages/ai/src/env-api-keys.ts`, `pi:packages/ai/src/providers/register-builtins.ts`.
   - **Done when:** OpenAI-compatible/Kimi wiring is one registered provider path, not hardcoded throughout CLI runtime.
 - [ ] Add provider compatibility options only behind provider adapters.
@@ -97,7 +111,7 @@ The current C++ project already covers the core loop: provider request, tool cal
 
 ### T3. `pi-agent-core` Loop, State, and Tool Parity
 
-- [ ] Expand agent state to match pi's public state concepts without copying TypeScript declaration merging.
+- [x] Expand agent state to match pi's public state concepts without copying TypeScript declaration merging.
   - **Files:** `include/cch/agent/AgentContext.hpp`, `include/cch/agent/AgentLoop.hpp`, `tests/agent/AsyncAgentLoopTest.cpp`.
   - **References:** `pi:packages/agent/src/types.ts`.
   - **Test scenarios:** active tools, messages, streaming message, pending tool calls, error message, model, and thinking level are observable through a C++-appropriate state seam.
@@ -113,7 +127,7 @@ The current C++ project already covers the core loop: provider request, tool cal
   - **Files:** `include/cch/agent/AgentTool.hpp`, `src/agent/AgentLoop.cpp`, `tests/agent/AsyncAgentLoopTest.cpp`.
   - **References:** `pi:packages/agent/src/types.ts`.
   - **Test scenarios:** read-only tools may complete out of order while tool-result messages are appended in assistant source order; mutating tools remain serialized unless classified safe.
-- [ ] Preserve move-only event sink semantics while adding missing lifecycle events.
+- [x] Preserve move-only event sink semantics while adding missing lifecycle events.
   - **Files:** `include/cch/agent/AgentEvent.hpp`, `tests/architecture/MoveOnlyCallbackTest.cpp`, `tests/agent/AsyncAgentLoopTest.cpp`.
   - **References:** `pi:packages/agent/src/types.ts`, `pi:packages/coding-agent/docs/extensions.md`.
   - **Done when:** event order can support future UI/extensions without requiring copyable callbacks.
@@ -150,8 +164,8 @@ The current C++ project already covers the core loop: provider request, tool cal
   - **Files:** `include/cch/ai/Message.hpp`, `include/cch/harness/session/`, `tests/harness/session/JsonlSessionStoreTest.cpp`.
   - **References:** `pi:packages/coding-agent/docs/session-format.md`, `pi:packages/coding-agent/src/core/messages.ts`.
   - **Done when:** bash execution, custom, compaction summary, and branch summary messages have explicit C++ variants or an intentional custom-message escape hatch.
-- [ ] Split CLI/runtime wiring into pi-coding-agent-like responsibilities.
-  - **Files:** `src/AsyncCliRuntime.hpp`, `src/AsyncCliRuntime.cpp`, `src/main.cpp`, `tests/cli/CliSmokeTest.cpp`.
+- [x] Split CLI/runtime wiring into pi-coding-agent-like responsibilities.
+  - **Files:** `src/AsyncCliRuntime.hpp`, `src/AsyncCliRuntime.cpp`, `src/main.cpp`, `src/coding_agent/runtime/`, `tests/cli/CliSmokeTest.cpp`.
   - **References:** `pi:packages/coding-agent/src/core/agent-session-runtime.ts`, `pi:packages/coding-agent/src/core/agent-session-services.ts`, `pi:packages/coding-agent/src/core/agent-session.ts`, `pi:packages/coding-agent/src/cli/args.ts`.
   - **Done when:** argument parsing, model resolution, tool registration, session lifecycle, event printing, and agent execution are separate seams.
 - [ ] Add configuration and model resolution before expanding provider count.
@@ -238,6 +252,7 @@ The current C++ project already covers the core loop: provider request, tool cal
 
 ## Suggested Attack Order
 
+0. Execute `docs/plans/2026-06-16-002-refactor-pre-implementation-cleanup-plan.md` to create the T0 inventory, split package-style build targets, move fake provider wiring into the registry seam, adopt CLI11, make shell execution truly async, and prepare session/event seams.
 1. T0 Reference Contract Inventory.
 2. T1 Package-Style Library Boundaries.
 3. T2 `pi-ai` stream/provider/model registry parity.

@@ -118,16 +118,20 @@ The smoke script requires explicit opt-in, uses a throwaway workspace/session, d
 
 ## Architecture boundaries
 
-The code is split into value contracts, capability seams, and implementation adapters:
+The code is split into value contracts, capability seams, implementation adapters, and package-style CMake targets:
 
-- `include/cch/ai`: passive message/content/tool/context contracts and provider-neutral stream events.
-- `include/cch/agent`: coroutine agent loop, lifecycle event values, move-only event sinks, async tool registry, and expected-style tool execution contracts.
-- `include/cch/harness` and `include/cch/tools`: local execution environment and built-in tool factory capability seams.
-- `include/cch/util`: project error/expected contracts, move-only callback vocabulary, passive `JsonValue`, and the Glaze-backed JSON adapter.
-- `include/cch/ai/glaze` and `src/ai/glaze`: explicit serialization DTOs and conversion helpers.
-- `src/...`: implementation files for provider transport, local filesystem/process behavior, CLI runtime, and session persistence.
+- `cch_util` (`include/cch/util`, `src/util`): project error/expected contracts, move-only callback vocabulary, passive `JsonValue`, the Glaze-backed JSON adapter, and async process execution.
+- `cch_ai` (`include/cch/ai`, `src/ai`): passive message/content/tool/context contracts, provider-neutral stream events, provider registry, OpenAI-compatible provider, scripted fake provider, SSE, and Glaze provider mapping.
+- `cch_agent` (`include/cch/agent`, `src/agent`): coroutine agent loop, observable state values, lifecycle event values, move-only event sinks, async tool registry, and expected-style tool execution contracts.
+- `cch_harness` (`include/cch/harness`, `src/harness`): local execution environment and JSONL session persistence.
+- `cch_tools` (`include/cch/tools`, `src/tools`): built-in read/write/edit/bash tool factories bridging agent tool contracts to harness capabilities.
+- `cch_coding_agent_runtime` (`src/AsyncCliRuntime.*`, `src/coding_agent/runtime/`): CLI runtime orchestration, session lifecycle, provider/tool service assembly, and semantic event printing.
 
 The build publishes `include` as the public surface and keeps `src` private. Legacy synchronous tools, Boost.JSON contracts, `util::Result`, and duplicate `src` contract headers have been removed.
+
+### pi parity roadmap
+
+Long-term work tracks pi module and contract parity in `docs/plans/2026-06-16-001-refactor-pi-cpp-parity-todo.md`. The pre-implementation cleanup in `docs/plans/2026-06-16-002-refactor-pre-implementation-cleanup-plan.md` established the structural prerequisites for larger parity slices: package-style CMake targets, CLI11 parsing, provider registry wiring with a registered fake provider, true async shell execution, expanded agent event/state seams, runtime service split, and parse-only session tree entry preparation.
 
 ## CLI states
 
@@ -161,9 +165,10 @@ Sessions are JSONL:
 
 1. a v2 `header` line with session/workspace/provider/model metadata,
 2. append-only typed `message` entries containing redacted user, assistant, and tool-result messages,
-3. safely ignored future entry types so resume flows can survive additive format growth.
+3. parse-only support for pi-style v3 tree metadata entries such as `model_change`, `thinking_level_change`, `compaction`, `branch_summary`, `custom`, `custom_message`, `label`, `session_info`, and `leaf`,
+4. safely ignored unknown future entry types.
 
-The redacted transcript is canonical for resume/replay. Exact unredacted replay is intentionally out of scope. Session files are still sensitive: they can contain source text, command output, workspace paths, and provider/model metadata.
+The redacted v2 transcript is canonical for current resume/replay. Nontrivial tree sessions are refused for append/resume until tree context reconstruction lands, avoiding silent reconstruction of the wrong conversation state. Exact unredacted replay is intentionally out of scope. Session files are still sensitive: they can contain source text, command output, workspace paths, and provider/model metadata.
 
 The workspace guard is not a sandbox. Prompts, file contents, and command outputs can be sent to the configured provider. Run this harness inside a VM/container if you need a real containment boundary.
 
@@ -192,4 +197,4 @@ These cover:
 
 ## Deferred
 
-Not included yet: rich TUI, extensions/skills, multi-provider registries, OAuth, session trees/branching/compaction, multi-replacement edits, native Windows shell semantics, parallel tool execution, subagents, MCP/RPC embedding, permission prompts, image/thinking content behavior, C++26 reflection-generated schema, `std::execution` senders/receivers, ABI-stable binary distribution, or OS-level sandboxing.
+Not included yet: rich TUI, extensions/skills, additional provider adapters and model catalog/config resolution, OAuth, session tree navigation/branching/compaction semantics, multi-replacement edits, native Windows shell process-tree termination semantics, parallel tool execution, subagents, MCP/RPC embedding, permission prompts, image generation behavior, C++26 reflection-generated schema, `std::execution` senders/receivers, ABI-stable binary distribution, or OS-level sandboxing.

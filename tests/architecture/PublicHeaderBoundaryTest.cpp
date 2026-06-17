@@ -9,6 +9,7 @@
 #include "../../include/cch/ai/Content.hpp"
 #include "../../include/cch/ai/Context.hpp"
 #include "../../include/cch/ai/Message.hpp"
+#include "../../include/cch/ai/ProviderRegistry.hpp"
 #include "../../include/cch/ai/StreamEvent.hpp"
 #include "../../include/cch/ai/Tool.hpp"
 #include "../../include/cch/ai/Usage.hpp"

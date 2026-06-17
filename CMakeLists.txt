@@ -15,52 +15,121 @@ option(CCH_BUILD_TESTS "Build tests" ON)
 find_package(Boost REQUIRED COMPONENTS system filesystem)
 find_package(OpenSSL REQUIRED)
 find_package(glaze CONFIG REQUIRED)
+find_package(CLI11 CONFIG REQUIRED)
 
-add_library(cpp_harness_lib
-    src/AsyncCliRuntime.cpp
-    src/agent/AgentLoop.cpp
-    src/ai/providers/BoostBeastStreamTransport.cpp
-    src/ai/providers/OpenAIChatClient.cpp
-    src/ai/providers/SseParser.cpp
-    src/harness/AsyncLocalExecutionEnv.cpp
-    src/harness/LocalExecutionEnv.cpp
-    src/harness/session/JsonlSessionStore.cpp
-    src/tools/AsyncToolFactories.cpp
-)
+set(CCH_WARNING_OPTIONS -Wall -Wextra -Wpedantic)
 
-target_include_directories(cpp_harness_lib
-    PUBLIC
+function(cch_target_defaults target_name)
+    target_include_directories(${target_name}
+        PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
-    PRIVATE
+        PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
+    )
+    target_compile_options(${target_name} PRIVATE ${CCH_WARNING_OPTIONS})
+endfunction()
 
-target_link_libraries(cpp_harness_lib
+add_library(cch_util
+    src/util/Process.cpp
+)
+cch_target_defaults(cch_util)
+target_link_libraries(cch_util
     PUBLIC
         glaze::glaze
         Boost::system
         Boost::filesystem
+)
+
+add_library(cch_ai
+    src/ai/ProviderRegistry.cpp
+    src/ai/providers/BoostBeastStreamTransport.cpp
+    src/ai/providers/FakeChatClient.cpp
+    src/ai/providers/OpenAIChatClient.cpp
+    src/ai/providers/SseParser.cpp
+)
+cch_target_defaults(cch_ai)
+target_link_libraries(cch_ai
+    PUBLIC
+        cch_util
     PRIVATE
         OpenSSL::SSL
         OpenSSL::Crypto
 )
 
-target_compile_options(cpp_harness_lib PRIVATE -Wall -Wextra -Wpedantic)
+add_library(cch_agent
+    src/agent/AgentLoop.cpp
+)
+cch_target_defaults(cch_agent)
+target_link_libraries(cch_agent
+    PUBLIC
+        cch_ai
+        cch_util
+)
+
+add_library(cch_harness
+    src/harness/AsyncLocalExecutionEnv.cpp
+    src/harness/LocalExecutionEnv.cpp
+    src/harness/session/JsonlSessionStore.cpp
+)
+cch_target_defaults(cch_harness)
+target_link_libraries(cch_harness
+    PUBLIC
+        cch_ai
+        cch_util
+)
+
+add_library(cch_tools
+    src/tools/AsyncToolFactories.cpp
+)
+cch_target_defaults(cch_tools)
+target_link_libraries(cch_tools
+    PUBLIC
+        cch_agent
+        cch_harness
+        cch_ai
+        cch_util
+)
+
+add_library(cch_coding_agent_runtime
+    src/AsyncCliRuntime.cpp
+    src/coding_agent/runtime/EventPrinter.cpp
+    src/coding_agent/runtime/RuntimeServices.cpp
+    src/coding_agent/runtime/SessionLifecycle.cpp
+)
+cch_target_defaults(cch_coding_agent_runtime)
+target_include_directories(cch_coding_agent_runtime
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_link_libraries(cch_coding_agent_runtime
+    PUBLIC
+        cch_agent
+        cch_harness
+        cch_tools
+        cch_ai
+        cch_util
+)
+
+# Transitional aggregate target for the executable/tests while the runtime is being split.
+add_library(cpp_harness_lib INTERFACE)
+target_link_libraries(cpp_harness_lib INTERFACE cch_coding_agent_runtime)
 
 add_executable(cpp_harness src/main.cpp)
-target_link_libraries(cpp_harness PRIVATE cpp_harness_lib)
-target_compile_options(cpp_harness PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(cpp_harness PRIVATE cpp_harness_lib CLI11::CLI11)
+target_compile_options(cpp_harness PRIVATE ${CCH_WARNING_OPTIONS})
 
 if(CCH_BUILD_TESTS)
     include(CTest)
     add_executable(cpp_harness_tests
         tests/TestMain.cpp
         tests/architecture/ArchitectureSurfaceScanTest.cpp
+        tests/architecture/CMakeDependencyTest.cpp
         tests/architecture/MoveOnlyCallbackTest.cpp
         tests/architecture/PublicHeaderBoundaryTest.cpp
         tests/agent/AsyncAgentLoopTest.cpp
         tests/ai/GlazeRoundTripTest.cpp
         tests/ai/MessageContractTest.cpp
+        tests/ai/ProviderRegistryTest.cpp
         tests/ai/ToolContractTest.cpp
         tests/ai/providers/BoostBeastStreamTransportTest.cpp
         tests/ai/providers/OpenAIChatClientTest.cpp
@@ -81,7 +150,7 @@ if(CCH_BUILD_TESTS)
         CCH_BINARY="$<TARGET_FILE:cpp_harness>"
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
     )
-    target_compile_options(cpp_harness_tests PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(cpp_harness_tests PRIVATE ${CCH_WARNING_OPTIONS})
     add_dependencies(cpp_harness_tests cpp_harness)
     add_test(NAME cpp_harness_tests COMMAND cpp_harness_tests)
 endif()

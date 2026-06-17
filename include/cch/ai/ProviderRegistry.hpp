@@ -1,0 +1,44 @@
+#pragma once
+
+#include "ChatClient.hpp"
+
+#include "../util/Error.hpp"
+
+#include <chrono>
+#include <functional>
+#include <map>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace cch::ai {
+
+struct ProviderFactoryContext {
+    std::string model;
+    std::string base_url{"https://api.openai.com"};
+    std::string api_key;
+    std::string api_key_env{"OPENAI_API_KEY"};
+    std::chrono::milliseconds timeout{30000};
+};
+
+using ProviderClient = std::unique_ptr<StreamingChatClient>;
+using ProviderFactoryResult = cch::util::Expected<ProviderClient>;
+using ProviderFactory = std::function<ProviderFactoryResult(const ProviderFactoryContext&)>;
+
+class ProviderRegistry {
+public:
+    [[nodiscard]] cch::util::ExpectedVoid register_provider(std::string name, ProviderFactory factory);
+    [[nodiscard]] ProviderFactoryResult create(
+        std::string_view name,
+        const ProviderFactoryContext& context) const;
+    [[nodiscard]] bool contains(std::string_view name) const;
+    [[nodiscard]] std::vector<std::string> provider_names() const;
+
+private:
+    std::map<std::string, ProviderFactory, std::less<>> factories_;
+};
+
+[[nodiscard]] cch::util::Expected<ProviderRegistry> make_default_provider_registry();
+
+} // namespace cch::ai

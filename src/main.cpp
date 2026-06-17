@@ -1,12 +1,14 @@
 #include "AsyncCliRuntime.hpp"
+
 #include "../include/cch/util/Error.hpp"
+
+#include <CLI/CLI.hpp>
 
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
-#include <memory>
 #include <random>
 #include <sstream>
 #include <string>
@@ -28,33 +30,17 @@ struct CliConfig {
     std::string base_url{"https://api.openai.com"};
     std::string api_key_env{"OPENAI_API_KEY"};
     std::string prompt;
+    std::string help_text;
 };
 
 cch::util::Error cli_error(std::string message) {
     return cch::util::make_error(cch::util::ErrorCode::Validation, message, message);
 }
 
-void print_help(std::ostream& out) {
-    out << "cpp-harness [options] [prompt]\n"
-        << "\nOptions:\n"
-        << "  --fake                    Use deterministic fake provider (no network)\n"
-        << "  --repl                    Read prompts interactively until exit/quit\n"
-        << "  --workspace <path>        Workspace boundary for tools (default: cwd)\n"
-        << "  --session <path>          Create a new JSONL session at path\n"
-        << "  --resume <path>           Resume and append to an existing JSONL session\n"
-        << "  --max-turns <n>           Maximum model turns per prompt\n"
-        << "  --enable-bash             Allow model-requested bash commands\n"
-        << "  --model <name>            Provider model name\n"
-        << "  --base-url <url>          OpenAI-compatible base URL\n"
-        << "  --api-key-env <name>      Environment variable containing API key\n"
-        << "\nSafety: prompts, file contents, and command outputs may be sent to the configured provider.\n"
-        << "Sessions are local sensitive transcripts even after secret-looking text is redacted.\n";
-}
-
-std::string join_prompt(const std::vector<std::string>& parts, std::size_t start) {
+std::string join_prompt(const std::vector<std::string>& parts) {
     std::ostringstream out;
-    for (std::size_t i = start; i < parts.size(); ++i) {
-        if (i > start) {
+    for (std::size_t i = 0; i < parts.size(); ++i) {
+        if (i > 0) {
             out << ' ';
         }
         out << parts[i];
@@ -62,76 +48,90 @@ std::string join_prompt(const std::vector<std::string>& parts, std::size_t start
     return out.str();
 }
 
-cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
-    CliConfig config;
-    std::vector<std::string> args;
-    for (int i = 1; i < argc; ++i) {
-        args.emplace_back(argv[i]);
+std::string normalize_parse_error(const CLI::ParseError& error) {
+    const std::string name = error.get_name();
+    const std::string message = error.what();
+
+    if (name == "ExcludesError") {
+        return "use either --session or --resume, not both";
     }
-    for (std::size_t i = 0; i < args.size(); ++i) {
-        const auto& arg = args[i];
-        auto need_value = [&](const std::string& name) -> cch::util::Expected<std::string> {
-            if (i + 1 >= args.size()) {
-                return std::unexpected(cli_error(name + " requires a value"));
-            }
-            return args[++i];
-        };
-        if (arg == "--help" || arg == "-h") {
-            config.help = true;
-        } else if (arg == "--fake") {
-            config.fake = true;
-        } else if (arg == "--repl") {
-            config.repl = true;
-        } else if (arg == "--enable-bash") {
-            config.enable_bash = true;
-        } else if (arg == "--workspace") {
-            auto value = need_value(arg);
-            if (!value) return std::unexpected(value.error());
-            config.workspace = *value;
-            config.workspace_explicit = true;
-        } else if (arg == "--session") {
-            auto value = need_value(arg);
-            if (!value) return std::unexpected(value.error());
-            config.session_path = *value;
-        } else if (arg == "--resume") {
-            auto value = need_value(arg);
-            if (!value) return std::unexpected(value.error());
-            config.resume_path = *value;
-        } else if (arg == "--max-turns") {
-            auto value = need_value(arg);
-            if (!value) return std::unexpected(value.error());
-            try {
-                std::size_t consumed = 0;
-                config.max_turns = std::stoi(*value, &consumed);
-                if (consumed != value->size()) {
-                    return std::unexpected(cli_error("--max-turns must be an integer"));
-                }
-            } catch (const std::exception&) {
-                return std::unexpected(cli_error("--max-turns must be an integer"));
-            }
-        } else if (arg == "--model") {
-            auto value = need_value(arg);
-            if (!value) return std::unexpected(value.error());
-            config.model = *value;
-        } else if (arg == "--base-url") {
-            auto value = need_value(arg);
-            if (!value) return std::unexpected(value.error());
-            config.base_url = *value;
-        } else if (arg == "--api-key-env") {
-            auto value = need_value(arg);
-            if (!value) return std::unexpected(value.error());
-            config.api_key_env = *value;
-        } else if (!arg.empty() && arg[0] == '-') {
-            return std::unexpected(cli_error("unknown option: " + arg));
-        } else {
-            config.prompt = join_prompt(args, i);
-            break;
+
+    const std::string singular = "The following argument was not expected: ";
+    const std::string plural = "The following arguments were not expected: ";
+    const auto prefix_size = message.rfind(singular, 0) == 0 ? singular.size()
+        : (message.rfind(plural, 0) == 0 ? plural.size() : std::string::npos);
+    if (prefix_size != std::string::npos) {
+        const auto unexpected = message.substr(prefix_size);
+        if (!unexpected.empty() && unexpected.front() == '-') {
+            return "unknown option: " + unexpected;
         }
     }
+
+    return message;
+}
+
+cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
+    CliConfig config;
+    std::string workspace_text = config.workspace.string();
+    std::string session_text;
+    std::string resume_text;
+    int max_turns_option = config.max_turns;
+    std::vector<std::string> prompt_parts;
+
+    CLI::App app{"C++ coding-agent harness", "cpp-harness"};
+    app.footer(
+        "Safety: prompts, file contents, and command outputs may be sent to the configured provider.\n"
+        "Sessions are local sensitive transcripts even after secret-looking text is redacted.");
+    app.set_help_flag("-h,--help", "Print this help message and exit");
+
+    app.add_flag("--fake", config.fake, "Use deterministic fake provider (no network)");
+    app.add_flag("--repl", config.repl, "Read prompts interactively until exit/quit");
+    app.add_flag("--enable-bash", config.enable_bash, "Allow model-requested bash commands");
+    auto* workspace_option = app.add_option("--workspace", workspace_text, "Workspace boundary for tools (default: cwd)");
+    auto* session_option = app.add_option("--session", session_text, "Create a new JSONL session at path");
+    auto* resume_option = app.add_option("--resume", resume_text, "Resume and append to an existing JSONL session");
+    session_option->excludes(resume_option);
+    resume_option->excludes(session_option);
+    app.add_option("--max-turns", max_turns_option, "Maximum model turns per prompt")
+        ->check(CLI::PositiveNumber);
+    app.add_option("--model", config.model, "Provider model name")->capture_default_str();
+    app.add_option("--base-url", config.base_url, "OpenAI-compatible base URL")->capture_default_str();
+    app.add_option("--api-key-env", config.api_key_env, "Environment variable containing API key")->capture_default_str();
+    app.add_option("prompt", prompt_parts, "Prompt")->expected(0, -1);
+
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::CallForHelp&) {
+        config.help = true;
+        config.help_text = app.help();
+        return config;
+    } catch (const CLI::ParseError& error) {
+        const auto message = normalize_parse_error(error);
+        return std::unexpected(cch::util::make_error(
+            cch::util::ErrorCode::Validation,
+            message,
+            message + "\n\n" + app.help()));
+    }
+
+    if (workspace_option->count() > 0) {
+        config.workspace_explicit = true;
+        config.workspace = workspace_text;
+    }
+    if (session_option->count() > 0) {
+        config.session_path = session_text;
+    }
+    if (resume_option->count() > 0) {
+        config.resume_path = resume_text;
+    }
+    if (app.count("--max-turns") > 0) {
+        config.max_turns = max_turns_option;
+    }
+
+    config.prompt = join_prompt(prompt_parts);
     if (config.max_turns <= 0) {
         return std::unexpected(cli_error("--max-turns must be positive"));
     }
-    if (!config.repl && config.prompt.empty() && !config.help) {
+    if (!config.repl && config.prompt.empty()) {
         return std::unexpected(cli_error("prompt is required unless --repl is used"));
     }
     return config;
@@ -205,13 +205,11 @@ int main(int argc, char** argv) {
     auto parsed = parse_args(argc, argv);
     if (!parsed) {
         print_error(parsed.error());
-        std::cerr << "\n";
-        print_help(std::cerr);
         return 2;
     }
     CliConfig config = std::move(*parsed);
     if (config.help) {
-        print_help(std::cout);
+        std::cout << config.help_text;
         return 0;
     }
     auto validation = validate_config_before_model(config);

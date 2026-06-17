@@ -21,7 +21,7 @@
 namespace cch::harness::session {
 namespace {
 
-struct HeaderDto {
+struct WriteHeaderDto {
     std::string type{"header"};
     int version{2};
     std::string sessionId;
@@ -31,9 +31,25 @@ struct HeaderDto {
     std::string model;
 };
 
+struct ReadHeaderDto {
+    std::string type{"header"};
+    int version{2};
+    std::optional<std::string> sessionId;
+    std::optional<std::string> createdAt;
+    std::optional<std::string> workspace;
+    std::optional<std::string> provider;
+    std::optional<std::string> model;
+    std::optional<std::string> id;
+    std::optional<std::string> timestamp;
+    std::optional<std::string> cwd;
+};
+
 struct MessageEntryDto {
     std::string type{"message"};
     std::string entryId;
+    std::string id;
+    std::optional<std::string> parentId;
+    std::optional<std::string> leafId;
     ai::glaze::MessageDto message;
 };
 
@@ -57,8 +73,8 @@ struct MessageEntryDto {
     }
 }
 
-[[nodiscard]] HeaderDto to_dto(const SessionMetadata& metadata) {
-    return HeaderDto{
+[[nodiscard]] WriteHeaderDto to_dto(const SessionMetadata& metadata) {
+    return WriteHeaderDto{
         "header",
         2,
         metadata.session_id,
@@ -69,12 +85,91 @@ struct MessageEntryDto {
     };
 }
 
-[[nodiscard]] SessionMetadata from_dto(const HeaderDto& dto) {
-    return SessionMetadata{dto.sessionId, dto.createdAt, dto.workspace, dto.provider, dto.model};
+[[nodiscard]] SessionMetadata from_dto(const ReadHeaderDto& dto) {
+    if (dto.type == "session") {
+        return SessionMetadata{
+            dto.id.value_or({}),
+            dto.timestamp.value_or({}),
+            dto.cwd.value_or({}),
+            dto.provider.value_or({}),
+            dto.model.value_or({})};
+    }
+    return SessionMetadata{
+        dto.sessionId.value_or({}),
+        dto.createdAt.value_or({}),
+        dto.workspace.value_or({}),
+        dto.provider.value_or({}),
+        dto.model.value_or({})};
 }
 
 [[nodiscard]] MessageEntryDto to_dto(std::string entry_id, const ai::MessageVariant& message) {
-    return MessageEntryDto{"message", std::move(entry_id), ai::glaze::to_message_dto(message)};
+    MessageEntryDto dto;
+    dto.type = "message";
+    dto.entryId = std::move(entry_id);
+    dto.message = ai::glaze::to_message_dto(message);
+    return dto;
+}
+
+[[nodiscard]] SessionEntryKind kind_from_type(const std::string& type) {
+    if (type == "header" || type == "session") return SessionEntryKind::Header;
+    if (type == "message") return SessionEntryKind::Message;
+    if (type == "model_change") return SessionEntryKind::ModelChange;
+    if (type == "thinking_level_change") return SessionEntryKind::ThinkingLevelChange;
+    if (type == "active_tools_change") return SessionEntryKind::ActiveToolsChange;
+    if (type == "custom") return SessionEntryKind::Custom;
+    if (type == "custom_message") return SessionEntryKind::CustomMessage;
+    if (type == "label") return SessionEntryKind::Label;
+    if (type == "compaction") return SessionEntryKind::Compaction;
+    if (type == "branch_summary") return SessionEntryKind::BranchSummary;
+    if (type == "session_info") return SessionEntryKind::SessionInfo;
+    if (type == "leaf") return SessionEntryKind::Leaf;
+    return SessionEntryKind::Unknown;
+}
+
+[[nodiscard]] std::optional<std::string> optional_string_field(
+    const util::JsonValue::object_t& object,
+    const std::string& key) {
+    const auto found = object.find(key);
+    if (found == object.end()) {
+        return std::nullopt;
+    }
+    if (const auto* value = found->second.get_if<std::string>()) {
+        return *value;
+    }
+    return std::nullopt;
+}
+
+void populate_tree_fields(SessionEntry& entry, const util::JsonValue& value) {
+    if (const auto* object = value.get_if<util::JsonValue::object_t>()) {
+        if (auto id = optional_string_field(*object, "entryId")) {
+            entry.entry_id = *id;
+        } else if (auto id = optional_string_field(*object, "id")) {
+            entry.entry_id = *id;
+        }
+        entry.parent_id = optional_string_field(*object, "parentId");
+        entry.leaf_id = optional_string_field(*object, "leafId");
+    }
+}
+
+[[nodiscard]] bool parse_only_tree_kind(SessionEntryKind kind) {
+    switch (kind) {
+    case SessionEntryKind::ModelChange:
+    case SessionEntryKind::ThinkingLevelChange:
+    case SessionEntryKind::ActiveToolsChange:
+    case SessionEntryKind::Custom:
+    case SessionEntryKind::CustomMessage:
+    case SessionEntryKind::Label:
+    case SessionEntryKind::Compaction:
+    case SessionEntryKind::BranchSummary:
+    case SessionEntryKind::SessionInfo:
+    case SessionEntryKind::Leaf:
+        return true;
+    case SessionEntryKind::Header:
+    case SessionEntryKind::Message:
+    case SessionEntryKind::Unknown:
+        return false;
+    }
+    return false;
 }
 
 [[nodiscard]] util::JsonValue redact_json_value(const util::JsonValue& value) {
@@ -251,6 +346,13 @@ util::Expected<JsonlSessionStore> JsonlSessionStore::open_existing(const std::fi
     if (!loaded) {
         return std::unexpected(loaded.error());
     }
+    for (const auto& entry : loaded->entries) {
+        if (parse_only_tree_kind(entry.kind)) {
+            return std::unexpected(session_error(
+                "session tree entries require tree resume support",
+                "refusing to append to a session containing parse-only tree entries until tree reconstruction is implemented"));
+        }
+    }
     JsonlSessionStore store;
     store.path_ = path;
     store.metadata_ = loaded->metadata;
@@ -284,20 +386,27 @@ util::Expected<LoadedSession> JsonlSessionStore::load(const std::filesystem::pat
         if (!type) {
             return std::unexpected(type.error());
         }
-        if (line_number == 1 && *type == "header") {
-            auto header = util::read_json<HeaderDto>(line);
+        if (line_number == 1 && (*type == "header" || *type == "session")) {
+            auto header = util::read_json<ReadHeaderDto>(line);
             if (!header) {
                 return std::unexpected(header.error());
             }
             loaded.metadata = from_dto(*header);
+            auto parsed = util::read_json<util::JsonValue>(line);
+            if (!parsed) {
+                return std::unexpected(parsed.error());
+            }
             SessionEntry entry;
             entry.kind = SessionEntryKind::Header;
             entry.raw_line = line;
+            entry.payload = *parsed;
+            populate_tree_fields(entry, *parsed);
             loaded.entries.push_back(std::move(entry));
             saw_header = true;
             continue;
         }
-        if (*type == "message") {
+        auto kind = kind_from_type(*type);
+        if (kind == SessionEntryKind::Message) {
             auto dto = util::read_json<MessageEntryDto>(line);
             if (!dto) {
                 return std::unexpected(dto.error());
@@ -306,19 +415,34 @@ util::Expected<LoadedSession> JsonlSessionStore::load(const std::filesystem::pat
             if (!message) {
                 return std::unexpected(message.error());
             }
+            auto parsed = util::read_json<util::JsonValue>(line);
+            if (!parsed) {
+                return std::unexpected(parsed.error());
+            }
             SessionEntry entry;
             entry.kind = SessionEntryKind::Message;
-            entry.entry_id = dto->entryId;
+            entry.entry_id = !dto->entryId.empty() ? dto->entryId : dto->id;
+            entry.parent_id = dto->parentId;
+            entry.leaf_id = dto->leafId;
             entry.message = *message;
+            entry.payload = *parsed;
             entry.raw_line = line;
             loaded.messages.push_back(*message);
             loaded.entries.push_back(std::move(entry));
         } else {
+            auto parsed = util::read_json<util::JsonValue>(line);
+            if (!parsed) {
+                return std::unexpected(parsed.error());
+            }
             SessionEntry entry;
-            entry.kind = SessionEntryKind::Unknown;
+            entry.kind = kind;
             entry.raw_line = line;
+            entry.payload = *parsed;
+            populate_tree_fields(entry, *parsed);
             loaded.entries.push_back(std::move(entry));
-            loaded.unknown_lines.push_back(line);
+            if (kind == SessionEntryKind::Unknown) {
+                loaded.unknown_lines.push_back(line);
+            }
         }
     }
     if (input.bad()) {

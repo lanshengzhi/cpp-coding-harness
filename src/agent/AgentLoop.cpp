@@ -5,6 +5,7 @@
 #include "../../include/cch/ai/glaze/AiJson.hpp"
 #include "../../include/cch/util/Json.hpp"
 
+#include <algorithm>
 #include <utility>
 
 namespace cch::agent {
@@ -47,6 +48,13 @@ namespace {
     return util::read_json<util::JsonValue>(call.raw_arguments);
 }
 
+void erase_first(std::vector<std::string>& values, const std::string& value) {
+    const auto found = std::find(values.begin(), values.end(), value);
+    if (found != values.end()) {
+        values.erase(found);
+    }
+}
+
 } // namespace
 
 AsyncAgentLoop::AsyncAgentLoop(ai::StreamingChatClient& client, AsyncToolRegistry registry, AsyncAgentOptions options)
@@ -67,9 +75,14 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
     context.tools = registry_.definitions();
     context.messages = std::move(history);
 
+    AgentState state;
+    state.model = options_.model;
+    state.messages = context.messages;
+
     CCH_TRY_VOID(emit(sink, AgentStartEvent{user_prompt}));
 
     context.messages.push_back(ai::MessageVariant{ai::user_text_message(std::move(user_prompt))});
+    state.messages = context.messages;
 
     for (int turn = 1; turn <= options_.max_turns; ++turn) {
         CCH_TRY_VOID(emit(sink, TurnStartEvent{turn}));
@@ -82,8 +95,56 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         auto assistant = co_await client_.stream(
             request,
             [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+                if (const auto* start = std::get_if<ai::AssistantStartEvent>(&event)) {
+                    state.streaming_message = start->partial;
+                    return {};
+                }
+                if (const auto* start = std::get_if<ai::TextStartEvent>(&event)) {
+                    state.streaming_message = start->partial;
+                    return {};
+                }
                 if (const auto* delta = std::get_if<ai::TextDeltaEvent>(&event)) {
+                    state.streaming_message = delta->partial;
                     return emit(sink, MessageUpdateEvent{turn, delta->delta});
+                }
+                if (const auto* end = std::get_if<ai::TextEndEvent>(&event)) {
+                    state.streaming_message = end->partial;
+                    return {};
+                }
+                if (const auto* start = std::get_if<ai::ThinkingStartEvent>(&event)) {
+                    state.streaming_message = start->partial;
+                    return {};
+                }
+                if (const auto* delta = std::get_if<ai::ThinkingDeltaEvent>(&event)) {
+                    state.streaming_message = delta->partial;
+                    return emit(sink, ThinkingUpdateEvent{turn, delta->content_index, delta->delta});
+                }
+                if (const auto* end = std::get_if<ai::ThinkingEndEvent>(&event)) {
+                    state.streaming_message = end->partial;
+                    return {};
+                }
+                if (const auto* start = std::get_if<ai::ToolCallStartEvent>(&event)) {
+                    state.streaming_message = start->partial;
+                    return emit(sink, ToolCallStreamStartEvent{turn, start->content_index});
+                }
+                if (const auto* delta = std::get_if<ai::ToolCallDeltaEvent>(&event)) {
+                    state.streaming_message = delta->partial;
+                    return emit(sink, ToolCallStreamUpdateEvent{turn, delta->content_index, delta->delta});
+                }
+                if (const auto* end = std::get_if<ai::ToolCallEndEvent>(&event)) {
+                    state.streaming_message = end->partial;
+                    if (!end->tool_call.id.empty()) {
+                        state.pending_tool_call_ids.push_back(end->tool_call.id);
+                    }
+                    return emit(sink, ToolCallStreamEndEvent{turn, end->content_index, end->tool_call});
+                }
+                if (const auto* done = std::get_if<ai::AssistantDoneEvent>(&event)) {
+                    state.streaming_message = done->message;
+                    return {};
+                }
+                if (const auto* error = std::get_if<ai::AssistantErrorEvent>(&event)) {
+                    state.streaming_message = error->error;
+                    return {};
                 }
                 return {};
             });
@@ -99,15 +160,25 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
 
         CCH_TRY_VOID(emit(sink, MessageEndEvent{turn, *assistant}));
         context.messages.push_back(ai::MessageVariant{*assistant});
+        state.messages = context.messages;
+        state.streaming_message = *assistant;
 
         auto calls = tool_calls(*assistant);
+        state.pending_tool_call_ids.clear();
+        for (const auto& call : calls) {
+            if (!call.id.empty()) {
+                state.pending_tool_call_ids.push_back(call.id);
+            }
+        }
         if (calls.empty()) {
+            state.streaming_message.reset();
             CCH_TRY_VOID(emit(sink, TurnEndEvent{turn, assistant->stop_reason}));
             CCH_TRY_VOID(emit(sink, AgentEndEvent{true, ai::glaze::stop_reason_to_json(assistant->stop_reason)}));
-            co_return AsyncAgentRunResult{std::move(context), assistant->stop_reason, turn};
+            co_return AsyncAgentRunResult{std::move(context), assistant->stop_reason, turn, std::move(state)};
         }
 
         for (const auto& call : calls) {
+            state.active_tool_names.push_back(call.name);
             CCH_TRY_VOID(emit(sink, ToolExecutionStartEvent{turn, call.id, call.name}));
 
             ai::ToolResultMessage tool_result;
@@ -135,7 +206,10 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
 
             const auto tool_text = text_from_content(tool_result.content);
             CCH_TRY_VOID(emit(sink, ToolExecutionEndEvent{turn, call.id, call.name, tool_result.is_error, tool_text}));
+            erase_first(state.active_tool_names, call.name);
+            erase_first(state.pending_tool_call_ids, call.id);
             context.messages.push_back(ai::MessageVariant{std::move(tool_result)});
+            state.messages = context.messages;
         }
 
         CCH_TRY_VOID(emit(sink, TurnEndEvent{turn, ai::AssistantStopReason::ToolUse}));

@@ -2,6 +2,7 @@
 
 #include "../ai/Message.hpp"
 #include "../util/Error.hpp"
+#include <cstddef>
 #include <functional>
 #include <string>
 #include <variant>
@@ -28,6 +29,29 @@ struct MessageUpdateEvent {
 struct MessageEndEvent {
     int turn{};
     ai::AssistantMessage message;
+};
+
+struct ThinkingUpdateEvent {
+    int turn{};
+    std::size_t content_index{};
+    std::string delta;
+};
+
+struct ToolCallStreamStartEvent {
+    int turn{};
+    std::size_t content_index{};
+};
+
+struct ToolCallStreamUpdateEvent {
+    int turn{};
+    std::size_t content_index{};
+    std::string delta;
+};
+
+struct ToolCallStreamEndEvent {
+    int turn{};
+    std::size_t content_index{};
+    ai::ToolCallContent tool_call;
 };
 
 struct ToolExecutionStartEvent {
@@ -60,6 +84,10 @@ using AgentLifecycleEvent = std::variant<
     MessageStartEvent,
     MessageUpdateEvent,
     MessageEndEvent,
+    ThinkingUpdateEvent,
+    ToolCallStreamStartEvent,
+    ToolCallStreamUpdateEvent,
+    ToolCallStreamEndEvent,
     ToolExecutionStartEvent,
     ToolExecutionEndEvent,
     TurnEndEvent,

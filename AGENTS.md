@@ -10,6 +10,7 @@
 2. `CMakeLists.txt`：构建目标、源文件清单、测试目标。
 3. `docs/plans/`：当前/历史重构计划；涉及架构调整时优先读最新相关计划。
    - 长期 pi C++ 化路线图：`docs/plans/2026-06-16-001-refactor-pi-cpp-parity-todo.md`。
+   - 实施路线图前的结构清理计划：`docs/plans/2026-06-16-002-refactor-pre-implementation-cleanup-plan.md`。
 4. 涉及与 pi 对齐、模块迁移、接口契约参考时，读取参考仓库（通常是同级 `../pi`）中的对应 package/docs，再按任务进入下面的路由表。
 
 开始改动前先执行：
@@ -45,10 +46,10 @@ git status --short
 | --- | --- | --- |
 | `pi:packages/ai` | `include/cch/ai/`, `src/ai/`, `tests/ai/` | 对齐 message/content/tool/usage/stream/provider contract；provider wire DTO 留在 provider/glaze 层。 |
 | `pi:packages/agent` | `include/cch/agent/`, `src/agent/`, `include/cch/harness/`, `src/harness/` | 对齐 agent loop、state、event、tool execution、execution env、session harness contract；保持 move-only event sink。 |
-| `pi:packages/coding-agent` | `src/AsyncCliRuntime.*`, `src/main.cpp`, 后续 runtime/config/resource 模块 | 对齐 CLI/runtime、settings、resources、skills、prompt templates、sessions、JSON/RPC surface；不要把 CLI 逻辑塞回 agent core。 |
+| `pi:packages/coding-agent` | `src/AsyncCliRuntime.*`, `src/main.cpp`, `src/coding_agent/runtime/`, 后续 config/resource 模块 | 对齐 CLI/runtime、settings、resources、skills、prompt templates、sessions、JSON/RPC surface；不要把 CLI 逻辑塞回 agent core。 |
 | `pi:packages/tui` | 后续 TUI 模块 | 仅在明确进入 TUI parity 时引入；先保护 terminal/render/keybinding/theme contract。 |
 
-迁移优先级：先做 contract inventory 与库边界，再推进 `pi-ai`、`pi-agent-core`、session/execution env、coding-agent runtime，最后考虑 resources/extensions/packages/TUI。
+迁移优先级：先执行 `docs/plans/2026-06-16-002-refactor-pre-implementation-cleanup-plan.md` 中确认的前置清理（包式 CMake target、CLI11、provider/model registry、fake provider 注册路径、真正 async shell I/O、event/session seam），再推进 `pi-ai`、`pi-agent-core`、session/execution env、coding-agent runtime，最后考虑 resources/extensions/packages/TUI。
 
 ## 3. 目录与职责路由
 
@@ -57,11 +58,12 @@ git status --short
 | Agent loop / turn 流程 / tool-call 编排 | `include/cch/agent/`, `src/agent/AgentLoop.cpp`, `tests/agent/` | `AsyncAgentLoop` 负责 provider-neutral loop；事件通过 `AgentLifecycleEvent` 发出。 |
 | AI 消息、内容、tool schema、usage contract | `include/cch/ai/`, `tests/ai/` | 公共消息/内容类型必须保持 passive value contract。 |
 | OpenAI-compatible provider / SSE / HTTP transport | `include/cch/ai/providers/`, `src/ai/providers/`, `src/ai/glaze/`, `tests/ai/providers/` | provider wire DTO 和 Glaze mapping 放实现/serialization 层，不要放回公共 domain contract。 |
+| Provider/model registry | `include/cch/ai/ProviderRegistry.hpp`, `src/ai/ProviderRegistry.cpp`, `src/ai/providers/FakeChatClient.*`, `tests/ai/ProviderRegistryTest.cpp` | 注册 fake/OpenAI-compatible provider；CLI/runtime 只解析 provider/model，不硬编码具体 client 构造。 |
 | JSON 序列化/反序列化 | `include/cch/ai/glaze/`, `src/ai/glaze/`, `include/cch/util/Json*.hpp`, `tests/ai/GlazeRoundTripTest.cpp` | Domain 用 `JsonValue`，Glaze 只在边界做 DTO 转换。 |
 | 内置工具 read/write/edit/bash | `include/cch/tools/ToolFactories.hpp`, `src/tools/AsyncToolFactories.cpp`, `tests/tools/` | 工具通过 `AsyncAgentTool` 暴露；文件/进程能力走 execution env。 |
-| 工作区、路径防护、shell 执行 | `include/cch/harness/ExecutionEnv.hpp`, `include/cch/harness/LocalExecutionEnv.hpp`, `src/harness/`, `src/tools/PathGuard.hpp`, `src/util/Process.hpp`, `tests/harness/` | workspace guard 不是沙箱；保持路径 containment、symlink escape、防泄密环境变量等安全检查。 |
-| Session JSONL / resume | `include/cch/harness/session/`, `src/harness/session/JsonlSessionStore.cpp`, `tests/harness/session/` | JSONL 是脱敏 typed transcript；未来 entry 类型应可安全忽略。 |
-| CLI / REPL / runtime wiring | `src/main.cpp`, `src/AsyncCliRuntime.*`, `tests/cli/` | CLI 输出稳定 semantic event line；不要恢复 legacy `--async` 等兼容 flag。 |
+| 工作区、路径防护、shell 执行 | `include/cch/harness/ExecutionEnv.hpp`, `include/cch/harness/LocalExecutionEnv.hpp`, `src/harness/`, `src/tools/PathGuard.hpp`, `src/util/Process.*`, `tests/harness/` | workspace guard 不是沙箱；保持路径 containment、symlink escape、防泄密环境变量等安全检查；async shell I/O 走 `ProcessRunner` awaitable seam。 |
+| Session JSONL / resume | `include/cch/harness/session/`, `src/harness/session/JsonlSessionStore.cpp`, `tests/harness/session/` | JSONL 是脱敏 typed transcript；v2 message resume 必须稳定，pi-style v3 tree metadata 目前只 parse/preserve，非平凡 tree resume 要 fail closed。 |
+| CLI / REPL / runtime wiring | `src/main.cpp`, `src/AsyncCliRuntime.*`, `src/coding_agent/runtime/`, `tests/cli/` | CLI 输出稳定 semantic event line；参数解析使用 CLI11；runtime 负责组装服务，不要恢复 legacy `--async` 等兼容 flag。 |
 | 公共边界/架构守卫 | `tests/architecture/`, `CMakeLists.txt`, `include/cch/` | 改公共 header、依赖或 include surface 时必须跑 architecture tests。 |
 | 文档与计划 | `README.md`, `docs/plans/` | 重大行为或边界变化需同步 README/计划。 |
 

@@ -37,9 +37,16 @@ public:
         }
         auto response = responses.front();
         responses.pop_front();
-        for (const auto& block : response.content) {
+        for (std::size_t index = 0; index < response.content.size(); ++index) {
+            const auto& block = response.content[index];
             if (const auto* text = std::get_if<ai::TextContent>(&block)) {
-                CCH_TRY_VOID(sink(ai::TextDeltaEvent{0, text->text, response}));
+                CCH_TRY_VOID(sink(ai::TextDeltaEvent{index, text->text, response}));
+            } else if (const auto* thinking = std::get_if<ai::ThinkingContent>(&block)) {
+                CCH_TRY_VOID(sink(ai::ThinkingDeltaEvent{index, thinking->thinking, response}));
+            } else if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
+                CCH_TRY_VOID(sink(ai::ToolCallStartEvent{index, response}));
+                CCH_TRY_VOID(sink(ai::ToolCallDeltaEvent{index, call->raw_arguments, response}));
+                CCH_TRY_VOID(sink(ai::ToolCallEndEvent{index, *call, response}));
             }
         }
         co_return response;
@@ -169,6 +176,36 @@ TEST_CASE("async agent loop emits deterministic lifecycle events for text", "[ag
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }
 
+TEST_CASE("async agent loop forwards thinking and tool-call stream lifecycle events", "[agent][async][u5]") {
+    FakeStreamingClient client;
+    ai::AssistantMessage message;
+    message.stop_reason = ai::AssistantStopReason::ToolUse;
+    message.content.emplace_back(ai::thinking_content("SECRET_THOUGHT"));
+    message.content.emplace_back(ai::tool_call_content("call-1", "read_file", R"({"path":"README.md"})"));
+    client.responses.push_back(std::move(message));
+    client.responses.push_back(ai::assistant_text_message("done"));
+
+    agent::AsyncToolRegistry registry;
+    registry.add(std::make_unique<FakeTool>(ai::Tool{
+        "read_file",
+        "Read a workspace file",
+        ai::JsonSchema::object({{"path", ai::JsonSchema::string("file path")}}, {"path"}),
+    }));
+    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{4, "gpt-test"});
+
+    auto run = run_loop(loop, "read");
+
+    REQUIRE(run.result);
+    CHECK(count_events<agent::ThinkingUpdateEvent>(run.events) == 1);
+    CHECK(count_events<agent::ToolCallStreamStartEvent>(run.events) == 1);
+    CHECK(count_events<agent::ToolCallStreamUpdateEvent>(run.events) == 1);
+    CHECK(count_events<agent::ToolCallStreamEndEvent>(run.events) == 1);
+    CHECK(run.result->state.model == "gpt-test");
+    CHECK(run.result->state.pending_tool_call_ids.empty());
+    CHECK(run.result->state.active_tool_names.empty());
+    CHECK(run.result->state.messages.size() == run.result->context.messages.size());
+}
+
 TEST_CASE("async agent loop executes tool calls and continues with tool result context", "[agent][async][u5][ae2]") {
     FakeStreamingClient client;
     client.responses.push_back(tool_call_response());
@@ -195,8 +232,12 @@ TEST_CASE("async agent loop executes tool calls and continues with tool result c
     REQUIRE(client.requests.size() == 2);
     REQUIRE(client.requests[1].context.messages.size() == 3);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client.requests[1].context.messages.back()));
+    CHECK(count_events<agent::ToolCallStreamStartEvent>(run.events) == 1);
+    CHECK(count_events<agent::ToolCallStreamEndEvent>(run.events) == 1);
     CHECK(count_events<agent::ToolExecutionStartEvent>(run.events) == 1);
     CHECK(count_events<agent::ToolExecutionEndEvent>(run.events) == 1);
+    CHECK(run.result->state.pending_tool_call_ids.empty());
+    CHECK(run.result->state.active_tool_names.empty());
 }
 
 TEST_CASE("async agent loop turns malformed tool arguments into error tool results", "[agent][async][u5]") {

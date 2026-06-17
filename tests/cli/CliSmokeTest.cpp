@@ -6,7 +6,6 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
-#include <sstream>
 #include <string>
 
 #if defined(__unix__) || defined(__APPLE__)
@@ -142,6 +141,26 @@ TEST_CASE("CLI resume rejects explicit workspace mismatch", "[cli][u6]") {
     CHECK(resumed.output.find("[model-request]") == std::string::npos);
 }
 
+TEST_CASE("CLI rejects session and resume together before model request", "[cli][u6]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "exclusive.jsonl";
+    auto result = run_command(bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " --resume " + q(session) + " hello");
+
+    REQUIRE(result.exit_code != 0);
+    CHECK(result.output.find("use either --session or --resume") != std::string::npos);
+    CHECK(result.output.find("[model-request]") == std::string::npos);
+}
+
+TEST_CASE("CLI rejects missing prompt without repl before model request", "[cli][u6]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "missing-prompt.jsonl";
+    auto result = run_command(bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session));
+
+    REQUIRE(result.exit_code != 0);
+    CHECK(result.output.find("prompt is required unless --repl is used") != std::string::npos);
+    CHECK(result.output.find("[model-request]") == std::string::npos);
+}
+
 TEST_CASE("CLI blocks existing session path without resume before model request", "[cli][u6]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "exists.jsonl";
@@ -159,7 +178,8 @@ TEST_CASE("CLI rejects invalid max turns before model request", "[cli][u6]") {
     auto result = run_command(bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " --max-turns nope hello");
 
     REQUIRE(result.exit_code != 0);
-    CHECK(result.output.find("--max-turns must be an integer") != std::string::npos);
+    CHECK((result.output.find("--max-turns") != std::string::npos ||
+           result.output.find("Could not parse") != std::string::npos));
     CHECK(result.output.find("[model-request]") == std::string::npos);
 }
 

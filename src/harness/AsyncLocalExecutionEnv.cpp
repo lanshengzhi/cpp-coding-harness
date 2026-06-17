@@ -49,7 +49,15 @@ boost::asio::awaitable<util::Expected<AsyncFileEditResult>> AsyncLocalExecutionE
 boost::asio::awaitable<util::Expected<AsyncShellResult>> AsyncLocalExecutionEnv::run_shell(
     std::string command,
     std::chrono::milliseconds timeout) {
-    co_return sync_->run_shell(std::move(command), timeout);
+    auto request = sync_->make_shell_request(std::move(command), timeout);
+    if (!request) {
+        co_return std::unexpected(request.error());
+    }
+    auto process = co_await sync_->process_runner()->run(std::move(*request));
+    if (!process) {
+        co_return std::unexpected(process.error());
+    }
+    co_return sync_->shell_result_from_process(*process);
 }
 
 } // namespace cch::harness

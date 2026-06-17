@@ -41,6 +41,14 @@ std::string text_from_message(const ai::MessageVariant& message) {
     }
     return {};
 }
+
+void make_private(const std::filesystem::path& path) {
+#if defined(__unix__) || defined(__APPLE__)
+    chmod(path.c_str(), S_IRUSR | S_IWUSR);
+#else
+    (void)path;
+#endif
+}
 } // namespace
 
 TEST_CASE("Glaze JSONL session writes header and typed message entries", "[harness][session][u7]") {
@@ -137,6 +145,40 @@ TEST_CASE("Glaze JSONL session keeps unknown future entries", "[harness][session
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::Unknown);
     CHECK(loaded->entries[2].kind == harness::session::SessionEntryKind::Message);
     CHECK(text_from_message(loaded->messages[0]) == "known");
+}
+
+TEST_CASE("Glaze JSONL session parses v3 tree metadata entries", "[harness][session][u8]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "v3-tree.jsonl";
+    {
+        std::ofstream output(path);
+        output << "{\"type\":\"session\",\"version\":3,\"id\":\"sess-v3\",\"timestamp\":\"2026-06-16T00:00:00.000Z\",\"cwd\":\""
+               << workspace.path().string() << "\"}\n";
+        output << "{\"type\":\"model_change\",\"id\":\"model001\",\"parentId\":null,\"timestamp\":\"2026-06-16T00:00:01.000Z\",\"provider\":\"openai\",\"modelId\":\"gpt-4o\"}\n";
+        output << "{\"type\":\"thinking_level_change\",\"id\":\"think001\",\"parentId\":\"model001\",\"timestamp\":\"2026-06-16T00:00:02.000Z\",\"thinkingLevel\":\"high\"}\n";
+    }
+    make_private(path);
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+
+    REQUIRE(loaded);
+    CHECK(loaded->metadata.session_id == "sess-v3");
+    CHECK(loaded->metadata.workspace == workspace.path());
+    CHECK(loaded->messages.empty());
+    REQUIRE(loaded->entries.size() == 3);
+    CHECK(loaded->entries[0].kind == harness::session::SessionEntryKind::Header);
+    CHECK(loaded->entries[0].entry_id == "sess-v3");
+    CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::ModelChange);
+    CHECK(loaded->entries[1].entry_id == "model001");
+    CHECK_FALSE(loaded->entries[1].parent_id.has_value());
+    CHECK(loaded->entries[2].kind == harness::session::SessionEntryKind::ThinkingLevelChange);
+    REQUIRE(loaded->entries[2].parent_id.has_value());
+    CHECK(*loaded->entries[2].parent_id == "model001");
+    CHECK(loaded->unknown_lines.empty());
+
+    auto opened = harness::session::JsonlSessionStore::open_existing(path);
+    REQUIRE_FALSE(opened);
+    CHECK(opened.error().message == "session tree entries require tree resume support");
 }
 
 TEST_CASE("Glaze JSONL session reports malformed line context", "[harness][session][u7]") {

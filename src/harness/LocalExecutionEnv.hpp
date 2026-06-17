@@ -25,6 +25,12 @@ public:
     [[nodiscard]] util::Expected<AsyncFileEditResult> edit_file(std::string path, std::string old_text, std::string new_text);
     [[nodiscard]] util::Expected<AsyncShellResult> run_shell(std::string command, std::chrono::milliseconds timeout);
 
+    [[nodiscard]] util::Expected<util::ProcessRequest> make_shell_request(
+        std::string command,
+        std::chrono::milliseconds timeout) const;
+    [[nodiscard]] AsyncShellResult shell_result_from_process(const util::ProcessResult& process) const;
+    [[nodiscard]] std::shared_ptr<util::ProcessRunner> process_runner() const { return runner_; }
+
 private:
     std::filesystem::path workspace_;
     bool bash_enabled_{false};

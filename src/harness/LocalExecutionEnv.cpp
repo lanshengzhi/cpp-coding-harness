@@ -4,10 +4,15 @@
 #include "../tools/OutputLimiter.hpp"
 #include "../tools/PathGuard.hpp"
 
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/io_context.hpp>
+
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <utility>
 
@@ -182,7 +187,9 @@ util::Expected<AsyncFileEditResult> LocalExecutionEnv::edit_file(std::string pat
     return AsyncFileEditResult{old_text.substr(0, 80), new_text.substr(0, 80)};
 }
 
-util::Expected<AsyncShellResult> LocalExecutionEnv::run_shell(std::string command, std::chrono::milliseconds timeout) {
+util::Expected<util::ProcessRequest> LocalExecutionEnv::make_shell_request(
+    std::string command,
+    std::chrono::milliseconds timeout) const {
     if (!bash_enabled_) {
         return std::unexpected(process_error("bash is disabled by default; rerun with explicit bash enablement"));
     }
@@ -192,16 +199,42 @@ util::Expected<AsyncShellResult> LocalExecutionEnv::run_shell(std::string comman
     request.timeout = timeout;
     request.environment = sanitized_environment(secret_environment_names_);
     request.use_explicit_environment = true;
-    auto process = runner_->run(request);
-    if (!process) {
-        return std::unexpected(process.error());
-    }
-    auto limited = tools::limit_output(process->output);
+    return request;
+}
+
+AsyncShellResult LocalExecutionEnv::shell_result_from_process(const util::ProcessResult& process) const {
+    auto limited = tools::limit_output(process.output);
     AsyncShellResult result;
-    result.exit_code = process->exit_code;
+    result.exit_code = process.exit_code;
     result.output = limited.text;
-    result.timed_out = process->timed_out;
+    result.timed_out = process.timed_out;
     return result;
+}
+
+util::Expected<AsyncShellResult> LocalExecutionEnv::run_shell(std::string command, std::chrono::milliseconds timeout) {
+    auto request = make_shell_request(std::move(command), timeout);
+    if (!request) {
+        return std::unexpected(request.error());
+    }
+
+    boost::asio::io_context io;
+    std::optional<util::Expected<util::ProcessResult>> process;
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            process = co_await runner_->run(std::move(*request));
+            co_return;
+        },
+        boost::asio::detached);
+    io.run();
+
+    if (!process) {
+        return std::unexpected(process_error("process execution did not complete"));
+    }
+    if (!*process) {
+        return std::unexpected((*process).error());
+    }
+    return shell_result_from_process(**process);
 }
 
 } // namespace cch::harness

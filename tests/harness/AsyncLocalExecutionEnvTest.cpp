@@ -9,7 +9,7 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
 
-#include <cstdlib>
+#include <chrono>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -22,12 +22,12 @@ namespace {
 
 class FakeProcessRunner final : public util::ProcessRunner {
 public:
-    util::Expected<util::ProcessResult> run(const util::ProcessRequest& request) override {
-        requests.push_back(request);
+    boost::asio::awaitable<util::Expected<util::ProcessResult>> run(util::ProcessRequest request) override {
+        requests.push_back(std::move(request));
         if (!error.empty()) {
-            return std::unexpected(util::make_error(util::ErrorCode::Process, "fake process failed", error));
+            co_return std::unexpected(util::make_error(util::ErrorCode::Process, "fake process failed", error));
         }
-        return next;
+        co_return next;
     }
 
     util::ProcessResult next;
@@ -117,6 +117,57 @@ TEST_CASE("async local execution env returns typed shell unavailable errors", "[
     CHECK(shell.error().detail.find("disabled") != std::string::npos);
 }
 
+TEST_CASE("async local execution env runs shell commands concurrently", "[harness][async][u6]") {
+    tests::TempWorkspace workspace;
+    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+
+    boost::asio::io_context io;
+    std::optional<util::Expected<harness::AsyncShellResult>> first;
+    std::optional<util::Expected<harness::AsyncShellResult>> second;
+    const auto started = std::chrono::steady_clock::now();
+
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            first = co_await env.run_shell("sleep 0.6; echo first", std::chrono::milliseconds(3000));
+            co_return;
+        },
+        boost::asio::detached);
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            second = co_await env.run_shell("sleep 0.6; echo second", std::chrono::milliseconds(3000));
+            co_return;
+        },
+        boost::asio::detached);
+
+    io.run();
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+
+    REQUIRE(first.has_value());
+    REQUIRE(second.has_value());
+    REQUIRE(*first);
+    REQUIRE(*second);
+    CHECK((*first)->output.find("first") != std::string::npos);
+    CHECK((*second)->output.find("second") != std::string::npos);
+    CHECK(elapsed < std::chrono::milliseconds(1100));
+}
+
+TEST_CASE("async local execution env times out shell commands without blocking the io context", "[harness][async][u6]") {
+    tests::TempWorkspace workspace;
+    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+    const auto started = std::chrono::steady_clock::now();
+
+    auto shell = run_awaitable<harness::AsyncShellResult>([&]() {
+        return env.run_shell("sleep 2", std::chrono::milliseconds(100));
+    });
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+
+    REQUIRE(shell);
+    CHECK(shell->timed_out);
+    CHECK(elapsed < std::chrono::milliseconds(1500));
+}
+
 TEST_CASE("async local execution env sanitizes shell environment through process capability", "[harness][async][u2]") {
 #if defined(__unix__) || defined(__APPLE__)
     setenv("OPENAI_API_KEY", "sk-test-secret", 1);
@@ -158,7 +209,9 @@ TEST_CASE("default process runner caps newline-free output without waiting for l
     request.max_output_bytes = 1024;
     request.max_output_lines = 2000;
 
-    auto result = runner.run(request);
+    auto result = run_awaitable<util::ProcessResult>([&]() {
+        return runner.run(std::move(request));
+    });
 
     REQUIRE(result);
     CHECK(result->output.size() <= 1100);

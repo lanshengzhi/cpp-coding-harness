@@ -1,8 +1,10 @@
 #pragma once
 
-#include <cch/ai/Message.hpp>
+#include "../../ai/Message.hpp"
+#include "../../util/JsonValue.hpp"
 
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -19,13 +21,26 @@ struct SessionMetadata {
 enum class SessionEntryKind {
     Header,
     Message,
+    ModelChange,
+    ThinkingLevelChange,
+    ActiveToolsChange,
+    Custom,
+    CustomMessage,
+    Label,
+    Compaction,
+    BranchSummary,
+    SessionInfo,
+    Leaf,
     Unknown,
 };
 
 struct SessionEntry {
     SessionEntryKind kind{SessionEntryKind::Unknown};
     std::string entry_id;
-    ai::MessageVariant message;
+    std::optional<std::string> parent_id;
+    std::optional<std::string> leaf_id;
+    std::optional<ai::MessageVariant> message;
+    util::JsonValue payload;
     std::string raw_line;
 };
 
