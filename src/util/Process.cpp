@@ -3,7 +3,7 @@
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
+#include <boost/asio/deferred.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
@@ -14,6 +14,12 @@
 #include <chrono>
 #include <exception>
 #include <string>
+
+#if defined(__unix__) || defined(__APPLE__)
+#include <signal.h>
+#include <sys/types.h>
+#include <unistd.h>
+#endif
 
 namespace cch::util {
 namespace {
@@ -49,12 +55,11 @@ void append_limited(
     }
 }
 
-boost::asio::awaitable<void> drain_pipe(
+boost::asio::awaitable<OutputCapture> drain_pipe(
     boost::process::v1::async_pipe& pipe,
-    OutputCapture& capture,
     std::size_t max_bytes,
-    std::size_t max_lines,
-    bool& done) {
+    std::size_t max_lines) {
+    OutputCapture capture;
     std::array<char, 4096> buffer{};
     for (;;) {
         auto [ec, size] = co_await pipe.async_read_some(
@@ -69,13 +74,42 @@ boost::asio::awaitable<void> drain_pipe(
         }
         append_limited(capture, buffer.data(), size, max_bytes, max_lines);
     }
-    done = true;
+    co_return capture;
 }
 
 boost::asio::io_context& io_context_from_executor(const boost::asio::any_io_executor& executor) {
     auto& context = boost::asio::query(executor, boost::asio::execution::context);
     return static_cast<boost::asio::io_context&>(context);
 }
+
+class ChildGuard {
+public:
+    ChildGuard(boost::process::v1::child& child, boost::process::v1::group& group)
+        : child_(child), group_(group) {}
+
+    ~ChildGuard() {
+        if (!released_ && child_.running()) {
+            boost::system::error_code ignored;
+            group_.terminate(ignored);
+            child_.terminate(ignored);
+        }
+    }
+
+    ChildGuard(const ChildGuard&) = delete;
+    ChildGuard& operator=(const ChildGuard&) = delete;
+    ChildGuard(ChildGuard&&) = delete;
+    ChildGuard& operator=(ChildGuard&&) = delete;
+
+    void release() { released_ = true; }
+
+private:
+    boost::process::v1::child& child_;
+    boost::process::v1::group& group_;
+    bool released_{false};
+};
+
+constexpr std::chrono::milliseconds poll_interval{100};
+constexpr std::chrono::milliseconds sigkill_grace_period{100};
 
 } // namespace
 
@@ -106,27 +140,26 @@ boost::asio::awaitable<Expected<ProcessResult>> DefaultProcessRunner::run(Proces
             child_environment,
             process_group);
 
-        OutputCapture stdout_capture;
-        OutputCapture stderr_capture;
-        bool stdout_done = false;
-        bool stderr_done = false;
+        ChildGuard guard(child, process_group);
 
-        boost::asio::co_spawn(
+        auto stdout_drain = boost::asio::co_spawn(
             executor,
-            drain_pipe(stdout_pipe, stdout_capture, request.max_output_bytes, request.max_output_lines, stdout_done),
-            boost::asio::detached);
-        boost::asio::co_spawn(
+            drain_pipe(stdout_pipe, request.max_output_bytes, request.max_output_lines),
+            boost::asio::deferred);
+        auto stderr_drain = boost::asio::co_spawn(
             executor,
-            drain_pipe(stderr_pipe, stderr_capture, request.max_output_bytes, request.max_output_lines, stderr_done),
-            boost::asio::detached);
+            drain_pipe(stderr_pipe, request.max_output_bytes, request.max_output_lines),
+            boost::asio::deferred);
 
         ProcessResult result;
         const auto timeout_enabled = request.timeout.count() > 0;
-        const auto deadline = std::chrono::steady_clock::now() + request.timeout;
+        const auto start = std::chrono::steady_clock::now();
+        const auto deadline = start + request.timeout;
         boost::asio::steady_timer timer(executor);
 
         while (child.running()) {
-            if (timeout_enabled && std::chrono::steady_clock::now() >= deadline) {
+            auto now = std::chrono::steady_clock::now();
+            if (timeout_enabled && now >= deadline) {
                 result.timed_out = true;
                 boost::system::error_code ignored;
                 stdout_pipe.cancel();
@@ -135,28 +168,45 @@ boost::asio::awaitable<Expected<ProcessResult>> DefaultProcessRunner::run(Proces
                 child.terminate(ignored);
                 break;
             }
-            timer.expires_after(std::chrono::milliseconds(10));
+
+            auto sleep_ms = timeout_enabled
+                ? std::min(poll_interval, std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now))
+                : poll_interval;
+            timer.expires_after(sleep_ms);
             auto [ec] = co_await timer.async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
             if (ec && ec != boost::asio::error::operation_aborted) {
                 break;
             }
         }
 
-        while (child.running()) {
-            timer.expires_after(std::chrono::milliseconds(10));
-            co_await timer.async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
-        }
-        if (!result.timed_out) {
-            child.wait();
-        } else {
-            boost::system::error_code ignored;
-            child.wait(ignored);
+        if (result.timed_out) {
+            timer.expires_after(sigkill_grace_period);
+            auto [ec] = co_await timer.async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
+            (void)ec;
+            if (child.running()) {
+#if defined(__unix__) || defined(__APPLE__)
+                ::kill(child.id(), SIGKILL);
+#else
+                boost::system::error_code ignored;
+                process_group.terminate(ignored);
+                child.terminate(ignored);
+#endif
+            }
         }
 
-        while (!stdout_done || !stderr_done) {
-            timer.expires_after(std::chrono::milliseconds(1));
-            co_await timer.async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
+        OutputCapture stdout_capture = co_await std::move(stdout_drain);
+        OutputCapture stderr_capture = co_await std::move(stderr_drain);
+
+        if (child.joinable()) {
+            if (result.timed_out) {
+                boost::system::error_code ignored;
+                child.wait(ignored);
+            } else {
+                child.wait();
+            }
         }
+
+        guard.release();
 
         result.exit_code = child.exit_code();
         result.output = stdout_capture.data + stderr_capture.data;

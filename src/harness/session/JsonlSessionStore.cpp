@@ -455,21 +455,54 @@ util::Expected<LoadedSession> JsonlSessionStore::load(const std::filesystem::pat
 }
 
 util::ExpectedVoid JsonlSessionStore::append(const ai::MessageVariant& message) {
-    std::ofstream output(path_, std::ios::binary | std::ios::app);
-    if (!output) {
-        return std::unexpected(session_error("could not append to session file"));
-    }
     auto redacted = redacted_message(message);
     auto entry_json = util::write_json(to_dto("m" + std::to_string(next_entry_id_), redacted));
     if (!entry_json) {
         return std::unexpected(entry_json.error());
     }
-    output << *entry_json << '\n';
+    const auto line = *entry_json + '\n';
+
+#if defined(__unix__) || defined(__APPLE__)
+    int flags = O_WRONLY | O_APPEND | O_CREAT;
+#ifdef O_NOFOLLOW
+    flags |= O_NOFOLLOW;
+#endif
+    int fd = ::open(path_.c_str(), flags, S_IRUSR | S_IWUSR);
+    if (fd == -1) {
+        return std::unexpected(session_error("could not append to session file", std::strerror(errno)));
+    }
+    const char* data = line.data();
+    std::size_t remaining = line.size();
+    while (remaining > 0) {
+        ssize_t written = ::write(fd, data, remaining);
+        if (written < 0) {
+            const auto message = std::string(std::strerror(errno));
+            ::close(fd);
+            return std::unexpected(session_error("could not write session entry", message));
+        }
+        data += written;
+        remaining -= static_cast<std::size_t>(written);
+    }
+    if (::fsync(fd) != 0) {
+        const auto message = std::string(std::strerror(errno));
+        ::close(fd);
+        return std::unexpected(session_error("could not persist session entry", message));
+    }
+    if (::close(fd) != 0) {
+        return std::unexpected(session_error("could not close session file", std::strerror(errno)));
+    }
+#else
+    std::ofstream output(path_, std::ios::binary | std::ios::app);
+    if (!output) {
+        return std::unexpected(session_error("could not append to session file"));
+    }
+    output << line;
     output.flush();
     output.close();
     if (!output) {
         return std::unexpected(session_error("could not persist session entry"));
     }
+#endif
     ++next_entry_id_;
     return {};
 }
