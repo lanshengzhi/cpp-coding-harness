@@ -14,6 +14,7 @@ option(CCH_BUILD_TESTS "Build tests" ON)
 
 find_package(Boost REQUIRED COMPONENTS system filesystem)
 find_package(OpenSSL REQUIRED)
+find_package(CLI11 CONFIG REQUIRED)
 find_package(glaze CONFIG REQUIRED)
 
 add_library(cch_util INTERFACE)
@@ -132,7 +133,7 @@ target_link_libraries(cpp_harness_lib
 )
 
 add_executable(cpp_harness src/main.cpp)
-target_link_libraries(cpp_harness PRIVATE cpp_harness_lib)
+target_link_libraries(cpp_harness PRIVATE cpp_harness_lib CLI11::CLI11)
 target_compile_options(cpp_harness PRIVATE -Wall -Wextra -Wpedantic)
 
 if(CCH_BUILD_TESTS)
