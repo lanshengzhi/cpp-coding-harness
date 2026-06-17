@@ -16,36 +16,120 @@ find_package(Boost REQUIRED COMPONENTS system filesystem)
 find_package(OpenSSL REQUIRED)
 find_package(glaze CONFIG REQUIRED)
 
-add_library(cpp_harness_lib
-    src/AsyncCliRuntime.cpp
-    src/agent/AgentLoop.cpp
+add_library(cch_util INTERFACE)
+target_include_directories(cch_util
+    INTERFACE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+target_link_libraries(cch_util
+    INTERFACE
+        glaze::glaze
+)
+
+add_library(cch_ai
     src/ai/providers/BoostBeastStreamTransport.cpp
     src/ai/providers/OpenAIChatClient.cpp
     src/ai/providers/SseParser.cpp
-    src/harness/AsyncLocalExecutionEnv.cpp
-    src/harness/LocalExecutionEnv.cpp
-    src/harness/session/JsonlSessionStore.cpp
-    src/tools/AsyncToolFactories.cpp
 )
-
-target_include_directories(cpp_harness_lib
+target_include_directories(cch_ai
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-
-target_link_libraries(cpp_harness_lib
+target_link_libraries(cch_ai
     PUBLIC
-        glaze::glaze
+        cch_util
         Boost::system
-        Boost::filesystem
     PRIVATE
         OpenSSL::SSL
         OpenSSL::Crypto
 )
+target_compile_options(cch_ai PRIVATE -Wall -Wextra -Wpedantic)
 
-target_compile_options(cpp_harness_lib PRIVATE -Wall -Wextra -Wpedantic)
+add_library(cch_harness
+    src/harness/AsyncLocalExecutionEnv.cpp
+    src/harness/LocalExecutionEnv.cpp
+    src/harness/session/JsonlSessionStore.cpp
+)
+target_include_directories(cch_harness
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_link_libraries(cch_harness
+    PUBLIC
+        cch_ai
+        cch_util
+        Boost::system
+        Boost::filesystem
+)
+target_compile_options(cch_harness PRIVATE -Wall -Wextra -Wpedantic)
+
+add_library(cch_agent
+    src/agent/AgentLoop.cpp
+)
+target_include_directories(cch_agent
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_link_libraries(cch_agent
+    PUBLIC
+        cch_ai
+        cch_util
+        Boost::system
+)
+target_compile_options(cch_agent PRIVATE -Wall -Wextra -Wpedantic)
+
+add_library(cch_tools
+    src/tools/AsyncToolFactories.cpp
+)
+target_include_directories(cch_tools
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_link_libraries(cch_tools
+    PUBLIC
+        cch_agent
+        cch_harness
+        cch_ai
+        cch_util
+        Boost::system
+)
+target_compile_options(cch_tools PRIVATE -Wall -Wextra -Wpedantic)
+
+add_library(cch_coding_agent_runtime
+    src/AsyncCliRuntime.cpp
+)
+target_include_directories(cch_coding_agent_runtime
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_link_libraries(cch_coding_agent_runtime
+    PUBLIC
+        cch_agent
+        cch_ai
+        cch_harness
+        cch_tools
+        cch_util
+        Boost::system
+        Boost::filesystem
+)
+target_compile_options(cch_coding_agent_runtime PRIVATE -Wall -Wextra -Wpedantic)
+
+# Transitional aggregate used by the executable/tests while the runtime split lands.
+add_library(cpp_harness_lib INTERFACE)
+target_link_libraries(cpp_harness_lib
+    INTERFACE
+        cch_coding_agent_runtime
+)
 
 add_executable(cpp_harness src/main.cpp)
 target_link_libraries(cpp_harness PRIVATE cpp_harness_lib)
@@ -56,6 +140,7 @@ if(CCH_BUILD_TESTS)
     add_executable(cpp_harness_tests
         tests/TestMain.cpp
         tests/architecture/ArchitectureSurfaceScanTest.cpp
+        tests/architecture/CMakeDependencyTest.cpp
         tests/architecture/MoveOnlyCallbackTest.cpp
         tests/architecture/PublicHeaderBoundaryTest.cpp
         tests/agent/AsyncAgentLoopTest.cpp
