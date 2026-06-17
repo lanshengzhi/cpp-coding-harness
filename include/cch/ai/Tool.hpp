@@ -59,6 +59,27 @@ struct JsonSchema {
         schema.description = std::move(description);
         return schema;
     }
+
+    [[nodiscard]] static JsonSchema number(std::optional<std::string> description = std::nullopt) {
+        JsonSchema schema;
+        schema.type = JsonSchemaType::Number;
+        schema.description = std::move(description);
+        return schema;
+    }
+
+    [[nodiscard]] static JsonSchema array(std::optional<std::string> description = std::nullopt) {
+        JsonSchema schema;
+        schema.type = JsonSchemaType::Array;
+        schema.description = std::move(description);
+        return schema;
+    }
+
+    [[nodiscard]] static JsonSchema null(std::optional<std::string> description = std::nullopt) {
+        JsonSchema schema;
+        schema.type = JsonSchemaType::Null;
+        schema.description = std::move(description);
+        return schema;
+    }
 };
 
 struct Tool {

@@ -150,7 +150,7 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
 
         beast::flat_buffer buffer;
         http::response_parser<http::buffer_body> parser;
-        parser.body_limit((std::numeric_limits<std::uint64_t>::max)());
+        parser.body_limit(16 * 1024 * 1024); // 16 MiB
         co_await http::async_read_header(stream, buffer, parser, asio::use_awaitable);
 
         StreamResponse response;

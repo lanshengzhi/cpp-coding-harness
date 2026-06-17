@@ -274,12 +274,12 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
                                 return std::unexpected(emitted.error());
                             }
                         }
-                        if (call_delta.id) {
+                        if (call_delta.id && call.id.empty()) {
                             call.id = *call_delta.id;
                         }
                         if (call_delta.function) {
-                            if (call_delta.function->name) {
-                                call.name += *call_delta.function->name;
+                            if (call_delta.function->name && call.name.empty()) {
+                                call.name = *call_delta.function->name;
                             }
                             if (call_delta.function->arguments) {
                                 call.raw_arguments += *call_delta.function->arguments;
