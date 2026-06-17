@@ -142,8 +142,8 @@ TEST_CASE("async tool registry owns tools and returns deterministic definitions"
     auto* alpha_ptr = alpha.get();
 
     agent::AsyncToolRegistry registry;
-    registry.add(std::move(zed));
-    registry.add(std::move(alpha));
+    REQUIRE(registry.add(std::move(zed)));
+    REQUIRE(registry.add(std::move(alpha)));
 
     CHECK(registry.find("zed") == zed_ptr);
     CHECK(registry.find("alpha") == alpha_ptr);
@@ -186,11 +186,11 @@ TEST_CASE("async agent loop forwards thinking and tool-call stream lifecycle eve
     client.responses.push_back(ai::assistant_text_message("done"));
 
     agent::AsyncToolRegistry registry;
-    registry.add(std::make_unique<FakeTool>(ai::Tool{
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{
         "read_file",
         "Read a workspace file",
         ai::JsonSchema::object({{"path", ai::JsonSchema::string("file path")}}, {"path"}),
-    }));
+    })));
     agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{4, "gpt-test"});
 
     auto run = run_loop(loop, "read");
@@ -218,7 +218,7 @@ TEST_CASE("async agent loop executes tool calls and continues with tool result c
     });
     auto* tool_ptr = tool.get();
     agent::AsyncToolRegistry registry;
-    registry.add(std::move(tool));
+    REQUIRE(registry.add(std::move(tool)));
     agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{4, "gpt-test"});
 
     auto run = run_loop(loop, "read");
@@ -245,7 +245,7 @@ TEST_CASE("async agent loop turns malformed tool arguments into error tool resul
     client.responses.push_back(tool_call_response("not-json"));
     client.responses.push_back(ai::assistant_text_message("saw error"));
     agent::AsyncToolRegistry registry;
-    registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()}));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
     agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{4, "gpt-test"});
 
     auto run = run_loop(loop, "read");
@@ -262,7 +262,7 @@ TEST_CASE("async agent loop reports max turn exhaustion", "[agent][async][u5]") 
     FakeStreamingClient client;
     client.responses.push_back(tool_call_response());
     agent::AsyncToolRegistry registry;
-    registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()}));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
     agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{1, "gpt-test"});
 
     auto run = run_loop(loop, "read");

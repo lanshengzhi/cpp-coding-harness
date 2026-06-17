@@ -18,11 +18,12 @@ public:
     AsyncToolRegistry(const AsyncToolRegistry&) = delete;
     AsyncToolRegistry& operator=(const AsyncToolRegistry&) = delete;
 
-    void add(std::unique_ptr<AsyncAgentTool> tool) {
+    [[nodiscard]] util::ExpectedVoid add(std::unique_ptr<AsyncAgentTool> tool) {
         if (!tool) {
-            return;
+            return std::unexpected(util::make_error(util::ErrorCode::Validation, "cannot add null tool to registry"));
         }
         tools_[tool->definition().name] = std::move(tool);
+        return {};
     }
 
     [[nodiscard]] AsyncAgentTool* find(const std::string& name) const {

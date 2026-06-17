@@ -29,10 +29,18 @@ util::Expected<RuntimeServices> make_runtime_services(const RuntimeServicesConfi
         config.workspace,
         config.enable_bash,
         std::vector<std::string>{config.api_key_env});
-    services.tools.add(tools::make_async_read_file_tool(services.env));
-    services.tools.add(tools::make_async_write_file_tool(services.env));
-    services.tools.add(tools::make_async_edit_file_tool(services.env));
-    services.tools.add(tools::make_async_bash_tool(services.env));
+    if (auto added = services.tools.add(tools::make_async_read_file_tool(services.env)); !added) {
+        return std::unexpected(added.error());
+    }
+    if (auto added = services.tools.add(tools::make_async_write_file_tool(services.env)); !added) {
+        return std::unexpected(added.error());
+    }
+    if (auto added = services.tools.add(tools::make_async_edit_file_tool(services.env)); !added) {
+        return std::unexpected(added.error());
+    }
+    if (auto added = services.tools.add(tools::make_async_bash_tool(services.env)); !added) {
+        return std::unexpected(added.error());
+    }
     return services;
 }
 

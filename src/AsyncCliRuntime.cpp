@@ -65,9 +65,13 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         boost::asio::co_spawn(
             io,
             [&]() -> boost::asio::awaitable<void> {
-                result = co_await loop.continue_with(history, prompt, [](const agent::AgentLifecycleEvent& event) {
-                    coding_agent::runtime::print_agent_event(event, std::cout);
-                    return util::ExpectedVoid{};
+                result = co_await loop.continue_with(history, prompt, [](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+                    try {
+                        coding_agent::runtime::print_agent_event(event, std::cout);
+                        return util::ExpectedVoid{};
+                    } catch (const std::exception& e) {
+                        return std::unexpected(util::make_error(util::ErrorCode::Tool, "event printer failed", e.what()));
+                    }
                 });
                 co_return;
             },

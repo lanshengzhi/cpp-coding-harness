@@ -55,6 +55,10 @@ void erase_first(std::vector<std::string>& values, const std::string& value) {
     }
 }
 
+void sync_state(AgentState& state, const ai::AiContext& context) {
+    state.messages = context.messages;
+}
+
 } // namespace
 
 AsyncAgentLoop::AsyncAgentLoop(ai::StreamingChatClient& client, AsyncToolRegistry registry, AsyncAgentOptions options)
@@ -77,12 +81,12 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
 
     AgentState state;
     state.model = options_.model;
-    state.messages = context.messages;
+    sync_state(state, context);
 
     CCH_TRY_VOID(emit(sink, AgentStartEvent{user_prompt}));
 
     context.messages.push_back(ai::MessageVariant{ai::user_text_message(std::move(user_prompt))});
-    state.messages = context.messages;
+    sync_state(state, context);
 
     for (int turn = 1; turn <= options_.max_turns; ++turn) {
         CCH_TRY_VOID(emit(sink, TurnStartEvent{turn}));
@@ -160,7 +164,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
 
         CCH_TRY_VOID(emit(sink, MessageEndEvent{turn, *assistant}));
         context.messages.push_back(ai::MessageVariant{*assistant});
-        state.messages = context.messages;
+        sync_state(state, context);
         state.streaming_message = *assistant;
 
         auto calls = tool_calls(*assistant);
@@ -209,7 +213,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             erase_first(state.active_tool_names, call.name);
             erase_first(state.pending_tool_call_ids, call.id);
             context.messages.push_back(ai::MessageVariant{std::move(tool_result)});
-            state.messages = context.messages;
+            sync_state(state, context);
         }
 
         CCH_TRY_VOID(emit(sink, TurnEndEvent{turn, ai::AssistantStopReason::ToolUse}));
