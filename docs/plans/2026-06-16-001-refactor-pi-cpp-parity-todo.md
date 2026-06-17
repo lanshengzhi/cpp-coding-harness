@@ -52,14 +52,16 @@ The current C++ project already covers the core loop: provider request, tool cal
 
 ### T0. Reference Contract Inventory
 
-- [ ] Build a contract inventory that maps pi public types, events, commands, and session entries to existing or missing C++ equivalents.
-  - **References:** `pi:packages/ai/src/types.ts`, `pi:packages/agent/src/types.ts`, `pi:packages/agent/src/harness/types.ts`, `pi:packages/coding-agent/docs/session-format.md`.
-  - **Output:** a small matrix in `docs/plans/` or an update to this TODO document.
+- [x] Build a contract inventory that maps pi public types, events, commands, and session entries to existing or missing C++ equivalents.
+  - **References:** `pi:packages/ai/src/types.ts`, `pi:packages/ai/src/stream.ts`, `pi:packages/ai/src/api-registry.ts`, `pi:packages/ai/src/models.ts`, `pi:packages/agent/src/types.ts`, `pi:packages/agent/src/harness/types.ts`, `pi:packages/coding-agent/docs/session-format.md`, `pi:packages/coding-agent/src/cli/args.ts`, `pi:packages/coding-agent/src/core/sdk.ts`.
+  - **Output:** `docs/plans/2026-06-16-003-refactor-pi-cpp-contract-inventory.md`.
   - **Done when:** every future TODO item can cite either an existing C++ contract or a named missing contract.
-- [ ] Classify pi features into MVP parity, near-term parity, and intentionally deferred parity.
+- [x] Classify pi features into MVP parity, near-term parity, and intentionally deferred parity.
   - **Done when:** README and this TODO agree on which gaps are intentional: full TUI, extensions, package installation, OAuth, multi-provider registry, session tree, compaction, SDK/RPC, and sandbox/container integration.
-- [ ] Add a recurring implementation checklist for each future parity slice.
+  - **Result:** see `docs/plans/2026-06-16-003-refactor-pi-cpp-contract-inventory.md` for per-contract classification and the intentional deferrals summary.
+- [x] Add a recurring implementation checklist for each future parity slice.
   - **Done when:** each slice starts by reading the relevant `pi:` contract, adding tests, implementing the smallest C++ seam, and updating docs only if behavior or public boundaries change.
+  - **Result:** see the recurring checklist in `docs/plans/2026-06-16-003-refactor-pi-cpp-contract-inventory.md`.
 
 ### T1. Package-Style Library Boundaries
 
