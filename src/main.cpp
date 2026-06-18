@@ -93,7 +93,7 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     session_option->excludes(resume_option);
     resume_option->excludes(session_option);
     app.add_option("--max-turns", max_turns_option, "Maximum model turns per prompt")
-        ->check(CLI::PositiveNumber);
+        ->check(CLI::Range(1, 64));
     app.add_option("--model", config.model, "Provider model name")->capture_default_str();
     app.add_option("--base-url", config.base_url, "OpenAI-compatible base URL")->capture_default_str();
     app.add_option("--api-key-env", config.api_key_env, "Environment variable containing API key")->capture_default_str();

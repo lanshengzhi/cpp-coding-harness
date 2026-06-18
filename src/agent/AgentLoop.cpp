@@ -2,7 +2,8 @@
 
 #include "../../src/util/ExpectedMacros.hpp"
 
-#include "../../include/cch/ai/glaze/AiJson.hpp"
+#include "../../include/cch/ai/Content.hpp"
+#include "../../include/cch/ai/Usage.hpp"
 #include "../../include/cch/util/Json.hpp"
 
 #include <algorithm>
@@ -10,16 +11,6 @@
 
 namespace cch::agent {
 namespace {
-
-[[nodiscard]] std::string text_from_content(const std::vector<ai::Content>& content) {
-    std::string text;
-    for (const auto& block : content) {
-        if (const auto* text_block = std::get_if<ai::TextContent>(&block)) {
-            text += text_block->text;
-        }
-    }
-    return text;
-}
 
 [[nodiscard]] ai::ToolResultMessage error_tool_result(
     const ai::ToolCallContent& call,
@@ -81,12 +72,10 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
 
     AgentState state;
     state.model = options_.model;
-    sync_state(state, context);
 
     CCH_TRY_VOID(emit(sink, AgentStartEvent{user_prompt}));
 
     context.messages.push_back(ai::MessageVariant{ai::user_text_message(std::move(user_prompt))});
-    sync_state(state, context);
 
     for (int turn = 1; turn <= options_.max_turns; ++turn) {
         CCH_TRY_VOID(emit(sink, TurnStartEvent{turn}));
@@ -164,7 +153,6 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
 
         CCH_TRY_VOID(emit(sink, MessageEndEvent{turn, *assistant}));
         context.messages.push_back(ai::MessageVariant{*assistant});
-        sync_state(state, context);
         state.streaming_message = *assistant;
 
         auto calls = tool_calls(*assistant);
@@ -177,7 +165,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         if (calls.empty()) {
             state.streaming_message.reset();
             CCH_TRY_VOID(emit(sink, TurnEndEvent{turn, assistant->stop_reason}));
-            CCH_TRY_VOID(emit(sink, AgentEndEvent{true, ai::glaze::stop_reason_to_json(assistant->stop_reason)}));
+            CCH_TRY_VOID(emit(sink, AgentEndEvent{true, ai::stop_reason_to_string(assistant->stop_reason)}));
+            sync_state(state, context);
             co_return AsyncAgentRunResult{std::move(context), assistant->stop_reason, turn, std::move(state)};
         }
 
@@ -213,7 +202,6 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             erase_first(state.active_tool_names, call.name);
             erase_first(state.pending_tool_call_ids, call.id);
             context.messages.push_back(ai::MessageVariant{std::move(tool_result)});
-            sync_state(state, context);
         }
 
         CCH_TRY_VOID(emit(sink, TurnEndEvent{turn, ai::AssistantStopReason::ToolUse}));

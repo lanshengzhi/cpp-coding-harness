@@ -2,6 +2,7 @@
 
 #include "../../../src/util/ExpectedMacros.hpp"
 #include "../../../include/cch/ai/ChatClient.hpp"
+#include "../../../include/cch/ai/Content.hpp"
 #include "../../../include/cch/util/Json.hpp"
 
 #include <memory>
@@ -14,14 +15,10 @@
 namespace cch::ai::providers {
 namespace {
 
-std::string text_from_content(const std::vector<ai::Content>& content) {
-    std::string text;
-    for (const auto& block : content) {
-        if (const auto* text_block = std::get_if<ai::TextContent>(&block)) {
-            text += text_block->text;
-        }
-    }
-    return text;
+[[nodiscard]] util::Expected<std::string> make_tool_arguments(std::string key, std::string value) {
+    util::JsonValue::object_t object;
+    object.emplace(std::move(key), util::JsonValue{std::move(value)});
+    return util::write_json(util::JsonValue{std::move(object)});
 }
 
 class ScriptedStreamingFakeClient final : public ai::StreamingChatClient {
@@ -36,7 +33,7 @@ public:
 
         if (!request.context.messages.empty()) {
             if (const auto* last_tool = std::get_if<ai::ToolResultMessage>(&request.context.messages.back())) {
-                assistant = ai::assistant_text_message("fake observed: " + text_from_content(last_tool->content));
+                assistant = ai::assistant_text_message("fake observed: " + ai::text_from_content(last_tool->content));
                 assistant.provider = "fake";
                 assistant.api = "scripted-fake";
                 co_return co_await emit_text(std::move(assistant), sink);
@@ -46,19 +43,22 @@ public:
         std::string prompt;
         for (auto it = request.context.messages.rbegin(); it != request.context.messages.rend(); ++it) {
             if (const auto* user = std::get_if<ai::UserMessage>(&*it)) {
-                prompt = text_from_content(user->content);
+                prompt = ai::text_from_content(user->content);
                 break;
             }
         }
 
         if (prompt.rfind("read ", 0) == 0) {
             const auto path = prompt.substr(5);
-            auto raw = "{\"path\":\"" + path + "\"}";
-            auto args = util::read_json<util::JsonValue>(raw);
+            auto raw = make_tool_arguments("path", path);
+            if (!raw) {
+                co_return std::unexpected(raw.error());
+            }
+            auto args = util::read_json<util::JsonValue>(*raw);
             ai::ToolCallContent call;
             call.id = "fake-read-1";
             call.name = "read_file";
-            call.raw_arguments = raw;
+            call.raw_arguments = *raw;
             if (args) {
                 call.arguments = *args;
             }
@@ -72,12 +72,15 @@ public:
         }
         if (prompt.rfind("bash ", 0) == 0) {
             const auto command = prompt.substr(5);
-            auto raw = "{\"command\":\"" + command + "\"}";
-            auto args = util::read_json<util::JsonValue>(raw);
+            auto raw = make_tool_arguments("command", command);
+            if (!raw) {
+                co_return std::unexpected(raw.error());
+            }
+            auto args = util::read_json<util::JsonValue>(*raw);
             ai::ToolCallContent call;
             call.id = "fake-bash-1";
             call.name = "bash";
-            call.raw_arguments = raw;
+            call.raw_arguments = *raw;
             if (args) {
                 call.arguments = *args;
             }
@@ -101,7 +104,7 @@ private:
         ai::AssistantMessage assistant,
         ai::AssistantEventSink& sink) {
         if (sink && !assistant.content.empty()) {
-            auto text = text_from_content(assistant.content);
+            auto text = ai::text_from_content(assistant.content);
             CCH_TRY_VOID(sink(ai::TextDeltaEvent{0, text, assistant}));
         }
         co_return assistant;

@@ -5,16 +5,6 @@
 
 namespace cch::coding_agent::runtime {
 
-std::string text_from_content(const std::vector<ai::Content>& content) {
-    std::string text;
-    for (const auto& block : content) {
-        if (const auto* text_block = std::get_if<ai::TextContent>(&block)) {
-            text += text_block->text;
-        }
-    }
-    return text;
-}
-
 void print_agent_event(const agent::AgentLifecycleEvent& event, std::ostream& out) {
     if (const auto* turn = std::get_if<agent::TurnStartEvent>(&event)) {
         out << "[model-request] turn " << turn->turn << '\n';

@@ -1,6 +1,7 @@
 #include "AsyncCliRuntime.hpp"
 
 #include "../include/cch/agent/AgentLoop.hpp"
+#include "../include/cch/ai/Content.hpp"
 #include "coding_agent/runtime/EventPrinter.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
@@ -90,7 +91,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             }
         }
         const auto& final_message = std::get<ai::AssistantMessage>(history.back());
-        std::cout << coding_agent::runtime::text_from_content(final_message.content) << '\n';
+        std::cout << ai::text_from_content(final_message.content) << '\n';
         return true;
     };
 

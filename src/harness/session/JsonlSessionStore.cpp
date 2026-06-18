@@ -245,9 +245,79 @@ void redact_content(ai::Content& content) {
     return redacted;
 }
 
-bool has_public_read(std::filesystem::perms mode) {
+[[maybe_unused]] bool has_public_read(std::filesystem::perms mode) {
     using std::filesystem::perms;
     return (mode & perms::others_read) != perms::none || (mode & perms::group_read) != perms::none;
+}
+
+#if defined(__unix__) || defined(__APPLE__)
+[[nodiscard]] int open_session_path(const std::filesystem::path& path, int flags, int mode = 0) {
+    int final_flags = flags;
+#ifdef O_NOFOLLOW
+    final_flags |= O_NOFOLLOW;
+#endif
+    if (mode != 0) {
+        return ::open(path.c_str(), final_flags, mode);
+    }
+    return ::open(path.c_str(), final_flags);
+}
+
+[[nodiscard]] util::Expected<std::string> read_file_contents(int fd) {
+    std::string contents;
+    std::array<char, 8192> buffer{};
+    for (;;) {
+        ssize_t n = ::read(fd, buffer.data(), buffer.size());
+        if (n < 0) {
+            return std::unexpected(session_error("could not read session file", std::strerror(errno)));
+        }
+        if (n == 0) {
+            break;
+        }
+        contents.append(buffer.data(), static_cast<std::size_t>(n));
+    }
+    return contents;
+}
+
+[[nodiscard]] util::ExpectedVoid set_fd_private_permissions(int fd) {
+    struct stat st {};
+    if (::fstat(fd, &st) != 0) {
+        return std::unexpected(session_error("could not inspect session permissions", std::strerror(errno)));
+    }
+    if ((st.st_mode & (S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)) != 0) {
+        return std::unexpected(session_error("session file is readable by group/others", "refusing to load sensitive transcript"));
+    }
+    if (::fchmod(fd, S_IRUSR | S_IWUSR) != 0) {
+        return std::unexpected(session_error("could not set owner-only session permissions", std::strerror(errno)));
+    }
+    return {};
+}
+#endif
+
+[[nodiscard]] bool parent_path_contains_symlink(const std::filesystem::path& path) {
+    auto parent = path.parent_path();
+    if (parent.empty()) {
+        return false;
+    }
+    std::error_code ec;
+    std::filesystem::path cursor;
+    for (const auto& part : parent) {
+        if (part == "/" || part == "." || part.empty()) {
+            continue;
+        }
+        if (part == "..") {
+            // Should already be normalized by caller; treat as suspicious.
+            return true;
+        }
+        cursor /= part;
+        auto status = std::filesystem::symlink_status(cursor, ec);
+        if (ec) {
+            return status.type() != std::filesystem::file_type::not_found;
+        }
+        if (std::filesystem::is_symlink(status)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 util::ExpectedVoid write_new_file_exclusive(const std::filesystem::path& path, const std::string& content) {
@@ -316,6 +386,9 @@ util::Expected<JsonlSessionStore> JsonlSessionStore::create_new(const std::files
     }
     std::error_code ec;
     if (!path.parent_path().empty()) {
+        if (parent_path_contains_symlink(path)) {
+            return std::unexpected(session_error("session parent path contains a symlink", "refusing to create session directory through a symlink"));
+        }
         std::filesystem::create_directories(path.parent_path(), ec);
         if (ec) {
             return std::unexpected(session_error("could not create session directory", ec.message()));
@@ -365,6 +438,20 @@ util::Expected<LoadedSession> JsonlSessionStore::load(const std::filesystem::pat
     if (!validation) {
         return std::unexpected(validation.error());
     }
+#if defined(__unix__) || defined(__APPLE__)
+    int fd = open_session_path(path, O_RDONLY);
+    if (fd == -1) {
+        return std::unexpected(session_error("could not open session file", std::strerror(errno)));
+    }
+    auto fd_guard = std::unique_ptr<int, void (*)(int*)>(new int(fd), [](int* p) { if (p && *p != -1) ::close(*p); delete p; });
+    if (auto perms = set_fd_private_permissions(fd); !perms) {
+        return std::unexpected(perms.error());
+    }
+    auto contents = read_file_contents(fd);
+    if (!contents) {
+        return std::unexpected(contents.error());
+    }
+#else
     if (auto perms = ensure_private_permissions(path, true); !perms) {
         return std::unexpected(perms.error());
     }
@@ -372,12 +459,15 @@ util::Expected<LoadedSession> JsonlSessionStore::load(const std::filesystem::pat
     if (!input) {
         return std::unexpected(session_error("could not open session file"));
     }
+    std::string contents((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+#endif
 
     LoadedSession loaded;
     std::string line;
     std::size_t line_number = 0;
     bool saw_header = false;
-    while (std::getline(input, line)) {
+    std::istringstream stream(*contents);
+    while (std::getline(stream, line)) {
         ++line_number;
         if (line.empty()) {
             continue;
@@ -445,9 +535,13 @@ util::Expected<LoadedSession> JsonlSessionStore::load(const std::filesystem::pat
             }
         }
     }
+#if defined(__unix__) || defined(__APPLE__)
+    // read_file_contents returns full content; stream parsing errors are caught above.
+#else
     if (input.bad()) {
         return std::unexpected(session_error("could not read complete session file"));
     }
+#endif
     if (!saw_header) {
         return std::unexpected(session_error("session header is missing"));
     }
@@ -522,6 +616,24 @@ util::ExpectedVoid JsonlSessionStore::validate_session_path_for_open(const std::
 }
 
 util::ExpectedVoid JsonlSessionStore::ensure_private_permissions(const std::filesystem::path& path, bool existing) {
+#if defined(__unix__) || defined(__APPLE__)
+    int fd = open_session_path(path, O_RDONLY);
+    if (fd == -1) {
+        return std::unexpected(session_error("could not open session file for permission check", std::strerror(errno)));
+    }
+    auto fd_guard = std::unique_ptr<int, void (*)(int*)>(new int(fd), [](int* p) { if (p && *p != -1) ::close(*p); delete p; });
+    if (auto perms = set_fd_private_permissions(fd); !perms) {
+        if (!existing) {
+            // When creating a new file, permission errors are still failures but the message above assumes "existing".
+            auto detail = perms.error().detail.empty()
+                ? "could not set owner-only session permissions"
+                : perms.error().detail;
+            return std::unexpected(session_error("could not set owner-only session permissions", detail));
+        }
+        return std::unexpected(perms.error());
+    }
+    return {};
+#else
     std::error_code ec;
     auto status = std::filesystem::status(path, ec);
     if (ec) {
@@ -530,14 +642,9 @@ util::ExpectedVoid JsonlSessionStore::ensure_private_permissions(const std::file
     if (existing && has_public_read(status.permissions())) {
         return std::unexpected(session_error("session file is readable by group/others", "refusing to load sensitive transcript"));
     }
-#if defined(__unix__) || defined(__APPLE__)
-    if (::chmod(path.c_str(), S_IRUSR | S_IWUSR) != 0) {
-        return std::unexpected(session_error("could not set owner-only session permissions"));
-    }
-#else
     (void)existing;
-#endif
     return {};
+#endif
 }
 
 } // namespace cch::harness::session

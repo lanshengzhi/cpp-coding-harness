@@ -4,6 +4,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <system_error>
 
@@ -31,7 +32,7 @@ inline util::ExpectedVoid write_atomic_file(const std::filesystem::path& target,
 #if defined(__unix__) || defined(__APPLE__)
     mode_t mode = S_IRUSR | S_IWUSR;
     struct stat existing_status {};
-    if (::stat(target.c_str(), &existing_status) == 0) {
+    if (::lstat(target.c_str(), &existing_status) == 0) {
         mode = existing_status.st_mode & 0777;
     }
 #endif
@@ -56,11 +57,26 @@ inline util::ExpectedVoid write_atomic_file(const std::filesystem::path& target,
     }
 
 #if defined(__unix__) || defined(__APPLE__)
-    int flags = O_WRONLY | O_CREAT | O_EXCL;
+    auto parent = target.parent_path();
+    if (parent.empty()) {
+        parent = ".";
+    }
+    int dir_flags = O_RDONLY | O_DIRECTORY | O_CLOEXEC;
+#ifdef O_NOFOLLOW
+    dir_flags |= O_NOFOLLOW;
+#endif
+    int dir_fd = ::open(parent.c_str(), dir_flags);
+    if (dir_fd == -1) {
+        return std::unexpected(write_error("could not open target parent directory: " + std::string(std::strerror(errno))));
+    }
+    auto dir_guard = std::unique_ptr<int, void (*)(int*)>(new int(dir_fd), [](int* p) { if (p && *p != -1) ::close(*p); delete p; });
+
+    auto temp_filename = temp.filename().string();
+    int flags = O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC;
 #ifdef O_NOFOLLOW
     flags |= O_NOFOLLOW;
 #endif
-    int fd = ::open(temp.c_str(), flags, mode);
+    int fd = ::openat(dir_fd, temp_filename.c_str(), flags, mode);
     if (fd == -1) {
         return std::unexpected(write_error("could not create temporary file: " + std::string(std::strerror(errno))));
     }
@@ -71,7 +87,7 @@ inline util::ExpectedVoid write_atomic_file(const std::filesystem::path& target,
         if (written < 0) {
             const auto message = std::string(std::strerror(errno));
             ::close(fd);
-            std::filesystem::remove(temp, ec);
+            ::unlinkat(dir_fd, temp_filename.c_str(), 0);
             return std::unexpected(write_error("could not write temporary file: " + message));
         }
         data += written;
@@ -80,13 +96,20 @@ inline util::ExpectedVoid write_atomic_file(const std::filesystem::path& target,
     if (::fsync(fd) != 0) {
         const auto message = std::string(std::strerror(errno));
         ::close(fd);
-        std::filesystem::remove(temp, ec);
+        ::unlinkat(dir_fd, temp_filename.c_str(), 0);
         return std::unexpected(write_error("could not flush temporary file: " + message));
     }
     if (::close(fd) != 0) {
         const auto message = std::string(std::strerror(errno));
-        std::filesystem::remove(temp, ec);
+        ::unlinkat(dir_fd, temp_filename.c_str(), 0);
         return std::unexpected(write_error("could not close temporary file: " + message));
+    }
+
+    auto target_filename = target.filename().string();
+    if (::renameat(dir_fd, temp_filename.c_str(), dir_fd, target_filename.c_str()) != 0) {
+        const auto message = std::string(std::strerror(errno));
+        ::unlinkat(dir_fd, temp_filename.c_str(), 0);
+        return std::unexpected(write_error("could not replace target atomically: " + message));
     }
 #else
     std::ofstream output(temp, std::ios::binary | std::ios::trunc);
@@ -100,13 +123,13 @@ inline util::ExpectedVoid write_atomic_file(const std::filesystem::path& target,
         std::filesystem::remove(temp, ec);
         return std::unexpected(write_error("could not write temporary file"));
     }
-#endif
 
     std::filesystem::rename(temp, target, ec);
     if (ec) {
         std::filesystem::remove(temp, ec);
         return std::unexpected(write_error("could not replace target atomically: " + ec.message()));
     }
+#endif
     return {};
 }
 
