@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ChatClient.hpp"
+#include "providers/OpenAICompletionsCompat.hpp"
 
 #include "../util/Error.hpp"
 
@@ -20,6 +21,7 @@ struct ProviderFactoryContext {
     std::string api_key;
     std::string api_key_env{"OPENAI_API_KEY"};
     std::chrono::milliseconds timeout{30000};
+    cch::ai::providers::OpenAICompletionsCompat openai_compat;
 };
 
 using ProviderClient = std::unique_ptr<StreamingChatClient>;

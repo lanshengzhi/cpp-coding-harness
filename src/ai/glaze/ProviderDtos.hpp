@@ -32,8 +32,13 @@ struct ProviderToolCallDto {
 struct OpenAIChatMessageDto {
     std::string role;
     std::string content;
+    std::optional<std::string> name;
     std::optional<std::string> tool_call_id;
     std::optional<std::vector<ProviderToolCallDto>> tool_calls;
+};
+
+struct OpenAIStreamOptionsDto {
+    bool include_usage{true};
 };
 
 struct OpenAIChatRequestDto {
@@ -41,6 +46,14 @@ struct OpenAIChatRequestDto {
     std::vector<OpenAIChatMessageDto> messages;
     std::optional<std::vector<ProviderToolDto>> tools;
     bool stream{true};
+    std::optional<bool> store;
+    std::optional<std::string> reasoning_effort;
+    std::optional<std::string> reasoning;
+    std::optional<std::string> thinking;
+    std::optional<bool> enable_thinking;
+    std::optional<std::string> max_completion_tokens;
+    std::optional<std::string> max_tokens;
+    std::optional<OpenAIStreamOptionsDto> stream_options;
 };
 
 struct OpenAIStreamFunctionDeltaDto {

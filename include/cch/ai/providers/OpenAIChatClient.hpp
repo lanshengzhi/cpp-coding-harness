@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../ChatClient.hpp"
+#include "OpenAICompletionsCompat.hpp"
 #include "StreamTransport.hpp"
 
 #include <chrono>
@@ -17,6 +18,7 @@ struct OpenAIStreamConfig {
     std::string organization;
     std::string project;
     std::chrono::milliseconds timeout{30000};
+    OpenAICompletionsCompat compat;
 };
 
 class StreamingOpenAIChatClient final : public ai::StreamingChatClient {

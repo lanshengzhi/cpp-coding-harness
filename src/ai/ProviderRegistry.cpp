@@ -56,6 +56,7 @@ util::Expected<ProviderRegistry> make_default_provider_registry() {
             config.api_key_env = context.api_key_env;
             config.model = context.model;
             config.timeout = context.timeout;
+            config.compat = context.openai_compat;
             auto transport = std::make_shared<providers::BoostBeastStreamTransport>();
             std::unique_ptr<StreamingChatClient> client =
                 std::make_unique<providers::StreamingOpenAIChatClient>(transport, std::move(config));

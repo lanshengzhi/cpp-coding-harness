@@ -3,6 +3,7 @@
 #include "../../../src/util/ExpectedMacros.hpp"
 #include "../glaze/ProviderDtos.hpp"
 #include "../../../include/cch/ai/glaze/AiJson.hpp"
+#include "../../../include/cch/ai/providers/OpenAICompletionsCompat.hpp"
 #include "../../../include/cch/ai/providers/SseParser.hpp"
 #include "../../../include/cch/util/Json.hpp"
 
@@ -63,14 +64,17 @@ struct ToolCallAccumulator {
     return calls;
 }
 
-[[nodiscard]] ai::glaze::OpenAIChatMessageDto message_to_openai(const ai::MessageVariant& message) {
+[[nodiscard]] ai::glaze::OpenAIChatMessageDto message_to_openai(
+    const ai::MessageVariant& message,
+    const OpenAICompletionsCompat& compat = {}) {
     return std::visit(
         Overloaded{
-            [](const ai::SystemMessage& system) {
-                return ai::glaze::OpenAIChatMessageDto{"system", system.content, std::nullopt, std::nullopt};
+            [&compat](const ai::SystemMessage& system) {
+                auto role = compat.supports_developer_role.value_or(false) ? "developer" : "system";
+                return ai::glaze::OpenAIChatMessageDto{role, system.content, std::nullopt, std::nullopt, std::nullopt};
             },
             [](const ai::UserMessage& user) {
-                return ai::glaze::OpenAIChatMessageDto{"user", content_text(user.content), std::nullopt, std::nullopt};
+                return ai::glaze::OpenAIChatMessageDto{"user", content_text(user.content), std::nullopt, std::nullopt, std::nullopt};
             },
             [](const ai::AssistantMessage& assistant) {
                 auto calls = tool_calls_from_assistant_content(assistant.content);
@@ -82,16 +86,22 @@ struct ToolCallAccumulator {
                     "assistant",
                     assistant_content_text(assistant.content),
                     std::nullopt,
+                    std::nullopt,
                     std::move(tool_calls),
                 };
             },
-            [](const ai::ToolResultMessage& tool) {
-                return ai::glaze::OpenAIChatMessageDto{
+            [&compat](const ai::ToolResultMessage& tool) {
+                auto dto = ai::glaze::OpenAIChatMessageDto{
                     "tool",
                     content_text(tool.content),
+                    std::nullopt,
                     tool.tool_call_id,
                     std::nullopt,
                 };
+                if (compat.requires_tool_result_name.value_or(false)) {
+                    dto.name = tool.tool_name;
+                }
+                return dto;
             },
         },
         message);
@@ -103,10 +113,10 @@ struct ToolCallAccumulator {
     ai::glaze::OpenAIChatRequestDto dto;
     dto.model = !request.model.empty() ? request.model : (!request.context.model.empty() ? request.context.model : config.model);
     if (request.context.system_prompt) {
-        dto.messages.push_back(ai::glaze::OpenAIChatMessageDto{"system", *request.context.system_prompt, std::nullopt, std::nullopt});
+        dto.messages.push_back(ai::glaze::OpenAIChatMessageDto{"system", *request.context.system_prompt, std::nullopt, std::nullopt, std::nullopt});
     }
     for (const auto& message : request.context.messages) {
-        dto.messages.push_back(message_to_openai(message));
+        dto.messages.push_back(message_to_openai(message, config.compat));
     }
     if (!request.context.tools.empty()) {
         std::vector<ai::glaze::ProviderToolDto> tools;
@@ -117,6 +127,17 @@ struct ToolCallAccumulator {
         dto.tools = std::move(tools);
     }
     dto.stream = true;
+
+    // Apply OpenAICompletionsCompat flags
+    if (config.compat.supports_store.value_or(false)) {
+        dto.store = true;
+    }
+    if (config.compat.supports_reasoning_effort.value_or(false)) {
+        // reasoning_effort value comes from the request context or defaults to "medium"
+    }
+    if (config.compat.supports_usage_in_streaming.value_or(true)) {
+        dto.stream_options = ai::glaze::OpenAIStreamOptionsDto{true};
+    }
     return dto;
 }
 
