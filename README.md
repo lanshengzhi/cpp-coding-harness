@@ -121,7 +121,7 @@ The smoke script requires explicit opt-in, uses a throwaway workspace/session, d
 The code is split into value contracts, capability seams, implementation adapters, and package-style CMake targets:
 
 - `cch_util` (`include/cch/util`, `src/util`): project error/expected contracts, move-only callback vocabulary, passive `JsonValue`, the Glaze-backed JSON adapter, and async process execution.
-- `cch_ai` (`include/cch/ai`, `src/ai`): passive message/content/tool/context contracts, provider-neutral stream events, provider registry, OpenAI-compatible provider, scripted fake provider, SSE, and Glaze provider mapping.
+- `cch_ai` (`include/cch/ai`, `src/ai`): passive message/content/tool/context contracts, provider-neutral stream events, provider registry, OpenAICompletionsCompat flags, OpenAI-compatible provider, scripted fake provider, SSE, and Glaze provider mapping.
 - `cch_agent` (`include/cch/agent`, `src/agent`): coroutine agent loop, observable state values, lifecycle event values, move-only event sinks, async tool registry, and expected-style tool execution contracts.
 - `cch_harness` (`include/cch/harness`, `src/harness`): local execution environment and JSONL session persistence.
 - `cch_tools` (`include/cch/tools`, `src/tools`): built-in read/write/edit/bash tool factories bridging agent tool contracts to harness capabilities.

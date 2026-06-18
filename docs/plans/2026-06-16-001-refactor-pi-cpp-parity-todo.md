@@ -90,11 +90,11 @@ The first implementation pass should execute that cleanup plan and produce the T
 
 ### T2. `pi-ai` Contract Parity
 
-- [ ] Complete message/content parity for text, image, thinking, tool-call, tool-result, diagnostics, usage, stop reasons, and provider metadata.
+- [x] Complete message/content parity for text, image, thinking, tool-call, tool-result, diagnostics, usage, stop reasons, and provider metadata.
   - **Files:** `include/cch/ai/Content.hpp`, `include/cch/ai/Message.hpp`, `include/cch/ai/Usage.hpp`, `include/cch/ai/StreamEvent.hpp`, `tests/ai/MessageContractTest.cpp`.
   - **References:** `pi:packages/ai/src/types.ts`.
   - **Test scenarios:** round-trip each content block type; preserve tool call IDs and raw/parsed arguments; preserve error/aborted stop reasons.
-- [ ] Align streaming event semantics with pi's assistant message event protocol.
+- [x] Align streaming event semantics with pi's assistant message event protocol.
   - **Files:** `include/cch/ai/StreamEvent.hpp`, `src/ai/providers/SseParser.cpp`, `tests/ai/providers/SseParserTest.cpp`.
   - **References:** `pi:packages/ai/src/types.ts`, `pi:packages/ai/src/stream.ts`, `pi:packages/ai/src/utils/event-stream.ts`.
   - **Test scenarios:** start, text delta/end, thinking delta/end, toolcall delta/end, done, and error events produce the expected final assistant message.
@@ -102,10 +102,11 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **Files:** `include/cch/ai/ProviderRegistry.hpp`, `src/ai/ProviderRegistry.cpp`, `src/ai/providers/`, `tests/ai/ProviderRegistryTest.cpp`.
   - **References:** `pi:packages/ai/src/api-registry.ts`, `pi:packages/ai/src/models.ts`, `pi:packages/ai/src/env-api-keys.ts`, `pi:packages/ai/src/providers/register-builtins.ts`.
   - **Done when:** OpenAI-compatible/Kimi wiring is one registered provider path, not hardcoded throughout CLI runtime.
-- [ ] Add provider compatibility options only behind provider adapters.
-  - **Files:** `src/ai/providers/OpenAIChatClient.cpp`, `src/ai/glaze/ProviderDtos.hpp`, `tests/ai/providers/OpenAIChatClientTest.cpp`.
+- [x] Add provider compatibility options only behind provider adapters.
+  - **Files:** `src/ai/providers/OpenAIChatClient.cpp`, `src/ai/glaze/ProviderDtos.hpp`, `include/cch/ai/providers/OpenAICompletionsCompat.hpp`, `tests/ai/providers/OpenAIChatClientTest.cpp`.
   - **References:** `pi:packages/ai/src/providers/openai-completions.ts`, `pi:packages/ai/src/providers/openai-responses.ts`, `pi:packages/ai/src/providers/transform-messages.ts`.
   - **Done when:** custom base URLs, tool-result naming, reasoning/thinking compatibility, timeout/retry options, and session affinity live in provider-specific code.
+  - **Implementation plan:** `docs/plans/2026-06-18-001-feat-pi-ai-contract-parity-plan.md`.
 - [ ] Defer OAuth and subscription-provider flows until model/provider registry contracts are stable.
   - **References:** `pi:packages/ai/src/oauth.ts`, `pi:packages/coding-agent/docs/providers.md`.
   - **Done when:** the deferral is documented, and no placeholder API implies OAuth is already supported.

@@ -58,7 +58,7 @@ git status --short
 | Agent loop / turn 流程 / tool-call 编排 | `include/cch/agent/`, `src/agent/AgentLoop.cpp`, `tests/agent/` | `AsyncAgentLoop` 负责 provider-neutral loop；事件通过 `AgentLifecycleEvent` 发出。 |
 | AI 消息、内容、tool schema、usage contract | `include/cch/ai/`, `tests/ai/` | 公共消息/内容类型必须保持 passive value contract。 |
 | OpenAI-compatible provider / SSE / HTTP transport | `include/cch/ai/providers/`, `src/ai/providers/`, `src/ai/glaze/`, `tests/ai/providers/` | provider wire DTO 和 Glaze mapping 放实现/serialization 层，不要放回公共 domain contract。 |
-| Provider/model registry | `include/cch/ai/ProviderRegistry.hpp`, `src/ai/ProviderRegistry.cpp`, `src/ai/providers/FakeChatClient.*`, `tests/ai/ProviderRegistryTest.cpp` | 注册 fake/OpenAI-compatible provider；CLI/runtime 只解析 provider/model，不硬编码具体 client 构造。 |
+| Provider/model registry | `include/cch/ai/ProviderRegistry.hpp`, `src/ai/ProviderRegistry.cpp`, `src/ai/providers/FakeChatClient.*`, `include/cch/ai/providers/OpenAICompletionsCompat.hpp` | 注册 fake/OpenAI-compatible provider；CLI/runtime 只解析 provider/model，不硬编码具体 client 构造；compat flags 控制 provider adapter 行为。 |
 | JSON 序列化/反序列化 | `include/cch/ai/glaze/`, `src/ai/glaze/`, `include/cch/util/Json*.hpp`, `tests/ai/GlazeRoundTripTest.cpp` | Domain 用 `JsonValue`，Glaze 只在边界做 DTO 转换。 |
 | 内置工具 read/write/edit/bash | `include/cch/tools/ToolFactories.hpp`, `src/tools/AsyncToolFactories.cpp`, `tests/tools/` | 工具通过 `AsyncAgentTool` 暴露；文件/进程能力走 execution env。 |
 | 工作区、路径防护、shell 执行 | `include/cch/harness/ExecutionEnv.hpp`, `include/cch/harness/LocalExecutionEnv.hpp`, `src/harness/`, `src/tools/PathGuard.hpp`, `src/util/Process.*`, `tests/harness/` | workspace guard 不是沙箱；保持路径 containment、symlink escape、防泄密环境变量等安全检查；async shell I/O 走 `ProcessRunner` awaitable seam。 |
