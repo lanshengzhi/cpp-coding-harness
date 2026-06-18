@@ -139,6 +139,7 @@ if(CCH_BUILD_TESTS)
         tests/harness/AsyncLocalExecutionEnvTest.cpp
         tests/harness/session/JsonlSessionStoreTest.cpp
         tests/tools/AsyncToolsTest.cpp
+        tests/tools/PathGuardTest.cpp
         tests/util/ExpectedErrorTest.cpp
         tests/util/ExpectedMacrosTest.cpp
     )

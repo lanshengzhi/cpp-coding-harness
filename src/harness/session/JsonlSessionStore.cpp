@@ -57,20 +57,26 @@ struct MessageEntryDto {
     return util::make_error(util::ErrorCode::Session, std::move(message), std::move(detail));
 }
 
-[[nodiscard]] util::Expected<std::string> entry_type(std::string_view line, std::size_t line_number) {
-    auto parsed = util::read_json<util::JsonValue>(line);
-    if (!parsed) {
-        return std::unexpected(session_error(
-            "malformed JSONL",
-            "malformed JSONL at line " + std::to_string(line_number) + ": " + parsed.error().detail));
-    }
+[[nodiscard]] util::Expected<std::string> entry_type(const glz::generic& parsed, std::size_t line_number) {
     try {
-        return parsed->get<util::JsonValue::object_t>().at("type").get_string();
+        return parsed.get<glz::generic::object_t>().at("type").get<std::string>();
     } catch (const std::exception&) {
         return std::unexpected(session_error(
             "session entry missing type",
             "session entry missing type at line " + std::to_string(line_number)));
     }
+}
+
+template <typename T>
+[[nodiscard]] util::Expected<T> entry_from_generic(const glz::generic& value, std::string_view line, std::size_t line_number) {
+    auto parsed = glz::read_json<T>(value);
+    if (!parsed) {
+        return std::unexpected(session_error(
+            "failed to parse session entry",
+            "failed to parse session entry at line " + std::to_string(line_number) + ": " +
+                glz::format_error(parsed.error(), line)));
+    }
+    return std::move(parsed).value();
 }
 
 [[nodiscard]] WriteHeaderDto to_dto(const SessionMetadata& metadata) {
@@ -472,32 +478,36 @@ util::Expected<LoadedSession> JsonlSessionStore::load(const std::filesystem::pat
         if (line.empty()) {
             continue;
         }
-        auto type = entry_type(line, line_number);
+        auto generic = glz::read_json<glz::generic>(line);
+        if (!generic) {
+            return std::unexpected(session_error(
+                "malformed JSONL",
+                "malformed JSONL at line " + std::to_string(line_number) + ": " +
+                    glz::format_error(generic.error(), line)));
+        }
+        auto type = entry_type(*generic, line_number);
         if (!type) {
             return std::unexpected(type.error());
         }
+        auto payload = util::json_from_glaze(*generic);
         if (line_number == 1 && (*type == "header" || *type == "session")) {
-            auto header = util::read_json<ReadHeaderDto>(line);
+            auto header = entry_from_generic<ReadHeaderDto>(*generic, line, line_number);
             if (!header) {
                 return std::unexpected(header.error());
             }
             loaded.metadata = from_dto(*header);
-            auto parsed = util::read_json<util::JsonValue>(line);
-            if (!parsed) {
-                return std::unexpected(parsed.error());
-            }
             SessionEntry entry;
             entry.kind = SessionEntryKind::Header;
             entry.raw_line = line;
-            entry.payload = *parsed;
-            populate_tree_fields(entry, *parsed);
+            entry.payload = std::move(payload);
+            populate_tree_fields(entry, entry.payload);
             loaded.entries.push_back(std::move(entry));
             saw_header = true;
             continue;
         }
         auto kind = kind_from_type(*type);
         if (kind == SessionEntryKind::Message) {
-            auto dto = util::read_json<MessageEntryDto>(line);
+            auto dto = entry_from_generic<MessageEntryDto>(*generic, line, line_number);
             if (!dto) {
                 return std::unexpected(dto.error());
             }
@@ -505,30 +515,22 @@ util::Expected<LoadedSession> JsonlSessionStore::load(const std::filesystem::pat
             if (!message) {
                 return std::unexpected(message.error());
             }
-            auto parsed = util::read_json<util::JsonValue>(line);
-            if (!parsed) {
-                return std::unexpected(parsed.error());
-            }
             SessionEntry entry;
             entry.kind = SessionEntryKind::Message;
             entry.entry_id = !dto->entryId.empty() ? dto->entryId : dto->id;
             entry.parent_id = dto->parentId;
             entry.leaf_id = dto->leafId;
             entry.message = *message;
-            entry.payload = *parsed;
+            entry.payload = std::move(payload);
             entry.raw_line = line;
             loaded.messages.push_back(*message);
             loaded.entries.push_back(std::move(entry));
         } else {
-            auto parsed = util::read_json<util::JsonValue>(line);
-            if (!parsed) {
-                return std::unexpected(parsed.error());
-            }
             SessionEntry entry;
             entry.kind = kind;
             entry.raw_line = line;
-            entry.payload = *parsed;
-            populate_tree_fields(entry, *parsed);
+            entry.payload = std::move(payload);
+            populate_tree_fields(entry, entry.payload);
             loaded.entries.push_back(std::move(entry));
             if (kind == SessionEntryKind::Unknown) {
                 loaded.unknown_lines.push_back(line);

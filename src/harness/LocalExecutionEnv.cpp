@@ -1,6 +1,5 @@
 #include "LocalExecutionEnv.hpp"
 
-#include "../tools/AtomicWrite.hpp"
 #include "../tools/OutputLimiter.hpp"
 #include "../tools/PathGuard.hpp"
 
@@ -11,7 +10,6 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
-#include <fstream>
 #include <optional>
 #include <sstream>
 #include <utility>
@@ -93,13 +91,9 @@ util::Expected<AsyncFileReadResult> LocalExecutionEnv::read_file(std::string pat
     if (!guard) {
         return std::unexpected(guard.error());
     }
-    auto resolved = guard->resolve_existing_file(path);
-    if (!resolved) {
-        return std::unexpected(resolved.error());
-    }
-    std::ifstream input(*resolved, std::ios::binary);
-    if (!input) {
-        return std::unexpected(workspace_error("could not open file for reading: " + path));
+    auto content = guard->read_existing_file(path);
+    if (!content) {
+        return std::unexpected(content.error());
     }
     offset = std::max(1, offset);
     tools::OutputLimit output_limit;
@@ -109,6 +103,7 @@ util::Expected<AsyncFileReadResult> LocalExecutionEnv::read_file(std::string pat
     std::size_t lines = 0;
     int line_number = 1;
     int emitted = 0;
+    std::istringstream input(*content);
     while (std::getline(input, line)) {
         if (line_number++ < offset) {
             continue;
@@ -141,15 +136,11 @@ util::Expected<AsyncFileWriteResult> LocalExecutionEnv::write_file(std::string p
     if (!guard) {
         return std::unexpected(guard.error());
     }
-    auto resolved = guard->resolve_for_write(path, create_parents);
-    if (!resolved) {
-        return std::unexpected(resolved.error());
-    }
-    auto written = tools::write_atomic_file(*resolved, content);
+    auto written = guard->write_file(path, content, create_parents);
     if (!written) {
         return std::unexpected(written.error());
     }
-    return AsyncFileWriteResult{content.size()};
+    return AsyncFileWriteResult{*written};
 }
 
 util::Expected<AsyncFileEditResult> LocalExecutionEnv::edit_file(std::string path, std::string old_text, std::string new_text) {
@@ -157,20 +148,11 @@ util::Expected<AsyncFileEditResult> LocalExecutionEnv::edit_file(std::string pat
     if (!guard) {
         return std::unexpected(guard.error());
     }
-    auto resolved = guard->resolve_existing_file(path);
-    if (!resolved) {
-        return std::unexpected(resolved.error());
+    auto existing = guard->read_existing_file(path);
+    if (!existing) {
+        return std::unexpected(existing.error());
     }
-    std::ifstream input(*resolved, std::ios::binary);
-    if (!input) {
-        return std::unexpected(workspace_error("could not open file for editing: " + path));
-    }
-    std::ostringstream buffer;
-    buffer << input.rdbuf();
-    if (input.bad()) {
-        return std::unexpected(workspace_error("could not read file for editing: " + path));
-    }
-    auto content = buffer.str();
+    auto content = std::move(*existing);
     const auto matches = count_occurrences(content, old_text);
     if (matches == 0) {
         return std::unexpected(workspace_error("old_text did not match any text in " + path));
@@ -180,7 +162,7 @@ util::Expected<AsyncFileEditResult> LocalExecutionEnv::edit_file(std::string pat
     }
     const auto pos = content.find(old_text);
     content.replace(pos, old_text.size(), new_text);
-    auto written = tools::write_atomic_file(*resolved, content);
+    auto written = guard->write_file(path, content, false);
     if (!written) {
         return std::unexpected(written.error());
     }

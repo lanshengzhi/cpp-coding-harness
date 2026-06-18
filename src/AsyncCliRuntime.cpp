@@ -13,6 +13,7 @@
 #include <iostream>
 #include <optional>
 #include <string>
+#include <thread>
 #include <utility>
 
 namespace cch::cli {
@@ -61,14 +62,23 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
 
     auto run_prompt = [&](const std::string& prompt) -> bool {
         boost::asio::io_context io;
+        boost::asio::io_context print_io;
+        auto print_work = boost::asio::make_work_guard(print_io);
+        std::jthread print_thread([&]() { print_io.run(); });
         std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
         const auto previous_size = history.size();
         boost::asio::co_spawn(
             io,
             [&]() -> boost::asio::awaitable<void> {
-                result = co_await loop.continue_with(history, prompt, [](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+                result = co_await loop.continue_with(history, prompt, [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
                     try {
-                        coding_agent::runtime::print_agent_event(event, std::cout);
+                        boost::asio::post(print_io, [event]() {
+                            try {
+                                coding_agent::runtime::print_agent_event(event, std::cout);
+                            } catch (const std::exception& e) {
+                                std::cerr << "event printer failed: " << e.what() << '\n';
+                            }
+                        });
                         return util::ExpectedVoid{};
                     } catch (const std::exception& e) {
                         return std::unexpected(util::make_error(util::ErrorCode::Tool, "event printer failed", e.what()));
@@ -78,6 +88,9 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             },
             boost::asio::detached);
         io.run();
+        print_work.reset();
+        print_thread.join();
+        std::cout.flush();
         if (!result || !*result) {
             const auto message = result ? (*result).error().message : std::string{"async loop did not finish"};
             std::cerr << "loop failed: " << (message == "max turns exceeded" ? "max_turns_exceeded" : message) << '\n';
