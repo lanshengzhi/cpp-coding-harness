@@ -607,6 +607,32 @@ Runtime builds a provider from the registry by name/model, injects it into the a
 
 ---
 
+## Post-Completion Review Fixes
+
+The original U1–U9 scope landed in commit `be5e6df`. During PR #1 review and follow-up hardening, the additional changes below were made to address issues discovered after the main implementation. These fixes are not part of the original U1–U9 scope, but they are required before the plan can be considered fully merged.
+
+| Commit | Focus | What changed |
+|---|---|---|
+| `d6557e5` | Build | Fix Boost 1.91 component list and runtime include surface. |
+| `eff78c9` | AI/providers | Harden streaming and schema boundaries. |
+| `4087164` | Agent/runtime | Fix registry errors, event sink safety, and state sync. |
+| `a122c44` | Harness/process | Durable session append and async process cleanup. |
+| `ac6934f` | General | Address review findings from PR #1. |
+| `4a8702d` | Runtime | Use `AsyncExecutionEnv` interface in `RuntimeServices`. |
+| `af8df3b` | Tests | Remove duplicate `text_from_content` helper in `ProviderRegistryTest`. |
+| `0e8c875` | Tools/harness | Harden `PathGuard` against symlink TOCTOU and thread event printing. |
+
+Key review-driven themes:
+
+- **Event sink safety**: ensure move-only event sinks do not dangle or race when the loop outlives the consumer.
+- **Registry robustness**: fix provider lookup keying, duplicate-registration edge cases, and factory context lifetime.
+- **Async process cleanup**: ensure shell timeouts terminate process groups and that async pipes are drained before destruction.
+- **Session durability**: make JSONL append resilient to concurrent writers and partial writes.
+- **Workspace containment**: close symlink TOCTOU windows in `PathGuard` by using `openat(O_NOFOLLOW)`/`mkdirat` on POSIX.
+- **CLI threading**: move lifecycle event printing off the agent `io_context` thread to avoid blocking the loop.
+
+---
+
 ## Sources & References
 
 - **Origin document:** `docs/plans/2026-06-16-001-refactor-pi-cpp-parity-todo.md`
