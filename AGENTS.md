@@ -44,7 +44,7 @@ git status --short
 
 | 任务类型 | 优先入口 | 说明 |
 | --- | --- | --- |
-| Agent loop / turn 流程 / tool-call 编排 | `include/cch/agent/`, `src/agent/AgentLoop.cpp`, `tests/agent/` | `AsyncAgentLoop` 负责 provider-neutral loop；事件通过 `AgentLifecycleEvent` 发出。 |
+| Agent loop / turn 流程 / tool-call 编排 | `include/cch/agent/`, `src/agent/AgentLoop.cpp`, `tests/agent/` | `AsyncAgentLoop` 负责 provider-neutral loop；事件通过 `AgentLifecycleEvent` 发出；`beforeToolCall`/`afterToolCall` hook 通过 `AsyncAgentOptions` 配置。 |
 | AI 消息、内容、tool schema、usage contract | `include/cch/ai/`, `tests/ai/` | 公共消息/内容类型必须保持 passive value contract。 |
 | OpenAI-compatible provider / SSE / HTTP transport | `include/cch/ai/providers/`, `src/ai/providers/`, `src/ai/glaze/`, `tests/ai/providers/` | provider wire DTO 和 Glaze mapping 放实现/serialization 层，不要放回公共 domain contract。 |
 | Provider/model registry | `include/cch/ai/ProviderRegistry.hpp`, `src/ai/ProviderRegistry.cpp`, `src/ai/providers/FakeChatClient.*`, `include/cch/ai/providers/OpenAICompletionsCompat.hpp` | 注册 fake/OpenAI-compatible provider；CLI/runtime 只解析 provider/model，不硬编码具体 client 构造；compat flags 控制 provider adapter 行为。 |

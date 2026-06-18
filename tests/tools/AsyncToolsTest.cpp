@@ -98,7 +98,7 @@ TEST_CASE("async read_file tool uses Glaze typed args and workspace guard", "[to
 
     REQUIRE(result);
     CHECK_FALSE(result->is_error);
-    CHECK(result->content == "line2");
+    CHECK(ai::text_from_content(result->content) == "line2");
 }
 
 TEST_CASE("async edit_file tool returns error result for ambiguous replacements", "[tools][async][u6][ae4]") {
@@ -113,7 +113,7 @@ TEST_CASE("async edit_file tool returns error result for ambiguous replacements"
 
     REQUIRE(result);
     CHECK(result->is_error);
-    CHECK(result->content.find("multiple") != std::string::npos);
+    CHECK(ai::text_from_content(result->content).find("multiple") != std::string::npos);
     CHECK(workspace.read("note.txt") == "same\nsame\n");
 }
 
@@ -134,7 +134,7 @@ TEST_CASE("async tools prefer structured arguments over raw provider text", "[to
 
     REQUIRE(result);
     CHECK_FALSE(result->is_error);
-    CHECK(result->content == "from-structured");
+    CHECK(ai::text_from_content(result->content) == "from-structured");
 }
 
 TEST_CASE("async bash tool rejects non-positive timeout", "[tools][async][u6]") {
@@ -148,7 +148,7 @@ TEST_CASE("async bash tool rejects non-positive timeout", "[tools][async][u6]") 
 
     REQUIRE(result);
     CHECK(result->is_error);
-    CHECK(result->content.find("timeout_ms") != std::string::npos);
+    CHECK(ai::text_from_content(result->content).find("timeout_ms") != std::string::npos);
 }
 
 TEST_CASE("async bash tool clamps oversized timeout", "[tools][async][u6]") {
@@ -177,5 +177,5 @@ TEST_CASE("async bash tool is disabled unless env explicitly enables it", "[tool
 
     REQUIRE(result);
     CHECK(result->is_error);
-    CHECK(result->content.find("disabled") != std::string::npos);
+    CHECK(ai::text_from_content(result->content).find("disabled") != std::string::npos);
 }

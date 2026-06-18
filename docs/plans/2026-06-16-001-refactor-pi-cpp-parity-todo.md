@@ -117,10 +117,11 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **Files:** `include/cch/agent/AgentContext.hpp`, `include/cch/agent/AgentLoop.hpp`, `tests/agent/AsyncAgentLoopTest.cpp`.
   - **References:** `pi:packages/agent/src/types.ts`.
   - **Test scenarios:** active tools, messages, streaming message, pending tool calls, error message, model, and thinking level are observable through a C++-appropriate state seam.
-- [ ] Add pre/post tool-call hooks and graceful blocking semantics.
-  - **Files:** `include/cch/agent/AgentTool.hpp`, `src/agent/AgentLoop.cpp`, `tests/agent/AsyncAgentLoopTest.cpp`.
+- [x] Add pre/post tool-call hooks and graceful blocking semantics.
+  - **Files:** `include/cch/agent/AgentTool.hpp`, `include/cch/agent/AgentContext.hpp`, `src/agent/AgentLoop.cpp`, `src/tools/AsyncToolFactories.cpp`, `tests/agent/AsyncAgentLoopTest.cpp`, `tests/tools/AsyncToolsTest.cpp`.
   - **References:** `pi:packages/agent/src/types.ts`, `pi:packages/agent/src/agent-loop.ts`.
   - **Test scenarios:** before-hook blocks a tool with an error tool result; after-hook overrides content/details/isError/terminate; thrown hook errors become stable agent errors.
+  - **Implementation plan:** `docs/plans/2026-06-19-002-feat-agent-tool-hooks-plan.md`.
 - [ ] Add context transform, conversion-to-LLM, steering messages, follow-up messages, and prepare-next-turn seams.
   - **Files:** `include/cch/agent/AgentLoop.hpp`, `include/cch/agent/AgentContext.hpp`, `src/agent/AgentLoop.cpp`, `tests/agent/AsyncAgentLoopTest.cpp`.
   - **References:** `pi:packages/agent/src/types.ts`.

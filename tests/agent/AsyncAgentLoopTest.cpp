@@ -3,6 +3,7 @@
 #include "../../src/util/ExpectedMacros.hpp"
 
 #include "../../include/cch/agent/AgentLoop.hpp"
+#include "../../include/cch/ai/Content.hpp"
 #include "../../include/cch/util/Error.hpp"
 #include "../../include/cch/util/Json.hpp"
 
@@ -66,7 +67,7 @@ public:
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
         agent::ToolInvocation invocation) override {
         invocations.push_back(invocation);
-        co_return agent::AsyncToolExecutionResult{"tool says ok", std::nullopt, false};
+        co_return agent::AsyncToolExecutionResult{std::vector<ai::Content>{ai::text_content("tool says ok")}, std::nullopt, false};
     }
 
     ai::Tool definition_;
@@ -270,4 +271,312 @@ TEST_CASE("async agent loop reports max turn exhaustion", "[agent][async][u5]") 
     REQUIRE_FALSE(run.result);
     CHECK(run.result.error().message == "max turns exceeded");
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+}
+
+TEST_CASE("beforeToolCall hook can block a tool call", "[agent][async][u7]") {
+    FakeStreamingClient client;
+    client.responses.push_back(tool_call_response());
+    client.responses.push_back(ai::assistant_text_message("done"));
+
+    auto tool = std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()});
+    auto* tool_ptr = tool.get();
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::move(tool)));
+
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.before_tool_call = [](const agent::BeforeToolCallContext&) -> util::Expected<agent::BeforeToolCallResult> {
+        return agent::BeforeToolCallResult{true, "blocked by policy"};
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "read");
+
+    REQUIRE(run.result);
+    CHECK(tool_ptr->invocations.empty());
+    CHECK(count_events<agent::ToolExecutionStartEvent>(run.events) == 1);
+    CHECK(count_events<agent::ToolExecutionEndEvent>(run.events) == 1);
+
+    const agent::ToolExecutionEndEvent* end_event = nullptr;
+    for (const auto& event : run.events) {
+        if (const auto* candidate = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
+            end_event = candidate;
+        }
+    }
+    REQUIRE(end_event);
+    CHECK(end_event->is_error);
+
+    REQUIRE(client.requests.size() == 2);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client.requests[1].context.messages.back()));
+    const auto& result = std::get<ai::ToolResultMessage>(client.requests[1].context.messages.back());
+    CHECK(result.is_error);
+    CHECK(ai::text_from_content(result.content) == "blocked by policy");
+}
+
+TEST_CASE("beforeToolCall hook passes context and skips execution on block", "[agent][async][u7]") {
+    FakeStreamingClient client;
+    client.responses.push_back(tool_call_response());
+    client.responses.push_back(ai::assistant_text_message("done"));
+
+    auto tool = std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()});
+    auto* tool_ptr = tool.get();
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::move(tool)));
+
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.before_tool_call = [](const agent::BeforeToolCallContext& ctx) -> util::Expected<agent::BeforeToolCallResult> {
+        REQUIRE(ctx.tool_call.name == "read_file");
+        REQUIRE(ctx.args.get<util::JsonValue::object_t>().at("path").get_string() == "README.md");
+        REQUIRE(ctx.context.model == "gpt-test");
+        REQUIRE(!ctx.context.messages.empty());
+        return agent::BeforeToolCallResult{false, std::nullopt};
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "read");
+
+    REQUIRE(run.result);
+    CHECK(tool_ptr->invocations.size() == 1);
+}
+
+TEST_CASE("beforeToolCall hook failure aborts the run", "[agent][async][u7]") {
+    FakeStreamingClient client;
+    client.responses.push_back(tool_call_response());
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.before_tool_call = [](const agent::BeforeToolCallContext&) -> util::Expected<agent::BeforeToolCallResult> {
+        return std::unexpected(util::make_error(util::ErrorCode::Tool, "policy rejected"));
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "read");
+
+    REQUIRE_FALSE(run.result);
+    CHECK(run.result.error().code == util::ErrorCode::Tool);
+    CHECK(run.result.error().message == "policy rejected");
+
+    const auto* end_event = std::get_if<agent::AgentEndEvent>(&run.events.back());
+    REQUIRE(end_event);
+    CHECK_FALSE(end_event->success);
+}
+
+TEST_CASE("beforeToolCall hook exception becomes a tool error", "[agent][async][u7]") {
+    FakeStreamingClient client;
+    client.responses.push_back(tool_call_response());
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.before_tool_call = [](const agent::BeforeToolCallContext&) -> util::Expected<agent::BeforeToolCallResult> {
+        throw std::runtime_error("boom");
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "read");
+
+    REQUIRE_FALSE(run.result);
+    CHECK(run.result.error().code == util::ErrorCode::Tool);
+    CHECK(run.result.error().detail.find("boom") != std::string::npos);
+}
+
+TEST_CASE("afterToolCall hook overrides tool result content", "[agent][async][u7]") {
+    FakeStreamingClient client;
+    client.responses.push_back(tool_call_response());
+    client.responses.push_back(ai::assistant_text_message("done"));
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.after_tool_call = [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
+        return agent::AfterToolCallResult{
+            std::vector<ai::Content>{ai::text_content("overridden")}, std::nullopt, std::nullopt, std::nullopt};
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "read");
+
+    REQUIRE(run.result);
+    REQUIRE(client.requests.size() == 2);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client.requests[1].context.messages.back()));
+    const auto& result = std::get<ai::ToolResultMessage>(client.requests[1].context.messages.back());
+    CHECK(ai::text_from_content(result.content) == "overridden");
+}
+
+TEST_CASE("afterToolCall hook overrides error flag", "[agent][async][u7]") {
+    FakeStreamingClient client;
+    client.responses.push_back(tool_call_response());
+    client.responses.push_back(ai::assistant_text_message("done"));
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.after_tool_call = [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
+        return agent::AfterToolCallResult{std::nullopt, std::nullopt, true, std::nullopt};
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "read");
+
+    REQUIRE(run.result);
+    REQUIRE(client.requests.size() == 2);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client.requests[1].context.messages.back()));
+    const auto& result = std::get<ai::ToolResultMessage>(client.requests[1].context.messages.back());
+    CHECK(result.is_error);
+}
+
+namespace {
+
+ai::AssistantMessage two_tool_call_response() {
+    ai::AssistantMessage message;
+    message.stop_reason = ai::AssistantStopReason::ToolUse;
+    message.content.emplace_back(ai::tool_call_content("call-1", "alpha", R"({"x":1})"));
+    message.content.emplace_back(ai::tool_call_content("call-2", "beta", R"({"y":2})"));
+    return message;
+}
+
+} // namespace
+
+TEST_CASE("afterToolCall terminate hint stops the run when all calls agree", "[agent][async][u7]") {
+    FakeStreamingClient client;
+    client.responses.push_back(tool_call_response());
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.after_tool_call = [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
+        return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "read");
+
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 1);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+    const auto* end_event = std::get_if<agent::AgentEndEvent>(&run.events.back());
+    REQUIRE(end_event);
+    CHECK(end_event->success);
+    CHECK(end_event->reason == ai::stop_reason_to_string(ai::AssistantStopReason::ToolUse));
+}
+
+TEST_CASE("terminate batch continues when one call declines", "[agent][async][u7]") {
+    FakeStreamingClient client;
+    client.responses.push_back(two_tool_call_response());
+    client.responses.push_back(ai::assistant_text_message("done"));
+
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"beta", "Beta", ai::JsonSchema::object()})));
+
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.after_tool_call = [](const agent::AfterToolCallContext& ctx) -> util::Expected<agent::AfterToolCallResult> {
+        if (ctx.tool_call.name == "alpha") {
+            return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
+        }
+        return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, false};
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "read");
+
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 2);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
+}
+
+TEST_CASE("blocked call prevents terminate batch", "[agent][async][u7]") {
+    FakeStreamingClient client;
+    client.responses.push_back(two_tool_call_response());
+    client.responses.push_back(ai::assistant_text_message("done"));
+
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"beta", "Beta", ai::JsonSchema::object()})));
+
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.before_tool_call = [](const agent::BeforeToolCallContext& ctx) -> util::Expected<agent::BeforeToolCallResult> {
+        if (ctx.tool_call.name == "alpha") {
+            return agent::BeforeToolCallResult{true, "no alpha"};
+        }
+        return agent::BeforeToolCallResult{false, std::nullopt};
+    };
+    options.after_tool_call = [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
+        return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "read");
+
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 2);
+}
+
+TEST_CASE("tool execution error prevents terminate batch", "[agent][async][u7]") {
+    FakeStreamingClient client;
+    client.responses.push_back(two_tool_call_response());
+    client.responses.push_back(ai::assistant_text_message("done"));
+
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"beta", "Beta", ai::JsonSchema::object()})));
+
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.after_tool_call = [](const agent::AfterToolCallContext& ctx) -> util::Expected<agent::AfterToolCallResult> {
+        if (ctx.tool_call.name == "alpha") {
+            return agent::AfterToolCallResult{std::nullopt, std::nullopt, true, true};
+        }
+        return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "read");
+
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 2);
+}
+
+TEST_CASE("afterToolCall hook failure aborts the run", "[agent][async][u7]") {
+    FakeStreamingClient client;
+    client.responses.push_back(tool_call_response());
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.after_tool_call = [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
+        return std::unexpected(util::make_error(util::ErrorCode::Tool, "post-processor failed"));
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "read");
+
+    REQUIRE_FALSE(run.result);
+    CHECK(run.result.error().code == util::ErrorCode::Tool);
+    CHECK(run.result.error().message == "post-processor failed");
+}
+
+TEST_CASE("afterToolCall hook exception becomes a tool error", "[agent][async][u7]") {
+    FakeStreamingClient client;
+    client.responses.push_back(tool_call_response());
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.after_tool_call = [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
+        throw std::runtime_error("after boom");
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "read");
+
+    REQUIRE_FALSE(run.result);
+    CHECK(run.result.error().code == util::ErrorCode::Tool);
+    CHECK(run.result.error().detail.find("after boom") != std::string::npos);
+}
+
+TEST_CASE("AsyncAgentOptions hooks are move-only", "[agent][async][u7]") {
+    static_assert(!std::is_copy_constructible_v<agent::AsyncAgentOptions>);
+    static_assert(!std::is_copy_assignable_v<agent::AsyncAgentOptions>);
+    static_assert(std::is_move_constructible_v<agent::AsyncAgentOptions>);
 }

@@ -39,7 +39,7 @@ struct BashArgs {
 };
 
 [[nodiscard]] agent::AsyncToolExecutionResult error_result(std::string content) {
-    return agent::AsyncToolExecutionResult{std::move(content), std::nullopt, true};
+    return agent::AsyncToolExecutionResult{std::vector<ai::Content>{ai::text_content(std::move(content))}, std::nullopt, true};
 }
 
 template <typename Args>
@@ -99,7 +99,7 @@ public:
         if (!read) {
             co_return error_result(read.error().detail.empty() ? read.error().message : read.error().detail);
         }
-        co_return agent::AsyncToolExecutionResult{read->content, std::nullopt, false};
+        co_return agent::AsyncToolExecutionResult{std::vector<ai::Content>{ai::text_content(read->content)}, std::nullopt, false};
     }
 };
 
@@ -136,7 +136,7 @@ public:
         if (!written) {
             co_return error_result(written.error().detail.empty() ? written.error().message : written.error().detail);
         }
-        co_return agent::AsyncToolExecutionResult{"wrote " + std::to_string(written->bytes_written) + " bytes", std::nullopt, false};
+        co_return agent::AsyncToolExecutionResult{std::vector<ai::Content>{ai::text_content("wrote " + std::to_string(written->bytes_written) + " bytes")}, std::nullopt, false};
     }
 };
 
@@ -173,7 +173,7 @@ public:
         if (!edited) {
             co_return error_result(edited.error().detail.empty() ? edited.error().message : edited.error().detail);
         }
-        co_return agent::AsyncToolExecutionResult{"edited " + parsed->path, std::nullopt, false};
+        co_return agent::AsyncToolExecutionResult{std::vector<ai::Content>{ai::text_content("edited " + parsed->path)}, std::nullopt, false};
     }
 };
 
@@ -223,7 +223,7 @@ public:
         if (!shell->output.empty()) {
             out << "\n" << shell->output;
         }
-        co_return agent::AsyncToolExecutionResult{out.str(), std::nullopt, shell->exit_code != 0 || shell->timed_out};
+        co_return agent::AsyncToolExecutionResult{std::vector<ai::Content>{ai::text_content(out.str())}, std::nullopt, shell->exit_code != 0 || shell->timed_out};
     }
 };
 

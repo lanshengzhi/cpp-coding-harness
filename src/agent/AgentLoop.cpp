@@ -50,6 +50,34 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
     state.messages = context.messages;
 }
 
+[[nodiscard]] util::Expected<BeforeToolCallResult> invoke_before_hook(
+    BeforeToolCallHook& hook,
+    const BeforeToolCallContext& context) {
+    try {
+        return hook(context);
+    } catch (const std::exception& e) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Tool, "beforeToolCall hook failed", e.what()));
+    } catch (...) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Tool, "beforeToolCall hook failed", "unknown exception"));
+    }
+}
+
+[[nodiscard]] util::Expected<AfterToolCallResult> invoke_after_hook(
+    AfterToolCallHook& hook,
+    const AfterToolCallContext& context) {
+    try {
+        return hook(context);
+    } catch (const std::exception& e) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Tool, "afterToolCall hook failed", e.what()));
+    } catch (...) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Tool, "afterToolCall hook failed", "unknown exception"));
+    }
+}
+
 } // namespace
 
 AsyncAgentLoop::AsyncAgentLoop(ai::StreamingChatClient& client, AsyncToolRegistry registry, AsyncAgentOptions options)
@@ -170,30 +198,91 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             co_return AsyncAgentRunResult{std::move(context), assistant->stop_reason, turn, std::move(state)};
         }
 
+        bool terminate_batch = true;
         for (const auto& call : calls) {
             state.active_tool_names.push_back(call.name);
             CCH_TRY_VOID(emit(sink, ToolExecutionStartEvent{turn, call.id, call.name}));
 
             ai::ToolResultMessage tool_result;
+            bool executed_successfully = false;
+            bool call_terminate = false;
             auto* tool = registry_.find(call.name);
             if (tool == nullptr) {
                 tool_result = error_tool_result(call, "unknown tool: " + call.name);
+                terminate_batch = false;
             } else {
                 auto arguments = arguments_for_call(call);
                 if (!arguments) {
                     tool_result = error_tool_result(call, arguments.error().detail);
+                    terminate_batch = false;
                 } else {
                     ToolInvocation invocation{call.id, call.name, std::move(*arguments), call.raw_arguments};
-                    auto executed = co_await tool->execute(invocation);
-                    if (!executed) {
-                        tool_result = error_tool_result(call, executed.error().detail.empty() ? executed.error().message : executed.error().detail);
-                    } else {
-                        tool_result.tool_call_id = call.id;
-                        tool_result.tool_name = call.name;
-                        tool_result.content.emplace_back(ai::TextContent{executed->content, std::nullopt});
-                        tool_result.details = executed->details;
-                        tool_result.is_error = executed->is_error;
+                    bool blocked = false;
+
+                    if (options_.before_tool_call) {
+                        BeforeToolCallContext hook_ctx{*assistant, call, invocation.arguments, context};
+                        auto before_result = invoke_before_hook(*options_.before_tool_call, hook_ctx);
+                        if (!before_result) {
+                            CCH_TRY_VOID(emit(sink, AgentEndEvent{false, before_result.error().message}));
+                            co_return std::unexpected(before_result.error());
+                        }
+                        if (before_result->block) {
+                            blocked = true;
+                            tool_result = error_tool_result(
+                                call, before_result->reason.value_or("Tool execution was blocked"));
+                            terminate_batch = false;
+                        }
                     }
+
+                    if (!blocked) {
+                        auto executed = co_await tool->execute(invocation);
+                        if (!executed) {
+                            tool_result = error_tool_result(
+                                call,
+                                executed.error().detail.empty() ? executed.error().message
+                                                                : executed.error().detail);
+                            terminate_batch = false;
+                        } else {
+                            executed_successfully = true;
+                            tool_result.tool_call_id = call.id;
+                            tool_result.tool_name = call.name;
+                            tool_result.content = executed->content;
+                            tool_result.details = executed->details;
+                            tool_result.is_error = executed->is_error;
+
+                            if (executed->is_error) {
+                                terminate_batch = false;
+                            } else if (options_.after_tool_call) {
+                                AfterToolCallContext hook_ctx{
+                                    *assistant, call, invocation.arguments, *executed, false, context};
+                                auto after_result = invoke_after_hook(*options_.after_tool_call, hook_ctx);
+                                if (!after_result) {
+                                    CCH_TRY_VOID(emit(sink, AgentEndEvent{false, after_result.error().message}));
+                                    co_return std::unexpected(after_result.error());
+                                }
+                                if (after_result->content) {
+                                    tool_result.content = std::move(*after_result->content);
+                                }
+                                if (after_result->details) {
+                                    tool_result.details = std::move(*after_result->details);
+                                }
+                                if (after_result->is_error) {
+                                    tool_result.is_error = *after_result->is_error;
+                                }
+                                call_terminate = after_result->terminate.value_or(executed->terminate);
+                            } else {
+                                call_terminate = executed->terminate;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (executed_successfully) {
+                if (tool_result.is_error) {
+                    terminate_batch = false;
+                } else {
+                    terminate_batch = terminate_batch && call_terminate;
                 }
             }
 
@@ -202,6 +291,14 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             erase_first(state.active_tool_names, call.name);
             erase_first(state.pending_tool_call_ids, call.id);
             context.messages.push_back(ai::MessageVariant{std::move(tool_result)});
+        }
+
+        if (terminate_batch) {
+            state.streaming_message.reset();
+            CCH_TRY_VOID(emit(sink, TurnEndEvent{turn, ai::AssistantStopReason::ToolUse}));
+            CCH_TRY_VOID(emit(sink, AgentEndEvent{true, ai::stop_reason_to_string(ai::AssistantStopReason::ToolUse)}));
+            sync_state(state, context);
+            co_return AsyncAgentRunResult{std::move(context), ai::AssistantStopReason::ToolUse, turn, std::move(state)};
         }
 
         CCH_TRY_VOID(emit(sink, TurnEndEvent{turn, ai::AssistantStopReason::ToolUse}));
