@@ -95,7 +95,7 @@ TEST_CASE("assistant text and tool-call content round-trip in order with metadat
     assistant.model = "gpt-test";
     assistant.response_model = "gpt-test-2026-06";
     assistant.response_id = "resp-1";
-    assistant.usage = ai::Usage{10, 5, 2, 1, 18, ai::UsageCost{0.1, 0.2, 0.03, 0.04, 0.37}};
+    assistant.usage = ai::Usage{10, 5, 2, 1, std::nullopt, 18, ai::UsageCost{0.1, 0.2, 0.03, 0.04, 0.37}};
     assistant.stop_reason = ai::AssistantStopReason::ToolUse;
     assistant.timestamp = 1718000000123;
 

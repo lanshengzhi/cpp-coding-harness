@@ -59,27 +59,13 @@ std::string normalize_parse_error(const CLI::ParseError& error) {
 
     const std::string singular = "The following argument was not expected: ";
     const std::string plural = "The following arguments were not expected: ";
-    const auto prefix_size = message.rfind(singular, 0) == 0 ? singular.size()
+    const std::size_t prefix_size = message.rfind(singular, 0) == 0 ? singular.size()
         : (message.rfind(plural, 0) == 0 ? plural.size() : std::string::npos);
     if (prefix_size != std::string::npos) {
         const auto unexpected = message.substr(prefix_size);
         if (!unexpected.empty() && unexpected.front() == '-') {
             return "unknown option: " + unexpected;
         }
-        if (is_known_flag(arg)) {
-            continue;
-        }
-        if (is_value_option(arg)) {
-            if (i + 1 >= argc) {
-                return std::unexpected(cli_error(std::string(arg) + " requires a value"));
-            }
-            ++i;
-            continue;
-        }
-        if (arg[0] == '-') {
-            return std::unexpected(cli_error("unknown option: " + std::string(arg)));
-        }
-        break;
     }
 
     return message;

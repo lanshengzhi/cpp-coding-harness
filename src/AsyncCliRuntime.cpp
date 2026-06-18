@@ -104,7 +104,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             }
         }
         const auto& final_message = std::get<ai::AssistantMessage>(history.back());
-        std::cout << ai::text_from_content(final_message.content) << '\n';
+        std::cout << ai::text_from_assistant_content(final_message.content) << '\n';
         return true;
     };
 

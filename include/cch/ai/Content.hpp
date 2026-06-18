@@ -34,7 +34,9 @@ struct ToolCallContent {
     std::optional<std::string> argument_error;
 };
 
-using Content = std::variant<TextContent, ThinkingContent, ImageContent, ToolCallContent>;
+using Content = std::variant<TextContent, ThinkingContent, ImageContent>;
+
+using AssistantContent = std::variant<TextContent, ThinkingContent, ToolCallContent>;
 
 [[nodiscard]] inline TextContent text_content(std::string text) {
     return TextContent{std::move(text), std::nullopt};
@@ -65,6 +67,17 @@ using Content = std::variant<TextContent, ThinkingContent, ImageContent, ToolCal
 }
 
 [[nodiscard]] inline std::string text_from_content(const std::vector<Content>& content) {
+    std::string text;
+    for (const auto& block : content) {
+        if (const auto* text_block = std::get_if<TextContent>(&block)) {
+            text += text_block->text;
+        }
+    }
+    return text;
+}
+
+[[nodiscard]] inline std::string text_from_assistant_content(
+    const std::vector<AssistantContent>& content) {
     std::string text;
     for (const auto& block : content) {
         if (const auto* text_block = std::get_if<TextContent>(&block)) {

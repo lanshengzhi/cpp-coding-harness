@@ -38,7 +38,18 @@ struct ToolCallAccumulator {
     return text;
 }
 
-[[nodiscard]] std::vector<ai::glaze::ProviderToolCallDto> tool_calls_from_content(const std::vector<ai::Content>& content) {
+[[nodiscard]] std::string assistant_content_text(const std::vector<ai::AssistantContent>& content) {
+    std::string text;
+    for (const auto& block : content) {
+        if (const auto* text_block = std::get_if<ai::TextContent>(&block)) {
+            text += text_block->text;
+        }
+    }
+    return text;
+}
+
+[[nodiscard]] std::vector<ai::glaze::ProviderToolCallDto> tool_calls_from_assistant_content(
+    const std::vector<ai::AssistantContent>& content) {
     std::vector<ai::glaze::ProviderToolCallDto> calls;
     for (const auto& block : content) {
         if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
@@ -62,14 +73,14 @@ struct ToolCallAccumulator {
                 return ai::glaze::OpenAIChatMessageDto{"user", content_text(user.content), std::nullopt, std::nullopt};
             },
             [](const ai::AssistantMessage& assistant) {
-                auto calls = tool_calls_from_content(assistant.content);
+                auto calls = tool_calls_from_assistant_content(assistant.content);
                 std::optional<std::vector<ai::glaze::ProviderToolCallDto>> tool_calls;
                 if (!calls.empty()) {
                     tool_calls = std::move(calls);
                 }
                 return ai::glaze::OpenAIChatMessageDto{
                     "assistant",
-                    content_text(assistant.content),
+                    assistant_content_text(assistant.content),
                     std::nullopt,
                     std::move(tool_calls),
                 };

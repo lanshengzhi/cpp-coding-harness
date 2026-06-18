@@ -119,7 +119,7 @@ TEST_CASE("default provider registry includes fake and OpenAI-compatible provide
     REQUIRE(run.result);
     CHECK(run.result->provider == "fake");
     CHECK(run.result->api == "scripted-fake");
-    CHECK(text_from_content(run.result->content) == "fake: hello");
+    CHECK(text_from_assistant_content(run.result->content) == "fake: hello");
     CHECK_FALSE(run.events.empty());
 
     auto openai = registry->create("openai-compatible", context);

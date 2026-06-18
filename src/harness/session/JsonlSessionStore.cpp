@@ -212,6 +212,19 @@ void redact_content(ai::Content& content) {
                 block.text = util::redact_text(std::move(block.text));
             } else if constexpr (std::is_same_v<T, ai::ThinkingContent>) {
                 block.thinking = util::redact_text(std::move(block.thinking));
+            }
+        },
+        content);
+}
+
+void redact_assistant_content(ai::AssistantContent& content) {
+    std::visit(
+        [](auto& block) {
+            using T = std::decay_t<decltype(block)>;
+            if constexpr (std::is_same_v<T, ai::TextContent>) {
+                block.text = util::redact_text(std::move(block.text));
+            } else if constexpr (std::is_same_v<T, ai::ThinkingContent>) {
+                block.thinking = util::redact_text(std::move(block.thinking));
             } else if constexpr (std::is_same_v<T, ai::ToolCallContent>) {
                 if (block.arguments) {
                     block.arguments = redact_json_value(*block.arguments);
@@ -232,15 +245,18 @@ void redact_content(ai::Content& content) {
             using T = std::decay_t<decltype(concrete)>;
             if constexpr (std::is_same_v<T, ai::SystemMessage>) {
                 concrete.content = util::redact_text(std::move(concrete.content));
+            } else if constexpr (std::is_same_v<T, ai::AssistantMessage>) {
+                for (auto& block : concrete.content) {
+                    redact_assistant_content(block);
+                }
+                if (concrete.error_message) {
+                    concrete.error_message = util::redact_text(std::move(*concrete.error_message));
+                }
             } else {
                 for (auto& block : concrete.content) {
                     redact_content(block);
                 }
-                if constexpr (std::is_same_v<T, ai::AssistantMessage>) {
-                    if (concrete.error_message) {
-                        concrete.error_message = util::redact_text(std::move(*concrete.error_message));
-                    }
-                } else if constexpr (std::is_same_v<T, ai::ToolResultMessage>) {
+                if constexpr (std::is_same_v<T, ai::ToolResultMessage>) {
                     if (concrete.details) {
                         concrete.details = redact_json_value(*concrete.details);
                     }

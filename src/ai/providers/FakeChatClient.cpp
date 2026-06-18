@@ -104,7 +104,7 @@ private:
         ai::AssistantMessage assistant,
         ai::AssistantEventSink& sink) {
         if (sink && !assistant.content.empty()) {
-            auto text = ai::text_from_content(assistant.content);
+            auto text = ai::text_from_assistant_content(assistant.content);
             CCH_TRY_VOID(sink(ai::TextDeltaEvent{0, text, assistant}));
         }
         co_return assistant;

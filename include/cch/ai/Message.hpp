@@ -2,6 +2,7 @@
 
 #include "Content.hpp"
 #include "Usage.hpp"
+#include "../util/JsonValue.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -12,6 +13,20 @@
 namespace cch::ai {
 
 using TimestampMs = std::int64_t;
+
+struct DiagnosticErrorInfo {
+    std::optional<std::string> name;
+    std::string message;
+    std::optional<std::string> stack;
+    std::optional<std::string> code;
+};
+
+struct DiagnosticEntry {
+    std::string type;
+    TimestampMs timestamp{};
+    std::optional<DiagnosticErrorInfo> error;
+    std::optional<util::JsonValue> details;
+};
 
 struct SystemMessage {
     std::string content;
@@ -24,7 +39,7 @@ struct UserMessage {
 };
 
 struct AssistantMessage {
-    std::vector<Content> content;
+    std::vector<AssistantContent> content;
     std::string api;
     std::string provider;
     std::string model;
@@ -33,6 +48,7 @@ struct AssistantMessage {
     std::optional<Usage> usage;
     AssistantStopReason stop_reason{AssistantStopReason::Unknown};
     std::optional<std::string> error_message;
+    std::optional<std::vector<DiagnosticEntry>> diagnostics;
     TimestampMs timestamp{};
 };
 

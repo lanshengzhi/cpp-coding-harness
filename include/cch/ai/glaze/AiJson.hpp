@@ -31,8 +31,23 @@ struct UsageDto {
     std::int64_t output{};
     std::int64_t cacheRead{};
     std::int64_t cacheWrite{};
+    std::optional<std::int64_t> cacheWrite1h;
     std::int64_t totalTokens{};
     UsageCostDto cost{};
+};
+
+struct DiagnosticErrorInfoDto {
+    std::optional<std::string> name;
+    std::string message;
+    std::optional<std::string> stack;
+    std::optional<std::string> code;
+};
+
+struct DiagnosticEntryDto {
+    std::string type;
+    std::int64_t timestamp{};
+    std::optional<DiagnosticErrorInfoDto> error;
+    std::optional<glz::generic> details;
 };
 
 struct ContentDto {
@@ -64,6 +79,7 @@ struct MessageDto {
     std::optional<UsageDto> usage;
     std::optional<std::string> stopReason;
     std::optional<std::string> errorMessage;
+    std::optional<std::vector<DiagnosticEntryDto>> diagnostics;
     std::optional<std::string> toolCallId;
     std::optional<std::string> toolName;
     std::optional<glz::generic> details;
@@ -170,6 +186,7 @@ template <typename T>
         usage.output,
         usage.cache_read,
         usage.cache_write,
+        usage.cache_write_1h,
         usage.total_tokens,
         UsageCostDto{
             usage.cost.input,
@@ -187,6 +204,7 @@ template <typename T>
         dto.output,
         dto.cacheRead,
         dto.cacheWrite,
+        dto.cacheWrite1h,
         dto.totalTokens,
         UsageCost{
             dto.cost.input,
@@ -246,6 +264,10 @@ template <typename T>
     return std::visit([](const auto& concrete) { return to_dto(concrete); }, content);
 }
 
+[[nodiscard]] inline ContentDto to_dto(const AssistantContent& content) {
+    return std::visit([](const auto& concrete) { return to_dto(concrete); }, content);
+}
+
 [[nodiscard]] inline util::Expected<Content> content_from_dto(const ContentDto& dto, std::string_view context) {
     if (dto.type == "text") {
         if (auto required = require_field(dto.text, "text content", "text", context); !required) {
@@ -269,35 +291,10 @@ template <typename T>
         return Content{ImageContent{*dto.data, *dto.mimeType}};
     }
     if (dto.type == "toolCall") {
-        if (auto required = require_field(dto.id, "toolCall content", "id", context); !required) {
-            return std::unexpected(required.error());
-        }
-        if (auto required = require_field(dto.name, "toolCall content", "name", context); !required) {
-            return std::unexpected(required.error());
-        }
-        if (!dto.rawArguments && !dto.arguments) {
-            return std::unexpected(json_contract_error(
-                "missing required JSON field",
-                "missing required field 'rawArguments' or 'arguments' for toolCall content",
-                context));
-        }
-        auto raw_arguments = dto.rawArguments.value_or("");
-        if (raw_arguments.empty() && dto.arguments) {
-            auto raw = util::write_json(util::json_from_glaze(*dto.arguments));
-            if (!raw) {
-                return std::unexpected(raw.error());
-            }
-            raw_arguments = std::move(*raw);
-        }
-        return Content{ToolCallContent{
-            *dto.id,
-            *dto.name,
-            dto.arguments ? std::optional<util::JsonValue>{util::json_from_glaze(*dto.arguments)} : std::nullopt,
-            std::move(raw_arguments),
-            dto.thoughtSignature,
-            dto.argumentsValid.value_or(true),
-            dto.argumentError,
-        }};
+        return std::unexpected(json_contract_error(
+            "unexpected toolCall in non-assistant content",
+            "toolCall content blocks are only valid in assistant messages",
+            context));
     }
 
     return std::unexpected(json_contract_error(
@@ -321,6 +318,93 @@ template <typename T>
     return converted;
 }
 
+[[nodiscard]] inline util::Expected<AssistantContent> assistant_content_from_dto(
+    const ContentDto& dto,
+    std::string_view context) {
+    if (dto.type == "text") {
+        if (auto required = require_field(dto.text, "text content", "text", context); !required) {
+            return std::unexpected(required.error());
+        }
+        return AssistantContent{TextContent{*dto.text, dto.textSignature}};
+    }
+    if (dto.type == "thinking") {
+        if (auto required = require_field(dto.thinking, "thinking content", "thinking", context); !required) {
+            return std::unexpected(required.error());
+        }
+        return AssistantContent{ThinkingContent{*dto.thinking, dto.thinkingSignature, dto.redacted.value_or(false)}};
+    }
+    if (dto.type == "toolCall") {
+        if (auto required = require_field(dto.id, "toolCall content", "id", context); !required) {
+            return std::unexpected(required.error());
+        }
+        if (auto required = require_field(dto.name, "toolCall content", "name", context); !required) {
+            return std::unexpected(required.error());
+        }
+        if (!dto.rawArguments && !dto.arguments) {
+            return std::unexpected(json_contract_error(
+                "missing required JSON field",
+                "missing required field 'rawArguments' or 'arguments' for toolCall content",
+                context));
+        }
+        auto raw_arguments = dto.rawArguments.value_or("");
+        if (raw_arguments.empty() && dto.arguments) {
+            auto raw = util::write_json(util::json_from_glaze(*dto.arguments));
+            if (!raw) {
+                return std::unexpected(raw.error());
+            }
+            raw_arguments = std::move(*raw);
+        }
+        return AssistantContent{ToolCallContent{
+            *dto.id,
+            *dto.name,
+            dto.arguments ? std::optional<util::JsonValue>{util::json_from_glaze(*dto.arguments)} : std::nullopt,
+            std::move(raw_arguments),
+            dto.thoughtSignature,
+            dto.argumentsValid.value_or(true),
+            dto.argumentError,
+        }};
+    }
+    if (dto.type == "image") {
+        return std::unexpected(json_contract_error(
+            "unexpected image in assistant content",
+            "assistant messages cannot contain image content blocks",
+            context));
+    }
+
+    return std::unexpected(json_contract_error(
+        "unknown content discriminator",
+        "unknown content type '" + dto.type + "'",
+        context));
+}
+
+[[nodiscard]] inline util::Expected<std::vector<AssistantContent>> assistant_content_from_dto(
+    const std::vector<ContentDto>& content,
+    std::string_view context) {
+    std::vector<AssistantContent> converted;
+    converted.reserve(content.size());
+    for (const auto& dto : content) {
+        auto block = assistant_content_from_dto(dto, context);
+        if (!block) {
+            return std::unexpected(block.error());
+        }
+        converted.push_back(std::move(*block));
+    }
+    return converted;
+}
+
+[[nodiscard]] inline util::Expected<std::vector<AssistantContent>> required_assistant_content_from_dto(
+    const std::optional<std::vector<ContentDto>>& content,
+    std::string_view role,
+    std::string_view context) {
+    if (!content) {
+        return std::unexpected(json_contract_error(
+            "missing content",
+            std::string(role) + " message is missing the 'content' field",
+            context));
+    }
+    return assistant_content_from_dto(*content, context);
+}
+
 [[nodiscard]] inline std::vector<ContentDto> to_content_dtos(const std::vector<Content>& content) {
     std::vector<ContentDto> dtos;
     dtos.reserve(content.size());
@@ -328,6 +412,92 @@ template <typename T>
         dtos.push_back(to_dto(block));
     }
     return dtos;
+}
+
+[[nodiscard]] inline std::vector<ContentDto> to_assistant_content_dtos(
+    const std::vector<AssistantContent>& content) {
+    std::vector<ContentDto> dtos;
+    dtos.reserve(content.size());
+    for (const auto& block : content) {
+        dtos.push_back(to_dto(block));
+    }
+    return dtos;
+}
+
+[[nodiscard]] inline DiagnosticErrorInfoDto to_dto(const DiagnosticErrorInfo& info) {
+    DiagnosticErrorInfoDto dto;
+    dto.name = info.name;
+    dto.message = info.message;
+    dto.stack = info.stack;
+    dto.code = info.code;
+    return dto;
+}
+
+[[nodiscard]] inline DiagnosticErrorInfo diagnostic_error_info_from_dto(
+    const DiagnosticErrorInfoDto& dto) {
+    DiagnosticErrorInfo info;
+    info.name = dto.name;
+    info.message = dto.message;
+    info.stack = dto.stack;
+    info.code = dto.code;
+    return info;
+}
+
+[[nodiscard]] inline DiagnosticEntryDto to_dto(const DiagnosticEntry& entry) {
+    DiagnosticEntryDto dto;
+    dto.type = entry.type;
+    dto.timestamp = entry.timestamp;
+    if (entry.error) {
+        dto.error = to_dto(*entry.error);
+    }
+    if (entry.details) {
+        dto.details = util::json_to_glaze(*entry.details);
+    }
+    return dto;
+}
+
+[[nodiscard]] inline DiagnosticEntry diagnostic_entry_from_dto(
+    const DiagnosticEntryDto& dto) {
+    DiagnosticEntry entry;
+    entry.type = dto.type;
+    entry.timestamp = dto.timestamp;
+    if (dto.error) {
+        entry.error = diagnostic_error_info_from_dto(*dto.error);
+    }
+    if (dto.details) {
+        entry.details = util::json_from_glaze(*dto.details);
+    }
+    return entry;
+}
+
+[[nodiscard]] inline std::vector<DiagnosticEntryDto> to_diagnostic_entry_dtos(
+    const std::vector<DiagnosticEntry>& entries) {
+    std::vector<DiagnosticEntryDto> dtos;
+    dtos.reserve(entries.size());
+    for (const auto& entry : entries) {
+        dtos.push_back(to_dto(entry));
+    }
+    return dtos;
+}
+
+[[nodiscard]] inline util::Expected<std::vector<DiagnosticEntry>> diagnostic_entries_from_dto(
+    const std::vector<DiagnosticEntryDto>& dtos,
+    std::string_view /*context*/) {
+    std::vector<DiagnosticEntry> entries;
+    entries.reserve(dtos.size());
+    for (const auto& dto : dtos) {
+        entries.push_back(diagnostic_entry_from_dto(dto));
+    }
+    return entries;
+}
+
+[[nodiscard]] inline util::Expected<std::vector<DiagnosticEntry>> required_diagnostic_entries_from_dto(
+    const std::optional<std::vector<DiagnosticEntryDto>>& dtos,
+    std::string_view context) {
+    if (!dtos) {
+        return std::vector<DiagnosticEntry>{};
+    }
+    return diagnostic_entries_from_dto(*dtos, context);
 }
 
 [[nodiscard]] inline MessageDto to_dto(const SystemMessage& message) {
@@ -349,7 +519,7 @@ template <typename T>
 [[nodiscard]] inline MessageDto to_dto(const AssistantMessage& message) {
     MessageDto dto;
     dto.role = "assistant";
-    dto.content = to_content_dtos(message.content);
+    dto.content = to_assistant_content_dtos(message.content);
     if (!message.api.empty()) {
         dto.api = message.api;
     }
@@ -366,6 +536,9 @@ template <typename T>
     }
     dto.stopReason = stop_reason_to_json(message.stop_reason);
     dto.errorMessage = message.error_message;
+    if (message.diagnostics.has_value()) {
+        dto.diagnostics = to_diagnostic_entry_dtos(*message.diagnostics);
+    }
     dto.timestamp = message.timestamp;
     return dto;
 }
@@ -412,7 +585,7 @@ template <typename T>
     }
 
     if (dto.role == "assistant") {
-        auto content = required_content_from_dto(dto.content, dto.role, context);
+        auto content = required_assistant_content_from_dto(dto.content, dto.role, context);
         if (!content) {
             return std::unexpected(content.error());
         }
@@ -428,6 +601,13 @@ template <typename T>
         }
         message.stop_reason = dto.stopReason ? stop_reason_from_json(*dto.stopReason) : AssistantStopReason::Unknown;
         message.error_message = dto.errorMessage;
+        if (dto.diagnostics.has_value()) {
+            auto diags = required_diagnostic_entries_from_dto(dto.diagnostics, context);
+            if (!diags) {
+                return std::unexpected(diags.error());
+            }
+            message.diagnostics = std::move(*diags);
+        }
         message.timestamp = dto.timestamp;
         return MessageVariant{std::move(message)};
     }
