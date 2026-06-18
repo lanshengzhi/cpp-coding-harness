@@ -15,6 +15,7 @@ option(CCH_BUILD_TESTS "Build tests" ON)
 find_package(Boost REQUIRED COMPONENTS filesystem)
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
+find_package(CLI11 CONFIG REQUIRED)
 find_package(glaze CONFIG REQUIRED)
 find_package(CLI11 CONFIG REQUIRED)
 
@@ -56,6 +57,7 @@ target_link_libraries(cch_ai
         OpenSSL::SSL
         OpenSSL::Crypto
 )
+target_compile_options(cch_ai PRIVATE -Wall -Wextra -Wpedantic)
 
 add_library(cch_agent
     src/agent/AgentLoop.cpp

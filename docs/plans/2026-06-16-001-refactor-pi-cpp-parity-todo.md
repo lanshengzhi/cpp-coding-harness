@@ -73,6 +73,7 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **Done when:** README and this TODO agree on which gaps are intentional: full TUI, extensions, package installation, OAuth, multi-provider registry, session tree, compaction, SDK/RPC, and sandbox/container integration.
 - [x] Add a recurring implementation checklist for each future parity slice.
   - **Done when:** each slice starts by reading the relevant `pi:` contract, adding tests, implementing the smallest C++ seam, and updating docs only if behavior or public boundaries change.
+  - **Result:** see the recurring checklist in `docs/plans/2026-06-16-003-refactor-pi-cpp-contract-inventory.md`.
 
 ### T1. Package-Style Library Boundaries
 

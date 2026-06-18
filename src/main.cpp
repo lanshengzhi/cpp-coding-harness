@@ -12,6 +12,7 @@
 #include <random>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -65,6 +66,20 @@ std::string normalize_parse_error(const CLI::ParseError& error) {
         if (!unexpected.empty() && unexpected.front() == '-') {
             return "unknown option: " + unexpected;
         }
+        if (is_known_flag(arg)) {
+            continue;
+        }
+        if (is_value_option(arg)) {
+            if (i + 1 >= argc) {
+                return std::unexpected(cli_error(std::string(arg) + " requires a value"));
+            }
+            ++i;
+            continue;
+        }
+        if (arg[0] == '-') {
+            return std::unexpected(cli_error("unknown option: " + std::string(arg)));
+        }
+        break;
     }
 
     return message;
