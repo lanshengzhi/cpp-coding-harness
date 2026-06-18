@@ -1,7 +1,7 @@
 ---
 title: "refactor: Clean up AGENTS.md for progressive disclosure"
 type: refactor
-status: active
+status: completed
 date: 2026-06-19
 ---
 
