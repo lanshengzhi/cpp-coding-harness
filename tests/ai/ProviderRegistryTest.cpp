@@ -1,5 +1,6 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
+#include "../../include/cch/ai/Content.hpp"
 #include "../../include/cch/ai/ProviderRegistry.hpp"
 #include "../../include/cch/util/Error.hpp"
 
@@ -61,16 +62,6 @@ RunResult run_client(ai::StreamingChatClient& client, ai::StreamChatRequest requ
     io.run();
     REQUIRE(result.has_value());
     return RunResult{std::move(*result), std::move(events)};
-}
-
-std::string text_from_content(const std::vector<ai::Content>& content) {
-    std::string text;
-    for (const auto& block : content) {
-        if (const auto* text_block = std::get_if<ai::TextContent>(&block)) {
-            text += text_block->text;
-        }
-    }
-    return text;
 }
 
 } // namespace
