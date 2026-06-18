@@ -22,7 +22,7 @@ struct RuntimeServicesConfig {
 
 struct RuntimeServices {
     std::unique_ptr<ai::StreamingChatClient> client;
-    std::shared_ptr<harness::AsyncLocalExecutionEnv> env;
+    std::shared_ptr<harness::AsyncExecutionEnv> env;
     agent::AsyncToolRegistry tools;
 };
 
