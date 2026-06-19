@@ -177,8 +177,16 @@ TEST_CASE("Glaze JSONL session parses v3 tree metadata entries", "[harness][sess
     CHECK(loaded->unknown_lines.empty());
 
     auto opened = harness::session::JsonlSessionStore::open_existing(path);
-    REQUIRE_FALSE(opened);
-    CHECK(opened.error().message == "session tree entries require tree resume support");
+    REQUIRE(opened);
+    CHECK(opened->metadata().session_id == "sess-v3");
+    // After U4 (resume gate removal), sessions with tree entries can be resumed.
+    // Append a message to verify linear appends still work on a resumed tree session.
+    REQUIRE(opened->append(user_message("resumed after tree entries")));
+    auto reloaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(reloaded);
+    CHECK(reloaded->entries.size() == 4);  // header + model_change + thinking_level_change + message
+    CHECK(reloaded->messages.size() == 1);
+    CHECK(text_from_message(reloaded->messages[0]) == "resumed after tree entries");
 }
 
 TEST_CASE("Glaze JSONL session reports malformed line context", "[harness][session][u7]") {
@@ -234,4 +242,260 @@ TEST_CASE("Glaze JSONL session rejects symlink and public readable files", "[har
     REQUIRE_FALSE(public_load);
     CHECK(public_load.error().message.find("readable") != std::string::npos);
 #endif
+}
+
+// --- U5: v3 tree entry write round-trip tests ---
+
+namespace {
+bool is_hex8(const std::string& s) {
+    if (s.size() != 8) return false;
+    for (char c : s) {
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+    }
+    return true;
+}
+} // namespace
+
+TEST_CASE("v3 session header writes and loads correctly", "[harness][session][u9]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "v3-header.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    CHECK(loaded->metadata.session_id == "session-test");
+    CHECK(loaded->metadata.workspace == workspace.path());
+    CHECK(loaded->entries.size() == 1);
+    CHECK(loaded->entries[0].kind == harness::session::SessionEntryKind::Header);
+
+    // Verify v3 header JSON format
+    const auto raw = read_all(path);
+    CHECK(raw.find("\"type\":\"session\"") != std::string::npos);
+    CHECK(raw.find("\"version\":3") != std::string::npos);
+}
+
+TEST_CASE("entry IDs are 8-char random hex", "[harness][session][u9]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "id-format.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(user_message("test")));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    REQUIRE(loaded->entries.size() >= 2);
+    CHECK(is_hex8(loaded->entries[1].entry_id));
+}
+
+TEST_CASE("model_change entry round-trips", "[harness][session][u9]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "model-change.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append_model_change(std::nullopt, "openai", "gpt-4o"));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    REQUIRE(loaded->entries.size() == 2);
+    CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::ModelChange);
+    CHECK(is_hex8(loaded->entries[1].entry_id));
+    CHECK_FALSE(loaded->entries[1].parent_id.has_value());
+    CHECK(loaded->entries[1].payload.get<util::JsonValue::object_t>().at("provider").get<std::string>() == "openai");
+    CHECK(loaded->entries[1].payload.get<util::JsonValue::object_t>().at("modelId").get<std::string>() == "gpt-4o");
+    CHECK(loaded->messages.empty());
+}
+
+TEST_CASE("thinking_level_change entry round-trips", "[harness][session][u9]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "thinking-change.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append_thinking_level_change("parent01", "high"));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    REQUIRE(loaded->entries.size() == 2);
+    CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::ThinkingLevelChange);
+    REQUIRE(loaded->entries[1].parent_id.has_value());
+    CHECK(*loaded->entries[1].parent_id == "parent01");
+    CHECK(loaded->entries[1].payload.get<util::JsonValue::object_t>().at("thinkingLevel").get<std::string>() == "high");
+}
+
+TEST_CASE("active_tools_change entry round-trips", "[harness][session][u9]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "tools-change.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append_active_tools_change(std::nullopt, {"read", "write", "bash"}));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    REQUIRE(loaded->entries.size() == 2);
+    CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::ActiveToolsChange);
+    const auto& tools_arr = loaded->entries[1].payload.get<util::JsonValue::object_t>().at("tools").get<util::JsonValue::array_t>();
+    REQUIRE(tools_arr.size() == 3);
+    CHECK(tools_arr[0].get<std::string>() == "read");
+    CHECK(tools_arr[1].get<std::string>() == "write");
+    CHECK(tools_arr[2].get<std::string>() == "bash");
+}
+
+TEST_CASE("custom entry round-trips", "[harness][session][u9]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "custom.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+    auto data = util::JsonValue{util::JsonValue::object_t{{"count", util::JsonValue{42}}, {"name", util::JsonValue{"test"}}}};
+    REQUIRE(store->append_custom_entry(std::nullopt, "my-ext", std::move(data)));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    REQUIRE(loaded->entries.size() == 2);
+    CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::Custom);
+    const auto& obj = loaded->entries[1].payload.get<util::JsonValue::object_t>();
+    CHECK(obj.at("customType").get<std::string>() == "my-ext");
+    CHECK(obj.at("data").get<util::JsonValue::object_t>().at("count").get<double>() == 42.0);
+}
+
+TEST_CASE("custom_message entry round-trips", "[harness][session][u9]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "custom-msg.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+    auto details = util::JsonValue{util::JsonValue::object_t{{"key", util::JsonValue{"val"}}}};
+    REQUIRE(store->append_custom_message_entry("parent99", "my-ext", "injected content", true, std::move(details)));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    REQUIRE(loaded->entries.size() == 2);
+    CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::CustomMessage);
+    const auto& obj = loaded->entries[1].payload.get<util::JsonValue::object_t>();
+    CHECK(obj.at("customType").get<std::string>() == "my-ext");
+    CHECK(obj.at("content").get<std::string>() == "injected content");
+    CHECK(obj.at("display").get<bool>() == true);
+    REQUIRE(loaded->entries[1].parent_id.has_value());
+    CHECK(*loaded->entries[1].parent_id == "parent99");
+}
+
+TEST_CASE("label entry round-trips with set and clear", "[harness][session][u9]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "label.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+    // Set a label
+    REQUIRE(store->append_label_change(std::nullopt, "target-entry", std::string{"checkpoint-1"}));
+    // Clear it (null label)
+    REQUIRE(store->append_label_change("prev-id", "target-entry", std::nullopt));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    REQUIRE(loaded->entries.size() == 3);  // header + 2 labels
+    CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::Label);
+    const auto& set_obj = loaded->entries[1].payload.get<util::JsonValue::object_t>();
+    CHECK(set_obj.at("label").get<std::string>() == "checkpoint-1");
+    CHECK(loaded->entries[2].kind == harness::session::SessionEntryKind::Label);
+    // Null label should omit the field (Glaze skips std::nullopt by default)
+    const auto raw = read_all(path);
+    CHECK(raw.find("checkpoint-1") != std::string::npos);
+    // Second label entry should have label absent
+    auto clear_obj = loaded->entries[2].payload.get<util::JsonValue::object_t>();
+    CHECK(clear_obj.find("label") == clear_obj.end());
+}
+
+TEST_CASE("compaction entry round-trips", "[harness][session][u9]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "compaction.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+    auto details = util::JsonValue{util::JsonValue::object_t{{"readFiles", util::JsonValue{util::JsonValue::array_t{util::JsonValue{"a.txt"}}}}}};
+    REQUIRE(store->append_compaction(std::nullopt, "summary text", "first-kept", 50000, std::move(details), true));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    REQUIRE(loaded->entries.size() == 2);
+    CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::Compaction);
+    const auto& obj = loaded->entries[1].payload.get<util::JsonValue::object_t>();
+    CHECK(obj.at("summary").get<std::string>() == "summary text");
+    CHECK(obj.at("firstKeptEntryId").get<std::string>() == "first-kept");
+    CHECK(obj.at("tokensBefore").get<double>() == 50000.0);
+    CHECK(obj.at("fromHook").get<bool>() == true);
+}
+
+TEST_CASE("branch_summary entry round-trips", "[harness][session][u9]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "branch-summary.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+    auto details = util::JsonValue{util::JsonValue::object_t{{"modifiedFiles", util::JsonValue{util::JsonValue::array_t{util::JsonValue{"b.txt"}}}}}};
+    REQUIRE(store->append_branch_summary("from-branch", "branch-id", "branch explored X", std::move(details), std::nullopt));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    REQUIRE(loaded->entries.size() == 2);
+    CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::BranchSummary);
+    const auto& obj = loaded->entries[1].payload.get<util::JsonValue::object_t>();
+    CHECK(obj.at("fromId").get<std::string>() == "branch-id");
+    CHECK(obj.at("summary").get<std::string>() == "branch explored X");
+    CHECK(obj.find("fromHook") == obj.end());  // not present when std::nullopt
+}
+
+TEST_CASE("session_info entry round-trips", "[harness][session][u9]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "session-info.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append_session_info(std::nullopt, "Refactor auth module"));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    REQUIRE(loaded->entries.size() == 2);
+    CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::SessionInfo);
+    CHECK(loaded->entries[1].payload.get<util::JsonValue::object_t>().at("name").get<std::string>() == "Refactor auth module");
+}
+
+TEST_CASE("mixed tree entries and messages round-trip in order", "[harness][session][u9]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "mixed.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+    // Simulate a session: model_change → thinking_level_change → user message → assistant message
+    REQUIRE(store->append_model_change(std::nullopt, "openai", "gpt-4o"));
+    REQUIRE(store->append_thinking_level_change("mc-id", "high"));
+    REQUIRE(store->append(user_message("hello")));
+    ai::AssistantMessage assistant;
+    assistant.content.emplace_back(ai::TextContent{"hi there", std::nullopt});
+    assistant.provider = "openai";
+    assistant.model = "gpt-4o";
+    REQUIRE(store->append(ai::MessageVariant{assistant}));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    REQUIRE(loaded->entries.size() == 5);  // header + 4 entries
+    CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::ModelChange);
+    CHECK(loaded->entries[2].kind == harness::session::SessionEntryKind::ThinkingLevelChange);
+    CHECK(loaded->entries[3].kind == harness::session::SessionEntryKind::Message);
+    CHECK(loaded->entries[4].kind == harness::session::SessionEntryKind::Message);
+    CHECK(loaded->messages.size() == 2);
+    CHECK(text_from_message(loaded->messages[0]) == "hello");
+}
+
+TEST_CASE("open_existing succeeds and allows append on session with tree entries", "[harness][session][u9]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "resume-tree.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append_model_change(std::nullopt, "openai", "gpt-4o"));
+    REQUIRE(store->append(user_message("first message")));
+
+    // Resume the session
+    auto resumed = harness::session::JsonlSessionStore::open_existing(path);
+    REQUIRE(resumed);
+    REQUIRE(resumed->append(user_message("second message")));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    REQUIRE(loaded->entries.size() == 4);  // header + model_change + 2 messages
+    CHECK(loaded->messages.size() == 2);
+    CHECK(text_from_message(loaded->messages[0]) == "first message");
+    CHECK(text_from_message(loaded->messages[1]) == "second message");
 }

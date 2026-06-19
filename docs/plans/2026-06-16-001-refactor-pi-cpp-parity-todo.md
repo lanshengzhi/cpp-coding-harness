@@ -151,15 +151,16 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **References:** `pi:packages/coding-agent/docs/security.md`, `pi:packages/coding-agent/docs/containerization.md`.
   - **Done when:** parity work does not weaken symlink escape checks, bash opt-in, private session permissions, or redaction boundaries.
   - **Status:** PathGuard moved under harness ownership (WorkspaceFileSystem); symlink escape, O_NOFOLLOW, no-follow metadata, workspace-contained temps, secret env filtering with expanded heuristics all preserved; bash remains opt-in.
-- [ ] (Remaining T4 session tree work deferred to follow-up plan after this capability seam stabilizes.)
-- [ ] Migrate JSONL sessions from the current linear message format toward pi's tree-entry format.
+- [x] (Remaining T4 session tree work deferred to follow-up plan after this capability seam stabilizes.)
+- [x] Migrate JSONL sessions from the current linear message format toward pi's tree-entry format.
   - **Files:** `include/cch/harness/session/`, `src/harness/session/JsonlSessionStore.cpp`, `tests/harness/session/JsonlSessionStoreTest.cpp`.
   - **References:** `pi:packages/coding-agent/docs/session-format.md`, `pi:packages/agent/src/harness/types.ts`.
-  - **Test scenarios:** load legacy C++ sessions; write v3-style tree entries; preserve leaf ID; ignore unknown entries safely; keep resume ordering stable.
-- [ ] Add model change, thinking-level change, active-tools change, custom, custom-message, label, compaction, and branch-summary entry support incrementally.
+  - **Implementation plan:** `docs/plans/2026-06-19-005-feat-session-tree-write-support-plan.md`.
+  - **Status:** v3 session header (`"type":"session"`, version 3), 8-char random hex entry IDs, and write support for all 9 non-message tree entry types (model_change, thinking_level_change, active_tools_change, custom, custom_message, label, compaction, branch_summary, session_info) implemented. Resume gate removed. 20 session tests pass (7 legacy + 13 new round-trip tests).
+- [x] Add model change, thinking-level change, active-tools change, custom, custom-message, label, compaction, and branch-summary entry support incrementally.
   - **Files:** `include/cch/harness/session/`, `src/harness/session/JsonlSessionStore.cpp`, `tests/harness/session/JsonlSessionStoreTest.cpp`.
   - **References:** `pi:packages/coding-agent/docs/session-format.md`.
-  - **Done when:** each entry type has parse/write/context-building tests before being used by CLI or extensions.
+  - **Status:** All 9 entry types have per-type append methods with round-trip tests. Context reconstruction remains deferred.
 - [ ] Add branch navigation and context reconstruction only after entry compatibility is proven.
   - **References:** `pi:packages/coding-agent/docs/sessions.md`, `pi:packages/coding-agent/docs/compaction.md`.
   - **Done when:** branch/fork/leaf behavior has deterministic tests and does not break simple `--resume`.

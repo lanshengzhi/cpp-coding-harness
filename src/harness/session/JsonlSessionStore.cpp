@@ -6,8 +6,11 @@
 #include "../../util/Redactor.hpp"
 
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <fstream>
+#include <random>
+#include <sstream>
 #include <system_error>
 #include <type_traits>
 #include <utility>
@@ -22,11 +25,11 @@ namespace cch::harness::session {
 namespace {
 
 struct WriteHeaderDto {
-    std::string type{"header"};
-    int version{2};
-    std::string sessionId;
-    std::string createdAt;
-    std::string workspace;
+    std::string type{"session"};
+    int version{3};
+    std::string id;
+    std::string timestamp;
+    std::string cwd;
     std::string provider;
     std::string model;
 };
@@ -51,6 +54,96 @@ struct MessageEntryDto {
     std::optional<std::string> parentId;
     std::optional<std::string> leafId;
     ai::glaze::MessageDto message;
+};
+
+// --- v3 tree entry DTOs ---
+// Each mirrors pi's session-format.md field names exactly.
+// Common fields (type, id, parentId, timestamp) are inline — no base struct
+// because Glaze reflection operates on the concrete type.
+
+struct ModelChangeDto {
+    std::string type{"model_change"};
+    std::string id;
+    std::optional<std::string> parentId;
+    std::string timestamp;
+    std::string provider;
+    std::string modelId;
+};
+
+struct ThinkingLevelChangeDto {
+    std::string type{"thinking_level_change"};
+    std::string id;
+    std::optional<std::string> parentId;
+    std::string timestamp;
+    std::string thinkingLevel;
+};
+
+struct ActiveToolsChangeDto {
+    std::string type{"active_tools_change"};
+    std::string id;
+    std::optional<std::string> parentId;
+    std::string timestamp;
+    std::vector<std::string> tools;
+};
+
+struct CustomDto {
+    std::string type{"custom"};
+    std::string id;
+    std::optional<std::string> parentId;
+    std::string timestamp;
+    std::string customType;
+    glz::raw_json data{"null"};
+};
+
+struct CustomMessageDto {
+    std::string type{"custom_message"};
+    std::string id;
+    std::optional<std::string> parentId;
+    std::string timestamp;
+    std::string customType;
+    std::string content;
+    bool display{true};
+    std::optional<glz::raw_json> details;
+};
+
+struct LabelDto {
+    std::string type{"label"};
+    std::string id;
+    std::optional<std::string> parentId;
+    std::string timestamp;
+    std::string targetId;
+    std::optional<std::string> label;
+};
+
+struct CompactionDto {
+    std::string type{"compaction"};
+    std::string id;
+    std::optional<std::string> parentId;
+    std::string timestamp;
+    std::string summary;
+    std::string firstKeptEntryId;
+    std::size_t tokensBefore{0};
+    std::optional<glz::raw_json> details;
+    std::optional<bool> fromHook;
+};
+
+struct BranchSummaryDto {
+    std::string type{"branch_summary"};
+    std::string id;
+    std::optional<std::string> parentId;
+    std::string timestamp;
+    std::string fromId;
+    std::string summary;
+    std::optional<glz::raw_json> details;
+    std::optional<bool> fromHook;
+};
+
+struct SessionInfoDto {
+    std::string type{"session_info"};
+    std::string id;
+    std::optional<std::string> parentId;
+    std::string timestamp;
+    std::string name;
 };
 
 [[nodiscard]] util::Error session_error(std::string message, std::string detail = {}) {
@@ -79,10 +172,101 @@ template <typename T>
     return std::move(parsed).value();
 }
 
+[[nodiscard]] std::string generate_entry_id() {
+    thread_local std::random_device rd;
+    thread_local std::mt19937_64 gen(rd());
+    thread_local std::uniform_int_distribution<unsigned> dist(0, 15);
+    const char hex_chars[] = "0123456789abcdef";
+    std::string id(8, '0');
+    for (auto& c : id) {
+        c = hex_chars[dist(gen)];
+    }
+    return id;
+}
+
+[[nodiscard]] std::string generate_iso_timestamp() {
+    const auto now = std::chrono::system_clock::now();
+    const auto time = std::chrono::system_clock::to_time_t(now);
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        now.time_since_epoch()) % 1000;
+    std::tm gm{};
+    gmtime_r(&time, &gm);
+    std::ostringstream oss;
+    oss << std::put_time(&gm, "%Y-%m-%dT%H:%M:%S");
+    oss << '.' << std::setfill('0') << std::setw(3) << ms.count() << 'Z';
+    return oss.str();
+}
+
+#if defined(__unix__) || defined(__APPLE__)
+[[nodiscard]] util::ExpectedVoid append_line_to_file(const std::filesystem::path& path, const std::string& line) {
+    int flags = O_WRONLY | O_APPEND | O_CREAT;
+#ifdef O_NOFOLLOW
+    flags |= O_NOFOLLOW;
+#endif
+    int fd = ::open(path.c_str(), flags, S_IRUSR | S_IWUSR);
+    if (fd == -1) {
+        return std::unexpected(session_error("could not append to session file", std::strerror(errno)));
+    }
+    const char* data = line.data();
+    std::size_t remaining = line.size();
+    while (remaining > 0) {
+        ssize_t written = ::write(fd, data, remaining);
+        if (written < 0) {
+            const auto message = std::string(std::strerror(errno));
+            ::close(fd);
+            return std::unexpected(session_error("could not write session entry", message));
+        }
+        data += written;
+        remaining -= static_cast<std::size_t>(written);
+    }
+    if (::fsync(fd) != 0) {
+        const auto message = std::string(std::strerror(errno));
+        ::close(fd);
+        return std::unexpected(session_error("could not persist session entry", message));
+    }
+    if (::close(fd) != 0) {
+        return std::unexpected(session_error("could not close session file", std::strerror(errno)));
+    }
+    return {};
+}
+#else
+[[nodiscard]] util::ExpectedVoid append_line_to_file(const std::filesystem::path& path, const std::string& line) {
+    std::ofstream output(path, std::ios::binary | std::ios::app);
+    if (!output) {
+        return std::unexpected(session_error("could not append to session file"));
+    }
+    output << line;
+    output.flush();
+    output.close();
+    if (!output) {
+        return std::unexpected(session_error("could not persist session entry"));
+    }
+    return {};
+}
+#endif
+
+// Serialize a DTO and append to file. Tree entry metadata does not contain
+// user secrets — key-based redaction is too aggressive for fields like
+// "tokensBefore" (which contains "token"). Per-type methods handle any
+// payload redaction (e.g., custom.data) before constructing the DTO.
+template <typename Dto>
+[[nodiscard]] util::ExpectedVoid write_entry_line(const std::filesystem::path& path, const Dto& dto, std::size_t& counter) {
+    auto json_str = glz::write_json(dto);
+    if (!json_str) {
+        return std::unexpected(session_error("failed to serialize tree entry"));
+    }
+    const auto line = *json_str + '\n';
+    auto result = append_line_to_file(path, line);
+    if (result) {
+        ++counter;
+    }
+    return result;
+}
+
 [[nodiscard]] WriteHeaderDto to_dto(const SessionMetadata& metadata) {
     return WriteHeaderDto{
-        "header",
-        2,
+        "session",
+        3,
         metadata.session_id,
         metadata.created_at,
         metadata.workspace.string(),
@@ -155,27 +339,6 @@ void populate_tree_fields(SessionEntry& entry, const util::JsonValue& value) {
         entry.parent_id = optional_string_field(*object, "parentId");
         entry.leaf_id = optional_string_field(*object, "leafId");
     }
-}
-
-[[nodiscard]] bool parse_only_tree_kind(SessionEntryKind kind) {
-    switch (kind) {
-    case SessionEntryKind::ModelChange:
-    case SessionEntryKind::ThinkingLevelChange:
-    case SessionEntryKind::ActiveToolsChange:
-    case SessionEntryKind::Custom:
-    case SessionEntryKind::CustomMessage:
-    case SessionEntryKind::Label:
-    case SessionEntryKind::Compaction:
-    case SessionEntryKind::BranchSummary:
-    case SessionEntryKind::SessionInfo:
-    case SessionEntryKind::Leaf:
-        return true;
-    case SessionEntryKind::Header:
-    case SessionEntryKind::Message:
-    case SessionEntryKind::Unknown:
-        return false;
-    }
-    return false;
 }
 
 [[nodiscard]] util::JsonValue redact_json_value(const util::JsonValue& value) {
@@ -441,17 +604,10 @@ util::Expected<JsonlSessionStore> JsonlSessionStore::open_existing(const std::fi
     if (!loaded) {
         return std::unexpected(loaded.error());
     }
-    for (const auto& entry : loaded->entries) {
-        if (parse_only_tree_kind(entry.kind)) {
-            return std::unexpected(session_error(
-                "session tree entries require tree resume support",
-                "refusing to append to a session containing parse-only tree entries until tree reconstruction is implemented"));
-        }
-    }
     JsonlSessionStore store;
     store.path_ = path;
     store.metadata_ = loaded->metadata;
-    store.next_entry_id_ = loaded->messages.size() + 1;
+    store.next_entry_id_ = loaded->entries.size();
     return store;
 }
 
@@ -568,55 +724,164 @@ util::Expected<LoadedSession> JsonlSessionStore::load(const std::filesystem::pat
 
 util::ExpectedVoid JsonlSessionStore::append(const ai::MessageVariant& message) {
     auto redacted = redacted_message(message);
-    auto entry_json = util::write_json(to_dto("m" + std::to_string(next_entry_id_), redacted));
+    auto entry_json = util::write_json(to_dto(generate_entry_id(), redacted));
     if (!entry_json) {
         return std::unexpected(entry_json.error());
     }
-    const auto line = *entry_json + '\n';
+    auto result = append_line_to_file(path_, *entry_json + '\n');
+    if (result) {
+        ++next_entry_id_;
+    }
+    return result;
+}
 
-#if defined(__unix__) || defined(__APPLE__)
-    int flags = O_WRONLY | O_APPEND | O_CREAT;
-#ifdef O_NOFOLLOW
-    flags |= O_NOFOLLOW;
-#endif
-    int fd = ::open(path_.c_str(), flags, S_IRUSR | S_IWUSR);
-    if (fd == -1) {
-        return std::unexpected(session_error("could not append to session file", std::strerror(errno)));
+// --- v3 tree entry append methods ---
+
+util::ExpectedVoid JsonlSessionStore::append_model_change(
+    std::optional<std::string> parent_id,
+    std::string provider,
+    std::string model_id) {
+    ModelChangeDto dto;
+    dto.id = generate_entry_id();
+    dto.parentId = std::move(parent_id);
+    dto.timestamp = generate_iso_timestamp();
+    dto.provider = std::move(provider);
+    dto.modelId = std::move(model_id);
+    return write_entry_line(path_, dto, next_entry_id_);
+}
+
+util::ExpectedVoid JsonlSessionStore::append_thinking_level_change(
+    std::optional<std::string> parent_id,
+    std::string thinking_level) {
+    ThinkingLevelChangeDto dto;
+    dto.id = generate_entry_id();
+    dto.parentId = std::move(parent_id);
+    dto.timestamp = generate_iso_timestamp();
+    dto.thinkingLevel = std::move(thinking_level);
+    return write_entry_line(path_, dto, next_entry_id_);
+}
+
+util::ExpectedVoid JsonlSessionStore::append_active_tools_change(
+    std::optional<std::string> parent_id,
+    std::vector<std::string> tools) {
+    ActiveToolsChangeDto dto;
+    dto.id = generate_entry_id();
+    dto.parentId = std::move(parent_id);
+    dto.timestamp = generate_iso_timestamp();
+    dto.tools = std::move(tools);
+    return write_entry_line(path_, dto, next_entry_id_);
+}
+
+util::ExpectedVoid JsonlSessionStore::append_custom_entry(
+    std::optional<std::string> parent_id,
+    std::string custom_type,
+    util::JsonValue data) {
+    auto data_json = util::write_json(data);
+    if (!data_json) {
+        return std::unexpected(session_error("failed to serialize custom entry data"));
     }
-    const char* data = line.data();
-    std::size_t remaining = line.size();
-    while (remaining > 0) {
-        ssize_t written = ::write(fd, data, remaining);
-        if (written < 0) {
-            const auto message = std::string(std::strerror(errno));
-            ::close(fd);
-            return std::unexpected(session_error("could not write session entry", message));
+    CustomDto dto;
+    dto.id = generate_entry_id();
+    dto.parentId = std::move(parent_id);
+    dto.timestamp = generate_iso_timestamp();
+    dto.customType = std::move(custom_type);
+    dto.data = glz::raw_json{std::move(*data_json)};
+    return write_entry_line(path_, dto, next_entry_id_);
+}
+
+util::ExpectedVoid JsonlSessionStore::append_custom_message_entry(
+    std::optional<std::string> parent_id,
+    std::string custom_type,
+    std::string content,
+    bool display,
+    std::optional<util::JsonValue> details) {
+    CustomMessageDto dto;
+    dto.id = generate_entry_id();
+    dto.parentId = std::move(parent_id);
+    dto.timestamp = generate_iso_timestamp();
+    dto.customType = std::move(custom_type);
+    dto.content = std::move(content);
+    dto.display = display;
+    if (details) {
+        auto details_json = util::write_json(*details);
+        if (!details_json) {
+            return std::unexpected(session_error("failed to serialize custom message details"));
         }
-        data += written;
-        remaining -= static_cast<std::size_t>(written);
+        dto.details = glz::raw_json{std::move(*details_json)};
     }
-    if (::fsync(fd) != 0) {
-        const auto message = std::string(std::strerror(errno));
-        ::close(fd);
-        return std::unexpected(session_error("could not persist session entry", message));
+    return write_entry_line(path_, dto, next_entry_id_);
+}
+
+util::ExpectedVoid JsonlSessionStore::append_label_change(
+    std::optional<std::string> parent_id,
+    std::string target_id,
+    std::optional<std::string> label) {
+    LabelDto dto;
+    dto.id = generate_entry_id();
+    dto.parentId = std::move(parent_id);
+    dto.timestamp = generate_iso_timestamp();
+    dto.targetId = std::move(target_id);
+    dto.label = std::move(label);
+    return write_entry_line(path_, dto, next_entry_id_);
+}
+
+util::ExpectedVoid JsonlSessionStore::append_compaction(
+    std::optional<std::string> parent_id,
+    std::string summary,
+    std::string first_kept_entry_id,
+    std::size_t tokens_before,
+    std::optional<util::JsonValue> details,
+    std::optional<bool> from_hook) {
+    CompactionDto dto;
+    dto.id = generate_entry_id();
+    dto.parentId = std::move(parent_id);
+    dto.timestamp = generate_iso_timestamp();
+    dto.summary = std::move(summary);
+    dto.firstKeptEntryId = std::move(first_kept_entry_id);
+    dto.tokensBefore = tokens_before;
+    if (details) {
+        auto details_json = util::write_json(*details);
+        if (!details_json) {
+            return std::unexpected(session_error("failed to serialize compaction details"));
+        }
+        dto.details = glz::raw_json{std::move(*details_json)};
     }
-    if (::close(fd) != 0) {
-        return std::unexpected(session_error("could not close session file", std::strerror(errno)));
+    dto.fromHook = from_hook;
+    return write_entry_line(path_, dto, next_entry_id_);
+}
+
+util::ExpectedVoid JsonlSessionStore::append_branch_summary(
+    std::optional<std::string> parent_id,
+    std::string from_id,
+    std::string summary,
+    std::optional<util::JsonValue> details,
+    std::optional<bool> from_hook) {
+    BranchSummaryDto dto;
+    dto.id = generate_entry_id();
+    dto.parentId = std::move(parent_id);
+    dto.timestamp = generate_iso_timestamp();
+    dto.fromId = std::move(from_id);
+    dto.summary = std::move(summary);
+    if (details) {
+        auto details_json = util::write_json(*details);
+        if (!details_json) {
+            return std::unexpected(session_error("failed to serialize branch summary details"));
+        }
+        dto.details = glz::raw_json{std::move(*details_json)};
     }
-#else
-    std::ofstream output(path_, std::ios::binary | std::ios::app);
-    if (!output) {
-        return std::unexpected(session_error("could not append to session file"));
-    }
-    output << line;
-    output.flush();
-    output.close();
-    if (!output) {
-        return std::unexpected(session_error("could not persist session entry"));
-    }
-#endif
-    ++next_entry_id_;
-    return {};
+    dto.fromHook = from_hook;
+    return write_entry_line(path_, dto, next_entry_id_);
+}
+
+util::ExpectedVoid JsonlSessionStore::append_session_info(
+    std::optional<std::string> parent_id,
+    std::string name) {
+    SessionInfoDto dto;
+    dto.id = generate_entry_id();
+    dto.parentId = std::move(parent_id);
+    dto.timestamp = generate_iso_timestamp();
+    dto.name = std::move(name);
+    return write_entry_line(path_, dto, next_entry_id_);
 }
 
 util::ExpectedVoid JsonlSessionStore::validate_session_path_for_open(const std::filesystem::path& path, bool must_exist) {
