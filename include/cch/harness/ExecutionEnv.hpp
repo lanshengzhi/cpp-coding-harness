@@ -25,6 +25,8 @@ namespace cch::harness {
 struct AsyncFileReadResult {
     std::string content;
     bool truncated{false};
+    int lines_read{0};
+    std::size_t bytes_read{0};
 };
 
 struct AsyncFileWriteResult {

@@ -128,6 +128,8 @@ util::Expected<AsyncFileReadResult> LocalExecutionEnv::read_file(std::string pat
     if (!result.content.empty()) {
         result.content.pop_back();
     }
+    result.lines_read = static_cast<int>(lines);
+    result.bytes_read = bytes;
     if (result.truncated) {
         result.content += "\n[output truncated]";
     }
