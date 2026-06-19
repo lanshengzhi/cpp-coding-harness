@@ -72,6 +72,16 @@ git status --short
 - 涉及 shell、文件、环境变量、session 的改动必须考虑 workspace containment、secret redaction 和输出截断。
 - 测试应保护当前架构意图与安全性质，不要只保护旧类名、旧 JSONL 形状或旧 transcript 文案。
 
+## 5.5 分支、合入与 PR 约定
+
+本仓库按单人维护/实验仓库处理，默认不强制 PR。
+
+- 默认用 feature branch 开发，避免 `main` 留下半成品。
+- 未经用户明确要求，不要自动 commit、merge、push 或删除分支。
+- 用户要求合入/发布且验证通过时，优先使用 `git switch main && git merge --ff-only <branch> && git push origin main`，再删除已被 `main` 包含的 feature branch。
+- PR 仅在用户明确要求、需要 CI/review 记录，或变更风险较高时建议使用。
+- 合入前若 `origin/main` 更新或分叉，先 fetch 并检查关系，不要强推。
+
 ## 6. 提交前自检清单
 
 - [ ] `git status --short` 中只包含本任务相关文件。
