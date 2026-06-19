@@ -24,10 +24,17 @@ struct WriteFileArgs {
     bool create_parents{false};
 };
 
-struct EditFileArgs {
-    std::string path;
+struct EditEntry {
     std::string old_text;
     std::string new_text;
+};
+
+struct EditFileArgs {
+    std::string path;
+    std::vector<EditEntry> edits;
+    // Legacy single-arg fallback
+    std::optional<std::string> old_text;
+    std::optional<std::string> new_text;
 };
 
 constexpr int kDefaultBashTimeoutMs = 30000;
@@ -145,16 +152,30 @@ public:
     using AsyncToolBase::AsyncToolBase;
 
     const ai::Tool& definition() const override {
+        static const auto edit_entry_schema = std::make_shared<ai::JsonSchema>(
+            ai::JsonSchema::object(
+                {
+                    {"old_text", ai::JsonSchema::string("Exact text for one targeted replacement.")},
+                    {"new_text", ai::JsonSchema::string("Replacement text for this targeted edit.")},
+                },
+                {"old_text", "new_text"},
+                std::nullopt,
+                false));
         static const ai::Tool tool{
             "edit_file",
-            "Replace one exact text region inside a workspace file",
+            "Replace exact text regions inside a workspace file with one or more edits. "
+            "Each edit is matched against the original file, not incrementally. "
+            "Overlapping edits are rejected.",
             ai::JsonSchema::object(
                 {
                     {"path", ai::JsonSchema::string("Workspace-relative file path")},
-                    {"old_text", ai::JsonSchema::string("Exact text to replace")},
-                    {"new_text", ai::JsonSchema::string("Replacement text")},
+                    {"edits", ai::JsonSchema::array(
+                        std::make_shared<ai::JsonSchema>(*edit_entry_schema),
+                        "One or more targeted replacements")},
+                    {"old_text", ai::JsonSchema::string("Legacy: exact text to replace (single edit)")},
+                    {"new_text", ai::JsonSchema::string("Legacy: replacement text (single edit)")},
                 },
-                {"path", "old_text", "new_text"}),
+                {"path", "edits"}),
         };
         return tool;
     }
@@ -162,18 +183,103 @@ public:
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
         agent::ToolInvocation invocation) override {
         auto parsed = parse_invocation_args<EditFileArgs>(invocation);
-        if (!parsed || parsed->path.empty() || parsed->old_text.empty()) {
-            co_return error_result("invalid edit_file arguments");
+        if (!parsed || parsed->path.empty()) {
+            co_return error_result("invalid edit_file arguments: missing path");
+        }
+        // Backward-compatible legacy conversion: single old_text/new_text → edits[]
+        if (parsed->edits.empty() && parsed->old_text && !parsed->old_text->empty()) {
+            if (!parsed->new_text) {
+                co_return error_result("invalid edit_file arguments: old_text without new_text");
+            }
+            parsed->edits.push_back(EditEntry{*parsed->old_text, *parsed->new_text});
+        }
+        if (parsed->edits.empty()) {
+            co_return error_result("invalid edit_file arguments: edits must contain at least one replacement");
         }
         auto environment = env();
         if (!environment) {
             co_return std::unexpected(environment.error());
         }
-        auto edited = co_await (*environment)->edit_file(parsed->path, parsed->old_text, parsed->new_text);
-        if (!edited) {
-            co_return error_result(edited.error().detail.empty() ? edited.error().message : edited.error().detail);
+        // Read the original file
+        auto read = co_await (*environment)->read_file(parsed->path, 1, 0);
+        if (!read) {
+            co_return error_result(read.error().detail.empty() ? read.error().message : read.error().detail);
         }
-        co_return agent::AsyncToolExecutionResult{std::vector<ai::Content>{ai::text_content("edited " + parsed->path)}, std::nullopt, false};
+        const std::string original = read->content;
+        // Validate all edits against the original content
+        std::string working = original;
+        std::vector<std::pair<std::string, std::string>> applied;
+        for (const auto& edit : parsed->edits) {
+            if (edit.old_text.empty()) {
+                co_return error_result("invalid edit_file arguments: empty oldText in edits");
+            }
+            // Count occurrences
+            size_t pos = 0;
+            int count = 0;
+            size_t match_pos = std::string::npos;
+            while ((pos = working.find(edit.old_text, pos)) != std::string::npos) {
+                if (count == 0) match_pos = pos;
+                ++count;
+                pos += edit.old_text.length();
+            }
+            if (count == 0) {
+                co_return error_result("edit_file: oldText not found in file: '" +
+                    (edit.old_text.length() > 50 ? edit.old_text.substr(0, 47) + "..." : edit.old_text) + "'");
+            }
+            if (count > 1) {
+                co_return error_result("edit_file: oldText matches " + std::to_string(count) +
+                    " occurrences, must be unique. Text: '" +
+                    (edit.old_text.length() > 40 ? edit.old_text.substr(0, 37) + "..." : edit.old_text) + "'");
+            }
+            // Apply replacement
+            working.replace(match_pos, edit.old_text.length(), edit.new_text);
+            applied.emplace_back(edit.old_text, edit.new_text);
+        }
+        // Write back
+        auto written = co_await (*environment)->write_file(parsed->path, working, true);
+        if (!written) {
+            co_return error_result(written.error().detail.empty() ? written.error().message : written.error().detail);
+        }
+        // Build a simple result message
+        std::string result_text = "Successfully replaced " + std::to_string(applied.size()) + " block(s) in " + parsed->path + ".";
+        // Generate a basic line-diff preview
+        if (original != working) {
+            result_text += "\n--- before\n+++ after\n";
+            // Simple line-by-line diff: show first changed region
+            auto orig_lines = split_lines(original);
+            auto new_lines = split_lines(working);
+            size_t i = 0;
+            while (i < orig_lines.size() && i < new_lines.size() && orig_lines[i] == new_lines[i]) ++i;
+            if (i < orig_lines.size() || i < new_lines.size()) {
+                // Show context: up to 3 lines before and after the first change
+                size_t ctx_start = (i > 3) ? i - 3 : 0;
+                size_t ctx_end_orig = std::min(i + 3, orig_lines.size());
+                size_t ctx_end_new = std::min(i + 3, new_lines.size());
+                for (size_t j = ctx_start; j < ctx_end_orig && j < orig_lines.size(); ++j) {
+                    result_text += (j >= i && (j - i < new_lines.size() - i) ? "-" : " ") + orig_lines[j] + "\n";
+                }
+                for (size_t j = ctx_start; j < ctx_end_new && j < new_lines.size(); ++j) {
+                    result_text += (j >= i ? "+" : " ") + new_lines[j] + "\n";
+                }
+            }
+        }
+        co_return agent::AsyncToolExecutionResult{
+            std::vector<ai::Content>{ai::text_content(result_text)},
+            std::nullopt, false};
+    }
+
+private:
+    static std::vector<std::string> split_lines(const std::string& text) {
+        std::vector<std::string> lines;
+        size_t start = 0;
+        for (size_t i = 0; i < text.size(); ++i) {
+            if (text[i] == '\n') {
+                lines.push_back(text.substr(start, i - start));
+                start = i + 1;
+            }
+        }
+        if (start < text.size()) lines.push_back(text.substr(start));
+        return lines;
     }
 };
 

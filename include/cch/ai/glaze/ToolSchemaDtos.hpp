@@ -17,6 +17,10 @@ struct ToolParametersDto {
     std::optional<std::map<std::string, ToolParametersDto>> properties;
     std::optional<std::vector<std::string>> required;
     std::optional<bool> additionalProperties;
+    // items: at most one element (0 = absent, 1 = present).
+    // std::optional<ToolParametersDto> creates direct recursion Glaze cannot handle;
+    // std::vector breaks the recursion the same way std::map does for properties.
+    std::vector<ToolParametersDto> items;
 };
 
 struct FunctionToolDto {
@@ -85,6 +89,9 @@ struct FunctionToolDto {
         dto.required = schema.required;
     }
     dto.additionalProperties = schema.additional_properties;
+    if (schema.items) {
+        dto.items.push_back(to_tool_parameters_dto(*schema.items));
+    }
     return dto;
 }
 
@@ -112,6 +119,13 @@ struct FunctionToolDto {
     }
     if (dto.required) {
         schema.required = *dto.required;
+    }
+    if (!dto.items.empty()) {
+        auto converted = schema_from_tool_parameters_dto(dto.items[0]);
+        if (!converted) {
+            return std::unexpected(converted.error());
+        }
+        schema.items = std::make_shared<JsonSchema>(std::move(*converted));
     }
     return schema;
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -29,6 +30,9 @@ struct JsonSchema {
     std::map<std::string, JsonSchema> properties;
     std::vector<std::string> required;
     std::optional<bool> additional_properties;
+    // shared_ptr breaks recursive type dependency for Glaze/STL traits
+    // while keeping JsonSchema copyable (unique_ptr would delete copy ops).
+    std::shared_ptr<JsonSchema> items;
 
     [[nodiscard]] static JsonSchema object(
         std::map<std::string, JsonSchema> properties = {},
@@ -72,10 +76,13 @@ struct JsonSchema {
         return schema;
     }
 
-    [[nodiscard]] static JsonSchema array(std::optional<std::string> description = std::nullopt) {
+    [[nodiscard]] static JsonSchema array(
+        std::shared_ptr<JsonSchema> items = nullptr,
+        std::optional<std::string> description = std::nullopt) {
         JsonSchema schema;
         schema.type = JsonSchemaType::Array;
         schema.description = std::move(description);
+        schema.items = std::move(items);
         return schema;
     }
 

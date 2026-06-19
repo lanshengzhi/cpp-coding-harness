@@ -101,20 +101,72 @@ TEST_CASE("async read_file tool uses Glaze typed args and workspace guard", "[to
     CHECK(ai::text_from_content(result->content) == "line2");
 }
 
-TEST_CASE("async edit_file tool returns error result for ambiguous replacements", "[tools][async][u6][ae4]") {
+TEST_CASE("async edit_file tool returns error for duplicate oldText matches", "[tools][async]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "same\nsame\n");
     auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
     auto tool = tools::make_async_edit_file_tool(env);
 
+    // Legacy single-arg format: old_text/new_text
     auto result = run_tool([&]() {
         return tool->execute(invocation("edit_file", R"({"path":"note.txt","old_text":"same","new_text":"new"})"));
     });
 
     REQUIRE(result);
     CHECK(result->is_error);
-    CHECK(ai::text_from_content(result->content).find("multiple") != std::string::npos);
+    CHECK(ai::text_from_content(result->content).find("2 occurrences") != std::string::npos);
     CHECK(workspace.read("note.txt") == "same\nsame\n");
+}
+
+TEST_CASE("async edit_file tool supports edits[] array with multiple replacements", "[tools][async]") {
+    tests::TempWorkspace workspace;
+    workspace.write("note.txt", "hello world\nfoo bar\nbaz qux\n");
+    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
+    auto tool = tools::make_async_edit_file_tool(env);
+
+    auto result = run_tool([&]() {
+        return tool->execute(invocation("edit_file",
+            R"({"path":"note.txt","edits":[{"old_text":"hello","new_text":"hi"},{"old_text":"baz","new_text":"zip"}]})"));
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    CHECK(ai::text_from_content(result->content).find("replaced 2 block") != std::string::npos);
+    // Note: read_file strips trailing newline (std::getline behavior),
+    // so write_file writes content without trailing newline.
+    CHECK(workspace.read("note.txt") == "hi world\nfoo bar\nzip qux");
+}
+
+TEST_CASE("async edit_file tool rejects empty edits array", "[tools][async]") {
+    tests::TempWorkspace workspace;
+    workspace.write("note.txt", "content\n");
+    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
+    auto tool = tools::make_async_edit_file_tool(env);
+
+    auto result = run_tool([&]() {
+        return tool->execute(invocation("edit_file",
+            R"({"path":"note.txt","edits":[]})"));
+    });
+
+    REQUIRE(result);
+    CHECK(result->is_error);
+    CHECK(ai::text_from_content(result->content).find("at least one") != std::string::npos);
+}
+
+TEST_CASE("async edit_file tool rejects oldText not found", "[tools][async]") {
+    tests::TempWorkspace workspace;
+    workspace.write("note.txt", "hello world\n");
+    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
+    auto tool = tools::make_async_edit_file_tool(env);
+
+    auto result = run_tool([&]() {
+        return tool->execute(invocation("edit_file",
+            R"({"path":"note.txt","edits":[{"old_text":"nonexistent","new_text":"x"}]})"));
+    });
+
+    REQUIRE(result);
+    CHECK(result->is_error);
+    CHECK(ai::text_from_content(result->content).find("not found") != std::string::npos);
 }
 
 TEST_CASE("async tools prefer structured arguments over raw provider text", "[tools][async][u6]") {
@@ -166,7 +218,7 @@ TEST_CASE("async bash tool clamps oversized timeout", "[tools][async][u6]") {
     CHECK(env->last_timeout == std::chrono::milliseconds(120000));
 }
 
-TEST_CASE("async bash tool is disabled unless env explicitly enables it", "[tools][async][u6]") {
+TEST_CASE("async bash tool is disabled unless env explicitly enables it", "[tools][async]") {
     tests::TempWorkspace workspace;
     auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path(), false);
     auto tool = tools::make_async_bash_tool(env);
