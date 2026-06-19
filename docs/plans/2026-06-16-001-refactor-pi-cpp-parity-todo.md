@@ -140,14 +140,18 @@ The first implementation pass should execute that cleanup plan and produce the T
 
 ### T4. Harness Execution Environment and Session Tree Parity
 
-- [ ] Expand execution environment from current workspace/file/shell methods toward pi's `FileSystem` and `Shell` capability contracts.
-  - **Files:** `include/cch/harness/ExecutionEnv.hpp`, `include/cch/harness/LocalExecutionEnv.hpp`, `src/harness/`, `tests/harness/AsyncLocalExecutionEnvTest.cpp`.
+- [x] Expand execution environment from current workspace/file/shell methods toward pi's `FileSystem` and `Shell` capability contracts.
+  - **Files:** `include/cch/harness/ExecutionEnv.hpp`, `include/cch/harness/LocalExecutionEnv.hpp`, `src/harness/`, `src/util/Process.hpp`, `tests/harness/AsyncLocalExecutionEnvTest.cpp`, `tests/harness/WorkspaceFileSystemTest.cpp`.
   - **References:** `pi:packages/agent/src/harness/types.ts`.
   - **Test scenarios:** absolute path, join path, file info, list dir, canonical path, exists, create/remove directory, temp file/dir, read/write binary, streaming stdout/stderr, stable error codes.
-- [ ] Keep workspace containment and secret redaction stronger than the pi default where the C++ harness already has it.
-  - **Files:** `src/tools/PathGuard.hpp`, `src/util/Redactor.hpp`, `tests/tools/AsyncToolsTest.cpp`, `tests/harness/AsyncLocalExecutionEnvTest.cpp`.
+  - **Implementation plan:** `docs/plans/2026-06-19-004-refactor-execution-env-capability-parity-plan.md`.
+  - **Status:** FileSystem and Shell capability contracts added with default not_supported impls; local env implements full pi-shaped FS ops (WorkspaceFileSystem) and split-stream shell exec; 172 tests pass.
+- [x] Keep workspace containment and secret redaction stronger than the pi default where the C++ harness already has it.
+  - **Files:** `src/harness/WorkspaceFileSystem.hpp`, `src/util/Process.hpp`, `tests/harness/AsyncLocalExecutionEnvTest.cpp`, `tests/harness/WorkspaceFileSystemTest.cpp`.
   - **References:** `pi:packages/coding-agent/docs/security.md`, `pi:packages/coding-agent/docs/containerization.md`.
   - **Done when:** parity work does not weaken symlink escape checks, bash opt-in, private session permissions, or redaction boundaries.
+  - **Status:** PathGuard moved under harness ownership (WorkspaceFileSystem); symlink escape, O_NOFOLLOW, no-follow metadata, workspace-contained temps, secret env filtering with expanded heuristics all preserved; bash remains opt-in.
+- [ ] (Remaining T4 session tree work deferred to follow-up plan after this capability seam stabilizes.)
 - [ ] Migrate JSONL sessions from the current linear message format toward pi's tree-entry format.
   - **Files:** `include/cch/harness/session/`, `src/harness/session/JsonlSessionStore.cpp`, `tests/harness/session/JsonlSessionStoreTest.cpp`.
   - **References:** `pi:packages/coding-agent/docs/session-format.md`, `pi:packages/agent/src/harness/types.ts`.

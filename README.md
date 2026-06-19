@@ -125,7 +125,7 @@ The code is split into value contracts, capability seams, implementation adapter
 - `cch_util` (`include/cch/util`, `src/util`): project error/expected contracts, move-only callback vocabulary, passive `JsonValue`, the Glaze-backed JSON adapter, and async process execution.
 - `cch_ai` (`include/cch/ai`, `src/ai`): passive message/content/tool/context contracts, provider-neutral stream events, provider registry, OpenAICompletionsCompat flags, OpenAI-compatible provider, scripted fake provider, SSE, and Glaze provider mapping.
 - `cch_agent` (`include/cch/agent`, `src/agent`): coroutine agent loop, observable state values, lifecycle event values, move-only event sinks, async tool registry, expected-style tool execution contracts, optional pre/post tool-call hooks (`beforeToolCall`/`afterToolCall`), context transform / LLM conversion hooks, steering/follow-up queues, prepare-next-turn updates, and sequential/parallel tool execution modes.
-- `cch_harness` (`include/cch/harness`, `src/harness`): local execution environment and JSONL session persistence.
+- `cch_harness` (`include/cch/harness`, `src/harness`): pi-shaped filesystem and shell execution capability contracts (`FileSystem`/`Shell`), local implementation with workspace containment, symlink safety, atomic writes, split-stream process execution, secret environment filtering, and JSONL session persistence.
 - `cch_tools` (`include/cch/tools`, `src/tools`): built-in read/write/edit/bash tool factories bridging agent tool contracts to harness capabilities.
 - `cch_coding_agent_runtime` (`src/AsyncCliRuntime.*`, `src/coding_agent/runtime/`): CLI runtime orchestration, session lifecycle, provider/tool service assembly, and semantic event printing.
 

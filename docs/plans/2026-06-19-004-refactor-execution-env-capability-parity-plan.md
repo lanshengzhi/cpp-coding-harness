@@ -1,7 +1,7 @@
 ---
 title: "refactor: Add execution environment capability parity"
 type: "refactor"
-status: active
+status: completed
 date: "2026-06-19"
 deepened: "2026-06-19"
 origin: "docs/plans/2026-06-16-001-refactor-pi-cpp-parity-todo.md"
