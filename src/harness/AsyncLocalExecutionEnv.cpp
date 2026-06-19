@@ -25,6 +25,8 @@ bool AsyncLocalExecutionEnv::bash_enabled() const {
     return sync_->bash_enabled();
 }
 
+// -- Tool-shaped methods ---
+
 boost::asio::awaitable<util::Expected<AsyncFileReadResult>> AsyncLocalExecutionEnv::read_file(
     std::string path,
     int offset,
@@ -58,6 +60,89 @@ boost::asio::awaitable<util::Expected<AsyncShellResult>> AsyncLocalExecutionEnv:
         co_return std::unexpected(process.error());
     }
     co_return sync_->shell_result_from_process(*process);
+}
+
+// -- Pi-shaped filesystem methods ---
+
+boost::asio::awaitable<std::expected<std::string, FileError>> AsyncLocalExecutionEnv::absolutePath(
+    std::string path) {
+    co_return sync_->absolutePath(std::move(path));
+}
+
+boost::asio::awaitable<std::expected<std::string, FileError>> AsyncLocalExecutionEnv::joinPath(
+    std::vector<std::string> parts) {
+    co_return sync_->joinPath(std::move(parts));
+}
+
+boost::asio::awaitable<std::expected<std::string, FileError>> AsyncLocalExecutionEnv::readTextFile(
+    std::string path) {
+    co_return sync_->readTextFile(std::move(path));
+}
+
+boost::asio::awaitable<std::expected<std::vector<std::string>, FileError>> AsyncLocalExecutionEnv::readTextLines(
+    std::string path,
+    std::optional<int> maxLines) {
+    co_return sync_->readTextLines(std::move(path), maxLines);
+}
+
+boost::asio::awaitable<std::expected<BinaryData, FileError>> AsyncLocalExecutionEnv::readBinaryFile(
+    std::string path) {
+    co_return sync_->readBinaryFile(std::move(path));
+}
+
+boost::asio::awaitable<std::expected<void, FileError>> AsyncLocalExecutionEnv::writeFile(
+    std::string path,
+    WriteContent content) {
+    co_return sync_->writeFile(std::move(path), std::move(content));
+}
+
+boost::asio::awaitable<std::expected<void, FileError>> AsyncLocalExecutionEnv::appendFile(
+    std::string path,
+    WriteContent content) {
+    co_return sync_->appendFile(std::move(path), std::move(content));
+}
+
+boost::asio::awaitable<std::expected<FileInfo, FileError>> AsyncLocalExecutionEnv::fileInfo(
+    std::string path) {
+    co_return sync_->fileInfo(std::move(path));
+}
+
+boost::asio::awaitable<std::expected<std::vector<FileInfo>, FileError>> AsyncLocalExecutionEnv::listDir(
+    std::string path) {
+    co_return sync_->listDir(std::move(path));
+}
+
+boost::asio::awaitable<std::expected<std::string, FileError>> AsyncLocalExecutionEnv::canonicalPath(
+    std::string path) {
+    co_return sync_->canonicalPath(std::move(path));
+}
+
+boost::asio::awaitable<std::expected<bool, FileError>> AsyncLocalExecutionEnv::exists(
+    std::string path) {
+    co_return sync_->exists(std::move(path));
+}
+
+boost::asio::awaitable<std::expected<void, FileError>> AsyncLocalExecutionEnv::createDir(
+    std::string path,
+    bool recursive) {
+    co_return sync_->createDir(std::move(path), recursive);
+}
+
+boost::asio::awaitable<std::expected<void, FileError>> AsyncLocalExecutionEnv::remove(
+    std::string path,
+    bool recursive) {
+    co_return sync_->remove(std::move(path), recursive);
+}
+
+boost::asio::awaitable<std::expected<std::string, FileError>> AsyncLocalExecutionEnv::createTempDir(
+    std::optional<std::string> prefix) {
+    co_return sync_->createTempDir(std::move(prefix));
+}
+
+boost::asio::awaitable<std::expected<std::string, FileError>> AsyncLocalExecutionEnv::createTempFile(
+    std::optional<std::string> prefix,
+    std::optional<std::string> suffix) {
+    co_return sync_->createTempFile(std::move(prefix), std::move(suffix));
 }
 
 } // namespace cch::harness

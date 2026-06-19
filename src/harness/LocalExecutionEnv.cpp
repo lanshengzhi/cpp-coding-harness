@@ -1,7 +1,6 @@
 #include "LocalExecutionEnv.hpp"
 
-#include "../tools/OutputLimiter.hpp"
-#include "../tools/PathGuard.hpp"
+#include "../util/OutputLimiter.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -43,6 +42,9 @@ bool secret_env_name(std::string name, const std::vector<std::string>& explicit_
     std::transform(name.begin(), name.end(), name.begin(), [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
     return name.find("API_KEY") != std::string::npos || name.find("TOKEN") != std::string::npos ||
            name.find("SECRET") != std::string::npos || name.find("PASSWORD") != std::string::npos ||
+           name.find("CREDENTIAL") != std::string::npos || name.find("PRIVATE_KEY") != std::string::npos ||
+           name.find("AUTH") != std::string::npos || name.find("JWT") != std::string::npos ||
+           name.find("CERTIFICATE") != std::string::npos || name.find("PASSPHRASE") != std::string::npos ||
            name.find("OPENAI") != std::string::npos;
 }
 
@@ -84,19 +86,20 @@ LocalExecutionEnv::LocalExecutionEnv(
     : workspace_(std::move(workspace)),
       bash_enabled_(bash_enabled),
       secret_environment_names_(std::move(secret_environment_names)),
-      runner_(std::move(runner)) {}
+      runner_(std::move(runner)),
+      fs_(workspace_) {}
+
+// ---------------------------------------------------------------------------
+// Tool-shaped methods (compatibility)
+// ---------------------------------------------------------------------------
 
 util::Expected<AsyncFileReadResult> LocalExecutionEnv::read_file(std::string path, int offset, int limit) {
-    auto guard = tools::PathGuard::create(workspace_);
-    if (!guard) {
-        return std::unexpected(guard.error());
-    }
-    auto content = guard->read_existing_file(path);
+    auto content = fs_.read_existing_file(path);
     if (!content) {
         return std::unexpected(content.error());
     }
     offset = std::max(1, offset);
-    tools::OutputLimit output_limit;
+    util::OutputLimit output_limit;
     AsyncFileReadResult result;
     std::string line;
     std::size_t bytes = 0;
@@ -132,11 +135,7 @@ util::Expected<AsyncFileReadResult> LocalExecutionEnv::read_file(std::string pat
 }
 
 util::Expected<AsyncFileWriteResult> LocalExecutionEnv::write_file(std::string path, std::string content, bool create_parents) {
-    auto guard = tools::PathGuard::create(workspace_);
-    if (!guard) {
-        return std::unexpected(guard.error());
-    }
-    auto written = guard->write_file(path, content, create_parents);
+    auto written = fs_.write_file(path, content, create_parents);
     if (!written) {
         return std::unexpected(written.error());
     }
@@ -144,11 +143,7 @@ util::Expected<AsyncFileWriteResult> LocalExecutionEnv::write_file(std::string p
 }
 
 util::Expected<AsyncFileEditResult> LocalExecutionEnv::edit_file(std::string path, std::string old_text, std::string new_text) {
-    auto guard = tools::PathGuard::create(workspace_);
-    if (!guard) {
-        return std::unexpected(guard.error());
-    }
-    auto existing = guard->read_existing_file(path);
+    auto existing = fs_.read_existing_file(path);
     if (!existing) {
         return std::unexpected(existing.error());
     }
@@ -162,12 +157,16 @@ util::Expected<AsyncFileEditResult> LocalExecutionEnv::edit_file(std::string pat
     }
     const auto pos = content.find(old_text);
     content.replace(pos, old_text.size(), new_text);
-    auto written = guard->write_file(path, content, false);
+    auto written = fs_.write_file(path, content, false);
     if (!written) {
         return std::unexpected(written.error());
     }
     return AsyncFileEditResult{old_text.substr(0, 80), new_text.substr(0, 80)};
 }
+
+// ---------------------------------------------------------------------------
+// Shell methods (compatibility)
+// ---------------------------------------------------------------------------
 
 util::Expected<util::ProcessRequest> LocalExecutionEnv::make_shell_request(
     std::string command,
@@ -185,7 +184,7 @@ util::Expected<util::ProcessRequest> LocalExecutionEnv::make_shell_request(
 }
 
 AsyncShellResult LocalExecutionEnv::shell_result_from_process(const util::ProcessResult& process) const {
-    auto limited = tools::limit_output(process.output);
+    auto limited = util::limit_output(process.output);
     AsyncShellResult result;
     result.exit_code = process.exit_code;
     result.output = limited.text;
@@ -217,6 +216,74 @@ util::Expected<AsyncShellResult> LocalExecutionEnv::run_shell(std::string comman
         return std::unexpected((*process).error());
     }
     return shell_result_from_process(**process);
+}
+
+// ---------------------------------------------------------------------------
+// Pi-shaped filesystem methods
+// ---------------------------------------------------------------------------
+
+std::expected<std::string, FileError> LocalExecutionEnv::absolutePath(const std::string& path) const {
+    return fs_.absolutePath(path);
+}
+
+std::expected<std::string, FileError> LocalExecutionEnv::joinPath(const std::vector<std::string>& parts) const {
+    return fs_.joinPath(parts);
+}
+
+std::expected<std::string, FileError> LocalExecutionEnv::readTextFile(const std::string& path) const {
+    return fs_.readTextFile(path);
+}
+
+std::expected<std::vector<std::string>, FileError> LocalExecutionEnv::readTextLines(
+    const std::string& path,
+    std::optional<int> maxLines) const {
+    return fs_.readTextLines(path, maxLines);
+}
+
+std::expected<BinaryData, FileError> LocalExecutionEnv::readBinaryFile(const std::string& path) const {
+    return fs_.readBinaryFile(path);
+}
+
+std::expected<void, FileError> LocalExecutionEnv::writeFile(const std::string& path, const WriteContent& content) const {
+    return fs_.writeFile(path, content);
+}
+
+std::expected<void, FileError> LocalExecutionEnv::appendFile(const std::string& path, const WriteContent& content) const {
+    return fs_.appendFile(path, content);
+}
+
+std::expected<FileInfo, FileError> LocalExecutionEnv::fileInfo(const std::string& path) const {
+    return fs_.fileInfo(path);
+}
+
+std::expected<std::vector<FileInfo>, FileError> LocalExecutionEnv::listDir(const std::string& path) const {
+    return fs_.listDir(path);
+}
+
+std::expected<std::string, FileError> LocalExecutionEnv::canonicalPath(const std::string& path) const {
+    return fs_.canonicalPath(path);
+}
+
+std::expected<bool, FileError> LocalExecutionEnv::exists(const std::string& path) const {
+    return fs_.exists(path);
+}
+
+std::expected<void, FileError> LocalExecutionEnv::createDir(const std::string& path, bool recursive) const {
+    return fs_.createDir(path, recursive);
+}
+
+std::expected<void, FileError> LocalExecutionEnv::remove(const std::string& path, bool recursive) const {
+    return fs_.remove(path, recursive);
+}
+
+std::expected<std::string, FileError> LocalExecutionEnv::createTempDir(std::optional<std::string> prefix) const {
+    return fs_.createTempDir(prefix);
+}
+
+std::expected<std::string, FileError> LocalExecutionEnv::createTempFile(
+    std::optional<std::string> prefix,
+    std::optional<std::string> suffix) const {
+    return fs_.createTempFile(prefix, suffix);
 }
 
 } // namespace cch::harness
