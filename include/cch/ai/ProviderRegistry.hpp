@@ -15,6 +15,9 @@
 
 namespace cch::ai {
 
+// ProviderFactoryContext captures static construction-time provider configuration.
+// OAuth, subscription-provider, and dynamic per-call API-key resolution are not
+// supported yet; api_key_env only reads a static environment variable.
 struct ProviderFactoryContext {
     std::string model;
     std::string base_url{"https://api.openai.com"};

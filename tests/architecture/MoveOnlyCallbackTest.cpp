@@ -1,5 +1,6 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
+#include "../../include/cch/agent/AgentContext.hpp"
 #include "../../include/cch/agent/AgentEvent.hpp"
 #include "../../include/cch/ai/ChatClient.hpp"
 #include "../../include/cch/ai/providers/StreamTransport.hpp"
@@ -13,6 +14,24 @@ TEST_CASE("event sink contracts are move-only", "[architecture][u5]") {
     static_assert(!std::is_copy_constructible_v<agent::AgentEventSink>);
     static_assert(!std::is_copy_assignable_v<agent::AgentEventSink>);
     static_assert(std::is_move_constructible_v<agent::AgentEventSink>);
+
+    static_assert(!std::is_copy_constructible_v<agent::AsyncAgentOptions>);
+    static_assert(!std::is_copy_assignable_v<agent::AsyncAgentOptions>);
+    static_assert(std::is_move_constructible_v<agent::AsyncAgentOptions>);
+    static_assert(std::is_move_assignable_v<agent::AsyncAgentOptions>);
+
+    static_assert(!std::is_copy_constructible_v<agent::TransformContextHook>);
+    static_assert(std::is_move_constructible_v<agent::TransformContextHook>);
+    static_assert(!std::is_copy_constructible_v<agent::ConvertToLlmHook>);
+    static_assert(std::is_move_constructible_v<agent::ConvertToLlmHook>);
+    static_assert(!std::is_copy_constructible_v<agent::GetSteeringMessagesHook>);
+    static_assert(std::is_move_constructible_v<agent::GetSteeringMessagesHook>);
+    static_assert(!std::is_copy_constructible_v<agent::GetFollowUpMessagesHook>);
+    static_assert(std::is_move_constructible_v<agent::GetFollowUpMessagesHook>);
+    static_assert(!std::is_copy_constructible_v<agent::PrepareNextTurnHook>);
+    static_assert(std::is_move_constructible_v<agent::PrepareNextTurnHook>);
+    static_assert(!std::is_copy_constructible_v<agent::ValidateTurnUpdateHook>);
+    static_assert(std::is_move_constructible_v<agent::ValidateTurnUpdateHook>);
 
     static_assert(!std::is_copy_constructible_v<ai::AssistantEventSink>);
     static_assert(std::is_move_constructible_v<ai::AssistantEventSink>);

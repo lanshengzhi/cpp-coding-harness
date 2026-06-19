@@ -8,6 +8,11 @@
 
 namespace cch::ai {
 
+enum class ToolExecutionMode {
+    Sequential,
+    Parallel,
+};
+
 enum class JsonSchemaType {
     Object,
     String,

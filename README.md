@@ -74,6 +74,8 @@ export OPENAI_API_KEY=...
 
 Use `--base-url` for compatible gateways that preserve the `/v1/chat/completions` contract.
 
+OAuth, subscription-provider, and dynamic API-key resolution flows are intentionally deferred. The `--api-key-env` mechanism reads a static environment variable at provider construction time; there is no OAuth handshake, token refresh, or per-call key callback yet.
+
 ### Kimi Code via the OpenAI-compatible path
 
 Kimi Code can be used through the existing OpenAI-compatible provider path. Keep the Kimi base URL, model, and API-key environment variable together because the bearer token from `--api-key-env` is sent to whichever `--base-url` you configure.
@@ -122,7 +124,7 @@ The code is split into value contracts, capability seams, implementation adapter
 
 - `cch_util` (`include/cch/util`, `src/util`): project error/expected contracts, move-only callback vocabulary, passive `JsonValue`, the Glaze-backed JSON adapter, and async process execution.
 - `cch_ai` (`include/cch/ai`, `src/ai`): passive message/content/tool/context contracts, provider-neutral stream events, provider registry, OpenAICompletionsCompat flags, OpenAI-compatible provider, scripted fake provider, SSE, and Glaze provider mapping.
-- `cch_agent` (`include/cch/agent`, `src/agent`): coroutine agent loop, observable state values, lifecycle event values, move-only event sinks, async tool registry, expected-style tool execution contracts, and optional pre/post tool-call hooks (`beforeToolCall`/`afterToolCall`) with blocking and result override semantics.
+- `cch_agent` (`include/cch/agent`, `src/agent`): coroutine agent loop, observable state values, lifecycle event values, move-only event sinks, async tool registry, expected-style tool execution contracts, optional pre/post tool-call hooks (`beforeToolCall`/`afterToolCall`), context transform / LLM conversion hooks, steering/follow-up queues, prepare-next-turn updates, and sequential/parallel tool execution modes.
 - `cch_harness` (`include/cch/harness`, `src/harness`): local execution environment and JSONL session persistence.
 - `cch_tools` (`include/cch/tools`, `src/tools`): built-in read/write/edit/bash tool factories bridging agent tool contracts to harness capabilities.
 - `cch_coding_agent_runtime` (`src/AsyncCliRuntime.*`, `src/coding_agent/runtime/`): CLI runtime orchestration, session lifecycle, provider/tool service assembly, and semantic event printing.
@@ -197,4 +199,4 @@ These cover:
 
 ## Deferred
 
-Not included yet: rich TUI, extensions/skills, additional provider adapters and model catalog/config resolution, OAuth, session tree navigation/branching/compaction semantics, multi-replacement edits, native Windows shell process-tree termination semantics, parallel tool execution, subagents, MCP/RPC embedding, permission prompts, image generation behavior, C++26 reflection-generated schema, `std::execution` senders/receivers, ABI-stable binary distribution, or OS-level sandboxing.
+Not included yet: rich TUI, extensions/skills, additional provider adapters and model catalog/config resolution, OAuth, session tree navigation/branching/compaction semantics, multi-replacement edits, native Windows shell process-tree termination semantics, tool execution streaming updates, subagents, MCP/RPC embedding, permission prompts, image generation behavior, C++26 reflection-generated schema, `std::execution` senders/receivers, ABI-stable binary distribution, or OS-level sandboxing.

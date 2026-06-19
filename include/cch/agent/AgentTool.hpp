@@ -68,6 +68,11 @@ public:
     [[nodiscard]] virtual const ai::Tool& definition() const = 0;
     [[nodiscard]] virtual boost::asio::awaitable<util::Expected<AsyncToolExecutionResult>> execute(
         ToolInvocation invocation) = 0;
+
+    /** Per-tool execution-mode hint. Returning std::nullopt defers to the run default. */
+    [[nodiscard]] virtual std::optional<ai::ToolExecutionMode> execution_mode() const {
+        return std::nullopt;
+    }
 };
 
 } // namespace cch::agent

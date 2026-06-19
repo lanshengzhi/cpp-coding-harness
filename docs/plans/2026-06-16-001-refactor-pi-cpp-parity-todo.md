@@ -107,9 +107,10 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **References:** `pi:packages/ai/src/providers/openai-completions.ts`, `pi:packages/ai/src/providers/openai-responses.ts`, `pi:packages/ai/src/providers/transform-messages.ts`.
   - **Done when:** custom base URLs, tool-result naming, reasoning/thinking compatibility, timeout/retry options, and session affinity live in provider-specific code.
   - **Implementation plan:** `docs/plans/2026-06-18-001-feat-pi-ai-contract-parity-plan.md`.
-- [ ] Defer OAuth and subscription-provider flows until model/provider registry contracts are stable.
+- [x] Defer OAuth and subscription-provider flows until model/provider registry contracts are stable.
   - **References:** `pi:packages/ai/src/oauth.ts`, `pi:packages/coding-agent/docs/providers.md`.
   - **Done when:** the deferral is documented, and no placeholder API implies OAuth is already supported.
+  - **Implementation plan:** `docs/plans/2026-06-19-003-feat-agent-loop-pi-parity-plan.md`.
 
 ### T3. `pi-agent-core` Loop, State, and Tool Parity
 
@@ -122,14 +123,16 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **References:** `pi:packages/agent/src/types.ts`, `pi:packages/agent/src/agent-loop.ts`.
   - **Test scenarios:** before-hook blocks a tool with an error tool result; after-hook overrides content/details/isError/terminate; thrown hook errors become stable agent errors.
   - **Implementation plan:** `docs/plans/2026-06-19-002-feat-agent-tool-hooks-plan.md`.
-- [ ] Add context transform, conversion-to-LLM, steering messages, follow-up messages, and prepare-next-turn seams.
+- [x] Add context transform, conversion-to-LLM, steering messages, follow-up messages, and prepare-next-turn seams.
   - **Files:** `include/cch/agent/AgentLoop.hpp`, `include/cch/agent/AgentContext.hpp`, `src/agent/AgentLoop.cpp`, `tests/agent/AsyncAgentLoopTest.cpp`.
   - **References:** `pi:packages/agent/src/types.ts`.
   - **Done when:** continuation and multi-turn control can be implemented without special cases in CLI runtime.
-- [ ] Evaluate sequential versus parallel tool execution with deterministic result insertion.
+  - **Implementation plan:** `docs/plans/2026-06-19-003-feat-agent-loop-pi-parity-plan.md`.
+- [x] Evaluate sequential versus parallel tool execution with deterministic result insertion.
   - **Files:** `include/cch/agent/AgentTool.hpp`, `src/agent/AgentLoop.cpp`, `tests/agent/AsyncAgentLoopTest.cpp`.
   - **References:** `pi:packages/agent/src/types.ts`.
-  - **Test scenarios:** read-only tools may complete out of order while tool-result messages are appended in assistant source order; mutating tools remain serialized unless classified safe.
+  - **Test scenarios:** tools may complete out of order while tool-result messages are appended in assistant source order; tool-level sequential overrides and the run default keep mutating/stateful tools serialized.
+  - **Implementation plan:** `docs/plans/2026-06-19-003-feat-agent-loop-pi-parity-plan.md`.
 - [x] Preserve move-only event sink semantics while adding missing lifecycle events.
   - **Files:** `include/cch/agent/AgentEvent.hpp`, `tests/architecture/MoveOnlyCallbackTest.cpp`, `tests/agent/AsyncAgentLoopTest.cpp`.
   - **References:** `pi:packages/agent/src/types.ts`, `pi:packages/coding-agent/docs/extensions.md`.

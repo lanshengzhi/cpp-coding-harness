@@ -2,18 +2,63 @@
 
 #include "AgentTool.hpp"
 #include "../ai/Context.hpp"
+#include "../ai/Tool.hpp"
+#include "../util/Error.hpp"
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace cch::agent {
 
+using TransformContextHook = std::move_only_function<
+    util::Expected<std::vector<ai::MessageVariant>>(const std::vector<ai::MessageVariant>&)>;
+
+using ConvertToLlmHook = std::move_only_function<
+    util::Expected<std::vector<ai::MessageVariant>>(const std::vector<ai::MessageVariant>&)>;
+
+using GetSteeringMessagesHook = std::move_only_function<
+    util::Expected<std::vector<ai::MessageVariant>>()>;
+
+using GetFollowUpMessagesHook = std::move_only_function<
+    util::Expected<std::vector<ai::MessageVariant>>()>;
+
+struct PrepareNextTurnContext {
+    ai::AssistantMessage assistant_message;
+    std::vector<ai::ToolResultMessage> tool_results;
+    ai::AiContext context;
+    std::vector<ai::MessageVariant> queued_messages;
+};
+
+struct AgentLoopTurnUpdate {
+    std::optional<std::vector<ai::MessageVariant>> append_messages;
+    std::optional<std::string> model;
+    std::optional<std::string> thinking_level;
+};
+
+using PrepareNextTurnHook = std::move_only_function<
+    util::Expected<std::optional<AgentLoopTurnUpdate>>(const PrepareNextTurnContext&)>;
+
+// Validates high-privilege turn updates before they are applied. Model changes
+// require this hook until a provider/model registry validator is wired directly
+// into the agent loop.
+using ValidateTurnUpdateHook = std::move_only_function<
+    util::ExpectedVoid(const AgentLoopTurnUpdate&)>;
+
 struct AsyncAgentOptions {
     int max_turns{8};
     std::string model;
     std::optional<BeforeToolCallHook> before_tool_call;
     std::optional<AfterToolCallHook> after_tool_call;
+    std::optional<TransformContextHook> transform_context;
+    std::optional<ConvertToLlmHook> convert_to_llm;
+    std::optional<GetSteeringMessagesHook> get_steering_messages;
+    std::optional<GetFollowUpMessagesHook> get_follow_up_messages;
+    std::optional<PrepareNextTurnHook> prepare_next_turn;
+    std::optional<ValidateTurnUpdateHook> validate_turn_update;
+    ai::ToolExecutionMode tool_execution_mode{ai::ToolExecutionMode::Sequential};
+    std::size_t max_parallel_tools{8};
 
     AsyncAgentOptions() = default;
     AsyncAgentOptions(AsyncAgentOptions&&) = default;

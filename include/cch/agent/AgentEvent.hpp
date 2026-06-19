@@ -21,6 +21,11 @@ struct MessageStartEvent {
     int turn{};
 };
 
+struct QueuedMessageStartEvent {
+    int turn{};
+    ai::MessageVariant message;
+};
+
 struct MessageUpdateEvent {
     int turn{};
     std::string delta;
@@ -29,6 +34,11 @@ struct MessageUpdateEvent {
 struct MessageEndEvent {
     int turn{};
     ai::AssistantMessage message;
+};
+
+struct QueuedMessageEndEvent {
+    int turn{};
+    ai::MessageVariant message;
 };
 
 struct ThinkingUpdateEvent {
@@ -82,8 +92,10 @@ using AgentLifecycleEvent = std::variant<
     AgentStartEvent,
     TurnStartEvent,
     MessageStartEvent,
+    QueuedMessageStartEvent,
     MessageUpdateEvent,
     MessageEndEvent,
+    QueuedMessageEndEvent,
     ThinkingUpdateEvent,
     ToolCallStreamStartEvent,
     ToolCallStreamUpdateEvent,
