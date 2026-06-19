@@ -145,4 +145,35 @@ boost::asio::awaitable<std::expected<std::string, FileError>> AsyncLocalExecutio
     co_return sync_->createTempFile(std::move(prefix), std::move(suffix));
 }
 
+// -- Pi-shaped shell method ---
+
+boost::asio::awaitable<std::expected<ShellExecResult, ExecutionError>> AsyncLocalExecutionEnv::exec(
+    std::string command,
+    ExecOptions options) {
+    auto request = sync_->make_exec_request(std::move(command), std::move(options));
+    if (!request) {
+        if (request.error().detail.find("disabled") != std::string::npos) {
+            co_return std::unexpected(ExecutionError{ExecutionErrorCode::ShellUnavailable, request.error().detail});
+        }
+        co_return std::unexpected(ExecutionError{ExecutionErrorCode::SpawnError, request.error().detail});
+    }
+    auto process = co_await sync_->process_runner()->run(std::move(*request));
+    if (!process) {
+        const auto& err = process.error();
+        auto code = ExecutionErrorCode::Unknown;
+        if (err.code == util::ErrorCode::Timeout) {
+            code = ExecutionErrorCode::Timeout;
+        } else if (err.detail.find("callback") != std::string::npos) {
+            code = ExecutionErrorCode::CallbackError;
+        } else {
+            code = ExecutionErrorCode::SpawnError;
+        }
+        co_return std::unexpected(ExecutionError{code, err.detail});
+    }
+    if (process->timed_out) {
+        co_return std::unexpected(ExecutionError{ExecutionErrorCode::Timeout, "shell command timed out"});
+    }
+    co_return sync_->exec_result_from_process(*process);
+}
+
 } // namespace cch::harness

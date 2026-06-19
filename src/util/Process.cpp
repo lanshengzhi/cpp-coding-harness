@@ -36,7 +36,8 @@ void append_limited(
     const char* data,
     std::size_t size,
     std::size_t max_bytes,
-    std::size_t max_lines) {
+    std::size_t max_lines,
+    std::optional<std::move_only_function<void(std::string_view)>>& callback) {
     bool line_limit_reached = max_lines == 0 || capture.lines >= max_lines;
     std::size_t offset = 0;
     while (offset < size && capture.bytes < max_bytes && !line_limit_reached) {
@@ -50,6 +51,15 @@ void append_limited(
             }
         }
     }
+    // Invoke callback with the chunk we read (before truncation).
+    if (callback) {
+        try {
+            (*callback)(std::string_view(data, size));
+        } catch (...) {
+            // Callback failure becomes an execution error at the caller level.
+            throw;
+        }
+    }
     if (offset < size) {
         capture.truncated = true;
     }
@@ -58,7 +68,8 @@ void append_limited(
 boost::asio::awaitable<OutputCapture> drain_pipe(
     boost::process::v1::async_pipe& pipe,
     std::size_t max_bytes,
-    std::size_t max_lines) {
+    std::size_t max_lines,
+    std::optional<std::move_only_function<void(std::string_view)>> callback) {
     OutputCapture capture;
     std::array<char, 4096> buffer{};
     for (;;) {
@@ -72,7 +83,12 @@ boost::asio::awaitable<OutputCapture> drain_pipe(
             capture.truncated = true;
             break;
         }
-        append_limited(capture, buffer.data(), size, max_bytes, max_lines);
+        try {
+            append_limited(capture, buffer.data(), size, max_bytes, max_lines, callback);
+        } catch (...) {
+            // Callback threw — rethrow to propagate as an error.
+            throw;
+        }
     }
     co_return capture;
 }
@@ -142,13 +158,16 @@ boost::asio::awaitable<Expected<ProcessResult>> DefaultProcessRunner::run(Proces
 
         ChildGuard guard(child, process_group);
 
+        // Move callbacks into the drain coroutines.
         auto stdout_drain = boost::asio::co_spawn(
             executor,
-            drain_pipe(stdout_pipe, request.max_output_bytes, request.max_output_lines),
+            drain_pipe(stdout_pipe, request.max_output_bytes, request.max_output_lines,
+                       std::move(request.on_stdout)),
             boost::asio::deferred);
         auto stderr_drain = boost::asio::co_spawn(
             executor,
-            drain_pipe(stderr_pipe, request.max_output_bytes, request.max_output_lines),
+            drain_pipe(stderr_pipe, request.max_output_bytes, request.max_output_lines,
+                       std::move(request.on_stderr)),
             boost::asio::deferred);
 
         ProcessResult result;
@@ -194,8 +213,20 @@ boost::asio::awaitable<Expected<ProcessResult>> DefaultProcessRunner::run(Proces
             }
         }
 
-        OutputCapture stdout_capture = co_await std::move(stdout_drain);
-        OutputCapture stderr_capture = co_await std::move(stderr_drain);
+        OutputCapture stdout_capture;
+        OutputCapture stderr_capture;
+        bool callback_error = false;
+
+        try {
+            stdout_capture = co_await std::move(stdout_drain);
+        } catch (...) {
+            callback_error = true;
+        }
+        try {
+            stderr_capture = co_await std::move(stderr_drain);
+        } catch (...) {
+            callback_error = true;
+        }
 
         if (child.joinable()) {
             if (result.timed_out) {
@@ -208,7 +239,17 @@ boost::asio::awaitable<Expected<ProcessResult>> DefaultProcessRunner::run(Proces
 
         guard.release();
 
+        if (callback_error) {
+            co_return std::unexpected(make_error(ErrorCode::Process, "process execution failed", "callback threw an exception"));
+        }
+
         result.exit_code = child.exit_code();
+        result.stdout_output = stdout_capture.data;
+        result.stderr_output = stderr_capture.data;
+        result.stdout_truncated = stdout_capture.truncated;
+        result.stderr_truncated = stderr_capture.truncated;
+
+        // Build combined output for compatibility (deterministic: stdout first, then stderr).
         result.output = stdout_capture.data + stderr_capture.data;
         if (stdout_capture.truncated || stderr_capture.truncated) {
             result.output += "\n[output truncated]";

@@ -44,6 +44,29 @@ public:
 
     [[nodiscard]] const std::filesystem::path& root() const { return root_; }
 
+    /// Resolve a workspace-relative path to an absolute addressed path,
+    /// validating containment. Does not require the path to exist.
+    [[nodiscard]] util::Expected<std::filesystem::path> resolve_addressed_path(const std::string& requested) const {
+        if (requested.empty()) {
+            return std::unexpected(workspace_error("path is required"));
+        }
+        std::filesystem::path relative(requested);
+        if (relative.is_absolute()) {
+            return std::unexpected(workspace_error("absolute paths are not allowed: " + requested));
+        }
+        auto normalized = relative.lexically_normal();
+        for (const auto& part : normalized) {
+            if (part == "..") {
+                return std::unexpected(workspace_error("path escapes workspace: " + requested));
+            }
+        }
+        auto target = (root_ / normalized).lexically_normal();
+        if (!inside_lexically(target)) {
+            return std::unexpected(workspace_error("path escapes workspace: " + requested));
+        }
+        return target;
+    }
+
     // -----------------------------------------------------------------------
     // Legacy tool-shaped operations (compatible with existing PathGuard API)
     // -----------------------------------------------------------------------
@@ -179,7 +202,7 @@ public:
         }
         auto rel = result.lexically_normal().lexically_relative(root_);
         if (rel.is_absolute() || (!rel.empty() && *rel.begin() == "..")) {
-            return std::unexpected(FileError{FileErrorCode::Invalid, "path escapes workspace"});
+            return std::unexpected(FileError{FileErrorCode::Invalid, "path escapes workspace", std::nullopt});
         }
         return result.string();
     }
@@ -561,7 +584,7 @@ public:
             }
             break;
         }
-        return std::unexpected(FileError{FileErrorCode::Unknown, "could not create temp directory"});
+        return std::unexpected(FileError{FileErrorCode::Unknown, "could not create temp directory", std::nullopt});
     }
 
     /// Create a workspace-contained temp file.
@@ -700,27 +723,6 @@ private:
         return {};
     }
 #endif
-
-    [[nodiscard]] util::Expected<std::filesystem::path> resolve_addressed_path(const std::string& requested) const {
-        if (requested.empty()) {
-            return std::unexpected(workspace_error("path is required"));
-        }
-        std::filesystem::path relative(requested);
-        if (relative.is_absolute()) {
-            return std::unexpected(workspace_error("absolute paths are not allowed: " + requested));
-        }
-        auto normalized = relative.lexically_normal();
-        for (const auto& part : normalized) {
-            if (part == "..") {
-                return std::unexpected(workspace_error("path escapes workspace: " + requested));
-            }
-        }
-        auto target = (root_ / normalized).lexically_normal();
-        if (!inside_lexically(target)) {
-            return std::unexpected(workspace_error("path escapes workspace: " + requested));
-        }
-        return target;
-    }
 
     [[nodiscard]] bool inside(const std::filesystem::path& path) const {
         return inside_lexically(std::filesystem::weakly_canonical(path));

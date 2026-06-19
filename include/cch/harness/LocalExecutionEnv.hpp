@@ -72,6 +72,12 @@ public:
         std::optional<std::string> prefix = std::nullopt,
         std::optional<std::string> suffix = std::nullopt) override;
 
+    // -- Pi-shaped shell override ---
+
+    [[nodiscard]] boost::asio::awaitable<std::expected<ShellExecResult, ExecutionError>> exec(
+        std::string command,
+        ExecOptions options = {}) override;
+
 private:
     std::shared_ptr<class LocalExecutionEnv> sync_;
 };

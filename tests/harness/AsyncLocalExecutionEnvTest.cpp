@@ -433,3 +433,90 @@ TEST_CASE("complete fake can override full pi-shaped capability surface", "[harn
     CHECK(sh->stdout_output == "pwd");
     CHECK(sh->exitCode == 0);
 }
+
+// ---------------------------------------------------------------------------
+// U3: pi-shaped shell exec tests
+// ---------------------------------------------------------------------------
+
+TEST_CASE("pi-shaped exec returns split stdout and stderr streams", "[harness][u3]") {
+    tests::TempWorkspace workspace;
+    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+
+    auto result = run_awaitable_pi(env.exec("echo hello && echo error >&2"));
+    REQUIRE(result);
+    CHECK(result->stdout_output.find("hello") != std::string::npos);
+    CHECK(result->stderr_output.find("error") != std::string::npos);
+    CHECK(result->exitCode == 0);
+}
+
+TEST_CASE("pi-shaped exec stdout-only and stderr-only preserve empty unused stream", "[harness][u3]") {
+    tests::TempWorkspace workspace;
+    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+
+    auto stdout_only = run_awaitable_pi(env.exec("echo only"));
+    REQUIRE(stdout_only);
+    CHECK(stdout_only->stdout_output.find("only") != std::string::npos);
+    CHECK(stdout_only->stderr_output.empty());
+
+    auto stderr_only = run_awaitable_pi(env.exec("echo only_err >&2"));
+    REQUIRE(stderr_only);
+    CHECK(stderr_only->stdout_output.empty());
+    CHECK(stderr_only->stderr_output.find("only_err") != std::string::npos);
+}
+
+TEST_CASE("pi-shaped exec honors cwd override", "[harness][u3]") {
+    tests::TempWorkspace workspace;
+    workspace.write("sub/note.txt", "hello");
+    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+
+    harness::ExecOptions opts;
+    opts.cwd = "sub";
+    auto result = run_awaitable_pi(env.exec("cat note.txt", std::move(opts)));
+    REQUIRE(result);
+    CHECK(result->stdout_output.find("hello") != std::string::npos);
+    CHECK(result->exitCode == 0);
+}
+
+TEST_CASE("pi-shaped exec rejects cwd that escapes workspace", "[harness][u3]") {
+    tests::TempWorkspace workspace;
+    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+
+    harness::ExecOptions opts;
+    opts.cwd = "../outside";
+    auto result = run_awaitable_pi(env.exec("pwd", std::move(opts)));
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == harness::ExecutionErrorCode::SpawnError);
+}
+
+TEST_CASE("pi-shaped exec returns shell_unavailable when bash is disabled", "[harness][u3]") {
+    tests::TempWorkspace workspace;
+    harness::AsyncLocalExecutionEnv env(workspace.path(), false);
+
+    auto result = run_awaitable_pi(env.exec("echo nope"));
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == harness::ExecutionErrorCode::ShellUnavailable);
+}
+
+TEST_CASE("pi-shaped exec times out without blocking io context", "[harness][u3]") {
+    tests::TempWorkspace workspace;
+    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+    const auto started = std::chrono::steady_clock::now();
+
+    harness::ExecOptions opts;
+    opts.timeout = std::chrono::milliseconds(100);
+    auto result = run_awaitable_pi(env.exec("sleep 2", std::move(opts)));
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == harness::ExecutionErrorCode::Timeout);
+    CHECK(elapsed < std::chrono::milliseconds(1500));
+}
+
+TEST_CASE("pi-shaped exec preserves nonzero exit codes", "[harness][u3]") {
+    tests::TempWorkspace workspace;
+    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+
+    auto result = run_awaitable_pi(env.exec("exit 42"));
+    REQUIRE(result);
+    CHECK(result->exitCode == 42);
+}

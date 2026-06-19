@@ -286,4 +286,112 @@ std::expected<std::string, FileError> LocalExecutionEnv::createTempFile(
     return fs_.createTempFile(prefix, suffix);
 }
 
+// ---------------------------------------------------------------------------
+// Pi-shaped shell methods
+// ---------------------------------------------------------------------------
+
+util::Expected<util::ProcessRequest> LocalExecutionEnv::make_exec_request(
+    std::string command,
+    ExecOptions options) const {
+    if (!bash_enabled_) {
+        return std::unexpected(process_error("bash is disabled by default; rerun with explicit bash enablement"));
+    }
+
+    // Validate cwd override through workspace containment.
+    std::filesystem::path working_dir = workspace_;
+    if (options.cwd) {
+        auto resolved = fs_.resolve_addressed_path(*options.cwd);
+        if (!resolved) {
+            return std::unexpected(resolved.error());
+        }
+        std::error_code ec;
+        auto status = std::filesystem::symlink_status(*resolved, ec);
+        if (ec || !std::filesystem::is_directory(status)) {
+            return std::unexpected(workspace_error("cwd does not exist or is not a directory: " + *options.cwd));
+        }
+        working_dir = *resolved;
+    }
+
+    // Build sanitized base environment.
+    auto base_env = sanitized_environment(secret_environment_names_);
+
+    // Apply explicit overrides, stripping secret-like names.
+    if (options.env) {
+        for (const auto& [key, value] : *options.env) {
+            if (secret_env_name(key, secret_environment_names_)) {
+                continue;
+            }
+            base_env[key] = value;
+        }
+    }
+
+    util::ProcessRequest request;
+    request.command = std::move(command);
+    request.working_directory = working_dir;
+    request.timeout = options.timeout.value_or(std::chrono::milliseconds{30000});
+    request.environment = std::move(base_env);
+    request.use_explicit_environment = true;
+
+    // Move callbacks if provided.
+    if (options.onStdout) {
+        request.on_stdout = std::move(*options.onStdout);
+    }
+    if (options.onStderr) {
+        request.on_stderr = std::move(*options.onStderr);
+    }
+
+    return request;
+}
+
+ShellExecResult LocalExecutionEnv::exec_result_from_process(const util::ProcessResult& process) const {
+    ShellExecResult result;
+    result.stdout_output = process.stdout_output;
+    result.stderr_output = process.stderr_output;
+    result.exitCode = process.exit_code;
+    return result;
+}
+
+std::expected<ShellExecResult, ExecutionError> LocalExecutionEnv::exec(
+    std::string command,
+    ExecOptions options) const {
+    auto request = make_exec_request(std::move(command), std::move(options));
+    if (!request) {
+        if (request.error().detail.find("disabled") != std::string::npos) {
+            return std::unexpected(ExecutionError{ExecutionErrorCode::ShellUnavailable, request.error().detail});
+        }
+        return std::unexpected(ExecutionError{ExecutionErrorCode::SpawnError, request.error().detail});
+    }
+
+    boost::asio::io_context io;
+    std::optional<util::Expected<util::ProcessResult>> process;
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            process = co_await runner_->run(std::move(*request));
+            co_return;
+        },
+        boost::asio::detached);
+    io.run();
+
+    if (!process) {
+        return std::unexpected(ExecutionError{ExecutionErrorCode::SpawnError, "process execution did not complete"});
+    }
+    if (!*process) {
+        const auto& err = (*process).error();
+        auto code = ExecutionErrorCode::Unknown;
+        if (err.code == util::ErrorCode::Timeout) {
+            code = ExecutionErrorCode::Timeout;
+        } else if (err.detail.find("callback") != std::string::npos) {
+            code = ExecutionErrorCode::CallbackError;
+        } else {
+            code = ExecutionErrorCode::SpawnError;
+        }
+        return std::unexpected(ExecutionError{code, err.detail});
+    }
+    if ((*process)->timed_out) {
+        return std::unexpected(ExecutionError{ExecutionErrorCode::Timeout, "shell command timed out"});
+    }
+    return exec_result_from_process(**process);
+}
+
 } // namespace cch::harness

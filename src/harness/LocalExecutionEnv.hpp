@@ -59,6 +59,16 @@ public:
 
     [[nodiscard]] const WorkspaceFileSystem& fs() const { return fs_; }
 
+    // -- Pi-shaped shell methods ---
+
+    [[nodiscard]] util::Expected<util::ProcessRequest> make_exec_request(
+        std::string command,
+        ExecOptions options) const;
+    [[nodiscard]] ShellExecResult exec_result_from_process(const util::ProcessResult& process) const;
+    [[nodiscard]] std::expected<ShellExecResult, ExecutionError> exec(
+        std::string command,
+        ExecOptions options = {}) const;
+
 private:
     std::filesystem::path workspace_;
     bool bash_enabled_{false};

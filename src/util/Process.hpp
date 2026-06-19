@@ -6,7 +6,9 @@
 
 #include <chrono>
 #include <filesystem>
+#include <functional>
 #include <map>
+#include <optional>
 #include <string>
 
 namespace cch::util {
@@ -19,12 +21,25 @@ struct ProcessRequest {
     bool use_explicit_environment{false};
     std::size_t max_output_bytes{50 * 1024};
     std::size_t max_output_lines{2000};
+
+    /// Called with stdout chunks as they are produced.
+    std::optional<std::move_only_function<void(std::string_view)>> on_stdout;
+    /// Called with stderr chunks as they are produced.
+    std::optional<std::move_only_function<void(std::string_view)>> on_stderr;
 };
 
 struct ProcessResult {
     int exit_code{-1};
+    /// Combined stdout+stderr (compatibility field).
     std::string output;
+    /// Separate stdout stream.
+    std::string stdout_output;
+    /// Separate stderr stream.
+    std::string stderr_output;
     bool timed_out{false};
+    /// Per-stream truncation flags.
+    bool stdout_truncated{false};
+    bool stderr_truncated{false};
 };
 
 class ProcessRunner {
