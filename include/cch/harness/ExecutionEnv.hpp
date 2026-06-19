@@ -5,10 +5,22 @@
 #include <boost/asio/awaitable.hpp>
 
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
 #include <filesystem>
+#include <functional>
+#include <map>
+#include <optional>
 #include <string>
+#include <variant>
+#include <vector>
 
 namespace cch::harness {
+
+// ---------------------------------------------------------------------------
+// Existing tool-shaped result types (compatibility surface)
+// ---------------------------------------------------------------------------
 
 struct AsyncFileReadResult {
     std::string content;
@@ -30,9 +42,162 @@ struct AsyncShellResult {
     bool timed_out{false};
 };
 
+// ---------------------------------------------------------------------------
+// Pi-shaped passive value contracts
+// ---------------------------------------------------------------------------
+
+/// Kind of a filesystem object. Symlinks are not followed automatically.
+enum class FileKind {
+    File,
+    Directory,
+    Symlink,
+};
+
+/// Stable, backend-independent file error codes.
+enum class FileErrorCode {
+    Aborted,
+    NotFound,
+    PermissionDenied,
+    NotDirectory,
+    IsDirectory,
+    Invalid,
+    NotSupported,
+    Unknown,
+};
+
+/// Error returned by pi-shaped filesystem operations.
+struct FileError {
+    FileErrorCode code{FileErrorCode::Unknown};
+    std::string message;
+    std::optional<std::string> path;
+};
+
+/// Stable, backend-independent execution error codes.
+enum class ExecutionErrorCode {
+    Aborted,
+    Timeout,
+    ShellUnavailable,
+    SpawnError,
+    CallbackError,
+    NotSupported,
+    Unknown,
+};
+
+/// Error returned by pi-shaped shell operations.
+struct ExecutionError {
+    ExecutionErrorCode code{ExecutionErrorCode::Unknown};
+    std::string message;
+};
+
+/// Metadata for one filesystem object. Symlink targets are not followed.
+struct FileInfo {
+    /// Basename of the addressed path.
+    std::string name;
+    /// Absolute, syntactically normalized addressed path.
+    std::string path;
+    /// Object kind without following symlinks.
+    FileKind kind{FileKind::File};
+    /// Size in bytes.
+    std::uint64_t size{0};
+    /// Modification time as milliseconds since Unix epoch.
+    std::int64_t mtimeMs{0};
+};
+
+/// Binary data container for file I/O.
+using BinaryData = std::vector<std::byte>;
+
+/// Content passed to write/append: either UTF-8 text or raw bytes.
+using WriteContent = std::variant<std::string, BinaryData>;
+
+/// Options for Shell::exec.
+struct ExecOptions {
+    /// Working directory override (relative resolved against workspace).
+    std::optional<std::string> cwd;
+    /// Environment variable overrides. Non-secret keys shadow the base env.
+    std::optional<std::map<std::string, std::string>> env;
+    /// Wall-clock timeout. Zero / unset means no timeout.
+    std::optional<std::chrono::milliseconds> timeout;
+    /// Called with stdout chunks as they are produced.
+    std::optional<std::move_only_function<void(std::string_view)>> onStdout;
+    /// Called with stderr chunks as they are produced.
+    std::optional<std::move_only_function<void(std::string_view)>> onStderr;
+};
+
+/// Result of a pi-shaped shell execution with split streams.
+struct ShellExecResult {
+    std::string stdout_output;
+    std::string stderr_output;
+    int exitCode{0};
+};
+
+// ---------------------------------------------------------------------------
+// Error conversion helpers (pi-shaped → util::Error)
+// ---------------------------------------------------------------------------
+
+[[nodiscard]] inline util::Error to_util_error(FileError e) {
+    auto code = util::ErrorCode::Workspace;
+    switch (e.code) {
+    case FileErrorCode::Aborted:
+        code = util::ErrorCode::Cancelled;
+        break;
+    case FileErrorCode::NotFound:
+        code = util::ErrorCode::Validation;
+        break;
+    case FileErrorCode::PermissionDenied:
+        code = util::ErrorCode::Workspace;
+        break;
+    case FileErrorCode::NotDirectory:
+    case FileErrorCode::IsDirectory:
+    case FileErrorCode::Invalid:
+        code = util::ErrorCode::Validation;
+        break;
+    case FileErrorCode::NotSupported:
+        code = util::ErrorCode::Unknown;
+        break;
+    case FileErrorCode::Unknown:
+        code = util::ErrorCode::Unknown;
+        break;
+    }
+    return util::make_error(code, e.message, e.message, e.path);
+}
+
+[[nodiscard]] inline util::Error to_util_error(ExecutionError e) {
+    auto code = util::ErrorCode::Process;
+    switch (e.code) {
+    case ExecutionErrorCode::Aborted:
+        code = util::ErrorCode::Cancelled;
+        break;
+    case ExecutionErrorCode::Timeout:
+        code = util::ErrorCode::Timeout;
+        break;
+    case ExecutionErrorCode::ShellUnavailable:
+        code = util::ErrorCode::Process;
+        break;
+    case ExecutionErrorCode::SpawnError:
+        code = util::ErrorCode::Process;
+        break;
+    case ExecutionErrorCode::CallbackError:
+        code = util::ErrorCode::Process;
+        break;
+    case ExecutionErrorCode::NotSupported:
+        code = util::ErrorCode::Unknown;
+        break;
+    case ExecutionErrorCode::Unknown:
+        code = util::ErrorCode::Unknown;
+        break;
+    }
+    return util::make_error(code, e.message, e.message);
+}
+
+// ---------------------------------------------------------------------------
+// AsyncExecutionEnv — public capability seam
+// ---------------------------------------------------------------------------
+
 class AsyncExecutionEnv {
 public:
     virtual ~AsyncExecutionEnv() = default;
+
+    // -- existing tool-shaped methods (pure virtual, must be implemented) ---
 
     [[nodiscard]] virtual const std::filesystem::path& workspace() const = 0;
     [[nodiscard]] virtual bool bash_enabled() const = 0;
@@ -52,6 +217,118 @@ public:
     [[nodiscard]] virtual boost::asio::awaitable<util::Expected<AsyncShellResult>> run_shell(
         std::string command,
         std::chrono::milliseconds timeout) = 0;
+
+    // -- pi-shaped filesystem methods (virtual with not_supported defaults) ---
+
+    /// Return an absolute addressed path without requiring it to exist and without following symlinks.
+    [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::string, FileError>> absolutePath(
+        std::string /*path*/) {
+        co_return std::unexpected(FileError{FileErrorCode::NotSupported, "absolutePath not supported", std::nullopt});
+    }
+
+    /// Join path segments without requiring the result to exist.
+    [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::string, FileError>> joinPath(
+        std::vector<std::string> /*parts*/) {
+        co_return std::unexpected(FileError{FileErrorCode::NotSupported, "joinPath not supported", std::nullopt});
+    }
+
+    /// Read entire UTF-8 text file.
+    [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::string, FileError>> readTextFile(
+        std::string /*path*/) {
+        co_return std::unexpected(FileError{FileErrorCode::NotSupported, "readTextFile not supported", std::nullopt});
+    }
+
+    /// Read UTF-8 text lines. Stops after maxLines if set.
+    [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::vector<std::string>, FileError>> readTextLines(
+        std::string /*path*/,
+        std::optional<int> /*maxLines*/ = std::nullopt) {
+        co_return std::unexpected(FileError{FileErrorCode::NotSupported, "readTextLines not supported", std::nullopt});
+    }
+
+    /// Read entire binary file.
+    [[nodiscard]] virtual boost::asio::awaitable<std::expected<BinaryData, FileError>> readBinaryFile(
+        std::string /*path*/) {
+        co_return std::unexpected(FileError{FileErrorCode::NotSupported, "readBinaryFile not supported", std::nullopt});
+    }
+
+    /// Create or overwrite a file, creating parent directories.
+    [[nodiscard]] virtual boost::asio::awaitable<std::expected<void, FileError>> writeFile(
+        std::string /*path*/,
+        WriteContent /*content*/) {
+        co_return std::unexpected(FileError{FileErrorCode::NotSupported, "writeFile not supported", std::nullopt});
+    }
+
+    /// Create or append to a file, creating parent directories.
+    [[nodiscard]] virtual boost::asio::awaitable<std::expected<void, FileError>> appendFile(
+        std::string /*path*/,
+        WriteContent /*content*/) {
+        co_return std::unexpected(FileError{FileErrorCode::NotSupported, "appendFile not supported", std::nullopt});
+    }
+
+    /// Return metadata for the addressed path without following symlinks.
+    [[nodiscard]] virtual boost::asio::awaitable<std::expected<FileInfo, FileError>> fileInfo(
+        std::string /*path*/) {
+        co_return std::unexpected(FileError{FileErrorCode::NotSupported, "fileInfo not supported", std::nullopt});
+    }
+
+    /// List direct children of a directory without following symlinks.
+    [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::vector<FileInfo>, FileError>> listDir(
+        std::string /*path*/) {
+        co_return std::unexpected(FileError{FileErrorCode::NotSupported, "listDir not supported", std::nullopt});
+    }
+
+    /// Return canonical path for an existing path, resolving symlinks.
+    [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::string, FileError>> canonicalPath(
+        std::string /*path*/) {
+        co_return std::unexpected(FileError{FileErrorCode::NotSupported, "canonicalPath not supported", std::nullopt});
+    }
+
+    /// Return false for missing paths. Other errors return FileError.
+    [[nodiscard]] virtual boost::asio::awaitable<std::expected<bool, FileError>> exists(
+        std::string /*path*/) {
+        co_return std::unexpected(FileError{FileErrorCode::NotSupported, "exists not supported", std::nullopt});
+    }
+
+    /// Create a directory. Defaults: recursive=true.
+    [[nodiscard]] virtual boost::asio::awaitable<std::expected<void, FileError>> createDir(
+        std::string /*path*/,
+        bool /*recursive*/ = true) {
+        co_return std::unexpected(FileError{FileErrorCode::NotSupported, "createDir not supported", std::nullopt});
+    }
+
+    /// Remove a file or directory. Default: non-recursive.
+    [[nodiscard]] virtual boost::asio::awaitable<std::expected<void, FileError>> remove(
+        std::string /*path*/,
+        bool /*recursive*/ = false) {
+        co_return std::unexpected(FileError{FileErrorCode::NotSupported, "remove not supported", std::nullopt});
+    }
+
+    /// Create a workspace-contained temporary directory and return its addressed path.
+    [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::string, FileError>> createTempDir(
+        std::optional<std::string> /*prefix*/ = std::nullopt) {
+        co_return std::unexpected(FileError{FileErrorCode::NotSupported, "createTempDir not supported", std::nullopt});
+    }
+
+    /// Create a workspace-contained temporary file and return its addressed path.
+    [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::string, FileError>> createTempFile(
+        std::optional<std::string> /*prefix*/ = std::nullopt,
+        std::optional<std::string> /*suffix*/ = std::nullopt) {
+        co_return std::unexpected(FileError{FileErrorCode::NotSupported, "createTempFile not supported", std::nullopt});
+    }
+
+    /// Release owned resources. Must be best-effort and must not throw.
+    virtual boost::asio::awaitable<void> cleanup() {
+        co_return;
+    }
+
+    // -- pi-shaped shell method (virtual with not_supported default) ---------
+
+    /// Execute a shell command with split streams.
+    [[nodiscard]] virtual boost::asio::awaitable<std::expected<ShellExecResult, ExecutionError>> exec(
+        std::string /*command*/,
+        ExecOptions /*options*/ = {}) {
+        co_return std::unexpected(ExecutionError{ExecutionErrorCode::NotSupported, "exec not supported"});
+    }
 };
 
 } // namespace cch::harness

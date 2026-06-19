@@ -51,6 +51,24 @@ util::Expected<T> run_awaitable(Start start) {
     return std::move(*result);
 }
 
+/// Like run_awaitable but for pi-shaped methods that return std::expected<T, E>
+/// (not util::Expected<T>). Returns the raw std::expected<T, E>.
+template <typename T>
+T run_awaitable_pi(boost::asio::awaitable<T> start) {
+    boost::asio::io_context io;
+    std::optional<T> result;
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            result = co_await std::move(start);
+            co_return;
+        },
+        boost::asio::detached);
+    io.run();
+    REQUIRE(result.has_value());
+    return std::move(*result);
+}
+
 } // namespace
 
 TEST_CASE("async local execution env preserves file read and write safety", "[harness][async][u6]") {
@@ -216,4 +234,202 @@ TEST_CASE("default process runner caps newline-free output without waiting for l
     REQUIRE(result);
     CHECK(result->output.size() <= 1100);
     CHECK(result->output.find("[output truncated]") != std::string::npos);
+}
+
+// ---------------------------------------------------------------------------
+// U1: pi-shaped public contract compile / construction tests
+// ---------------------------------------------------------------------------
+
+TEST_CASE("pi-shaped public types compile with aggregate construction", "[harness][u1]") {
+    // FileKind
+    CHECK(static_cast<int>(harness::FileKind::File) != static_cast<int>(harness::FileKind::Directory));
+    CHECK(static_cast<int>(harness::FileKind::Symlink) != static_cast<int>(harness::FileKind::File));
+
+    // FileInfo aggregate
+    harness::FileInfo info{
+        .name = "note.txt",
+        .path = "/ws/note.txt",
+        .kind = harness::FileKind::File,
+        .size = 42,
+        .mtimeMs = 1700000000000,
+    };
+    CHECK(info.name == "note.txt");
+    CHECK(info.path == "/ws/note.txt");
+    CHECK(info.kind == harness::FileKind::File);
+    CHECK(info.size == 42);
+    CHECK(info.mtimeMs == 1700000000000);
+
+    // FileError
+    harness::FileError fe{harness::FileErrorCode::NotFound, "missing", std::string{"/tmp/x"}};
+    CHECK(fe.code == harness::FileErrorCode::NotFound);
+    CHECK(fe.message == "missing");
+    CHECK(fe.path == "/tmp/x");
+
+    // ExecutionError
+    harness::ExecutionError ee{harness::ExecutionErrorCode::Timeout, "timed out"};
+    CHECK(ee.code == harness::ExecutionErrorCode::Timeout);
+    CHECK(ee.message == "timed out");
+
+    // ExecOptions
+    harness::ExecOptions opts;
+    opts.cwd = "subdir";
+    opts.timeout = std::chrono::milliseconds(5000);
+    CHECK(opts.cwd == "subdir");
+    CHECK(opts.timeout->count() == 5000);
+
+    // ShellExecResult
+    harness::ShellExecResult sr{"out", "err", 0};
+    CHECK(sr.stdout_output == "out");
+    CHECK(sr.stderr_output == "err");
+    CHECK(sr.exitCode == 0);
+
+    // BinaryData
+    harness::BinaryData bin{std::byte{0x00}, std::byte{0xFF}, std::byte{0x7F}};
+    CHECK(bin.size() == 3);
+    CHECK(bin[1] == std::byte{0xFF});
+
+    // WriteContent variant
+    harness::WriteContent text = std::string{"hello"};
+    harness::WriteContent bytes = harness::BinaryData{std::byte{0x01}};
+    CHECK(std::holds_alternative<std::string>(text));
+    CHECK(std::holds_alternative<harness::BinaryData>(bytes));
+}
+
+TEST_CASE("pi-shaped error conversion helpers map to util::Error", "[harness][u1]") {
+    // FileError → util::Error
+    auto ue = harness::to_util_error(harness::FileError{
+        harness::FileErrorCode::PermissionDenied, "denied", std::string{"/x"}});
+    CHECK(ue.code == util::ErrorCode::Workspace);
+    CHECK(ue.detail.find("denied") != std::string::npos);
+    CHECK(ue.context == "/x");
+
+    // ExecutionError → util::Error
+    auto ee = harness::to_util_error(harness::ExecutionError{
+        harness::ExecutionErrorCode::Timeout, "too slow"});
+    CHECK(ee.code == util::ErrorCode::Timeout);
+    CHECK(ee.detail.find("too slow") != std::string::npos);
+
+    // Every FileErrorCode maps without unknown fallback (except Unknown/NotSupported)
+    for (auto code : {harness::FileErrorCode::Aborted, harness::FileErrorCode::NotFound,
+                      harness::FileErrorCode::PermissionDenied, harness::FileErrorCode::NotDirectory,
+                      harness::FileErrorCode::IsDirectory, harness::FileErrorCode::Invalid,
+                      harness::FileErrorCode::NotSupported, harness::FileErrorCode::Unknown}) {
+        auto err = harness::to_util_error(harness::FileError{code, "test", std::nullopt});
+        bool allowed_unknown = (code == harness::FileErrorCode::Unknown ||
+                                code == harness::FileErrorCode::NotSupported);
+        CHECK((static_cast<int>(err.code) != static_cast<int>(util::ErrorCode::Unknown) || allowed_unknown));
+    }
+
+    // Every ExecutionErrorCode maps without unknown fallback
+    for (auto code : {harness::ExecutionErrorCode::Aborted, harness::ExecutionErrorCode::Timeout,
+                      harness::ExecutionErrorCode::ShellUnavailable, harness::ExecutionErrorCode::SpawnError,
+                      harness::ExecutionErrorCode::CallbackError,
+                      harness::ExecutionErrorCode::NotSupported,
+                      harness::ExecutionErrorCode::Unknown}) {
+        auto err = harness::to_util_error(harness::ExecutionError{code, "test"});
+        bool allowed_unknown = (code == harness::ExecutionErrorCode::Unknown ||
+                                code == harness::ExecutionErrorCode::NotSupported);
+        CHECK((static_cast<int>(err.code) != static_cast<int>(util::ErrorCode::Unknown) || allowed_unknown));
+    }
+}
+
+TEST_CASE("focused fake can override only tool-shaped methods", "[harness][u1]") {
+    // A fake that only implements the required pure virtual methods.
+    // The new pi-shaped methods inherit default not_supported implementations.
+    struct FocusedFake : harness::AsyncExecutionEnv {
+        std::filesystem::path ws{"/tmp/ws"};
+        const std::filesystem::path& workspace() const override { return ws; }
+        bool bash_enabled() const override { return false; }
+
+        boost::asio::awaitable<util::Expected<harness::AsyncFileReadResult>> read_file(
+            std::string, int, int) override {
+            co_return harness::AsyncFileReadResult{"fake"};
+        }
+        boost::asio::awaitable<util::Expected<harness::AsyncFileWriteResult>> write_file(
+            std::string, std::string, bool) override {
+            co_return harness::AsyncFileWriteResult{4};
+        }
+        boost::asio::awaitable<util::Expected<harness::AsyncFileEditResult>> edit_file(
+            std::string, std::string, std::string) override {
+            co_return harness::AsyncFileEditResult{};
+        }
+        boost::asio::awaitable<util::Expected<harness::AsyncShellResult>> run_shell(
+            std::string, std::chrono::milliseconds) override {
+            co_return harness::AsyncShellResult{};
+        }
+    };
+
+    FocusedFake fake;
+    CHECK(fake.workspace() == "/tmp/ws");
+    CHECK_FALSE(fake.bash_enabled());
+
+    // Tool-shaped methods work.
+    auto read = run_awaitable<harness::AsyncFileReadResult>(
+        [&]() { return fake.read_file("x", 1, 0); });
+    REQUIRE(read);
+    CHECK(read->content == "fake");
+
+    // Pi-shaped methods return not_supported.
+    auto info = run_awaitable_pi(fake.fileInfo("x"));
+    REQUIRE_FALSE(info);
+    CHECK(info.error().code == harness::FileErrorCode::NotSupported);
+
+    auto exec_result = run_awaitable_pi(fake.exec("ls"));
+    REQUIRE_FALSE(exec_result);
+    CHECK(exec_result.error().code == harness::ExecutionErrorCode::NotSupported);
+}
+
+TEST_CASE("complete fake can override full pi-shaped capability surface", "[harness][u1]") {
+    struct CompleteFake : harness::AsyncExecutionEnv {
+        std::filesystem::path ws{"/ws"};
+        const std::filesystem::path& workspace() const override { return ws; }
+        bool bash_enabled() const override { return true; }
+
+        boost::asio::awaitable<util::Expected<harness::AsyncFileReadResult>> read_file(
+            std::string, int, int) override {
+            co_return harness::AsyncFileReadResult{};
+        }
+        boost::asio::awaitable<util::Expected<harness::AsyncFileWriteResult>> write_file(
+            std::string, std::string, bool) override {
+            co_return harness::AsyncFileWriteResult{};
+        }
+        boost::asio::awaitable<util::Expected<harness::AsyncFileEditResult>> edit_file(
+            std::string, std::string, std::string) override {
+            co_return harness::AsyncFileEditResult{};
+        }
+        boost::asio::awaitable<util::Expected<harness::AsyncShellResult>> run_shell(
+            std::string, std::chrono::milliseconds) override {
+            co_return harness::AsyncShellResult{};
+        }
+
+        // Override a sampling of pi-shaped methods.
+        boost::asio::awaitable<std::expected<harness::FileInfo, harness::FileError>> fileInfo(
+            std::string path) override {
+            co_return harness::FileInfo{.name = path, .path = "/ws/" + path, .kind = harness::FileKind::File};
+        }
+        boost::asio::awaitable<std::expected<std::string, harness::FileError>> readTextFile(
+            std::string path) override {
+            co_return path + "-content";
+        }
+        boost::asio::awaitable<std::expected<harness::ShellExecResult, harness::ExecutionError>> exec(
+            std::string cmd, harness::ExecOptions) override {
+            co_return harness::ShellExecResult{cmd, "", 0};
+        }
+    };
+
+    CompleteFake fake;
+
+    auto info = run_awaitable_pi(fake.fileInfo("readme.md"));
+    REQUIRE(info);
+    CHECK(info->name == "readme.md");
+    CHECK(info->kind == harness::FileKind::File);
+
+    auto text = run_awaitable_pi(fake.readTextFile("f"));
+    REQUIRE(text);
+    CHECK(*text == "f-content");
+
+    auto sh = run_awaitable_pi(fake.exec("pwd", harness::ExecOptions{}));
+    REQUIRE(sh);
+    CHECK(sh->stdout_output == "pwd");
+    CHECK(sh->exitCode == 0);
 }
