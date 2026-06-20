@@ -3,6 +3,8 @@
 #include "../../src/harness/WorkspaceFileSystem.hpp"
 #include "../support/TempWorkspace.hpp"
 
+#include <algorithm>
+
 using namespace cch;
 
 namespace {
@@ -275,4 +277,163 @@ TEST_CASE("loadSkillFromFile handles YAML parse failure", "[coding_agent][skill]
     CHECK(result.skills.empty());
     REQUIRE(result.diagnostics.size() == 1);
     CHECK(result.diagnostics[0].code == coding_agent::SkillDiagnosticCode::parse_failed);
+}
+
+// ── U4: Recursive directory discovery tests ──────────────────────────
+
+TEST_CASE("loadSkills discovers single SKILL.md in root dir", "[coding_agent][skill][u4]") {
+    SkillTestFixture fix;
+    fix.writeSkill("SKILL.md",
+        "---\n"
+        "name: root-skill\n"
+        "description: Root level skill.\n"
+        "---\n"
+        "Body.\n");
+
+    std::vector<coding_agent::SkillDirSpec> dirs = {{.path = ".", .includeRootFiles = false}};
+    auto result = coding_agent::loadSkills(fix.fs, dirs);
+
+    // Only SKILL.md matches, not root .md files (includeRootFiles=false).
+    REQUIRE(result.skills.size() == 1);
+    CHECK(result.skills[0].name == "root-skill");
+}
+
+TEST_CASE("loadSkills discovers nested skill directories", "[coding_agent][skill][u4]") {
+    SkillTestFixture fix;
+    fix.writeSkill("skill-a/SKILL.md",
+        "---\nname: skill-a\ndescription: First skill.\n---\nBody A.\n");
+    fix.writeSkill("skill-b/SKILL.md",
+        "---\nname: skill-b\ndescription: Second skill.\n---\nBody B.\n");
+
+    std::vector<coding_agent::SkillDirSpec> dirs = {{.path = ".", .includeRootFiles = false}};
+    auto result = coding_agent::loadSkills(fix.fs, dirs);
+
+    REQUIRE(result.skills.size() == 2);
+    // Skills should be loaded (order may vary by directory listing sort).
+    std::vector<std::string> names;
+    for (const auto& s : result.skills) names.push_back(s.name);
+    CHECK(std::find(names.begin(), names.end(), "skill-a") != names.end());
+    CHECK(std::find(names.begin(), names.end(), "skill-b") != names.end());
+}
+
+TEST_CASE("loadSkills with includeRootFiles loads root .md files", "[coding_agent][skill][u4]") {
+    SkillTestFixture fix;
+    fix.writeSkill("global-skill.md",
+        "---\n"
+        "name: global-skill\n"
+        "description: A global skill from root .md.\n"
+        "---\n"
+        "Body.\n");
+
+    std::vector<coding_agent::SkillDirSpec> dirs = {{.path = ".", .includeRootFiles = true}};
+    auto result = coding_agent::loadSkills(fix.fs, dirs);
+
+    REQUIRE(result.skills.size() == 1);
+    CHECK(result.skills[0].name == "global-skill");
+}
+
+TEST_CASE("loadSkills skips dot-prefixed directories", "[coding_agent][skill][u4]") {
+    SkillTestFixture fix;
+    fix.writeSkill(".hidden/skill-hidden/SKILL.md",
+        "---\nname: skill-hidden\ndescription: Should be skipped.\n---\nBody.\n");
+    fix.writeSkill("visible/SKILL.md",
+        "---\nname: visible\ndescription: Should be found.\n---\nBody.\n");
+
+    std::vector<coding_agent::SkillDirSpec> dirs = {{.path = ".", .includeRootFiles = false}};
+    auto result = coding_agent::loadSkills(fix.fs, dirs);
+
+    REQUIRE(result.skills.size() == 1);
+    CHECK(result.skills[0].name == "visible");
+}
+
+TEST_CASE("loadSkills skips node_modules", "[coding_agent][skill][u4]") {
+    SkillTestFixture fix;
+    fix.writeSkill("node_modules/some-pkg/SKILL.md",
+        "---\nname: pkg-skill\ndescription: Should be skipped.\n---\nBody.\n");
+    fix.writeSkill("my-skill/SKILL.md",
+        "---\nname: my-skill\ndescription: Should be found.\n---\nBody.\n");
+
+    std::vector<coding_agent::SkillDirSpec> dirs = {{.path = ".", .includeRootFiles = false}};
+    auto result = coding_agent::loadSkills(fix.fs, dirs);
+
+    REQUIRE(result.skills.size() == 1);
+    CHECK(result.skills[0].name == "my-skill");
+}
+
+TEST_CASE("loadSkills deduplicates by name", "[coding_agent][skill][u4]") {
+    SkillTestFixture fix;
+    fix.writeSkill("dir-a/SKILL.md",
+        "---\nname: same-name\ndescription: First occurrence.\n---\nBody A.\n");
+    fix.writeSkill("dir-b/SKILL.md",
+        "---\nname: same-name\ndescription: Second occurrence.\n---\nBody B.\n");
+
+    std::vector<coding_agent::SkillDirSpec> dirs = {{.path = ".", .includeRootFiles = false}};
+    auto result = coding_agent::loadSkills(fix.fs, dirs);
+
+    REQUIRE(result.skills.size() == 1);
+    CHECK(result.skills[0].name == "same-name");
+    // Should have one duplicate_name diagnostic.
+    bool hasDupDiag = false;
+    for (const auto& d : result.diagnostics) {
+        if (d.code == coding_agent::SkillDiagnosticCode::duplicate_name) hasDupDiag = true;
+    }
+    CHECK(hasDupDiag);
+}
+
+TEST_CASE("loadSkills silently skips missing input directory", "[coding_agent][skill][u4]") {
+    SkillTestFixture fix;
+
+    std::vector<coding_agent::SkillDirSpec> dirs = {{.path = "nonexistent-dir", .includeRootFiles = false}};
+    auto result = coding_agent::loadSkills(fix.fs, dirs);
+
+    CHECK(result.skills.empty());
+    // Missing dir should not produce diagnostics.
+    CHECK(result.diagnostics.empty());
+}
+
+TEST_CASE("loadSkills handles directory with no SKILL.md", "[coding_agent][skill][u4]") {
+    SkillTestFixture fix;
+    fix.writeSkill("empty-dir/placeholder.txt", "not a skill");
+
+    std::vector<coding_agent::SkillDirSpec> dirs = {{.path = ".", .includeRootFiles = false}};
+    auto result = coding_agent::loadSkills(fix.fs, dirs);
+
+    CHECK(result.skills.empty());
+}
+
+TEST_CASE("loadSkills continues after malformed skill in one directory", "[coding_agent][skill][u4]") {
+    SkillTestFixture fix;
+    fix.writeSkill("bad/SKILL.md",
+        "---\nname: bad\ndescription:\n---\nBody.\n");  // missing description → rejected
+    fix.writeSkill("good/SKILL.md",
+        "---\nname: good\ndescription: Valid skill.\n---\nBody.\n");
+
+    std::vector<coding_agent::SkillDirSpec> dirs = {{.path = ".", .includeRootFiles = false}};
+    auto result = coding_agent::loadSkills(fix.fs, dirs);
+
+    // Good skill should still be loaded.
+    REQUIRE(result.skills.size() == 1);
+    CHECK(result.skills[0].name == "good");
+    // Bad skill should produce a diagnostic.
+    bool hasDiag = false;
+    for (const auto& d : result.diagnostics) {
+        if (d.path.find("bad/SKILL.md") != std::string::npos) hasDiag = true;
+    }
+    CHECK(hasDiag);
+}
+
+TEST_CASE("loadSkills loads from multiple input directories", "[coding_agent][skill][u4]") {
+    SkillTestFixture fix;
+    fix.writeSkill("dir1/skill1/SKILL.md",
+        "---\nname: skill1\ndescription: First.\n---\nBody1.\n");
+    fix.writeSkill("dir2/skill2/SKILL.md",
+        "---\nname: skill2\ndescription: Second.\n---\nBody2.\n");
+
+    std::vector<coding_agent::SkillDirSpec> dirs = {
+        {.path = "dir1", .includeRootFiles = false},
+        {.path = "dir2", .includeRootFiles = false},
+    };
+    auto result = coding_agent::loadSkills(fix.fs, dirs);
+
+    REQUIRE(result.skills.size() == 2);
 }
