@@ -148,6 +148,7 @@ if(CCH_BUILD_TESTS)
 tests/coding_agent/BuiltinCommandsTest.cpp
 tests/coding_agent/PromptExpanderTest.cpp
         tests/coding_agent/ConfigLoaderTest.cpp
+        tests/coding_agent/SkillTest.cpp
         tests/coding_agent/runtime/JsonEventPrinterTest.cpp
         tests/harness/AsyncLocalExecutionEnvTest.cpp
         tests/harness/session/JsonlSessionStoreTest.cpp
