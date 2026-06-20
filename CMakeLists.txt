@@ -96,8 +96,11 @@ target_link_libraries(cch_tools
 add_library(cch_coding_agent_runtime
     src/AsyncCliRuntime.cpp
     src/coding_agent/ConfigLoader.cpp
+    src/coding_agent/runtime/AgentSessionRunner.cpp
     src/coding_agent/runtime/EventPrinter.cpp
     src/coding_agent/runtime/JsonEventPrinter.cpp
+    src/coding_agent/runtime/RpcJsonl.cpp
+    src/coding_agent/runtime/RpcMode.cpp
     src/coding_agent/runtime/RuntimeServices.cpp
     src/coding_agent/runtime/SessionLifecycle.cpp
 )

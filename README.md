@@ -61,6 +61,7 @@ Run the binary with the deterministic fake provider:
 ./build/cpp_harness --fake --session /tmp/cpp-session.jsonl "hello"
 ./build/cpp_harness --fake --workspace . --session /tmp/cpp-read.jsonl "read README.md"
 ./build/cpp_harness --fake --mode json --session /tmp/cpp-json.jsonl "hello" | jq -c 'select(.type == "message_update")'
+printf '{"type":"get_state"}\n{"type":"shutdown"}\n' | ./build/cpp_harness --fake --mode rpc --session /tmp/cpp-rpc.jsonl
 ./build/cpp_harness --fake --repl --session /tmp/cpp-repl.jsonl
 ```
 
@@ -151,7 +152,9 @@ The default text CLI prints stable semantic event lines:
 
 `--mode json` emits the first machine-readable surface: one compact JSON object per stdout line. The first record is a session header, followed by a C++ JSON stream schema v1 subset of pi-named lifecycle events such as `agent_start`, `turn_start`, `message_update`, `tool_execution_start`, `tool_execution_end`, `turn_end`, and a final `runtime_terminal` record. Text-mode final assistant output is suppressed in JSON mode so stdout remains JSONL after the session header. Startup/pre-session validation errors still report on stderr with a non-zero exit and are not a complete machine-readable CLI error protocol.
 
-One-shot mode runs one prompt. `--repl` keeps history in memory for multiple prompts. `--mode json` cannot be combined with `--repl`; RPC mode is not implemented yet. `--resume <session.jsonl>` loads the redacted typed JSONL history and appends new messages. `--session <path>` always creates a new file; use `--resume` to append.
+`--mode rpc` is a narrow JSONL stdin/stdout command loop. It supports `prompt`, `get_state`, `get_last_assistant_text`, and `shutdown`; unsupported pi RPC commands return structured `success:false` responses. RPC mode emits no startup session header, writes command responses and prompt lifecycle events to stdout, and keeps startup/pre-session failures on stderr. It is sequential only: no `abort`, `steer`, `follow_up`, session switching, fork/clone, compaction, extension UI, resources, or SDK surface yet.
+
+One-shot mode runs one prompt. `--repl` keeps history in memory for multiple prompts. `--mode json` and `--mode rpc` cannot be combined with `--repl`; RPC mode reads prompts from stdin commands rather than positional CLI arguments. `--resume <session.jsonl>` loads the redacted typed JSONL history and appends new messages. `--session <path>` always creates a new file; use `--resume` to append.
 
 ## Tools
 
@@ -202,4 +205,4 @@ These cover:
 
 ## Deferred
 
-Not included yet: rich TUI, extensions/skills, additional provider adapters and model catalog/config resolution, OAuth, session tree navigation/branching/compaction semantics, multi-replacement edits, native Windows shell process-tree termination semantics, tool execution streaming updates, subagents, RPC mode, embeddable SDK surface, MCP integration, permission prompts, image generation behavior, C++26 reflection-generated schema, `std::execution` senders/receivers, ABI-stable binary distribution, or OS-level sandboxing.
+Not included yet: rich TUI, extensions/skills, additional provider adapters and model catalog/config resolution, OAuth, session tree navigation/branching/compaction semantics, multi-replacement edits, native Windows shell process-tree termination semantics, tool execution streaming updates, subagents, full pi RPC parity, embeddable SDK surface, MCP integration, permission prompts, image generation behavior, C++26 reflection-generated schema, `std::execution` senders/receivers, ABI-stable binary distribution, or OS-level sandboxing.

@@ -8,6 +8,7 @@ namespace cch::cli {
 enum class OutputMode {
     Text,
     Json,
+    Rpc,
 };
 
 struct AsyncCliRuntimeConfig {

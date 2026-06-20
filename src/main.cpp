@@ -100,7 +100,7 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     app.add_option("--model", config.model, "Provider model name")->capture_default_str();
     app.add_option("--base-url", config.base_url, "OpenAI-compatible base URL")->capture_default_str();
     app.add_option("--api-key-env", config.api_key_env, "Environment variable containing API key")->capture_default_str();
-    app.add_option("--mode", config.mode, "Output mode: text or json")->capture_default_str();
+    app.add_option("--mode", config.mode, "Output mode: text, json, or rpc")->capture_default_str();
     app.add_option("prompt", prompt_parts, "Prompt")->expected(0, -1);
 
     try {
@@ -136,7 +136,7 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     } else if (config.mode == "json") {
         config.output_mode = cch::cli::OutputMode::Json;
     } else if (config.mode == "rpc") {
-        return std::unexpected(cli_error("--mode rpc is not supported yet"));
+        config.output_mode = cch::cli::OutputMode::Rpc;
     } else {
         return std::unexpected(cli_error("unsupported --mode: " + config.mode));
     }
@@ -148,7 +148,13 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     if (config.output_mode == cch::cli::OutputMode::Json && config.repl) {
         return std::unexpected(cli_error("--mode json cannot be combined with --repl"));
     }
-    if (!config.repl && config.prompt.empty()) {
+    if (config.output_mode == cch::cli::OutputMode::Rpc && config.repl) {
+        return std::unexpected(cli_error("--mode rpc cannot be combined with --repl"));
+    }
+    if (config.output_mode == cch::cli::OutputMode::Rpc && !config.prompt.empty()) {
+        return std::unexpected(cli_error("--mode rpc reads prompts from stdin; positional prompt is not allowed"));
+    }
+    if (config.output_mode != cch::cli::OutputMode::Rpc && !config.repl && config.prompt.empty()) {
         return std::unexpected(cli_error("prompt is required unless --repl is used"));
     }
     return config;

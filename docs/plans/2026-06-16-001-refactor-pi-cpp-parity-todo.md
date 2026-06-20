@@ -229,8 +229,11 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **Test scenarios:** stable event objects for model request, assistant deltas, tool call, tool result, errors, max turns, and completion.
   - **Implementation plan:** `docs/plans/2026-06-20-002-feat-json-event-stream-mode-plan.md`.
   - **Status:** `--mode json` emits JSONL stdout with a session header, pi-named C++ schema v1 lifecycle subset, correlated tool execution events, and final `runtime_terminal`; text mode remains default. RPC and SDK remain deferred.
-- [ ] Add RPC mode only after runtime services are separated from CLI printing.
+- [x] Add RPC mode only after runtime services are separated from CLI printing.
+  - **Files:** `src/main.cpp`, `src/AsyncCliRuntime.*`, `src/coding_agent/runtime/AgentSessionRunner.*`, `src/coding_agent/runtime/RpcJsonl.*`, `src/coding_agent/runtime/RpcMode.*`, `tests/cli/CliSmokeTest.cpp`.
   - **References:** `pi:packages/coding-agent/docs/rpc.md`.
+  - **Implementation plan:** `docs/plans/2026-06-20-003-feat-t8-jsonl-rpc-mode-plan.md`.
+  - **Status:** `--mode rpc` reads strict JSONL commands on stdin and emits JSONL responses/events on stdout for a narrow v1 command set: `prompt`, `get_state`, `get_last_assistant_text`, and `shutdown`. Full pi RPC command parity, SDK, extension UI, compaction, resources, and session tree operations remain deferred.
   - **Done when:** stdin/stdout JSONL requests can drive sessions without TUI assumptions.
 - [ ] Add embeddable SDK surface after agent/session/resource seams are stable.
   - **References:** `pi:packages/coding-agent/docs/sdk.md`, `pi:packages/coding-agent/src/core/sdk.ts`.

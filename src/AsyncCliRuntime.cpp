@@ -1,16 +1,16 @@
 #include "AsyncCliRuntime.hpp"
 
-#include "../include/cch/agent/AgentLoop.hpp"
 #include "../include/cch/ai/Content.hpp"
 #include "../include/cch/coding_agent/Config.hpp"
+#include "coding_agent/runtime/AgentSessionRunner.hpp"
 #include "coding_agent/runtime/EventPrinter.hpp"
 #include "coding_agent/runtime/JsonEventPrinter.hpp"
+#include "coding_agent/runtime/RpcMode.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/post.hpp>
 
 #include <cstdlib>
 #include <iostream>
@@ -27,15 +27,8 @@ namespace {
     return mode == OutputMode::Json;
 }
 
-[[nodiscard]] std::string terminal_code_for_loop_error(const std::string& message) {
-    if (message == "max turns exceeded") {
-        return "max_turns_exceeded";
-    }
-    return "runtime_error";
-}
-
-[[nodiscard]] std::string text_error_for_loop_error(const std::string& message) {
-    return message == "max turns exceeded" ? "max_turns_exceeded" : message;
+[[nodiscard]] bool is_rpc_mode(OutputMode mode) {
+    return mode == OutputMode::Rpc;
 }
 
 bool print_json_terminal(coding_agent::runtime::JsonEventPrinter& printer, bool success, std::string code, std::string message = {}) {
@@ -153,10 +146,25 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         return 2;
     }
 
-    agent::AsyncAgentLoop loop(*services->client, std::move(services->tools), agent::AsyncAgentOptions{config.max_turns, resolved_model});
+    coding_agent::runtime::AgentSessionRunner runner(
+        *services->client,
+        std::move(services->tools),
+        agent::AsyncAgentOptions{config.max_turns, resolved_model});
+
+    if (is_rpc_mode(config.output_mode)) {
+        return coding_agent::runtime::run_rpc_mode(coding_agent::runtime::RpcModeConfig{
+            std::cin,
+            std::cout,
+            history,
+            store,
+            runner,
+            resolved_provider,
+            resolved_model,
+            workspace,
+        });
+    }
 
     auto run_prompt = [&](const std::string& prompt) -> bool {
-        boost::asio::io_context io;
         std::optional<boost::asio::io_context> print_io;
         std::optional<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>> print_work;
         std::optional<std::jthread> print_thread;
@@ -166,62 +174,50 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             print_thread.emplace([&]() { print_io->run(); });
         }
 
-        std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
-        const auto previous_size = history.size();
-        boost::asio::co_spawn(
-            io,
-            [&]() -> boost::asio::awaitable<void> {
-                result = co_await loop.continue_with(history, prompt, [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
-                    if (json_mode) {
-                        return json_printer->print_agent_event(event);
-                    }
-                    try {
-                        boost::asio::post(*print_io, [event]() {
-                            try {
-                                coding_agent::runtime::print_agent_event(event, std::cout);
-                            } catch (const std::exception& e) {
-                                std::cerr << "event printer failed: " << e.what() << '\n';
-                            }
-                        });
-                        return util::ExpectedVoid{};
-                    } catch (const std::exception& e) {
-                        return std::unexpected(util::make_error(util::ErrorCode::Tool, "event printer failed", e.what()));
-                    }
-                });
-                co_return;
-            },
-            boost::asio::detached);
-        io.run();
+        auto result = runner.run_prompt(
+            history,
+            store,
+            prompt,
+            [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+                if (json_mode) {
+                    return json_printer->print_agent_event(event);
+                }
+                try {
+                    boost::asio::post(*print_io, [event]() {
+                        try {
+                            coding_agent::runtime::print_agent_event(event, std::cout);
+                        } catch (const std::exception& e) {
+                            std::cerr << "event printer failed: " << e.what() << '\n';
+                        }
+                    });
+                    return util::ExpectedVoid{};
+                } catch (const std::exception& e) {
+                    return std::unexpected(util::make_error(util::ErrorCode::Tool, "event printer failed", e.what()));
+                }
+            });
+
         if (!json_mode) {
             print_work->reset();
             print_thread->join();
         }
         std::cout.flush();
-        if (!result || !*result) {
-            const auto message = result ? (*result).error().message : std::string{"async loop did not finish"};
+        if (!result.success) {
             if (json_mode) {
-                (void)print_json_terminal(*json_printer, false, terminal_code_for_loop_error(message), text_error_for_loop_error(message));
+                (void)print_json_terminal(*json_printer, false, result.code, result.message);
+            } else if (result.code == "session_persist_failed") {
+                std::cerr << result.message << '\n';
             } else {
-                std::cerr << "loop failed: " << text_error_for_loop_error(message) << '\n';
+                std::cerr << "loop failed: " << result.message << '\n';
             }
             return false;
         }
-        history = (*result)->context.messages;
-        for (std::size_t index = previous_size; index < history.size(); ++index) {
-            if (auto appended = store.append(history[index]); !appended) {
-                if (json_mode) {
-                    (void)print_json_terminal(*json_printer, false, "session_persist_failed", "could not persist session entry");
-                } else {
-                    std::cerr << "could not persist session entry: " << appended.error().message << ": " << appended.error().detail << '\n';
-                }
-                return false;
-            }
-        }
         if (json_mode) {
-            return print_json_terminal(*json_printer, true, "completed");
+            return print_json_terminal(*json_printer, true, result.code);
         }
-        if (const auto* final_message = std::get_if<ai::AssistantMessage>(&history.back())) {
-            std::cout << ai::text_from_assistant_content(final_message->content) << '\n';
+        if (!history.empty()) {
+            if (const auto* final_message = std::get_if<ai::AssistantMessage>(&history.back())) {
+                std::cout << ai::text_from_assistant_content(final_message->content) << '\n';
+            }
         }
         return true;
     };
