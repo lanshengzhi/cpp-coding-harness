@@ -129,6 +129,11 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
     }
     if (resolved_api_key_env.empty()) resolved_api_key_env = "OPENAI_API_KEY";
 
+    // Build skill directory list (project-local only; global ~/.cpp-harness/skills/
+    // requires a separate filesystem root and is deferred to follow-up).
+    std::vector<coding_agent::SkillDirSpec> skill_dirs;
+    skill_dirs.push_back({.path = ".cpp-harness/skills", .includeRootFiles = false});
+
     auto services = coding_agent::runtime::make_runtime_services(coding_agent::runtime::RuntimeServicesConfig{
         workspace,
         config.enable_bash,
@@ -136,6 +141,8 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         resolved_model,
         resolved_base_url,
         resolved_api_key_env,
+        std::move(skill_dirs),
+        true,  // print_skill_diagnostics
     });
     if (!services) {
         if (json_mode && json_printer) {

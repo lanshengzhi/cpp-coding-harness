@@ -1,8 +1,11 @@
 #include "RuntimeServices.hpp"
 
 #include "../../../include/cch/ai/ProviderRegistry.hpp"
+#include "../../../include/cch/coding_agent/SkillLoader.hpp"
 #include "../../../include/cch/tools/ToolFactories.hpp"
+#include "../../harness/WorkspaceFileSystem.hpp"
 
+#include <iostream>
 #include <utility>
 #include <vector>
 
@@ -41,6 +44,42 @@ util::Expected<RuntimeServices> make_runtime_services(const RuntimeServicesConfi
     if (auto added = services.tools.add(tools::make_async_bash_tool(services.env)); !added) {
         return std::unexpected(added.error());
     }
+
+    // Load skills from configured directories.
+    if (!config.skill_dirs.empty()) {
+        auto fs = harness::WorkspaceFileSystem::create(config.workspace);
+        if (fs.has_value()) {
+            services.skill_load_result = loadSkills(*fs, config.skill_dirs);
+
+            if (config.print_skill_diagnostics) {
+                for (const auto& diag : services.skill_load_result.diagnostics) {
+                    std::cerr << "[skill:warn] ";
+                    switch (diag.code) {
+                    case SkillDiagnosticCode::file_info_failed:
+                        std::cerr << "file_info_failed";
+                        break;
+                    case SkillDiagnosticCode::list_failed:
+                        std::cerr << "list_failed";
+                        break;
+                    case SkillDiagnosticCode::read_failed:
+                        std::cerr << "read_failed";
+                        break;
+                    case SkillDiagnosticCode::parse_failed:
+                        std::cerr << "parse_failed";
+                        break;
+                    case SkillDiagnosticCode::invalid_metadata:
+                        std::cerr << "invalid_metadata";
+                        break;
+                    case SkillDiagnosticCode::duplicate_name:
+                        std::cerr << "duplicate_name";
+                        break;
+                    }
+                    std::cerr << ": " << diag.message << " (" << diag.path << ")\n";
+                }
+            }
+        }
+    }
+
     return services;
 }
 

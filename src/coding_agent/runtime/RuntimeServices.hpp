@@ -2,6 +2,7 @@
 
 #include "../../../include/cch/agent/ToolRegistry.hpp"
 #include "../../../include/cch/ai/ChatClient.hpp"
+#include "../../../include/cch/coding_agent/SkillLoader.hpp"
 #include "../../../include/cch/harness/LocalExecutionEnv.hpp"
 #include "../../../include/cch/util/Error.hpp"
 
@@ -18,12 +19,18 @@ struct RuntimeServicesConfig {
     std::string model;
     std::string base_url;
     std::string api_key_env;
+    /// Skill directories to scan at startup. Empty by default (no skill loading).
+    std::vector<SkillDirSpec> skill_dirs;
+    /// Print skill loading diagnostics to stderr. Default true.
+    bool print_skill_diagnostics{true};
 };
 
 struct RuntimeServices {
     std::unique_ptr<ai::StreamingChatClient> client;
     std::shared_ptr<harness::AsyncExecutionEnv> env;
     agent::AsyncToolRegistry tools;
+    /// Result of skill loading at startup (empty if skill_dirs was empty).
+    SkillLoadResult skill_load_result;
 };
 
 [[nodiscard]] util::Expected<RuntimeServices> make_runtime_services(const RuntimeServicesConfig& config);

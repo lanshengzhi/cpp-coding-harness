@@ -331,15 +331,28 @@ SkillLoadResult loadSkills(
     std::unordered_set<std::string> seenNames;
 
     for (const auto& dirSpec : dirs) {
+        // Convert absolute paths to workspace-relative for fileInfo.
+        std::string dirPath = dirSpec.path;
+        const auto& root = fs.root();
+        std::string rootStr = root.string();
+        if (dirPath.starts_with("/") && dirPath.starts_with(rootStr)) {
+            dirPath = dirPath.substr(rootStr.size());
+            if (dirPath.starts_with("/")) dirPath = dirPath.substr(1);
+        }
+        // If absolute but not under workspace root, skip (can't access).
+        if (dirPath.starts_with("/")) {
+            continue;
+        }
+
         // Check if the directory exists (skip missing dirs silently).
-        auto infoResult = fs.fileInfo(dirSpec.path);
+        auto infoResult = fs.fileInfo(dirPath);
         if (!infoResult.has_value()) {
             if (infoResult.error().code != harness::FileErrorCode::NotFound) {
                 result.diagnostics.push_back(SkillDiagnostic{
                     .type = "warning",
                     .code = SkillDiagnosticCode::file_info_failed,
                     .message = infoResult.error().message,
-                    .path = dirSpec.path,
+                    .path = dirPath,
                 });
             }
             continue;
@@ -351,7 +364,7 @@ SkillLoadResult loadSkills(
         }
 
         // Walk the directory recursively.
-        loadSkillsFromDir(fs, dirSpec.path, dirSpec.includeRootFiles, seenNames, result);
+        loadSkillsFromDir(fs, dirPath, dirSpec.includeRootFiles, seenNames, result);
     }
 
     return result;
