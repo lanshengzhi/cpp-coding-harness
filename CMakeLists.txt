@@ -99,6 +99,7 @@ add_library(cch_coding_agent_runtime
 src/coding_agent/PromptProcessing.cpp
 src/coding_agent/PromptExpander.cpp
     src/coding_agent/SkillFrontmatterParser.cpp
+    src/coding_agent/SkillLoader.cpp
     src/coding_agent/runtime/AgentSessionRunner.cpp
     src/coding_agent/runtime/EventPrinter.cpp
     src/coding_agent/runtime/JsonEventPrinter.cpp
@@ -151,6 +152,7 @@ tests/coding_agent/PromptExpanderTest.cpp
         tests/coding_agent/ConfigLoaderTest.cpp
         tests/coding_agent/SkillTest.cpp
         tests/coding_agent/SkillFrontmatterParserTest.cpp
+        tests/coding_agent/SkillLoaderTest.cpp
         tests/coding_agent/runtime/JsonEventPrinterTest.cpp
         tests/harness/AsyncLocalExecutionEnvTest.cpp
         tests/harness/session/JsonlSessionStoreTest.cpp
