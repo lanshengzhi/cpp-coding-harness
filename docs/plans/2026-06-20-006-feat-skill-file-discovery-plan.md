@@ -1,7 +1,7 @@
 ---
 title: "feat: Implement skill file discovery and loading"
 type: feat
-status: active
+status: completed
 date: 2026-06-20
 ---
 
@@ -10,6 +10,10 @@ date: 2026-06-20
 ## Summary
 
 Add skill file discovery and loading — scan configured directories for `SKILL.md` files, parse YAML frontmatter, validate metadata against the Agent Skills standard (with pi's leniency on name/directory mismatch), and return `Skill` objects with diagnostics. The feature stops at loadable, validated skill objects; model-visible integration (system prompt, `/skill:name` command) is deferred.
+
+## Completion Status
+
+Completed on 2026-06-20. The shipped slice adds passive `Skill`/`SkillDiagnostic` contracts, flat frontmatter parsing, recursive `SkillDirSpec` loading with deduplication and diagnostics, runtime startup loading, and CLI stderr diagnostics. The reusable loader supports arbitrary directories and global-style root `.md` files via `includeRootFiles`; current CLI wiring loads project-local `.cpp-harness/skills` only. Global `~/.cpp-harness/skills` and config-driven skill directories remain deferred follow-up work.
 
 ---
 
@@ -88,7 +92,7 @@ The T0–T5 parity slices are complete: the execution environment has all needed
 
 - **Duplicate name diagnostics**: When a skill name collides, the second skill is dropped and a `SkillDiagnostic` with code `duplicate_name` is emitted. Pi doesn't dedup at load time (dedup happens later in agent-harness), but emitting diagnostics here gives users immediate feedback about shadowed skills, which is more debuggable.
 
-- **Hardcoded standard paths, design for arbitrary dirs**: `loadSkills(fs, dirs)` accepts arbitrary `SkillDirSpec` lists for testability and future config-driven paths. The runtime wiring (`make_runtime_services`) produces `SkillDirSpec` entries for `~/.cpp-harness/skills/` (global, `includeRootFiles=true`) and `<workspace>/.cpp-harness/skills/` (project, `includeRootFiles=false`). Config-driven paths are deferred.
+- **Project-local runtime path, design for arbitrary dirs**: `loadSkills(fs, dirs)` accepts arbitrary `SkillDirSpec` lists for testability and future config-driven paths. The runtime wiring currently produces a project-local `SkillDirSpec` for `<workspace>/.cpp-harness/skills/` (`includeRootFiles=false`). The loader supports global-style root `.md` files via `includeRootFiles=true`, but CLI wiring for `~/.cpp-harness/skills/` is deferred because it needs a filesystem root outside the workspace guard. Config-driven paths are also deferred.
 
 - **Description >1024 chars is a warning, not a rejection**: Matching pi's behavior — the diagnostic is emitted but the skill still loads. This avoids breaking skills that work in pi.
 
@@ -334,9 +338,9 @@ The T0–T5 parity slices are complete: the execution environment has all needed
   - Store result in `services.skill_load_result`.
   - If `config.print_skill_diagnostics`, print each diagnostic to stderr: `[skill:warn] <code>: <message> (<path>)`.
 - `RuntimeServicesConfig::skill_dirs` type: `std::vector<SkillDirSpec>` where `SkillDirSpec = {path, includeRootFiles}`.
-- In `main.cpp` / `run_async_cli`: pass skill directories to `RuntimeServicesConfig`:
-  - Global: `SkillDirSpec{~/.cpp-harness/skills/, includeRootFiles=true}` (resolve via `std::filesystem::path(getenv("HOME")) / ".cpp-harness" / "skills"`).
+- In `main.cpp` / `run_async_cli`: pass the project-local skill directory to `RuntimeServicesConfig`:
   - Project: `SkillDirSpec{<workspace>/.cpp-harness/skills/, includeRootFiles=false}` (only nested `SKILL.md`, not root `.md` files).
+  - Global `~/.cpp-harness/skills/` runtime wiring is deferred until the harness has an explicit filesystem/root policy for user-level resources outside the workspace guard.
 
 **Patterns to follow:**
 - `make_runtime_services` existing error-handling pattern — early return on failure.

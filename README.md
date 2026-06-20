@@ -129,7 +129,7 @@ The code is split into value contracts, capability seams, implementation adapter
 - `cch_agent` (`include/cch/agent`, `src/agent`): coroutine agent loop, observable state values, lifecycle event values, move-only event sinks, async tool registry, expected-style tool execution contracts, optional pre/post tool-call hooks (`beforeToolCall`/`afterToolCall`), context transform / LLM conversion hooks, steering/follow-up queues, prepare-next-turn updates, and sequential/parallel tool execution modes.
 - `cch_harness` (`include/cch/harness`, `src/harness`): pi-shaped filesystem and shell execution capability contracts (`FileSystem`/`Shell`), local implementation with workspace containment, symlink safety, atomic writes, split-stream process execution, secret environment filtering, and JSONL session persistence.
 - `cch_tools` (`include/cch/tools`, `src/tools`): built-in read/write/edit/bash tool factories bridging agent tool contracts to harness capabilities.
-- `cch_coding_agent_runtime` (`src/AsyncCliRuntime.*`, `src/coding_agent/runtime/`): CLI runtime orchestration, session lifecycle, provider/tool service assembly, semantic event printing, JSON/RPC output modes, slash-command handling, and prompt-template expansion.
+- `cch_coding_agent_runtime` (`src/AsyncCliRuntime.*`, `src/coding_agent/runtime/`, `include/cch/coding_agent/Skill*.hpp`, `src/coding_agent/Skill*.cpp`): CLI runtime orchestration, session lifecycle, provider/tool service assembly, semantic event printing, JSON/RPC output modes, slash-command handling, prompt-template expansion, project-local skill discovery/loading, skill prompt formatting, and `/skill:name` expansion.
 - `cch_coding_agent_config` (`include/cch/coding_agent/Config.hpp`, `src/coding_agent/ConfigLoader.cpp`): `~/.cpp-harness/config.json` loading with provider/model/base-url/api-key-env defaults, environment variable chain resolution, and CLI override precedence.
 
 The build publishes `include` as the public surface and keeps `src` private. Legacy synchronous tools, Boost.JSON contracts, `util::Result`, and duplicate `src` contract headers have been removed.
@@ -155,7 +155,13 @@ The default text CLI prints stable semantic event lines:
 
 `--mode rpc` is a narrow JSONL stdin/stdout command loop. It supports `prompt`, `get_state`, `get_last_assistant_text`, and `shutdown`; unsupported pi RPC commands return structured `success:false` responses. RPC mode emits no startup session header, writes command responses and prompt lifecycle events to stdout, and keeps startup/pre-session failures on stderr. It is sequential only: no `abort`, `steer`, `follow_up`, session switching, fork/clone, compaction, extension UI, resources, or SDK surface yet.
 
-One-shot mode runs one prompt. `--repl` keeps history in memory for multiple prompts and supports built-in slash commands: `/help`, `/clear`, `/compact`, and `/exit`. `--mode json` and `--mode rpc` cannot be combined with `--repl`; RPC mode reads prompts from stdin commands rather than positional CLI arguments. `--resume <session.jsonl>` loads the redacted typed JSONL history and appends new messages. `--session <path>` always creates a new file; use `--resume` to append.
+One-shot mode runs one prompt. `--repl` keeps history in memory for multiple prompts and supports built-in slash commands: `/help`, `/clear`, `/compact`, and `/exit`. Loaded skills are explicitly invocable with `/skill:<name> [additional instructions]`; that input expands to a regular user prompt containing the skill instructions. `--mode json` and `--mode rpc` cannot be combined with `--repl`; RPC mode reads prompts from stdin commands rather than positional CLI arguments. `--resume <session.jsonl>` loads the redacted typed JSONL history and appends new messages. `--session <path>` always creates a new file; use `--resume` to append.
+
+## Skills
+
+At startup, the CLI scans project-local `.cpp-harness/skills` for nested `SKILL.md` files. A skill file uses flat YAML frontmatter (`name`, `description`, optional `disable-model-invocation`) followed by markdown instructions. Valid skills are loaded into the session, diagnostics for malformed or duplicate skills print to stderr, and visible skills are injected into model context through the pi-shaped `<available_skills>` block.
+
+Skills with `disable-model-invocation: true` are hidden from the model-visible list but can still be invoked explicitly with `/skill:<name> [additional instructions]`. Invocation uses the skill body cached at startup; edit/reload behavior during a running session, global `~/.cpp-harness/skills`, and config-driven skill directories are deferred.
 
 ## Tools
 
@@ -206,4 +212,4 @@ These cover:
 
 ## Deferred
 
-Not included yet: rich TUI, extensions/skills, packages, OAuth, session tree navigation/branching/compaction semantics, full pi RPC command parity, embeddable SDK surface, MCP integration, permission prompts, native Windows shell process-tree termination semantics, tool execution streaming updates, subagents, C++26 reflection-generated schema, `std::execution` senders/receivers, ABI-stable binary distribution, or OS-level sandboxing.
+Not included yet: rich TUI, extensions, packages, global/config-driven skill directories, live skill reload, prompt-template loading, OAuth, session tree navigation/branching/compaction semantics, full pi RPC command parity, embeddable SDK surface, MCP integration, permission prompts, native Windows shell process-tree termination semantics, tool execution streaming updates, subagents, C++26 reflection-generated schema, `std::execution` senders/receivers, ABI-stable binary distribution, or OS-level sandboxing.

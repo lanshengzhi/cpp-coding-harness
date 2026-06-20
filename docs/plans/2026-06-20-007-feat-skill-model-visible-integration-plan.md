@@ -1,7 +1,7 @@
 ---
 title: "feat: Make loaded skills model-visible and user-invocable"
 type: feat
-status: active
+status: completed
 date: 2026-06-20
 ---
 
@@ -10,6 +10,10 @@ date: 2026-06-20
 ## Summary
 
 Make skill objects (already loaded into `RuntimeServices` by the discovery/loading plan) visible to the model and invocable by users. Build `formatSkillsForPrompt()` to emit the `<available_skills>` XML block per the [Agent Skills standard](https://agentskills.io/integrate-skills), inject it into agent context via the existing `get_steering_messages` hook, and register `/skill:name [args]` as a command that expands to a `<skill>` XML block containing the skill's full instructions plus optional user-supplied arguments.
+
+## Completion Status
+
+Completed on 2026-06-20. The shipped slice adds pi-shaped skill prompt formatting, `<available_skills>` steering-message injection for visible skills, `AgentSessionRunner` skill ownership, REPL/runner/RPC prompt processing with `/skill:name [args]` expansion, and tests for formatting and integration. Runtime skill invocation expands from the cached `Skill::content` loaded at startup; dynamic file re-read/reload remains deferred.
 
 ---
 
@@ -26,7 +30,7 @@ Skill discovery and loading is complete (plan `docs/plans/2026-06-20-006-feat-sk
 - **R3.** `/skill:name [args]` input expands inline (in `process_prompt`, before `CommandRegistry` dispatch) to a `<skill>` XML block containing the skill's full content (body after frontmatter), a reference-relative preamble, and optional user-supplied arguments appended after the closing `</skill>` tag. The expanded text is then passed to the agent loop as a regular user prompt.
 - **R4.** `disableModelInvocation: true` skills are excluded from the `<available_skills>` block but remain invocable via `/skill:name`.
 - **R5.** Unknown skill names in `/skill:unknown` print a diagnostic to stderr and the original input is passed through to the agent loop unchanged (matching pi's behavior — unknown `/skill:` is treated as a regular prompt).
-- **R6.** Skill file read failures during `/skill:name` expansion print an error diagnostic to stderr and the original input is passed through to the agent loop unchanged.
+- **R6.** `/skill:name` expansion uses the cached skill body loaded at startup; live edits to `SKILL.md` require restarting the session until an explicit reload policy exists.
 
 ---
 
@@ -81,7 +85,7 @@ Skill discovery and loading is complete (plan `docs/plans/2026-06-20-006-feat-sk
 
 - **`formatSkillsForPrompt` and `formatSkillInvocation` are free functions in `cch::coding_agent` namespace**: They live alongside `Skill` and `SkillLoader` in the `cch_coding_agent_runtime` CMake target. No new library target needed — the runtime consumer is the only caller.
 
-- **Skill file re-read on `/skill:name`, not using cached `Skill::content`**: Pi reads the file fresh on each invocation via `readFileSync`, stripping frontmatter. The C++ loader already stores `Skill::content` (body after frontmatter), but re-reading via `WorkspaceFileSystem::readTextFile()` matches pi's behavior and ensures the latest file content is used if skills were reloaded. The `content` field remains available for potential future caching.
+- **Cached skill content on `/skill:name`**: The C++ harness expands explicit skill invocations from `Skill::content`, which is already the body after frontmatter and was loaded/validated at startup. This keeps prompt processing simple and avoids another synchronous file read in the invocation path. Dynamic skill reload or per-invocation re-read can be added later if live-edit behavior becomes important.
 
 - **`disableModelInvocation` filtering in `formatSkillsForPrompt`**: Skills with `disableModelInvocation: true` are excluded from the `<available_skills>` block but their names are still recognized by `/skill:name` command lookup. This matches pi's behavior precisely.
 
@@ -93,12 +97,12 @@ Skill discovery and loading is complete (plan `docs/plans/2026-06-20-006-feat-sk
 
 - **Steering messages vs. SystemMessage for skills block**: Steering messages — resolved above in Key Technical Decisions.
 - **CommandRegistry vs. inline expansion for `/skill:name`**: Inline expansion — resolved above in Key Technical Decisions.
-- **File re-read vs. cached content for `/skill:name`**: File re-read via WorkspaceFileSystem — resolved above.
+- **File re-read vs. cached content for `/skill:name`**: Cached startup content — resolved above.
 
 ### Deferred to Implementation
 
-- **Exact error message wording for unknown skill / read failure**: The display text (`Unknown skill: <name>`, `Failed to read skill file: <message>`) is a presentation choice best finalized when reviewing actual CLI output.
-- **`WorkspaceFileSystem` availability at command-dispatch time**: `RuntimeServices` already holds the env; whether to pass a `WorkspaceFileSystem*` through `CommandContext` or construct it on-demand in the command handler depends on the exact call site plumbing.
+- **Exact error message wording for unknown skill**: The display text (`Unknown skill: <name>`) is a presentation choice best finalized when reviewing actual CLI output.
+- **Dynamic skill reload semantics**: The shipped implementation uses cached startup content. If users need edits to `SKILL.md` to take effect mid-session, add an explicit reload/re-read policy rather than silently mixing cached metadata with live body reads.
 - **Skill content size budget**: Pi doesn't enforce a limit on individual skill content size for `/skill:name` expansion. The C++ harness can match this initially; a budget can be added later if models show truncation issues with large skills.
 
 ---
@@ -306,17 +310,15 @@ Skill discovery and loading is complete (plan `docs/plans/2026-06-20-006-feat-sk
   3. If name is empty (bare `/skill:`): return input unchanged (passthrough).
   4. Look up skill by name in the skills list.
   5. If not found: print `[skill:warn] unknown skill: <name>` to stderr, return input unchanged (passthrough, matching pi).
-  6. Read `SKILL.md` via `WorkspaceFileSystem::readTextFile(skill.filePath)`.
-  7. If read fails: print `[skill:error] failed to read <path>: <message>` to stderr, return input unchanged.
-  8. Parse frontmatter (reuse `parseFrontmatter` from `SkillFrontmatterParser`), extract body.
-  9. Call `formatSkillInvocation(skill, body, args)` and return the expanded `<skill>` XML block string.
+  6. Use the cached `Skill::content` body loaded at startup.
+  7. Call `formatSkillInvocation(skill, skill.content, args)` and return the expanded `<skill>` XML block string.
 - In `process_prompt()`, call `expand_skill_command(raw_input, skills, fs)` before checking for slash-commands. If the result differs from `raw_input` (skill was expanded), set `expanded_prompt` to the result and return immediately — skip command dispatch and template expansion for this input.
-- `process_prompt` signature extended with `const std::vector<Skill>& skills` and `const WorkspaceFileSystem& fs` parameters, defaulting to empty skills and a no-op filesystem for backward compatibility.
-- `AgentSessionRunner` passes `skills_` and a `WorkspaceFileSystem` reference to `process_prompt`.
+- `process_prompt` signature extended with `const std::vector<Skill>& skills` and `const WorkspaceFileSystem& fs` parameters, defaulting to empty skills for backward compatibility. The filesystem parameter remains available for future live reload/re-read behavior.
+- `AgentSessionRunner` passes `skills_` to `process_prompt`.
 
 **Why inline expansion, not CommandRegistry**: The REPL loop in `AsyncCliRuntime.cpp` (lines 252–260) intercepts slash-commands, dispatches through `process_prompt`, prints `display_text`, and `continue`s back to the REPL prompt — it never calls `run_prompt` with the expanded result. Inline expansion in `process_prompt` bypasses this gap: the expanded text becomes `expanded_prompt`, which `AgentSessionRunner::run_prompt` feeds directly into the agent loop. This also matches pi's `_expandSkillCommand` pattern exactly.
 
-**WorkspaceFileSystem availability**: The `WorkspaceFileSystem` can be constructed from the workspace path stored in `AgentSessionRunner` (via `RuntimeServices` metadata). The exact plumbing (store a `WorkspaceFileSystem` member, or construct on-demand per-invocation) is deferred to implementation.
+**Live reload boundary**: Explicit `/skill:name` invocation uses cached startup content. Mid-session reload/re-read behavior is deferred to a future resource policy rather than implicitly reading mutable files during prompt processing.
 
 **Patterns to follow:**
 - Pi `_expandSkillCommand()` in `pi:packages/coding-agent/src/core/agent-session.ts` (line ~1168).
@@ -331,12 +333,12 @@ Skill discovery and loading is complete (plan `docs/plans/2026-06-20-006-feat-sk
 - Edge case: `/skill:` with no name → input returned unchanged (passthrough).
 - Edge case: Input not starting with `/skill:` → returned unchanged (fast path, no skill lookup).
 - Edge case: Input starts with `/skill` but not `/skill:` (e.g., `/skills`) → returned unchanged.
-- Error path: Skill file deleted between loading and invocation → stderr diagnostic, input returned unchanged.
-- Error path: Skill content has no frontmatter (just body) → body used as-is (empty frontmatter is valid).
+- Edge case: Skill file deleted between loading and invocation → cached startup content is still used; live reload is deferred.
+- Edge case: Skill content has no frontmatter (just body) → body used as-is (empty frontmatter is valid).
 
 **Verification:**
 - `/skill:name` expands to the correct `<skill>` XML block matching pi's `formatSkillInvocation` output.
-- Unknown skills and read failures produce stderr diagnostics without crashing.
+- Unknown skills produce stderr diagnostics without crashing.
 - Input without `/skill:` prefix passes through `expand_skill_command` unchanged (fast path).
 - `disableModelInvocation` skills are invocable but absent from agent context (U4 already tested).
 

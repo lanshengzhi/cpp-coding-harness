@@ -49,7 +49,7 @@ The first implementation pass should execute that cleanup plan and produce the T
 | `pi:packages/ai` | `include/cch/ai/`, `src/ai/`, `tests/ai/` | Partial: messages, content, usage, stream events, OpenAI-compatible provider, SSE, Glaze DTO boundary exist. | `pi:packages/ai/src/types.ts`, `pi:packages/ai/src/stream.ts`, `pi:packages/ai/src/api-registry.ts`, `pi:packages/ai/src/providers/` |
 | `pi:packages/agent` | `include/cch/agent/`, `src/agent/`, `include/cch/harness/`, `src/harness/`, `tests/agent/`, `tests/harness/` | Partial: async loop, event sink, async tools, execution env, and JSONL store exist; richer agent state/hooks/session tree are missing. | `pi:packages/agent/src/types.ts`, `pi:packages/agent/src/agent-loop.ts`, `pi:packages/agent/src/harness/types.ts`, `pi:packages/agent/src/harness/agent-harness.ts` |
 | `pi:packages/coding-agent` core/CLI | `src/AsyncCliRuntime.*`, `src/main.cpp`, future CLI/core modules, `tests/cli/` | MVP only: fake/real provider wiring, one-shot/REPL/resume, semantic event lines. | `pi:packages/coding-agent/src/core/`, `pi:packages/coding-agent/src/cli/`, `pi:packages/coding-agent/docs/usage.md`, `pi:packages/coding-agent/docs/json.md`, `pi:packages/coding-agent/docs/rpc.md` |
-| `pi:packages/coding-agent` resources | future resource/config/extension modules | Mostly absent: settings, packages, extensions, skills, prompts, themes, project trust. | `pi:packages/coding-agent/docs/settings.md`, `pi:packages/coding-agent/docs/extensions.md`, `pi:packages/coding-agent/docs/skills.md`, `pi:packages/coding-agent/docs/prompt-templates.md`, `pi:packages/coding-agent/docs/packages.md` |
+| `pi:packages/coding-agent` resources | `include/cch/coding_agent/`, `src/coding_agent/`, `src/coding_agent/runtime/`, future extension/package modules | Partial: config/model defaults, prompt expansion, project-local skill discovery/loading, skill prompt formatting, and `/skill:name` invocation exist; extensions, packages, project trust, global/config-driven skill dirs, and prompt-template loading remain missing. | `pi:packages/coding-agent/docs/settings.md`, `pi:packages/coding-agent/docs/extensions.md`, `pi:packages/coding-agent/docs/skills.md`, `pi:packages/coding-agent/docs/prompt-templates.md`, `pi:packages/coding-agent/docs/packages.md` |
 | `pi:packages/tui` | future `include/cch/tui/`, `src/tui/`, `tests/tui/` or equivalent | Absent: current CLI is line-oriented only. | `pi:packages/tui/src/`, `pi:packages/coding-agent/docs/tui.md`, `pi:packages/coding-agent/docs/themes.md`, `pi:packages/coding-agent/docs/keybindings.md` |
 
 ## Current C++ Baseline to Preserve
@@ -199,9 +199,11 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **References:** `pi:packages/coding-agent/docs/extensions.md`, `pi:packages/coding-agent/examples/extensions/`.
   - **Decision to record:** native C++ plugin, process/RPC extension, embedded JS/TS bridge, or intentionally unsupported for the C++ harness.
   - **Done when:** the decision preserves security posture and does not leak dynamic extension concerns into core AI/agent contracts.
-- [ ] Implement skill loading as file/resource discovery before model-visible integration.
+- [x] Implement skill loading plus model-visible/user-invocable integration.
   - **References:** `pi:packages/coding-agent/docs/skills.md`, `pi:packages/agent/src/harness/skills.ts`.
-  - **Test scenarios:** global/project skill discovery, relative reference resolution, disabled model invocation, prompt formatting, and duplicate handling.
+  - **Test scenarios:** project skill discovery, reusable global-style `includeRootFiles` loader behavior, relative reference resolution, disabled model invocation, prompt formatting, and duplicate handling.
+  - **Implementation plans:** `docs/plans/2026-06-20-006-feat-skill-file-discovery-plan.md`, `docs/plans/2026-06-20-007-feat-skill-model-visible-integration-plan.md`.
+  - **Status:** `Skill`/diagnostic contracts, frontmatter parsing, recursive/deduplicating loader, runtime startup loading, `<available_skills>` steering-message injection, and `/skill:name [args]` expansion are implemented. CLI wiring currently loads project-local `.cpp-harness/skills`; global `~/.cpp-harness/skills` and config-driven skill directories are deferred.
 - [ ] Implement prompt template loading and invocation.
   - **References:** `pi:packages/coding-agent/docs/prompt-templates.md`, `pi:packages/agent/src/harness/prompt-templates.ts`.
   - **Done when:** templates can be expanded deterministically in tests without provider calls.
@@ -282,7 +284,7 @@ The first implementation pass should execute that cleanup plan and produce the T
 5. T4 session tree and richer execution environment parity.
 6. T5 coding-agent runtime split, config, and tool behavior parity.
 7. T8 JSON/RPC surfaces before a large TUI investment.
-8. T6 resources/extensions/packages once trust and runtime seams exist.
+8. Continue T6 with project trust/resource enablement, prompt-template loading, and an extension boundary; skill discovery/model-visible invocation is already in place, while package installation remains a later supply-chain plan.
 9. T7 native TUI only after machine-readable/runtime seams are stable.
 10. T9/T10 continuously as security, platform, distribution, and docs guardrails.
 
