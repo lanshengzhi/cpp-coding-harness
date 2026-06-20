@@ -160,8 +160,12 @@ The first implementation pass should execute that cleanup plan and produce the T
 - [x] Add model change, thinking-level change, active-tools change, custom, custom-message, label, compaction, and branch-summary entry support incrementally.
   - **Files:** `include/cch/harness/session/`, `src/harness/session/JsonlSessionStore.cpp`, `tests/harness/session/JsonlSessionStoreTest.cpp`.
   - **References:** `pi:packages/coding-agent/docs/session-format.md`.
-  - **Status:** All 9 entry types have per-type append methods with round-trip tests. Context reconstruction remains deferred.
-- [ ] Add branch navigation and context reconstruction only after entry compatibility is proven.
+  - **Status:** All 9 entry types have per-type append methods with round-trip tests.
+- [x] Add branch navigation and context reconstruction.
+  - **Files:** `include/cch/harness/session/SessionTree.hpp`, `src/harness/session/SessionTree.cpp`, `tests/harness/session/SessionTreeTest.cpp`, `CMakeLists.txt`.
+  - **References:** `pi:packages/coding-agent/docs/sessions.md`, `pi:packages/coding-agent/docs/session-format.md`, `pi:packages/coding-agent/docs/compaction.md`.
+  - **Implementation plan:** `docs/plans/2026-06-20-010-feat-session-tree-navigation-plan.md`.
+  - **Status:** SessionTree with in-memory index, leaf tracking, getBranch/getChildren/root, buildSessionContext() with compaction-aware context reconstruction, branchWithSummary() hook seam, open_as_tree()/append_leaf() in JsonlSessionStore. 26 new tests pass (381 total).
   - **References:** `pi:packages/coding-agent/docs/sessions.md`, `pi:packages/coding-agent/docs/compaction.md`.
   - **Done when:** branch/fork/leaf behavior has deterministic tests and does not break simple `--resume`.
 
@@ -195,18 +199,21 @@ The first implementation pass should execute that cleanup plan and produce the T
 
 ### T6. Resources, Skills, Extensions, and Packages
 
-- [ ] Design a C++ extension boundary before implementing extensions.
+- [x] Design a C++ extension boundary before implementing extensions.
   - **References:** `pi:packages/coding-agent/docs/extensions.md`, `pi:packages/coding-agent/examples/extensions/`.
-  - **Decision to record:** native C++ plugin, process/RPC extension, embedded JS/TS bridge, or intentionally unsupported for the C++ harness.
+  - **Implementation plan:** `docs/plans/2026-06-20-011-design-extension-boundary-plan.md`.
+  - **Decision:** Option E — formalize existing hook system as SessionExtension callback boundary. pi-style TypeScript extensions intentionally unsupported. Options A (dlopen), C (JS bridge) excluded. Option B (RPC) as viable mid-term upgrade path.
   - **Done when:** the decision preserves security posture and does not leak dynamic extension concerns into core AI/agent contracts.
 - [x] Implement skill loading plus model-visible/user-invocable integration.
   - **References:** `pi:packages/coding-agent/docs/skills.md`, `pi:packages/agent/src/harness/skills.ts`.
   - **Test scenarios:** project skill discovery, reusable global-style `includeRootFiles` loader behavior, relative reference resolution, disabled model invocation, prompt formatting, and duplicate handling.
   - **Implementation plans:** `docs/plans/2026-06-20-006-feat-skill-file-discovery-plan.md`, `docs/plans/2026-06-20-007-feat-skill-model-visible-integration-plan.md`.
   - **Status:** `Skill`/diagnostic contracts, frontmatter parsing, recursive/deduplicating loader, trust-gated runtime startup loading, `<available_skills>` context injection, and `/skill:name [args]` expansion are implemented. Global `~/.cpp-harness/skills`, config-driven skill directories, and live skill reload are deferred.
-- [ ] Implement prompt template loading and invocation.
+- [x] Implement prompt template loading and invocation.
+  - **Files:** `include/cch/coding_agent/PromptTemplateLoader.hpp`, `src/coding_agent/PromptTemplateLoader.cpp`, `tests/coding_agent/PromptTemplateLoaderTest.cpp`.
   - **References:** `pi:packages/coding-agent/docs/prompt-templates.md`, `pi:packages/agent/src/harness/prompt-templates.ts`.
-  - **Done when:** templates can be expanded deterministically in tests without provider calls.
+  - **Implementation plan:** `docs/plans/2026-06-20-009-feat-prompt-template-loading-plan.md`.
+  - **Status:** PromptTemplateLoader with YAML frontmatter parsing and directory scanning. expand_prompt_template() with $1/$@/$ARGUMENTS/${N:-default}/${@:N}/${@:N:L} substitution. Runtime wiring in RuntimeServices. 26 tests pass.
 - [ ] Implement package discovery/installation only after resource loading exists.
   - **References:** `pi:packages/coding-agent/docs/packages.md`.
   - **Scope boundary:** do not add npm/git package installation silently; it is a supply-chain surface and needs an explicit design/test plan.
