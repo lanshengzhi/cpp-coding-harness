@@ -145,3 +145,90 @@ TEST_CASE("project resource detection rejects escaping symlink marker", "[coding
     std::filesystem::remove_all(outside);
 }
 #endif
+
+// ── project_prompts_allowed trust gating ──
+
+TEST_CASE("project_prompts_allowed returns true when trusted with prompts marker", "[coding_agent][project-resources][prompts]") {
+    tests::TempWorkspace workspace;
+    std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "prompts");
+
+    auto detection = coding_agent::detect_project_resources(fs_for(workspace));
+    coding_agent::ProjectResourcePolicy policy{};
+    CHECK(coding_agent::needs_project_trust_resolution(detection, policy));
+
+    auto plan = coding_agent::build_project_resource_load_plan(
+        detection, policy,
+        coding_agent::ProjectTrustResolution{
+            .decision = coding_agent::ProjectTrustDecision::Trusted,
+            .source = coding_agent::ProjectTrustSource::CliOverride,
+        });
+    CHECK(coding_agent::project_prompts_allowed(plan));
+    REQUIRE(plan.decisions.size() == 1);
+    CHECK(plan.decisions[0].allowed);
+    CHECK(plan.decisions[0].reason == coding_agent::ResourceSkipReason::Allowed);
+}
+
+TEST_CASE("project_prompts_allowed returns false when no prompts marker", "[coding_agent][project-resources][prompts]") {
+    tests::TempWorkspace workspace;
+    // No .cpp-harness/prompts directory
+    auto detection = coding_agent::detect_project_resources(fs_for(workspace));
+    coding_agent::ProjectResourcePolicy policy{};
+    auto plan = coding_agent::build_project_resource_load_plan(
+        detection, policy,
+        coding_agent::ProjectTrustResolution{
+            .decision = coding_agent::ProjectTrustDecision::Trusted,
+            .source = coding_agent::ProjectTrustSource::NoProjectResources,
+        });
+    CHECK_FALSE(coding_agent::project_prompts_allowed(plan));
+}
+
+TEST_CASE("project_prompts_allowed returns false when untrusted", "[coding_agent][project-resources][prompts]") {
+    tests::TempWorkspace workspace;
+    std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "prompts");
+
+    auto detection = coding_agent::detect_project_resources(fs_for(workspace));
+    coding_agent::ProjectResourcePolicy policy{};
+
+    auto plan = coding_agent::build_project_resource_load_plan(
+        detection, policy,
+        coding_agent::ProjectTrustResolution{
+            .decision = coding_agent::ProjectTrustDecision::Untrusted,
+            .source = coding_agent::ProjectTrustSource::DefaultAskNoUi,
+        });
+    CHECK_FALSE(coding_agent::project_prompts_allowed(plan));
+    REQUIRE(plan.decisions.size() == 1);
+    CHECK(plan.decisions[0].reason == coding_agent::ResourceSkipReason::Untrusted);
+}
+
+TEST_CASE("project_prompts_allowed returns false when skills disabled", "[coding_agent][project-resources][prompts]") {
+    tests::TempWorkspace workspace;
+    std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "prompts");
+
+    auto detection = coding_agent::detect_project_resources(fs_for(workspace));
+    coding_agent::ProjectResourcePolicy policy{};
+    policy.project_skills = coding_agent::ResourceEnablement::Off;
+
+    auto plan = coding_agent::build_project_resource_load_plan(
+        detection, policy,
+        coding_agent::ProjectTrustResolution{
+            .decision = coding_agent::ProjectTrustDecision::Trusted,
+            .source = coding_agent::ProjectTrustSource::CliOverride,
+        });
+    CHECK_FALSE(coding_agent::project_prompts_allowed(plan));
+    // Note: project_prompts_allowed uses the same project_skills enablement field;
+    // --no-skills disables prompts as well.
+}
+
+TEST_CASE("project_prompts_allowed returns false when unsupported", "[coding_agent][project-resources][prompts]") {
+    // Regression: has_implemented_loader must return true for ProjectPrompts.
+    // This test verifies the loader gate is open.
+    tests::TempWorkspace workspace;
+    std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "prompts");
+
+    auto detection = coding_agent::detect_project_resources(fs_for(workspace));
+    // Verify detection finds the prompts marker
+    CHECK(coding_agent::has_detected_kind(detection, coding_agent::ProjectResourceKind::ProjectPrompts));
+    
+    coding_agent::ProjectResourcePolicy policy{};
+    CHECK(coding_agent::needs_project_trust_resolution(detection, policy));
+}

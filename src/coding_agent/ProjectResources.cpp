@@ -64,9 +64,9 @@ constexpr std::array<MarkerSpec, 7> kMarkers{{
     ProjectResourceKind kind) {
     switch (kind) {
     case ProjectResourceKind::ProjectSkills:
+    case ProjectResourceKind::ProjectPrompts:
         return policy.project_skills;
     case ProjectResourceKind::ProjectSettings:
-    case ProjectResourceKind::ProjectPrompts:
     case ProjectResourceKind::ProjectExtensions:
     case ProjectResourceKind::ProjectPackages:
     case ProjectResourceKind::ProjectSystemPrompt:
@@ -77,7 +77,8 @@ constexpr std::array<MarkerSpec, 7> kMarkers{{
 }
 
 [[nodiscard]] bool has_implemented_loader(ProjectResourceKind kind) {
-    return kind == ProjectResourceKind::ProjectSkills;
+    return kind == ProjectResourceKind::ProjectSkills ||
+           kind == ProjectResourceKind::ProjectPrompts;
 }
 
 } // namespace
@@ -278,6 +279,15 @@ ProjectResourceLoadPlan build_project_resource_load_plan(
 bool project_skills_allowed(const ProjectResourceLoadPlan& plan) {
     for (const auto& decision : plan.decisions) {
         if (decision.kind == ProjectResourceKind::ProjectSkills && decision.allowed) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool project_prompts_allowed(const ProjectResourceLoadPlan& plan) {
+    for (const auto& decision : plan.decisions) {
+        if (decision.kind == ProjectResourceKind::ProjectPrompts && decision.allowed) {
             return true;
         }
     }

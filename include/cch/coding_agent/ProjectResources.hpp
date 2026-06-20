@@ -106,4 +106,6 @@ struct ProjectResourceLoadPlan {
 
 [[nodiscard]] bool project_skills_allowed(const ProjectResourceLoadPlan& plan);
 
+[[nodiscard]] bool project_prompts_allowed(const ProjectResourceLoadPlan& plan);
+
 } // namespace cch::coding_agent
