@@ -1,5 +1,7 @@
 #include "../../../include/cch/harness/session/SessionTree.hpp"
 
+#include "../../../include/cch/util/Error.hpp"
+
 namespace cch::harness::session {
 
 SessionTree::SessionTree(LoadedSession session)
@@ -14,6 +16,7 @@ SessionTree::SessionTree(LoadedSession session)
         entries_.push_back(std::move(entry));
     }
     build_index();
+    restore_leaf_position();
 }
 
 void SessionTree::build_index() {
@@ -41,6 +44,13 @@ void SessionTree::build_index() {
         }
 
         children_[effective_parent].push_back(i);
+
+        // Record the effective parent for leaf-to-root traversal.
+        // This may differ from entry.parent_id when inferred from linear order.
+        if (!entry.parent_id.has_value() || entry.parent_id->empty()) {
+            inferred_parent_[entry.entry_id] = effective_parent;
+        }
+
         previous_id = entry.entry_id;
     }
 }
@@ -49,6 +59,20 @@ const SessionEntry* SessionTree::getEntry(std::string_view entry_id) const {
     auto it = id_to_index_.find(std::string{entry_id});
     if (it == id_to_index_.end()) return nullptr;
     return &entries_[it->second];
+}
+
+std::optional<std::string> SessionTree::effective_parent_id(std::string_view entry_id) const {
+    // Prefer explicit parent_id from the entry.
+    const auto* entry = getEntry(entry_id);
+    if (entry != nullptr && entry->parent_id.has_value() && !entry->parent_id->empty()) {
+        return entry->parent_id;
+    }
+    // Fall back to inferred parent from linear ordering.
+    auto it = inferred_parent_.find(std::string{entry_id});
+    if (it != inferred_parent_.end()) {
+        return it->second;
+    }
+    return std::nullopt;
 }
 
 std::vector<const SessionEntry*> SessionTree::getChildren(std::string_view parent_id) const {
@@ -60,6 +84,93 @@ std::vector<const SessionEntry*> SessionTree::getChildren(std::string_view paren
         result.push_back(&entries_[idx]);
     }
     return result;
+}
+
+// ── Leaf navigation ──
+
+void SessionTree::restore_leaf_position() {
+    // Scan entries in reverse for the last Leaf entry.
+    for (auto it = entries_.rbegin(); it != entries_.rend(); ++it) {
+        if (it->kind == SessionEntryKind::Leaf) {
+            // Extract targetId from the payload.
+            if (const auto* obj = it->payload.get_if<util::JsonValue::object_t>()) {
+                auto target = obj->find("targetId");
+                if (target != obj->end()) {
+                    if (const auto* target_str = target->second.get_if<std::string>()) {
+                        // Verify the target exists in the tree.
+                        if (getEntry(*target_str) != nullptr) {
+                            leaf_id_ = *target_str;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // No Leaf entry found or target invalid — default to the last entry.
+    if (!entries_.empty()) {
+        leaf_id_ = entries_.back().entry_id;
+    }
+}
+
+const SessionEntry* SessionTree::leaf_entry() const {
+    if (leaf_id_.empty()) return nullptr;
+    return getEntry(leaf_id_);
+}
+
+util::ExpectedVoid SessionTree::branch(std::string_view entry_id) {
+    if (!getEntry(entry_id)) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Session,
+            std::string("entry not found: ") + std::string{entry_id}));
+    }
+    leaf_id_ = std::string{entry_id};
+    return {};
+}
+
+std::vector<const SessionEntry*> SessionTree::getBranch(std::string_view from_id) const {
+    const SessionEntry* start = nullptr;
+
+    if (from_id.empty()) {
+        start = leaf_entry();
+    } else {
+        start = getEntry(from_id);
+    }
+
+    if (start == nullptr) return {};
+
+    // Walk leaf-to-root following parent chain.
+    std::vector<const SessionEntry*> path;
+    const SessionEntry* current = start;
+    while (current != nullptr) {
+        path.push_back(current);
+        auto parent = effective_parent_id(current->entry_id);
+        if (parent.has_value()) {
+            current = getEntry(*parent);
+        } else {
+            break;
+        }
+    }
+
+    return path;
+}
+
+const SessionEntry* SessionTree::root() const {
+    if (entries_.empty()) return nullptr;
+
+    // Find the entry with no valid parent.
+    for (const auto& entry : entries_) {
+        bool has_parent = entry.parent_id.has_value() &&
+                          !entry.parent_id->empty() &&
+                          getEntry(*entry.parent_id) != nullptr;
+        if (!has_parent) {
+            return &entry;
+        }
+    }
+
+    // Fallback: first entry.
+    return &entries_.front();
 }
 
 } // namespace cch::harness::session

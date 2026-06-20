@@ -135,3 +135,139 @@ TEST_CASE("SessionTree is move-only", "[harness][session][tree]") {
     tree3 = std::move(tree2);
     CHECK(tree3.size() == 1);
 }
+
+// ── U2: Leaf tracking and tree navigation ──
+
+TEST_CASE("SessionTree leaf_id defaults to last entry in linear session", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "leaf-default.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("first")}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("second")}));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    harness::session::SessionTree tree(std::move(*loaded));
+
+    // Leaf should be the last entry
+    CHECK_FALSE(tree.leaf_id().empty());
+    const auto* leaf = tree.leaf_entry();
+    REQUIRE(leaf != nullptr);
+    CHECK(leaf->entry_id == tree.leaf_id());
+}
+
+TEST_CASE("SessionTree branch switches active leaf", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "branch.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("first")}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("second")}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("third")}));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    harness::session::SessionTree tree(std::move(*loaded));
+
+    // Default leaf is third entry
+    std::string first_id = tree.entries()[0].entry_id;
+    std::string third_id = tree.entries()[2].entry_id;
+    CHECK(tree.leaf_id() == third_id);
+
+    // Branch to first entry
+    auto result = tree.branch(first_id);
+    REQUIRE(result.has_value());
+    CHECK(tree.leaf_id() == first_id);
+}
+
+TEST_CASE("SessionTree branch rejects unknown entry ID", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "branch-err.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("msg")}));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    harness::session::SessionTree tree(std::move(*loaded));
+
+    std::string original_leaf = tree.leaf_id();
+    auto result = tree.branch("deadbeef");
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().code == util::ErrorCode::Session);
+    // Leaf should not have changed
+    CHECK(tree.leaf_id() == original_leaf);
+}
+
+TEST_CASE("SessionTree getBranch returns leaf-to-root path", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "path.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("root")}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("child")}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("leaf")}));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    harness::session::SessionTree tree(std::move(*loaded));
+
+    auto path_entries = tree.getBranch();
+    REQUIRE(path_entries.size() == 3);
+    // Leaf-to-root: leaf is first, root is last
+    CHECK(path_entries[0]->entry_id == tree.leaf_id());
+
+    // From specific entry
+    std::string middle_id = tree.entries()[1].entry_id;
+    auto from_middle = tree.getBranch(middle_id);
+    REQUIRE(from_middle.size() == 2);
+    CHECK(from_middle[0]->entry_id == middle_id);
+}
+
+TEST_CASE("SessionTree getBranch from root returns single entry", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "root-path.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("only")}));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    harness::session::SessionTree tree(std::move(*loaded));
+
+    auto path_entries = tree.getBranch();
+    REQUIRE(path_entries.size() == 1);
+}
+
+TEST_CASE("SessionTree root returns root entry", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "find-root.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("first")}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("second")}));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    harness::session::SessionTree tree(std::move(*loaded));
+
+    const auto* r = tree.root();
+    REQUIRE(r != nullptr);
+    CHECK(r->entry_id == tree.entries()[0].entry_id);
+}
+
+TEST_CASE("SessionTree root returns nullptr for empty tree", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "empty-root.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    harness::session::SessionTree tree(std::move(*loaded));
+
+    CHECK(tree.root() == nullptr);
+    CHECK(tree.leaf_entry() == nullptr);
+    CHECK(tree.leaf_id().empty());
+}
