@@ -167,22 +167,26 @@ The first implementation pass should execute that cleanup plan and produce the T
 
 ### T5. Built-In Tools and Coding-Agent Runtime Parity
 
-- [ ] Reconcile built-in tool schemas and behavior with pi's read, write, edit, and bash tools.
+- [x] Reconcile built-in tool schemas and behavior with pi's read, write, edit, and bash tools.
   - **Files:** `include/cch/tools/ToolFactories.hpp`, `src/tools/AsyncToolFactories.cpp`, `tests/tools/AsyncToolsTest.cpp`.
   - **References:** `pi:packages/coding-agent/src/core/bash-executor.ts`, `pi:packages/coding-agent/src/core/output-guard.ts`, `pi:packages/coding-agent/src/core/exec.ts`.
   - **Test scenarios:** schema shape, path validation, truncation, edit ambiguity, timeout, exit code, stderr/stdout representation, and secret filtering.
-- [ ] Add pi-style extended runtime messages only after session entry support exists.
-  - **Files:** `include/cch/ai/Message.hpp`, `include/cch/harness/session/`, `tests/harness/session/JsonlSessionStoreTest.cpp`.
+  - **Implementation plan:** `docs/plans/2026-06-20-001-feat-t5-tool-config-parity-plan.md`.
+  - **Status:** edit tool uses `edits[]` array with multi-edit semantics; read appends continuation hints on truncation; bash accepts timeout in seconds and strips ANSI; write creates parent directories implicitly. All tests pass.
+- [x] Add pi-style extended runtime messages only after session entry support exists.
+  - **Files:** `include/cch/ai/Message.hpp`, `include/cch/ai/glaze/AiJson.hpp`, `src/harness/session/JsonlSessionStore.cpp`, `tests/ai/MessageContractTest.cpp`, `tests/harness/session/JsonlSessionStoreTest.cpp`.
   - **References:** `pi:packages/coding-agent/docs/session-format.md`, `pi:packages/coding-agent/src/core/messages.ts`.
-  - **Done when:** bash execution, custom, compaction summary, and branch summary messages have explicit C++ variants or an intentional custom-message escape hatch.
+  - **Implementation plan:** `docs/plans/2026-06-20-004-feat-extended-runtime-messages-plan.md`.
+  - **Status:** `BashExecutionMessage`, `CustomMessage`, `BranchSummaryMessage`, `CompactionSummaryMessage` added as passive aggregates with DTO round-trip, LLM conversion helpers, and redaction visitor cases. 15 new tests pass.
 - [x] Split CLI/runtime wiring into pi-coding-agent-like responsibilities.
   - **Files:** `src/AsyncCliRuntime.hpp`, `src/AsyncCliRuntime.cpp`, `src/main.cpp`, `src/coding_agent/runtime/`, `tests/cli/CliSmokeTest.cpp`.
   - **References:** `pi:packages/coding-agent/src/core/agent-session-runtime.ts`, `pi:packages/coding-agent/src/core/agent-session-services.ts`, `pi:packages/coding-agent/src/core/agent-session.ts`, `pi:packages/coding-agent/src/cli/args.ts`.
   - **Done when:** argument parsing, model resolution, tool registration, session lifecycle, event printing, and agent execution are separate seams.
-- [ ] Add configuration and model resolution before expanding provider count.
-  - **Files:** future config/runtime files, `tests/cli/`.
+- [x] Add configuration and model resolution before expanding provider count.
+  - **Files:** `include/cch/coding_agent/Config.hpp`, `src/coding_agent/ConfigLoader.cpp`, `tests/coding_agent/ConfigLoaderTest.cpp`.
   - **References:** `pi:packages/coding-agent/src/config.ts`, `pi:packages/coding-agent/src/core/settings-manager.ts`, `pi:packages/coding-agent/src/core/model-registry.ts`, `pi:packages/coding-agent/src/core/model-resolver.ts`, `pi:packages/coding-agent/docs/settings.md`, `pi:packages/coding-agent/docs/models.md`.
-  - **Done when:** provider/model/base-url/api-key-env defaults can be resolved through configuration rather than ad hoc CLI conditionals.
+  - **Implementation plan:** `docs/plans/2026-06-20-001-feat-t5-tool-config-parity-plan.md`.
+  - **Status:** `~/.cpp-harness/config.json` loaded with provider/model/base-url/api-key-env defaults; env var chains resolved; CLI overrides take precedence; session resume preserves stored provider/model. All tests pass.
 - [ ] Add slash-command and prompt-processing seams after runtime/session boundaries are stable.
   - **References:** `pi:packages/coding-agent/src/core/slash-commands.ts`, `pi:packages/coding-agent/src/core/prompt-templates.ts`, `pi:packages/coding-agent/docs/usage.md`, `pi:packages/coding-agent/docs/prompt-templates.md`.
   - **Done when:** commands can be tested without starting an interactive TUI.

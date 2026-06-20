@@ -66,7 +66,7 @@ Classification:
 | `AgentLoopTurnUpdate` | Partial: lifecycle events in `include/cch/agent/AgentEvent.hpp` | Near-term parity | U5 expands lifecycle events to include thinking/tool-call stream phases. |
 | `AgentLoopConfig` | `include/cch/agent/AgentContext.hpp::AsyncAgentOptions` | MVP parity | Current options cover max turns, tools, and event sink; richer queue/hook/options remain deferred. |
 | Agent `ThinkingLevel` | Missing | Near-term parity | U5 introduces an observable field if needed by current state seam; provider-specific model support remains later T2/T3. |
-| `CustomAgentMessages`, `AgentMessage` | `include/cch/ai/Message.hpp::MessageVariant` | Deferred parity | Custom/runtime messages wait for session tree/custom-message support. |
+| `CustomAgentMessages`, `AgentMessage` | `include/cch/ai/Message.hpp::MessageVariant` | MVP parity | `BashExecutionMessage`, `CustomMessage`, `BranchSummaryMessage`, `CompactionSummaryMessage` added as passive aggregates with LLM conversion helpers. |
 | `AgentState` | Missing | Near-term parity | U5 adds passive `AgentState` for active tools, messages, streaming message, pending tool calls, model, and thinking level. |
 | `AgentToolResult`, `AgentToolUpdateCallback`, `AgentTool` | `include/cch/agent/AgentTool.hpp` (`AsyncToolExecutionResult`, `AsyncAgentTool`) | MVP parity | Current contract is async and value-oriented. Progress/update callbacks are deferred. |
 | `AgentContext` | `include/cch/agent/AgentContext.hpp` | Near-term parity | Current header is options/result-only; U5 decides whether state lives here or in a sibling header. |

@@ -415,6 +415,20 @@ void redact_assistant_content(ai::AssistantContent& content) {
                 if (concrete.error_message) {
                     concrete.error_message = util::redact_text(std::move(*concrete.error_message));
                 }
+            } else if constexpr (std::is_same_v<T, ai::BashExecutionMessage>) {
+                concrete.command = util::redact_text(std::move(concrete.command));
+                concrete.output = util::redact_text(std::move(concrete.output));
+            } else if constexpr (std::is_same_v<T, ai::CustomMessage>) {
+                for (auto& block : concrete.content) {
+                    redact_content(block);
+                }
+                if (concrete.details) {
+                    concrete.details = redact_json_value(*concrete.details);
+                }
+            } else if constexpr (std::is_same_v<T, ai::BranchSummaryMessage>) {
+                // Summary text is already plain; no further redaction needed
+            } else if constexpr (std::is_same_v<T, ai::CompactionSummaryMessage>) {
+                // Summary text is already plain; no further redaction needed
             } else {
                 for (auto& block : concrete.content) {
                     redact_content(block);

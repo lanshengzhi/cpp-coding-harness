@@ -15,6 +15,10 @@ TEST_CASE("AI contracts are aggregate-friendly passive value types", "[ai][u3][c
     static_assert(std::is_aggregate_v<ai::ToolCallContent>);
     static_assert(std::is_aggregate_v<ai::AssistantMessage>);
     static_assert(std::is_aggregate_v<ai::ToolResultMessage>);
+    static_assert(std::is_aggregate_v<ai::BashExecutionMessage>);
+    static_assert(std::is_aggregate_v<ai::CustomMessage>);
+    static_assert(std::is_aggregate_v<ai::BranchSummaryMessage>);
+    static_assert(std::is_aggregate_v<ai::CompactionSummaryMessage>);
     static_assert(std::is_aggregate_v<util::Error>);
 
     ai::ToolCallContent call{
@@ -169,4 +173,229 @@ TEST_CASE("missing required content payload fields return typed JSON errors", "[
     REQUIRE_FALSE(missing_tool_result_link);
     CHECK(missing_tool_result_link.error().code == util::ErrorCode::JsonParse);
     CHECK(missing_tool_result_link.error().detail.find("toolCallId") != std::string::npos);
+}
+
+// ── Extended message type round-trip tests ──
+
+TEST_CASE("BashExecutionMessage serializes and deserializes round-trip", "[ai][extended][glaze]") {
+    ai::BashExecutionMessage bash;
+    bash.command = "echo hello";
+    bash.output = "hello\n";
+    bash.exit_code = 0;
+    bash.cancelled = false;
+    bash.truncated = false;
+    bash.full_output_path = std::nullopt;
+    bash.exclude_from_context = false;
+    bash.timestamp = 1718000000001;
+
+    auto json = ai::glaze::write_message_json(ai::MessageVariant{bash});
+    REQUIRE(json);
+    CHECK(json->find(R"("role":"bashExecution")") != std::string::npos);
+    CHECK(json->find(R"("command":"echo hello")") != std::string::npos);
+
+    auto parsed = ai::glaze::read_message_json(*json);
+    REQUIRE(parsed);
+    REQUIRE(std::holds_alternative<ai::BashExecutionMessage>(*parsed));
+    const auto& rt = std::get<ai::BashExecutionMessage>(*parsed);
+    CHECK(rt.command == "echo hello");
+    CHECK(rt.output == "hello\n");
+    REQUIRE(rt.exit_code);
+    CHECK(*rt.exit_code == 0);
+    CHECK(rt.cancelled == false);
+    CHECK(rt.timestamp == 1718000000001);
+}
+
+TEST_CASE("BashExecutionMessage with optional fields null round-trips", "[ai][extended][glaze]") {
+    ai::BashExecutionMessage bash;
+    bash.command = "ls";
+    bash.output = "";
+    bash.timestamp = 1718000000002;
+
+    auto json = ai::glaze::write_message_json(ai::MessageVariant{bash});
+    REQUIRE(json);
+
+    auto parsed = ai::glaze::read_message_json(*json);
+    REQUIRE(parsed);
+    REQUIRE(std::holds_alternative<ai::BashExecutionMessage>(*parsed));
+    const auto& rt = std::get<ai::BashExecutionMessage>(*parsed);
+    CHECK_FALSE(rt.exit_code.has_value());
+    CHECK_FALSE(rt.full_output_path.has_value());
+    CHECK(rt.cancelled == false);
+}
+
+TEST_CASE("CompactionSummaryMessage serializes and deserializes round-trip", "[ai][extended][glaze]") {
+    ai::CompactionSummaryMessage compaction;
+    compaction.summary = "Compacted 10 messages";
+    compaction.tokens_before = 5000;
+    compaction.timestamp = 1718000000003;
+
+    auto json = ai::glaze::write_message_json(ai::MessageVariant{compaction});
+    REQUIRE(json);
+    CHECK(json->find(R"("role":"compactionSummary")") != std::string::npos);
+    CHECK(json->find(R"("tokensBefore":5000)") != std::string::npos);
+
+    auto parsed = ai::glaze::read_message_json(*json);
+    REQUIRE(parsed);
+    REQUIRE(std::holds_alternative<ai::CompactionSummaryMessage>(*parsed));
+    const auto& rt = std::get<ai::CompactionSummaryMessage>(*parsed);
+    CHECK(rt.summary == "Compacted 10 messages");
+    CHECK(rt.tokens_before == 5000);
+    CHECK(rt.timestamp == 1718000000003);
+}
+
+TEST_CASE("BranchSummaryMessage serializes and deserializes round-trip", "[ai][extended][glaze]") {
+    ai::BranchSummaryMessage branch;
+    branch.summary = "Branch resolved";
+    branch.from_id = "abc12345";
+    branch.timestamp = 1718000000004;
+
+    auto json = ai::glaze::write_message_json(ai::MessageVariant{branch});
+    REQUIRE(json);
+    CHECK(json->find(R"("role":"branchSummary")") != std::string::npos);
+    CHECK(json->find(R"("fromId":"abc12345")") != std::string::npos);
+
+    auto parsed = ai::glaze::read_message_json(*json);
+    REQUIRE(parsed);
+    REQUIRE(std::holds_alternative<ai::BranchSummaryMessage>(*parsed));
+    const auto& rt = std::get<ai::BranchSummaryMessage>(*parsed);
+    CHECK(rt.summary == "Branch resolved");
+    CHECK(rt.from_id == "abc12345");
+    CHECK(rt.timestamp == 1718000000004);
+}
+
+TEST_CASE("CustomMessage serializes and deserializes round-trip", "[ai][extended][glaze]") {
+    ai::CustomMessage custom;
+    custom.custom_type = "my-extension";
+    custom.content.emplace_back(ai::TextContent{"hello from extension", std::nullopt});
+    custom.display = true;
+    custom.timestamp = 1718000000005;
+
+    auto json = ai::glaze::write_message_json(ai::MessageVariant{custom});
+    REQUIRE(json);
+    CHECK(json->find(R"("role":"custom")") != std::string::npos);
+    CHECK(json->find(R"("customType":"my-extension")") != std::string::npos);
+
+    auto parsed = ai::glaze::read_message_json(*json);
+    REQUIRE(parsed);
+    REQUIRE(std::holds_alternative<ai::CustomMessage>(*parsed));
+    const auto& rt = std::get<ai::CustomMessage>(*parsed);
+    CHECK(rt.custom_type == "my-extension");
+    CHECK(rt.display == true);
+    REQUIRE(rt.content.size() == 1);
+    CHECK(std::get<ai::TextContent>(rt.content[0]).text == "hello from extension");
+    CHECK(rt.timestamp == 1718000000005);
+}
+
+TEST_CASE("CustomMessage with display false round-trips", "[ai][extended][glaze]") {
+    ai::CustomMessage custom;
+    custom.custom_type = "hidden-ext";
+    custom.display = false;
+    custom.timestamp = 1718000000006;
+
+    auto json = ai::glaze::write_message_json(ai::MessageVariant{custom});
+    REQUIRE(json);
+
+    auto parsed = ai::glaze::read_message_json(*json);
+    REQUIRE(parsed);
+    REQUIRE(std::holds_alternative<ai::CustomMessage>(*parsed));
+    CHECK(std::get<ai::CustomMessage>(*parsed).display == false);
+}
+
+// ── LLM conversion tests ──
+
+TEST_CASE("bash_execution_to_user_message produces formatted text", "[ai][extended][convert]") {
+    ai::BashExecutionMessage bash;
+    bash.command = "echo hello";
+    bash.output = "hello\n";
+    bash.exit_code = 0;
+    bash.timestamp = 1718000000001;
+
+    auto msg = ai::bash_execution_to_user_message(bash);
+    CHECK(msg.timestamp == 1718000000001);
+    REQUIRE(msg.content.size() == 1);
+    const auto& text = std::get<ai::TextContent>(msg.content[0]);
+    CHECK(text.text.find("Ran `echo hello`") != std::string::npos);
+    CHECK(text.text.find("```\nhello") != std::string::npos);
+}
+
+TEST_CASE("bash_execution_to_user_message reports non-zero exit code", "[ai][extended][convert]") {
+    ai::BashExecutionMessage bash;
+    bash.command = "false";
+    bash.output = "";
+    bash.exit_code = 1;
+    bash.timestamp = 1718000000002;
+
+    auto msg = ai::bash_execution_to_user_message(bash);
+    const auto& text = std::get<ai::TextContent>(msg.content[0]);
+    CHECK(text.text.find("Command exited with code 1") != std::string::npos);
+}
+
+TEST_CASE("bash_execution_to_user_message reports cancellation", "[ai][extended][convert]") {
+    ai::BashExecutionMessage bash;
+    bash.command = "sleep 999";
+    bash.output = "";
+    bash.cancelled = true;
+
+    auto msg = ai::bash_execution_to_user_message(bash);
+    const auto& text = std::get<ai::TextContent>(msg.content[0]);
+    CHECK(text.text.find("(command cancelled)") != std::string::npos);
+}
+
+TEST_CASE("bash_execution_to_user_message reports truncation with path", "[ai][extended][convert]") {
+    ai::BashExecutionMessage bash;
+    bash.command = "cat huge.log";
+    bash.output = "truncated...";
+    bash.truncated = true;
+    bash.full_output_path = "/tmp/bash-output-12345.txt";
+
+    auto msg = ai::bash_execution_to_user_message(bash);
+    const auto& text = std::get<ai::TextContent>(msg.content[0]);
+    CHECK(text.text.find("[Output truncated. Full output: /tmp/bash-output-12345.txt]") != std::string::npos);
+}
+
+TEST_CASE("compaction_summary_to_user_message wraps with prefix and suffix", "[ai][extended][convert]") {
+    ai::CompactionSummaryMessage compaction;
+    compaction.summary = "Previous 20 messages compacted";
+    compaction.tokens_before = 8000;
+    compaction.timestamp = 1718000000003;
+
+    auto msg = ai::compaction_summary_to_user_message(compaction);
+    CHECK(msg.timestamp == 1718000000003);
+    const auto& text = std::get<ai::TextContent>(msg.content[0]);
+    CHECK(text.text.find(std::string{ai::COMPACTION_SUMMARY_PREFIX} + "Previous 20 messages compacted" + std::string{ai::COMPACTION_SUMMARY_SUFFIX}) != std::string::npos);
+}
+
+TEST_CASE("branch_summary_to_user_message wraps with prefix and suffix", "[ai][extended][convert]") {
+    ai::BranchSummaryMessage branch;
+    branch.summary = "Branch work completed";
+    branch.from_id = "abc12345";
+    branch.timestamp = 1718000000004;
+
+    auto msg = ai::branch_summary_to_user_message(branch);
+    CHECK(msg.timestamp == 1718000000004);
+    const auto& text = std::get<ai::TextContent>(msg.content[0]);
+    CHECK(text.text.find(std::string{ai::BRANCH_SUMMARY_PREFIX} + "Branch work completed" + std::string{ai::BRANCH_SUMMARY_SUFFIX}) != std::string::npos);
+}
+
+TEST_CASE("custom_message_to_user_message concatenates text content blocks", "[ai][extended][convert]") {
+    ai::CustomMessage custom;
+    custom.custom_type = "ext";
+    custom.content.emplace_back(ai::TextContent{"part1", std::nullopt});
+    custom.content.emplace_back(ai::TextContent{"part2", std::nullopt});
+    custom.timestamp = 1718000000005;
+
+    auto msg = ai::custom_message_to_user_message(custom);
+    CHECK(msg.timestamp == 1718000000005);
+    const auto& text = std::get<ai::TextContent>(msg.content[0]);
+    CHECK(text.text.find("part1\npart2") != std::string::npos);
+}
+
+TEST_CASE("custom_message_to_user_message handles empty content", "[ai][extended][convert]") {
+    ai::CustomMessage custom;
+    custom.custom_type = "ext";
+    custom.timestamp = 1718000000006;
+
+    auto msg = ai::custom_message_to_user_message(custom);
+    const auto& text = std::get<ai::TextContent>(msg.content[0]);
+    CHECK(text.text.empty());
 }

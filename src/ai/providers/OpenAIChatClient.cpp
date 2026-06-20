@@ -103,6 +103,22 @@ struct ToolCallAccumulator {
                 }
                 return dto;
             },
+            [](const ai::BashExecutionMessage& bash) {
+                auto msg = bash_execution_to_user_message(bash);
+                return ai::glaze::OpenAIChatMessageDto{"user", content_text(msg.content), std::nullopt, std::nullopt, std::nullopt};
+            },
+            [](const ai::CustomMessage& custom) {
+                auto msg = custom_message_to_user_message(custom);
+                return ai::glaze::OpenAIChatMessageDto{"user", content_text(msg.content), std::nullopt, std::nullopt, std::nullopt};
+            },
+            [](const ai::BranchSummaryMessage& branch) {
+                auto msg = branch_summary_to_user_message(branch);
+                return ai::glaze::OpenAIChatMessageDto{"user", content_text(msg.content), std::nullopt, std::nullopt, std::nullopt};
+            },
+            [](const ai::CompactionSummaryMessage& compaction) {
+                auto msg = compaction_summary_to_user_message(compaction);
+                return ai::glaze::OpenAIChatMessageDto{"user", content_text(msg.content), std::nullopt, std::nullopt, std::nullopt};
+            },
         },
         message);
 }

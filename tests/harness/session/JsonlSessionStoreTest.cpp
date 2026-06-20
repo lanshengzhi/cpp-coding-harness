@@ -499,3 +499,36 @@ TEST_CASE("open_existing succeeds and allows append on session with tree entries
     CHECK(text_from_message(loaded->messages[0]) == "first message");
     CHECK(text_from_message(loaded->messages[1]) == "second message");
 }
+
+TEST_CASE("extended message types survive session append and load", "[harness][session][extended]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "extended-messages.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+
+    // Append compaction summary
+    ai::CompactionSummaryMessage compaction;
+    compaction.summary = "Compacted 5 messages";
+    compaction.tokens_before = 2000;
+    compaction.timestamp = 1718000000001;
+    REQUIRE(store->append(ai::MessageVariant{compaction}));
+
+    // Append branch summary
+    ai::BranchSummaryMessage branch;
+    branch.summary = "Branch resolved";
+    branch.from_id = "abc12345";
+    branch.timestamp = 1718000000002;
+    REQUIRE(store->append(ai::MessageVariant{branch}));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    // header + 2 messages
+    REQUIRE(loaded->messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::CompactionSummaryMessage>(loaded->messages[0]));
+    CHECK(std::get<ai::CompactionSummaryMessage>(loaded->messages[0]).summary == "Compacted 5 messages");
+    CHECK(std::get<ai::CompactionSummaryMessage>(loaded->messages[0]).tokens_before == 2000);
+
+    REQUIRE(std::holds_alternative<ai::BranchSummaryMessage>(loaded->messages[1]));
+    CHECK(std::get<ai::BranchSummaryMessage>(loaded->messages[1]).summary == "Branch resolved");
+    CHECK(std::get<ai::BranchSummaryMessage>(loaded->messages[1]).from_id == "abc12345");
+}

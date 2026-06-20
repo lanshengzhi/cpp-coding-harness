@@ -84,6 +84,19 @@ struct MessageDto {
     std::optional<std::string> toolName;
     std::optional<glz::generic> details;
     std::optional<bool> isError;
+    // Extended message type fields
+    std::optional<std::string> command;
+    std::optional<std::string> output;
+    std::optional<std::int64_t> exitCode;
+    std::optional<bool> cancelled;
+    std::optional<bool> truncated;
+    std::optional<std::string> fullOutputPath;
+    std::optional<bool> excludeFromContext;
+    std::optional<std::string> customType;
+    std::optional<bool> display;
+    std::optional<std::string> summary;
+    std::optional<std::string> fromId;
+    std::optional<std::int64_t> tokensBefore;
     std::int64_t timestamp{};
 };
 
@@ -557,6 +570,53 @@ template <typename T>
     return dto;
 }
 
+[[nodiscard]] inline MessageDto to_dto(const BashExecutionMessage& message) {
+    MessageDto dto;
+    dto.role = "bashExecution";
+    dto.command = message.command;
+    dto.output = message.output;
+    if (message.exit_code.has_value()) {
+        dto.exitCode = static_cast<std::int64_t>(*message.exit_code);
+    }
+    dto.cancelled = message.cancelled;
+    dto.truncated = message.truncated;
+    dto.fullOutputPath = message.full_output_path;
+    dto.excludeFromContext = message.exclude_from_context;
+    dto.timestamp = message.timestamp;
+    return dto;
+}
+
+[[nodiscard]] inline MessageDto to_dto(const CustomMessage& message) {
+    MessageDto dto;
+    dto.role = "custom";
+    dto.customType = message.custom_type;
+    dto.content = to_content_dtos(message.content);
+    dto.display = message.display;
+    if (message.details) {
+        dto.details = util::json_to_glaze(*message.details);
+    }
+    dto.timestamp = message.timestamp;
+    return dto;
+}
+
+[[nodiscard]] inline MessageDto to_dto(const BranchSummaryMessage& message) {
+    MessageDto dto;
+    dto.role = "branchSummary";
+    dto.summary = message.summary;
+    dto.fromId = message.from_id;
+    dto.timestamp = message.timestamp;
+    return dto;
+}
+
+[[nodiscard]] inline MessageDto to_dto(const CompactionSummaryMessage& message) {
+    MessageDto dto;
+    dto.role = "compactionSummary";
+    dto.summary = message.summary;
+    dto.tokensBefore = message.tokens_before;
+    dto.timestamp = message.timestamp;
+    return dto;
+}
+
 [[nodiscard]] inline MessageDto to_dto(const MessageVariant& message) {
     return std::visit([](const auto& concrete) { return to_dto(concrete); }, message);
 }
@@ -629,6 +689,68 @@ template <typename T>
             std::move(*content),
             dto.details ? std::optional<util::JsonValue>{util::json_from_glaze(*dto.details)} : std::nullopt,
             dto.isError.value_or(false),
+            dto.timestamp,
+        }};
+    }
+
+    if (dto.role == "bashExecution") {
+        if (auto required = require_field(dto.command, "bashExecution message", "command", context); !required) {
+            return std::unexpected(required.error());
+        }
+        return MessageVariant{BashExecutionMessage{
+            *dto.command,
+            dto.output.value_or(""),
+            dto.exitCode ? std::optional<int>{static_cast<int>(*dto.exitCode)} : std::nullopt,
+            dto.cancelled.value_or(false),
+            dto.truncated.value_or(false),
+            dto.fullOutputPath,
+            dto.excludeFromContext.value_or(false),
+            dto.timestamp,
+        }};
+    }
+
+    if (dto.role == "custom") {
+        if (auto required = require_field(dto.customType, "custom message", "customType", context); !required) {
+            return std::unexpected(required.error());
+        }
+        std::vector<Content> content;
+        if (dto.content) {
+            auto blocks = content_from_dto(*dto.content, context);
+            if (!blocks) {
+                return std::unexpected(blocks.error());
+            }
+            content = std::move(*blocks);
+        }
+        return MessageVariant{CustomMessage{
+            *dto.customType,
+            std::move(content),
+            dto.display.value_or(true),
+            dto.details ? std::optional<util::JsonValue>{util::json_from_glaze(*dto.details)} : std::nullopt,
+            dto.timestamp,
+        }};
+    }
+
+    if (dto.role == "branchSummary") {
+        if (auto required = require_field(dto.summary, "branchSummary message", "summary", context); !required) {
+            return std::unexpected(required.error());
+        }
+        if (auto required = require_field(dto.fromId, "branchSummary message", "fromId", context); !required) {
+            return std::unexpected(required.error());
+        }
+        return MessageVariant{BranchSummaryMessage{
+            *dto.summary,
+            *dto.fromId,
+            dto.timestamp,
+        }};
+    }
+
+    if (dto.role == "compactionSummary") {
+        if (auto required = require_field(dto.summary, "compactionSummary message", "summary", context); !required) {
+            return std::unexpected(required.error());
+        }
+        return MessageVariant{CompactionSummaryMessage{
+            *dto.summary,
+            dto.tokensBefore.value_or(0),
             dto.timestamp,
         }};
     }
