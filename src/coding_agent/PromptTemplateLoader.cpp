@@ -1,0 +1,224 @@
+#include "../../include/cch/coding_agent/PromptTemplateLoader.hpp"
+
+#include "SkillFrontmatterParser.hpp"
+#include "../harness/WorkspaceFileSystem.hpp"
+
+#include <algorithm>
+#include <iostream>
+#include <string>
+
+namespace cch::coding_agent {
+
+namespace {
+
+/// Strip .md extension from a filename to derive the template name.
+[[nodiscard]] std::string templateNameFromPath(const std::string& path) {
+    // Find the last path separator to extract the filename.
+    auto slash = path.rfind('/');
+    std::string_view filename = (slash == std::string::npos)
+        ? std::string_view(path)
+        : std::string_view(path).substr(slash + 1);
+
+    // Strip .md extension (case-insensitive).
+    if (filename.size() > 3) {
+        auto suffix = filename.substr(filename.size() - 3);
+        if ((suffix[0] == '.' || suffix[0] == '.') &&
+            (suffix[1] == 'm' || suffix[1] == 'M') &&
+            (suffix[2] == 'd' || suffix[2] == 'D')) {
+            filename = filename.substr(0, filename.size() - 3);
+        }
+    }
+    return std::string(filename);
+}
+
+/// Check if a filename starts with a dot.
+[[nodiscard]] bool isDotfile(std::string_view name) {
+    return !name.empty() && name.front() == '.';
+}
+
+} // namespace
+
+PromptTemplateLoadResult loadPromptTemplateFromFile(
+    const harness::WorkspaceFileSystem& fs,
+    const std::string& filePath) {
+    PromptTemplateLoadResult result;
+
+    // Only load .md files.
+    std::string_view pathView = filePath;
+    if (pathView.size() < 3) return result;
+    auto suffix = pathView.substr(pathView.size() - 3);
+    if (!((suffix[0] == '.' || suffix[0] == '.') &&
+          (suffix[1] == 'm' || suffix[1] == 'M') &&
+          (suffix[2] == 'd' || suffix[2] == 'D'))) {
+        return result;
+    }
+
+    // Read the file.
+    auto content = fs.readTextFile(filePath);
+    if (!content) {
+        result.diagnostics.push_back(PromptTemplateDiagnostic{
+            .type = "warning",
+            .code = PromptTemplateDiagnosticCode::read_failed,
+            .message = content.error().message,
+            .path = filePath,
+        });
+        return result;
+    }
+
+    // Parse frontmatter.
+    auto parsed = parseFrontmatter(*content);
+    if (!parsed) {
+        result.diagnostics.push_back(PromptTemplateDiagnostic{
+            .type = "warning",
+            .code = PromptTemplateDiagnosticCode::parse_failed,
+            .message = parsed.error().message,
+            .path = filePath,
+        });
+        return result;
+    }
+
+    const auto& fm = *parsed;
+
+    // Extract name from filename.
+    std::string name = templateNameFromPath(filePath);
+
+    // Extract description from frontmatter fields.
+    std::optional<std::string> description;
+    auto descIt = fm.fields.find("description");
+    if (descIt != fm.fields.end() && !descIt->second.empty()) {
+        description = descIt->second;
+    }
+
+    // Extract argument-hint from frontmatter fields.
+    std::optional<std::string> argument_hint;
+    auto hintIt = fm.fields.find("argument-hint");
+    if (hintIt != fm.fields.end() && !hintIt->second.empty()) {
+        argument_hint = hintIt->second;
+    }
+
+    result.templates.push_back(PromptTemplate{
+        .name = std::move(name),
+        .description = std::move(description),
+        .content = std::move(fm.body),
+        .argument_hint = std::move(argument_hint),
+    });
+
+    return result;
+}
+
+PromptTemplateLoadResult loadPromptTemplates(
+    const harness::WorkspaceFileSystem& fs,
+    const std::vector<PromptTemplateDirSpec>& dirs) {
+    PromptTemplateLoadResult result;
+
+    for (const auto& spec : dirs) {
+        if (spec.is_file) {
+            // Explicit file path — load directly.
+            auto file_result = loadPromptTemplateFromFile(fs, spec.path);
+            // Deduplicate by name.
+            for (auto& tmpl : file_result.templates) {
+                auto dup = std::find_if(result.templates.begin(), result.templates.end(),
+                    [&](const PromptTemplate& existing) { return existing.name == tmpl.name; });
+                if (dup != result.templates.end()) {
+                    result.diagnostics.push_back(PromptTemplateDiagnostic{
+                        .type = "warning",
+                        .code = PromptTemplateDiagnosticCode::duplicate_name,
+                        .message = std::string("duplicate template name '") + tmpl.name + "'",
+                        .path = spec.path,
+                    });
+                } else {
+                    result.templates.push_back(std::move(tmpl));
+                }
+            }
+            result.diagnostics.insert(result.diagnostics.end(),
+                std::make_move_iterator(file_result.diagnostics.begin()),
+                std::make_move_iterator(file_result.diagnostics.end()));
+            continue;
+        }
+
+        // Directory — list direct children.
+        auto entries = fs.listDir(spec.path);
+        if (!entries) {
+            // Missing directory is silent (not an error).
+            if (entries.error().code != harness::FileErrorCode::NotFound) {
+                result.diagnostics.push_back(PromptTemplateDiagnostic{
+                    .type = "warning",
+                    .code = PromptTemplateDiagnosticCode::list_failed,
+                    .message = entries.error().message,
+                    .path = spec.path,
+                });
+            }
+            continue;
+        }
+
+        // Sort entries by name for deterministic order.
+        std::sort(entries->begin(), entries->end(),
+            [](const harness::FileInfo& a, const harness::FileInfo& b) { return a.name < b.name; });
+
+        for (const auto& entry : *entries) {
+            // Skip dot-prefixed entries and non-files.
+            if (isDotfile(entry.name)) continue;
+            if (entry.kind != harness::FileKind::File) continue;
+            // Only load .md files.
+            std::string_view name = entry.name;
+            if (name.size() < 3) continue;
+            auto suffix = name.substr(name.size() - 3);
+            if (!((suffix[0] == '.' || suffix[0] == '.') &&
+                  (suffix[1] == 'm' || suffix[1] == 'M') &&
+                  (suffix[2] == 'd' || suffix[2] == 'D'))) {
+                continue;
+            }
+
+            // Build relative path from the entry's path. The entry.path is
+            // an absolute path; we need a workspace-relative path for the loader.
+            // Extract the relative portion from the workspace root.
+            auto rel = entry.path;
+            // Use the entry path directly since listDir returns workspace-relative paths
+            // for entries... actually, listDir returns absolute paths. We need to
+            // compute the relative path for loadPromptTemplateFromFile.
+            // The loadPromptTemplateFromFile takes a workspace-relative path.
+            // We can compute it from the workspace root.
+            std::string relative_path;
+            const auto& root = fs.root().string();
+            if (entry.path.compare(0, root.size(), root) == 0) {
+                relative_path = entry.path.substr(root.size());
+                // Strip leading slash.
+                if (!relative_path.empty() && relative_path.front() == '/') {
+                    relative_path.erase(0, 1);
+                }
+            } else {
+                // Fallback: use the name relative to the spec path.
+                relative_path = spec.path + "/" + entry.name;
+            }
+
+            auto file_result = loadPromptTemplateFromFile(fs, relative_path);
+
+            // Deduplicate by name.
+            for (auto& tmpl : file_result.templates) {
+                auto dup = std::find_if(result.templates.begin(), result.templates.end(),
+                    [&](const PromptTemplate& existing) { return existing.name == tmpl.name; });
+                if (dup != result.templates.end()) {
+                    result.diagnostics.push_back(PromptTemplateDiagnostic{
+                        .type = "warning",
+                        .code = PromptTemplateDiagnosticCode::duplicate_name,
+                        .message = std::string("duplicate template name '") + tmpl.name + "'",
+                        .path = relative_path,
+                    });
+                } else {
+                    result.templates.push_back(std::move(tmpl));
+                }
+            }
+            result.diagnostics.insert(result.diagnostics.end(),
+                std::make_move_iterator(file_result.diagnostics.begin()),
+                std::make_move_iterator(file_result.diagnostics.end()));
+        }
+    }
+
+    // Sort templates by name for deterministic output.
+    std::sort(result.templates.begin(), result.templates.end(),
+        [](const PromptTemplate& a, const PromptTemplate& b) { return a.name < b.name; });
+
+    return result;
+}
+
+} // namespace cch::coding_agent
