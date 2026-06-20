@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace cch::cli {
 
@@ -18,6 +19,8 @@ struct AsyncCliRuntimeConfig {
     bool enable_bash{false};
     std::optional<bool> project_trust_override;
     bool disable_project_skills{false};
+    bool disable_prompt_templates{false};
+    std::vector<std::string> prompt_template_paths;
     OutputMode output_mode{OutputMode::Text};
     int max_turns{8};
     bool workspace_explicit{false};

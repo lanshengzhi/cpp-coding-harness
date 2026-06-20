@@ -25,7 +25,9 @@ struct CliConfig {
     bool approve_project{false};
     bool no_approve_project{false};
     bool no_skills{false};
+    bool no_prompt_templates{false};
     bool help{false};
+    std::vector<std::string> prompt_template_paths;
     cch::cli::OutputMode output_mode{cch::cli::OutputMode::Text};
     bool workspace_explicit{false};
     int max_turns{8};
@@ -99,6 +101,9 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     approve_option->excludes(no_approve_option);
     no_approve_option->excludes(approve_option);
     app.add_flag("--no-skills", config.no_skills, "Disable project-local skills for this run");
+    app.add_flag("--no-prompt-templates", config.no_prompt_templates, "Disable all prompt template loading");
+    app.add_option("--prompt-template", config.prompt_template_paths, "Load a prompt template file or directory (repeatable)")
+        ->expected(0, -1);
     auto* workspace_option = app.add_option("--workspace", workspace_text, "Workspace boundary for tools (default: cwd)");
     auto* session_option = app.add_option("--session", session_text, "Create a new JSONL session at path");
     auto* resume_option = app.add_option("--resume", resume_text, "Resume and append to an existing JSONL session");
@@ -264,6 +269,8 @@ int main(int argc, char** argv) {
         config.approve_project ? std::optional<bool>{true}
             : (config.no_approve_project ? std::optional<bool>{false} : std::nullopt),
         config.no_skills,
+        config.no_prompt_templates,
+        config.prompt_template_paths,
         config.output_mode,
         config.max_turns,
         config.workspace_explicit,

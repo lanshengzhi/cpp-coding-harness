@@ -236,6 +236,17 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         skill_dirs.push_back({.path = ".cpp-harness/skills", .includeRootFiles = false});
     }
 
+    // Build prompt template directory list.
+    std::vector<std::string> prompt_dirs;
+    if (!config.disable_prompt_templates) {
+        if (coding_agent::project_prompts_allowed(resource_plan)) {
+            prompt_dirs.push_back(".cpp-harness/prompts");
+        }
+        for (const auto& path : config.prompt_template_paths) {
+            prompt_dirs.push_back(path);
+        }
+    }
+
     auto services = coding_agent::runtime::make_runtime_services(coding_agent::runtime::RuntimeServicesConfig{
         workspace,
         config.enable_bash,
@@ -244,6 +255,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         resolved_base_url,
         resolved_api_key_env,
         std::move(skill_dirs),
+        std::move(prompt_dirs),
         true,  // print_skill_diagnostics
     });
     if (!services) {
@@ -262,7 +274,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         *services->client,
         std::move(services->tools),
         agent::AsyncAgentOptions{config.max_turns, resolved_model},
-        {} /* templates — empty until U3 */,
+        std::move(services->prompt_load_result.templates),
         &command_registry,
         std::move(services->skill_load_result.skills));
 
@@ -352,7 +364,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
                     .model = resolved_model,
                     .message_count = history.size(),
                 };
-                auto processed = coding_agent::process_prompt(line, {} /* templates */,
+                auto processed = coding_agent::process_prompt(line, runner.templates(),
                     command_registry, cmd_ctx,
                     runner.skills(), harness::WorkspaceFileSystem{store.metadata().workspace});
                 if (processed.command_handled) {

@@ -36,6 +36,9 @@ public:
     /// Access the loaded skills (for external callers like the REPL loop).
     [[nodiscard]] const std::vector<Skill>& skills() const { return skills_; }
 
+    /// Access the loaded prompt templates (for external callers like the REPL loop).
+    [[nodiscard]] const std::vector<PromptTemplate>& templates() const { return templates_; }
+
 private:
     std::optional<agent::AsyncAgentLoop> loop_;
     std::vector<PromptTemplate> templates_;
