@@ -40,6 +40,9 @@ util::Expected<OpenSession> open_session(SessionOpenRequest request) {
             }
         }
         session.history = std::move(loaded->messages);
+        // Preserve stored provider/model for config resolution chain
+        session.stored_provider = loaded->metadata.provider;
+        session.stored_model = loaded->metadata.model;
         auto opened = harness::session::JsonlSessionStore::open_existing(request.resume_path);
         if (!opened) {
             return std::unexpected(opened.error());

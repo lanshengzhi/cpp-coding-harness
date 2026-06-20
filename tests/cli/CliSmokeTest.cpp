@@ -217,7 +217,7 @@ TEST_CASE("CLI JSON fake tool flow emits correlated tool events", "[cli][json]")
         if (json_string_at(record, "type") == "tool_execution_end") {
             saw_tool_end = true;
             CHECK(json_string_at(record, "toolCallId") == "fake-read-1");
-            CHECK(json_string_at(record, "toolName") == "read_file");
+            CHECK(json_string_at(record, "toolName") == "read");
             CHECK(record.find("content") == record.end());
         }
     }
@@ -366,7 +366,7 @@ TEST_CASE("CLI fake read loop prints max-turn marker when turn budget is exhaust
 
     REQUIRE(result.exit_code != 0);
     CHECK(result.output.find("[model-request] turn 1") != std::string::npos);
-    CHECK(result.output.find("[tool-call] read_file#fake-read-1") != std::string::npos);
+    CHECK(result.output.find("[tool-call] read#fake-read-1") != std::string::npos);
     CHECK(result.output.find("[tool-error] fake-read-1") != std::string::npos);
     CHECK(result.output.find("[max-turns] max_turns_exceeded") != std::string::npos);
     CHECK(result.output.find("loop failed: max_turns_exceeded") != std::string::npos);

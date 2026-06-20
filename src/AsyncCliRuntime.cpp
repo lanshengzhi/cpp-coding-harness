@@ -2,6 +2,7 @@
 
 #include "../include/cch/agent/AgentLoop.hpp"
 #include "../include/cch/ai/Content.hpp"
+#include "../include/cch/coding_agent/Config.hpp"
 #include "coding_agent/runtime/EventPrinter.hpp"
 #include "coding_agent/runtime/JsonEventPrinter.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
@@ -11,7 +12,9 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
 
+#include <cstdlib>
 #include <iostream>
+#include <map>
 #include <optional>
 #include <string>
 #include <thread>
@@ -83,13 +86,63 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         }
     }
 
+    // Load config file defaults; CLI values take precedence.
+    const char* home = std::getenv("HOME");
+    std::string config_path = home ? std::string(home) + "/.cpp-harness/config.json" : "";
+    auto config_data = coding_agent::ConfigLoader::load(config_path);
+    if (!config_data) {
+        std::cerr << "warning: could not load config: " << config_data.error().message << '\n';
+        config_data = coding_agent::ConfigData{};
+    }
+
+    static const std::map<std::string, std::string> default_model{
+        {"openai-compatible", "gpt-4.1-mini"},
+        {"fake", "fake-model"},
+    };
+    auto provider_default_model = [&](const std::string& provider) -> std::string {
+        auto it = default_model.find(provider);
+        return it != default_model.end() ? it->second : "gpt-4.1-mini";
+    };
+
+    std::string resolved_provider = provider_name;
+    if (config_data->provider && resolved_provider == "openai-compatible" && !config.fake) {
+        resolved_provider = *config_data->provider;
+    }
+
+    std::string resolved_model = config.model;
+    if (resolved_model.empty() && opened_session->stored_model) {
+        resolved_model = *opened_session->stored_model;
+    }
+    if (resolved_model.empty() && config_data->model) resolved_model = *config_data->model;
+    if (resolved_model.empty()) resolved_model = provider_default_model(resolved_provider);
+
+    std::string resolved_base_url = config.base_url;
+    if (resolved_base_url.empty() && config_data->base_url) resolved_base_url = *config_data->base_url;
+    if (resolved_base_url.empty()) resolved_base_url = "https://api.openai.com";
+
+    std::string resolved_api_key_env = config.api_key_env;
+    if (resolved_api_key_env.empty() && config_data->api_key_env) {
+        resolved_api_key_env = config_data->api_key_env->front();
+        auto resolved_key = coding_agent::ConfigLoader::resolve_api_key(*config_data->api_key_env);
+        if (resolved_key) {
+            for (const auto& env_name : *config_data->api_key_env) {
+                const char* val = std::getenv(env_name.c_str());
+                if (val && val[0] != '\0') {
+                    resolved_api_key_env = env_name;
+                    break;
+                }
+            }
+        }
+    }
+    if (resolved_api_key_env.empty()) resolved_api_key_env = "OPENAI_API_KEY";
+
     auto services = coding_agent::runtime::make_runtime_services(coding_agent::runtime::RuntimeServicesConfig{
         workspace,
         config.enable_bash,
-        provider_name,
-        config.model,
-        config.base_url,
-        config.api_key_env,
+        resolved_provider,
+        resolved_model,
+        resolved_base_url,
+        resolved_api_key_env,
     });
     if (!services) {
         if (json_mode && json_printer) {
@@ -100,7 +153,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         return 2;
     }
 
-    agent::AsyncAgentLoop loop(*services->client, std::move(services->tools), agent::AsyncAgentOptions{config.max_turns, config.model});
+    agent::AsyncAgentLoop loop(*services->client, std::move(services->tools), agent::AsyncAgentOptions{config.max_turns, resolved_model});
 
     auto run_prompt = [&](const std::string& prompt) -> bool {
         boost::asio::io_context io;

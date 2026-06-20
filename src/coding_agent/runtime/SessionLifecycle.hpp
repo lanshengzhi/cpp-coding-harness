@@ -25,6 +25,10 @@ struct OpenSession {
     std::filesystem::path workspace;
     std::vector<ai::MessageVariant> history;
     harness::session::JsonlSessionStore store;
+    /// Provider stored in session metadata (populated on resume).
+    std::optional<std::string> stored_provider;
+    /// Model stored in session metadata (populated on resume).
+    std::optional<std::string> stored_model;
 };
 
 [[nodiscard]] util::Expected<OpenSession> open_session(SessionOpenRequest request);

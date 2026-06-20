@@ -17,6 +17,7 @@
 #include "../../include/cch/ai/providers/OpenAIChatClient.hpp"
 #include "../../include/cch/ai/providers/SseParser.hpp"
 #include "../../include/cch/ai/providers/StreamTransport.hpp"
+#include "../../include/cch/coding_agent/Config.hpp"
 #include "../../include/cch/harness/ExecutionEnv.hpp"
 #include "../../include/cch/harness/LocalExecutionEnv.hpp"
 #include "../../include/cch/harness/session/JsonlSessionStore.hpp"

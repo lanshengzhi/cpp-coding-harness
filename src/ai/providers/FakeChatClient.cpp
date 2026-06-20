@@ -57,7 +57,7 @@ public:
             auto args = util::read_json<util::JsonValue>(*raw);
             ai::ToolCallContent call;
             call.id = "fake-read-1";
-            call.name = "read_file";
+            call.name = "read";
             call.raw_arguments = *raw;
             if (args) {
                 call.arguments = *args;

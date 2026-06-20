@@ -95,6 +95,7 @@ target_link_libraries(cch_tools
 
 add_library(cch_coding_agent_runtime
     src/AsyncCliRuntime.cpp
+    src/coding_agent/ConfigLoader.cpp
     src/coding_agent/runtime/EventPrinter.cpp
     src/coding_agent/runtime/JsonEventPrinter.cpp
     src/coding_agent/runtime/RuntimeServices.cpp
@@ -139,6 +140,7 @@ if(CCH_BUILD_TESTS)
         tests/ai/providers/OpenAIChatClientTest.cpp
         tests/ai/providers/SseParserTest.cpp
         tests/cli/CliSmokeTest.cpp
+        tests/coding_agent/ConfigLoaderTest.cpp
         tests/coding_agent/runtime/JsonEventPrinterTest.cpp
         tests/harness/AsyncLocalExecutionEnvTest.cpp
         tests/harness/session/JsonlSessionStoreTest.cpp
