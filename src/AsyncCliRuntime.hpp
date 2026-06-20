@@ -5,10 +5,16 @@
 
 namespace cch::cli {
 
+enum class OutputMode {
+    Text,
+    Json,
+};
+
 struct AsyncCliRuntimeConfig {
     bool fake{false};
     bool repl{false};
     bool enable_bash{false};
+    OutputMode output_mode{OutputMode::Text};
     int max_turns{8};
     bool workspace_explicit{false};
     std::filesystem::path workspace;

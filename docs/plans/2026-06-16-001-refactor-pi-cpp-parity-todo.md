@@ -223,10 +223,12 @@ The first implementation pass should execute that cleanup plan and produce the T
 
 ### T8. SDK, RPC, and Machine-Readable Modes
 
-- [ ] Add JSON event stream mode as the first machine-readable surface.
-  - **Files:** `src/main.cpp`, `src/AsyncCliRuntime.*`, `tests/cli/CliSmokeTest.cpp`.
+- [x] Add JSON event stream mode as the first machine-readable surface.
+  - **Files:** `src/main.cpp`, `src/AsyncCliRuntime.*`, `src/coding_agent/runtime/JsonEventPrinter.*`, `tests/coding_agent/runtime/JsonEventPrinterTest.cpp`, `tests/cli/CliSmokeTest.cpp`.
   - **References:** `pi:packages/coding-agent/docs/json.md`.
   - **Test scenarios:** stable event objects for model request, assistant deltas, tool call, tool result, errors, max turns, and completion.
+  - **Implementation plan:** `docs/plans/2026-06-20-002-feat-json-event-stream-mode-plan.md`.
+  - **Status:** `--mode json` emits JSONL stdout with a session header, pi-named C++ schema v1 lifecycle subset, correlated tool execution events, and final `runtime_terminal`; text mode remains default. RPC and SDK remain deferred.
 - [ ] Add RPC mode only after runtime services are separated from CLI printing.
   - **References:** `pi:packages/coding-agent/docs/rpc.md`.
   - **Done when:** stdin/stdout JSONL requests can drive sessions without TUI assumptions.

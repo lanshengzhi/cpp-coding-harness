@@ -96,6 +96,7 @@ target_link_libraries(cch_tools
 add_library(cch_coding_agent_runtime
     src/AsyncCliRuntime.cpp
     src/coding_agent/runtime/EventPrinter.cpp
+    src/coding_agent/runtime/JsonEventPrinter.cpp
     src/coding_agent/runtime/RuntimeServices.cpp
     src/coding_agent/runtime/SessionLifecycle.cpp
 )
@@ -138,6 +139,7 @@ if(CCH_BUILD_TESTS)
         tests/ai/providers/OpenAIChatClientTest.cpp
         tests/ai/providers/SseParserTest.cpp
         tests/cli/CliSmokeTest.cpp
+        tests/coding_agent/runtime/JsonEventPrinterTest.cpp
         tests/harness/AsyncLocalExecutionEnvTest.cpp
         tests/harness/session/JsonlSessionStoreTest.cpp
         tests/tools/AsyncToolsTest.cpp
@@ -147,6 +149,7 @@ if(CCH_BUILD_TESTS)
     )
     target_include_directories(cpp_harness_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
         third_party
     )
     target_link_libraries(cpp_harness_tests PRIVATE cpp_harness_lib)

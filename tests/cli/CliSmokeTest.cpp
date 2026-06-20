@@ -2,11 +2,16 @@
 
 #include "../support/TempWorkspace.hpp"
 
+#include "cch/util/Json.hpp"
+
 #include <array>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <string>
+#include <vector>
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <sys/wait.h>
@@ -21,6 +26,17 @@ struct CommandResult {
     int exit_code{0};
     std::string output;
 };
+
+struct SplitCommandResult {
+    int exit_code{0};
+    std::string stdout_text;
+    std::string stderr_text;
+};
+
+std::string read_file(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
+}
 
 CommandResult run_command(const std::string& command) {
     std::array<char, 256> buffer{};
@@ -41,11 +57,59 @@ CommandResult run_command(const std::string& command) {
     return {exit_code, output};
 }
 
+SplitCommandResult run_command_split(const std::string& command) {
+    cch::tests::TempWorkspace capture;
+    const auto stdout_path = capture.path() / "stdout.txt";
+    const auto stderr_path = capture.path() / "stderr.txt";
+    int status = std::system((command + " > '" + stdout_path.string() + "' 2> '" + stderr_path.string() + "'").c_str());
+#if defined(__unix__) || defined(__APPLE__)
+    int exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : status;
+#else
+    int exit_code = status;
+#endif
+    return {exit_code, read_file(stdout_path), read_file(stderr_path)};
+}
+
 std::string q(const std::filesystem::path& path) {
     return "'" + path.string() + "'";
 }
 
 std::string bin() { return q(CCH_BINARY); }
+
+std::vector<std::string> non_empty_lines(const std::string& text) {
+    std::vector<std::string> result;
+    std::istringstream input{text};
+    std::string line;
+    while (std::getline(input, line)) {
+        if (!line.empty()) {
+            result.push_back(line);
+        }
+    }
+    return result;
+}
+
+cch::util::JsonValue parse_json_line(const std::string& line) {
+    auto parsed = cch::util::read_json<cch::util::JsonValue>(line);
+    REQUIRE(parsed.has_value());
+    return *parsed;
+}
+
+const cch::util::JsonValue::object_t& as_object(const cch::util::JsonValue& value) {
+    return value.get<cch::util::JsonValue::object_t>();
+}
+
+std::string json_string_at(const cch::util::JsonValue::object_t& object, const std::string& key) {
+    return object.at(key).get<std::string>();
+}
+
+bool has_json_event_type(const std::vector<std::string>& lines, const std::string& type) {
+    for (const auto& line : lines) {
+        if (json_string_at(as_object(parse_json_line(line)), "type") == type) {
+            return true;
+        }
+    }
+    return false;
+}
 }
 
 TEST_CASE("CLI fake one-shot prints transcript and writes session", "[cli][u6]") {
@@ -88,6 +152,107 @@ TEST_CASE("CLI help no longer advertises compatibility-only async flag", "[cli][
     REQUIRE(result.exit_code == 0);
     CHECK(result.output.find("--async") == std::string::npos);
     CHECK(result.output.find("--fake") != std::string::npos);
+    CHECK(result.output.find("--mode") != std::string::npos);
+}
+
+TEST_CASE("CLI rejects unsupported JSON mode combinations before model request", "[cli][json]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "json-repl.jsonl";
+    auto result = run_command_split(bin() + " --fake --mode json --repl --workspace " + q(workspace.path()) + " --session " + q(session));
+
+    REQUIRE(result.exit_code != 0);
+    CHECK(result.stdout_text.empty());
+    CHECK(result.stderr_text.find("--mode json cannot be combined with --repl") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(session));
+}
+
+TEST_CASE("CLI rejects rpc mode before session creation", "[cli][json]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "rpc.jsonl";
+    auto result = run_command_split(bin() + " --fake --mode rpc --workspace " + q(workspace.path()) + " --session " + q(session) + " hello");
+
+    REQUIRE(result.exit_code != 0);
+    CHECK(result.stdout_text.empty());
+    CHECK(result.stderr_text.find("--mode rpc is not supported yet") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(session));
+}
+
+TEST_CASE("CLI JSON fake one-shot emits JSONL only", "[cli][json]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "json-one-shot.jsonl";
+    auto result = run_command_split(bin() + " --fake --mode json --workspace " + q(workspace.path()) + " --session " + q(session) + " hello");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.empty());
+    auto output_lines = non_empty_lines(result.stdout_text);
+    REQUIRE(output_lines.size() >= 5);
+    for (const auto& line : output_lines) {
+        (void)parse_json_line(line);
+    }
+    auto first = as_object(parse_json_line(output_lines.front()));
+    CHECK(json_string_at(first, "type") == "session");
+    CHECK(json_string_at(first, "id").empty() == false);
+    CHECK(has_json_event_type(output_lines, "turn_start"));
+    CHECK(has_json_event_type(output_lines, "message_update"));
+    auto last = as_object(parse_json_line(output_lines.back()));
+    CHECK(json_string_at(last, "type") == "runtime_terminal");
+    CHECK(json_string_at(last, "code") == "completed");
+    CHECK(last.at("success").get<bool>() == true);
+    CHECK(result.stdout_text.find("[assistant]") == std::string::npos);
+    CHECK(std::filesystem::exists(session));
+}
+
+TEST_CASE("CLI JSON fake tool flow emits correlated tool events", "[cli][json]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "json-tool.jsonl";
+    auto result = run_command_split(bin() + " --fake --mode json --workspace " + q(workspace.path()) + " --session " + q(session) + " read missing.txt");
+
+    REQUIRE(result.exit_code == 0);
+    auto output_lines = non_empty_lines(result.stdout_text);
+    REQUIRE(has_json_event_type(output_lines, "tool_execution_start"));
+    REQUIRE(has_json_event_type(output_lines, "tool_execution_end"));
+    bool saw_tool_end = false;
+    for (const auto& line : output_lines) {
+        auto record = as_object(parse_json_line(line));
+        if (json_string_at(record, "type") == "tool_execution_end") {
+            saw_tool_end = true;
+            CHECK(json_string_at(record, "toolCallId") == "fake-read-1");
+            CHECK(json_string_at(record, "toolName") == "read_file");
+            CHECK(record.find("content") == record.end());
+        }
+    }
+    CHECK(saw_tool_end);
+    auto last = as_object(parse_json_line(output_lines.back()));
+    CHECK(json_string_at(last, "type") == "runtime_terminal");
+    CHECK(last.at("success").get<bool>() == true);
+}
+
+TEST_CASE("CLI JSON max-turn flow emits terminal error code", "[cli][json]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "json-max-turn.jsonl";
+    auto result = run_command_split(bin() + " --fake --mode json --workspace " + q(workspace.path()) + " --session " + q(session) + " --max-turns 1 read missing.txt");
+
+    REQUIRE(result.exit_code != 0);
+    auto output_lines = non_empty_lines(result.stdout_text);
+    REQUIRE(output_lines.size() >= 2);
+    for (const auto& line : output_lines) {
+        (void)parse_json_line(line);
+    }
+    auto last = as_object(parse_json_line(output_lines.back()));
+    CHECK(json_string_at(last, "type") == "runtime_terminal");
+    CHECK(json_string_at(last, "code") == "max_turns_exceeded");
+    CHECK(last.at("success").get<bool>() == false);
+}
+
+TEST_CASE("CLI JSON preflight errors do not write stdout", "[cli][json]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "json-real.jsonl";
+    auto result = run_command_split("env -u CCH_TEST_MISSING_KEY " + bin() + " --mode json --workspace " + q(workspace.path()) + " --session " + q(session) + " --api-key-env CCH_TEST_MISSING_KEY hello");
+
+    REQUIRE(result.exit_code != 0);
+    CHECK(result.stdout_text.empty());
+    CHECK(result.stderr_text.find("missing API key") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(session));
 }
 
 TEST_CASE("CLI fake REPL preserves process history for two prompts", "[cli][u6]") {

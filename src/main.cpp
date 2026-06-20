@@ -22,6 +22,7 @@ struct CliConfig {
     bool repl{false};
     bool enable_bash{false};
     bool help{false};
+    cch::cli::OutputMode output_mode{cch::cli::OutputMode::Text};
     bool workspace_explicit{false};
     int max_turns{8};
     std::filesystem::path workspace{std::filesystem::current_path()};
@@ -30,6 +31,7 @@ struct CliConfig {
     std::string model{"gpt-4.1-mini"};
     std::string base_url{"https://api.openai.com"};
     std::string api_key_env{"OPENAI_API_KEY"};
+    std::string mode{"text"};
     std::string prompt;
     std::string help_text;
 };
@@ -98,6 +100,7 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     app.add_option("--model", config.model, "Provider model name")->capture_default_str();
     app.add_option("--base-url", config.base_url, "OpenAI-compatible base URL")->capture_default_str();
     app.add_option("--api-key-env", config.api_key_env, "Environment variable containing API key")->capture_default_str();
+    app.add_option("--mode", config.mode, "Output mode: text or json")->capture_default_str();
     app.add_option("prompt", prompt_parts, "Prompt")->expected(0, -1);
 
     try {
@@ -128,9 +131,22 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
         config.max_turns = max_turns_option;
     }
 
+    if (config.mode == "text") {
+        config.output_mode = cch::cli::OutputMode::Text;
+    } else if (config.mode == "json") {
+        config.output_mode = cch::cli::OutputMode::Json;
+    } else if (config.mode == "rpc") {
+        return std::unexpected(cli_error("--mode rpc is not supported yet"));
+    } else {
+        return std::unexpected(cli_error("unsupported --mode: " + config.mode));
+    }
+
     config.prompt = join_prompt(prompt_parts);
     if (config.max_turns <= 0) {
         return std::unexpected(cli_error("--max-turns must be positive"));
+    }
+    if (config.output_mode == cch::cli::OutputMode::Json && config.repl) {
+        return std::unexpected(cli_error("--mode json cannot be combined with --repl"));
     }
     if (!config.repl && config.prompt.empty()) {
         return std::unexpected(cli_error("prompt is required unless --repl is used"));
@@ -230,6 +246,7 @@ int main(int argc, char** argv) {
         config.fake,
         config.repl,
         config.enable_bash,
+        config.output_mode,
         config.max_turns,
         config.workspace_explicit,
         config.workspace,

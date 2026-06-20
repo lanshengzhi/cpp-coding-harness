@@ -60,6 +60,7 @@ Run the binary with the deterministic fake provider:
 ```bash
 ./build/cpp_harness --fake --session /tmp/cpp-session.jsonl "hello"
 ./build/cpp_harness --fake --workspace . --session /tmp/cpp-read.jsonl "read README.md"
+./build/cpp_harness --fake --mode json --session /tmp/cpp-json.jsonl "hello" | jq -c 'select(.type == "message_update")'
 ./build/cpp_harness --fake --repl --session /tmp/cpp-repl.jsonl
 ```
 
@@ -137,7 +138,7 @@ Long-term work tracks pi module and contract parity in `docs/plans/2026-06-16-00
 
 ## CLI states
 
-The CLI prints stable semantic event lines:
+The default text CLI prints stable semantic event lines:
 
 - `[model-request] turn N`
 - `[assistant] <text>`
@@ -148,7 +149,9 @@ The CLI prints stable semantic event lines:
 - `[max-turns] max_turns_exceeded`
 - `[completed] <stop reason>`
 
-One-shot mode runs one prompt. `--repl` keeps history in memory for multiple prompts. `--resume <session.jsonl>` loads the redacted typed JSONL history and appends new messages. `--session <path>` always creates a new file; use `--resume` to append.
+`--mode json` emits the first machine-readable surface: one compact JSON object per stdout line. The first record is a session header, followed by a C++ JSON stream schema v1 subset of pi-named lifecycle events such as `agent_start`, `turn_start`, `message_update`, `tool_execution_start`, `tool_execution_end`, `turn_end`, and a final `runtime_terminal` record. Text-mode final assistant output is suppressed in JSON mode so stdout remains JSONL after the session header. Startup/pre-session validation errors still report on stderr with a non-zero exit and are not a complete machine-readable CLI error protocol.
+
+One-shot mode runs one prompt. `--repl` keeps history in memory for multiple prompts. `--mode json` cannot be combined with `--repl`; RPC mode is not implemented yet. `--resume <session.jsonl>` loads the redacted typed JSONL history and appends new messages. `--session <path>` always creates a new file; use `--resume` to append.
 
 ## Tools
 
@@ -199,4 +202,4 @@ These cover:
 
 ## Deferred
 
-Not included yet: rich TUI, extensions/skills, additional provider adapters and model catalog/config resolution, OAuth, session tree navigation/branching/compaction semantics, multi-replacement edits, native Windows shell process-tree termination semantics, tool execution streaming updates, subagents, MCP/RPC embedding, permission prompts, image generation behavior, C++26 reflection-generated schema, `std::execution` senders/receivers, ABI-stable binary distribution, or OS-level sandboxing.
+Not included yet: rich TUI, extensions/skills, additional provider adapters and model catalog/config resolution, OAuth, session tree navigation/branching/compaction semantics, multi-replacement edits, native Windows shell process-tree termination semantics, tool execution streaming updates, subagents, RPC mode, embeddable SDK surface, MCP integration, permission prompts, image generation behavior, C++26 reflection-generated schema, `std::execution` senders/receivers, ABI-stable binary distribution, or OS-level sandboxing.
