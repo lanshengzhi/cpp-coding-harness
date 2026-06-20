@@ -271,3 +271,185 @@ TEST_CASE("SessionTree root returns nullptr for empty tree", "[harness][session]
     CHECK(tree.leaf_entry() == nullptr);
     CHECK(tree.leaf_id().empty());
 }
+
+// ── U3: Context reconstruction ──
+
+namespace {
+ai::MessageVariant user_msg(std::string text) {
+    return ai::MessageVariant{ai::user_text_message(std::move(text))};
+}
+
+std::string first_user_text(const std::vector<ai::MessageVariant>& msgs) {
+    for (const auto& m : msgs) {
+        if (const auto* u = std::get_if<ai::UserMessage>(&m)) {
+            if (!u->content.empty()) {
+                if (const auto* t = std::get_if<ai::TextContent>(&u->content.front())) {
+                    return t->text;
+                }
+            }
+        }
+    }
+    return {};
+}
+} // namespace
+
+TEST_CASE("buildSessionContext linear tree returns all messages", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "ctx-linear.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(user_msg("first")));
+    REQUIRE(store->append(user_msg("second")));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    harness::session::SessionTree tree(std::move(*loaded));
+
+    auto ctx = tree.buildSessionContext();
+    REQUIRE(ctx.messages.size() == 2);
+    CHECK(first_user_text(ctx.messages) == "first");
+    CHECK_FALSE(ctx.model.has_value());
+    CHECK_FALSE(ctx.thinking_level.has_value());
+}
+
+TEST_CASE("buildSessionContext extracts model and thinking level", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "ctx-model.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    // Use nullopt parent_ids for linear chain inference.
+    REQUIRE(store->append_model_change(std::nullopt, "openai", "gpt-4o"));
+    REQUIRE(store->append_thinking_level_change(std::nullopt, "high"));
+    REQUIRE(store->append(user_msg("hello")));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    harness::session::SessionTree tree(std::move(*loaded));
+
+    auto ctx = tree.buildSessionContext();
+    CHECK(ctx.model == "gpt-4o");
+    CHECK(ctx.thinking_level == "high");
+    REQUIRE(ctx.messages.size() == 1);
+    CHECK(first_user_text(ctx.messages) == "hello");
+}
+
+TEST_CASE("buildSessionContext compaction skips pre-kept messages", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "ctx-compact.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    // Write 3 messages, then a compaction that keeps from message 3
+    REQUIRE(store->append(user_msg("msg1")));
+    REQUIRE(store->append(user_msg("msg2")));
+    REQUIRE(store->append(user_msg("msg3")));
+
+    // Get the entry IDs from a separate load to construct the compaction
+    auto pre = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(pre);
+    REQUIRE(pre->entries.size() >= 4);  // header + 3 messages
+    std::string msg3_id = pre->entries[3].entry_id;  // third message (1-indexed after header)
+
+    // Now write the compaction entry via open_existing
+    auto resumed = harness::session::JsonlSessionStore::open_existing(path);
+    REQUIRE(resumed);
+    REQUIRE(resumed->append_compaction(std::nullopt, "summary of msg1-2", msg3_id, 1000, std::nullopt, std::nullopt));
+    REQUIRE(resumed->append(user_msg("msg4")));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    harness::session::SessionTree tree(std::move(*loaded));
+
+    auto ctx = tree.buildSessionContext();
+    // Expected: CompactionSummaryMessage + msg3 + msg4 (msg1 and msg2 are before firstKeptEntryId)
+    REQUIRE(ctx.messages.size() == 3);
+    // First message should be compaction summary
+    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(ctx.messages[0]));
+    CHECK(std::get<ai::CompactionSummaryMessage>(ctx.messages[0]).summary == "summary of msg1-2");
+    // Remaining should be msg3 and msg4
+    CHECK(first_user_text({ctx.messages[1]}) == "msg3");
+    CHECK(first_user_text({ctx.messages[2]}) == "msg4");
+}
+
+TEST_CASE("buildSessionContext branch summary converted to message", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "ctx-branch.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(user_msg("root")));
+    REQUIRE(store->append_branch_summary(std::nullopt, "from-branch", "explored X", std::nullopt, std::nullopt));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    harness::session::SessionTree tree(std::move(*loaded));
+
+    auto ctx = tree.buildSessionContext();
+    REQUIRE(ctx.messages.size() == 2);
+    // First: user message
+    CHECK(first_user_text({ctx.messages[0]}) == "root");
+    // Second: BranchSummaryMessage
+    CHECK(std::holds_alternative<ai::BranchSummaryMessage>(ctx.messages[1]));
+    CHECK(std::get<ai::BranchSummaryMessage>(ctx.messages[1]).summary == "explored X");
+}
+
+TEST_CASE("buildSessionContext custom message converted", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "ctx-custom.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(user_msg("root")));
+    REQUIRE(store->append_custom_message_entry(std::nullopt, "my-ext", "injected", true, std::nullopt));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    harness::session::SessionTree tree(std::move(*loaded));
+
+    auto ctx = tree.buildSessionContext();
+    REQUIRE(ctx.messages.size() == 2);
+    CHECK(std::holds_alternative<ai::CustomMessage>(ctx.messages[1]));
+    const auto& cm = std::get<ai::CustomMessage>(ctx.messages[1]);
+    CHECK(cm.custom_type == "my-ext");
+    REQUIRE_FALSE(cm.content.empty());
+    CHECK(std::get<ai::TextContent>(cm.content.front()).text == "injected");
+}
+
+TEST_CASE("buildSessionContext empty tree returns empty context", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "ctx-empty.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    harness::session::SessionTree tree(std::move(*loaded));
+
+    auto ctx = tree.buildSessionContext();
+    CHECK(ctx.messages.empty());
+    CHECK_FALSE(ctx.model.has_value());
+}
+
+TEST_CASE("buildSessionContext respects branch navigation", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "ctx-nav.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(user_msg("first")));
+    REQUIRE(store->append(user_msg("second")));
+    REQUIRE(store->append(user_msg("third")));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    harness::session::SessionTree tree(std::move(*loaded));
+
+    // Default: leaf is third, context has 3 messages
+    auto ctx_all = tree.buildSessionContext();
+    CHECK(ctx_all.messages.size() == 3);
+
+    // Branch to first entry
+    std::string first_id = tree.entries()[0].entry_id;
+    REQUIRE(tree.branch(first_id).has_value());
+
+    // Now context should have only 1 message
+    auto ctx_branched = tree.buildSessionContext();
+    CHECK(ctx_branched.messages.size() == 1);
+    CHECK(first_user_text(ctx_branched.messages) == "first");
+}

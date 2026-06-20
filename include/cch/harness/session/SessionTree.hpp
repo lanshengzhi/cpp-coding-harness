@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SessionEntry.hpp"
+#include "../../ai/Message.hpp"
 #include "../../util/Error.hpp"
 
 #include <cstddef>
@@ -11,6 +12,16 @@
 #include <vector>
 
 namespace cch::harness::session {
+
+/// Result of context reconstruction from a session tree path.
+struct SessionContext {
+    /// Messages ready for LLM consumption, in chronological order.
+    std::vector<ai::MessageVariant> messages;
+    /// Current model from the nearest ModelChangeEntry on the path.
+    std::optional<std::string> model;
+    /// Current thinking level from the nearest ThinkingLevelChangeEntry on the path.
+    std::optional<std::string> thinking_level;
+};
 
 /// In-memory session tree index and navigation capability.
 ///
@@ -70,6 +81,14 @@ public:
     /// Get the root entry (the one with no parent).
     /// Returns nullptr if tree is empty.
     [[nodiscard]] const SessionEntry* root() const;
+
+    // ── Context reconstruction ──
+
+    /// Reconstruct LLM context from the current leaf path.
+    /// Walks leaf-to-root, handles CompactionEntry (summary→kept messages→
+    /// post-compaction), converts BranchSummaryEntry/CustomMessageEntry to
+    /// message types, and extracts model/thinking-level state.
+    [[nodiscard]] SessionContext buildSessionContext() const;
 
 private:
     void build_index();
