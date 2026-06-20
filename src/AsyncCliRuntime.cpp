@@ -146,10 +146,15 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         return 2;
     }
 
+    coding_agent::CommandRegistry command_registry;
+    register_builtin_commands(command_registry);
+
     coding_agent::runtime::AgentSessionRunner runner(
         *services->client,
         std::move(services->tools),
-        agent::AsyncAgentOptions{config.max_turns, resolved_model});
+        agent::AsyncAgentOptions{config.max_turns, resolved_model},
+        {} /* templates — empty until U3 */,
+        &command_registry);
 
     if (is_rpc_mode(config.output_mode)) {
         return coding_agent::runtime::run_rpc_mode(coding_agent::runtime::RpcModeConfig{
@@ -226,7 +231,32 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         std::string line;
         while (std::cout << "> " && std::getline(std::cin, line)) {
             if (line == "exit" || line == "quit") break;
-            if (!line.empty() && !run_prompt(line)) return 1;
+            if (line.empty()) continue;
+
+            // Intercept slash-commands and shell passthrough
+            if (!line.empty() && (line[0] == '/' || line[0] == '!')) {
+                coding_agent::CommandContext cmd_ctx{
+                    .session_id = store.metadata().session_id,
+                    .workspace_path = store.metadata().workspace.string(),
+                    .provider = resolved_provider,
+                    .model = resolved_model,
+                    .message_count = history.size(),
+                };
+                auto processed = coding_agent::process_prompt(line, {} /* templates */, command_registry, cmd_ctx);
+                if (processed.command_handled) {
+                    if (processed.display_text) {
+                        std::cout << *processed.display_text << '\n';
+                    }
+                    if (processed.shutdown_requested) {
+                        return 0;
+                    }
+                    continue; // back to REPL prompt
+                }
+                // Template expanded — pass expanded text to run_prompt
+                line = std::move(processed.expanded_prompt);
+            }
+
+            if (!run_prompt(line)) return 1;
         }
         return 0;
     }

@@ -67,6 +67,8 @@ Classification:
 | `AgentLoopConfig` | `include/cch/agent/AgentContext.hpp::AsyncAgentOptions` | MVP parity | Current options cover max turns, tools, and event sink; richer queue/hook/options remain deferred. |
 | Agent `ThinkingLevel` | Missing | Near-term parity | U5 introduces an observable field if needed by current state seam; provider-specific model support remains later T2/T3. |
 | `CustomAgentMessages`, `AgentMessage` | `include/cch/ai/Message.hpp::MessageVariant` | Deferred parity | Custom/runtime messages wait for session tree/custom-message support. |
+| `SlashCommandInfo`, command sources | `include/cch/coding_agent/PromptProcessing.hpp::CommandRegistry` | MVP parity | Built-in command registry with session-lifecycle commands (`/session`, `/quit`, `/new`, `/resume`); extension/prompt/skill sources deferred to T6. |
+| `PromptTemplate`, `expandPromptTemplate` | `include/cch/coding_agent/PromptProcessing.hpp` | MVP parity | `PromptTemplate` struct and `expand_prompt_template()` with bash-style arg substitution. File-based template discovery deferred to T6. |
 | `AgentState` | Missing | Near-term parity | U5 adds passive `AgentState` for active tools, messages, streaming message, pending tool calls, model, and thinking level. |
 | `AgentToolResult`, `AgentToolUpdateCallback`, `AgentTool` | `include/cch/agent/AgentTool.hpp` (`AsyncToolExecutionResult`, `AsyncAgentTool`) | MVP parity | Current contract is async and value-oriented. Progress/update callbacks are deferred. |
 | `AgentContext` | `include/cch/agent/AgentContext.hpp` | Near-term parity | Current header is options/result-only; U5 decides whether state lives here or in a sibling header. |

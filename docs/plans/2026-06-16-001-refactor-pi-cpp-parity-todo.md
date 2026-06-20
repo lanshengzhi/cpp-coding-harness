@@ -183,9 +183,11 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **Files:** future config/runtime files, `tests/cli/`.
   - **References:** `pi:packages/coding-agent/src/config.ts`, `pi:packages/coding-agent/src/core/settings-manager.ts`, `pi:packages/coding-agent/src/core/model-registry.ts`, `pi:packages/coding-agent/src/core/model-resolver.ts`, `pi:packages/coding-agent/docs/settings.md`, `pi:packages/coding-agent/docs/models.md`.
   - **Done when:** provider/model/base-url/api-key-env defaults can be resolved through configuration rather than ad hoc CLI conditionals.
-- [ ] Add slash-command and prompt-processing seams after runtime/session boundaries are stable.
+- [x] Add slash-command and prompt-processing seams after runtime/session boundaries are stable.
+  - **Files:** `include/cch/coding_agent/PromptProcessing.hpp`, `src/coding_agent/PromptProcessing.cpp`, `src/coding_agent/PromptExpander.cpp`, `src/coding_agent/runtime/AgentSessionRunner.cpp`, `src/AsyncCliRuntime.cpp`, `tests/coding_agent/BuiltinCommandsTest.cpp`, `tests/coding_agent/PromptExpanderTest.cpp`.
   - **References:** `pi:packages/coding-agent/src/core/slash-commands.ts`, `pi:packages/coding-agent/src/core/prompt-templates.ts`, `pi:packages/coding-agent/docs/usage.md`, `pi:packages/coding-agent/docs/prompt-templates.md`.
-  - **Done when:** commands can be tested without starting an interactive TUI.
+  - **Implementation plan:** `docs/plans/2026-06-20-005-feat-slash-command-prompt-processing-plan.md`.
+  - **Status:** `CommandRegistry` with 4 session-lifecycle built-in commands, `process_prompt()` seam in REPL/runner/RPC, `expand_prompt_template()` with bash-style arg substitution. 22 new tests pass.
 
 ### T6. Resources, Skills, Extensions, and Packages
 
