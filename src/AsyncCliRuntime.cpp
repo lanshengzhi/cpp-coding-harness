@@ -8,6 +8,7 @@
 #include "coding_agent/runtime/RpcMode.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
+#include "harness/WorkspaceFileSystem.hpp"
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
@@ -161,7 +162,8 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         std::move(services->tools),
         agent::AsyncAgentOptions{config.max_turns, resolved_model},
         {} /* templates — empty until U3 */,
-        &command_registry);
+        &command_registry,
+        std::move(services->skill_load_result.skills));
 
     if (is_rpc_mode(config.output_mode)) {
         return coding_agent::runtime::run_rpc_mode(coding_agent::runtime::RpcModeConfig{
@@ -249,7 +251,9 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
                     .model = resolved_model,
                     .message_count = history.size(),
                 };
-                auto processed = coding_agent::process_prompt(line, {} /* templates */, command_registry, cmd_ctx);
+                auto processed = coding_agent::process_prompt(line, {} /* templates */,
+                    command_registry, cmd_ctx,
+                    runner.skills(), harness::WorkspaceFileSystem{store.metadata().workspace});
                 if (processed.command_handled) {
                     if (processed.display_text) {
                         std::cout << *processed.display_text << '\n';

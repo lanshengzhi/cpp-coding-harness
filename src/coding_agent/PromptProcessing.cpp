@@ -1,5 +1,11 @@
 #include "../../include/cch/coding_agent/PromptProcessing.hpp"
 
+#include "../../include/cch/coding_agent/SkillFormatting.hpp"
+#include "../coding_agent/SkillFrontmatterParser.hpp"
+#include "../harness/WorkspaceFileSystem.hpp"
+
+#include <iostream>
+
 namespace cch::coding_agent {
 
 void register_builtin_commands(CommandRegistry& registry) {
@@ -92,6 +98,73 @@ PromptProcessingResult process_prompt(
     result.command_handled = false;
     result.expanded_prompt = std::string{raw_input};
     return result;
+}
+
+std::string expand_skill_command(
+    std::string_view input,
+    const std::vector<Skill>& skills,
+    const harness::WorkspaceFileSystem& fs) {
+    // Fast path: not a skill command
+    if (!input.starts_with("/skill:")) {
+        return std::string{input};
+    }
+
+    // Parse skill name: text between /skill: and first space (or end of string)
+    std::string_view rest = input.substr(7); // strip "/skill:"
+    auto space_pos = rest.find_first_of(" \t");
+    std::string_view name = (space_pos == std::string_view::npos)
+        ? rest
+        : rest.substr(0, space_pos);
+
+    // Bare /skill: with no name — passthrough
+    if (name.empty()) {
+        return std::string{input};
+    }
+
+    // Parse args: everything after the skill name
+    std::string_view args = (space_pos == std::string_view::npos)
+        ? std::string_view{}
+        : trim_left(rest.substr(space_pos + 1));
+
+    // Look up skill by name
+    const Skill* found = nullptr;
+    for (const auto& skill : skills) {
+        if (skill.name == name) {
+            found = &skill;
+            break;
+        }
+    }
+
+    if (!found) {
+        std::cerr << "[skill:warn] unknown skill: " << name << '\n';
+        return std::string{input};
+    }
+
+    // Use the cached skill content (already body after frontmatter from loader).
+    // The C++ loader stores the full body in Skill::content, unlike pi which
+    // only stores metadata at load time and re-reads on invocation.
+    return formatSkillInvocation(*found, found->content, args);
+}
+
+PromptProcessingResult process_prompt(
+    std::string_view raw_input,
+    const std::vector<PromptTemplate>& templates,
+    CommandRegistry& registry,
+    const CommandContext& ctx,
+    const std::vector<Skill>& skills,
+    const harness::WorkspaceFileSystem& fs) {
+    // Expand /skill:name inline before command dispatch
+    auto expanded_skill = expand_skill_command(raw_input, skills, fs);
+    if (expanded_skill != raw_input) {
+        // Skill was expanded — pass to agent loop as regular prompt
+        PromptProcessingResult result;
+        result.command_handled = false;
+        result.expanded_prompt = std::move(expanded_skill);
+        return result;
+    }
+
+    // No skill expansion — fall through to normal processing
+    return process_prompt(raw_input, templates, registry, ctx);
 }
 
 } // namespace cch::coding_agent

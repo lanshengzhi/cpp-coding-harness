@@ -1,11 +1,17 @@
 #pragma once
 
+#include <cch/coding_agent/Skill.hpp>
+
 #include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
+
+namespace cch::harness {
+class WorkspaceFileSystem;
+}
 
 namespace cch::coding_agent {
 
@@ -115,6 +121,14 @@ private:
 /// Registers the built-in session-lifecycle slash commands.
 void register_builtin_commands(CommandRegistry& registry);
 
+/// Expand a skill command (/skill:name args) to its full <skill> XML block.
+/// Returns the expanded text, or the original input if no skill matched.
+/// Prints diagnostics to stderr for unknown skills and file read failures.
+[[nodiscard]] std::string expand_skill_command(
+    std::string_view input,
+    const std::vector<Skill>& skills,
+    const harness::WorkspaceFileSystem& fs);
+
 /// Expand a prompt template if input matches `/templateName args`.
 /// Returns the expanded text, or the original input if no match.
 [[nodiscard]] std::string expand_prompt_template(
@@ -128,5 +142,15 @@ void register_builtin_commands(CommandRegistry& registry);
     const std::vector<PromptTemplate>& templates,
     CommandRegistry& registry,
     const CommandContext& ctx = {});
+
+/// Process raw user input with skill expansion support.
+/// Expands /skill:name inline before slash-command dispatch.
+[[nodiscard]] PromptProcessingResult process_prompt(
+    std::string_view raw_input,
+    const std::vector<PromptTemplate>& templates,
+    CommandRegistry& registry,
+    const CommandContext& ctx,
+    const std::vector<Skill>& skills,
+    const harness::WorkspaceFileSystem& fs);
 
 } // namespace cch::coding_agent

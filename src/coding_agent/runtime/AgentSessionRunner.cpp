@@ -1,6 +1,8 @@
 #include "AgentSessionRunner.hpp"
 
 #include "../../../include/cch/ai/Content.hpp"
+#include "../../../include/cch/coding_agent/SkillFormatting.hpp"
+#include "../../harness/WorkspaceFileSystem.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -27,10 +29,28 @@ AgentSessionRunner::AgentSessionRunner(
     agent::AsyncToolRegistry registry,
     agent::AsyncAgentOptions options,
     std::vector<PromptTemplate> templates,
-    CommandRegistry* command_registry)
-    : loop_(client, std::move(registry), std::move(options)),
-      templates_(std::move(templates)),
-      command_registry_(command_registry) {}
+    CommandRegistry* command_registry,
+    std::vector<Skill> skills)
+    : templates_(std::move(templates)),
+      command_registry_(command_registry),
+      skills_(std::move(skills)) {
+    // U4: Build the <available_skills> block once at construction time and
+    // inject it into the agent context via the get_steering_messages hook.
+    // This is called on every turn — the block is static and cheap to emit.
+    std::string skills_block = formatSkillsForPrompt(skills_);
+    if (!skills_block.empty()) {
+        options.get_steering_messages = [block = std::move(skills_block)]()
+            -> util::Expected<std::vector<ai::MessageVariant>> {
+            ai::UserMessage msg;
+            msg.content.emplace_back(ai::TextContent{block});
+            std::vector<ai::MessageVariant> msgs;
+            msgs.push_back(ai::MessageVariant{std::move(msg)});
+            return msgs;
+        };
+    }
+    // Construct loop_ last — it takes ownership of options (move-only)
+    loop_.emplace(client, std::move(registry), std::move(options));
+}
 
 PromptRunResult AgentSessionRunner::run_prompt(
     std::vector<ai::MessageVariant>& history,
@@ -47,7 +67,9 @@ PromptRunResult AgentSessionRunner::run_prompt(
     };
     auto processed = process_prompt(prompt, templates_,
         command_registry_ ? *command_registry_ : CommandRegistry::empty(),
-        cmd_ctx);
+        cmd_ctx,
+        skills_,
+        harness::WorkspaceFileSystem{store.metadata().workspace});
     if (processed.command_handled) {
         if (processed.shutdown_requested) {
             return PromptRunResult{true, "shutdown", {}};
@@ -63,7 +85,7 @@ PromptRunResult AgentSessionRunner::run_prompt(
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            result = co_await loop_.continue_with(history, std::move(prompt), std::move(sink));
+            result = co_await loop_->continue_with(history, std::move(prompt), std::move(sink));
             co_return;
         },
         boost::asio::detached);
