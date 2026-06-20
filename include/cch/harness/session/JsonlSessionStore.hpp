@@ -12,6 +12,8 @@
 
 namespace cch::harness::session {
 
+class SessionTree;
+
 class JsonlSessionStore {
 public:
     JsonlSessionStore() = default;
@@ -19,6 +21,9 @@ public:
     static util::Expected<JsonlSessionStore> create_new(const std::filesystem::path& path, SessionMetadata metadata);
     static util::Expected<JsonlSessionStore> open_existing(const std::filesystem::path& path);
     static util::Expected<LoadedSession> load(const std::filesystem::path& path);
+
+    /// Load a session and construct a SessionTree for navigation.
+    static util::Expected<SessionTree> open_as_tree(const std::filesystem::path& path);
 
     [[nodiscard]] util::ExpectedVoid append(const ai::MessageVariant& message);
 
@@ -54,6 +59,11 @@ public:
                                                             std::optional<bool> from_hook);
     [[nodiscard]] util::ExpectedVoid append_session_info(std::optional<std::string> parent_id,
                                                           std::string name);
+
+    /// Write a Leaf entry to persist the current active leaf position.
+    /// The target_id is the entry ID that becomes the new leaf.
+    [[nodiscard]] util::ExpectedVoid append_leaf(std::optional<std::string> parent_id,
+                                                  std::string target_id);
 
     [[nodiscard]] const std::filesystem::path& path() const { return path_; }
     [[nodiscard]] const SessionMetadata& metadata() const { return metadata_; }

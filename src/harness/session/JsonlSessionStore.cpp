@@ -1,4 +1,5 @@
 #include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
+#include "../../../include/cch/harness/session/SessionTree.hpp"
 
 #include "../../../include/cch/ai/glaze/AiJson.hpp"
 #include "../../../include/cch/util/Json.hpp"
@@ -144,6 +145,14 @@ struct SessionInfoDto {
     std::optional<std::string> parentId;
     std::string timestamp;
     std::string name;
+};
+
+struct LeafDto {
+    std::string type{"leaf"};
+    std::string id;
+    std::optional<std::string> parentId;
+    std::string timestamp;
+    std::string targetId;
 };
 
 [[nodiscard]] util::Error session_error(std::string message, std::string detail = {}) {
@@ -736,6 +745,14 @@ util::Expected<LoadedSession> JsonlSessionStore::load(const std::filesystem::pat
     return loaded;
 }
 
+util::Expected<SessionTree> JsonlSessionStore::open_as_tree(const std::filesystem::path& path) {
+    auto loaded = load(path);
+    if (!loaded.has_value()) {
+        return std::unexpected(loaded.error());
+    }
+    return SessionTree(std::move(*loaded));
+}
+
 util::ExpectedVoid JsonlSessionStore::append(const ai::MessageVariant& message) {
     auto redacted = redacted_message(message);
     auto entry_json = util::write_json(to_dto(generate_entry_id(), redacted));
@@ -895,6 +912,17 @@ util::ExpectedVoid JsonlSessionStore::append_session_info(
     dto.parentId = std::move(parent_id);
     dto.timestamp = generate_iso_timestamp();
     dto.name = std::move(name);
+    return write_entry_line(path_, dto, next_entry_id_);
+}
+
+util::ExpectedVoid JsonlSessionStore::append_leaf(
+    std::optional<std::string> parent_id,
+    std::string target_id) {
+    LeafDto dto;
+    dto.id = generate_entry_id();
+    dto.parentId = std::move(parent_id);
+    dto.timestamp = generate_iso_timestamp();
+    dto.targetId = std::move(target_id);
     return write_entry_line(path_, dto, next_entry_id_);
 }
 

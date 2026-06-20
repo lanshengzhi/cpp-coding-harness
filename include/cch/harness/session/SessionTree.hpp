@@ -5,6 +5,7 @@
 #include "../../util/Error.hpp"
 
 #include <cstddef>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -90,10 +91,45 @@ public:
     /// message types, and extracts model/thinking-level state.
     [[nodiscard]] SessionContext buildSessionContext() const;
 
+    // ── Branch summary hook ──
+
+    /// Context passed to a branch summary hook when switching branches.
+    struct BranchSummaryContext {
+        /// Leaf ID of the branch being abandoned.
+        std::string from_leaf_id;
+        /// Target entry ID being navigated to.
+        std::string to_entry_id;
+        /// Entries on the abandoned branch (from old leaf to common ancestor).
+        std::vector<const SessionEntry*> branch_entries;
+    };
+
+    /// Data produced by a branch summary hook.
+    struct BranchSummaryData {
+        std::string summary;
+        std::optional<util::JsonValue> details;
+    };
+
+    /// Hook for generating branch summaries.
+    /// Returns BranchSummaryData on success, nullopt to skip summary,
+    /// or an error on failure.
+    using BranchSummaryHook = std::move_only_function<
+        util::Expected<std::optional<BranchSummaryData>>(const BranchSummaryContext&)>;
+
+    /// Navigate to a target entry and optionally generate a branch summary.
+    /// If hook is provided and returns data, a BranchSummary entry is appended.
+    /// The append_writer callback writes entries to the underlying store.
+    [[nodiscard]] util::ExpectedVoid branchWithSummary(
+        std::string_view entry_id,
+        BranchSummaryHook& hook,
+        std::move_only_function<util::ExpectedVoid(const SessionEntry&)> append_writer);
+
 private:
     void build_index();
 
     void restore_leaf_position();
+
+    /// Emit a message entry (or derived type) into the session context.
+    static void emitEntryMessage(SessionContext& ctx, const SessionEntry* entry);
 
     /// Get the effective parent ID for leaf-to-root traversal.
     /// Prefers explicit parent_id, falls back to inferred parent from linear ordering.

@@ -453,3 +453,147 @@ TEST_CASE("buildSessionContext respects branch navigation", "[harness][session][
     CHECK(ctx_branched.messages.size() == 1);
     CHECK(first_user_text(ctx_branched.messages) == "first");
 }
+
+// ── U5: JsonlSessionStore integration ──
+
+TEST_CASE("open_as_tree returns valid SessionTree", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "open-tree.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(user_msg("hello")));
+
+    auto tree = harness::session::JsonlSessionStore::open_as_tree(path);
+    REQUIRE(tree.has_value());
+    CHECK(tree->size() == 1);
+    CHECK_FALSE(tree->leaf_id().empty());
+}
+
+TEST_CASE("append_leaf round-trips and restores leaf position", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "leaf-roundtrip.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(user_msg("first")));
+    REQUIRE(store->append(user_msg("second")));
+
+    // Get second message's ID
+    auto pre = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(pre);
+    REQUIRE(pre->entries.size() >= 3);
+    std::string second_id = pre->entries[2].entry_id;
+
+    // Open existing and write a Leaf entry pointing to second message
+    auto resumed = harness::session::JsonlSessionStore::open_existing(path);
+    REQUIRE(resumed);
+    REQUIRE(resumed->append_leaf(std::nullopt, second_id));
+
+    // Load as tree — leaf should be restored to second_id
+    auto tree = harness::session::JsonlSessionStore::open_as_tree(path);
+    REQUIRE(tree.has_value());
+    CHECK(tree->leaf_id() == second_id);
+}
+
+TEST_CASE("open_as_tree missing file returns error", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "nonexistent.jsonl";
+    auto tree = harness::session::JsonlSessionStore::open_as_tree(path);
+    REQUIRE_FALSE(tree.has_value());
+}
+
+// ── U4: Branch summary hook ──
+
+TEST_CASE("branchWithSummary generates summary and switches leaf", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "branch-summary-hook.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(user_msg("root")));
+    REQUIRE(store->append(user_msg("branch-a")));
+    REQUIRE(store->append(user_msg("branch-b")));
+
+    auto tree = harness::session::JsonlSessionStore::open_as_tree(path);
+    REQUIRE(tree.has_value());
+
+    std::string root_id = tree->entries()[0].entry_id;
+    std::string leaf_before = tree->leaf_id();
+
+    // Hook that returns a summary.
+    std::vector<harness::session::SessionEntry> appended_entries;
+    harness::session::SessionTree::BranchSummaryHook hook =
+        [](const harness::session::SessionTree::BranchSummaryContext& ctx)
+        -> util::Expected<std::optional<harness::session::SessionTree::BranchSummaryData>> {
+        harness::session::SessionTree::BranchSummaryData data;
+        data.summary = "summarized " + std::to_string(ctx.branch_entries.size()) + " entries";
+        return data;
+    };
+
+    auto append_writer = [&](const harness::session::SessionEntry& entry) -> util::ExpectedVoid {
+        appended_entries.push_back(entry);
+        return {};
+    };
+
+    auto result = tree->branchWithSummary(root_id, hook, std::move(append_writer));
+    REQUIRE(result.has_value());
+
+    // Leaf should now be root_id
+    CHECK(tree->leaf_id() == root_id);
+
+    // A branch summary should have been appended
+    REQUIRE(appended_entries.size() == 1);
+    CHECK(appended_entries[0].kind == harness::session::SessionEntryKind::BranchSummary);
+    CHECK(appended_entries[0].parent_id == root_id);
+}
+
+TEST_CASE("branchWithSummary nullopt skips summary", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "skip-summary.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(user_msg("root")));
+    REQUIRE(store->append(user_msg("leaf")));
+
+    auto tree = harness::session::JsonlSessionStore::open_as_tree(path);
+    REQUIRE(tree.has_value());
+
+    std::string root_id = tree->entries()[0].entry_id;
+
+    // Hook that returns nullopt (skip summary).
+    harness::session::SessionTree::BranchSummaryHook hook =
+        [](const harness::session::SessionTree::BranchSummaryContext&)
+        -> util::Expected<std::optional<harness::session::SessionTree::BranchSummaryData>> {
+        return std::nullopt;
+    };
+
+    bool writer_called = false;
+    auto append_writer = [&](const harness::session::SessionEntry&) -> util::ExpectedVoid {
+        writer_called = true;
+        return {};
+    };
+
+    auto result = tree->branchWithSummary(root_id, hook, std::move(append_writer));
+    REQUIRE(result.has_value());
+    CHECK(tree->leaf_id() == root_id);
+    CHECK_FALSE(writer_called);  // No entry written
+}
+
+TEST_CASE("branchWithSummary rejects unknown target", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "bad-target.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(user_msg("msg")));
+
+    auto tree = harness::session::JsonlSessionStore::open_as_tree(path);
+    REQUIRE(tree.has_value());
+
+    harness::session::SessionTree::BranchSummaryHook hook =
+        [](const harness::session::SessionTree::BranchSummaryContext&)
+        -> util::Expected<std::optional<harness::session::SessionTree::BranchSummaryData>> {
+        return std::nullopt;
+    };
+    auto append_writer = [](const harness::session::SessionEntry&) -> util::ExpectedVoid { return {}; };
+
+    auto result = tree->branchWithSummary("deadbeef", hook, std::move(append_writer));
+    REQUIRE_FALSE(result.has_value());
+}

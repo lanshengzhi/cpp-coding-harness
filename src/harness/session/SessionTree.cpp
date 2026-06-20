@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <set>
+#include <utility>
 
 namespace cch::harness::session {
 
@@ -50,7 +51,6 @@ void SessionTree::build_index() {
         children_[effective_parent].push_back(i);
 
         // Record the effective parent for leaf-to-root traversal.
-        // This may differ from entry.parent_id when inferred from linear order.
         if (!entry.parent_id.has_value() || entry.parent_id->empty()) {
             inferred_parent_[entry.entry_id] = effective_parent;
         }
@@ -66,12 +66,10 @@ const SessionEntry* SessionTree::getEntry(std::string_view entry_id) const {
 }
 
 std::optional<std::string> SessionTree::effective_parent_id(std::string_view entry_id) const {
-    // Prefer explicit parent_id from the entry.
     const auto* entry = getEntry(entry_id);
     if (entry != nullptr && entry->parent_id.has_value() && !entry->parent_id->empty()) {
         return entry->parent_id;
     }
-    // Fall back to inferred parent from linear ordering.
     auto it = inferred_parent_.find(std::string{entry_id});
     if (it != inferred_parent_.end()) {
         return it->second;
@@ -96,12 +94,10 @@ void SessionTree::restore_leaf_position() {
     // Scan entries in reverse for the last Leaf entry.
     for (auto it = entries_.rbegin(); it != entries_.rend(); ++it) {
         if (it->kind == SessionEntryKind::Leaf) {
-            // Extract targetId from the payload.
             if (const auto* obj = it->payload.get_if<util::JsonValue::object_t>()) {
                 auto target = obj->find("targetId");
                 if (target != obj->end()) {
                     if (const auto* target_str = target->second.get_if<std::string>()) {
-                        // Verify the target exists in the tree.
                         if (getEntry(*target_str) != nullptr) {
                             leaf_id_ = *target_str;
                             return;
@@ -163,7 +159,6 @@ std::vector<const SessionEntry*> SessionTree::getBranch(std::string_view from_id
 const SessionEntry* SessionTree::root() const {
     if (entries_.empty()) return nullptr;
 
-    // Find the entry with no valid parent.
     for (const auto& entry : entries_) {
         bool has_parent = entry.parent_id.has_value() &&
                           !entry.parent_id->empty() &&
@@ -173,7 +168,6 @@ const SessionEntry* SessionTree::root() const {
         }
     }
 
-    // Fallback: first entry.
     return &entries_.front();
 }
 
@@ -182,14 +176,13 @@ const SessionEntry* SessionTree::root() const {
 SessionContext SessionTree::buildSessionContext() const {
     SessionContext ctx;
 
-    // 1. Collect the leaf-to-root path.
     auto path = getBranch();
     if (path.empty()) return ctx;
 
     // Path is leaf-to-root. Reverse for chronological (root-to-leaf) processing.
     std::reverse(path.begin(), path.end());
 
-    // 2. Extract model and thinking level from the path.
+    // Extract model and thinking level from the path (closest to leaf wins).
     for (auto it = path.rbegin(); it != path.rend(); ++it) {
         const auto& entry = **it;
         if (entry.kind == SessionEntryKind::ModelChange) {
@@ -215,11 +208,7 @@ SessionContext SessionTree::buildSessionContext() const {
         }
     }
 
-    // 3. Find the most recent CompactionEntry (closest to leaf).
-    //    We walk from leaf towards root; the first compaction we encounter
-    //    determines the message boundary.
-    // Walk from leaf towards root; the first compaction we encounter
-    // is the one closest to the leaf.
+    // Find the compaction entry closest to the leaf.
     const SessionEntry* compaction = nullptr;
     for (auto it = path.rbegin(); it != path.rend(); ++it) {
         if ((*it)->kind == SessionEntryKind::Compaction) {
@@ -229,7 +218,7 @@ SessionContext SessionTree::buildSessionContext() const {
     }
 
     if (compaction != nullptr) {
-        // 3a. Extract firstKeptEntryId from the compaction entry.
+        // Extract firstKeptEntryId from the compaction entry.
         std::string first_kept_id;
         if (const auto* obj = compaction->payload.get_if<util::JsonValue::object_t>()) {
             auto fk = obj->find("firstKeptEntryId");
@@ -238,7 +227,7 @@ SessionContext SessionTree::buildSessionContext() const {
             }
         }
 
-        // 3b. Emit the compaction summary as a CompactionSummaryMessage.
+        // Emit the compaction summary as a CompactionSummaryMessage.
         std::string summary_text;
         if (const auto* obj = compaction->payload.get_if<util::JsonValue::object_t>()) {
             auto s = obj->find("summary");
@@ -249,11 +238,10 @@ SessionContext SessionTree::buildSessionContext() const {
         if (!summary_text.empty()) {
             ai::CompactionSummaryMessage csm;
             csm.summary = summary_text;
-            // tokensBefore is optional for context reconstruction.
             ctx.messages.emplace_back(std::move(csm));
         }
 
-        // 3c. Collect entry IDs to skip (before firstKeptEntryId).
+        // Collect entry IDs to skip (before firstKeptEntryId).
         std::set<std::string> skip_ids;
         bool found_kept = false;
         for (const auto* entry : path) {
@@ -264,87 +252,123 @@ SessionContext SessionTree::buildSessionContext() const {
                 skip_ids.insert(entry->entry_id);
             }
             if (entry == compaction) {
-                // Don't skip the compaction entry itself.
                 skip_ids.erase(compaction->entry_id);
                 break;
             }
         }
 
-        // 3d. Emit messages: skip pre-kept entries, include kept and post-compaction.
+        // Emit messages: skip pre-kept, include kept and post-compaction.
         for (const auto* entry : path) {
             if (skip_ids.count(entry->entry_id) > 0) continue;
-            if (entry->kind == SessionEntryKind::Message) {
-                if (entry->message.has_value()) {
-                    ctx.messages.push_back(*entry->message);
-                }
-            } else if (entry->kind == SessionEntryKind::BranchSummary) {
-                ai::BranchSummaryMessage bsm;
-                if (const auto* obj = entry->payload.get_if<util::JsonValue::object_t>()) {
-                    auto s = obj->find("summary");
-                    if (s != obj->end() && s->second.get_if<std::string>()) {
-                        bsm.summary = s->second.get<std::string>();
-                    }
-                    auto f = obj->find("fromId");
-                    if (f != obj->end() && f->second.get_if<std::string>()) {
-                        bsm.from_id = f->second.get<std::string>();
-                    }
-                }
-                ctx.messages.emplace_back(std::move(bsm));
-            } else if (entry->kind == SessionEntryKind::CustomMessage) {
-                ai::CustomMessage cm;
-                if (const auto* obj = entry->payload.get_if<util::JsonValue::object_t>()) {
-                    auto ct = obj->find("customType");
-                    if (ct != obj->end() && ct->second.get_if<std::string>()) {
-                        cm.custom_type = ct->second.get<std::string>();
-                    }
-                    auto c = obj->find("content");
-                    if (c != obj->end() && c->second.get_if<std::string>()) {
-                        cm.content = {ai::TextContent{c->second.get<std::string>(), std::nullopt}};
-                    }
-                }
-                ctx.messages.emplace_back(std::move(cm));
-            }
-            // Skip non-message entry types: ModelChange, ThinkingLevelChange,
-            // Label, Custom, SessionInfo, Leaf, ActiveToolsChange.
+            emitEntryMessage(ctx, entry);
         }
     } else {
         // No compaction on path: emit all messages in order.
         for (const auto* entry : path) {
-            if (entry->kind == SessionEntryKind::Message) {
-                if (entry->message.has_value()) {
-                    ctx.messages.push_back(*entry->message);
-                }
-            } else if (entry->kind == SessionEntryKind::BranchSummary) {
-                ai::BranchSummaryMessage bsm;
-                if (const auto* obj = entry->payload.get_if<util::JsonValue::object_t>()) {
-                    auto s = obj->find("summary");
-                    if (s != obj->end() && s->second.get_if<std::string>()) {
-                        bsm.summary = s->second.get<std::string>();
-                    }
-                    auto f = obj->find("fromId");
-                    if (f != obj->end() && f->second.get_if<std::string>()) {
-                        bsm.from_id = f->second.get<std::string>();
-                    }
-                }
-                ctx.messages.emplace_back(std::move(bsm));
-            } else if (entry->kind == SessionEntryKind::CustomMessage) {
-                ai::CustomMessage cm;
-                if (const auto* obj = entry->payload.get_if<util::JsonValue::object_t>()) {
-                    auto ct = obj->find("customType");
-                    if (ct != obj->end() && ct->second.get_if<std::string>()) {
-                        cm.custom_type = ct->second.get<std::string>();
-                    }
-                    auto c = obj->find("content");
-                    if (c != obj->end() && c->second.get_if<std::string>()) {
-                        cm.content = {ai::TextContent{c->second.get<std::string>(), std::nullopt}};
-                    }
-                }
-                ctx.messages.emplace_back(std::move(cm));
-            }
+            emitEntryMessage(ctx, entry);
         }
     }
 
     return ctx;
+}
+
+void SessionTree::emitEntryMessage(SessionContext& ctx, const SessionEntry* entry) {
+    if (entry->kind == SessionEntryKind::Message) {
+        if (entry->message.has_value()) {
+            ctx.messages.push_back(*entry->message);
+        }
+    } else if (entry->kind == SessionEntryKind::BranchSummary) {
+        ai::BranchSummaryMessage bsm;
+        if (const auto* obj = entry->payload.get_if<util::JsonValue::object_t>()) {
+            auto s = obj->find("summary");
+            if (s != obj->end() && s->second.get_if<std::string>()) {
+                bsm.summary = s->second.get<std::string>();
+            }
+            auto f = obj->find("fromId");
+            if (f != obj->end() && f->second.get_if<std::string>()) {
+                bsm.from_id = f->second.get<std::string>();
+            }
+        }
+        ctx.messages.emplace_back(std::move(bsm));
+    } else if (entry->kind == SessionEntryKind::CustomMessage) {
+        ai::CustomMessage cm;
+        if (const auto* obj = entry->payload.get_if<util::JsonValue::object_t>()) {
+            auto ct = obj->find("customType");
+            if (ct != obj->end() && ct->second.get_if<std::string>()) {
+                cm.custom_type = ct->second.get<std::string>();
+            }
+            auto c = obj->find("content");
+            if (c != obj->end() && c->second.get_if<std::string>()) {
+                cm.content = {ai::TextContent{c->second.get<std::string>(), std::nullopt}};
+            }
+        }
+        ctx.messages.emplace_back(std::move(cm));
+    }
+}
+
+// ── Branch summary hook ──
+
+util::ExpectedVoid SessionTree::branchWithSummary(
+    std::string_view entry_id,
+    BranchSummaryHook& hook,
+    std::move_only_function<util::ExpectedVoid(const SessionEntry&)> append_writer) {
+
+    if (!getEntry(entry_id)) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Session,
+            std::string("target entry not found: ") + std::string{entry_id}));
+    }
+
+    // Collect the abandoned branch.
+    auto from_path = getBranch(leaf_id_);
+    auto to_path = getBranch(entry_id);
+
+    BranchSummaryContext ctx;
+    ctx.from_leaf_id = leaf_id_;
+    ctx.to_entry_id = std::string{entry_id};
+
+    // branch_entries: entries on from_path up to common ancestor.
+    for (const auto* entry : from_path) {
+        bool in_to_path = false;
+        for (const auto* te : to_path) {
+            if (te->entry_id == entry->entry_id) {
+                in_to_path = true;
+                break;
+            }
+        }
+        if (in_to_path) break;
+        ctx.branch_entries.push_back(entry);
+    }
+
+    // Call the hook.
+    auto summary_result = hook(ctx);
+    if (!summary_result.has_value()) {
+        return std::unexpected(summary_result.error());
+    }
+
+    if (summary_result->has_value()) {
+        const auto& data = **summary_result;
+
+        SessionEntry summary_entry;
+        summary_entry.kind = SessionEntryKind::BranchSummary;
+        summary_entry.parent_id = std::string{entry_id};
+
+        util::JsonValue::object_t payload;
+        payload["type"] = util::JsonValue(std::string("branch_summary"));
+        payload["summary"] = util::JsonValue(std::string(data.summary));
+        payload["fromId"] = util::JsonValue(std::string(ctx.from_leaf_id));
+        if (data.details.has_value()) {
+            payload["details"] = util::JsonValue(*data.details);
+        }
+        summary_entry.payload = util::JsonValue{std::move(payload)};
+
+        auto write_result = append_writer(summary_entry);
+        if (!write_result.has_value()) {
+            return write_result;
+        }
+    }
+
+    return branch(entry_id);
 }
 
 } // namespace cch::harness::session
