@@ -609,3 +609,94 @@ TEST_CASE("CLI Kimi path validates KIMI_API_KEY before model request and session
     CHECK(result.output.find("[model-request]") == std::string::npos);
     CHECK_FALSE(std::filesystem::exists(session));
 }
+
+TEST_CASE("CLI skips project skills by default when project trust is unknown", "[cli][project-trust]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    workspace.write(".cpp-harness/skills/demo/SKILL.md",
+                    "---\n"
+                    "name: demo\n"
+                    "description: Demo skill.\n"
+                    "---\n"
+                    "# Demo Skill\n\n"
+                    "Do demo.\n");
+    auto session = workspace.path() / "untrusted-skills.jsonl";
+
+    auto result = run_command_split(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --session " + q(session) + " /skill:demo");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.find("project_skills skipped: untrusted") != std::string::npos);
+    CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
+}
+
+TEST_CASE("CLI approve loads project skills for one run", "[cli][project-trust]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    workspace.write(".cpp-harness/skills/demo/SKILL.md",
+                    "---\n"
+                    "name: demo\n"
+                    "description: Demo skill.\n"
+                    "---\n"
+                    "# Demo Skill\n\n"
+                    "Do demo.\n");
+    auto session = workspace.path() / "trusted-skills.jsonl";
+
+    auto result = run_command_split(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --approve --workspace " + q(workspace.path()) +
+        " --session " + q(session) + " /skill:demo");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.find("project_skills skipped") == std::string::npos);
+    CHECK(result.stdout_text.find("<skill name=\"demo\"") != std::string::npos);
+    CHECK(result.stdout_text.find("Do demo.") != std::string::npos);
+}
+
+TEST_CASE("CLI no-skills disables project skills even when approved", "[cli][project-trust]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    workspace.write(".cpp-harness/skills/demo/SKILL.md",
+                    "---\n"
+                    "name: demo\n"
+                    "description: Demo skill.\n"
+                    "---\n"
+                    "# Demo Skill\n\n"
+                    "Do demo.\n");
+    auto session = workspace.path() / "disabled-skills.jsonl";
+
+    auto result = run_command_split(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --approve --no-skills --workspace " + q(workspace.path()) +
+        " --session " + q(session) + " /skill:demo");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.find("project_skills skipped: disabled") != std::string::npos);
+    CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
+}
+
+TEST_CASE("CLI JSON project trust diagnostics stay on stderr", "[cli][json][project-trust]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    workspace.write(".cpp-harness/skills/demo/SKILL.md",
+                    "---\n"
+                    "name: demo\n"
+                    "description: Demo skill.\n"
+                    "---\n"
+                    "# Demo Skill\n\n"
+                    "Do demo.\n");
+    auto session = workspace.path() / "json-untrusted-skills.jsonl";
+
+    auto result = run_command_split(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --mode json --workspace " + q(workspace.path()) +
+        " --session " + q(session) + " hello");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.find("project_skills skipped: untrusted") != std::string::npos);
+    for (const auto& line : non_empty_lines(result.stdout_text)) {
+        (void)parse_json_line(line);
+    }
+}

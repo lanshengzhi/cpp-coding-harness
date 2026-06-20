@@ -34,18 +34,32 @@ AgentSessionRunner::AgentSessionRunner(
     : templates_(std::move(templates)),
       command_registry_(command_registry),
       skills_(std::move(skills)) {
-    // U4: Build the <available_skills> block once at construction time and
-    // inject it into the agent context via the get_steering_messages hook.
-    // This is called on every turn — the block is static and cheap to emit.
+    // Build the <available_skills> block once at construction time and inject
+    // it into each provider request via transform_context. Unlike queued
+    // steering messages, this does not mutate conversation history or force an
+    // extra turn after the assistant stops.
     std::string skills_block = formatSkillsForPrompt(skills_);
     if (!skills_block.empty()) {
-        options.get_steering_messages = [block = std::move(skills_block)]()
+        auto existing_transform = std::move(options.transform_context);
+        options.transform_context = [block = std::move(skills_block),
+                                        existing = std::move(existing_transform)](
+                                        const std::vector<ai::MessageVariant>& messages) mutable
             -> util::Expected<std::vector<ai::MessageVariant>> {
-            ai::UserMessage msg;
-            msg.content.emplace_back(ai::TextContent{block});
-            std::vector<ai::MessageVariant> msgs;
-            msgs.push_back(ai::MessageVariant{std::move(msg)});
-            return msgs;
+            std::vector<ai::MessageVariant> transformed;
+            if (existing) {
+                auto prior = (*existing)(messages);
+                if (!prior) {
+                    return std::unexpected(prior.error());
+                }
+                transformed = std::move(*prior);
+            } else {
+                transformed = messages;
+            }
+
+            ai::SystemMessage msg;
+            msg.content = block;
+            transformed.insert(transformed.begin(), ai::MessageVariant{std::move(msg)});
+            return transformed;
         };
     }
     // Construct loop_ last — it takes ownership of options (move-only)

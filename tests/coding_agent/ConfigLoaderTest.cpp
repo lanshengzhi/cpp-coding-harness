@@ -83,3 +83,43 @@ TEST_CASE("ConfigLoader resolve_api_key returns nullopt when none set", "[config
     auto result = coding_agent::ConfigLoader::resolve_api_key({"DOES_NOT_EXIST_XYZ"});
     CHECK_FALSE(result.has_value());
 }
+
+TEST_CASE("ConfigLoader loads project trust defaults", "[config][project-trust]") {
+    tests::TempWorkspace workspace;
+    auto config_path = workspace.path() / "config.json";
+    std::ofstream(config_path) << R"({"default_project_trust":"always"})";
+
+    auto config = coding_agent::ConfigLoader::load(config_path.string());
+    REQUIRE(config);
+    REQUIRE(config->default_project_trust.has_value());
+    CHECK(*config->default_project_trust == coding_agent::DefaultProjectTrust::Always);
+}
+
+TEST_CASE("ConfigLoader loads project resource skill enablement", "[config][project-resources]") {
+    tests::TempWorkspace workspace;
+    auto config_path = workspace.path() / "config.json";
+    std::ofstream(config_path) << R"({"project_resources":{"skills":"off"}})";
+
+    auto config = coding_agent::ConfigLoader::load(config_path.string());
+    REQUIRE(config);
+    REQUIRE(config->project_skills.has_value());
+    CHECK(*config->project_skills == coding_agent::ResourceEnablement::Off);
+}
+
+TEST_CASE("ConfigLoader rejects invalid project trust defaults", "[config][project-trust]") {
+    tests::TempWorkspace workspace;
+    auto config_path = workspace.path() / "config.json";
+    std::ofstream(config_path) << R"({"default_project_trust":"sometimes"})";
+
+    auto config = coding_agent::ConfigLoader::load(config_path.string());
+    CHECK_FALSE(config.has_value());
+}
+
+TEST_CASE("ConfigLoader rejects invalid project resource values", "[config][project-resources]") {
+    tests::TempWorkspace workspace;
+    auto config_path = workspace.path() / "config.json";
+    std::ofstream(config_path) << R"({"project_resources":{"skills":"enabled"}})";
+
+    auto config = coding_agent::ConfigLoader::load(config_path.string());
+    CHECK_FALSE(config.has_value());
+}

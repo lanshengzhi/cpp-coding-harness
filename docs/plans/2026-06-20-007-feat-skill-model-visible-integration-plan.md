@@ -13,7 +13,7 @@ Make skill objects (already loaded into `RuntimeServices` by the discovery/loadi
 
 ## Completion Status
 
-Completed on 2026-06-20. The shipped slice adds pi-shaped skill prompt formatting, `<available_skills>` steering-message injection for visible skills, `AgentSessionRunner` skill ownership, REPL/runner/RPC prompt processing with `/skill:name [args]` expansion, and tests for formatting and integration. Runtime skill invocation expands from the cached `Skill::content` loaded at startup; dynamic file re-read/reload remains deferred.
+Completed on 2026-06-20. The shipped slice adds pi-shaped skill prompt formatting, `<available_skills>` context injection for visible skills, `AgentSessionRunner` skill ownership, REPL/runner/RPC prompt processing with `/skill:name [args]` expansion, and tests for formatting and integration. Runtime skill invocation expands from the cached `Skill::content` loaded at startup; dynamic file re-read/reload remains deferred. The context injection now uses `transform_context` rather than queued steering messages so the static skills block does not force extra turns after the assistant stops.
 
 ---
 

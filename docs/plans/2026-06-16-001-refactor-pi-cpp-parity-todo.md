@@ -203,16 +203,17 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **References:** `pi:packages/coding-agent/docs/skills.md`, `pi:packages/agent/src/harness/skills.ts`.
   - **Test scenarios:** project skill discovery, reusable global-style `includeRootFiles` loader behavior, relative reference resolution, disabled model invocation, prompt formatting, and duplicate handling.
   - **Implementation plans:** `docs/plans/2026-06-20-006-feat-skill-file-discovery-plan.md`, `docs/plans/2026-06-20-007-feat-skill-model-visible-integration-plan.md`.
-  - **Status:** `Skill`/diagnostic contracts, frontmatter parsing, recursive/deduplicating loader, runtime startup loading, `<available_skills>` steering-message injection, and `/skill:name [args]` expansion are implemented. CLI wiring currently loads project-local `.cpp-harness/skills`; global `~/.cpp-harness/skills` and config-driven skill directories are deferred.
+  - **Status:** `Skill`/diagnostic contracts, frontmatter parsing, recursive/deduplicating loader, trust-gated runtime startup loading, `<available_skills>` context injection, and `/skill:name [args]` expansion are implemented. Global `~/.cpp-harness/skills`, config-driven skill directories, and live skill reload are deferred.
 - [ ] Implement prompt template loading and invocation.
   - **References:** `pi:packages/coding-agent/docs/prompt-templates.md`, `pi:packages/agent/src/harness/prompt-templates.ts`.
   - **Done when:** templates can be expanded deterministically in tests without provider calls.
 - [ ] Implement package discovery/installation only after resource loading exists.
   - **References:** `pi:packages/coding-agent/docs/packages.md`.
   - **Scope boundary:** do not add npm/git package installation silently; it is a supply-chain surface and needs an explicit design/test plan.
-- [ ] Add project trust and resource enable/disable controls before loading project-local executable resources.
+- [x] Add project trust and resource enable/disable controls before loading project-local executable resources.
   - **References:** `pi:packages/coding-agent/src/cli/project-trust.ts`, `pi:packages/coding-agent/src/core/trust-manager.ts`, `pi:packages/coding-agent/docs/security.md`.
-  - **Done when:** untrusted project resources cannot execute by accident.
+  - **Implementation plan:** `docs/plans/2026-06-20-008-feat-project-trust-resource-controls-plan.md`.
+  - **Status:** Passive trust/resource contracts, marker detection, trust store/resolution, user config defaults, `--approve`/`--no-approve`/`--no-skills`, resource load plans, trust-gated project skill loading, and stderr diagnostics are implemented. Interactive trust prompts, project settings parsing, global resources, extension execution, and package installation remain deferred.
 
 ### T7. TUI, Themes, Keybindings, and Interactive UX
 

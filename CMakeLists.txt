@@ -96,11 +96,13 @@ target_link_libraries(cch_tools
 add_library(cch_coding_agent_runtime
     src/AsyncCliRuntime.cpp
     src/coding_agent/ConfigLoader.cpp
-src/coding_agent/PromptProcessing.cpp
-src/coding_agent/PromptExpander.cpp
+    src/coding_agent/ProjectResources.cpp
+    src/coding_agent/ProjectTrust.cpp
+    src/coding_agent/PromptProcessing.cpp
+    src/coding_agent/PromptExpander.cpp
     src/coding_agent/SkillFrontmatterParser.cpp
     src/coding_agent/SkillLoader.cpp
-        src/coding_agent/SkillFormatting.cpp
+    src/coding_agent/SkillFormatting.cpp
     src/coding_agent/runtime/AgentSessionRunner.cpp
     src/coding_agent/runtime/EventPrinter.cpp
     src/coding_agent/runtime/JsonEventPrinter.cpp
@@ -148,9 +150,11 @@ if(CCH_BUILD_TESTS)
         tests/ai/providers/OpenAIChatClientTest.cpp
         tests/ai/providers/SseParserTest.cpp
         tests/cli/CliSmokeTest.cpp
-tests/coding_agent/BuiltinCommandsTest.cpp
-tests/coding_agent/PromptExpanderTest.cpp
+        tests/coding_agent/BuiltinCommandsTest.cpp
+        tests/coding_agent/PromptExpanderTest.cpp
         tests/coding_agent/ConfigLoaderTest.cpp
+        tests/coding_agent/ProjectResourcesTest.cpp
+        tests/coding_agent/ProjectTrustTest.cpp
         tests/coding_agent/SkillTest.cpp
         tests/coding_agent/SkillFormattingTest.cpp
         tests/coding_agent/SkillFrontmatterParserTest.cpp

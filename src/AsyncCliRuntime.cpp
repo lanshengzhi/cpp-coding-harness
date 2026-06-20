@@ -2,6 +2,8 @@
 
 #include "../include/cch/ai/Content.hpp"
 #include "../include/cch/coding_agent/Config.hpp"
+#include "../include/cch/coding_agent/ProjectResources.hpp"
+#include "../include/cch/coding_agent/ProjectTrust.hpp"
 #include "coding_agent/runtime/AgentSessionRunner.hpp"
 #include "coding_agent/runtime/EventPrinter.hpp"
 #include "coding_agent/runtime/JsonEventPrinter.hpp"
@@ -14,6 +16,7 @@
 #include <boost/asio/post.hpp>
 
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <map>
 #include <optional>
@@ -39,6 +42,58 @@ bool print_json_terminal(coding_agent::runtime::JsonEventPrinter& printer, bool 
     }
     std::cout.flush();
     return true;
+}
+
+void print_trust_diagnostics(const coding_agent::ProjectTrustResolution& trust) {
+    for (const auto& diag : trust.diagnostics) {
+        std::cerr << "[trust:warn] " << diag.code << ": " << diag.message;
+        if (diag.path) {
+            std::cerr << " (" << *diag.path << ")";
+        }
+        std::cerr << '\n';
+    }
+}
+
+void print_resource_diagnostics(const coding_agent::ProjectResourceLoadPlan& plan) {
+    for (const auto& diag : plan.diagnostics) {
+        std::cerr << "[resource:warn] " << diag.code << ": " << diag.message;
+        if (!diag.path.empty()) {
+            std::cerr << " (" << diag.path << ")";
+        }
+        std::cerr << '\n';
+    }
+    for (const auto& decision : plan.decisions) {
+        if (decision.detected && !decision.allowed && decision.reason != coding_agent::ResourceSkipReason::Unsupported) {
+            std::cerr << "[resource:info] " << coding_agent::to_string(decision.kind)
+                      << " skipped: " << coding_agent::to_string(decision.reason);
+            if (!decision.path.empty()) {
+                std::cerr << " (" << decision.path << ")";
+            }
+            std::cerr << '\n';
+        }
+    }
+}
+
+bool is_project_local_resume(const std::filesystem::path& resume_path, const std::filesystem::path& workspace) {
+    if (resume_path.empty()) {
+        return false;
+    }
+    std::error_code ec;
+    auto absolute_resume = resume_path.is_absolute() ? resume_path : (std::filesystem::current_path(ec) / resume_path);
+    auto canonical_resume = std::filesystem::weakly_canonical(absolute_resume, ec);
+    if (ec) {
+        canonical_resume = absolute_resume.lexically_normal();
+    }
+    auto canonical_workspace = std::filesystem::weakly_canonical(workspace, ec);
+    if (ec) {
+        canonical_workspace = workspace.lexically_normal();
+    }
+    auto relative = canonical_resume.lexically_relative(canonical_workspace);
+    if (relative.empty()) {
+        return false;
+    }
+    auto it = relative.begin();
+    return it != relative.end() && *it == ".cpp-harness";
 }
 
 } // namespace
@@ -130,10 +185,56 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
     }
     if (resolved_api_key_env.empty()) resolved_api_key_env = "OPENAI_API_KEY";
 
-    // Build skill directory list (project-local only; global ~/.cpp-harness/skills/
-    // requires a separate filesystem root and is deferred to follow-up).
+    auto default_project_trust = config_data->default_project_trust.value_or(coding_agent::DefaultProjectTrust::Ask);
+    coding_agent::ProjectResourcePolicy resource_policy;
+    resource_policy.project_skills = config_data->project_skills.value_or(coding_agent::ResourceEnablement::Auto);
+    if (config.disable_project_skills) {
+        resource_policy.project_skills = coding_agent::ResourceEnablement::Off;
+    }
+
+    coding_agent::ProjectResourceDetectionResult resource_detection;
+    auto resource_fs = harness::WorkspaceFileSystem::create(workspace);
+    if (resource_fs) {
+        resource_detection = coding_agent::detect_project_resources(*resource_fs);
+    } else {
+        resource_detection.diagnostics.push_back(coding_agent::ResourceDiagnostic{
+            .severity = coding_agent::ResourceDiagnosticSeverity::Warning,
+            .code = "workspace_fs_unavailable",
+            .message = resource_fs.error().message,
+            .path = workspace.string(),
+        });
+    }
+
+    const bool trust_needed = coding_agent::needs_project_trust_resolution(resource_detection, resource_policy);
+    const std::filesystem::path trust_store_path = home
+        ? (std::filesystem::path{home} / ".cpp-harness" / "trust.json")
+        : std::filesystem::path{};
+    coding_agent::ProjectTrustStore trust_store{trust_store_path};
+    auto trust_resolution = coding_agent::resolve_project_trust(
+        workspace,
+        trust_needed,
+        trust_store,
+        default_project_trust,
+        config.project_trust_override);
+    auto resource_plan = coding_agent::build_project_resource_load_plan(
+        resource_detection,
+        resource_policy,
+        trust_resolution);
+
+    print_trust_diagnostics(trust_resolution);
+    print_resource_diagnostics(resource_plan);
+    if (resource_plan.skipped_for_untrusted && is_project_local_resume(config.resume_path, workspace)) {
+        std::cerr << "[trust:warn] project-local resume history is not scrubbed by project trust ("
+                  << config.resume_path.string() << ")\n";
+    }
+
+    // Build skill directory list from the resource load plan. Global
+    // ~/.cpp-harness/skills requires a separate user-resource filesystem root
+    // and remains deferred.
     std::vector<coding_agent::SkillDirSpec> skill_dirs;
-    skill_dirs.push_back({.path = ".cpp-harness/skills", .includeRootFiles = false});
+    if (coding_agent::project_skills_allowed(resource_plan)) {
+        skill_dirs.push_back({.path = ".cpp-harness/skills", .includeRootFiles = false});
+    }
 
     auto services = coding_agent::runtime::make_runtime_services(coding_agent::runtime::RuntimeServicesConfig{
         workspace,

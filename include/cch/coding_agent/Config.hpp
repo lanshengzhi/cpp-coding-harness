@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cch/coding_agent/ProjectResources.hpp>
+#include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/util/Error.hpp>
 
 #include <optional>
@@ -16,6 +18,10 @@ struct ConfigData {
     std::optional<std::string> base_url;
     /// Env var chain: first found value is used as the resolved API key.
     std::optional<std::vector<std::string>> api_key_env;
+    /// User-controlled project trust default. Project-local settings cannot set this.
+    std::optional<DefaultProjectTrust> default_project_trust;
+    /// User-controlled project skill resource enablement.
+    std::optional<ResourceEnablement> project_skills;
 };
 
 /// Loads configuration from a JSON file and resolves API keys from environment.

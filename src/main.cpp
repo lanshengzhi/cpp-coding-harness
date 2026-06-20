@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <optional>
 #include <random>
 #include <sstream>
 #include <string>
@@ -21,6 +22,9 @@ struct CliConfig {
     bool fake{false};
     bool repl{false};
     bool enable_bash{false};
+    bool approve_project{false};
+    bool no_approve_project{false};
+    bool no_skills{false};
     bool help{false};
     cch::cli::OutputMode output_mode{cch::cli::OutputMode::Text};
     bool workspace_explicit{false};
@@ -90,6 +94,11 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     app.add_flag("--fake", config.fake, "Use deterministic fake provider (no network)");
     app.add_flag("--repl", config.repl, "Read prompts interactively until exit/quit");
     app.add_flag("--enable-bash", config.enable_bash, "Allow model-requested bash commands");
+    auto* approve_option = app.add_flag("-a,--approve", config.approve_project, "Trust project resources for this run");
+    auto* no_approve_option = app.add_flag("--no-approve", config.no_approve_project, "Do not trust project resources for this run");
+    approve_option->excludes(no_approve_option);
+    no_approve_option->excludes(approve_option);
+    app.add_flag("--no-skills", config.no_skills, "Disable project-local skills for this run");
     auto* workspace_option = app.add_option("--workspace", workspace_text, "Workspace boundary for tools (default: cwd)");
     auto* session_option = app.add_option("--session", session_text, "Create a new JSONL session at path");
     auto* resume_option = app.add_option("--resume", resume_text, "Resume and append to an existing JSONL session");
@@ -252,6 +261,9 @@ int main(int argc, char** argv) {
         config.fake,
         config.repl,
         config.enable_bash,
+        config.approve_project ? std::optional<bool>{true}
+            : (config.no_approve_project ? std::optional<bool>{false} : std::nullopt),
+        config.no_skills,
         config.output_mode,
         config.max_turns,
         config.workspace_explicit,

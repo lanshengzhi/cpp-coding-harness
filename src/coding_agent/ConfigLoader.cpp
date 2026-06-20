@@ -70,6 +70,49 @@ util::Expected<ConfigData> ConfigLoader::load(const std::string& config_path) {
                 config.api_key_env = std::move(chain);
             }
         }
+        if (auto it = obj.find("default_project_trust"); it != obj.end()) {
+            if (auto* str = it->second.get_if<std::string>()) {
+                auto parsed = parse_default_project_trust(*str);
+                if (!parsed) {
+                    return std::unexpected(util::make_error(
+                        util::ErrorCode::Validation,
+                        "invalid default_project_trust",
+                        "default_project_trust must be one of: ask, always, never"));
+                }
+                config.default_project_trust = *parsed;
+            } else {
+                return std::unexpected(util::make_error(
+                    util::ErrorCode::Validation,
+                    "invalid default_project_trust",
+                    "default_project_trust must be a string"));
+            }
+        }
+        if (auto it = obj.find("project_resources"); it != obj.end()) {
+            if (!it->second.holds<util::JsonValue::object_t>()) {
+                return std::unexpected(util::make_error(
+                    util::ErrorCode::Validation,
+                    "invalid project_resources",
+                    "project_resources must be an object"));
+            }
+            const auto& resources = it->second.get_object();
+            if (auto skills_it = resources.find("skills"); skills_it != resources.end()) {
+                if (auto* str = skills_it->second.get_if<std::string>()) {
+                    auto parsed = parse_resource_enablement(*str);
+                    if (!parsed) {
+                        return std::unexpected(util::make_error(
+                            util::ErrorCode::Validation,
+                            "invalid project_resources.skills",
+                            "project_resources.skills must be one of: auto, on, off"));
+                    }
+                    config.project_skills = *parsed;
+                } else {
+                    return std::unexpected(util::make_error(
+                        util::ErrorCode::Validation,
+                        "invalid project_resources.skills",
+                        "project_resources.skills must be a string"));
+                }
+            }
+        }
     }
 
     return config;
