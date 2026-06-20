@@ -1,7 +1,7 @@
 ---
 title: "feat: Align built-in tools with pi contracts and add config/model resolution"
 type: feat
-status: active
+status: "completed"
 date: "2026-06-20"
 ---
 

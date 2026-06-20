@@ -129,7 +129,8 @@ The code is split into value contracts, capability seams, implementation adapter
 - `cch_agent` (`include/cch/agent`, `src/agent`): coroutine agent loop, observable state values, lifecycle event values, move-only event sinks, async tool registry, expected-style tool execution contracts, optional pre/post tool-call hooks (`beforeToolCall`/`afterToolCall`), context transform / LLM conversion hooks, steering/follow-up queues, prepare-next-turn updates, and sequential/parallel tool execution modes.
 - `cch_harness` (`include/cch/harness`, `src/harness`): pi-shaped filesystem and shell execution capability contracts (`FileSystem`/`Shell`), local implementation with workspace containment, symlink safety, atomic writes, split-stream process execution, secret environment filtering, and JSONL session persistence.
 - `cch_tools` (`include/cch/tools`, `src/tools`): built-in read/write/edit/bash tool factories bridging agent tool contracts to harness capabilities.
-- `cch_coding_agent_runtime` (`src/AsyncCliRuntime.*`, `src/coding_agent/runtime/`): CLI runtime orchestration, session lifecycle, provider/tool service assembly, and semantic event printing.
+- `cch_coding_agent_runtime` (`src/AsyncCliRuntime.*`, `src/coding_agent/runtime/`): CLI runtime orchestration, session lifecycle, provider/tool service assembly, semantic event printing, JSON/RPC output modes, slash-command handling, and prompt-template expansion.
+- `cch_coding_agent_config` (`include/cch/coding_agent/Config.hpp`, `src/coding_agent/ConfigLoader.cpp`): `~/.cpp-harness/config.json` loading with provider/model/base-url/api-key-env defaults, environment variable chain resolution, and CLI override precedence.
 
 The build publishes `include` as the public surface and keeps `src` private. Legacy synchronous tools, Boost.JSON contracts, `util::Result`, and duplicate `src` contract headers have been removed.
 
@@ -154,16 +155,16 @@ The default text CLI prints stable semantic event lines:
 
 `--mode rpc` is a narrow JSONL stdin/stdout command loop. It supports `prompt`, `get_state`, `get_last_assistant_text`, and `shutdown`; unsupported pi RPC commands return structured `success:false` responses. RPC mode emits no startup session header, writes command responses and prompt lifecycle events to stdout, and keeps startup/pre-session failures on stderr. It is sequential only: no `abort`, `steer`, `follow_up`, session switching, fork/clone, compaction, extension UI, resources, or SDK surface yet.
 
-One-shot mode runs one prompt. `--repl` keeps history in memory for multiple prompts. `--mode json` and `--mode rpc` cannot be combined with `--repl`; RPC mode reads prompts from stdin commands rather than positional CLI arguments. `--resume <session.jsonl>` loads the redacted typed JSONL history and appends new messages. `--session <path>` always creates a new file; use `--resume` to append.
+One-shot mode runs one prompt. `--repl` keeps history in memory for multiple prompts and supports built-in slash commands: `/help`, `/clear`, `/compact`, and `/exit`. `--mode json` and `--mode rpc` cannot be combined with `--repl`; RPC mode reads prompts from stdin commands rather than positional CLI arguments. `--resume <session.jsonl>` loads the redacted typed JSONL history and appends new messages. `--session <path>` always creates a new file; use `--resume` to append.
 
 ## Tools
 
 The built-in tools are:
 
-- `read_file`: read a text file inside the workspace, with optional line offset/limit.
-- `write_file`: create or overwrite a file inside the workspace after parent validation.
-- `edit_file`: perform one exact `old_text` / `new_text` replacement; zero or multiple matches are rejected.
-- `bash`: run a shell command inside the workspace only when `--enable-bash` is passed.
+- `read_file`: read a text file inside the workspace, with optional line offset/limit. Appends a continuation hint when output is truncated.
+- `write_file`: create or overwrite a file inside the workspace; creates parent directories implicitly.
+- `edit_file`: perform one or more exact replacements via an `edits[]` array of `{oldText, newText}` pairs; zero or multiple matches per edit are rejected. Multiple disjoint edits in one call are applied together.
+- `bash`: run a shell command inside the workspace only when `--enable-bash` is passed. Accepts a timeout in seconds and strips ANSI escape sequences from output.
 
 The registry owns tool capabilities directly. File tools deliberately share one execution environment capability, which owns workspace containment, path validation, atomic writes, process execution, timeout handling, and output limiting. File tools reject workspace escapes, symlink escapes, directory/file mismatches, and missing parents unless creation is explicitly requested. `bash` receives a sanitized environment that omits API-key, token, secret, password, and OpenAI-looking variables.
 
@@ -173,7 +174,7 @@ Sessions are JSONL:
 
 1. a v2 `header` line with session/workspace/provider/model metadata,
 2. append-only typed `message` entries containing redacted user, assistant, and tool-result messages,
-3. parse-only support for pi-style v3 tree metadata entries such as `model_change`, `thinking_level_change`, `compaction`, `branch_summary`, `custom`, `custom_message`, `label`, `session_info`, and `leaf`,
+3. write support for pi-style v3 tree metadata entries (`model_change`, `thinking_level_change`, `active_tools_change`, `custom`, `custom_message`, `label`, `compaction`, `branch_summary`, `session_info`) and extended runtime messages (`BashExecutionMessage`, `CustomMessage`, `BranchSummaryMessage`, `CompactionSummaryMessage`),
 4. safely ignored unknown future entry types.
 
 The redacted v2 transcript is canonical for current resume/replay. Nontrivial tree sessions are refused for append/resume until tree context reconstruction lands, avoiding silent reconstruction of the wrong conversation state. Exact unredacted replay is intentionally out of scope. Session files are still sensitive: they can contain source text, command output, workspace paths, and provider/model metadata.
@@ -205,4 +206,4 @@ These cover:
 
 ## Deferred
 
-Not included yet: rich TUI, extensions/skills, additional provider adapters and model catalog/config resolution, OAuth, session tree navigation/branching/compaction semantics, multi-replacement edits, native Windows shell process-tree termination semantics, tool execution streaming updates, subagents, full pi RPC parity, embeddable SDK surface, MCP integration, permission prompts, image generation behavior, C++26 reflection-generated schema, `std::execution` senders/receivers, ABI-stable binary distribution, or OS-level sandboxing.
+Not included yet: rich TUI, extensions/skills, packages, OAuth, session tree navigation/branching/compaction semantics, full pi RPC command parity, embeddable SDK surface, MCP integration, permission prompts, native Windows shell process-tree termination semantics, tool execution streaming updates, subagents, C++26 reflection-generated schema, `std::execution` senders/receivers, ABI-stable binary distribution, or OS-level sandboxing.

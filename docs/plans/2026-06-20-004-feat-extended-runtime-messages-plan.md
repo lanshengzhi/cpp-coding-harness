@@ -1,7 +1,7 @@
 ---
 title: "feat: Add pi extended runtime message types"
 type: feat
-status: active
+status: "completed"
 date: "2026-06-20"
 ---
 

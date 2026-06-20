@@ -1,7 +1,7 @@
 ---
 title: "feat: Achieve pi-ai message/content/stream/provider parity"
 type: "feat"
-status: active
+status: "completed"
 date: "2026-06-18"
 origin: "docs/plans/2026-06-16-001-refactor-pi-cpp-parity-todo.md"
 target_repo: "cpp-coding-harness"

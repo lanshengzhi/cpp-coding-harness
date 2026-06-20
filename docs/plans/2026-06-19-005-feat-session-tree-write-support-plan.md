@@ -1,7 +1,7 @@
 ---
 title: "feat: Add write support for pi v3 session tree entries"
 type: "feat"
-status: active
+status: "completed"
 date: "2026-06-19"
 origin: "docs/plans/2026-06-16-001-refactor-pi-cpp-parity-todo.md"
 target_repo: "cpp-coding-harness"
