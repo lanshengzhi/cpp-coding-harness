@@ -25,14 +25,37 @@ std::string display_message_for_loop_error(const std::string& message) {
 AgentSessionRunner::AgentSessionRunner(
     ai::StreamingChatClient& client,
     agent::AsyncToolRegistry registry,
-    agent::AsyncAgentOptions options)
-    : loop_(client, std::move(registry), std::move(options)) {}
+    agent::AsyncAgentOptions options,
+    std::vector<PromptTemplate> templates,
+    CommandRegistry* command_registry)
+    : loop_(client, std::move(registry), std::move(options)),
+      templates_(std::move(templates)),
+      command_registry_(command_registry) {}
 
 PromptRunResult AgentSessionRunner::run_prompt(
     std::vector<ai::MessageVariant>& history,
     harness::session::JsonlSessionStore& store,
     std::string prompt,
     agent::AgentEventSink sink) {
+    // Process slash-commands and prompt templates before the agent loop
+    CommandContext cmd_ctx{
+        .session_id = store.metadata().session_id,
+        .workspace_path = store.metadata().workspace.string(),
+        .provider = store.metadata().provider,
+        .model = store.metadata().model,
+        .message_count = history.size(),
+    };
+    auto processed = process_prompt(prompt, templates_,
+        command_registry_ ? *command_registry_ : CommandRegistry::empty(),
+        cmd_ctx);
+    if (processed.command_handled) {
+        if (processed.shutdown_requested) {
+            return PromptRunResult{true, "shutdown", {}};
+        }
+        return PromptRunResult{true, "command_handled", processed.display_text.value_or("")};
+    }
+    prompt = std::move(processed.expanded_prompt);
+
     boost::asio::io_context io;
     std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
     const auto previous_size = history.size();
