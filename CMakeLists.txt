@@ -73,6 +73,7 @@ add_library(cch_harness
     src/harness/AsyncLocalExecutionEnv.cpp
     src/harness/LocalExecutionEnv.cpp
     src/harness/session/JsonlSessionStore.cpp
+    src/harness/session/SessionTree.cpp
 )
 cch_target_defaults(cch_harness)
 target_link_libraries(cch_harness
@@ -165,6 +166,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/runtime/JsonEventPrinterTest.cpp
         tests/harness/AsyncLocalExecutionEnvTest.cpp
         tests/harness/session/JsonlSessionStoreTest.cpp
+        tests/harness/session/SessionTreeTest.cpp
         tests/tools/AsyncToolsTest.cpp
         tests/harness/WorkspaceFileSystemTest.cpp
         tests/util/ExpectedErrorTest.cpp
