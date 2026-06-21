@@ -191,7 +191,7 @@ Sessions are JSONL:
 3. write support for pi-style v3 tree metadata entries (`model_change`, `thinking_level_change`, `active_tools_change`, `custom`, `custom_message`, `label`, `compaction`, `branch_summary`, `session_info`) and extended runtime messages (`BashExecutionMessage`, `CustomMessage`, `BranchSummaryMessage`, `CompactionSummaryMessage`),
 4. safely ignored unknown future entry types.
 
-The redacted v2 transcript is canonical for current resume/replay. Nontrivial tree sessions are refused for append/resume until tree context reconstruction lands, avoiding silent reconstruction of the wrong conversation state. Exact unredacted replay is intentionally out of scope. Session files are still sensitive: they can contain source text, command output, workspace paths, and provider/model metadata.
+The redacted v2 transcript is canonical for current resume/replay. The v3 session tree with branch navigation, leaf tracking, and compaction-aware context reconstruction (via `SessionTree::buildSessionContext()`) is also available. Exact unredacted replay is intentionally out of scope. Session files are still sensitive: they can contain source text, command output, workspace paths, and provider/model metadata.
 
 The workspace guard is not a sandbox. Prompts, file contents, and command outputs can be sent to the configured provider. Run this harness inside a VM/container if you need a real containment boundary.
 
@@ -220,4 +220,4 @@ These cover:
 
 ## Deferred
 
-Not included yet: rich TUI, extensions, packages, global/config-driven skill directories, live skill reload, prompt-template loading, OAuth, session tree navigation/branching/compaction semantics, full pi RPC command parity, embeddable SDK surface, MCP integration, permission prompts, native Windows shell process-tree termination semantics, tool execution streaming updates, subagents, C++26 reflection-generated schema, `std::execution` senders/receivers, ABI-stable binary distribution, or OS-level sandboxing.
+Not included yet: rich TUI, extensions, packages, global/config-driven skill directories, live skill reload, OAuth, full pi RPC command parity, embeddable SDK surface, MCP integration, permission prompts, native Windows shell process-tree termination semantics, tool execution streaming updates, subagents, C++26 reflection-generated schema, `std::execution` senders/receivers, ABI-stable binary distribution, or OS-level sandboxing.

@@ -49,17 +49,17 @@ The first implementation pass should execute that cleanup plan and produce the T
 | `pi:packages/ai` | `include/cch/ai/`, `src/ai/`, `tests/ai/` | Partial: messages, content, usage, stream events, OpenAI-compatible provider, SSE, Glaze DTO boundary exist. | `pi:packages/ai/src/types.ts`, `pi:packages/ai/src/stream.ts`, `pi:packages/ai/src/api-registry.ts`, `pi:packages/ai/src/providers/` |
 | `pi:packages/agent` | `include/cch/agent/`, `src/agent/`, `include/cch/harness/`, `src/harness/`, `tests/agent/`, `tests/harness/` | Partial: async loop, event sink, async tools, execution env, and JSONL store exist; richer agent state/hooks/session tree are missing. | `pi:packages/agent/src/types.ts`, `pi:packages/agent/src/agent-loop.ts`, `pi:packages/agent/src/harness/types.ts`, `pi:packages/agent/src/harness/agent-harness.ts` |
 | `pi:packages/coding-agent` core/CLI | `src/AsyncCliRuntime.*`, `src/main.cpp`, future CLI/core modules, `tests/cli/` | MVP only: fake/real provider wiring, one-shot/REPL/resume, semantic event lines. | `pi:packages/coding-agent/src/core/`, `pi:packages/coding-agent/src/cli/`, `pi:packages/coding-agent/docs/usage.md`, `pi:packages/coding-agent/docs/json.md`, `pi:packages/coding-agent/docs/rpc.md` |
-| `pi:packages/coding-agent` resources | `include/cch/coding_agent/`, `src/coding_agent/`, `src/coding_agent/runtime/`, future extension/package modules | Partial: config/model defaults, prompt expansion, project-local skill discovery/loading, skill prompt formatting, and `/skill:name` invocation exist; extensions, packages, project trust, global/config-driven skill dirs, and prompt-template loading remain missing. | `pi:packages/coding-agent/docs/settings.md`, `pi:packages/coding-agent/docs/extensions.md`, `pi:packages/coding-agent/docs/skills.md`, `pi:packages/coding-agent/docs/prompt-templates.md`, `pi:packages/coding-agent/docs/packages.md` |
+| `pi:packages/coding-agent` resources | `include/cch/coding_agent/`, `src/coding_agent/`, `src/coding_agent/runtime/`, future extension/package modules | Partial: config/model defaults, project trust/resource controls, prompt expansion, project-local skill discovery/loading, skill prompt formatting, `/skill:name` invocation, and prompt-template loading exist; extensions, packages, and global/config-driven skill dirs remain missing. | `pi:packages/coding-agent/docs/settings.md`, `pi:packages/coding-agent/docs/extensions.md`, `pi:packages/coding-agent/docs/skills.md`, `pi:packages/coding-agent/docs/prompt-templates.md`, `pi:packages/coding-agent/docs/packages.md` |
 | `pi:packages/tui` | future `include/cch/tui/`, `src/tui/`, `tests/tui/` or equivalent | Absent: current CLI is line-oriented only. | `pi:packages/tui/src/`, `pi:packages/coding-agent/docs/tui.md`, `pi:packages/coding-agent/docs/themes.md`, `pi:packages/coding-agent/docs/keybindings.md` |
 
 ## Current C++ Baseline to Preserve
 
-- [ ] `include/cch/ai` remains the public AI contract surface for content blocks, messages, context, tools, usage, stream events, and chat clients.
-- [ ] `src/ai/providers` remains provider-specific implementation code, with Glaze DTOs isolated under `include/cch/ai/glaze` and `src/ai/glaze`.
-- [ ] `include/cch/agent` remains the public agent orchestration surface for loop, context, events, tools, and registry behavior.
-- [ ] `include/cch/harness` remains the execution/session capability boundary.
+- [x] `include/cch/ai` remains the public AI contract surface for content blocks, messages, context, tools, usage, stream events, and chat clients.
+- [x] `src/ai/providers` remains provider-specific implementation code, with Glaze DTOs isolated under `include/cch/ai/glaze` and `src/ai/glaze`.
+- [x] `include/cch/agent` remains the public agent orchestration surface for loop, context, events, tools, and registry behavior.
+- [x] `include/cch/harness` remains the execution/session capability boundary.
 - [x] `src/AsyncCliRuntime.*`, `src/main.cpp`, and `src/coding_agent/runtime/` split current runtime wiring into CLI parsing, runtime services, session lifecycle, event printing, and agent execution seams.
-- [ ] `tests/architecture` continues to guard public header boundaries, no `src` public leakage, no old sync tool surface, no Boost.JSON domain contract, and move-only callbacks.
+- [x] `tests/architecture` continues to guard public header boundaries, no `src` public leakage, no old sync tool surface, no Boost.JSON domain contract, and move-only callbacks.
 
 ## TODO Roadmap
 
