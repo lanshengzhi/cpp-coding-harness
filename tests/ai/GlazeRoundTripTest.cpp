@@ -1,8 +1,8 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include "../../include/cch/ai/glaze/AiJson.hpp"
+#include "ai/glaze/AiJson.hpp"
 #include "../../include/cch/util/Error.hpp"
-#include "../../include/cch/util/Json.hpp"
+#include "util/Json.hpp"
 
 #include <string>
 #include <variant>

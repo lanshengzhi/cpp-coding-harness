@@ -1,4 +1,4 @@
-#include "../../include/cch/coding_agent/SkillLoader.hpp"
+#include "coding_agent/SkillLoader.hpp"
 
 #include "SkillFrontmatterParser.hpp"
 #include "../harness/WorkspaceFileSystem.hpp"

@@ -1,7 +1,7 @@
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
 #include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
-#include "../../../include/cch/util/Json.hpp"
+#include "util/Json.hpp"
 #include "../../support/TempWorkspace.hpp"
 
 #include <fstream>

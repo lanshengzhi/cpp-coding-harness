@@ -1,8 +1,8 @@
 #include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
 #include "../../../include/cch/harness/session/SessionTree.hpp"
 
-#include "../../../include/cch/ai/glaze/AiJson.hpp"
-#include "../../../include/cch/util/Json.hpp"
+#include "ai/glaze/AiJson.hpp"
+#include "util/Json.hpp"
 
 #include "../../util/Redactor.hpp"
 

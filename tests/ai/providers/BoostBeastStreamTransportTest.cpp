@@ -1,6 +1,6 @@
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
-#include "../../../include/cch/ai/providers/BoostBeastStreamTransport.hpp"
+#include "ai/providers/BoostBeastStreamTransport.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>

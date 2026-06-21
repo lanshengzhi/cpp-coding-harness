@@ -37,9 +37,10 @@ add_library(cch_util
 cch_target_defaults(cch_util)
 target_link_libraries(cch_util
     PUBLIC
-        glaze::glaze
         Boost::filesystem
         Threads::Threads
+    PRIVATE
+        glaze::glaze
 )
 
 add_library(cch_ai

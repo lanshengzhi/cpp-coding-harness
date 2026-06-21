@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../include/cch/ai/glaze/ToolSchemaDtos.hpp"
+#include "ToolSchemaDtos.hpp"
 
 #include <cstdint>
 #include <optional>

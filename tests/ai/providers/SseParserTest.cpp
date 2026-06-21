@@ -1,6 +1,6 @@
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
-#include <cch/ai/providers/SseParser.hpp>
+#include "ai/providers/SseParser.hpp"
 
 using namespace cch;
 

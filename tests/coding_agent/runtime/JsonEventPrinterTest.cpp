@@ -2,7 +2,7 @@
 
 #include "coding_agent/runtime/JsonEventPrinter.hpp"
 
-#include "cch/util/Json.hpp"
+#include "util/Json.hpp"
 
 #include <sstream>
 #include <string>

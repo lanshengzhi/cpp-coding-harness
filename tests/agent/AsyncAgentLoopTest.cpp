@@ -5,7 +5,7 @@
 #include "../../include/cch/agent/AgentLoop.hpp"
 #include "../../include/cch/ai/Content.hpp"
 #include "../../include/cch/util/Error.hpp"
-#include "../../include/cch/util/Json.hpp"
+#include "util/Json.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>

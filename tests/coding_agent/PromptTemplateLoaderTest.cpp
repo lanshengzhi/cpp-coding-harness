@@ -1,6 +1,6 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include "../../include/cch/coding_agent/PromptTemplateLoader.hpp"
+#include "coding_agent/PromptTemplateLoader.hpp"
 #include "../../src/harness/WorkspaceFileSystem.hpp"
 #include "../support/TempWorkspace.hpp"
 

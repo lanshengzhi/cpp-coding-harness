@@ -2,8 +2,8 @@
 
 #include "../../../include/cch/agent/ToolRegistry.hpp"
 #include "../../../include/cch/ai/ChatClient.hpp"
-#include "../../../include/cch/coding_agent/PromptTemplateLoader.hpp"
-#include "../../../include/cch/coding_agent/SkillLoader.hpp"
+#include "coding_agent/PromptTemplateLoader.hpp"
+#include "coding_agent/SkillLoader.hpp"
 #include "../../../include/cch/harness/LocalExecutionEnv.hpp"
 #include "../../../include/cch/util/Error.hpp"
 

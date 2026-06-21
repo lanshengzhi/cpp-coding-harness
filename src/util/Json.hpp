@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Error.hpp"
-#include "JsonValue.hpp"
+#include "../../include/cch/util/Error.hpp"
+#include "../../include/cch/util/JsonValue.hpp"
 
 #include <glaze/glaze.hpp>
 

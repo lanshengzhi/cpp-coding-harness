@@ -2,7 +2,7 @@
 
 #include "../../include/cch/harness/LocalExecutionEnv.hpp"
 #include "../../include/cch/tools/ToolFactories.hpp"
-#include "../../include/cch/util/Json.hpp"
+#include "util/Json.hpp"
 #include "../support/TempWorkspace.hpp"
 
 #include <boost/asio/co_spawn.hpp>

@@ -2,10 +2,10 @@
 
 #include "../../../src/util/ExpectedMacros.hpp"
 #include "../glaze/ProviderDtos.hpp"
-#include "../../../include/cch/ai/glaze/AiJson.hpp"
+#include "ai/glaze/AiJson.hpp"
 #include "../../../include/cch/ai/providers/OpenAICompletionsCompat.hpp"
-#include "../../../include/cch/ai/providers/SseParser.hpp"
-#include "../../../include/cch/util/Json.hpp"
+#include "ai/providers/SseParser.hpp"
+#include "util/Json.hpp"
 
 #include <cstdlib>
 #include <map>

@@ -1,8 +1,8 @@
 #include "RuntimeServices.hpp"
 
 #include "../../../include/cch/ai/ProviderRegistry.hpp"
-#include "../../../include/cch/coding_agent/PromptTemplateLoader.hpp"
-#include "../../../include/cch/coding_agent/SkillLoader.hpp"
+#include "coding_agent/PromptTemplateLoader.hpp"
+#include "coding_agent/SkillLoader.hpp"
 #include "../../../include/cch/tools/ToolFactories.hpp"
 #include "../../harness/WorkspaceFileSystem.hpp"
 

@@ -1,6 +1,6 @@
 #include "../../include/cch/coding_agent/PromptProcessing.hpp"
 
-#include "../../include/cch/coding_agent/SkillFormatting.hpp"
+#include "coding_agent/SkillFormatting.hpp"
 #include "../coding_agent/SkillFrontmatterParser.hpp"
 #include "../harness/WorkspaceFileSystem.hpp"
 

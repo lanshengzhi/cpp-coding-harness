@@ -4,7 +4,7 @@
 
 #include "../../../include/cch/ai/providers/OpenAIChatClient.hpp"
 #include "../../../include/cch/util/Error.hpp"
-#include "../../../include/cch/util/Json.hpp"
+#include "util/Json.hpp"
 #include "../../../include/cch/util/JsonValue.hpp"
 
 #include <boost/asio/co_spawn.hpp>

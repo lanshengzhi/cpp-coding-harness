@@ -2,7 +2,7 @@
 
 #include "../support/TempWorkspace.hpp"
 
-#include "cch/util/Json.hpp"
+#include "util/Json.hpp"
 
 #include <array>
 #include <cstdio>

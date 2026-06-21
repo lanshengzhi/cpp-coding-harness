@@ -3,7 +3,7 @@
 #include "../../../src/util/ExpectedMacros.hpp"
 #include "../../../include/cch/ai/ChatClient.hpp"
 #include "../../../include/cch/ai/Content.hpp"
-#include "../../../include/cch/util/Json.hpp"
+#include "util/Json.hpp"
 
 #include <memory>
 #include <optional>

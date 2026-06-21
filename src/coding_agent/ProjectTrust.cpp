@@ -1,5 +1,5 @@
 #include "../../include/cch/coding_agent/ProjectTrust.hpp"
-#include "../../include/cch/util/Json.hpp"
+#include "util/Json.hpp"
 
 #include <algorithm>
 #include <cerrno>

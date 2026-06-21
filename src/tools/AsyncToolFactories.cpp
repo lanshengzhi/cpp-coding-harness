@@ -1,7 +1,7 @@
 #include "../../include/cch/tools/ToolFactories.hpp"
 
-#include "../../include/cch/ai/glaze/ToolSchemaDtos.hpp"
-#include "../../include/cch/util/Json.hpp"
+#include "ai/glaze/ToolSchemaDtos.hpp"
+#include "util/Json.hpp"
 
 #include <chrono>
 #include <exception>

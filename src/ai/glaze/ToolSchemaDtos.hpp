@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Tool.hpp"
+#include "../../../include/cch/ai/Tool.hpp"
 #include "../../util/Json.hpp"
 
 #include <map>

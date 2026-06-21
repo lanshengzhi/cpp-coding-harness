@@ -1,4 +1,4 @@
-#include <cch/coding_agent/SkillFormatting.hpp>
+#include "coding_agent/SkillFormatting.hpp"
 
 #include <algorithm>
 #include <filesystem>

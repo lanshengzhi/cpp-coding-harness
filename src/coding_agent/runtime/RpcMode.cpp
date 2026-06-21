@@ -4,7 +4,7 @@
 #include "RpcJsonl.hpp"
 
 #include "../../../include/cch/ai/Content.hpp"
-#include "../../../include/cch/util/Json.hpp"
+#include "util/Json.hpp"
 
 #include <optional>
 #include <string>

@@ -1,7 +1,7 @@
 #include "../../include/cch/ai/ProviderRegistry.hpp"
 
 #include "../ai/providers/FakeChatClient.hpp"
-#include "../../include/cch/ai/providers/BoostBeastStreamTransport.hpp"
+#include "ai/providers/BoostBeastStreamTransport.hpp"
 #include "../../include/cch/ai/providers/OpenAIChatClient.hpp"
 
 #include <memory>

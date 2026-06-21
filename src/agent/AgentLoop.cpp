@@ -5,7 +5,7 @@
 #include "../../include/cch/ai/Content.hpp"
 #include "../../include/cch/ai/Usage.hpp"
 #include "../../include/cch/ai/Tool.hpp"
-#include "../../include/cch/util/Json.hpp"
+#include "util/Json.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>

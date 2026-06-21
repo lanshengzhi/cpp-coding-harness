@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../Context.hpp"
-#include "../Message.hpp"
-#include "../Usage.hpp"
+#include "../../../include/cch/ai/Context.hpp"
+#include "../../../include/cch/ai/Message.hpp"
+#include "../../../include/cch/ai/Usage.hpp"
 #include "ToolSchemaDtos.hpp"
 #include "../../util/Json.hpp"
 

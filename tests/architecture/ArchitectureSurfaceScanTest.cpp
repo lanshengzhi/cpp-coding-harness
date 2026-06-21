@@ -1,5 +1,6 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -92,10 +93,39 @@ TEST_CASE("core public contracts do not expose Glaze generic machinery", "[archi
 TEST_CASE("provider DTOs stay out of the public contract surface", "[architecture][u4]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
     CHECK_FALSE(std::filesystem::exists(source_root / "include" / "cch" / "ai" / "glaze" / "ProviderDtos.hpp"));
+    CHECK_FALSE(std::filesystem::exists(source_root / "include" / "cch" / "util" / "Json.hpp"));
+
+    const auto glaze_dir = source_root / "include" / "cch" / "ai" / "glaze";
+    if (std::filesystem::exists(glaze_dir)) {
+        for (const auto& entry : std::filesystem::directory_iterator(glaze_dir)) {
+            CHECK(entry.path().extension() != ".hpp");
+        }
+    }
 
     const auto openai_header = read_text(source_root / "include" / "cch" / "ai" / "providers" / "OpenAIChatClient.hpp");
     CHECK(openai_header.find("BoostBeastStreamTransport.hpp") == std::string::npos);
     CHECK(openai_header.find("StreamTransport.hpp") != std::string::npos);
+
+    const auto providers_dir = source_root / "include" / "cch" / "ai" / "providers";
+    const std::vector<std::string> allowed_provider_headers = {
+        "StreamTransport.hpp",
+        "OpenAIChatClient.hpp",
+        "OpenAICompletionsCompat.hpp",
+    };
+    for (const auto& entry : std::filesystem::directory_iterator(providers_dir)) {
+        if (entry.path().extension() != ".hpp") {
+            continue;
+        }
+        const auto filename = entry.path().filename().string();
+        CHECK(std::find(allowed_provider_headers.begin(), allowed_provider_headers.end(), filename) != allowed_provider_headers.end());
+    }
+}
+
+TEST_CASE("coding_agent loaders stay out of the public contract surface", "[architecture][u4]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    CHECK_FALSE(std::filesystem::exists(source_root / "include" / "cch" / "coding_agent" / "SkillLoader.hpp"));
+    CHECK_FALSE(std::filesystem::exists(source_root / "include" / "cch" / "coding_agent" / "PromptTemplateLoader.hpp"));
+    CHECK_FALSE(std::filesystem::exists(source_root / "include" / "cch" / "coding_agent" / "SkillFormatting.hpp"));
 }
 
 TEST_CASE("active source tree does not retain legacy sync contracts", "[architecture][u2]") {

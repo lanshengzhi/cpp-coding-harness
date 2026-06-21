@@ -1,7 +1,7 @@
 #include "AgentSessionRunner.hpp"
 
 #include "../../../include/cch/ai/Content.hpp"
-#include "../../../include/cch/coding_agent/SkillFormatting.hpp"
+#include "coding_agent/SkillFormatting.hpp"
 #include "../../harness/WorkspaceFileSystem.hpp"
 
 #include <boost/asio/co_spawn.hpp>

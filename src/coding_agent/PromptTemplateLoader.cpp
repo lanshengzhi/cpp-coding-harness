@@ -1,4 +1,4 @@
-#include "../../include/cch/coding_agent/PromptTemplateLoader.hpp"
+#include "coding_agent/PromptTemplateLoader.hpp"
 
 #include "SkillFrontmatterParser.hpp"
 #include "../harness/WorkspaceFileSystem.hpp"

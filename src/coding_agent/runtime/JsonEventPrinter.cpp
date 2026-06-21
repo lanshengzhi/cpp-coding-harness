@@ -1,7 +1,7 @@
 #include "JsonEventPrinter.hpp"
 
-#include "../../../include/cch/ai/glaze/AiJson.hpp"
-#include "../../../include/cch/util/Json.hpp"
+#include "ai/glaze/AiJson.hpp"
+#include "util/Json.hpp"
 
 #include <algorithm>
 #include <ostream>
