@@ -1,7 +1,7 @@
 ---
 title: "design: C++ extension boundary decision"
 type: design
-status: active
+status: completed
 date: 2026-06-20
 target_repo: cpp-coding-harness
 reference_repo: pi

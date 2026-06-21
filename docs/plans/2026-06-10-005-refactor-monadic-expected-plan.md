@@ -1,7 +1,7 @@
 ---
 title: "refactor: Adopt std::expected monadic operations for error propagation"
 type: "refactor"
-status: "active"
+status: "completed"
 date: "2026-06-10"
 target_repo: "cpp-coding-harness"
 ---

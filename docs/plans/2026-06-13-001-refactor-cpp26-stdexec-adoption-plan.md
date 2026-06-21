@@ -1,7 +1,8 @@
 ---
 title: "refactor: Evaluate C++26 stdexec adoption"
 type: "refactor"
-status: active
+status: abandoned
+reason: "项目不使用 C++26，继续使用 C++23 + Boost.Asio coroutine 异步栈，此预研的前提条件不存在"
 date: "2026-06-13"
 target_repo: "cpp-coding-harness"
 reference_repo: "stdexec"

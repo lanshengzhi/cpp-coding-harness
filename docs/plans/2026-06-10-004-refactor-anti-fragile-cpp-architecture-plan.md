@@ -1,7 +1,8 @@
 ---
 title: "refactor: Apply anti-fragile Modern C++ architecture"
 type: "refactor"
-status: "active"
+status: "completed"
+completed_reason: "各 U 单元已被 2026-06-10-005 至 2026-06-20-011 等后续具体实现计划吸收完成"
 date: "2026-06-10"
 deepened: "2026-06-10"
 target_repo: "cpp-coding-harness"

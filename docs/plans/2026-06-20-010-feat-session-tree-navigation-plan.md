@@ -1,7 +1,7 @@
 ---
 title: "feat: Session tree branch navigation and context reconstruction"
 type: feat
-status: active
+status: completed
 date: 2026-06-20
 target_repo: cpp-coding-harness
 reference_repo: pi
