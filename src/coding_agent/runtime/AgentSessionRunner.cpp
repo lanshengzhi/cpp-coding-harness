@@ -17,6 +17,9 @@ std::string terminal_code_for_loop_error(const std::string& message) {
     if (message == "max turns exceeded") {
         return "max_turns_exceeded";
     }
+    if (message == "agent event sink failed") {
+        return "event_sink_failed";
+    }
     return "runtime_error";
 }
 

@@ -79,23 +79,6 @@ struct AgentSession::Impl {
 
     // ── Helpers ──────────────────────────────────────────────────────────
 
-    /// Fan out an event to all currently-active persistent subscribers.
-    [[nodiscard]] util::ExpectedVoid fanout(const agent::AgentLifecycleEvent& event) {
-        std::vector<agent::AgentEventSink*> active_sinks;
-        for (auto& sub : subscribers) {
-            if (sub.active && sub.sink) {
-                active_sinks.push_back(&sub.sink);
-            }
-        }
-        for (auto* sink : active_sinks) {
-            if (*sink) {
-                auto result = (*sink)(event);
-                if (!result) return result;
-            }
-        }
-        return {};
-    }
-
     /// Build a combined sink: persistent subscribers + per-prompt sink.
     [[nodiscard]] agent::AgentEventSink make_combined_sink(agent::AgentEventSink per_prompt) {
         auto persistent = std::make_shared<std::vector<agent::AgentEventSink*>>();
@@ -122,14 +105,22 @@ struct AgentSession::Impl {
     }
 
     /// Process a prompt through the SDK prompt pipeline (silent — no stderr).
-    [[nodiscard]] PromptProcessingResult process_sdk_prompt(std::string_view raw_input) {
+    /// Process a prompt through the SDK pipeline plus diagnostics capture.
+    struct SdkPromptResult {
+        PromptProcessingResult processing;
+        std::vector<std::string> diagnostics;
+    };
+
+    [[nodiscard]] SdkPromptResult process_sdk_prompt(std::string_view raw_input) {
         auto skill_expansion = expand_skill_command_silent(raw_input, skills);
         std::string expanded = std::move(skill_expansion.expanded);
+        std::vector<std::string> diags = std::move(skill_expansion.diagnostics);
 
         if (expanded != raw_input) {
-            PromptProcessingResult result;
-            result.command_handled = false;
-            result.expanded_prompt = std::move(expanded);
+            SdkPromptResult result;
+            result.processing.command_handled = false;
+            result.processing.expanded_prompt = std::move(expanded);
+            result.diagnostics = std::move(diags);
             return result;
         }
 
@@ -141,7 +132,10 @@ struct AgentSession::Impl {
             .message_count = history.size(),
         };
 
-        return process_prompt(raw_input, templates, command_registry, cmd_ctx);
+        return SdkPromptResult{
+            process_prompt(raw_input, templates, command_registry, cmd_ctx),
+            std::move(diags),
+        };
     }
 };
 
@@ -250,17 +244,28 @@ constexpr std::string_view kHostClientModel = "host-client";
 
     const auto& pc = *provider_config;
 
-    // Resolve API key from environment
-    std::string resolved_key;
-    if (pc.api_key_env) {
-        auto val = ConfigLoader::resolve_api_key({*pc.api_key_env});
-        if (val) {
-            resolved_key = *val;
-        } else {
+    // Resolve API key from environment (env var chain: first set wins)
+    std::string resolved_env_name;
+    if (pc.api_key_env && !pc.api_key_env->empty()) {
+        bool found{false};
+        for (const auto& name : *pc.api_key_env) {
+            const char* val = std::getenv(name.c_str());
+            if (val && val[0] != '\0') {
+                resolved_env_name = name;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            std::string chain_str;
+            for (size_t i = 0; i < pc.api_key_env->size(); ++i) {
+                if (i > 0) chain_str += ", ";
+                chain_str += (*pc.api_key_env)[i];
+            }
             return std::unexpected(util::make_error(
                 util::ErrorCode::Validation,
-                std::format("API key env var '{}' is not set or empty", *pc.api_key_env),
-                "set the environment variable or supply a host-provided chat client"));
+                std::format("none of the API key env vars [{}] are set or non-empty", chain_str),
+                "set one of the environment variables or supply a host-provided chat client"));
         }
     }
 
@@ -273,7 +278,9 @@ constexpr std::string_view kHostClientModel = "host-client";
     ai::ProviderFactoryContext ctx;
     ctx.model = pc.model;
     ctx.base_url = pc.base_url.value_or("");
-    ctx.api_key_env = pc.api_key_env.value_or("");
+    ctx.api_key_env = resolved_env_name.empty()
+        ? (pc.api_key_env && !pc.api_key_env->empty() ? (*pc.api_key_env)[0] : "")
+        : resolved_env_name;
 
     auto client = registry->create(pc.provider, ctx);
     if (!client) {
@@ -311,9 +318,20 @@ constexpr std::string_view kHostClientModel = "host-client";
 // EventSubscription implementation
 // ─────────────────────────────────────────────────────────────────────────────
 
-EventSubscription::EventSubscription(EventSubscription&&) noexcept = default;
-EventSubscription& EventSubscription::operator=(EventSubscription&&) noexcept = default;
-EventSubscription::~EventSubscription() = default;
+EventSubscription::EventSubscription(EventSubscription&& other) noexcept
+    : impl_(std::move(other.impl_)) {}
+
+EventSubscription& EventSubscription::operator=(EventSubscription&& other) noexcept {
+    if (this != &other) {
+        unsubscribe();
+        impl_ = std::move(other.impl_);
+    }
+    return *this;
+}
+
+EventSubscription::~EventSubscription() {
+    unsubscribe();
+}
 
 void EventSubscription::unsubscribe() {
     if (!impl_) return;
@@ -342,7 +360,14 @@ EventSubscription::operator bool() const {
 AgentSession::AgentSession() = default;
 AgentSession::AgentSession(AgentSession&&) noexcept = default;
 AgentSession& AgentSession::operator=(AgentSession&&) noexcept = default;
-AgentSession::~AgentSession() = default;
+
+AgentSession::~AgentSession() {
+    // Close before destroying impl so outstanding EventSubscription
+    // handles see an empty subscribers vector rather than a dangling pointer.
+    if (impl_) {
+        close();
+    }
+}
 
 util::Expected<PromptResult> AgentSession::prompt(std::string text, PromptOptions options) {
     if (!impl_) {
@@ -361,10 +386,11 @@ util::Expected<PromptResult> AgentSession::prompt(std::string text, PromptOption
     auto processed = impl_->process_sdk_prompt(text);
 
     PromptResult result;
-    if (processed.command_handled) {
+    result.diagnostics = std::move(processed.diagnostics);
+    if (processed.processing.command_handled) {
         result.success = true;
         result.code = "command_handled";
-        result.message = processed.display_text.value_or("");
+        result.message = processed.processing.display_text.value_or("");
         result.last_assistant_text = last_assistant_text_from(impl_->history);
         result.message_count = impl_->history.size();
         impl_->state = AgentSession::Impl::State::Open;
@@ -378,7 +404,7 @@ util::Expected<PromptResult> AgentSession::prompt(std::string text, PromptOption
     auto run_result = impl_->runner->run_prompt(
         impl_->history,
         impl_->store,
-        std::move(processed.expanded_prompt),
+        std::move(processed.processing.expanded_prompt),
         std::move(combined_sink));
 
     if (!run_result.success) {
@@ -530,25 +556,41 @@ util::Expected<CreateAgentSessionResult> create_agent_session(
     }
 
     // ── Build chat client ────────────────────────────────────────────────
+    // For resume without host client or explicit provider_config we defer
+    // client construction until after the session is opened so we can read
+    // stored provider/model metadata.
     bool has_host_client = options.chat_client != nullptr;
-    auto client_result = build_chat_client(
-        std::move(options.chat_client),
-        options.provider_config,
-        diagnostics);
-    if (!client_result) {
-        return std::unexpected(client_result.error());
-    }
-    auto chat_client = std::move(*client_result);
+    bool build_client_now = has_create || has_host_client || options.provider_config.has_value();
 
-    // Determine provider/model metadata
+    std::unique_ptr<ai::StreamingChatClient> chat_client;
     std::string provider_name;
     std::string model_name;
-    if (has_host_client) {
-        provider_name = kHostClientProvider;
-        model_name = kHostClientModel;
-    } else if (options.provider_config) {
-        provider_name = options.provider_config->provider;
-        model_name = options.provider_config->model;
+
+    if (build_client_now) {
+        auto client_result = build_chat_client(
+            std::move(options.chat_client),
+            options.provider_config,
+            diagnostics);
+        if (!client_result) {
+            return std::unexpected(client_result.error());
+        }
+        chat_client = std::move(*client_result);
+
+        if (has_host_client) {
+            provider_name = kHostClientProvider;
+            model_name = kHostClientModel;
+        } else if (options.provider_config) {
+            provider_name = options.provider_config->provider;
+            model_name = options.provider_config->model;
+        }
+    }
+
+    // ── Validate workspace (required for new sessions) ────────────────────
+    if (has_create && options.workspace.empty()) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "workspace is required for new sessions",
+            "supply a non-empty workspace path"));
     }
 
     // ── Open or resume session ───────────────────────────────────────────
@@ -573,6 +615,32 @@ util::Expected<CreateAgentSessionResult> create_agent_session(
 
     auto& open = *open_result;
 
+    // ── Non-linear topology check (SDK v1 supports only linear sessions) ─
+    if (has_resume) {
+        auto preload = harness::session::JsonlSessionStore::load(*options.resume_path);
+        if (preload) {
+            bool has_non_linear{false};
+            for (const auto& entry : preload->entries) {
+                if (entry.parent_id.has_value() ||
+                    entry.kind == harness::session::SessionEntryKind::Compaction ||
+                    entry.kind == harness::session::SessionEntryKind::BranchSummary ||
+                    entry.kind == harness::session::SessionEntryKind::Label ||
+                    entry.kind == harness::session::SessionEntryKind::Leaf) {
+                    has_non_linear = true;
+                    break;
+                }
+            }
+            if (has_non_linear) {
+                return std::unexpected(util::make_error(
+                    util::ErrorCode::Session,
+                    "unsupported_session_topology",
+                    "SDK v1 supports only linear sessions; the resumed session contains branches, "
+                    "compactions, or tree metadata that cannot be appended linearly"));
+            }
+        }
+        // If load fails, let open_session() below surface the error
+    }
+
     // For resumes, resolve provider/model from session metadata
     if (has_resume) {
         if (has_host_client) {
@@ -582,9 +650,41 @@ util::Expected<CreateAgentSessionResult> create_agent_session(
                 "host_client_resume",
                 "Resumed session with host-provided chat client; stored provider/model metadata may differ"));
         } else if (open.stored_provider && open.stored_model) {
-            // Use stored metadata for provider/model
             provider_name = *open.stored_provider;
             model_name = *open.stored_model;
+
+            // Deferred client construction: try to build from stored metadata
+            if (!chat_client) {
+                // Try to resolve provider config from ~/.cpp-harness/config.json
+                const char* home = std::getenv("HOME");
+                if (home) {
+                    std::string config_path = std::string(home) + "/.cpp-harness/config.json";
+                    auto config = ConfigLoader::load(config_path);
+                    if (config && config->provider == provider_name) {
+                        SdkProviderConfig pc;
+                        pc.provider = provider_name;
+                        pc.model = model_name;
+                        pc.base_url = config->base_url;
+                        pc.api_key_env = config->api_key_env;
+                        auto client_result = build_chat_client(nullptr, pc, diagnostics);
+                        if (client_result) {
+                            chat_client = std::move(*client_result);
+                            diagnostics.push_back(make_diag(
+                                SdkDiagnostic::Severity::Info,
+                                "resume_default_client",
+                                std::format("Constructed default provider client from stored metadata ({}/{})",
+                                    provider_name, model_name)));
+                        }
+                    }
+                }
+                if (!chat_client) {
+                    return std::unexpected(util::make_error(
+                        util::ErrorCode::Session,
+                        "resumed session has no stored provider/model metadata usable for client construction",
+                        "supply a provider_config or host chat_client when resuming sessions, "
+                        "or ensure ~/.cpp-harness/config.json has matching provider/model/api_key_env"));
+                }
+            }
 
             if (options.provider_config) {
                 diagnostics.push_back(make_diag(
@@ -596,7 +696,7 @@ util::Expected<CreateAgentSessionResult> create_agent_session(
                 provider_name = options.provider_config->provider;
                 model_name = options.provider_config->model;
             }
-        } else if (!options.provider_config) {
+        } else if (!chat_client) {
             return std::unexpected(util::make_error(
                 util::ErrorCode::Session,
                 "resumed session has no stored provider/model metadata and no provider_config supplied",
@@ -613,8 +713,8 @@ util::Expected<CreateAgentSessionResult> create_agent_session(
         exec_env = std::make_shared<harness::AsyncLocalExecutionEnv>(
             open.workspace,
             options.builtin_tools.bash,
-            options.provider_config
-                ? std::vector<std::string>{options.provider_config->api_key_env.value_or("")}
+            options.provider_config && options.provider_config->api_key_env
+                ? *options.provider_config->api_key_env
                 : std::vector<std::string>{});
         owns_env = true;
     }
@@ -821,28 +921,15 @@ util::Expected<CreateAgentSessionResult> create_agent_session(
         }
     }
 
-    // ── Build runner ─────────────────────────────────────────────────────
-    auto runner_result = build_runner(
-        *chat_client,
-        std::move(tools),
-        templates,
-        command_registry,
-        skills,
-        options.max_turns);
-    if (!runner_result) {
-        return std::unexpected(runner_result.error());
-    }
-
-    // ── Assemble session impl ────────────────────────────────────────────
+    // ── Assemble session impl (construct before runner so command_registry
+    //     is stable — runner stores a pointer to it) ───────────────────────
     auto impl = std::make_unique<AgentSession::Impl>();
     impl->state = AgentSession::Impl::State::Open;
     impl->store = std::move(open.store);
     impl->history = std::move(open.history);
     impl->workspace_path = open.workspace;
-    impl->chat_client = std::move(chat_client);
     impl->execution_env = std::move(exec_env);
     impl->owns_execution_env = owns_env;
-    impl->runner = std::move(*runner_result);
     impl->skills = std::move(skills);
     impl->templates = std::move(templates);
     impl->command_registry = std::move(command_registry);
@@ -850,6 +937,20 @@ util::Expected<CreateAgentSessionResult> create_agent_session(
     impl->provider_name = provider_name;
     impl->model_name = model_name;
     impl->session_file_path = impl->store.path();
+
+    // ── Build runner (before chat_client is moved into impl) ─────────────
+    auto runner_result = build_runner(
+        *chat_client,
+        std::move(tools),
+        impl->templates,
+        impl->command_registry,
+        impl->skills,
+        options.max_turns);
+    if (!runner_result) {
+        return std::unexpected(runner_result.error());
+    }
+    impl->runner = std::move(*runner_result);
+    impl->chat_client = std::move(chat_client);
 
     // ── Build result ─────────────────────────────────────────────────────
     CreateAgentSessionResult result;

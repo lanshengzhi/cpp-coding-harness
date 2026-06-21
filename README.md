@@ -161,19 +161,23 @@ The project exposes an experimental same-process C++23 SDK surface for host appl
 
 ```cpp
 #include <cch/coding_agent/Sdk.hpp>
-#include <cch/ai/providers/FakeChatClient.hpp>
 
 using namespace cch;
 
-// Create a session with a host-provided fake client
+// Create a session with provider config (resolves API key from env)
 coding_agent::CreateAgentSessionOptions opts;
 opts.session_path = "/tmp/my-session.jsonl";
 opts.workspace = std::filesystem::current_path();
-opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+opts.provider_config = coding_agent::SdkProviderConfig{
+    .provider = "openai-compatible",
+    .model = "gpt-4o-mini",
+    .base_url = "https://api.openai.com/v1",
+    .api_key_env = {{"OPENAI_API_KEY"}},
+};
 
 auto result = coding_agent::create_agent_session(std::move(opts));
 if (!result) {
-    // handle creation error
+    // handle creation error — check result.error().message
 }
 
 auto& session = result->session;
@@ -191,7 +195,7 @@ if (auto pr = session->prompt("hello")) {
     // pr->last_assistant_text has the committed assistant response
 }
 
-// Close
+// Close (idempotent — repeated close is safe)
 session->close();
 ```
 

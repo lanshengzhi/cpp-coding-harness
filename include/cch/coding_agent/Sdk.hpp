@@ -52,9 +52,9 @@ struct SdkProviderConfig {
     std::string provider;
     std::string model;
     std::optional<std::string> base_url;
-    /// Environment variable(s) to resolve the API key from. The first set and
-    /// non-empty variable wins.
-    std::optional<std::string> api_key_env;
+    /// Environment variable chain to resolve the API key from.
+    /// The first set and non-empty variable wins.
+    std::optional<std::vector<std::string>> api_key_env;
 };
 
 // ── Built-in tool selection ──────────────────────────────────────────────────
@@ -196,6 +196,10 @@ struct PromptResult {
 
     /// Number of messages in committed history after this prompt.
     std::size_t message_count{0};
+
+    /// Diagnostics produced during prompt processing
+    /// (e.g. unknown /skill:name warnings).
+    std::vector<std::string> diagnostics;
 };
 
 // ── EventSubscription ────────────────────────────────────────────────────────
