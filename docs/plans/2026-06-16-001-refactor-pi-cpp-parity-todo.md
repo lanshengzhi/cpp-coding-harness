@@ -195,7 +195,11 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **Files:** `include/cch/coding_agent/PromptProcessing.hpp`, `src/coding_agent/PromptProcessing.cpp`, `src/coding_agent/PromptExpander.cpp`, `src/coding_agent/runtime/AgentSessionRunner.cpp`, `src/AsyncCliRuntime.cpp`, `tests/coding_agent/BuiltinCommandsTest.cpp`, `tests/coding_agent/PromptExpanderTest.cpp`.
   - **References:** `pi:packages/coding-agent/src/core/slash-commands.ts`, `pi:packages/coding-agent/src/core/prompt-templates.ts`, `pi:packages/coding-agent/docs/usage.md`, `pi:packages/coding-agent/docs/prompt-templates.md`.
   - **Implementation plan:** `docs/plans/2026-06-20-005-feat-slash-command-prompt-processing-plan.md`.
-  - **Status:** `CommandRegistry` with 4 session-lifecycle built-in commands, `process_prompt()` seam in REPL/runner/RPC, `expand_prompt_template()` with bash-style arg substitution. 22 new tests pass.
+  - **Status:** `CommandRegistry` dispatch framework, `process_prompt()` pipeline in REPL/runner/RPC, and `expand_prompt_template()` with bash-style arg substitution are implemented. 22 new tests pass.
+- [ ] Implement pi-aligned built-in slash commands.
+  - **References:** `pi:packages/coding-agent/src/core/slash-commands.ts` (25 built-in commands).
+  - **Current gap:** Only 4 CLI-shaped placeholder commands exist (`/session`, `/quit`, `/new`, `/resume`), and `/new`/`/resume` only print restart-instruction text rather than performing session operations. Missing pi-aligned commands include: `/help`, `/clear`, `/compact`, `/exit`, `/model`, `/cost`, `/stats`, `/theme`, `/doctor`, `/ide`, `/output-style`, and others. README incorrectly claims `/help`, `/clear`, `/compact`, `/exit` are available.
+  - **Done when:** each implemented command matches pi's behavior and has test coverage; README accurately reflects the implemented set.
 
 ### T6. Resources, Skills, Extensions, and Packages
 
@@ -293,7 +297,7 @@ The first implementation pass should execute that cleanup plan and produce the T
 3. T2 `pi-ai` stream/provider/model registry parity.
 4. T3 `pi-agent-core` loop hooks, state, and tool execution parity.
 5. T4 session tree and richer execution environment parity.
-6. T5 coding-agent runtime split, config, and tool behavior parity.
+6. T5 coding-agent runtime split, config, and tool behavior parity (pi-aligned slash commands still pending).
 7. T8 JSON/RPC surfaces before a large TUI investment.
 8. Continue T6 with project trust/resource enablement, prompt-template loading, and an extension boundary; skill discovery/model-visible invocation is already in place, while package installation remains a later supply-chain plan.
 9. T7 native TUI only after machine-readable/runtime seams are stable.
