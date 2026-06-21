@@ -36,6 +36,37 @@ public:
     /// environment variable that is set and non-empty. Returns nullopt if none are set.
     [[nodiscard]] static std::optional<std::string> resolve_api_key(
         const std::vector<std::string>& env_chain);
+
+    /// Default user config path: `$HOME/.cpp-harness/config.json`, or empty when HOME is unset.
+    [[nodiscard]] static std::string default_config_path();
 };
+
+/// Explicit CLI overrides for provider-facing settings. Unset fields fall through to
+/// session-stored values, config file, and built-in defaults.
+struct CliProviderOverrides {
+    std::optional<std::string> model;
+    std::optional<std::string> base_url;
+    std::optional<std::string> api_key_env;
+};
+
+struct ResolvedProviderSettings {
+    std::string provider;
+    std::string model;
+    std::string base_url;
+    std::string api_key_env;
+};
+
+/// Priority: CLI explicit > session stored model > config file > provider default.
+[[nodiscard]] ResolvedProviderSettings resolve_provider_settings(
+    const std::string& provider_name,
+    bool fake,
+    const CliProviderOverrides& cli,
+    const ConfigData& config,
+    const std::optional<std::string>& stored_model);
+
+/// Env var chain used for API key lookup after resolution (CLI single env or config chain).
+[[nodiscard]] std::vector<std::string> resolved_api_key_env_chain(
+    const CliProviderOverrides& cli,
+    const ConfigData& config);
 
 } // namespace cch::coding_agent

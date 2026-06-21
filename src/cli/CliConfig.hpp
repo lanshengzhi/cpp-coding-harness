@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../include/cch/coding_agent/Config.hpp"
+#include "../AsyncCliRuntime.hpp"
 
 #include <filesystem>
 #include <optional>
@@ -9,32 +9,24 @@
 
 namespace cch::cli {
 
-enum class OutputMode {
-    Text,
-    Json,
-    Rpc,
-};
-
-struct AsyncCliRuntimeConfig {
+struct CliConfig {
     bool fake{false};
     bool repl{false};
     bool enable_bash{false};
     std::optional<bool> project_trust_override;
-    bool disable_project_skills{false};
-    bool disable_prompt_templates{false};
+    bool no_skills{false};
+    bool no_prompt_templates{false};
+    bool help{false};
     std::vector<std::string> prompt_template_paths;
     OutputMode output_mode{OutputMode::Text};
-    int max_turns{8};
     bool workspace_explicit{false};
-    std::filesystem::path workspace;
+    int max_turns{8};
+    std::filesystem::path workspace{std::filesystem::current_path()};
     std::filesystem::path session_path;
     std::filesystem::path resume_path;
-    std::string session_id;
-    std::string created_at;
     coding_agent::CliProviderOverrides provider_overrides;
     std::string prompt;
+    std::string help_text;
 };
-
-int run_async_cli(const AsyncCliRuntimeConfig& config);
 
 } // namespace cch::cli

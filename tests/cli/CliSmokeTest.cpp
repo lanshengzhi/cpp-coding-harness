@@ -700,3 +700,38 @@ TEST_CASE("CLI JSON project trust diagnostics stay on stderr", "[cli][json][proj
         (void)parse_json_line(line);
     }
 }
+
+TEST_CASE("CLI applies config.json model when CLI omits --model", "[cli][config]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    std::filesystem::create_directories(home.path() / ".cpp-harness");
+    std::ofstream(home.path() / ".cpp-harness" / "config.json") << R"({"model":"config-model-name"})";
+    auto session = workspace.path() / "config-model-session.jsonl";
+
+    auto result = run_command(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --session " + q(session) + " hello");
+
+    REQUIRE(result.exit_code == 0);
+    const auto header = parse_json_line(read_file(session));
+    const auto& object = as_object(header);
+    CHECK(json_string_at(object, "type") == "session");
+    CHECK(json_string_at(object, "model") == "config-model-name");
+}
+
+TEST_CASE("CLI accepts config.json api_key_env chain without explicit --api-key-env", "[cli][config]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    std::filesystem::create_directories(home.path() / ".cpp-harness");
+    std::ofstream(home.path() / ".cpp-harness" / "config.json") << R"({"api_key_env":["CUSTOM_KEY"]})";
+    auto session = workspace.path() / "config-key-session.jsonl";
+
+    auto result = run_command(
+        "env -u OPENAI_API_KEY CUSTOM_KEY=test HOME=" + q(home.path()) + " " + bin() +
+        " --workspace " + q(workspace.path()) +
+        " --session " + q(session) + " hello");
+
+    CHECK(result.output.find("missing API key") == std::string::npos);
+    CHECK(std::filesystem::exists(session));
+}

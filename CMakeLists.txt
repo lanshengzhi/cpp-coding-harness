@@ -97,6 +97,7 @@ target_link_libraries(cch_tools
 add_library(cch_coding_agent_runtime
     src/AsyncCliRuntime.cpp
     src/coding_agent/ConfigLoader.cpp
+    src/coding_agent/ProviderConfigResolution.cpp
     src/coding_agent/ProjectResources.cpp
     src/coding_agent/ProjectTrust.cpp
     src/coding_agent/PromptProcessing.cpp
@@ -132,8 +133,13 @@ target_link_libraries(cch_coding_agent_runtime
 add_library(cpp_harness_lib INTERFACE)
 target_link_libraries(cpp_harness_lib INTERFACE cch_coding_agent_runtime)
 
-add_executable(cpp_harness src/main.cpp)
+add_executable(cpp_harness
+    src/main.cpp
+    src/cli/CliParse.cpp
+    src/cli/CliPreflight.cpp
+)
 target_link_libraries(cpp_harness PRIVATE cpp_harness_lib CLI11::CLI11)
+target_include_directories(cpp_harness PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_options(cpp_harness PRIVATE ${CCH_WARNING_OPTIONS})
 
 if(CCH_BUILD_TESTS)
@@ -153,9 +159,11 @@ if(CCH_BUILD_TESTS)
         tests/ai/providers/OpenAIChatClientTest.cpp
         tests/ai/providers/SseParserTest.cpp
         tests/cli/CliSmokeTest.cpp
+        tests/cli/CliParseTest.cpp
         tests/coding_agent/BuiltinCommandsTest.cpp
         tests/coding_agent/PromptExpanderTest.cpp
         tests/coding_agent/ConfigLoaderTest.cpp
+        tests/coding_agent/ProviderConfigResolutionTest.cpp
         tests/coding_agent/ProjectResourcesTest.cpp
         tests/coding_agent/ProjectTrustTest.cpp
         tests/coding_agent/SkillTest.cpp
@@ -179,7 +187,11 @@ if(CCH_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         third_party
     )
-    target_link_libraries(cpp_harness_tests PRIVATE cpp_harness_lib)
+    target_link_libraries(cpp_harness_tests PRIVATE cpp_harness_lib CLI11::CLI11)
+    target_sources(cpp_harness_tests PRIVATE
+        src/cli/CliParse.cpp
+        src/cli/CliPreflight.cpp
+    )
     target_compile_definitions(cpp_harness_tests PRIVATE
         CCH_BINARY="$<TARGET_FILE:cpp_harness>"
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"

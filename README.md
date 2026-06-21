@@ -98,7 +98,7 @@ Kimi's `ANTHROPIC_BASE_URL` / `ANTHROPIC_API_KEY` examples are for Anthropic-sha
 
 Live Kimi usage sends prompts, file contents read by tools, and tool outputs to the configured provider. JSONL session redaction is a persistence boundary, not a guarantee that terminal output, CI logs, provider diagnostics, or provider-bound tool results are redacted. Do not paste raw credentials into prompts, files, or tool-visible content.
 
-`--resume` loads the redacted transcript and workspace metadata, but it does not restore `--base-url`, `--model`, or `--api-key-env`. Repeat all three Kimi flags when resuming a Kimi session.
+`--resume` loads the redacted transcript and workspace metadata. When you omit `--model`, `--base-url`, or `--api-key-env`, the harness falls back to values stored in the resumed session, then to `~/.cpp-harness/config.json`, then to built-in defaults. Explicit CLI flags always win. For Kimi sessions, repeating all three Kimi flags on resume is still recommended so runtime context stays explicit.
 
 Troubleshooting:
 
@@ -130,7 +130,7 @@ The code is split into value contracts, capability seams, implementation adapter
 - `cch_harness` (`include/cch/harness`, `src/harness`): pi-shaped filesystem and shell execution capability contracts (`FileSystem`/`Shell`), local implementation with workspace containment, symlink safety, atomic writes, split-stream process execution, secret environment filtering, and JSONL session persistence.
 - `cch_tools` (`include/cch/tools`, `src/tools`): built-in read/write/edit/bash tool factories bridging agent tool contracts to harness capabilities.
 - `cch_coding_agent_runtime` (`src/AsyncCliRuntime.*`, `src/coding_agent/runtime/`, `include/cch/coding_agent/`, `src/coding_agent/`): CLI runtime orchestration, session lifecycle, provider/tool service assembly, semantic event printing, JSON/RPC output modes, slash-command/prompt-template processing (`PromptProcessing`, `PromptTemplateLoader`, `PromptExpander`), project trust/resource controls (`ProjectTrust`, `ProjectResources`), project-local skill discovery/loading, skill prompt formatting, `/skill:name` expansion, and prompt-template file loading with `--prompt-template`/`--no-prompt-templates` CLI flags.
-- `cch_coding_agent_config` (`include/cch/coding_agent/Config.hpp`, `src/coding_agent/ConfigLoader.cpp`): `~/.cpp-harness/config.json` loading with provider/model/base-url/api-key-env defaults, environment variable chain resolution, and CLI override precedence.
+- `cch_coding_agent_config` (`include/cch/coding_agent/Config.hpp`, `src/coding_agent/ConfigLoader.cpp`, `src/coding_agent/ProviderConfigResolution.cpp`): `~/.cpp-harness/config.json` loading with provider/model/base-url/api-key-env defaults, environment variable chain resolution, shared provider-settings resolution, and explicit CLI override precedence.
 
 The build publishes `include` as the public surface and keeps `src` private. Legacy synchronous tools, Boost.JSON contracts, `util::Result`, and duplicate `src` contract headers have been removed.
 
