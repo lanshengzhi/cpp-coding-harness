@@ -103,10 +103,20 @@ PromptProcessingResult process_prompt(
 std::string expand_skill_command(
     std::string_view input,
     const std::vector<Skill>& skills,
-    const harness::WorkspaceFileSystem& fs) {
+    const harness::WorkspaceFileSystem& /*fs*/) {
+    auto result = expand_skill_command_silent(input, skills);
+    for (const auto& diag : result.diagnostics) {
+        std::cerr << diag << '\n';
+    }
+    return std::move(result.expanded);
+}
+
+SkillExpansionResult expand_skill_command_silent(
+    std::string_view input,
+    const std::vector<Skill>& skills) {
     // Fast path: not a skill command
     if (!input.starts_with("/skill:")) {
-        return std::string{input};
+        return {std::string{input}, {}};
     }
 
     // Parse skill name: text between /skill: and first space (or end of string)
@@ -118,7 +128,7 @@ std::string expand_skill_command(
 
     // Bare /skill: with no name — passthrough
     if (name.empty()) {
-        return std::string{input};
+        return {std::string{input}, {}};
     }
 
     // Parse args: everything after the skill name
@@ -136,14 +146,13 @@ std::string expand_skill_command(
     }
 
     if (!found) {
-        std::cerr << "[skill:warn] unknown skill: " << name << '\n';
-        return std::string{input};
+        std::vector<std::string> diags;
+        diags.push_back(std::string{"[skill:warn] unknown skill: "} + std::string{name});
+        return {std::string{input}, std::move(diags)};
     }
 
     // Use the cached skill content (already body after frontmatter from loader).
-    // The C++ loader stores the full body in Skill::content, unlike pi which
-    // only stores metadata at load time and re-reads on invocation.
-    return formatSkillInvocation(*found, found->content, args);
+    return {formatSkillInvocation(*found, found->content, args), {}};
 }
 
 PromptProcessingResult process_prompt(

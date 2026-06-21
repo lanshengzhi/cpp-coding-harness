@@ -131,6 +131,20 @@ void register_builtin_commands(CommandRegistry& registry);
     const std::vector<Skill>& skills,
     const harness::WorkspaceFileSystem& fs);
 
+/// Result of silent skill expansion (no stderr output).
+struct SkillExpansionResult {
+    /// Expanded prompt text, or the original input if no skill matched.
+    std::string expanded;
+    /// Diagnostics produced during expansion (e.g. unknown skill name).
+    std::vector<std::string> diagnostics;
+};
+
+/// Expand a skill command without writing to stderr.
+/// Diagnostics are returned as values for SDK/non-interactive use.
+[[nodiscard]] SkillExpansionResult expand_skill_command_silent(
+    std::string_view input,
+    const std::vector<Skill>& skills);
+
 /// Expand a prompt template if input matches `/templateName args`.
 /// Returns the expanded text, or the original input if no match.
 [[nodiscard]] std::string expand_prompt_template(

@@ -101,6 +101,7 @@ add_library(cch_coding_agent_runtime
     src/coding_agent/ProjectTrust.cpp
     src/coding_agent/PromptProcessing.cpp
     src/coding_agent/PromptExpander.cpp
+    src/coding_agent/Sdk.cpp
     src/coding_agent/SkillFrontmatterParser.cpp
     src/coding_agent/SkillLoader.cpp
     src/coding_agent/PromptTemplateLoader.cpp
@@ -162,6 +163,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/SkillFrontmatterParserTest.cpp
         tests/coding_agent/SkillLoaderTest.cpp
         tests/coding_agent/PromptTemplateLoaderTest.cpp
+        tests/coding_agent/SdkSessionTest.cpp
         tests/coding_agent/SkillIntegrationTest.cpp
         tests/coding_agent/runtime/JsonEventPrinterTest.cpp
         tests/harness/AsyncLocalExecutionEnvTest.cpp

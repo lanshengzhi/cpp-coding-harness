@@ -153,7 +153,66 @@ The default text CLI prints stable semantic event lines:
 
 `--mode json` emits the first machine-readable surface: one compact JSON object per stdout line. The first record is a session header, followed by a C++ JSON stream schema v1 subset of pi-named lifecycle events such as `agent_start`, `turn_start`, `message_update`, `tool_execution_start`, `tool_execution_end`, `turn_end`, and a final `runtime_terminal` record. Text-mode final assistant output is suppressed in JSON mode so stdout remains JSONL after the session header. Startup/pre-session validation errors still report on stderr with a non-zero exit and are not a complete machine-readable CLI error protocol.
 
-`--mode rpc` is a narrow JSONL stdin/stdout command loop. It supports `prompt`, `get_state`, `get_last_assistant_text`, and `shutdown`; unsupported pi RPC commands return structured `success:false` responses. RPC mode emits no startup session header, writes command responses and prompt lifecycle events to stdout, and keeps startup/pre-session failures on stderr. It is sequential only: no `abort`, `steer`, `follow_up`, session switching, fork/clone, compaction, extension UI, resources, or SDK surface yet.
+`--mode rpc` is a narrow JSONL stdin/stdout command loop. It supports `prompt`, `get_state`, `get_last_assistant_text`, and `shutdown`; unsupported pi RPC commands return structured `success:false` responses. RPC mode emits no startup session header, writes command responses and prompt lifecycle events to stdout, and keeps startup/pre-session failures on stderr. It is sequential only: no `abort`, `steer`, `follow_up`, session switching, fork/clone, compaction, or extension UI yet.
+
+## Embeddable C++ SDK
+
+The project exposes an experimental same-process C++23 SDK surface for host applications that want to embed the agent loop without shelling out to `cpp_harness` or depending on CLI/RPC globals. The SDK is source-level only (not ABI-stable) and lives under `include/cch/coding_agent/Sdk.hpp`.
+
+```cpp
+#include <cch/coding_agent/Sdk.hpp>
+#include <cch/ai/providers/FakeChatClient.hpp>
+
+using namespace cch;
+
+// Create a session with a host-provided fake client
+coding_agent::CreateAgentSessionOptions opts;
+opts.session_path = "/tmp/my-session.jsonl";
+opts.workspace = std::filesystem::current_path();
+opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+auto result = coding_agent::create_agent_session(std::move(opts));
+if (!result) {
+    // handle creation error
+}
+
+auto& session = result->session;
+
+// Subscribe to lifecycle events
+int events = 0;
+auto sub = session->subscribe(
+    [&](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+        ++events;
+        return {};
+    });
+
+// Run a prompt
+if (auto pr = session->prompt("hello")) {
+    // pr->last_assistant_text has the committed assistant response
+}
+
+// Close
+session->close();
+```
+
+**Supported SDK v1 behavior:**
+- Explicit create/resume path: exactly one of `session_path` (create new) or `resume_path` (resume existing) must be set.
+- Blocking `prompt()` — serial, single-prompt-at-a-time.
+- Event subscriptions via move-only `agent::AgentEventSink`; per-prompt sinks also supported.
+- Host-provided chat clients and execution environments; SDK convenience provider construction from `SdkProviderConfig` when no host client is supplied.
+- Built-in tool selection with safe defaults: `read`, `write`, and `edit_file` by default; `bash` requires explicit opt-in.
+- Custom tool registration via existing `agent::AsyncAgentTool` contracts; duplicate tool names fail creation.
+- Programmatic skills, prompt templates, and slash-command handlers; host resources take precedence over project-discovered duplicates.
+- Optional project resource discovery (`.cpp-harness/skills/`, `.cpp-harness/prompts/`) behind explicit trust/resource controls.
+- Diagnostics returned as `CreateAgentSessionResult::diagnostics` values — no stdout/stderr output from the SDK path.
+
+**Not supported in SDK v1:**
+- ABI-stable binary distribution, plugin ABI, or package-manager integration.
+- Full pi `AgentSessionRuntime` replacement APIs (`newSession`, `switchSession`, `fork`, `clone`, import/export).
+- Public branch/tree navigation, compaction resume, or non-linear session topologies (SDK v1 returns `unsupported_session_topology` for branched/compacted sessions).
+- In-memory sessions, concurrent prompts, cancellation, `abort`, `steer`, `followUp`, or queueing.
+- Dynamic TypeScript/JavaScript extensions, extension UI, hot reload, MCP, or package installation.
+- TUI run modes, themes, keybindings, widgets, OAuth/subscription providers, or model catalogs.
 
 One-shot mode runs one prompt. `--repl` keeps history in memory for multiple prompts and supports built-in slash commands: `/help`, `/clear`, `/compact`, and `/exit`. Loaded skills are explicitly invocable with `/skill:<name> [additional instructions]`; that input expands to a regular user prompt containing the skill instructions. Project-local resources can be trusted for one run with `--approve` / `-a`, denied for one run with `--no-approve`, and project skills can be suppressed with `--no-skills`. `--mode json` and `--mode rpc` cannot be combined with `--repl`; RPC mode reads prompts from stdin commands rather than positional CLI arguments. `--resume <session.jsonl>` loads the redacted typed JSONL history and appends new messages. `--session <path>` always creates a new file; use `--resume` to append.
 
@@ -220,4 +279,6 @@ These cover:
 
 ## Deferred
 
-Not included yet: rich TUI, extensions, packages, global/config-driven skill directories, live skill reload, OAuth, full pi RPC command parity, embeddable SDK surface, MCP integration, permission prompts, native Windows shell process-tree termination semantics, tool execution streaming updates, subagents, C++26 reflection-generated schema, `std::execution` senders/receivers, ABI-stable binary distribution, or OS-level sandboxing.
+Not included yet: rich TUI, extensions, packages, global/config-driven skill directories, live skill reload, OAuth, full pi RPC command parity, MCP integration, permission prompts, native Windows shell process-tree termination semantics, tool execution streaming updates, subagents, C++26 reflection-generated schema, `std::execution` senders/receivers, ABI-stable binary distribution, or OS-level sandboxing.
+
+An experimental same-process embeddable C++ SDK surface is available (see Embeddable C++ SDK section above). Full pi SDK parity (session replacement runtime, concurrent prompts, compaction, in-memory sessions, ABI stability) is deferred.

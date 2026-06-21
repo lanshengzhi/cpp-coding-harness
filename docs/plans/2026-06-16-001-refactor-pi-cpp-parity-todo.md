@@ -251,8 +251,11 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **Implementation plan:** `docs/plans/2026-06-20-003-feat-t8-jsonl-rpc-mode-plan.md`.
   - **Status:** `--mode rpc` reads strict JSONL commands on stdin and emits JSONL responses/events on stdout for a narrow v1 command set: `prompt`, `get_state`, `get_last_assistant_text`, and `shutdown`. Full pi RPC command parity, SDK, extension UI, compaction, resources, and session tree operations remain deferred.
   - **Done when:** stdin/stdout JSONL requests can drive sessions without TUI assumptions.
-- [ ] Add embeddable SDK surface after agent/session/resource seams are stable.
+- [x] Add embeddable SDK surface after agent/session/resource seams are stable.
+  - **Files:** `include/cch/coding_agent/Sdk.hpp`, `src/coding_agent/Sdk.cpp`, `tests/coding_agent/SdkSessionTest.cpp`.
   - **References:** `pi:packages/coding-agent/docs/sdk.md`, `pi:packages/coding-agent/src/core/sdk.ts`.
+  - **Implementation plan:** `docs/plans/2026-06-21-001-feat-t8-embeddable-sdk-surface-plan.md`.
+  - **Status:** SDK v1 is available as a same-process C++23 source-level API. Host apps can create/resume sessions, register tools/resources, send prompts, subscribe to events, and close cleanly without CLI/RPC globals. Full pi SDK parity (session replacement runtime, concurrent prompts, compaction, in-memory sessions, ABI stability) is deferred.
   - **Done when:** a host application can create a session, register tools/resources, send prompts, receive events, and shut down cleanly without depending on CLI globals.
 
 ### T9. Security, Platform, and Distribution
