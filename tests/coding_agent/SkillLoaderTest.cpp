@@ -1,6 +1,6 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 #include "coding_agent/SkillLoader.hpp"
-#include "../../src/harness/WorkspaceFileSystem.hpp"
+#include "harness/WorkspaceFileSystem.hpp"
 #include "../support/TempWorkspace.hpp"
 
 #include <algorithm>

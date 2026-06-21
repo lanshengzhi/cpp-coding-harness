@@ -1,5 +1,5 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
-#include "../../src/coding_agent/SkillFrontmatterParser.hpp"
+#include "coding_agent/SkillFrontmatterParser.hpp"
 #include "../../include/cch/util/Error.hpp"
 
 using namespace cch;

@@ -2,8 +2,7 @@
 #include "../../include/cch/coding_agent/PromptProcessing.hpp"
 #include "coding_agent/SkillLoader.hpp"
 #include "coding_agent/SkillFormatting.hpp"
-#include "../../src/coding_agent/SkillFrontmatterParser.hpp"
-#include "../../src/harness/WorkspaceFileSystem.hpp"
+#include "harness/WorkspaceFileSystem.hpp"
 #include "../support/TempWorkspace.hpp"
 
 #include <sstream>
@@ -18,6 +17,7 @@ TEST_CASE("formatSkillsForPrompt integration with steering", "[coding_agent][ski
     std::vector<coding_agent::Skill> skills = {
         {.name = "int-skill",
          .description = "Integration test skill.",
+         .content = "",
          .filePath = "/tmp/test/SKILL.md",
          .disableModelInvocation = false},
     };

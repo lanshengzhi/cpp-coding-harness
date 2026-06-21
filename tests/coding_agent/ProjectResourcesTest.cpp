@@ -1,7 +1,7 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
 #include "../../include/cch/coding_agent/ProjectResources.hpp"
-#include "../../src/harness/WorkspaceFileSystem.hpp"
+#include "harness/WorkspaceFileSystem.hpp"
 #include "../support/TempWorkspace.hpp"
 
 #include <filesystem>
@@ -18,6 +18,17 @@ harness::WorkspaceFileSystem fs_for(const tests::TempWorkspace& workspace) {
 
 bool detected(const coding_agent::ProjectResourceDetectionResult& result, coding_agent::ProjectResourceKind kind) {
     return coding_agent::has_detected_kind(result, kind);
+}
+
+coding_agent::ProjectTrustResolution trust_resolution(
+    coding_agent::ProjectTrustDecision decision,
+    coding_agent::ProjectTrustSource source) {
+    return coding_agent::ProjectTrustResolution{
+        .decision = decision,
+        .source = source,
+        .matched_path = std::nullopt,
+        .diagnostics = {},
+    };
 }
 
 } // namespace
@@ -76,19 +87,17 @@ TEST_CASE("project resource load plan gates skills by trust and enablement", "[c
     auto trusted_plan = coding_agent::build_project_resource_load_plan(
         detection,
         policy,
-        coding_agent::ProjectTrustResolution{
-            .decision = coding_agent::ProjectTrustDecision::Trusted,
-            .source = coding_agent::ProjectTrustSource::CliOverride,
-        });
+        trust_resolution(
+            coding_agent::ProjectTrustDecision::Trusted,
+            coding_agent::ProjectTrustSource::CliOverride));
     CHECK(coding_agent::project_skills_allowed(trusted_plan));
 
     auto untrusted_plan = coding_agent::build_project_resource_load_plan(
         detection,
         policy,
-        coding_agent::ProjectTrustResolution{
-            .decision = coding_agent::ProjectTrustDecision::Untrusted,
-            .source = coding_agent::ProjectTrustSource::DefaultAskNoUi,
-        });
+        trust_resolution(
+            coding_agent::ProjectTrustDecision::Untrusted,
+            coding_agent::ProjectTrustSource::DefaultAskNoUi));
     CHECK_FALSE(coding_agent::project_skills_allowed(untrusted_plan));
     CHECK(untrusted_plan.skipped_for_untrusted);
 
@@ -97,10 +106,9 @@ TEST_CASE("project resource load plan gates skills by trust and enablement", "[c
     auto disabled_plan = coding_agent::build_project_resource_load_plan(
         detection,
         policy,
-        coding_agent::ProjectTrustResolution{
-            .decision = coding_agent::ProjectTrustDecision::Trusted,
-            .source = coding_agent::ProjectTrustSource::CliOverride,
-        });
+        trust_resolution(
+            coding_agent::ProjectTrustDecision::Trusted,
+            coding_agent::ProjectTrustSource::CliOverride));
     CHECK_FALSE(coding_agent::project_skills_allowed(disabled_plan));
     REQUIRE(disabled_plan.decisions.size() == 1);
     CHECK(disabled_plan.decisions[0].reason == coding_agent::ResourceSkipReason::Disabled);
@@ -117,10 +125,9 @@ TEST_CASE("project resource load plan does not force trust for unsupported futur
     auto plan = coding_agent::build_project_resource_load_plan(
         detection,
         policy,
-        coding_agent::ProjectTrustResolution{
-            .decision = coding_agent::ProjectTrustDecision::Trusted,
-            .source = coding_agent::ProjectTrustSource::NoProjectResources,
-        });
+        trust_resolution(
+            coding_agent::ProjectTrustDecision::Trusted,
+            coding_agent::ProjectTrustSource::NoProjectResources));
     REQUIRE(plan.decisions.size() == 1);
     CHECK(plan.decisions[0].reason == coding_agent::ResourceSkipReason::Unsupported);
     CHECK_FALSE(plan.decisions[0].allowed);
@@ -158,10 +165,9 @@ TEST_CASE("project_prompts_allowed returns true when trusted with prompts marker
 
     auto plan = coding_agent::build_project_resource_load_plan(
         detection, policy,
-        coding_agent::ProjectTrustResolution{
-            .decision = coding_agent::ProjectTrustDecision::Trusted,
-            .source = coding_agent::ProjectTrustSource::CliOverride,
-        });
+        trust_resolution(
+            coding_agent::ProjectTrustDecision::Trusted,
+            coding_agent::ProjectTrustSource::CliOverride));
     CHECK(coding_agent::project_prompts_allowed(plan));
     REQUIRE(plan.decisions.size() == 1);
     CHECK(plan.decisions[0].allowed);
@@ -175,10 +181,9 @@ TEST_CASE("project_prompts_allowed returns false when no prompts marker", "[codi
     coding_agent::ProjectResourcePolicy policy{};
     auto plan = coding_agent::build_project_resource_load_plan(
         detection, policy,
-        coding_agent::ProjectTrustResolution{
-            .decision = coding_agent::ProjectTrustDecision::Trusted,
-            .source = coding_agent::ProjectTrustSource::NoProjectResources,
-        });
+        trust_resolution(
+            coding_agent::ProjectTrustDecision::Trusted,
+            coding_agent::ProjectTrustSource::NoProjectResources));
     CHECK_FALSE(coding_agent::project_prompts_allowed(plan));
 }
 
@@ -191,10 +196,9 @@ TEST_CASE("project_prompts_allowed returns false when untrusted", "[coding_agent
 
     auto plan = coding_agent::build_project_resource_load_plan(
         detection, policy,
-        coding_agent::ProjectTrustResolution{
-            .decision = coding_agent::ProjectTrustDecision::Untrusted,
-            .source = coding_agent::ProjectTrustSource::DefaultAskNoUi,
-        });
+        trust_resolution(
+            coding_agent::ProjectTrustDecision::Untrusted,
+            coding_agent::ProjectTrustSource::DefaultAskNoUi));
     CHECK_FALSE(coding_agent::project_prompts_allowed(plan));
     REQUIRE(plan.decisions.size() == 1);
     CHECK(plan.decisions[0].reason == coding_agent::ResourceSkipReason::Untrusted);
@@ -210,10 +214,9 @@ TEST_CASE("project_prompts_allowed returns false when skills disabled", "[coding
 
     auto plan = coding_agent::build_project_resource_load_plan(
         detection, policy,
-        coding_agent::ProjectTrustResolution{
-            .decision = coding_agent::ProjectTrustDecision::Trusted,
-            .source = coding_agent::ProjectTrustSource::CliOverride,
-        });
+        trust_resolution(
+            coding_agent::ProjectTrustDecision::Trusted,
+            coding_agent::ProjectTrustSource::CliOverride));
     CHECK_FALSE(coding_agent::project_prompts_allowed(plan));
     // Note: project_prompts_allowed uses the same project_skills enablement field;
     // --no-skills disables prompts as well.

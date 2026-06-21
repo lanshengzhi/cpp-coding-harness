@@ -79,7 +79,7 @@ public:
         ExecOptions options = {}) override;
 
 private:
-    std::shared_ptr<class LocalExecutionEnv> sync_;
+    std::shared_ptr<class SyncLocalExecutionEnv> sync_;
 };
 
 } // namespace cch::harness

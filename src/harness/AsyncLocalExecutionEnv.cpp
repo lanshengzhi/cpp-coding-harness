@@ -1,6 +1,6 @@
 #include "../../include/cch/harness/LocalExecutionEnv.hpp"
 
-#include "LocalExecutionEnv.hpp"
+#include "SyncLocalExecutionEnv.hpp"
 #include "../util/Process.hpp"
 
 #include <utility>
@@ -11,7 +11,7 @@ AsyncLocalExecutionEnv::AsyncLocalExecutionEnv(
     std::filesystem::path workspace,
     bool bash_enabled,
     std::vector<std::string> secret_environment_names) {
-    sync_ = std::make_shared<LocalExecutionEnv>(
+    sync_ = std::make_shared<SyncLocalExecutionEnv>(
         std::move(workspace),
         bash_enabled,
         std::move(secret_environment_names));

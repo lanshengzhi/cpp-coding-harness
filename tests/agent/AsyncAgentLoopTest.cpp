@@ -1,6 +1,6 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include "../../src/util/ExpectedMacros.hpp"
+#include "util/ExpectedMacros.hpp"
 
 #include "../../include/cch/agent/AgentLoop.hpp"
 #include "../../include/cch/ai/Content.hpp"
@@ -20,7 +20,6 @@
 #include <mutex>
 #include <optional>
 #include <string>
-#include <thread>
 #include <type_traits>
 #include <utility>
 #include <variant>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../include/cch/coding_agent/Config.hpp"
+#include "../../include/cch/coding_agent/Config.hpp"
 
 #include <filesystem>
 #include <optional>
@@ -34,7 +34,5 @@ struct AsyncCliRuntimeConfig {
     coding_agent::CliProviderOverrides provider_overrides;
     std::string prompt;
 };
-
-int run_async_cli(const AsyncCliRuntimeConfig& config);
 
 } // namespace cch::cli

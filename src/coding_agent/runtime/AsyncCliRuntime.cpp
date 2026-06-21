@@ -1,4 +1,4 @@
-#include "AsyncCliRuntime.hpp"
+#include "coding_agent/runtime/AsyncCliRuntime.hpp"
 
 #include "../include/cch/ai/Content.hpp"
 #include "../include/cch/coding_agent/Config.hpp"
@@ -195,6 +195,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             .code = "workspace_fs_unavailable",
             .message = resource_fs.error().message,
             .path = workspace.string(),
+            .kind = std::nullopt,
         });
     }
 

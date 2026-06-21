@@ -1,8 +1,8 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
 #include "../../include/cch/harness/LocalExecutionEnv.hpp"
-#include "../../src/harness/LocalExecutionEnv.hpp"
-#include "../../src/util/Process.hpp"
+#include "harness/SyncLocalExecutionEnv.hpp"
+#include "util/Process.hpp"
 #include "../support/TempWorkspace.hpp"
 
 #include <boost/asio/co_spawn.hpp>
@@ -197,7 +197,7 @@ TEST_CASE("async local execution env sanitizes shell environment through process
     auto runner = std::make_shared<FakeProcessRunner>();
     runner->next.exit_code = 0;
     runner->next.output = "ok";
-    harness::LocalExecutionEnv env(workspace.path(), true, {"CCH_CREDENTIAL", "KIMI_API_KEY"}, runner);
+    harness::SyncLocalExecutionEnv env(workspace.path(), true, {"CCH_CREDENTIAL", "KIMI_API_KEY"}, runner);
 
     auto shell = env.run_shell("env", std::chrono::milliseconds(123));
 

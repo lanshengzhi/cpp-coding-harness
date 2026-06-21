@@ -1,4 +1,4 @@
-#include "LocalExecutionEnv.hpp"
+#include "SyncLocalExecutionEnv.hpp"
 
 #include "../util/OutputLimiter.hpp"
 
@@ -78,7 +78,7 @@ std::map<std::string, std::string> sanitized_environment(const std::vector<std::
 
 } // namespace
 
-LocalExecutionEnv::LocalExecutionEnv(
+SyncLocalExecutionEnv::SyncLocalExecutionEnv(
     std::filesystem::path workspace,
     bool bash_enabled,
     std::vector<std::string> secret_environment_names,
@@ -93,7 +93,7 @@ LocalExecutionEnv::LocalExecutionEnv(
 // Tool-shaped methods (compatibility)
 // ---------------------------------------------------------------------------
 
-util::Expected<AsyncFileReadResult> LocalExecutionEnv::read_file(std::string path, int offset, int limit) {
+util::Expected<AsyncFileReadResult> SyncLocalExecutionEnv::read_file(std::string path, int offset, int limit) {
     auto content = fs_.read_existing_file(path);
     if (!content) {
         return std::unexpected(content.error());
@@ -136,7 +136,7 @@ util::Expected<AsyncFileReadResult> LocalExecutionEnv::read_file(std::string pat
     return result;
 }
 
-util::Expected<AsyncFileWriteResult> LocalExecutionEnv::write_file(std::string path, std::string content, bool create_parents) {
+util::Expected<AsyncFileWriteResult> SyncLocalExecutionEnv::write_file(std::string path, std::string content, bool create_parents) {
     auto written = fs_.write_file(path, content, create_parents);
     if (!written) {
         return std::unexpected(written.error());
@@ -144,7 +144,7 @@ util::Expected<AsyncFileWriteResult> LocalExecutionEnv::write_file(std::string p
     return AsyncFileWriteResult{*written};
 }
 
-util::Expected<AsyncFileEditResult> LocalExecutionEnv::edit_file(std::string path, std::string old_text, std::string new_text) {
+util::Expected<AsyncFileEditResult> SyncLocalExecutionEnv::edit_file(std::string path, std::string old_text, std::string new_text) {
     auto existing = fs_.read_existing_file(path);
     if (!existing) {
         return std::unexpected(existing.error());
@@ -170,7 +170,7 @@ util::Expected<AsyncFileEditResult> LocalExecutionEnv::edit_file(std::string pat
 // Shell methods (compatibility)
 // ---------------------------------------------------------------------------
 
-util::Expected<util::ProcessRequest> LocalExecutionEnv::make_shell_request(
+util::Expected<util::ProcessRequest> SyncLocalExecutionEnv::make_shell_request(
     std::string command,
     std::chrono::milliseconds timeout) const {
     if (!bash_enabled_) {
@@ -185,7 +185,7 @@ util::Expected<util::ProcessRequest> LocalExecutionEnv::make_shell_request(
     return request;
 }
 
-AsyncShellResult LocalExecutionEnv::shell_result_from_process(const util::ProcessResult& process) const {
+AsyncShellResult SyncLocalExecutionEnv::shell_result_from_process(const util::ProcessResult& process) const {
     auto limited = util::limit_output(process.output);
     AsyncShellResult result;
     result.exit_code = process.exit_code;
@@ -194,7 +194,7 @@ AsyncShellResult LocalExecutionEnv::shell_result_from_process(const util::Proces
     return result;
 }
 
-util::Expected<AsyncShellResult> LocalExecutionEnv::run_shell(std::string command, std::chrono::milliseconds timeout) {
+util::Expected<AsyncShellResult> SyncLocalExecutionEnv::run_shell(std::string command, std::chrono::milliseconds timeout) {
     auto request = make_shell_request(std::move(command), timeout);
     if (!request) {
         return std::unexpected(request.error());
@@ -224,65 +224,65 @@ util::Expected<AsyncShellResult> LocalExecutionEnv::run_shell(std::string comman
 // Pi-shaped filesystem methods
 // ---------------------------------------------------------------------------
 
-std::expected<std::string, FileError> LocalExecutionEnv::absolutePath(const std::string& path) const {
+std::expected<std::string, FileError> SyncLocalExecutionEnv::absolutePath(const std::string& path) const {
     return fs_.absolutePath(path);
 }
 
-std::expected<std::string, FileError> LocalExecutionEnv::joinPath(const std::vector<std::string>& parts) const {
+std::expected<std::string, FileError> SyncLocalExecutionEnv::joinPath(const std::vector<std::string>& parts) const {
     return fs_.joinPath(parts);
 }
 
-std::expected<std::string, FileError> LocalExecutionEnv::readTextFile(const std::string& path) const {
+std::expected<std::string, FileError> SyncLocalExecutionEnv::readTextFile(const std::string& path) const {
     return fs_.readTextFile(path);
 }
 
-std::expected<std::vector<std::string>, FileError> LocalExecutionEnv::readTextLines(
+std::expected<std::vector<std::string>, FileError> SyncLocalExecutionEnv::readTextLines(
     const std::string& path,
     std::optional<int> maxLines) const {
     return fs_.readTextLines(path, maxLines);
 }
 
-std::expected<BinaryData, FileError> LocalExecutionEnv::readBinaryFile(const std::string& path) const {
+std::expected<BinaryData, FileError> SyncLocalExecutionEnv::readBinaryFile(const std::string& path) const {
     return fs_.readBinaryFile(path);
 }
 
-std::expected<void, FileError> LocalExecutionEnv::writeFile(const std::string& path, const WriteContent& content) const {
+std::expected<void, FileError> SyncLocalExecutionEnv::writeFile(const std::string& path, const WriteContent& content) const {
     return fs_.writeFile(path, content);
 }
 
-std::expected<void, FileError> LocalExecutionEnv::appendFile(const std::string& path, const WriteContent& content) const {
+std::expected<void, FileError> SyncLocalExecutionEnv::appendFile(const std::string& path, const WriteContent& content) const {
     return fs_.appendFile(path, content);
 }
 
-std::expected<FileInfo, FileError> LocalExecutionEnv::fileInfo(const std::string& path) const {
+std::expected<FileInfo, FileError> SyncLocalExecutionEnv::fileInfo(const std::string& path) const {
     return fs_.fileInfo(path);
 }
 
-std::expected<std::vector<FileInfo>, FileError> LocalExecutionEnv::listDir(const std::string& path) const {
+std::expected<std::vector<FileInfo>, FileError> SyncLocalExecutionEnv::listDir(const std::string& path) const {
     return fs_.listDir(path);
 }
 
-std::expected<std::string, FileError> LocalExecutionEnv::canonicalPath(const std::string& path) const {
+std::expected<std::string, FileError> SyncLocalExecutionEnv::canonicalPath(const std::string& path) const {
     return fs_.canonicalPath(path);
 }
 
-std::expected<bool, FileError> LocalExecutionEnv::exists(const std::string& path) const {
+std::expected<bool, FileError> SyncLocalExecutionEnv::exists(const std::string& path) const {
     return fs_.exists(path);
 }
 
-std::expected<void, FileError> LocalExecutionEnv::createDir(const std::string& path, bool recursive) const {
+std::expected<void, FileError> SyncLocalExecutionEnv::createDir(const std::string& path, bool recursive) const {
     return fs_.createDir(path, recursive);
 }
 
-std::expected<void, FileError> LocalExecutionEnv::remove(const std::string& path, bool recursive) const {
+std::expected<void, FileError> SyncLocalExecutionEnv::remove(const std::string& path, bool recursive) const {
     return fs_.remove(path, recursive);
 }
 
-std::expected<std::string, FileError> LocalExecutionEnv::createTempDir(std::optional<std::string> prefix) const {
+std::expected<std::string, FileError> SyncLocalExecutionEnv::createTempDir(std::optional<std::string> prefix) const {
     return fs_.createTempDir(prefix);
 }
 
-std::expected<std::string, FileError> LocalExecutionEnv::createTempFile(
+std::expected<std::string, FileError> SyncLocalExecutionEnv::createTempFile(
     std::optional<std::string> prefix,
     std::optional<std::string> suffix) const {
     return fs_.createTempFile(prefix, suffix);
@@ -292,7 +292,7 @@ std::expected<std::string, FileError> LocalExecutionEnv::createTempFile(
 // Pi-shaped shell methods
 // ---------------------------------------------------------------------------
 
-util::Expected<util::ProcessRequest> LocalExecutionEnv::make_exec_request(
+util::Expected<util::ProcessRequest> SyncLocalExecutionEnv::make_exec_request(
     std::string command,
     ExecOptions options) const {
     if (!bash_enabled_) {
@@ -345,7 +345,7 @@ util::Expected<util::ProcessRequest> LocalExecutionEnv::make_exec_request(
     return request;
 }
 
-ShellExecResult LocalExecutionEnv::exec_result_from_process(const util::ProcessResult& process) const {
+ShellExecResult SyncLocalExecutionEnv::exec_result_from_process(const util::ProcessResult& process) const {
     ShellExecResult result;
     result.stdout_output = process.stdout_output;
     result.stderr_output = process.stderr_output;
@@ -353,7 +353,7 @@ ShellExecResult LocalExecutionEnv::exec_result_from_process(const util::ProcessR
     return result;
 }
 
-std::expected<ShellExecResult, ExecutionError> LocalExecutionEnv::exec(
+std::expected<ShellExecResult, ExecutionError> SyncLocalExecutionEnv::exec(
     std::string command,
     ExecOptions options) const {
     auto request = make_exec_request(std::move(command), std::move(options));

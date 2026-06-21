@@ -1,5 +1,6 @@
 #include "cli/CliParse.hpp"
 #include "cli/CliPreflight.hpp"
+#include "coding_agent/runtime/AsyncCliRuntime.hpp"
 
 #include <iostream>
 

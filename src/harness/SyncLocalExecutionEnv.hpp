@@ -10,9 +10,9 @@
 
 namespace cch::harness {
 
-class LocalExecutionEnv final {
+class SyncLocalExecutionEnv final {
 public:
-    LocalExecutionEnv(
+    SyncLocalExecutionEnv(
         std::filesystem::path workspace,
         bool bash_enabled = false,
         std::vector<std::string> secret_environment_names = {},

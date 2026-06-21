@@ -3,12 +3,10 @@
 #include "../../include/cch/coding_agent/Sdk.hpp"
 #include "../../include/cch/agent/AgentEvent.hpp"
 #include "../../include/cch/agent/AgentTool.hpp"
-#include "../../include/cch/ai/ChatClient.hpp"
 #include "../../include/cch/ai/Content.hpp"
-#include "../../include/cch/ai/Message.hpp"
 #include "../../include/cch/coding_agent/Skill.hpp"
 #include "../../include/cch/util/Error.hpp"
-#include "../../src/ai/providers/FakeChatClient.hpp"
+#include "ai/providers/FakeChatClient.hpp"
 #include "../support/TempWorkspace.hpp"
 
 #include <filesystem>
@@ -205,7 +203,7 @@ TEST_CASE("SDK event subscription delivers lifecycle events", "[sdk][u3]") {
     CHECK_FALSE(static_cast<bool>(*sub_result));
 
     // Close
-    session->close();
+    CHECK(session->close().has_value());
 }
 
 TEST_CASE("SDK per-prompt event sink receives events", "[sdk][u3]") {
@@ -232,7 +230,7 @@ TEST_CASE("SDK per-prompt event sink receives events", "[sdk][u3]") {
     REQUIRE(prompt_result.has_value());
     CHECK(per_prompt_count > 0);
 
-    session->close();
+    CHECK(session->close().has_value());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -260,7 +258,7 @@ TEST_CASE("SDK custom tool is registered and can be called", "[sdk][u4]") {
     REQUIRE(prompt_result.has_value());
     CHECK(prompt_result->success);
 
-    session->close();
+    CHECK(session->close().has_value());
 }
 
 TEST_CASE("SDK duplicate custom tool names fail creation", "[sdk][u4]") {
@@ -304,7 +302,7 @@ TEST_CASE("SDK host-provided skills are accessible", "[sdk][u4]") {
     CHECK(session->skills().size() == 1);
     CHECK(session->skills()[0].name == "test-skill");
 
-    session->close();
+    CHECK(session->close().has_value());
 }
 
 TEST_CASE("SDK host-provided templates are accessible", "[sdk][u4]") {
@@ -328,7 +326,7 @@ TEST_CASE("SDK host-provided templates are accessible", "[sdk][u4]") {
     CHECK(session->templates().size() == 1);
     CHECK(session->templates()[0].name == "greet");
 
-    session->close();
+    CHECK(session->close().has_value());
 }
 
 TEST_CASE("SDK host-provided commands work", "[sdk][u4]") {
@@ -355,7 +353,7 @@ TEST_CASE("SDK host-provided commands work", "[sdk][u4]") {
     CHECK(prompt_result->code == "command_handled");
     CHECK(prompt_result->message.find("Hello from SDK") != std::string::npos);
 
-    session->close();
+    CHECK(session->close().has_value());
 }
 
 TEST_CASE("SDK duplicate command names fail creation", "[sdk][u4]") {
@@ -408,7 +406,7 @@ TEST_CASE("SDK default built-in tools exclude bash", "[sdk][u4]") {
     // But since bash is not registered, the agent loop won't find the tool and will error.
     // This verifies the tool is not registered by checking the session works.
 
-    session->close();
+    CHECK(session->close().has_value());
 }
 
 TEST_CASE("SDK bash tool can be explicitly enabled", "[sdk][u4]") {
@@ -425,7 +423,7 @@ TEST_CASE("SDK bash tool can be explicitly enabled", "[sdk][u4]") {
 
     auto& session = create_result->session;
     CHECK(session->is_open());
-    session->close();
+    CHECK(session->close().has_value());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -447,7 +445,7 @@ TEST_CASE("SDK can resume a linear session", "[sdk][u3]") {
         auto& session = result->session;
         auto pr = session->prompt("hello");
         REQUIRE(pr.has_value());
-        session->close();
+        CHECK(session->close().has_value());
     }
 
     // Then, resume it
@@ -465,7 +463,7 @@ TEST_CASE("SDK can resume a linear session", "[sdk][u3]") {
 
         auto pr = session->prompt("continue");
         REQUIRE(pr.has_value());
-        session->close();
+        CHECK(session->close().has_value());
     }
 }
 
@@ -493,7 +491,7 @@ TEST_CASE("SDK state accessors reflect committed history", "[sdk][u3]") {
     CHECK(pr->message_count > 0);
     CHECK(pr->last_assistant_text.has_value());
 
-    session->close();
+    CHECK(session->close().has_value());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -518,7 +516,7 @@ TEST_CASE("CreateAgentSessionResult contains metadata", "[sdk][u2]") {
     CHECK_FALSE(result->provider.empty());
     CHECK_FALSE(result->model.empty());
 
-    result->session->close();
+    CHECK(result->session->close().has_value());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -545,5 +543,5 @@ TEST_CASE("SDK creation with host client produces diagnostic", "[sdk][u2]") {
     }
     CHECK(found_host_diag);
 
-    result->session->close();
+    CHECK(result->session->close().has_value());
 }

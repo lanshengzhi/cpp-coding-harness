@@ -72,7 +72,7 @@ target_link_libraries(cch_agent
 
 add_library(cch_harness
     src/harness/AsyncLocalExecutionEnv.cpp
-    src/harness/LocalExecutionEnv.cpp
+    src/harness/SyncLocalExecutionEnv.cpp
     src/harness/session/JsonlSessionStore.cpp
     src/harness/session/SessionTree.cpp
 )
@@ -96,7 +96,7 @@ target_link_libraries(cch_tools
 )
 
 add_library(cch_coding_agent_runtime
-    src/AsyncCliRuntime.cpp
+    src/coding_agent/runtime/AsyncCliRuntime.cpp
     src/coding_agent/ConfigLoader.cpp
     src/coding_agent/ProviderConfigResolution.cpp
     src/coding_agent/ProjectResources.cpp
