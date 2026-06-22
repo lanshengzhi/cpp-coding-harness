@@ -9,9 +9,13 @@
 #include "ai/providers/FakeChatClient.hpp"
 #include "../support/TempWorkspace.hpp"
 
+#include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <memory>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace cch;
@@ -50,6 +54,36 @@ struct TestPaths {
     TestPaths() {
         session_file = workspace.path() / "test-session.jsonl";
     }
+};
+
+/// Save and restore an environment variable around a test.
+class EnvVarGuard {
+public:
+    explicit EnvVarGuard(std::string name) : name_(std::move(name)) {
+        if (const char* value = std::getenv(name_.c_str()); value != nullptr) {
+            previous_ = value;
+        }
+    }
+
+    ~EnvVarGuard() {
+        if (previous_) {
+            setenv(name_.c_str(), previous_->c_str(), 1);
+        } else {
+            unsetenv(name_.c_str());
+        }
+    }
+
+    void set(std::string value) const {
+        setenv(name_.c_str(), value.c_str(), 1);
+    }
+
+    void unset() const {
+        unsetenv(name_.c_str());
+    }
+
+private:
+    std::string name_;
+    std::optional<std::string> previous_;
 };
 
 } // namespace
@@ -127,6 +161,110 @@ TEST_CASE("create_agent_session fails without chat_client or provider_config", "
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().code == util::ErrorCode::Validation);
+}
+
+TEST_CASE("SDK provider_config api_key_env chain accepts first set fallback", "[sdk][u2][api-key-env]") {
+    TestPaths paths;
+    EnvVarGuard first_key{"CCH_SDK_CHAIN_FIRST"};
+    EnvVarGuard second_key{"CCH_SDK_CHAIN_SECOND"};
+    first_key.unset();
+    second_key.set("second-secret");
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.provider_config = coding_agent::SdkProviderConfig{
+        .provider = "fake",
+        .model = "fake-model",
+        .api_key_env = std::vector<std::string>{"CCH_SDK_CHAIN_FIRST", "CCH_SDK_CHAIN_SECOND"},
+    };
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    CHECK(result->provider == "fake");
+    CHECK(result->model == "fake-model");
+    CHECK(result->session->close().has_value());
+}
+
+TEST_CASE("SDK provider_config api_key_env chain rejects unset variables", "[sdk][u2][api-key-env]") {
+    TestPaths paths;
+    EnvVarGuard first_key{"CCH_SDK_CHAIN_UNSET_FIRST"};
+    EnvVarGuard second_key{"CCH_SDK_CHAIN_UNSET_SECOND"};
+    first_key.unset();
+    second_key.unset();
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.provider_config = coding_agent::SdkProviderConfig{
+        .provider = "fake",
+        .model = "fake-model",
+        .api_key_env = std::vector<std::string>{"CCH_SDK_CHAIN_UNSET_FIRST", "CCH_SDK_CHAIN_UNSET_SECOND"},
+    };
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().code == util::ErrorCode::Validation);
+    CHECK(result.error().message.find("CCH_SDK_CHAIN_UNSET_FIRST") != std::string::npos);
+    CHECK(result.error().message.find("CCH_SDK_CHAIN_UNSET_SECOND") != std::string::npos);
+}
+
+TEST_CASE("SDK provider_config api_key_env chain rejects empty chain", "[sdk][u2][api-key-env]") {
+    TestPaths paths;
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.provider_config = coding_agent::SdkProviderConfig{
+        .provider = "fake",
+        .model = "fake-model",
+        .api_key_env = std::vector<std::string>{},
+    };
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().code == util::ErrorCode::Validation);
+    CHECK(result.error().message.find("api_key_env chain is empty") != std::string::npos);
+}
+
+TEST_CASE("SDK resume uses config-derived api_key_env chain", "[sdk][u2][api-key-env]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace home;
+    EnvVarGuard home_guard{"HOME"};
+    EnvVarGuard first_key{"CCH_SDK_RESUME_FIRST"};
+    EnvVarGuard second_key{"CCH_SDK_RESUME_SECOND"};
+    home_guard.set(home.path().string());
+    first_key.unset();
+    second_key.set("resume-secret");
+
+    std::filesystem::create_directories(home.path() / ".cpp-harness");
+    std::ofstream(home.path() / ".cpp-harness" / "config.json")
+        << R"({"provider":"fake","model":"fake-model","api_key_env":["CCH_SDK_RESUME_FIRST","CCH_SDK_RESUME_SECOND"]})";
+
+    {
+        coding_agent::CreateAgentSessionOptions opts;
+        opts.session_path = paths.session_file;
+        opts.workspace = paths.workspace.path();
+        opts.provider_config = coding_agent::SdkProviderConfig{
+            .provider = "fake",
+            .model = "fake-model",
+            .api_key_env = std::vector<std::string>{"CCH_SDK_RESUME_FIRST", "CCH_SDK_RESUME_SECOND"},
+        };
+
+        auto result = coding_agent::create_agent_session(std::move(opts));
+        REQUIRE(result.has_value());
+        CHECK(result->session->close().has_value());
+    }
+
+    coding_agent::CreateAgentSessionOptions resume_opts;
+    resume_opts.resume_path = paths.session_file;
+    resume_opts.workspace = paths.workspace.path();
+
+    auto resume_result = coding_agent::create_agent_session(std::move(resume_opts));
+    REQUIRE(resume_result.has_value());
+    CHECK(resume_result->provider == "fake");
+    CHECK(resume_result->model == "fake-model");
+    CHECK(resume_result->session->close().has_value());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -301,6 +439,59 @@ TEST_CASE("SDK host-provided skills are accessible", "[sdk][u4]") {
     auto& session = create_result->session;
     CHECK(session->skills().size() == 1);
     CHECK(session->skills()[0].name == "test-skill");
+
+    CHECK(session->close().has_value());
+}
+
+TEST_CASE("SDK prompt returns diagnostics for unknown skill command", "[sdk][u4][skill-diagnostics]") {
+    TestPaths paths;
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+    auto create_result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(create_result.has_value());
+
+    auto& session = create_result->session;
+    auto prompt_result = session->prompt("/skill:unknown");
+    REQUIRE(prompt_result.has_value());
+    CHECK(prompt_result->code == "command_handled");
+    REQUIRE(prompt_result->diagnostics.size() == 1);
+    CHECK(prompt_result->diagnostics[0] == "[skill:warn] unknown skill: unknown");
+
+    CHECK(session->close().has_value());
+}
+
+TEST_CASE("SDK prompt leaves diagnostics empty for valid and bare skill commands", "[sdk][u4][skill-diagnostics]") {
+    TestPaths paths;
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+    coding_agent::Skill skill;
+    skill.name = "valid-skill";
+    skill.description = "A valid skill for SDK diagnostics testing";
+    skill.content = "Use the valid skill instructions.";
+    skill.filePath = "/tmp/valid-skill.md";
+    opts.skills.push_back(std::move(skill));
+
+    auto create_result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(create_result.has_value());
+
+    auto& session = create_result->session;
+    auto valid_result = session->prompt("/skill:valid-skill with args");
+    REQUIRE(valid_result.has_value());
+    CHECK(valid_result->success);
+    CHECK(valid_result->diagnostics.empty());
+
+    auto bare_result = session->prompt("/skill:");
+    REQUIRE(bare_result.has_value());
+    CHECK(bare_result->code == "command_handled");
+    CHECK(bare_result->diagnostics.empty());
 
     CHECK(session->close().has_value());
 }

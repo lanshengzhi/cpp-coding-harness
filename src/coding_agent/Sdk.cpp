@@ -15,6 +15,7 @@
 #include "runtime/SessionLifecycle.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
@@ -246,7 +247,14 @@ constexpr std::string_view kHostClientModel = "host-client";
 
     // Resolve API key from environment (env var chain: first set wins)
     std::string resolved_env_name;
-    if (pc.api_key_env && !pc.api_key_env->empty()) {
+    if (pc.api_key_env) {
+        if (pc.api_key_env->empty()) {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Validation,
+                "api_key_env chain is empty",
+                "provide at least one environment variable name or supply a host-provided chat client"));
+        }
+
         bool found{false};
         for (const auto& name : *pc.api_key_env) {
             const char* val = std::getenv(name.c_str());

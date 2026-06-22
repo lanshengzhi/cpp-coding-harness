@@ -1,7 +1,7 @@
 ---
 title: "fix: Align SDK api_key_env and skill diagnostics with pi contracts"
 type: fix
-status: active
+status: completed
 date: "2026-06-21"
 target_repo: "cpp-coding-harness"
 reference_repo: "pi"
@@ -78,11 +78,13 @@ The T8 SDK plan (`docs/plans/2026-06-21-001-feat-t8-embeddable-sdk-surface-plan.
 **Dependencies:** None
 
 **Files:**
+
 - Modify: `include/cch/coding_agent/Sdk.hpp`
 - Modify: `src/coding_agent/Sdk.cpp`
 - Test: `tests/coding_agent/SdkSessionTest.cpp`
 
 **Approach:**
+
 - Change `SdkProviderConfig::api_key_env` type to `std::optional<std::vector<std::string>>`
 - In `build_chat_client()`: iterate the chain with `ConfigLoader::resolve_api_key()` to validate that at least one var is set and discover the first-set name; pass that name as `ctx.api_key_env`
 - In the deferred resume construction path: assign `*config->api_key_env` directly instead of `[0]`
@@ -90,16 +92,19 @@ The T8 SDK plan (`docs/plans/2026-06-21-001-feat-t8-embeddable-sdk-surface-plan.
 - Update README example if it uses the field
 
 **Patterns to follow:**
+
 - `include/cch/coding_agent/Config.hpp` — same type signature for `api_key_env`
 - `src/coding_agent/ConfigLoader.cpp` — `resolve_api_key()` usage
 
 **Test scenarios:**
+
 - Happy path: SDK creation with a 2-element chain where only the second var is set succeeds
 - Edge case: chain with all vars unset fails with descriptive error listing the chain
 - Edge case: empty chain (after optional unwrap) fails validation
 - Integration: resume path with config-derived chain passes all elements through
 
 **Verification:**
+
 - `./build/cpp_harness_tests "[sdk]"` passes
 - New test exercises the chain with `setenv`/`unsetenv`
 
@@ -112,25 +117,30 @@ The T8 SDK plan (`docs/plans/2026-06-21-001-feat-t8-embeddable-sdk-surface-plan.
 **Dependencies:** U1 (same files, but logically independent)
 
 **Files:**
+
 - Modify: `include/cch/coding_agent/Sdk.hpp`
 - Modify: `src/coding_agent/Sdk.cpp`
 - Test: `tests/coding_agent/SdkSessionTest.cpp`
 
 **Approach:**
+
 - Add `std::vector<std::string> diagnostics` field to `PromptResult`
 - In `process_sdk_prompt()`: capture `skill_expansion.diagnostics` and carry them into the result
 - In `AgentSession::prompt()`: populate `result.diagnostics` from the expansion diagnostics
 
 **Patterns to follow:**
+
 - `src/coding_agent/PromptProcessing.cpp` — `expand_skill_command_silent()` contract and `SkillExpansionResult` shape
 - `include/cch/coding_agent/Sdk.hpp` — `PromptResult` struct
 
 **Test scenarios:**
+
 - Happy path: prompt with `/skill:valid_skill` returns empty diagnostics
 - Error path: prompt with `/skill:unknown` returns `diagnostics` containing `"[skill:warn] unknown skill: unknown"`
 - Edge case: prompt with bare `/skill:` (no name) returns empty diagnostics (passthrough)
 
 **Verification:**
+
 - Test asserts diagnostics vector is populated for unknown skill and empty for valid skill
 
 ### U3. Remove dead fanout() code
@@ -142,19 +152,24 @@ The T8 SDK plan (`docs/plans/2026-06-21-001-feat-t8-embeddable-sdk-surface-plan.
 **Dependencies:** None
 
 **Files:**
+
 - Modify: `src/coding_agent/Sdk.cpp`
 
 **Approach:**
+
 - Remove `AgentSession::Impl::fanout()` method (lines ~83-95)
 - Verify no callers exist via grep
 
 **Patterns to follow:**
+
 - Keep `make_combined_sink()` — it is the active implementation
 
 **Test scenarios:**
+
 - Test expectation: none — pure removal of dead code; existing tests prove no behavioral change
 
 **Verification:**
+
 - Compiles cleanly; all tests pass
 
 ---
