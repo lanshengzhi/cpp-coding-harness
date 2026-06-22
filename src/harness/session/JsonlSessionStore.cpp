@@ -1,7 +1,7 @@
 #include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
 #include "../../../include/cch/harness/session/SessionTree.hpp"
 
-#include "ai/glaze/AiJson.hpp"
+#include "../../ai/glaze/AiJson.hpp"
 #include "util/Json.hpp"
 
 #include "../../util/Redactor.hpp"
@@ -287,18 +287,18 @@ template <typename Dto>
 [[nodiscard]] SessionMetadata from_dto(const ReadHeaderDto& dto) {
     if (dto.type == "session") {
         return SessionMetadata{
-            dto.id.value_or({}),
-            dto.timestamp.value_or({}),
-            dto.cwd.value_or({}),
-            dto.provider.value_or({}),
-            dto.model.value_or({})};
+            dto.id.value_or(std::string{}),
+            dto.timestamp.value_or(std::string{}),
+            dto.cwd.value_or(std::string{}),
+            dto.provider.value_or(std::string{}),
+            dto.model.value_or(std::string{})};
     }
     return SessionMetadata{
-        dto.sessionId.value_or({}),
-        dto.createdAt.value_or({}),
-        dto.workspace.value_or({}),
-        dto.provider.value_or({}),
-        dto.model.value_or({})};
+        dto.sessionId.value_or(std::string{}),
+        dto.createdAt.value_or(std::string{}),
+        dto.workspace.value_or(std::string{}),
+        dto.provider.value_or(std::string{}),
+        dto.model.value_or(std::string{})};
 }
 
 [[nodiscard]] MessageEntryDto to_dto(std::string entry_id, const ai::MessageVariant& message) {

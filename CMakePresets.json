@@ -32,16 +32,19 @@
     {
       "name": "vcpkg",
       "configurePreset": "vcpkg",
+      "configuration": "Debug",
       "jobs": 4
     },
     {
       "name": "vcpkg-release",
       "configurePreset": "vcpkg-release",
+      "configuration": "Release",
       "jobs": 4
     },
     {
       "name": "system",
       "configurePreset": "system",
+      "configuration": "Debug",
       "jobs": 4
     }
   ],
@@ -49,11 +52,19 @@
     {
       "name": "vcpkg",
       "configurePreset": "vcpkg",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "vcpkg-release",
+      "configurePreset": "vcpkg-release",
+      "configuration": "Release",
       "output": { "outputOnFailure": true }
     },
     {
       "name": "system",
       "configurePreset": "system",
+      "configuration": "Debug",
       "output": { "outputOnFailure": true }
     }
   ]

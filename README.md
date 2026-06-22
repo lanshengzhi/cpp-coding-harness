@@ -20,38 +20,50 @@ This is a learning and experimentation harness, not a production sandbox or comp
 
 ## Build
 
-The project is CMake-based and requires a C++23-capable compiler. CMake 3.20 or newer is expected.
+The project is CMake-based and requires a C++23-capable compiler. CMake 3.25 or newer is expected.
 
 - Glaze is used only at typed JSON serialization/deserialization boundaries.
 - Boost.Beast/Asio + OpenSSL provide the HTTPS transport implementation.
 - Boost.Process is used behind the process-execution capability boundary.
 - CLI11 and Catch2 are declared in `vcpkg.json`; this repository also carries a tiny Catch-compatible fallback test header so the default suite can run in minimal environments.
 
-### Using vcpkg (recommended)
+### Bootstrap with vcpkg (recommended)
 
-All dependencies are declared in `vcpkg.json` and resolved automatically via vcpkg manifest mode. No system-installed packages are required.
+All dependencies are declared in `vcpkg.json`. The bootstrap scripts create a local `.deps/vcpkg` checkout when `VCPKG_ROOT` is not already set, bootstrap vcpkg, and configure CMake in manifest mode so dependencies such as CLI11, Glaze, Boost, and OpenSSL are installed automatically.
 
-Prerequisites: [vcpkg](https://github.com/microsoft/vcpkg) installed and `VCPKG_ROOT` environment variable set.
+Linux/macOS:
 
 ```bash
-# one-time vcpkg setup (if you don't have it yet)
-git clone https://github.com/microsoft/vcpkg.git ~/vcpkg
-~/vcpkg/bootstrap-vcpkg.sh
-export VCPKG_ROOT=~/vcpkg
+scripts/bootstrap.sh --test
+```
 
-# build
+Windows PowerShell:
+
+```powershell
+.\scripts\bootstrap.ps1 -Test
+```
+
+Useful options:
+
+- `--no-build` / `-NoBuild` configures dependencies and CMake without compiling.
+- `--release` / `-Release` uses the release preset.
+- `--vcpkg-root DIR` / `-VcpkgRoot DIR` uses an explicit vcpkg checkout instead of `$VCPKG_ROOT` or `.deps/vcpkg`.
+
+Manual vcpkg usage is also supported when `VCPKG_ROOT` is already set:
+
+```bash
 cmake --preset vcpkg
-cmake --build build -j4
+cmake --build --preset vcpkg
 ctest --preset vcpkg
 ```
 
 ### Using system packages
 
-If you prefer system-installed Boost, OpenSSL, and Glaze:
+If you prefer system-installed dependencies, install Boost, OpenSSL, Glaze, and CLI11 yourself, then use the system preset:
 
 ```bash
 cmake --preset system
-cmake --build build -j4
+cmake --build --preset system
 ctest --preset system
 ```
 
@@ -205,6 +217,7 @@ session->close();
 ```
 
 **Supported SDK v1 behavior:**
+
 - Explicit create/resume path: exactly one of `session_path` (create new) or `resume_path` (resume existing) must be set.
 - Blocking `prompt()` — serial, single-prompt-at-a-time.
 - Event subscriptions via move-only `agent::AgentEventSink`; per-prompt sinks also supported.
@@ -216,6 +229,7 @@ session->close();
 - Diagnostics returned as `CreateAgentSessionResult::diagnostics` values — no stdout/stderr output from the SDK path.
 
 **Not supported in SDK v1:**
+
 - ABI-stable binary distribution, plugin ABI, or package-manager integration.
 - Full pi `AgentSessionRuntime` replacement APIs (`newSession`, `switchSession`, `fork`, `clone`, import/export).
 - Public branch/tree navigation, compaction resume, or non-linear session topologies (SDK v1 returns `unsupported_session_topology` for branched/compacted sessions).

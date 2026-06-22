@@ -17,7 +17,6 @@ find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(CLI11 CONFIG REQUIRED)
 find_package(glaze CONFIG REQUIRED)
-find_package(CLI11 CONFIG REQUIRED)
 
 set(CCH_WARNING_OPTIONS -Wall -Wextra -Wpedantic)
 
