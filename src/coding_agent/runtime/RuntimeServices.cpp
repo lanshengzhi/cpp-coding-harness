@@ -19,10 +19,13 @@ util::Expected<RuntimeServices> make_runtime_services(const RuntimeServicesConfi
     }
 
     ai::ProviderFactoryContext provider_context;
+    provider_context.provider_registry_name = config.provider_registry_name;
+    provider_context.provider = config.provider;
+    provider_context.api = config.api;
     provider_context.model = config.model;
     provider_context.base_url = config.base_url;
     provider_context.api_key_env = config.api_key_env;
-    auto client = provider_registry->create(config.provider_name, provider_context);
+    auto client = provider_registry->create(config.provider_registry_name, provider_context);
     if (!client) {
         return std::unexpected(client.error());
     }

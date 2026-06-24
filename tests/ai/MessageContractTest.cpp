@@ -32,14 +32,15 @@ TEST_CASE("AI contracts are aggregate-friendly passive value types", "[ai][u3][c
     };
     ai::AssistantMessage assistant{
         .content = {ai::TextContent{.text = "checking", .text_signature = std::nullopt}, call},
-        .api = "openai-chat-completions",
-        .provider = "openai",
+        .api = "openai-completions",
+        .provider = "openai-compatible",
         .model = "gpt-test",
         .response_model = std::nullopt,
         .response_id = std::nullopt,
         .usage = std::nullopt,
         .stop_reason = ai::AssistantStopReason::ToolUse,
         .error_message = std::nullopt,
+        .diagnostics = std::nullopt,
         .timestamp = 1718000000999,
     };
     util::Error error{

@@ -50,18 +50,23 @@ struct CliProviderOverrides {
 };
 
 struct ResolvedProviderSettings {
+    /// Registry key used to construct the concrete provider adapter.
+    std::string provider_registry_name;
+    /// Provider/API identity stored in sessions and assistant messages.
     std::string provider;
+    std::string api;
     std::string model;
     std::string base_url;
     std::string api_key_env;
 };
 
-/// Priority: CLI explicit > session stored model > config file > provider default.
+/// Priority: CLI explicit > session stored provider/model > config file > provider default.
 [[nodiscard]] ResolvedProviderSettings resolve_provider_settings(
-    const std::string& provider_name,
+    const std::string& provider_registry_name,
     bool fake,
     const CliProviderOverrides& cli,
     const ConfigData& config,
+    const std::optional<std::string>& stored_provider,
     const std::optional<std::string>& stored_model);
 
 /// Env var chain used for API key lookup after resolution (CLI single env or config chain).

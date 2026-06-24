@@ -20,6 +20,8 @@ reference_repo: "pi"
 
 Complete pi-ai contract parity by separating ToolCall from the Content variant to match pi's semantic model, adding diagnostics/cacheWrite1h/missing-type-fields, introducing the `OpenAICompletionsCompat` struct with all pi-defined compatibility flags, and implementing provider-specific transformations in the OpenAI provider adapter. All changes stay within the established passive-value/Glaze-isolated architecture.
 
+**2026-06-24 drift note:** pi-ai has since moved stream/API-registry contracts into `types.ts`, `utils/event-stream.ts`, `models.ts`, `compat.ts`, and `api/lazy.ts`; `src/stream.ts` and `src/api-registry.ts` are absent in the current checkout. pi's `OpenAICompletionsCompat` also now includes routing, strict-mode, cache-control, session-affinity, long-retention, and chat-template fields beyond the 10 fields implemented by this completed plan. Treat those as deferred follow-up parity, not as behavior this plan delivered.
+
 ---
 
 ## Problem Frame
@@ -76,7 +78,7 @@ The pre-implementation cleanup (`docs/plans/2026-06-16-002-refactor-pre-implemen
 ### Reference Contracts (pi)
 
 - **`pi:packages/ai/src/types.ts`**: Defines `TextContent`, `ThinkingContent`, `ImageContent`, `ToolCall`, `UserMessage`, `AssistantMessage`, `ToolResultMessage`, `Usage`, `StopReason`, `OpenAICompletionsCompat`, `AnthropicMessagesCompat`, `OpenAIResponsesCompat`, `StreamOptions`, `AssistantMessageDiagnostic`.
-- **`pi:packages/ai/src/stream.ts`**: `AssistantMessageEvent` protocol — start, text_start/delta/end, thinking_start/delta/end, toolcall_start/delta/end, done, error.
+- **`pi:packages/ai/src/types.ts` + `pi:packages/ai/src/utils/event-stream.ts`**: `AssistantMessageEvent` protocol — start, text_start/delta/end, thinking_start/delta/end, toolcall_start/delta/end, done, error.
 - **`pi:packages/ai/src/providers/openai-completions.ts`**: Provider adapter implementing compat transformations.
 
 ### Institutional Learnings
@@ -495,6 +497,6 @@ User config (CLI11 / RuntimeConfig)
   - `tests/ai/MessageContractTest.cpp`, `tests/ai/GlazeRoundTripTest.cpp`, `tests/ai/providers/OpenAIChatClientTest.cpp`, `tests/ai/ProviderRegistryTest.cpp`
 - pi reference contracts:
   - `pi:packages/ai/src/types.ts`
-  - `pi:packages/ai/src/stream.ts`
+  - `pi:packages/ai/src/utils/event-stream.ts`
   - `pi:packages/ai/src/providers/openai-completions.ts`
   - `pi:packages/ai/src/providers/transform-messages.ts`

@@ -17,6 +17,14 @@ namespace {
     return it != default_model.end() ? it->second : "gpt-4.1-mini";
 }
 
+[[nodiscard]] std::string provider_default_api(const std::string& provider_registry_name) {
+    if (provider_registry_name == "fake") {
+        return "scripted-fake";
+    }
+    return "openai-completions";
+}
+
+
 } // namespace
 
 std::string ConfigLoader::default_config_path() {
@@ -25,13 +33,16 @@ std::string ConfigLoader::default_config_path() {
 }
 
 ResolvedProviderSettings resolve_provider_settings(
-    const std::string& provider_name,
+    const std::string& provider_registry_name,
     const bool fake,
     const CliProviderOverrides& cli,
     const ConfigData& config,
+    const std::optional<std::string>& stored_provider,
     const std::optional<std::string>& stored_model) {
-    std::string resolved_provider = provider_name;
-    if (config.provider && resolved_provider == "openai-compatible" && !fake) {
+    std::string resolved_provider = provider_registry_name;
+    if (stored_provider) {
+        resolved_provider = *stored_provider;
+    } else if (config.provider && resolved_provider == "openai-compatible" && !fake) {
         resolved_provider = *config.provider;
     }
 
@@ -43,7 +54,7 @@ ResolvedProviderSettings resolve_provider_settings(
     } else if (config.model) {
         resolved_model = *config.model;
     } else {
-        resolved_model = provider_default_model(resolved_provider);
+        resolved_model = provider_default_model(provider_registry_name);
     }
 
     std::string resolved_base_url;
@@ -74,7 +85,9 @@ ResolvedProviderSettings resolve_provider_settings(
     }
 
     return ResolvedProviderSettings{
+        .provider_registry_name = provider_registry_name,
         .provider = std::move(resolved_provider),
+        .api = provider_default_api(provider_registry_name),
         .model = std::move(resolved_model),
         .base_url = std::move(resolved_base_url),
         .api_key_env = std::move(resolved_api_key_env),

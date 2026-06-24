@@ -138,6 +138,8 @@ TEST_CASE("streaming OpenAI client serializes typed context and emits text delta
     CHECK(run.result->response_id == "resp-1");
     REQUIRE(run.result->response_model);
     CHECK(*run.result->response_model == "gpt-test-response");
+    CHECK(run.result->api == "openai-completions");
+    CHECK(run.result->provider == "openai-compatible");
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
     REQUIRE(run.result->content.size() == 1);
     REQUIRE(std::holds_alternative<ai::TextContent>(run.result->content[0]));
@@ -168,6 +170,31 @@ TEST_CASE("streaming OpenAI client serializes typed context and emits text delta
     CHECK(tool.at("type").get_string() == "function");
     const auto& stream_options = root.at("stream_options").get_object();
     CHECK(stream_options.at("include_usage").get_boolean());
+}
+
+TEST_CASE("streaming OpenAI client uses configured assistant identity", "[ai][provider][stream][u4]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {
+        sse(R"json({"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]})json"),
+        sse("[DONE]"),
+    };
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    config.api = "openai-completions";
+    config.provider = "kimi-coding";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::StreamChatRequest request;
+    request.model = "kimi-for-coding";
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result);
+    CHECK(run.result->api == "openai-completions");
+    CHECK(run.result->provider == "kimi-coding");
+    CHECK(run.result->model == "kimi-for-coding");
 }
 
 TEST_CASE("streaming OpenAI client builds Kimi-compatible tool requests offline", "[ai][provider][stream][u2]") {

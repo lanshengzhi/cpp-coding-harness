@@ -284,6 +284,9 @@ constexpr std::string_view kHostClientModel = "host-client";
     }
 
     ai::ProviderFactoryContext ctx;
+    ctx.provider_registry_name = pc.provider;
+    ctx.provider = pc.provider;
+    ctx.api = pc.provider == "fake" ? "scripted-fake" : "openai-completions";
     ctx.model = pc.model;
     ctx.base_url = pc.base_url.value_or("");
     ctx.api_key_env = resolved_env_name.empty()

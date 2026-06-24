@@ -20,6 +20,16 @@ std::string read_text(const std::filesystem::path& path) {
     return out.str();
 }
 
+std::size_t count_occurrences(const std::string& text, const std::string& needle) {
+    std::size_t count = 0;
+    std::size_t pos = 0;
+    while ((pos = text.find(needle, pos)) != std::string::npos) {
+        ++count;
+        pos += needle.size();
+    }
+    return count;
+}
+
 std::vector<std::filesystem::path> files_under(std::initializer_list<std::string> roots) {
     std::vector<std::filesystem::path> files;
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
@@ -119,6 +129,23 @@ TEST_CASE("provider DTOs stay out of the public contract surface", "[architectur
         const auto filename = entry.path().filename().string();
         CHECK(std::find(allowed_provider_headers.begin(), allowed_provider_headers.end(), filename) != allowed_provider_headers.end());
     }
+}
+
+TEST_CASE("AI message surface does not accept new runtime-only message variants", "[architecture][ai]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto message_header = read_text(source_root / "include" / "cch" / "ai" / "Message.hpp");
+
+    const auto section_start = message_header.find("// ── pi extended runtime message types ──");
+    const auto variant_start = message_header.find("using MessageVariant", section_start);
+    REQUIRE(section_start != std::string::npos);
+    REQUIRE(variant_start != std::string::npos);
+
+    const auto legacy_runtime_section = message_header.substr(section_start, variant_start - section_start);
+    CHECK(count_occurrences(legacy_runtime_section, "struct ") == 4);
+    CHECK(legacy_runtime_section.find("BashExecutionMessage") != std::string::npos);
+    CHECK(legacy_runtime_section.find("CustomMessage") != std::string::npos);
+    CHECK(legacy_runtime_section.find("BranchSummaryMessage") != std::string::npos);
+    CHECK(legacy_runtime_section.find("CompactionSummaryMessage") != std::string::npos);
 }
 
 TEST_CASE("coding_agent loaders stay out of the public contract surface", "[architecture][u4]") {

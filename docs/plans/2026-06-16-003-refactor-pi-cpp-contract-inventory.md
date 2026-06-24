@@ -28,9 +28,12 @@ Classification:
 ## Source References Read
 
 - `pi:packages/ai/src/types.ts`
-- `pi:packages/ai/src/stream.ts`
-- `pi:packages/ai/src/api-registry.ts`
+- `pi:packages/ai/src/utils/event-stream.ts`
 - `pi:packages/ai/src/models.ts`
+- `pi:packages/ai/src/compat.ts`
+- `pi:packages/ai/src/api/lazy.ts`
+- `pi:packages/ai/src/providers/all.ts`
+- Historical references `pi:packages/ai/src/stream.ts` and `pi:packages/ai/src/api-registry.ts` are absent in the current pi checkout; their stream/API-registry contracts now live in the files above.
 - `pi:packages/agent/src/types.ts`
 - `pi:packages/agent/src/harness/types.ts`
 - `pi:packages/coding-agent/docs/session-format.md`
@@ -41,19 +44,24 @@ Classification:
 
 | pi contract | C++ equivalent | Classification | Notes |
 | --- | --- | --- | --- |
-| `KnownApi`, `Api`, `KnownProvider`, `Provider`, image provider aliases | Missing explicit public aliases | Near-term parity | U4 introduces provider registry keyed by provider name; fuller provider/model catalog remains later T2 work. |
-| `ThinkingLevel`, `ModelThinkingLevel`, `ThinkingLevelMap`, `ThinkingBudgets` | Partial: `include/cch/ai/Content.hpp` has `ThinkingContent`; no public thinking-level model yet | Near-term parity | U5 adds observable state/thinking event seam; model-specific thinking budgets stay provider/model registry follow-up. |
-| `CacheRetention`, `Transport`, `ProviderResponse`, `StreamOptions`, `ProviderStreamOptions`, `SimpleStreamOptions` | Partial: `include/cch/ai/ChatClient.hpp::StreamChatRequest`, `src/ai/providers/OpenAIChatClient.cpp` | Near-term parity | Keep provider options at adapter boundary; do not leak provider DTOs into domain headers. |
-| `TextContent`, `ThinkingContent`, `ImageContent`, `ToolCall` | `include/cch/ai/Content.hpp` (`TextContent`, `ThinkingContent`, `ImageContent`, `ToolCallContent`) | MVP parity | Current types cover basic text/thinking/image/tool-call blocks with C++ naming. |
-| `Usage`, `StopReason` | `include/cch/ai/Usage.hpp` (`Usage`, `AssistantStopReason`) | MVP parity | Cost/provider metadata is partial and remains T2. |
-| `UserMessage`, `AssistantMessage`, `ToolResultMessage`, `Message` | `include/cch/ai/Message.hpp` (`SystemMessage`, `UserMessage`, `AssistantMessage`, `ToolResultMessage`, `MessageVariant`) | MVP parity | System messages are an existing C++ addition. Extended runtime/custom messages wait for session-entry support. |
-| `Tool`, `Context` | `include/cch/ai/Tool.hpp`, `include/cch/ai/Context.hpp` | MVP parity | Tool JSON schema uses project `util::JsonValue`; keep Glaze DTOs out of public contracts. |
-| `AssistantMessageEvent` and `AssistantMessageEventStream` | `include/cch/ai/StreamEvent.hpp` (`AssistantStreamEvent`) | Near-term parity | Current stream events already include text/thinking/tool-call phases; U5 forwards them through agent lifecycle events. |
-| `stream`, `complete`, `streamSimple`, `completeSimple` | `include/cch/ai/ChatClient.hpp::StreamingChatClient` | MVP parity | C++ exposes a streaming client seam only; complete/simple helpers are deferred unless a current consumer appears. |
-| `ApiProvider`, `registerApiProvider`, `getApiProvider`, `getApiProviders`, `unregisterApiProviders`, `clearApiProviders` | Missing | Near-term parity | U4 adds a C++ `ProviderRegistry` with deterministic registration, lookup, unknown-provider, and duplicate-registration behavior. |
-| `getModel`, `getProviders`, `getModels`, `calculateCost`, thinking-level helpers, `modelsAreEqual` | Missing | Deferred parity | Model catalog/config resolution follows after provider registry and runtime split. |
-| OpenAI/Anthropic/OpenRouter/Vercel compatibility option shapes | Provider implementation details under `src/ai/providers/` and `src/ai/glaze/` | Deferred parity | Only OpenAI-compatible path exists now; future adapter options must remain provider-local. |
+| `KnownApi`, `Api`, `KnownProvider`, `Provider`, image provider aliases | Partial: `ProviderFactoryContext` now carries separate registry key and provider/API identity; no public alias/catalog model yet | Near-term parity | C++ must not report every OpenAI-compatible adapter response as provider `openai`; full provider/model catalog remains deferred. |
+| `ThinkingLevel`, `ModelThinkingLevel`, `ThinkingLevelMap`, `ThinkingBudgets` | Partial: `include/cch/ai/Content.hpp` has `ThinkingContent`; no public thinking-level model/options seam yet | Deferred parity | Requires the future model/options seam; do not add inert thinking controls to the generic request surface. |
+| `CacheRetention`, `Transport`, `ProviderResponse`, `StreamOptions`, `ProviderStreamOptions`, `SimpleStreamOptions` | Partial: `include/cch/ai/ChatClient.hpp::StreamChatRequest`, `src/ai/providers/OpenAIChatClient.cpp` | Deferred parity | Current C++ request only carries context/model; temperature, maxTokens, transport, retry, cacheRetention, sessionId, callbacks, headers, metadata, and env remain out of scope. |
+| `TextContent`, `ThinkingContent`, `ImageContent`, `ToolCall` | `include/cch/ai/Content.hpp` (`TextContent`, `ThinkingContent`, `ImageContent`, `ToolCallContent`) | MVP parity | C++ also keeps `raw_arguments` / validity state for streamed tool-call recovery; this is useful but should not expand into provider scratch state elsewhere. |
+| `Usage`, `StopReason` | `include/cch/ai/Usage.hpp` (`Usage`, `AssistantStopReason`) | MVP parity | Contract has cache/cost fields; OpenAI-compatible adapter still only fills prompt/completion/total tokens. |
+| `UserMessage`, `AssistantMessage`, `ToolResultMessage`, `Message` | `include/cch/ai/Message.hpp` (`SystemMessage`, `UserMessage`, `AssistantMessage`, `ToolResultMessage`, `MessageVariant`) | MVP parity with known cleanup debt | System messages and extended runtime/custom messages are C++ additions; future runtime-only message types should live outside `include/cch/ai`. |
+| `Tool`, `Context` | `include/cch/ai/Tool.hpp`, `include/cch/ai/Context.hpp` | MVP parity with known cleanup debt | Tool JSON schema uses project `util::JsonValue`; `ToolExecutionMode` belongs to agent scheduling and is a future cleanup target. |
+| `AssistantMessageEvent` and `AssistantMessageEventStream` | `include/cch/ai/StreamEvent.hpp` (`AssistantStreamEvent`) | Near-term parity | Current pi stream/result semantics live in `types.ts` and `utils/event-stream.ts`. C++ has event variants but no async-iterable stream object. |
+| `stream`, `complete`, `streamSimple`, `completeSimple` | `include/cch/ai/ChatClient.hpp::StreamingChatClient` | MVP parity | C++ exposes a streaming client seam plus `complete()` helper; simple helpers remain deferred unless a current consumer appears. |
+| `ApiProvider`, `registerApiProvider`, `getApiProvider`, `getApiProviders`, `unregisterApiProviders`, `clearApiProviders` | Partial: `include/cch/ai/ProviderRegistry.hpp` | Near-term parity | pi's old global registry is now compatibility-only (`compat.ts`); C++ registry is adapter construction, not a full `Models` collection. |
+| `Model`, `Models`, `createModels`, `createProvider`, `getModel`, `getProviders`, `getModels`, `calculateCost`, thinking-level helpers, `modelsAreEqual` | Missing except static config/model strings | Deferred parity | Requires a dedicated C++ model seam carrying provider/API/baseUrl/reasoning/input/cost/context/max-token/compat metadata. |
+| OpenAI/Anthropic/OpenRouter/Vercel compatibility option shapes | Provider implementation details under `include/cch/ai/providers/`, `src/ai/providers/`, and `src/ai/glaze/` | Partial/deferred parity | C++ has the older OpenAI completions compat subset; current pi adds routing, strict-mode, cache-control, session-affinity, long-retention, and chat-template fields. |
 | Images API contracts (`ImagesOptions`, `AssistantImages`, `ImagesModel`) | Missing | Deferred parity | Image generation is out of scope for the current harness roadmap. |
+
+
+### AI Contract Ownership Note
+
+`include/cch/ai` should stay the provider-neutral LLM contract surface: content, assistant/user/tool-result messages, context, tools, usage, stream events, chat clients, provider registry, and provider adapter config. Agent scheduling (`ToolExecutionMode`, queueing, hooks) belongs under `include/cch/agent`; coding-agent/runtime transcript messages (bash execution, custom display messages, branch/compaction summaries) belong under coding-agent/session-facing contracts. Existing C++ additions remain for compatibility, but new runtime-only concepts should not be added to `include/cch/ai`.
 
 ## Agent Package Contracts
 

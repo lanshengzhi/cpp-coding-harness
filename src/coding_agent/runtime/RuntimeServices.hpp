@@ -16,7 +16,9 @@ namespace cch::coding_agent::runtime {
 struct RuntimeServicesConfig {
     std::filesystem::path workspace;
     bool enable_bash{false};
-    std::string provider_name;
+    std::string provider_registry_name;
+    std::string provider;
+    std::string api;
     std::string model;
     std::string base_url;
     std::string api_key_env;

@@ -51,6 +51,8 @@ util::Expected<ProviderRegistry> make_default_provider_registry() {
         "openai-compatible",
         [](const ProviderFactoryContext& context) -> ProviderFactoryResult {
             providers::OpenAIStreamConfig config;
+            config.api = context.api.empty() ? "openai-completions" : context.api;
+            config.provider = context.provider.empty() ? context.provider_registry_name : context.provider;
             if (!context.base_url.empty()) {
                 config.base_url = context.base_url;
             }

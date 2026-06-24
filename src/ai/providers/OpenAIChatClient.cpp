@@ -289,8 +289,8 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
     http.body = std::move(body);
 
     ai::AssistantMessage assistant;
-    assistant.api = "openai-chat-completions";
-    assistant.provider = "openai";
+    assistant.api = config_.api;
+    assistant.provider = config_.provider;
     assistant.model = request.model.empty() ? (request.context.model.empty() ? config_.model : request.context.model) : request.model;
     assistant.stop_reason = ai::AssistantStopReason::Unknown;
 

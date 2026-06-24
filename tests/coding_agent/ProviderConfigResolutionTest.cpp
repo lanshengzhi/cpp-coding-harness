@@ -24,6 +24,7 @@ TEST_CASE("resolve_provider_settings prefers explicit CLI model over config", "[
         false,
         cli,
         config_with_model("config-model"),
+        std::nullopt,
         std::nullopt);
 
     CHECK(resolved.model == "cli-model");
@@ -36,6 +37,7 @@ TEST_CASE("resolve_provider_settings uses config model when CLI omits model", "[
         false,
         cli,
         config_with_model("config-model"),
+        std::nullopt,
         std::nullopt);
 
     CHECK(resolved.model == "config-model");
@@ -48,6 +50,7 @@ TEST_CASE("resolve_provider_settings uses stored model on resume when CLI omits 
         false,
         cli,
         config_with_model("config-model"),
+        std::nullopt,
         std::string{"stored-model"});
 
     CHECK(resolved.model == "stored-model");
@@ -62,6 +65,7 @@ TEST_CASE("resolve_provider_settings lets explicit CLI model override stored mod
         false,
         cli,
         config_with_model("config-model"),
+        std::nullopt,
         std::string{"stored-model"});
 
     CHECK(resolved.model == "cli-model");
@@ -75,6 +79,7 @@ TEST_CASE("resolve_provider_settings falls back to provider default model", "[co
         false,
         cli,
         config,
+        std::nullopt,
         std::nullopt);
 
     CHECK(resolved.model == "gpt-4.1-mini");
@@ -88,6 +93,7 @@ TEST_CASE("resolve_provider_settings uses fake provider default model", "[config
         true,
         cli,
         config,
+        std::nullopt,
         std::nullopt);
 
     CHECK(resolved.model == "fake-model");
@@ -102,9 +108,51 @@ TEST_CASE("resolve_provider_settings uses config base_url when CLI omits base_ur
         false,
         cli,
         config,
+        std::nullopt,
         std::nullopt);
 
     CHECK(resolved.base_url == "https://config.example/v1");
+}
+
+TEST_CASE("resolve_provider_settings keeps custom provider identity on OpenAI-compatible adapter", "[config][resolution]") {
+    cch::coding_agent::ConfigData config;
+    config.provider = "kimi-coding";
+    config.model = "kimi-for-coding";
+    config.base_url = "https://api.kimi.com/coding/v1";
+    const cch::coding_agent::CliProviderOverrides cli;
+
+    const auto resolved = cch::coding_agent::resolve_provider_settings(
+        "openai-compatible",
+        false,
+        cli,
+        config,
+        std::nullopt,
+        std::nullopt);
+
+    CHECK(resolved.provider_registry_name == "openai-compatible");
+    CHECK(resolved.provider == "kimi-coding");
+    CHECK(resolved.api == "openai-completions");
+    CHECK(resolved.model == "kimi-for-coding");
+    CHECK(resolved.base_url == "https://api.kimi.com/coding/v1");
+}
+
+TEST_CASE("resolve_provider_settings preserves stored provider identity on resume", "[config][resolution]") {
+    cch::coding_agent::ConfigData config;
+    config.provider = "openai-compatible";
+    const cch::coding_agent::CliProviderOverrides cli;
+
+    const auto resolved = cch::coding_agent::resolve_provider_settings(
+        "openai-compatible",
+        false,
+        cli,
+        config,
+        std::string{"kimi-coding"},
+        std::string{"kimi-for-coding"});
+
+    CHECK(resolved.provider_registry_name == "openai-compatible");
+    CHECK(resolved.provider == "kimi-coding");
+    CHECK(resolved.api == "openai-completions");
+    CHECK(resolved.model == "kimi-for-coding");
 }
 
 TEST_CASE("resolved_api_key_env_chain prefers CLI override", "[config][resolution]") {

@@ -46,7 +46,7 @@ The first implementation pass should execute that cleanup plan and produce the T
 
 | pi reference area | C++ target area | Current state | Contract references to inspect first |
 | --- | --- | --- | --- |
-| `pi:packages/ai` | `include/cch/ai/`, `src/ai/`, `tests/ai/` | Partial: messages, content, usage, stream events, OpenAI-compatible provider, SSE, Glaze DTO boundary exist. | `pi:packages/ai/src/types.ts`, `pi:packages/ai/src/stream.ts`, `pi:packages/ai/src/api-registry.ts`, `pi:packages/ai/src/providers/` |
+| `pi:packages/ai` | `include/cch/ai/`, `src/ai/`, `tests/ai/` | Partial: messages, content, usage, stream events, OpenAI-compatible provider, SSE, Glaze DTO boundary, and provider/API identity propagation exist. Full `Model`/`Models`, `StreamOptions`, Responses/Image APIs, and current OpenAI compat breadth remain deferred. | `pi:packages/ai/src/types.ts`, `pi:packages/ai/src/utils/event-stream.ts`, `pi:packages/ai/src/models.ts`, `pi:packages/ai/src/compat.ts`, `pi:packages/ai/src/api/lazy.ts`, `pi:packages/ai/src/providers/` |
 | `pi:packages/agent` | `include/cch/agent/`, `src/agent/`, `include/cch/harness/`, `src/harness/`, `tests/agent/`, `tests/harness/` | Partial: async loop, event sink, async tools, execution env, and JSONL store exist; richer agent state/hooks/session tree are missing. | `pi:packages/agent/src/types.ts`, `pi:packages/agent/src/agent-loop.ts`, `pi:packages/agent/src/harness/types.ts`, `pi:packages/agent/src/harness/agent-harness.ts` |
 | `pi:packages/coding-agent` core/CLI | `src/AsyncCliRuntime.*`, `src/main.cpp`, future CLI/core modules, `tests/cli/` | MVP only: fake/real provider wiring, one-shot/REPL/resume, semantic event lines. | `pi:packages/coding-agent/src/core/`, `pi:packages/coding-agent/src/cli/`, `pi:packages/coding-agent/docs/usage.md`, `pi:packages/coding-agent/docs/json.md`, `pi:packages/coding-agent/docs/rpc.md` |
 | `pi:packages/coding-agent` resources | `include/cch/coding_agent/`, `src/coding_agent/`, `src/coding_agent/runtime/`, future extension/package modules | Partial: config/model defaults, project trust/resource controls, prompt expansion, project-local skill discovery/loading, skill prompt formatting, `/skill:name` invocation, and prompt-template loading exist; extensions, packages, and global/config-driven skill dirs remain missing. | `pi:packages/coding-agent/docs/settings.md`, `pi:packages/coding-agent/docs/extensions.md`, `pi:packages/coding-agent/docs/skills.md`, `pi:packages/coding-agent/docs/prompt-templates.md`, `pi:packages/coding-agent/docs/packages.md` |
@@ -96,16 +96,16 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **Test scenarios:** round-trip each content block type; preserve tool call IDs and raw/parsed arguments; preserve error/aborted stop reasons.
 - [x] Align streaming event semantics with pi's assistant message event protocol.
   - **Files:** `include/cch/ai/StreamEvent.hpp`, `src/ai/providers/SseParser.cpp`, `tests/ai/providers/SseParserTest.cpp`.
-  - **References:** `pi:packages/ai/src/types.ts`, `pi:packages/ai/src/stream.ts`, `pi:packages/ai/src/utils/event-stream.ts`.
+  - **References:** `pi:packages/ai/src/types.ts`, `pi:packages/ai/src/utils/event-stream.ts`.
   - **Test scenarios:** start, text delta/end, thinking delta/end, toolcall delta/end, done, and error events produce the expected final assistant message.
 - [x] Introduce a provider/model registry seam before adding more providers.
   - **Files:** `include/cch/ai/ProviderRegistry.hpp`, `src/ai/ProviderRegistry.cpp`, `src/ai/providers/`, `tests/ai/ProviderRegistryTest.cpp`.
-  - **References:** `pi:packages/ai/src/api-registry.ts`, `pi:packages/ai/src/models.ts`, `pi:packages/ai/src/env-api-keys.ts`, `pi:packages/ai/src/providers/register-builtins.ts`.
+  - **References:** `pi:packages/ai/src/models.ts`, `pi:packages/ai/src/compat.ts`, `pi:packages/ai/src/env-api-keys.ts`, `pi:packages/ai/src/providers/all.ts`.
   - **Done when:** OpenAI-compatible/Kimi wiring is one registered provider path, not hardcoded throughout CLI runtime.
 - [x] Add provider compatibility options only behind provider adapters.
   - **Files:** `src/ai/providers/OpenAIChatClient.cpp`, `src/ai/glaze/ProviderDtos.hpp`, `include/cch/ai/providers/OpenAICompletionsCompat.hpp`, `tests/ai/providers/OpenAIChatClientTest.cpp`.
   - **References:** `pi:packages/ai/src/providers/openai-completions.ts`, `pi:packages/ai/src/providers/openai-responses.ts`, `pi:packages/ai/src/providers/transform-messages.ts`.
-  - **Done when:** custom base URLs, tool-result naming, reasoning/thinking compatibility, timeout/retry options, and session affinity live in provider-specific code.
+  - **Done when:** custom base URLs do not force assistant metadata to report provider `openai`; implemented compat fields stay provider-specific; unsupported reasoning/thinking, retry, cache/session affinity, and current pi routing/cache-control compat fields are stated as deferred rather than exposed as inert generic APIs.
   - **Implementation plan:** `docs/plans/2026-06-18-001-feat-pi-ai-contract-parity-plan.md`.
 - [x] Defer OAuth and subscription-provider flows until model/provider registry contracts are stable.
   - **References:** `pi:packages/ai/src/oauth.ts`, `pi:packages/coding-agent/docs/providers.md`.

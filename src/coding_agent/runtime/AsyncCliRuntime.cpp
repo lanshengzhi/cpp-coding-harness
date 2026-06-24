@@ -118,6 +118,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             config.fake,
             config.provider_overrides,
             *config_data,
+            std::nullopt,
             std::nullopt);
         opened_session = coding_agent::runtime::open_session(coding_agent::runtime::SessionOpenRequest{
             config.session_path,
@@ -126,7 +127,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             config.workspace_explicit,
             config.session_id,
             config.created_at,
-            provider_name,
+            resolved.provider,
             resolved.model,
         });
     } else {
@@ -146,6 +147,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
                 config.fake,
                 config.provider_overrides,
                 *config_data,
+                opened_session->stored_provider,
                 opened_session->stored_model);
         }
     }
@@ -244,7 +246,9 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
     auto services = coding_agent::runtime::make_runtime_services(coding_agent::runtime::RuntimeServicesConfig{
         workspace,
         config.enable_bash,
+        resolved.provider_registry_name,
         resolved_provider,
+        resolved.api,
         resolved_model,
         resolved_base_url,
         resolved_api_key_env,

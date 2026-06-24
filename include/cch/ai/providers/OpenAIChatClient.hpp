@@ -11,6 +11,8 @@
 namespace cch::ai::providers {
 
 struct OpenAIStreamConfig {
+    std::string api{"openai-completions"};
+    std::string provider{"openai-compatible"};
     std::string base_url{"https://api.openai.com"};
     std::string api_key;
     std::string api_key_env{"OPENAI_API_KEY"};

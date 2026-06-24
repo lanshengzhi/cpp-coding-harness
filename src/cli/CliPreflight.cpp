@@ -81,6 +81,7 @@ cch::util::ExpectedVoid preflight_cli_config(const CliConfig& config) {
         false,
         config.provider_overrides,
         *config_data,
+        std::nullopt,
         std::nullopt);
     const auto chain = coding_agent::resolved_api_key_env_chain(config.provider_overrides, *config_data);
     if (!coding_agent::ConfigLoader::resolve_api_key(chain)) {
