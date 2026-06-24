@@ -51,7 +51,9 @@ util::Expected<ProviderRegistry> make_default_provider_registry() {
         "openai-compatible",
         [](const ProviderFactoryContext& context) -> ProviderFactoryResult {
             providers::OpenAIStreamConfig config;
-            config.base_url = context.base_url;
+            if (!context.base_url.empty()) {
+                config.base_url = context.base_url;
+            }
             config.api_key = context.api_key;
             config.api_key_env = context.api_key_env;
             config.model = context.model;

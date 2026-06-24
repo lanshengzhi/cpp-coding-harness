@@ -30,9 +30,9 @@ struct JsonSchema {
     std::map<std::string, JsonSchema> properties;
     std::vector<std::string> required;
     std::optional<bool> additional_properties;
-    // shared_ptr breaks recursive type dependency for Glaze/STL traits
-    // while keeping JsonSchema copyable (unique_ptr would delete copy ops).
-    std::shared_ptr<JsonSchema> items;
+    // shared_ptr breaks recursive type dependency for Glaze/STL traits while
+    // keeping JsonSchema copyable and exposing immutable item schemas through copies.
+    std::shared_ptr<const JsonSchema> items;
 
     [[nodiscard]] static JsonSchema object(
         std::map<std::string, JsonSchema> properties = {},
@@ -82,7 +82,7 @@ struct JsonSchema {
         JsonSchema schema;
         schema.type = JsonSchemaType::Array;
         schema.description = std::move(description);
-        schema.items = std::move(items);
+        schema.items = items ? std::make_shared<JsonSchema>(*items) : nullptr;
         return schema;
     }
 

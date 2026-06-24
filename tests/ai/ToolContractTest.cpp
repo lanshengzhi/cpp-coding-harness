@@ -4,7 +4,9 @@
 #include "../../include/cch/util/Error.hpp"
 #include "util/Json.hpp"
 
+#include <memory>
 #include <string>
+#include <type_traits>
 
 using namespace cch;
 
@@ -67,4 +69,18 @@ TEST_CASE("tool schema DTOs round-trip into typed schema contracts", "[ai][u2][t
     REQUIRE(converted->required.size() == 2);
     CHECK(converted->required[0] == "path");
     CHECK(converted->required[1] == "content");
+}
+
+TEST_CASE("array schemas clone immutable item schemas", "[ai][u2][tool]") {
+    auto item = std::make_shared<ai::JsonSchema>(ai::JsonSchema::string("item"));
+    auto array = ai::JsonSchema::array(item);
+    static_assert(std::is_same_v<decltype(array.items), std::shared_ptr<const ai::JsonSchema>>);
+
+    item->type = ai::JsonSchemaType::Integer;
+
+    REQUIRE(array.items);
+    CHECK(array.items->type == ai::JsonSchemaType::String);
+    auto copied = array;
+    REQUIRE(copied.items);
+    CHECK(copied.items->type == ai::JsonSchemaType::String);
 }

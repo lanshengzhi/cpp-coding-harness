@@ -118,6 +118,36 @@ TEST_CASE("assistant message round-trips diagnostics and cacheWrite1h", "[ai][u2
     CHECK(round_trip.usage->cache_write_1h == 15);
 }
 
+TEST_CASE("context JSON round-trips prompt model messages and tools", "[ai][u2][glaze]") {
+    ai::AiContext context;
+    context.system_prompt = "sys";
+    context.model = "gpt-test";
+    context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+    context.tools.push_back(ai::Tool{
+        "read_file",
+        "Read a workspace file",
+        ai::JsonSchema::object({{"path", ai::JsonSchema::string("file path")}}, {"path"}),
+    });
+
+    auto json = ai::glaze::write_context_json(context);
+    REQUIRE(json);
+    auto parsed = ai::glaze::read_context_json(*json);
+    REQUIRE(parsed);
+
+    REQUIRE(parsed->system_prompt);
+    CHECK(*parsed->system_prompt == "sys");
+    CHECK(parsed->model == "gpt-test");
+    REQUIRE(parsed->messages.size() == 1);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(parsed->messages[0]));
+    const auto& user = std::get<ai::UserMessage>(parsed->messages[0]);
+    CHECK(ai::text_from_content(user.content) == "hello");
+    REQUIRE(parsed->tools.size() == 1);
+    CHECK(parsed->tools[0].name == "read_file");
+    REQUIRE(parsed->tools[0].parameters.required.size() == 1);
+    CHECK(parsed->tools[0].parameters.required[0] == "path");
+    CHECK(parsed->tools[0].parameters.properties.at("path").type == ai::JsonSchemaType::String);
+}
+
 TEST_CASE("ContentDto rejects toolCall for non-assistant context", "[ai][u2][glaze]") {
     ai::glaze::ContentDto dto;
     dto.type = "toolCall";

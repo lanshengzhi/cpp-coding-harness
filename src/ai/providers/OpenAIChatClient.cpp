@@ -9,7 +9,9 @@
 
 #include <cstdlib>
 #include <map>
+#include <optional>
 #include <sstream>
+#include <string_view>
 #include <utility>
 
 namespace cch::ai::providers {
@@ -29,24 +31,61 @@ struct ToolCallAccumulator {
     std::size_t content_index{};
 };
 
+void append_plain_text_part(std::string& text, std::string_view part, std::string_view separator) {
+    if (part.empty()) {
+        return;
+    }
+    if (!text.empty()) {
+        text += separator;
+    }
+    text += part;
+}
+
 [[nodiscard]] std::string content_text(const std::vector<ai::Content>& content) {
     std::string text;
     for (const auto& block : content) {
-        if (const auto* text_block = std::get_if<ai::TextContent>(&block)) {
-            text += text_block->text;
+        std::visit(
+            Overloaded{
+                [&text](const ai::TextContent& text_block) {
+                    append_plain_text_part(text, text_block.text, "\n");
+                },
+                [&text](const ai::ThinkingContent&) {
+                    append_plain_text_part(text, "[thinking content omitted]", "\n");
+                },
+                [&text](const ai::ImageContent& image) {
+                    append_plain_text_part(text, "[image content omitted: " + image.mime_type + "]", "\n");
+                },
+            },
+            block);
+    }
+    return text;
+}
+
+[[nodiscard]] std::string assistant_content_text(
+    const std::vector<ai::AssistantContent>& content,
+    const OpenAICompletionsCompat& compat) {
+    std::string text;
+    if (!compat.requires_thinking_as_text.value_or(false)) {
+        for (const auto& block : content) {
+            if (const auto* text_block = std::get_if<ai::TextContent>(&block)) {
+                text += text_block->text;
+            }
+        }
+        return text;
+    }
+
+    for (const auto& block : content) {
+        if (const auto* thinking_block = std::get_if<ai::ThinkingContent>(&block)) {
+            append_plain_text_part(text, thinking_block->thinking, "\n\n");
+        } else if (const auto* text_block = std::get_if<ai::TextContent>(&block)) {
+            append_plain_text_part(text, text_block->text, "\n\n");
         }
     }
     return text;
 }
 
-[[nodiscard]] std::string assistant_content_text(const std::vector<ai::AssistantContent>& content) {
-    std::string text;
-    for (const auto& block : content) {
-        if (const auto* text_block = std::get_if<ai::TextContent>(&block)) {
-            text += text_block->text;
-        }
-    }
-    return text;
+[[nodiscard]] std::string system_role(const OpenAICompletionsCompat& compat) {
+    return compat.supports_developer_role.value_or(false) ? "developer" : "system";
 }
 
 [[nodiscard]] std::vector<ai::glaze::ProviderToolCallDto> tool_calls_from_assistant_content(
@@ -70,13 +109,12 @@ struct ToolCallAccumulator {
     return std::visit(
         Overloaded{
             [&compat](const ai::SystemMessage& system) {
-                auto role = compat.supports_developer_role.value_or(false) ? "developer" : "system";
-                return ai::glaze::OpenAIChatMessageDto{role, system.content, std::nullopt, std::nullopt, std::nullopt};
+                return ai::glaze::OpenAIChatMessageDto{system_role(compat), system.content, std::nullopt, std::nullopt, std::nullopt};
             },
             [](const ai::UserMessage& user) {
                 return ai::glaze::OpenAIChatMessageDto{"user", content_text(user.content), std::nullopt, std::nullopt, std::nullopt};
             },
-            [](const ai::AssistantMessage& assistant) {
+            [&compat](const ai::AssistantMessage& assistant) {
                 auto calls = tool_calls_from_assistant_content(assistant.content);
                 std::optional<std::vector<ai::glaze::ProviderToolCallDto>> tool_calls;
                 if (!calls.empty()) {
@@ -84,7 +122,7 @@ struct ToolCallAccumulator {
                 }
                 return ai::glaze::OpenAIChatMessageDto{
                     "assistant",
-                    assistant_content_text(assistant.content),
+                    assistant_content_text(assistant.content, compat),
                     std::nullopt,
                     std::nullopt,
                     std::move(tool_calls),
@@ -128,11 +166,31 @@ struct ToolCallAccumulator {
     const OpenAIStreamConfig& config) {
     ai::glaze::OpenAIChatRequestDto dto;
     dto.model = !request.model.empty() ? request.model : (!request.context.model.empty() ? request.context.model : config.model);
+    std::string last_emitted_role;
     if (request.context.system_prompt) {
-        dto.messages.push_back(ai::glaze::OpenAIChatMessageDto{"system", *request.context.system_prompt, std::nullopt, std::nullopt, std::nullopt});
+        const auto role = system_role(config.compat);
+        dto.messages.push_back(ai::glaze::OpenAIChatMessageDto{role, *request.context.system_prompt, std::nullopt, std::nullopt, std::nullopt});
+        last_emitted_role = role;
     }
     for (const auto& message : request.context.messages) {
-        dto.messages.push_back(message_to_openai(message, config.compat));
+        if (const auto* bash = std::get_if<ai::BashExecutionMessage>(&message); bash && bash->exclude_from_context) {
+            continue;
+        }
+        auto converted = message_to_openai(message, config.compat);
+        if (converted.role == "user"
+            && config.compat.requires_assistant_after_tool_result.value_or(false)
+            && last_emitted_role == "tool") {
+            dto.messages.push_back(ai::glaze::OpenAIChatMessageDto{
+                "assistant",
+                "I have processed the tool results.",
+                std::nullopt,
+                std::nullopt,
+                std::nullopt,
+            });
+            last_emitted_role = "assistant";
+        }
+        last_emitted_role = converted.role;
+        dto.messages.push_back(std::move(converted));
     }
     if (!request.context.tools.empty()) {
         std::vector<ai::glaze::ProviderToolDto> tools;
@@ -146,10 +204,7 @@ struct ToolCallAccumulator {
 
     // Apply OpenAICompletionsCompat flags
     if (config.compat.supports_store.value_or(false)) {
-        dto.store = true;
-    }
-    if (config.compat.supports_reasoning_effort.value_or(false)) {
-        // reasoning_effort value comes from the request context or defaults to "medium"
+        dto.store = false;
     }
     if (config.compat.supports_usage_in_streaming.value_or(true)) {
         dto.stream_options = ai::glaze::OpenAIStreamOptionsDto{true};
@@ -185,6 +240,19 @@ struct ToolCallAccumulator {
         return util::read_json<util::JsonValue>("{}");
     }
     return util::read_json<util::JsonValue>(raw_arguments);
+}
+
+[[nodiscard]] util::Expected<ai::glaze::OpenAIStreamChunkDto> read_openai_stream_chunk(std::string_view json) {
+    ai::glaze::OpenAIStreamChunkDto chunk;
+    auto error = glz::read<glz::opts{.error_on_unknown_keys = false}>(chunk, json);
+    if (error) {
+        return std::unexpected(util::glaze_error(
+            error,
+            json,
+            util::ErrorCode::JsonParse,
+            "malformed provider stream JSON"));
+    }
+    return chunk;
 }
 
 } // namespace
@@ -251,13 +319,9 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
                 continue;
             }
 
-            auto chunk = util::read_json<ai::glaze::OpenAIStreamChunkDto>(sse_event.data);
+            auto chunk = read_openai_stream_chunk(sse_event.data);
             if (!chunk) {
-                return std::unexpected(util::make_error(
-                    util::ErrorCode::JsonParse,
-                    "malformed provider stream JSON",
-                    chunk.error().detail,
-                    sse_event.data));
+                return std::unexpected(chunk.error());
             }
 
             if (chunk->id) {
@@ -322,6 +386,7 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
                                 return std::unexpected(emitted.error());
                             }
                         }
+                        std::optional<std::string> argument_delta;
                         if (call_delta.id && call.id.empty()) {
                             call.id = *call_delta.id;
                         }
@@ -330,11 +395,8 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
                                 call.name = *call_delta.function->name;
                             }
                             if (call_delta.function->arguments) {
-                                call.raw_arguments += *call_delta.function->arguments;
-                                auto emitted = emit(sink, ai::ToolCallDeltaEvent{call.content_index, *call_delta.function->arguments, assistant});
-                                if (!emitted) {
-                                    return std::unexpected(emitted.error());
-                                }
+                                argument_delta = *call_delta.function->arguments;
+                                call.raw_arguments += *argument_delta;
                             }
                         }
 
@@ -342,6 +404,12 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
                         block.id = call.id;
                         block.name = call.name;
                         block.raw_arguments = call.raw_arguments;
+                        if (argument_delta) {
+                            auto emitted = emit(sink, ai::ToolCallDeltaEvent{call.content_index, *argument_delta, assistant});
+                            if (!emitted) {
+                                return std::unexpected(emitted.error());
+                            }
+                        }
                     }
                 }
             }
@@ -447,6 +515,9 @@ std::string StreamingOpenAIChatClient::completions_url() const {
     std::string base = config_.base_url;
     while (!base.empty() && base.back() == '/') {
         base.pop_back();
+    }
+    if (base.empty()) {
+        base = "https://api.openai.com";
     }
     if (base.size() >= 3 && base.substr(base.size() - 3) == "/v1") {
         return base + "/chat/completions";

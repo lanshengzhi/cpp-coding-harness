@@ -64,6 +64,17 @@ RunResult run_client(ai::StreamingChatClient& client, ai::StreamChatRequest requ
     return RunResult{std::move(*result), std::move(events)};
 }
 
+template <typename T>
+std::vector<const T*> events_of(const std::vector<ai::AssistantStreamEvent>& events) {
+    std::vector<const T*> matches;
+    for (const auto& event : events) {
+        if (const auto* value = std::get_if<T>(&event)) {
+            matches.push_back(value);
+        }
+    }
+    return matches;
+}
+
 } // namespace
 
 TEST_CASE("provider registry creates registered clients", "[ai][provider][registry]") {
@@ -124,4 +135,77 @@ TEST_CASE("default provider registry includes fake and OpenAI-compatible provide
 
     auto openai = registry->create("openai-compatible", context);
     REQUIRE(openai);
+}
+
+TEST_CASE("fake provider emits read tool calls from prompts", "[ai][provider][registry]") {
+    auto registry = ai::make_default_provider_registry();
+    REQUIRE(registry);
+
+    ai::ProviderFactoryContext context;
+    context.model = "fake-model";
+    auto fake = registry->create("fake", context);
+    REQUIRE(fake);
+
+    ai::StreamChatRequest request;
+    request.model = context.model;
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("read README.md")});
+    auto run = run_client(**fake, std::move(request));
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    REQUIRE(run.result->content.size() == 2);
+    REQUIRE(std::holds_alternative<ai::ToolCallContent>(run.result->content[1]));
+    const auto& call = std::get<ai::ToolCallContent>(run.result->content[1]);
+    CHECK(call.id == "fake-read-1");
+    CHECK(call.name == "read");
+    CHECK(call.raw_arguments.find("README.md") != std::string::npos);
+    REQUIRE(call.arguments);
+    CHECK(call.arguments->at("path").get_string() == "README.md");
+    CHECK_FALSE(events_of<ai::TextDeltaEvent>(run.events).empty());
+}
+
+TEST_CASE("fake provider emits bash tool calls from prompts", "[ai][provider][registry]") {
+    auto registry = ai::make_default_provider_registry();
+    REQUIRE(registry);
+
+    ai::ProviderFactoryContext context;
+    context.model = "fake-model";
+    auto fake = registry->create("fake", context);
+    REQUIRE(fake);
+
+    ai::StreamChatRequest request;
+    request.model = context.model;
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("bash echo hi")});
+    auto run = run_client(**fake, std::move(request));
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    REQUIRE(run.result->content.size() == 2);
+    REQUIRE(std::holds_alternative<ai::ToolCallContent>(run.result->content[1]));
+    const auto& call = std::get<ai::ToolCallContent>(run.result->content[1]);
+    CHECK(call.id == "fake-bash-1");
+    CHECK(call.name == "bash");
+    CHECK(call.raw_arguments.find("echo hi") != std::string::npos);
+    REQUIRE(call.arguments);
+    CHECK(call.arguments->at("command").get_string() == "echo hi");
+    CHECK_FALSE(events_of<ai::TextDeltaEvent>(run.events).empty());
+}
+
+TEST_CASE("fake provider observes trailing tool results", "[ai][provider][registry]") {
+    auto registry = ai::make_default_provider_registry();
+    REQUIRE(registry);
+
+    ai::ProviderFactoryContext context;
+    context.model = "fake-model";
+    auto fake = registry->create("fake", context);
+    REQUIRE(fake);
+
+    ai::StreamChatRequest request;
+    request.model = context.model;
+    request.context.messages.push_back(ai::MessageVariant{ai::tool_result_message("fake-read-1", "read", "file contents")});
+    auto run = run_client(**fake, std::move(request));
+
+    REQUIRE(run.result);
+    CHECK(ai::text_from_assistant_content(run.result->content) == "fake observed: file contents");
+    CHECK_FALSE(events_of<ai::TextDeltaEvent>(run.events).empty());
 }

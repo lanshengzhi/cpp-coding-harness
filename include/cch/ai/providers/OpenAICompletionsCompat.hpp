@@ -25,13 +25,17 @@ enum class MaxTokensField {
 struct OpenAICompletionsCompat {
     std::optional<bool> supports_store;
     std::optional<bool> supports_developer_role;
+    // Reserved for pi parity; currently inert until StreamChatRequest carries max-token/reasoning controls.
     std::optional<bool> supports_reasoning_effort;
     std::optional<bool> supports_usage_in_streaming;
+    // Reserved for pi parity; currently inert until StreamChatRequest carries max-token/reasoning controls.
     std::optional<MaxTokensField> max_tokens_field;
     std::optional<bool> requires_tool_result_name;
     std::optional<bool> requires_assistant_after_tool_result;
     std::optional<bool> requires_thinking_as_text;
+    // Reserved for pi parity; currently inert until StreamChatRequest carries max-token/reasoning controls.
     std::optional<bool> requires_reasoning_content_on_assistant_messages;
+    // Reserved for pi parity; currently inert until StreamChatRequest carries max-token/reasoning controls.
     std::optional<ThinkingFormat> thinking_format;
 };
 
