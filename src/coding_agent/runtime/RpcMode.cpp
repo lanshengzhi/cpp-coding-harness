@@ -37,15 +37,15 @@ using util::JsonValue;
     JsonValue::object_t data;
     data.emplace("provider", JsonValue{config.provider});
     data.emplace("model", JsonValue{config.model});
-    data.emplace("sessionId", JsonValue{config.store.metadata().session_id});
+    data.emplace("sessionId", JsonValue{config.runtime.session_id()});
     data.emplace("workspace", JsonValue{config.workspace.string()});
-    data.emplace("messageCount", JsonValue{static_cast<int>(config.history.size())});
+    data.emplace("messageCount", JsonValue{static_cast<int>(config.runtime.message_count())});
     return data;
 }
 
-[[nodiscard]] JsonValue::object_t last_text_data(const std::vector<ai::MessageVariant>& history) {
+[[nodiscard]] JsonValue::object_t last_text_data(const AgentSessionRuntime& runtime) {
     JsonValue::object_t data;
-    auto text = last_assistant_text(history);
+    auto text = last_assistant_text(runtime.history());
     if (text) {
         data.emplace("text", JsonValue{std::move(*text)});
     } else {
@@ -146,7 +146,7 @@ int run_rpc_mode(RpcModeConfig config) {
         if (*type == "get_last_assistant_text") {
             if (auto written = write_response(
                     config.output,
-                    rpc_jsonl::success_response(id, *type, last_text_data(config.history)));
+                    rpc_jsonl::success_response(id, *type, last_text_data(config.runtime)));
                 !written) {
                 return 1;
             }
@@ -176,9 +176,7 @@ int run_rpc_mode(RpcModeConfig config) {
                 return 1;
             }
 
-            auto result = config.runner.run_prompt(
-                config.history,
-                config.store,
+            auto result = config.runtime.run_prompt(
                 std::move(*message),
                 [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
                     return printer.print_agent_event(event);

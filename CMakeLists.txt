@@ -61,6 +61,7 @@ target_compile_options(cch_ai PRIVATE -Wall -Wextra -Wpedantic)
 
 add_library(cch_agent
     src/agent/AgentLoop.cpp
+    src/agent/ToolCallExecutor.cpp
 )
 cch_target_defaults(cch_agent)
 target_link_libraries(cch_agent
@@ -72,6 +73,8 @@ target_link_libraries(cch_agent
 add_library(cch_harness
     src/harness/AsyncLocalExecutionEnv.cpp
     src/harness/SyncLocalExecutionEnv.cpp
+    src/harness/session/SessionJournal.cpp
+    src/harness/session/EntrySerializer.cpp
     src/harness/session/JsonlSessionStore.cpp
     src/harness/session/SessionTree.cpp
 )
@@ -96,19 +99,24 @@ target_link_libraries(cch_tools
 
 add_library(cch_coding_agent_runtime
     src/coding_agent/runtime/AsyncCliRuntime.cpp
+    src/coding_agent/CommandRegistry.cpp
     src/coding_agent/ConfigLoader.cpp
     src/coding_agent/ProviderConfigResolution.cpp
     src/coding_agent/ProjectResources.cpp
     src/coding_agent/ProjectTrust.cpp
     src/coding_agent/PromptProcessing.cpp
+    src/coding_agent/PromptProcessingPipeline.cpp
     src/coding_agent/PromptExpander.cpp
+    src/coding_agent/PromptTemplateExpander.cpp
     src/coding_agent/Sdk.cpp
+    src/coding_agent/SkillExpander.cpp
     src/coding_agent/SkillFrontmatterParser.cpp
     src/coding_agent/SkillLoader.cpp
     src/coding_agent/PromptTemplateLoader.cpp
     src/coding_agent/SkillFormatting.cpp
-    src/coding_agent/runtime/AgentSessionRunner.cpp
+    src/coding_agent/runtime/AgentSessionRuntime.cpp
     src/coding_agent/runtime/EventPrinter.cpp
+    src/coding_agent/runtime/SessionFactory.cpp
     src/coding_agent/runtime/JsonEventPrinter.cpp
     src/coding_agent/runtime/RpcJsonl.cpp
     src/coding_agent/runtime/RpcMode.cpp
@@ -151,6 +159,7 @@ if(CCH_BUILD_TESTS)
         tests/architecture/MoveOnlyCallbackTest.cpp
         tests/architecture/PublicHeaderBoundaryTest.cpp
         tests/agent/AsyncAgentLoopTest.cpp
+        tests/agent/ToolCallExecutorTest.cpp
         tests/ai/GlazeRoundTripTest.cpp
         tests/ai/MessageContractTest.cpp
         tests/ai/ProviderRegistryTest.cpp

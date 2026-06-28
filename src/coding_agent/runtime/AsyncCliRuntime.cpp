@@ -4,7 +4,7 @@
 #include "../include/cch/coding_agent/Config.hpp"
 #include "../include/cch/coding_agent/ProjectResources.hpp"
 #include "../include/cch/coding_agent/ProjectTrust.hpp"
-#include "coding_agent/runtime/AgentSessionRunner.hpp"
+#include "coding_agent/runtime/AgentSessionRuntime.hpp"
 #include "coding_agent/runtime/EventPrinter.hpp"
 #include "coding_agent/runtime/JsonEventPrinter.hpp"
 #include "coding_agent/runtime/RpcMode.hpp"
@@ -164,8 +164,6 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
     }
 
     auto workspace = opened_session->workspace;
-    auto history = std::move(opened_session->history);
-    auto store = std::move(opened_session->store);
     const auto resolved_provider = resolved.provider;
     const auto resolved_model = resolved.model;
     const auto resolved_base_url = resolved.base_url;
@@ -174,7 +172,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
     std::optional<coding_agent::runtime::JsonEventPrinter> json_printer;
     if (json_mode) {
         json_printer.emplace(std::cout);
-        if (auto printed = json_printer->print_session_header(store.metadata()); !printed) {
+        if (auto printed = json_printer->print_session_header(opened_session->store->metadata()); !printed) {
             std::cerr << "event printer failed: " << printed.error().message << '\n';
             return 2;
         }
@@ -224,15 +222,11 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
                   << config.resume_path.string() << ")\n";
     }
 
-    // Build skill directory list from the resource load plan. Global
-    // ~/.cpp-harness/skills requires a separate user-resource filesystem root
-    // and remains deferred.
     std::vector<coding_agent::SkillDirSpec> skill_dirs;
     if (coding_agent::project_skills_allowed(resource_plan)) {
         skill_dirs.push_back({.path = ".cpp-harness/skills", .includeRootFiles = false});
     }
 
-    // Build prompt template directory list.
     std::vector<std::string> prompt_dirs;
     if (!config.disable_prompt_templates) {
         if (coding_agent::project_prompts_allowed(resource_plan)) {
@@ -268,28 +262,28 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
     coding_agent::CommandRegistry command_registry;
     register_builtin_commands(command_registry);
 
-    coding_agent::runtime::AgentSessionRunner runner(
-        *services->client,
-        std::move(services->tools),
-        agent::AsyncAgentOptions{config.max_turns, resolved_model},
-        std::move(services->prompt_load_result.templates),
-        &command_registry,
-        std::move(services->skill_load_result.skills));
+    coding_agent::runtime::AgentSessionRuntime runtime(
+        std::move(*services),
+        std::move(*opened_session),
+        std::move(command_registry),
+        coding_agent::runtime::AgentSessionRuntimeConfig{
+            .max_turns = config.max_turns,
+            .model = resolved_model,
+            .capture_skill_diagnostics = false,
+        });
 
     if (is_rpc_mode(config.output_mode)) {
         return coding_agent::runtime::run_rpc_mode(coding_agent::runtime::RpcModeConfig{
             std::cin,
             std::cout,
-            history,
-            store,
-            runner,
+            runtime,
             resolved_provider,
             resolved_model,
             workspace,
         });
     }
 
-    auto run_prompt = [&](const std::string& prompt) -> bool {
+    auto run_prompt = [&](const std::string& prompt) -> coding_agent::runtime::PromptRunResult {
         std::optional<boost::asio::io_context> print_io;
         std::optional<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>> print_work;
         std::optional<std::jthread> print_thread;
@@ -299,9 +293,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             print_thread.emplace([&]() { print_io->run(); });
         }
 
-        auto result = runner.run_prompt(
-            history,
-            store,
+        auto result = runtime.run_prompt(
             prompt,
             [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
                 if (json_mode) {
@@ -334,17 +326,20 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             } else {
                 std::cerr << "loop failed: " << result.message << '\n';
             }
-            return false;
+            return result;
         }
         if (json_mode) {
-            return print_json_terminal(*json_printer, true, result.code);
+            if (!print_json_terminal(*json_printer, true, result.code)) {
+                return coding_agent::runtime::PromptRunResult{false, "event_print_failed", "failed to print terminal event", {}};
+            }
+            return result;
         }
-        if (!history.empty()) {
-            if (const auto* final_message = std::get_if<ai::AssistantMessage>(&history.back())) {
+        if (!runtime.history().empty()) {
+            if (const auto* final_message = std::get_if<ai::AssistantMessage>(&runtime.history().back())) {
                 std::cout << ai::text_from_assistant_content(final_message->content) << '\n';
             }
         }
-        return true;
+        return result;
     };
 
     if (config.repl) {
@@ -353,37 +348,18 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             if (line == "exit" || line == "quit") break;
             if (line.empty()) continue;
 
-            // Intercept slash-commands and shell passthrough
-            if (!line.empty() && (line[0] == '/' || line[0] == '!')) {
-                coding_agent::CommandContext cmd_ctx{
-                    .session_id = store.metadata().session_id,
-                    .workspace_path = store.metadata().workspace.string(),
-                    .provider = resolved_provider,
-                    .model = resolved_model,
-                    .message_count = history.size(),
-                };
-                auto processed = coding_agent::process_prompt(line, runner.templates(),
-                    command_registry, cmd_ctx,
-                    runner.skills(), harness::WorkspaceFileSystem{store.metadata().workspace});
-                if (processed.command_handled) {
-                    if (processed.display_text) {
-                        std::cout << *processed.display_text << '\n';
-                    }
-                    if (processed.shutdown_requested) {
-                        return 0;
-                    }
-                    continue; // back to REPL prompt
-                }
-                // Template expanded — pass expanded text to run_prompt
-                line = std::move(processed.expanded_prompt);
+            auto result = run_prompt(line);
+            if (!result.success) return 1;
+            if ((result.code == "command_handled" || result.code == "shutdown") && !result.message.empty()) {
+                std::cout << result.message << '\n';
             }
-
-            if (!run_prompt(line)) return 1;
+            if (result.code == "shutdown") return 0;
         }
         return 0;
     }
 
-    return run_prompt(config.prompt) ? 0 : 1;
+    auto result = run_prompt(config.prompt);
+    return result.success ? 0 : 1;
 }
 
 } // namespace cch::cli

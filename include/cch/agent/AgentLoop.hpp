@@ -30,26 +30,6 @@ private:
     [[nodiscard]] util::ExpectedVoid emit(AgentEventSink& sink, const AgentLifecycleEvent& event) const;
     [[nodiscard]] std::vector<ai::ToolCallContent> tool_calls(const ai::AssistantMessage& message) const;
 
-    struct FinalizedToolCall;
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::pair<std::vector<ai::ToolResultMessage>, bool>>>
-    execute_tool_calls_sequential(
-        int turn,
-        const ai::AssistantMessage& assistant_message,
-        const std::vector<ai::ToolCallContent>& calls,
-        ai::AiContext& context,
-        AgentState& state,
-        AgentEventSink& sink);
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::pair<std::vector<ai::ToolResultMessage>, bool>>>
-    execute_tool_calls_parallel(
-        int turn,
-        const ai::AssistantMessage& assistant_message,
-        const std::vector<ai::ToolCallContent>& calls,
-        ai::AiContext& context,
-        AgentState& state,
-        AgentEventSink& sink);
-
     ai::StreamingChatClient& client_;
     AsyncToolRegistry registry_;
     AsyncAgentOptions options_;

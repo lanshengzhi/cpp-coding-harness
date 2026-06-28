@@ -1,6 +1,6 @@
 #pragma once
 
-#include "AgentSessionRunner.hpp"
+#include "AgentSessionRuntime.hpp"
 
 #include "../../../include/cch/ai/Message.hpp"
 #include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
@@ -15,9 +15,7 @@ namespace cch::coding_agent::runtime {
 struct RpcModeConfig {
     std::istream& input;
     std::ostream& output;
-    std::vector<ai::MessageVariant>& history;
-    harness::session::JsonlSessionStore& store;
-    AgentSessionRunner& runner;
+    AgentSessionRuntime& runtime;
     std::string provider;
     std::string model;
     std::filesystem::path workspace;

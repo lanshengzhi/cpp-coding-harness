@@ -7,6 +7,30 @@
 namespace cch::coding_agent {
 namespace {
 
+[[nodiscard]] std::string_view trim_left(std::string_view sv) {
+    while (!sv.empty() && (sv.front() == ' ' || sv.front() == '\t')) {
+        sv.remove_prefix(1);
+    }
+    return sv;
+}
+
+[[nodiscard]] std::string_view extract_command_name(std::string_view input) {
+    auto trimmed = trim_left(input);
+    if (trimmed.empty() || trimmed.front() != '/') return {};
+    trimmed.remove_prefix(1); // strip '/'
+    auto end = trimmed.find_first_of(" \t\n\r");
+    return trimmed.substr(0, end);
+}
+
+[[nodiscard]] std::string_view extract_args(std::string_view input) {
+    auto trimmed = trim_left(input);
+    if (trimmed.empty() || trimmed.front() != '/') return {};
+    trimmed.remove_prefix(1);
+    auto space = trimmed.find_first_of(" \t");
+    if (space == std::string_view::npos) return {};
+    return trim_left(trimmed.substr(space + 1));
+}
+
 // ── Argument parsing (bash-style quote-aware) ──
 
 std::vector<std::string> parse_command_args(std::string_view input) {

@@ -5,6 +5,7 @@
 #include "../../../include/cch/util/Error.hpp"
 
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -24,7 +25,7 @@ struct SessionOpenRequest {
 struct OpenSession {
     std::filesystem::path workspace;
     std::vector<ai::MessageVariant> history;
-    harness::session::JsonlSessionStore store;
+    std::unique_ptr<harness::session::JsonlSessionStore> store;
     /// Provider stored in session metadata (populated on resume).
     std::optional<std::string> stored_provider;
     /// Model stored in session metadata (populated on resume).

@@ -6,8 +6,9 @@
 #include "../../util/JsonValue.hpp"
 
 #include <filesystem>
+#include <memory>
 #include <optional>
-#include <string>
+#include <cstring>
 #include <vector>
 
 namespace cch::harness::session {
@@ -16,7 +17,12 @@ class SessionTree;
 
 class JsonlSessionStore {
 public:
+    struct Impl;
+public:
     JsonlSessionStore() = default;
+    ~JsonlSessionStore();
+    JsonlSessionStore(JsonlSessionStore&&);
+    JsonlSessionStore& operator=(JsonlSessionStore&&);
 
     static util::Expected<JsonlSessionStore> create_new(const std::filesystem::path& path, SessionMetadata metadata);
     static util::Expected<JsonlSessionStore> open_existing(const std::filesystem::path& path);
@@ -65,16 +71,11 @@ public:
     [[nodiscard]] util::ExpectedVoid append_leaf(std::optional<std::string> parent_id,
                                                   std::string target_id);
 
-    [[nodiscard]] const std::filesystem::path& path() const { return path_; }
-    [[nodiscard]] const SessionMetadata& metadata() const { return metadata_; }
+    [[nodiscard]] const std::filesystem::path& path() const;
+    [[nodiscard]] const SessionMetadata& metadata() const;
 
 private:
-    static util::ExpectedVoid validate_session_path_for_open(const std::filesystem::path& path, bool must_exist);
-    static util::ExpectedVoid ensure_private_permissions(const std::filesystem::path& path, bool existing);
-
-    std::filesystem::path path_;
-    SessionMetadata metadata_;
-    std::size_t next_entry_id_{1};
+    std::unique_ptr<Impl> impl_;
 };
 
 } // namespace cch::harness::session

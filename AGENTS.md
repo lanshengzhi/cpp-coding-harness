@@ -53,7 +53,7 @@ git status --short
 | 内置工具 read/write/edit/bash | `include/cch/tools/ToolFactories.hpp`, `src/tools/AsyncToolFactories.cpp`, `tests/tools/` | 工具通过 `AsyncAgentTool` 暴露；文件/进程能力走 execution env。edit 使用 `edits[]` 数组多编辑语义；read 在截断时追加续读提示；write 隐式创建父目录。 |
 | Slash 命令 / Prompt 处理 | `include/cch/coding_agent/PromptProcessing.hpp`, `src/coding_agent/PromptProcessing.cpp`, `src/coding_agent/PromptExpander.cpp`, `tests/coding_agent/BuiltinCommandsTest.cpp`, `tests/coding_agent/PromptExpanderTest.cpp`, `tests/coding_agent/SkillIntegrationTest.cpp` | `CommandRegistry` 管理 session-lifecycle 内建命令（`/help`, `/clear`, `/compact`, `/exit`）；`expand_prompt_template()` 支持 bash-style 参数替换；`process_prompt()` 缝合 REPL/runner/RPC，并在命令分发前展开 `/skill:<name>`。 |
 | Project trust / Resource controls | `include/cch/coding_agent/ProjectTrust.hpp`, `include/cch/coding_agent/ProjectResources.hpp`, `src/coding_agent/ProjectTrust.cpp`, `src/coding_agent/ProjectResources.cpp`, `tests/coding_agent/Project*Test.cpp`, `tests/cli/CliSmokeTest.cpp` | project-local `.cpp-harness` resource marker 检测、trust store、`--approve`/`--no-approve`/`--no-skills`、load plan；trust 只是 startup input-loading guard，不是 sandbox。 |
-| Skills / Resource loading | `include/cch/coding_agent/Skill.hpp`, `src/coding_agent/SkillLoader.*`, `src/coding_agent/SkillFormatting.*`, `src/coding_agent/runtime/RuntimeServices.*`, `src/coding_agent/runtime/AgentSessionRunner.*`, `tests/coding_agent/Skill*Test.cpp` | 项目本地 `.cpp-harness/skills/**/SKILL.md` 在 project resource load plan 允许时发现、frontmatter 解析、diagnostics、`<available_skills>` 注入和 `/skill:<name>` 显式调用；loader/formatter 实现留在 `src/coding_agent/`；global/config-driven skill dirs、package install 仍是后续 T6。 |
+| Skills / Resource loading | `include/cch/coding_agent/Skill.hpp`, `src/coding_agent/SkillLoader.*`, `src/coding_agent/SkillFormatting.*`, `src/coding_agent/runtime/RuntimeServices.*`, `src/coding_agent/runtime/AgentSessionRuntime.*`, `src/coding_agent/runtime/SessionFactory.*`, `tests/coding_agent/Skill*Test.cpp` | 项目本地 `.cpp-harness/skills/**/SKILL.md` 在 project resource load plan 允许时发现、frontmatter 解析、diagnostics、`<available_skills>` 注入和 `/skill:<name>` 显式调用；loader/formatter 实现留在 `src/coding_agent/`；global/config-driven skill dirs、package install 仍是后续 T6。 |
 | 工作区、路径防护、shell 执行 | `include/cch/harness/ExecutionEnv.hpp`, `include/cch/harness/LocalExecutionEnv.hpp`, `src/harness/`（含 private `SyncLocalExecutionEnv.*`）, `src/tools/PathGuard.hpp`, `src/util/Process.*`, `tests/harness/` | 路径 containment 和安全检查；async shell I/O 走 `ProcessRunner`。 |
 | Session JSONL / resume / tree navigation | `include/cch/harness/session/`, `src/harness/session/JsonlSessionStore.cpp`, `src/harness/session/SessionTree.cpp`, `tests/harness/session/` | JSONL 脱敏 typed transcript；v2 message resume 稳定；v3 tree metadata 写入、branch navigation、compaction-aware context reconstruction（`SessionTree::buildSessionContext()`）均已实现。 |
 | CLI / REPL / runtime wiring | `src/main.cpp`, `src/cli/` (`CliParse`, `CliPreflight`, `CliConfig`, `CliRuntimeConfig`), `src/coding_agent/runtime/AsyncCliRuntime.*`, `src/coding_agent/runtime/`, `tests/cli/` | CLI11 参数解析与 preflight（含 `config.json` 优先级）在 `src/cli/`；runtime 负责组装服务并输出稳定 semantic event line；不要恢复 legacy `--async` 等兼容 flag。 |
@@ -93,3 +93,17 @@ git status --short
 - [ ] 符合 §2 禁止重新引入列表（`util::Result`、Boost.JSON domain contract、legacy sync tool、`src` 作为 public include surface、兼容性空 flag）。
 - [ ] 对应测试切片已运行；若未运行，在最终回复中说明原因。
 - [ ] README/计划在行为、CLI、session 或架构边界变化时已同步。
+
+## Agent skills
+
+### Issue tracker
+
+Issues 和 PRD 以本地 Markdown 文件形式存放在 `.scratch/<feature-slug>/`。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用五个默认 triage 角色字符串：`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`。详见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+单上下文布局：根目录 `CONTEXT.md` + `docs/adr/`。目前两者均不存在，技能会在需要时惰性创建。详见 `docs/agents/domain.md`。

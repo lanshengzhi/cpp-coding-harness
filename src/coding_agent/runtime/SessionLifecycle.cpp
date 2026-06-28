@@ -1,5 +1,6 @@
 #include "SessionLifecycle.hpp"
 
+#include <memory>
 #include <utility>
 
 namespace cch::coding_agent::runtime {
@@ -47,7 +48,7 @@ util::Expected<OpenSession> open_session(SessionOpenRequest request) {
         if (!opened) {
             return std::unexpected(opened.error());
         }
-        session.store = std::move(*opened);
+        session.store = std::make_unique<harness::session::JsonlSessionStore>(std::move(*opened));
         return session;
     }
 
@@ -62,7 +63,7 @@ util::Expected<OpenSession> open_session(SessionOpenRequest request) {
     if (!created) {
         return std::unexpected(created.error());
     }
-    session.store = std::move(*created);
+    session.store = std::make_unique<harness::session::JsonlSessionStore>(std::move(*created));
     return session;
 }
 
