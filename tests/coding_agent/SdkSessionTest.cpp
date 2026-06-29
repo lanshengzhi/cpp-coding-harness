@@ -706,6 +706,10 @@ TEST_CASE("CreateAgentSessionResult contains metadata", "[sdk][u2]") {
     // Provider/model are "sdk-host"/"host-client" for host-provided client
     CHECK_FALSE(result->provider.empty());
     CHECK_FALSE(result->model.empty());
+    CHECK(result->metadata.session_id == result->session_id);
+    CHECK(result->metadata.workspace == result->workspace);
+    CHECK(result->metadata.provider == result->provider);
+    CHECK(result->metadata.model == result->model);
 
     CHECK(result->session->close().has_value());
 }

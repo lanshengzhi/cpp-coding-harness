@@ -1,22 +1,14 @@
 #include "coding_agent/runtime/AsyncCliRuntime.hpp"
 
-#include "../include/cch/ai/Content.hpp"
 #include "../include/cch/coding_agent/Config.hpp"
-#include "../include/cch/coding_agent/ProjectResources.hpp"
-#include "../include/cch/coding_agent/ProjectTrust.hpp"
-#include "coding_agent/runtime/AgentSessionRuntime.hpp"
+#include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/runtime/EventPrinter.hpp"
 #include "coding_agent/runtime/JsonEventPrinter.hpp"
 #include "coding_agent/runtime/RpcMode.hpp"
-#include "coding_agent/runtime/RuntimeServices.hpp"
-#include "coding_agent/runtime/SessionLifecycle.hpp"
-#include "harness/WorkspaceFileSystem.hpp"
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
 
-#include <cstdlib>
-#include <filesystem>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -43,65 +35,11 @@ bool print_json_terminal(coding_agent::runtime::JsonEventPrinter& printer, bool 
     return true;
 }
 
-void print_trust_diagnostics(const coding_agent::ProjectTrustResolution& trust) {
-    for (const auto& diag : trust.diagnostics) {
-        std::cerr << "[trust:warn] " << diag.code << ": " << diag.message;
-        if (diag.path) {
-            std::cerr << " (" << *diag.path << ")";
-        }
-        std::cerr << '\n';
-    }
-}
-
-void print_resource_diagnostics(const coding_agent::ProjectResourceLoadPlan& plan) {
-    for (const auto& diag : plan.diagnostics) {
-        std::cerr << "[resource:warn] " << diag.code << ": " << diag.message;
-        if (!diag.path.empty()) {
-            std::cerr << " (" << diag.path << ")";
-        }
-        std::cerr << '\n';
-    }
-    for (const auto& decision : plan.decisions) {
-        if (decision.detected && !decision.allowed && decision.reason != coding_agent::ResourceSkipReason::Unsupported) {
-            std::cerr << "[resource:info] " << coding_agent::to_string(decision.kind)
-                      << " skipped: " << coding_agent::to_string(decision.reason);
-            if (!decision.path.empty()) {
-                std::cerr << " (" << decision.path << ")";
-            }
-            std::cerr << '\n';
-        }
-    }
-}
-
-bool is_project_local_resume(const std::filesystem::path& resume_path, const std::filesystem::path& workspace) {
-    if (resume_path.empty()) {
-        return false;
-    }
-    std::error_code ec;
-    auto absolute_resume = resume_path.is_absolute() ? resume_path : (std::filesystem::current_path(ec) / resume_path);
-    auto canonical_resume = std::filesystem::weakly_canonical(absolute_resume, ec);
-    if (ec) {
-        canonical_resume = absolute_resume.lexically_normal();
-    }
-    auto canonical_workspace = std::filesystem::weakly_canonical(workspace, ec);
-    if (ec) {
-        canonical_workspace = workspace.lexically_normal();
-    }
-    auto relative = canonical_resume.lexically_relative(canonical_workspace);
-    if (relative.empty()) {
-        return false;
-    }
-    auto it = relative.begin();
-    return it != relative.end() && *it == ".cpp-harness";
-}
 
 } // namespace
 
 int run_async_cli(const AsyncCliRuntimeConfig& config) {
     const auto json_mode = is_json_mode(config.output_mode);
-    const auto provider_name = std::string{config.fake ? "fake" : "openai-compatible"};
-
-    const char* home = std::getenv("HOME");
     const std::string config_path = coding_agent::ConfigLoader::default_config_path();
     auto config_data = coding_agent::ConfigLoader::load(config_path);
     if (!config_data) {
@@ -109,181 +47,91 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         config_data = coding_agent::ConfigData{};
     }
 
-    coding_agent::ResolvedProviderSettings resolved;
-    cch::util::Expected<coding_agent::runtime::OpenSession> opened_session;
+    coding_agent::CommandRegistry command_registry;
+    register_builtin_commands(command_registry);
 
-    if (config.resume_path.empty()) {
-        resolved = coding_agent::resolve_provider_settings(
-            provider_name,
-            config.fake,
-            config.provider_overrides,
-            *config_data,
-            std::nullopt,
-            std::nullopt);
-        opened_session = coding_agent::runtime::open_session(coding_agent::runtime::SessionOpenRequest{
-            config.session_path,
-            config.resume_path,
-            config.workspace,
-            config.workspace_explicit,
-            config.session_id,
-            config.created_at,
-            resolved.provider,
-            resolved.model,
-        });
-    } else {
-        opened_session = coding_agent::runtime::open_session(coding_agent::runtime::SessionOpenRequest{
-            config.session_path,
-            config.resume_path,
-            config.workspace,
-            config.workspace_explicit,
-            config.session_id,
-            config.created_at,
-            provider_name,
-            config.provider_overrides.model.value_or(""),
-        });
-        if (opened_session) {
-            resolved = coding_agent::resolve_provider_settings(
-                provider_name,
-                config.fake,
-                config.provider_overrides,
-                *config_data,
-                opened_session->stored_provider,
-                opened_session->stored_model);
-        }
-    }
+    coding_agent::runtime::AgentSessionCreationRequest request;
+    request.fake = config.fake;
+    request.enable_bash = config.enable_bash;
+    request.project_trust_override = config.project_trust_override;
+    request.disable_project_skills = config.disable_project_skills;
+    request.disable_prompt_templates = config.disable_prompt_templates;
+    request.prompt_template_paths = config.prompt_template_paths;
+    request.workspace_explicit = config.workspace_explicit;
+    request.max_turns = config.max_turns;
+    request.workspace = config.workspace;
+    request.session_path = config.session_path;
+    request.resume_path = config.resume_path;
+    request.session_id = config.session_id;
+    request.created_at = config.created_at;
+    request.provider_overrides = config.provider_overrides;
+    request.config = *config_data;
+    request.command_registry = std::move(command_registry);
 
-    if (!opened_session) {
-        if (opened_session.error().message == "resume workspace does not match session metadata") {
-            std::cerr << opened_session.error().detail << '\n';
+    auto created = coding_agent::create_agent_session(std::move(request));
+    if (!created) {
+        if (created.error().message == "resume workspace does not match session metadata") {
+            std::cerr << created.error().detail << '\n';
         } else if (!config.resume_path.empty()) {
-            std::cerr << "could not resume session: " << opened_session.error().message << ": " << opened_session.error().detail << '\n';
+            std::cerr << "could not resume session: " << created.error().message << ": " << created.error().detail << '\n';
         } else {
-            std::cerr << "could not create session: " << opened_session.error().message << ": " << opened_session.error().detail << '\n';
+            std::cerr << "could not create session: " << created.error().message << ": " << created.error().detail << '\n';
         }
         return 2;
     }
 
-    auto workspace = opened_session->workspace;
-    const auto resolved_provider = resolved.provider;
-    const auto resolved_model = resolved.model;
-    const auto resolved_base_url = resolved.base_url;
-    const auto resolved_api_key_env = resolved.api_key_env;
+    auto& session = *created->session;
+    const auto workspace = created->workspace;
+    const auto resolved_provider = created->provider;
+    const auto resolved_model = created->model;
 
     std::optional<coding_agent::runtime::JsonEventPrinter> json_printer;
     if (json_mode) {
         json_printer.emplace(std::cout);
-        if (auto printed = json_printer->print_session_header(opened_session->store->metadata()); !printed) {
+        if (auto printed = json_printer->print_session_header(created->metadata); !printed) {
             std::cerr << "event printer failed: " << printed.error().message << '\n';
             return 2;
         }
     }
 
-    auto default_project_trust = config_data->default_project_trust.value_or(coding_agent::DefaultProjectTrust::Ask);
-    coding_agent::ProjectResourcePolicy resource_policy;
-    resource_policy.project_skills = config_data->project_skills.value_or(coding_agent::ResourceEnablement::Auto);
-    if (config.disable_project_skills) {
-        resource_policy.project_skills = coding_agent::ResourceEnablement::Off;
-    }
-
-    coding_agent::ProjectResourceDetectionResult resource_detection;
-    auto resource_fs = harness::WorkspaceFileSystem::create(workspace);
-    if (resource_fs) {
-        resource_detection = coding_agent::detect_project_resources(*resource_fs);
-    } else {
-        resource_detection.diagnostics.push_back(coding_agent::ResourceDiagnostic{
-            .severity = coding_agent::ResourceDiagnosticSeverity::Warning,
-            .code = "workspace_fs_unavailable",
-            .message = resource_fs.error().message,
-            .path = workspace.string(),
-            .kind = std::nullopt,
-        });
-    }
-
-    const bool trust_needed = coding_agent::needs_project_trust_resolution(resource_detection, resource_policy);
-    const std::filesystem::path trust_store_path = home
-        ? (std::filesystem::path{home} / ".cpp-harness" / "trust.json")
-        : std::filesystem::path{};
-    coding_agent::ProjectTrustStore trust_store{trust_store_path};
-    auto trust_resolution = coding_agent::resolve_project_trust(
-        workspace,
-        trust_needed,
-        trust_store,
-        default_project_trust,
-        config.project_trust_override);
-    auto resource_plan = coding_agent::build_project_resource_load_plan(
-        resource_detection,
-        resource_policy,
-        trust_resolution);
-
-    print_trust_diagnostics(trust_resolution);
-    print_resource_diagnostics(resource_plan);
-    if (resource_plan.skipped_for_untrusted && is_project_local_resume(config.resume_path, workspace)) {
-        std::cerr << "[trust:warn] project-local resume history is not scrubbed by project trust ("
-                  << config.resume_path.string() << ")\n";
-    }
-
-    std::vector<coding_agent::SkillDirSpec> skill_dirs;
-    if (coding_agent::project_skills_allowed(resource_plan)) {
-        skill_dirs.push_back({.path = ".cpp-harness/skills", .includeRootFiles = false});
-    }
-
-    std::vector<std::string> prompt_dirs;
-    if (!config.disable_prompt_templates) {
-        if (coding_agent::project_prompts_allowed(resource_plan)) {
-            prompt_dirs.push_back(".cpp-harness/prompts");
+    for (const auto& diag : created->diagnostics) {
+        const char* severity = "info";
+        switch (diag.severity) {
+        case coding_agent::SdkDiagnostic::Severity::Info:
+            severity = "info";
+            break;
+        case coding_agent::SdkDiagnostic::Severity::Warning:
+            severity = "warn";
+            break;
+        case coding_agent::SdkDiagnostic::Severity::Error:
+            severity = "error";
+            break;
         }
-        for (const auto& path : config.prompt_template_paths) {
-            prompt_dirs.push_back(path);
+        std::string category = "session";
+        std::string code = diag.code;
+        if (const auto split = code.find(':'); split != std::string::npos) {
+            category = code.substr(0, split);
+            code = code.substr(split + 1);
         }
-    }
-
-    auto services = coding_agent::runtime::make_runtime_services(coding_agent::runtime::RuntimeServicesConfig{
-        workspace,
-        config.enable_bash,
-        resolved.provider_registry_name,
-        resolved_provider,
-        resolved.api,
-        resolved_model,
-        resolved_base_url,
-        resolved_api_key_env,
-        std::move(skill_dirs),
-        std::move(prompt_dirs),
-        true,  // print_skill_diagnostics
-    });
-    if (!services) {
-        if (json_mode && json_printer) {
-            (void)print_json_terminal(*json_printer, false, "runtime_service_failed", "could not create runtime services");
-        } else {
-            std::cerr << "could not create runtime services: " << services.error().message << ": " << services.error().detail << '\n';
+        std::cerr << '[' << category << ':' << severity << "] " << code << ": " << diag.message;
+        if (diag.path) {
+            std::cerr << " (" << *diag.path << ')';
         }
-        return 2;
+        std::cerr << '\n';
     }
-
-    coding_agent::CommandRegistry command_registry;
-    register_builtin_commands(command_registry);
-
-    coding_agent::runtime::AgentSessionRuntime runtime(
-        std::move(*services),
-        std::move(*opened_session),
-        std::move(command_registry),
-        coding_agent::runtime::AgentSessionRuntimeConfig{
-            .max_turns = config.max_turns,
-            .model = resolved_model,
-            .capture_skill_diagnostics = false,
-        });
 
     if (is_rpc_mode(config.output_mode)) {
         return coding_agent::runtime::run_rpc_mode(coding_agent::runtime::RpcModeConfig{
             std::cin,
             std::cout,
-            runtime,
+            session,
             resolved_provider,
             resolved_model,
             workspace,
         });
     }
 
-    auto run_prompt = [&](const std::string& prompt) -> coding_agent::runtime::PromptRunResult {
+    auto run_prompt = [&](const std::string& prompt) -> coding_agent::PromptResult {
         std::optional<boost::asio::io_context> print_io;
         std::optional<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>> print_work;
         std::optional<std::jthread> print_thread;
@@ -293,24 +141,26 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             print_thread.emplace([&]() { print_io->run(); });
         }
 
-        auto result = runtime.run_prompt(
+        auto prompt_result = session.prompt(
             prompt,
-            [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
-                if (json_mode) {
-                    return json_printer->print_agent_event(event);
-                }
-                try {
-                    boost::asio::post(*print_io, [event]() {
-                        try {
-                            coding_agent::runtime::print_agent_event(event, std::cout);
-                        } catch (const std::exception& e) {
-                            std::cerr << "event printer failed: " << e.what() << '\n';
-                        }
-                    });
-                    return util::ExpectedVoid{};
-                } catch (const std::exception& e) {
-                    return std::unexpected(util::make_error(util::ErrorCode::Tool, "event printer failed", e.what()));
-                }
+            coding_agent::PromptOptions{
+                .event_sink = [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+                    if (json_mode) {
+                        return json_printer->print_agent_event(event);
+                    }
+                    try {
+                        boost::asio::post(*print_io, [event]() {
+                            try {
+                                coding_agent::runtime::print_agent_event(event, std::cout);
+                            } catch (const std::exception& e) {
+                                std::cerr << "event printer failed: " << e.what() << '\n';
+                            }
+                        });
+                        return util::ExpectedVoid{};
+                    } catch (const std::exception& e) {
+                        return std::unexpected(util::make_error(util::ErrorCode::Tool, "event printer failed", e.what()));
+                    }
+                },
             });
 
         if (!json_mode) {
@@ -318,6 +168,16 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             print_thread->join();
         }
         std::cout.flush();
+
+        coding_agent::PromptResult result;
+        if (prompt_result) {
+            result = std::move(*prompt_result);
+        } else {
+            result.success = false;
+            result.code = "runtime_error";
+            result.message = prompt_result.error().message;
+        }
+
         if (!result.success) {
             if (json_mode) {
                 (void)print_json_terminal(*json_printer, false, result.code, result.message);
@@ -330,14 +190,16 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         }
         if (json_mode) {
             if (!print_json_terminal(*json_printer, true, result.code)) {
-                return coding_agent::runtime::PromptRunResult{false, "event_print_failed", "failed to print terminal event", {}};
+                coding_agent::PromptResult failed;
+                failed.success = false;
+                failed.code = "event_print_failed";
+                failed.message = "failed to print terminal event";
+                return failed;
             }
             return result;
         }
-        if (!runtime.history().empty()) {
-            if (const auto* final_message = std::get_if<ai::AssistantMessage>(&runtime.history().back())) {
-                std::cout << ai::text_from_assistant_content(final_message->content) << '\n';
-            }
+        if (result.code == "completed" && result.last_assistant_text) {
+            std::cout << *result.last_assistant_text << '\n';
         }
         return result;
     };

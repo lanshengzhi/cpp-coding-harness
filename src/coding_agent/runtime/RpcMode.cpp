@@ -24,28 +24,20 @@ using util::JsonValue;
     return rpc_jsonl::string_field(object, "type");
 }
 
-[[nodiscard]] std::optional<std::string> last_assistant_text(const std::vector<ai::MessageVariant>& history) {
-    for (auto it = history.rbegin(); it != history.rend(); ++it) {
-        if (const auto* assistant = std::get_if<ai::AssistantMessage>(&*it)) {
-            return ai::text_from_assistant_content(assistant->content);
-        }
-    }
-    return std::nullopt;
-}
 
 [[nodiscard]] JsonValue::object_t state_data(const RpcModeConfig& config) {
     JsonValue::object_t data;
     data.emplace("provider", JsonValue{config.provider});
     data.emplace("model", JsonValue{config.model});
-    data.emplace("sessionId", JsonValue{config.runtime.session_id()});
+    data.emplace("sessionId", JsonValue{config.session.session_id()});
     data.emplace("workspace", JsonValue{config.workspace.string()});
-    data.emplace("messageCount", JsonValue{static_cast<int>(config.runtime.message_count())});
+    data.emplace("messageCount", JsonValue{static_cast<int>(config.session.message_count())});
     return data;
 }
 
-[[nodiscard]] JsonValue::object_t last_text_data(const AgentSessionRuntime& runtime) {
+[[nodiscard]] JsonValue::object_t last_text_data(const AgentSession& session) {
     JsonValue::object_t data;
-    auto text = last_assistant_text(runtime.history());
+    auto text = session.last_assistant_text();
     if (text) {
         data.emplace("text", JsonValue{std::move(*text)});
     } else {
@@ -146,7 +138,7 @@ int run_rpc_mode(RpcModeConfig config) {
         if (*type == "get_last_assistant_text") {
             if (auto written = write_response(
                     config.output,
-                    rpc_jsonl::success_response(id, *type, last_text_data(config.runtime)));
+                    rpc_jsonl::success_response(id, *type, last_text_data(config.session)));
                 !written) {
                 return 1;
             }
@@ -176,19 +168,27 @@ int run_rpc_mode(RpcModeConfig config) {
                 return 1;
             }
 
-            auto result = config.runtime.run_prompt(
+            auto result = config.session.prompt(
                 std::move(*message),
-                [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
-                    return printer.print_agent_event(event);
+                PromptOptions{
+                    .event_sink = [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+                        return printer.print_agent_event(event);
+                    },
                 });
-            if (auto terminal = printer.print_terminal(result.success, result.code, result.message); !terminal) {
+            if (!result) {
+                if (auto terminal = printer.print_terminal(false, "runtime_error", result.error().message); !terminal) {
+                    return 1;
+                }
+                return 1;
+            }
+            if (auto terminal = printer.print_terminal(result->success, result->code, result->message); !terminal) {
                 return 1;
             }
             config.output.flush();
             if (!config.output) {
                 return 1;
             }
-            if (!result.success) {
+            if (!result->success) {
                 return 1;
             }
             continue;

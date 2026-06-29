@@ -191,27 +191,44 @@ const std::vector<PromptTemplate>& AgentSession::templates() const {
 // Factory
 // ─────────────────────────────────────────────────────────────────────────────
 
+namespace detail {
+
+class AgentSessionRuntimeAccess {
+public:
+    [[nodiscard]] static util::Expected<CreateAgentSessionResult> wrap_factory_result(
+        util::Expected<runtime::CreateAgentSessionResult> factory_result) {
+        if (!factory_result) {
+            return std::unexpected(factory_result.error());
+        }
+
+        auto session = std::make_unique<AgentSession>();
+        session->impl_ = std::make_unique<AgentSession::Impl>();
+        session->impl_->state = AgentSession::Impl::State::Open;
+        session->impl_->runtime = std::move(factory_result->runtime);
+
+        CreateAgentSessionResult result;
+        result.session = std::move(session);
+        result.diagnostics = std::move(factory_result->diagnostics);
+        result.session_id = factory_result->session_id;
+        result.provider = factory_result->provider;
+        result.model = factory_result->model;
+        result.session_path = factory_result->session_path;
+        result.workspace = factory_result->workspace;
+        result.metadata = factory_result->metadata;
+        return result;
+    }
+};
+
+} // namespace detail
+
 util::Expected<CreateAgentSessionResult> create_agent_session(
     CreateAgentSessionOptions options) {
-    auto factory_result = runtime::SessionFactory::create(std::move(options));
-    if (!factory_result) {
-        return std::unexpected(factory_result.error());
-    }
+    return detail::AgentSessionRuntimeAccess::wrap_factory_result(runtime::SessionFactory::create(std::move(options)));
+}
 
-    auto session = std::make_unique<AgentSession>();
-    session->impl_ = std::make_unique<AgentSession::Impl>();
-    session->impl_->state = AgentSession::Impl::State::Open;
-    session->impl_->runtime = std::move(factory_result->runtime);
-
-    CreateAgentSessionResult result;
-    result.session = std::move(session);
-    result.diagnostics = std::move(factory_result->diagnostics);
-    result.session_id = factory_result->session_id;
-    result.provider = factory_result->provider;
-    result.model = factory_result->model;
-    result.session_path = factory_result->session_path;
-    result.workspace = factory_result->workspace;
-    return result;
+util::Expected<CreateAgentSessionResult> create_agent_session(
+    runtime::AgentSessionCreationRequest request) {
+    return detail::AgentSessionRuntimeAccess::wrap_factory_result(runtime::SessionFactory::create(std::move(request)));
 }
 
 } // namespace cch::coding_agent

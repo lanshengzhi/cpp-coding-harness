@@ -19,6 +19,9 @@
 #include <vector>
 
 namespace cch::coding_agent {
+namespace detail {
+class AgentSessionRuntimeAccess;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public SDK types for the embeddable C++23 agent surface.
@@ -163,6 +166,8 @@ struct CreateAgentSessionResult {
     std::string model;
     std::filesystem::path session_path;
     std::filesystem::path workspace;
+    /// Full session metadata captured at creation/resume time.
+    harness::session::SessionMetadata metadata;
 };
 
 // ── PromptOptions ────────────────────────────────────────────────────────────
@@ -321,6 +326,7 @@ public:
 private:
     friend util::Expected<CreateAgentSessionResult> create_agent_session(
         CreateAgentSessionOptions options);
+    friend class detail::AgentSessionRuntimeAccess;
 
     std::unique_ptr<Impl> impl_;
 };

@@ -16,11 +16,13 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <filesystem>
 #include <format>
 #include <optional>
 #include <set>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -154,7 +156,271 @@ constexpr std::string_view kHostClientModel = "host-client";
     return client;
 }
 
+[[nodiscard]] std::filesystem::path default_trust_store_path() {
+    const char* home = std::getenv("HOME");
+    return home ? (std::filesystem::path{home} / ".cpp-harness" / "trust.json")
+                : std::filesystem::path{};
+}
+
+[[nodiscard]] SdkDiagnostic::Severity to_sdk_severity(ProjectTrustDiagnosticSeverity severity) {
+    switch (severity) {
+    case ProjectTrustDiagnosticSeverity::Info:
+        return SdkDiagnostic::Severity::Info;
+    case ProjectTrustDiagnosticSeverity::Warning:
+        return SdkDiagnostic::Severity::Warning;
+    case ProjectTrustDiagnosticSeverity::Error:
+        return SdkDiagnostic::Severity::Error;
+    }
+    return SdkDiagnostic::Severity::Warning;
+}
+
+[[nodiscard]] SdkDiagnostic::Severity to_sdk_severity(ResourceDiagnosticSeverity severity) {
+    switch (severity) {
+    case ResourceDiagnosticSeverity::Info:
+        return SdkDiagnostic::Severity::Info;
+    case ResourceDiagnosticSeverity::Warning:
+        return SdkDiagnostic::Severity::Warning;
+    case ResourceDiagnosticSeverity::Error:
+        return SdkDiagnostic::Severity::Error;
+    }
+    return SdkDiagnostic::Severity::Warning;
+}
+
+void add_project_diagnostics(
+    std::vector<SdkDiagnostic>& diagnostics,
+    const ProjectTrustResolution& trust,
+    const ProjectResourceLoadPlan& plan) {
+    for (const auto& td : trust.diagnostics) {
+        diagnostics.push_back(make_diag(
+            to_sdk_severity(td.severity),
+            "trust:" + td.code,
+            td.message,
+            td.path));
+    }
+    for (const auto& rd : plan.diagnostics) {
+        diagnostics.push_back(make_diag(
+            to_sdk_severity(rd.severity),
+            "resource:" + rd.code,
+            rd.message,
+            rd.path.empty() ? std::nullopt : std::optional<std::string>{rd.path}));
+    }
+    for (const auto& decision : plan.decisions) {
+        if (decision.detected && !decision.allowed && decision.reason != ResourceSkipReason::Unsupported) {
+            diagnostics.push_back(make_diag(
+                SdkDiagnostic::Severity::Info,
+                "resource:" + to_string(decision.kind),
+                to_string(decision.kind) + " skipped: " + to_string(decision.reason),
+                decision.path.empty() ? std::nullopt : std::optional<std::string>{decision.path}));
+        }
+    }
+}
+
+[[nodiscard]] std::string_view to_string(SkillDiagnosticCode code) {
+    switch (code) {
+    case SkillDiagnosticCode::file_info_failed:
+        return "file_info_failed";
+    case SkillDiagnosticCode::list_failed:
+        return "list_failed";
+    case SkillDiagnosticCode::read_failed:
+        return "read_failed";
+    case SkillDiagnosticCode::parse_failed:
+        return "parse_failed";
+    case SkillDiagnosticCode::invalid_metadata:
+        return "invalid_metadata";
+    case SkillDiagnosticCode::duplicate_name:
+        return "duplicate_name";
+    }
+    return "invalid_metadata";
+}
+
+[[nodiscard]] std::string_view to_string(PromptTemplateDiagnosticCode code) {
+    switch (code) {
+    case PromptTemplateDiagnosticCode::file_info_failed:
+        return "file_info_failed";
+    case PromptTemplateDiagnosticCode::list_failed:
+        return "list_failed";
+    case PromptTemplateDiagnosticCode::read_failed:
+        return "read_failed";
+    case PromptTemplateDiagnosticCode::parse_failed:
+        return "parse_failed";
+    case PromptTemplateDiagnosticCode::duplicate_name:
+        return "duplicate_name";
+    }
+    return "parse_failed";
+}
+
+
+void add_runtime_resource_diagnostics(
+    std::vector<SdkDiagnostic>& diagnostics,
+    const RuntimeServices& services) {
+    for (const auto& diag : services.skill_load_result.diagnostics) {
+        diagnostics.push_back(make_diag(
+            SdkDiagnostic::Severity::Warning,
+            "skill:" + std::string{to_string(diag.code)},
+            diag.message,
+            diag.path));
+    }
+    for (const auto& diag : services.prompt_load_result.diagnostics) {
+        diagnostics.push_back(make_diag(
+            SdkDiagnostic::Severity::Warning,
+            "template:" + std::string{to_string(diag.code)},
+            diag.message,
+            diag.path));
+    }
+}
+
 } // namespace
+
+util::Expected<CreateAgentSessionResult> SessionFactory::create(
+    AgentSessionCreationRequest request) {
+    std::vector<SdkDiagnostic> diagnostics;
+    const auto provider_registry_name = std::string{request.fake ? "fake" : "openai-compatible"};
+
+    coding_agent::ResolvedProviderSettings resolved;
+    util::Expected<OpenSession> opened_session = std::unexpected(util::make_error(
+        util::ErrorCode::Session,
+        "session was not opened",
+        "internal session factory initialization failed before open_session"));
+
+    if (request.resume_path.empty()) {
+        resolved = coding_agent::resolve_provider_settings(
+            provider_registry_name,
+            request.fake,
+            request.provider_overrides,
+            request.config,
+            std::nullopt,
+            std::nullopt);
+        opened_session = open_session(SessionOpenRequest{
+            request.session_path,
+            request.resume_path,
+            request.workspace,
+            request.workspace_explicit,
+            request.session_id,
+            request.created_at,
+            resolved.provider,
+            resolved.model,
+        });
+    } else {
+        opened_session = open_session(SessionOpenRequest{
+            request.session_path,
+            request.resume_path,
+            request.workspace,
+            request.workspace_explicit,
+            request.session_id,
+            request.created_at,
+            provider_registry_name,
+            request.provider_overrides.model.value_or(""),
+        });
+        if (opened_session) {
+            resolved = coding_agent::resolve_provider_settings(
+                provider_registry_name,
+                request.fake,
+                request.provider_overrides,
+                request.config,
+                opened_session->stored_provider,
+                opened_session->stored_model);
+        }
+    }
+
+    if (!opened_session) {
+        return std::unexpected(opened_session.error());
+    }
+
+    const auto workspace = opened_session->workspace;
+    const auto metadata = opened_session->store->metadata();
+    const auto session_path = opened_session->store->path();
+
+    ProjectResourcePolicy resource_policy;
+    resource_policy.project_skills = request.config.project_skills.value_or(ResourceEnablement::Auto);
+    if (request.disable_project_skills) {
+        resource_policy.project_skills = ResourceEnablement::Off;
+    }
+
+    ProjectResourceDetectionResult resource_detection;
+    auto resource_fs = harness::WorkspaceFileSystem::create(workspace);
+    if (resource_fs) {
+        resource_detection = detect_project_resources(*resource_fs);
+    } else {
+        resource_detection.diagnostics.push_back(ResourceDiagnostic{
+            .severity = ResourceDiagnosticSeverity::Warning,
+            .code = "workspace_fs_unavailable",
+            .message = resource_fs.error().message,
+            .path = workspace.string(),
+            .kind = std::nullopt,
+        });
+    }
+
+    const bool trust_needed = needs_project_trust_resolution(resource_detection, resource_policy);
+    ProjectTrustStore trust_store{default_trust_store_path()};
+    auto trust_resolution = resolve_project_trust(
+        workspace,
+        trust_needed,
+        trust_store,
+        request.config.default_project_trust.value_or(DefaultProjectTrust::Ask),
+        request.project_trust_override);
+    auto resource_plan = build_project_resource_load_plan(
+        resource_detection,
+        resource_policy,
+        trust_resolution);
+    add_project_diagnostics(diagnostics, trust_resolution, resource_plan);
+
+    std::vector<SkillDirSpec> skill_dirs;
+    if (project_skills_allowed(resource_plan)) {
+        skill_dirs.push_back({.path = ".cpp-harness/skills", .includeRootFiles = false});
+    }
+
+    std::vector<std::string> prompt_dirs;
+    if (!request.disable_prompt_templates) {
+        if (project_prompts_allowed(resource_plan)) {
+            prompt_dirs.push_back(".cpp-harness/prompts");
+        }
+        for (const auto& path : request.prompt_template_paths) {
+            prompt_dirs.push_back(path);
+        }
+    }
+
+    auto services = make_runtime_services(RuntimeServicesConfig{
+        workspace,
+        request.enable_bash,
+        resolved.provider_registry_name,
+        resolved.provider,
+        resolved.api,
+        resolved.model,
+        resolved.base_url,
+        resolved.api_key_env,
+        std::move(skill_dirs),
+        std::move(prompt_dirs),
+        false,
+    });
+    if (!services) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Session,
+            "could not create runtime services",
+            services.error().message + ": " + services.error().detail));
+    }
+    add_runtime_resource_diagnostics(diagnostics, *services);
+
+    auto runtime = std::make_unique<AgentSessionRuntime>(
+        std::move(*services),
+        std::move(*opened_session),
+        std::move(request.command_registry),
+        AgentSessionRuntimeConfig{
+            .max_turns = request.max_turns,
+            .model = resolved.model,
+            .capture_skill_diagnostics = false,
+        });
+
+    CreateAgentSessionResult result;
+    result.runtime = std::move(runtime);
+    result.diagnostics = std::move(diagnostics);
+    result.session_id = metadata.session_id;
+    result.provider = resolved.provider;
+    result.model = resolved.model;
+    result.session_path = session_path;
+    result.workspace = workspace;
+    result.metadata = metadata;
+    return result;
+}
 
 util::Expected<CreateAgentSessionResult> SessionFactory::create(
     CreateAgentSessionOptions options) {
@@ -519,6 +785,7 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
     runtime_config.model = model_name;
     runtime_config.capture_skill_diagnostics = true;
 
+    const auto metadata = open.store->metadata();
     auto runtime = std::make_unique<AgentSessionRuntime>(
         std::move(services),
         std::move(open),
@@ -533,6 +800,7 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
     result.model = result.runtime->model();
     result.session_path = result.runtime->session_path();
     result.workspace = result.runtime->workspace();
+    result.metadata = metadata;
 
     return result;
 }

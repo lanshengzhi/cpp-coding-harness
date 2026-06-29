@@ -226,6 +226,7 @@ session->close();
 - Programmatic skills, prompt templates, and slash-command handlers; host resources take precedence over project-discovered duplicates.
 - Optional project resource discovery (`.cpp-harness/skills/`, `.cpp-harness/prompts/`) behind explicit trust/resource controls.
 - Diagnostics returned as `CreateAgentSessionResult::diagnostics` values — no stdout/stderr output from the SDK path.
+- Resolved session metadata on `CreateAgentSessionResult::metadata`, matching the created/resumed JSONL session header.
 
 **Not supported in SDK v1:**
 
