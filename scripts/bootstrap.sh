@@ -107,17 +107,23 @@ if [[ -f "$cache_file" ]] && ! grep -Fq "scripts/buildsystems/vcpkg.cmake" "$cac
 	rm -rf "$repo_root/build/CMakeFiles"
 fi
 
-echo "Configuring with CMake preset '$preset'"
-cmake --preset "$preset"
+# CMake presets resolve CMakePresets.json relative to the current working
+# directory, so run from repo_root regardless of where the script is invoked.
+(
+	cd "$repo_root" || exit 1
 
-if [[ "$build" -eq 1 ]]; then
-	echo "Building with CMake preset '$preset'"
-	cmake --build --preset "$preset"
-fi
+	echo "Configuring with CMake preset '$preset'"
+	cmake --preset "$preset"
 
-if [[ "$run_tests" -eq 1 ]]; then
-	echo "Running tests with CTest preset '$preset'"
-	ctest --preset "$preset"
-fi
+	if [[ "$build" -eq 1 ]]; then
+		echo "Building with CMake preset '$preset'"
+		cmake --build --preset "$preset"
+	fi
+
+	if [[ "$run_tests" -eq 1 ]]; then
+		echo "Running tests with CTest preset '$preset'"
+		ctest --preset "$preset"
+	fi
+)
 
 echo "Bootstrap complete. VCPKG_ROOT=$VCPKG_ROOT"
