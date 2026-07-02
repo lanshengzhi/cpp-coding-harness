@@ -1,5 +1,6 @@
 #include "SessionJournal.hpp"
 
+#include <array>
 #include <cerrno>
 #include <cstring>
 #include <fstream>
