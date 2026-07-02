@@ -8,7 +8,6 @@ reference_repo: "pi"
 origin: docs/plans/2026-06-16-001-refactor-pi-cpp-parity-todo.md
 ---
 
-<!-- markdownlint-disable MD013 MD025 -->
 
 # feat: Add embeddable SDK surface
 

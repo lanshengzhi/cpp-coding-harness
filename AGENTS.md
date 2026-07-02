@@ -1,6 +1,5 @@
 # AGENTS.md
 
-<!-- markdownlint-disable MD013 -->
 
 This file is the root router for agents working in this repository. Its scope is the repository root and every subdirectory.
 

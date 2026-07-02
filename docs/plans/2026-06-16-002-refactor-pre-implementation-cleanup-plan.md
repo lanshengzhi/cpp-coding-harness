@@ -8,7 +8,6 @@ target_repo: "cpp-coding-harness"
 reference_repo: "pi"
 ---
 
-<!-- markdownlint-disable MD013 MD025 -->
 
 # refactor: Pre-implementation cleanup for pi module parity
 

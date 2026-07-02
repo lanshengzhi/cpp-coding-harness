@@ -7,7 +7,6 @@ target_repo: "cpp-coding-harness"
 reference_repo: "pi"
 ---
 
-<!-- markdownlint-disable MD013 MD025 -->
 
 # feat: Agent loop context transform, steering, follow-up, and parallel tool execution with OAuth deferral documentation
 

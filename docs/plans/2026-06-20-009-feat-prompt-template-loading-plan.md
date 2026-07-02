@@ -7,7 +7,6 @@ target_repo: "cpp-coding-harness"
 reference_repo: "pi"
 ---
 
-<!-- markdownlint-disable MD013 MD025 -->
 
 # feat: Prompt template file loading and runtime wiring
 

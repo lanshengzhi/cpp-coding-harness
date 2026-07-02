@@ -5,7 +5,6 @@ status: completed
 date: 2026-06-20
 ---
 
-<!-- markdownlint-disable MD013 -->
 
 # feat: Add project trust and resource controls
 

@@ -1,6 +1,5 @@
 # Detailed module routing reference
 
-<!-- markdownlint-disable MD013 -->
 
 This file is the detailed Route reference for [`AGENTS.md`](../../AGENTS.md). The root `AGENTS.md` remains the entry point for every agent run. Read this file when you need the complete module routing matrix, when you update routing, or when an active/historical plan mentions provider, tool, session, CLI, runtime, public-boundary, documentation, or pi-parity routing concepts. The historical section map below keeps older plan references to numbered `AGENTS.md` sections resolvable.
 
