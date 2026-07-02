@@ -1,0 +1,4 @@
+- **C++23** with **Boost.Asio/Beast** for async HTTPS streaming and **OpenSSL** for TLS.
+- **Glaze** for high-performance JSON serialization/deserialization at wire boundaries.
+- **CLI11** for argument parsing and **Catch2** for testing.
+- **vcpkg** manifest mode for dependency management.

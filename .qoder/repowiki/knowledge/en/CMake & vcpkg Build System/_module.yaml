@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: build_system
+title: CMake & vcpkg Build System
+scope: []
+source_files:
+    - CMakeLists.txt
+    - CMakePresets.json
+    - vcpkg.json
+    - scripts/bootstrap.sh
+    - scripts/kimi_live_smoke.sh
+depends_on: []
+related_to: []

@@ -1,0 +1,3 @@
+- **Bootstrap Scripts**: Use `scripts/bootstrap.sh --test` (Linux/macOS) or `scripts/bootstrap.ps1 -Test` (Windows) to automatically checkout vcpkg, install dependencies, and configure CMake.
+- **Presets**: Supports `cmake --preset vcpkg` for managed dependencies or `cmake --preset system` for system-installed libraries.
+- **Live Smoke Test**: Optional Kimi Code validation via `CCH_LIVE_KIMI=1 scripts/kimi_live_smoke.sh`.

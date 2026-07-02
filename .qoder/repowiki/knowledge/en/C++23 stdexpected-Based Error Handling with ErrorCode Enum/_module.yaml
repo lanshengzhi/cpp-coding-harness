@@ -1,0 +1,14 @@
+schema_version: 1
+module_path: error_handling
+title: C++23 std::expected-Based Error Handling with ErrorCode Enum
+scope: []
+source_files:
+    - include/cch/util/Error.hpp
+    - src/util/ExpectedMacros.hpp
+    - src/agent/AgentLoop.cpp
+    - src/agent/ToolCallExecutor.cpp
+    - include/cch/harness/session/JsonlSessionStore.hpp
+    - src/harness/session/JsonlSessionStore.cpp
+    - src/coding_agent/runtime/AgentSessionRuntime.cpp
+depends_on: []
+related_to: []

@@ -1,0 +1,16 @@
+schema_version: 1
+module_path: configuration_system
+title: Configuration System
+scope: []
+source_files:
+    - src/coding_agent/ConfigLoader.cpp
+    - include/cch/coding_agent/Config.hpp
+    - src/coding_agent/ProviderConfigResolution.cpp
+    - src/cli/CliParse.cpp
+    - src/cli/CliPreflight.cpp
+    - src/coding_agent/runtime/SessionFactory.cpp
+    - vcpkg.json
+    - CMakeLists.txt
+    - CMakePresets.json
+depends_on: []
+related_to: []
