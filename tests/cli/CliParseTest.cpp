@@ -101,3 +101,20 @@ TEST_CASE("parse_args defaults output mode to text", "[cli][parse]") {
     REQUIRE(parsed);
     CHECK(parsed->output_mode == cch::cli::OutputMode::Text);
 }
+
+TEST_CASE("parse_args defaults empty text-mode prompt to repl", "[cli][parse]") {
+    std::vector<std::string> args{"cpp-harness", "--fake"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    CHECK(parsed->repl);
+    CHECK(parsed->prompt.empty());
+}
+
+TEST_CASE("parse_args still requires prompt for json mode", "[cli][parse]") {
+    std::vector<std::string> args{"cpp-harness", "--fake", "--mode", "json"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE_FALSE(parsed);
+    CHECK(parsed.error().message.find("prompt is required") != std::string::npos);
+}

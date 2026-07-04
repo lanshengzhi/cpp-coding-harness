@@ -1,3 +1,4 @@
+#include "../../include/cch/coding_agent/AuthLoader.hpp"
 #include "../../include/cch/coding_agent/Config.hpp"
 
 #include <cstdlib>
@@ -84,6 +85,23 @@ ResolvedProviderSettings resolve_provider_settings(
         resolved_api_key_env = "OPENAI_API_KEY";
     }
 
+    std::string resolved_auth;
+    if (cli.auth) {
+        resolved_auth = *cli.auth;
+    } else if (config.auth) {
+        resolved_auth = *config.auth;
+    }
+
+    std::string resolved_api_key;
+    if (!resolved_auth.empty()) {
+        auto auth_entries = AuthLoader::load(AuthLoader::default_path());
+        if (auth_entries) {
+            if (auto it = auth_entries->find(resolved_auth); it != auth_entries->end()) {
+                resolved_api_key = it->second.key;
+            }
+        }
+    }
+
     return ResolvedProviderSettings{
         .provider_registry_name = provider_registry_name,
         .provider = std::move(resolved_provider),
@@ -91,6 +109,8 @@ ResolvedProviderSettings resolve_provider_settings(
         .model = std::move(resolved_model),
         .base_url = std::move(resolved_base_url),
         .api_key_env = std::move(resolved_api_key_env),
+        .api_key = std::move(resolved_api_key),
+        .auth = std::move(resolved_auth),
     };
 }
 

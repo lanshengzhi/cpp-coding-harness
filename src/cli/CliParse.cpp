@@ -73,6 +73,7 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     std::string model_text;
     std::string base_url_text;
     std::string api_key_env_text;
+    std::string auth_text;
     std::string mode_text{"text"};
 
     CLI::App app{"C++ coding-agent harness", "cpp-harness"};
@@ -104,6 +105,7 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
         ->default_str("https://api.openai.com");
     auto* api_key_env_option = app.add_option("--api-key-env", api_key_env_text, "Environment variable containing API key")
         ->default_str("OPENAI_API_KEY");
+    app.add_option("--auth", auth_text, "Auth provider name in ~/.cpp-harness/agent/auth.json");
     auto* mode_option = app.add_option("--mode", mode_text, "Output mode: text, json, or rpc")->default_str("text");
     app.add_option("prompt", prompt_parts, "Prompt")->expected(0, -1);
 
@@ -143,6 +145,9 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     if (api_key_env_option->count() > 0) {
         config.provider_overrides.api_key_env = api_key_env_text;
     }
+    if (app.count("--auth") > 0) {
+        config.provider_overrides.auth = auth_text;
+    }
     if (approve_option->count() > 0) {
         config.project_trust_override = true;
     } else if (no_approve_option->count() > 0) {
@@ -169,8 +174,12 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     if (config.output_mode == OutputMode::Rpc && !config.prompt.empty()) {
         return std::unexpected(cli_error("--mode rpc reads prompts from stdin; positional prompt is not allowed"));
     }
-    if (config.output_mode != OutputMode::Rpc && !config.repl && config.prompt.empty()) {
-        return std::unexpected(cli_error("prompt is required unless --repl is used"));
+    if (config.output_mode == OutputMode::Text && !config.repl && config.prompt.empty()) {
+        // No prompt in text mode defaults to an interactive REPL, matching pi's no-argument behavior.
+        config.repl = true;
+    }
+    if (config.output_mode == OutputMode::Json && !config.repl && config.prompt.empty()) {
+        return std::unexpected(cli_error("prompt is required for --mode json"));
     }
     return config;
 }

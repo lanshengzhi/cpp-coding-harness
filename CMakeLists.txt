@@ -99,6 +99,7 @@ target_link_libraries(cch_tools
 
 add_library(cch_coding_agent_runtime
     src/coding_agent/runtime/AsyncCliRuntime.cpp
+    src/coding_agent/AuthLoader.cpp
     src/coding_agent/CommandRegistry.cpp
     src/coding_agent/ConfigLoader.cpp
     src/coding_agent/ProviderConfigResolution.cpp
@@ -171,6 +172,7 @@ if(CCH_BUILD_TESTS)
         tests/cli/CliParseTest.cpp
         tests/coding_agent/BuiltinCommandsTest.cpp
         tests/coding_agent/PromptExpanderTest.cpp
+        tests/coding_agent/AuthLoaderTest.cpp
         tests/coding_agent/ConfigLoaderTest.cpp
         tests/coding_agent/ProviderConfigResolutionTest.cpp
         tests/coding_agent/ProjectResourcesTest.cpp

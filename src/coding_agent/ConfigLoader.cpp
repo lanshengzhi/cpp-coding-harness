@@ -70,6 +70,11 @@ util::Expected<ConfigData> ConfigLoader::load(const std::string& config_path) {
                 config.api_key_env = std::move(chain);
             }
         }
+        if (auto it = obj.find("auth"); it != obj.end()) {
+            if (auto* str = it->second.get_if<std::string>()) {
+                config.auth = *str;
+            }
+        }
         if (auto it = obj.find("default_project_trust"); it != obj.end()) {
             if (auto* str = it->second.get_if<std::string>()) {
                 auto parsed = parse_default_project_trust(*str);

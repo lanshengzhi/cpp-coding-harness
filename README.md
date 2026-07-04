@@ -90,9 +90,31 @@ Use `--base-url` for compatible gateways that preserve the `/v1/chat/completions
 
 OAuth, subscription-provider, and dynamic API-key resolution flows are intentionally deferred. The `--api-key-env` mechanism reads a static environment variable at provider construction time; there is no OAuth handshake, token refresh, or per-call key callback yet.
 
+### Auth file
+
+API keys can also be stored in `~/.cpp-harness/agent/auth.json` and selected by name with the `--auth` flag (or the `auth` field in `~/.cpp-harness/config.json`). This avoids exporting keys into the shell environment.
+
+```json
+{
+  "kimi-coding": { "type": "api_key", "key": "..." },
+  "deepseek": { "type": "api_key", "key": "..." }
+}
+```
+
+```bash
+# Uses the kimi-coding auth entry, no env var needed
+./build/cpp_harness --auth kimi-coding \
+  --base-url https://api.kimi.com/coding/v1 \
+  --model kimi-for-coding \
+  --session /tmp/cpp-kimi.jsonl \
+  "summarize README.md"
+```
+
+Auth file entries take precedence over environment variables. `api_key_env` is still used as a fallback and to decide which environment variable names are filtered from child shell processes.
+
 ### Kimi Code via the OpenAI-compatible path
 
-Kimi Code can be used through the existing OpenAI-compatible provider path. Keep the Kimi base URL, model, and API-key environment variable together because the bearer token from `--api-key-env` is sent to whichever `--base-url` you configure.
+Kimi Code can be used through the existing OpenAI-compatible provider path. Keep the Kimi base URL, model, and API key together — whether via `--api-key-env` or `--auth` — because the bearer token is sent to whichever `--base-url` you configure.
 
 ```bash
 export KIMI_API_KEY=...
@@ -110,17 +132,17 @@ Kimi's `ANTHROPIC_BASE_URL` / `ANTHROPIC_API_KEY` examples are for Anthropic-sha
 
 Live Kimi usage sends prompts, file contents read by tools, and tool outputs to the configured provider. JSONL session redaction is a persistence boundary, not a guarantee that terminal output, CI logs, provider diagnostics, or provider-bound tool results are redacted. Do not paste raw credentials into prompts, files, or tool-visible content.
 
-`--resume` loads the redacted transcript and workspace metadata. When you omit `--model`, `--base-url`, or `--api-key-env`, the harness falls back to values stored in the resumed session, then to `~/.cpp-harness/config.json`, then to built-in defaults. Explicit CLI flags always win. For Kimi sessions, repeating all three Kimi flags on resume is still recommended so runtime context stays explicit.
+`--resume` loads the redacted transcript and workspace metadata. When you omit `--model`, `--base-url`, `--api-key-env`, or `--auth`, the harness falls back to values stored in the resumed session, then to `~/.cpp-harness/config.json`, then to built-in defaults. Explicit CLI flags always win. For Kimi sessions, repeating the Kimi base URL, model, and key source on resume is still recommended so runtime context stays explicit.
 
 Troubleshooting:
 
 | Symptom | Check |
 | --- | --- |
-| `missing API key` | Export `KIMI_API_KEY` and pass `--api-key-env KIMI_API_KEY`. |
+| `missing API key` | Export `KIMI_API_KEY` and pass `--api-key-env KIMI_API_KEY`, or add the key to `~/.cpp-harness/agent/auth.json` and pass `--auth kimi-coding`. |
 | Authentication or authorization failure | Confirm the key is valid for Kimi Code and that the base URL is `https://api.kimi.com/coding/v1`. |
 | Invalid model | Use `--model kimi-for-coding`. |
 | Rate limit or quota error | Retry later or check Kimi Code subscription/entitlement and quota. |
-| Request unexpectedly goes to OpenAI | Ensure the Kimi `--base-url`, `--model`, and `--api-key-env` are all present. |
+| Request unexpectedly goes to OpenAI | Ensure the Kimi `--base-url`, `--model`, and key source (`--api-key-env` or `--auth`) are all present. |
 | 403 Forbidden | Your key can list models but is not entitled for Kimi Code chat completions; confirm Kimi Code subscription/agent access. |
 | Provider or transport error | Re-run with harmless prompts and inspect diagnostics without printing secrets. |
 
@@ -237,7 +259,7 @@ session->close();
 - Dynamic TypeScript/JavaScript extensions, extension UI, hot reload, MCP, or package installation.
 - TUI run modes, themes, keybindings, widgets, OAuth/subscription providers, or model catalogs.
 
-One-shot mode runs one prompt. `--repl` keeps history in memory for multiple prompts and supports built-in slash commands: `/help`, `/clear`, `/compact`, and `/exit`. Loaded skills are explicitly invocable with `/skill:<name> [additional instructions]`; that input expands to a regular user prompt containing the skill instructions. Project-local resources can be trusted for one run with `--approve` / `-a`, denied for one run with `--no-approve`, and project skills can be suppressed with `--no-skills`. `--mode json` and `--mode rpc` cannot be combined with `--repl`; RPC mode reads prompts from stdin commands rather than positional CLI arguments. `--resume <session.jsonl>` loads the redacted typed JSONL history and appends new messages. `--session <path>` always creates a new file; use `--resume` to append.
+One-shot mode runs one prompt. When no positional prompt is given in text mode, the CLI defaults to `--repl` and keeps history in memory for multiple prompts, supporting built-in slash commands: `/help`, `/clear`, `/compact`, and `/exit`. Loaded skills are explicitly invocable with `/skill:<name> [additional instructions]`; that input expands to a regular user prompt containing the skill instructions. Project-local resources can be trusted for one run with `--approve` / `-a`, denied for one run with `--no-approve`, and project skills can be suppressed with `--no-skills`. `--mode json` and `--mode rpc` cannot be combined with `--repl`; RPC mode reads prompts from stdin commands rather than positional CLI arguments. `--resume <session.jsonl>` loads the redacted typed JSONL history and appends new messages. `--session <path>` always creates a new file; use `--resume` to append.
 
 ## Skills
 
@@ -251,7 +273,7 @@ Project trust controls whether project-authored `.cpp-harness` resources are loa
 
 Protected project markers include `.cpp-harness/settings.json`, `.cpp-harness/skills`, `.cpp-harness/prompts`, `.cpp-harness/extensions`, `.cpp-harness/packages`, `.cpp-harness/SYSTEM.md`, and `.cpp-harness/APPEND_SYSTEM.md`. A bare `.cpp-harness` directory and `.cpp-harness/sessions` do not require trust. In non-interactive startup, the default `ask` policy acts as untrusted unless a saved trust decision or same-run override exists. Trust decisions are read from user-controlled `~/.cpp-harness/trust.json` with nearest-parent inheritance.
 
-User config in `~/.cpp-harness/config.json` can set `default_project_trust` to `ask`, `always`, or `never`, and `project_resources.skills` to `auto`, `on`, or `off`. `off` always skips project skills. `--approve` / `-a` and `--no-approve` are one-run trust overrides; they do not persist decisions. `--no-skills` disables project-local skills for the run even when the project is trusted.
+User config in `~/.cpp-harness/config.json` can set provider defaults (`provider`, `model`, `base_url`, `api_key_env`, `auth`), `default_project_trust` to `ask`, `always`, or `never`, and `project_resources.skills` to `auto`, `on`, or `off`. `off` always skips project skills. `--approve` / `-a` and `--no-approve` are one-run trust overrides; they do not persist decisions. `--no-skills` disables project-local skills for the run even when the project is trusted.
 
 ## Tools
 

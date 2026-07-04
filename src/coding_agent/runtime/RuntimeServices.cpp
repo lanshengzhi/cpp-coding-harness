@@ -24,6 +24,7 @@ util::Expected<RuntimeServices> make_runtime_services(const RuntimeServicesConfi
     provider_context.api = config.api;
     provider_context.model = config.model;
     provider_context.base_url = config.base_url;
+    provider_context.api_key = config.api_key;
     provider_context.api_key_env = config.api_key_env;
     auto client = provider_registry->create(config.provider_registry_name, provider_context);
     if (!client) {

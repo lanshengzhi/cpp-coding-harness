@@ -160,10 +160,35 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
         }
 
         if (response.head.status_code < 200 || response.head.status_code >= 300) {
+            std::string error_body;
+            while (!parser.is_done()) {
+                std::array<char, 4096> err_chunk{};
+                parser.get().body().data = err_chunk.data();
+                parser.get().body().size = err_chunk.size();
+                boost::system::error_code read_ec;
+                co_await http::async_read_some(
+                    stream, buffer, parser, asio::redirect_error(asio::use_awaitable, read_ec));
+                const auto remaining = parser.get().body().size;
+                const auto produced = err_chunk.size() - remaining;
+                if (produced != 0) {
+                    error_body.append(err_chunk.data(), produced);
+                }
+                if (read_ec == http::error::need_buffer) {
+                    continue;
+                }
+                if (read_ec) {
+                    break;
+                }
+            }
+            std::string detail = std::to_string(response.head.status_code);
+            if (!error_body.empty()) {
+                detail += ": ";
+                detail.append(error_body, 0, std::min(error_body.size(), std::size_t{4096}));
+            }
             co_return std::unexpected(util::make_error(
                 util::ErrorCode::Provider,
                 "provider returned non-success HTTP status",
-                std::to_string(response.head.status_code)));
+                std::move(detail)));
         }
 
         const bool stream_to_callback = static_cast<bool>(on_body_chunk);

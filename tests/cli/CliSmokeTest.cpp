@@ -420,8 +420,13 @@ TEST_CASE("CLI RPC event sequence is process-global across prompts", "[cli][rpc]
 
 TEST_CASE("CLI JSON preflight errors do not write stdout", "[cli][json]") {
     cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
     auto session = workspace.path() / "json-real.jsonl";
-    auto result = run_command_split("env -u CCH_TEST_MISSING_KEY " + bin() + " --mode json --workspace " + q(workspace.path()) + " --session " + q(session) + " --api-key-env CCH_TEST_MISSING_KEY hello");
+    auto result = run_command_split(
+        "HOME=" + q(home.path()) + " env -u CCH_TEST_MISSING_KEY " + bin() +
+        " --mode json --workspace " + q(workspace.path()) +
+        " --session " + q(session) +
+        " --api-key-env CCH_TEST_MISSING_KEY hello");
 
     REQUIRE(result.exit_code != 0);
     CHECK(result.stdout_text.empty());
@@ -526,14 +531,14 @@ TEST_CASE("CLI rejects session and resume together before model request", "[cli]
     CHECK(result.output.find("[model-request]") == std::string::npos);
 }
 
-TEST_CASE("CLI rejects missing prompt without repl before model request", "[cli][u6]") {
+TEST_CASE("CLI text mode without prompt defaults to REPL", "[cli][u6]") {
     cch::tests::TempWorkspace workspace;
-    auto session = workspace.path() / "missing-prompt.jsonl";
-    auto result = run_command(bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session));
+    auto session = workspace.path() / "default-repl.jsonl";
+    auto result = run_command("printf '' | " + bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session));
 
-    REQUIRE(result.exit_code != 0);
-    CHECK(result.output.find("prompt is required unless --repl is used") != std::string::npos);
-    CHECK(result.output.find("[model-request]") == std::string::npos);
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.output.find("prompt is required") == std::string::npos);
+    CHECK(std::filesystem::exists(session));
 }
 
 TEST_CASE("CLI blocks existing session path without resume before model request", "[cli][u6]") {
@@ -584,8 +589,13 @@ TEST_CASE("CLI fake read loop prints max-turn marker when turn budget is exhaust
 
 TEST_CASE("CLI real-provider mode reports missing API key before model request", "[cli][u6]") {
     cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
     auto session = workspace.path() / "real.jsonl";
-    auto result = run_command("env -u CCH_TEST_MISSING_KEY " + bin() + " --workspace " + q(workspace.path()) + " --session " + q(session) + " --api-key-env CCH_TEST_MISSING_KEY hello");
+    auto result = run_command(
+        "HOME=" + q(home.path()) + " env -u CCH_TEST_MISSING_KEY " + bin() +
+        " --workspace " + q(workspace.path()) +
+        " --session " + q(session) +
+        " --api-key-env CCH_TEST_MISSING_KEY hello");
 
     REQUIRE(result.exit_code != 0);
     CHECK(result.output.find("missing API key") != std::string::npos);
@@ -594,9 +604,10 @@ TEST_CASE("CLI real-provider mode reports missing API key before model request",
 
 TEST_CASE("CLI Kimi path validates KIMI_API_KEY before model request and session creation", "[cli][kimi][u3]") {
     cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
     auto session = workspace.path() / "kimi-missing-key.jsonl";
     auto result = run_command(
-        "env -u KIMI_API_KEY " + bin() +
+        "HOME=" + q(home.path()) + " env -u KIMI_API_KEY " + bin() +
         " --workspace " + q(workspace.path()) +
         " --session " + q(session) +
         " --base-url https://api.kimi.com/coding/v1"

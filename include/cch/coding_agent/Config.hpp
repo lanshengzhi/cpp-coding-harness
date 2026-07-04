@@ -18,6 +18,9 @@ struct ConfigData {
     std::optional<std::string> base_url;
     /// Env var chain: first found value is used as the resolved API key.
     std::optional<std::vector<std::string>> api_key_env;
+    /// Auth provider name in ~/.cpp-harness/agent/auth.json. If set, the corresponding
+    /// static API key is used before falling back to api_key_env.
+    std::optional<std::string> auth;
     /// User-controlled project trust default. Project-local settings cannot set this.
     std::optional<DefaultProjectTrust> default_project_trust;
     /// User-controlled project skill resource enablement.
@@ -47,6 +50,7 @@ struct CliProviderOverrides {
     std::optional<std::string> model;
     std::optional<std::string> base_url;
     std::optional<std::string> api_key_env;
+    std::optional<std::string> auth;
 };
 
 struct ResolvedProviderSettings {
@@ -58,6 +62,10 @@ struct ResolvedProviderSettings {
     std::string model;
     std::string base_url;
     std::string api_key_env;
+    /// Static API key loaded from ~/.cpp-harness/agent/auth.json, if any.
+    std::string api_key;
+    /// Name of the auth entry used to obtain api_key.
+    std::string auth;
 };
 
 /// Priority: CLI explicit > session stored provider/model > config file > provider default.

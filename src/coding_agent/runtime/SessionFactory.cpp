@@ -387,6 +387,7 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
         resolved.api,
         resolved.model,
         resolved.base_url,
+        resolved.api_key,
         resolved.api_key_env,
         std::move(skill_dirs),
         std::move(prompt_dirs),

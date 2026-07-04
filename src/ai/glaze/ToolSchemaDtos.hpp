@@ -9,6 +9,8 @@
 #include <utility>
 #include <vector>
 
+#include <glaze/glaze.hpp>
+
 namespace cch::ai::glaze {
 
 struct ToolParametersDto {
@@ -17,10 +19,10 @@ struct ToolParametersDto {
     std::optional<std::map<std::string, ToolParametersDto>> properties;
     std::optional<std::vector<std::string>> required;
     std::optional<bool> additionalProperties;
-    // items: at most one element (0 = absent, 1 = present).
-    // std::optional<ToolParametersDto> creates direct recursion Glaze cannot handle;
-    // std::vector breaks the recursion the same way std::map does for properties.
-    std::vector<ToolParametersDto> items;
+    // std::optional<ToolParametersDto> creates direct recursion Glaze cannot handle.
+    // glz::generic stores the already-serialized items schema as a single JSON object
+    // (or is nullopt when there is no items schema), so Glaze reflects a plain nullable.
+    std::optional<glz::generic> items;
 };
 
 struct FunctionToolDto {
@@ -74,6 +76,94 @@ struct FunctionToolDto {
     return std::nullopt;
 }
 
+[[nodiscard]] inline glz::generic tool_parameters_to_generic(const ToolParametersDto& dto) {
+    glz::generic obj = glz::generic::object_t{};
+    obj["type"] = dto.type;
+    if (dto.description) {
+        obj["description"] = *dto.description;
+    }
+    if (dto.properties) {
+        glz::generic props = glz::generic::object_t{};
+        for (const auto& [name, property] : *dto.properties) {
+            props[name] = tool_parameters_to_generic(property);
+        }
+        obj["properties"] = std::move(props);
+    }
+    if (dto.required) {
+        glz::generic::array_t req;
+        for (const auto& name : *dto.required) {
+            req.emplace_back(name);
+        }
+        obj["required"] = std::move(req);
+    }
+    if (dto.additionalProperties) {
+        obj["additionalProperties"] = *dto.additionalProperties;
+    }
+    if (dto.items) {
+        obj["items"] = *dto.items;
+    }
+    return obj;
+}
+
+[[nodiscard]] inline util::Expected<JsonSchema> json_schema_from_generic(const glz::generic& value) {
+    if (!value.is_object()) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::JsonParse,
+            "tool schema items is not an object",
+            "expected JSON object for items schema"));
+    }
+
+    JsonSchema schema;
+    const auto& obj = value.get_object();
+
+    if (auto it = obj.find("type"); it != obj.end() && it->second.is_string()) {
+        auto type = schema_type_from_string(it->second.get_string());
+        if (!type) {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::JsonParse,
+                "unknown JSON schema type",
+                "unknown schema type '" + it->second.get_string() + "'"));
+        }
+        schema.type = *type;
+    }
+
+    if (auto it = obj.find("description"); it != obj.end() && it->second.is_string()) {
+        schema.description = it->second.get_string();
+    }
+
+    if (auto it = obj.find("properties"); it != obj.end() && it->second.is_object()) {
+        for (const auto& [name, property] : it->second.get_object()) {
+            auto converted = json_schema_from_generic(property);
+            if (!converted) {
+                return std::unexpected(converted.error());
+            }
+            schema.properties.emplace(name, std::move(*converted));
+        }
+    }
+
+    if (auto it = obj.find("required"); it != obj.end() && it->second.is_array()) {
+        for (const auto& entry : it->second.get_array()) {
+            if (entry.is_string()) {
+                schema.required.push_back(entry.get_string());
+            }
+        }
+    }
+
+    if (auto it = obj.find("additionalProperties"); it != obj.end() && it->second.is_boolean()) {
+        schema.additional_properties = it->second.get_boolean();
+    }
+
+    if (auto it = obj.find("items"); it != obj.end()) {
+        auto converted = json_schema_from_generic(it->second);
+        if (!converted) {
+            return std::unexpected(converted.error());
+        }
+        schema.items = std::make_shared<JsonSchema>(std::move(*converted));
+    }
+
+    return schema;
+}
+
 [[nodiscard]] inline ToolParametersDto to_tool_parameters_dto(const JsonSchema& schema) {
     ToolParametersDto dto;
     dto.type = schema_type_to_string(schema.type);
@@ -90,7 +180,7 @@ struct FunctionToolDto {
     }
     dto.additionalProperties = schema.additional_properties;
     if (schema.items) {
-        dto.items.push_back(to_tool_parameters_dto(*schema.items));
+        dto.items = tool_parameters_to_generic(to_tool_parameters_dto(*schema.items));
     }
     return dto;
 }
@@ -120,8 +210,8 @@ struct FunctionToolDto {
     if (dto.required) {
         schema.required = *dto.required;
     }
-    if (!dto.items.empty()) {
-        auto converted = schema_from_tool_parameters_dto(dto.items[0]);
+    if (dto.items) {
+        auto converted = json_schema_from_generic(*dto.items);
         if (!converted) {
             return std::unexpected(converted.error());
         }

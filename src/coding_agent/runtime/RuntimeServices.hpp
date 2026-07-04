@@ -21,6 +21,7 @@ struct RuntimeServicesConfig {
     std::string api;
     std::string model;
     std::string base_url;
+    std::string api_key;
     std::string api_key_env;
     /// Skill directories to scan at startup. Empty by default (no skill loading).
     std::vector<SkillDirSpec> skill_dirs;
