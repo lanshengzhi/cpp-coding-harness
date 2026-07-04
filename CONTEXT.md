@@ -12,6 +12,14 @@ Example: the `AgentSession` interface is a seam; the runtime implementation behi
 
 ## Domain terms
 
+### RootRouter
+
+The root `AGENTS.md` document that starts every agent run by routing the task to the right reference material, guardrails, validation slice, and handoff expectations. Distinct from a `Seam`, which is reserved for module/interface boundaries.
+
+### VerifySlice
+
+The smallest validation scope that proves a change at its affected documentation, implementation, or public-boundary surface. It escalates only when the changed surface demands it.
+
 ### AgentSession
 
 A move-only runtime handle representing one open agent conversation session. The public seam exposes prompt execution, lifecycle event subscription, and close; assembly complexity lives behind it in a factory.
@@ -67,5 +75,9 @@ Passive configuration for `ToolCallExecutor`: optional before/after hooks, execu
 ### ToolCallBatchResult
 
 Passive result of executing a batch of tool calls: the list of tool-result messages and a flag indicating whether the batch requested early termination.
+
+### TriageState
+
+A readiness classification on a local PRD or issue saying who can pick it up next. It is not an execution-completion state; acceptance checkboxes or review comments carry completion evidence.
 
 *Additional terms to be added as design sessions continue.*

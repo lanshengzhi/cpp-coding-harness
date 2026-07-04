@@ -4,9 +4,9 @@ Status: ready-for-agent
 
 ## Problem Statement
 
-`AGENTS.md` is the repo's agent entry routing seam. It currently carries useful guardrails and route coverage, but it still behaves too much like a compact handbook: the root document loads a long module route table and several operational details into every agent turn. That increases context load, makes the first-step process less predictable, and makes future updates harder because detailed routing, policy, and checklist content live on the same level.
+`AGENTS.md` is the repo's **RootRouter**: the agent entry document that routes each task to start checks, guardrails, detailed references, validation, and handoff expectations. It currently carries useful guardrails and route coverage, but it still behaves too much like a compact handbook: the root document loads a long module route table and several operational details into every agent turn. That increases context load, makes the first-step process less predictable, and makes future updates harder because detailed routing, policy, and checklist content live on the same level.
 
-The user wants `AGENTS.md` optimized so an agent reliably follows the same process every run: start safely, choose the right seam, read only the necessary references, verify at the right slice, and hand off clearly. The optimization must preserve the current architecture guardrails, pi C++ parity direction, and local issue-tracker conventions while using clear English, agent-friendly documentation.
+The user wants `AGENTS.md` optimized so an agent reliably follows the same process every run: start safely, choose the right route or code seam, read only the necessary references, verify at the right slice, and hand off clearly. The optimization must preserve the current architecture guardrails, pi C++ parity direction, and local issue-tracker conventions while using clear English, agent-friendly documentation.
 
 ## Solution
 
@@ -47,7 +47,7 @@ The full route matrix remains available as external reference, but the root docu
 
 ## Implementation Decisions
 
-- Treat the root agent instruction document as the repository's root routing seam. Its job is to route, guard, and define completion criteria, not to duplicate every detailed module reference.
+- Treat the root agent instruction document as the repository's RootRouter. Its job is to route, guard, and define completion criteria, not to duplicate every detailed module reference.
 - Write the optimized root instructions and new agent documentation in clear English, optimized for agent execution rather than human narrative.
 - Use progressive disclosure: keep always-needed process and guardrails in the root document; move branch-specific route details into a dedicated agent reference document.
 - Introduce stable leading words for the root process: Start Gate, Guardrails, Route, Verify Slice, and Handoff.
@@ -90,6 +90,13 @@ The full route matrix remains available as external reference, but the root docu
 ## Further Notes
 
 - No ADR files were found for this area during exploration.
-- The domain glossary defines “Seam”; this PRD treats the root agent instruction document as the documentation seam where agent behavior is altered.
+- The domain glossary reserves “Seam” for module/interface boundaries; this PRD uses “RootRouter” for `AGENTS.md`.
 - The current working tree was clean before publishing this PRD.
 - This PRD intentionally synthesizes from the current conversation and repo state without interviewing the user further.
+
+## Post-build Review
+
+- 2026-07-03: Reviewed as an already-applied documentation refactor. `Status: ready-for-agent` remains a triage-readiness state; completion evidence belongs in acceptance checkboxes and review comments.
+- Row-level route preservation is the review standard: every pre-router route row must have a corresponding row in `docs/agents/module-routing.md`.
+- Detailed branch, merge, publish, PR, and cleanup guidance belongs in `docs/agents/worktree-discipline.md` rather than the RootRouter.
+- Tool, provider, session, workspace, and documentation-specific change rules belong in the relevant rows of `docs/agents/module-routing.md`.

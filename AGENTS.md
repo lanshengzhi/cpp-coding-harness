@@ -57,7 +57,7 @@ Use the compact route below to decide where to continue. The complete module mat
 | Config, project trust, resources, skills, prompt templates | `docs/agents/module-routing.md` → config, project trust, skills/resources rows |
 | Sessions, resume, tree navigation, compaction context | `docs/agents/module-routing.md` → session row |
 | Public headers, dependency direction, architecture guards | `docs/agents/module-routing.md` → public boundary/architecture row |
-| Documentation, plans, issue tracker, route maintenance | This file plus `docs/agents/module-routing.md`, `docs/plans/`, and `.scratch/<feature-slug>/` |
+| Documentation, plans, issue tracker, route maintenance | The referenced issue/PRD and affected docs in this file, `docs/agents/module-routing.md`, `docs/plans/`, or `.scratch/<feature-slug>/` |
 
 Condensed or removed detailed route content from the old root document is preserved in `docs/agents/module-routing.md`. Historical references to old `AGENTS.md` section numbers are mapped there. Build/test command examples remain in `README.md`; source/target membership remains authoritative in `CMakeLists.txt`.
 
@@ -76,6 +76,7 @@ Tests should protect current architecture intent and safety properties, not only
 
 - Edit the minimum file set needed for the task.
 - Prefer a feature branch for extended work, but do not commit, merge, push, delete branches, or force-push unless the user explicitly asks.
+- Detailed branch, merge, publish, PR, and cleanup conventions live in `docs/agents/worktree-discipline.md`; read it only when the task asks for those operations.
 - Before final response, re-check `git status --short` and ensure listed changes are task-related.
 
 ## Handoff
@@ -88,6 +89,7 @@ Final responses must include:
 
 ## Agent References
 
+- Worktree discipline: `docs/agents/worktree-discipline.md` (branch, merge, publish, PR, and cleanup conventions).
 - Issue tracker conventions: `docs/agents/issue-tracker.md` (`.scratch/<feature-slug>/PRD.md` and `.scratch/<feature-slug>/issues/<NN>-<slug>.md`); use `ready-for-agent` for fully specified PRDs or derived implementation issues unless the user requests another triage state.
 - Triage labels: `docs/agents/triage-labels.md` (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`).
 - Domain docs: `docs/agents/domain.md` (single-context layout uses root `CONTEXT.md` plus `docs/adr/`; proceed silently if absent).

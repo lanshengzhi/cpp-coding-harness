@@ -14,14 +14,18 @@ This is the prefactor slice: make the later simplification easy by giving detail
 
 ## Acceptance criteria
 
-- [ ] A detailed Route reference exists in the agent documentation area and is reachable from the root agent instruction document.
-- [ ] The detailed reference is written in clear English and optimized for agent execution.
-- [ ] The detailed reference preserves every current task family, preferred seam, and routing note from the existing module route matrix.
-- [ ] The root agent instruction document still works as the entry point after this slice; it may contain both the old routing content and the new pointer if needed for safety.
-- [ ] Existing plan cross-references that depend on provider, tool, session, CLI, runtime, public-boundary, documentation, or pi-parity routing still land on equivalent concepts.
-- [ ] Markdown links and headings render correctly.
-- [ ] The change is documentation-only and does not alter C++ behavior, build configuration, CLI behavior, provider behavior, tool behavior, or session behavior.
+- [x] A detailed Route reference exists in the agent documentation area and is reachable from the root agent instruction document.
+- [x] The detailed reference is written in clear English and optimized for agent execution.
+- [x] The detailed reference preserves every current task family, preferred seam, and routing note from the existing module route matrix.
+- [x] The root agent instruction document still works as the entry point after this slice; it may contain both the old routing content and the new pointer if needed for safety.
+- [x] Existing plan cross-references that depend on provider, tool, session, CLI, runtime, public-boundary, documentation, or pi-parity routing still land on equivalent concepts.
+- [x] Markdown links and headings render correctly.
+- [x] The change is documentation-only and does not alter C++ behavior, build configuration, CLI behavior, provider behavior, tool behavior, or session behavior.
 
 ## Blocked by
 
 None - can start immediately
+
+## Comments
+
+- 2026-07-03 post-build review: `docs/agents/module-routing.md` is reachable from the RootRouter and preserves the pre-router module matrix row-for-row. Completion evidence is recorded in checkboxes while `Status: ready-for-agent` remains triage readiness.
