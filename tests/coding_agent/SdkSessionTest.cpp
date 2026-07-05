@@ -61,6 +61,25 @@ harness::session::SessionMetadata test_metadata(const TestPaths& paths) {
     return {"sdk-session-test", "2026-07-05T00:00:00Z", paths.workspace.path(), "fake", "fake-model"};
 }
 
+ai::MessageVariant user_msg(std::string text) {
+    return ai::MessageVariant{ai::user_text_message(std::move(text))};
+}
+
+coding_agent::CreateAgentSessionOptions sdk_resume_options(const TestPaths& paths) {
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.resume_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    return opts;
+}
+
+void expect_unsupported_sdk_resume(const TestPaths& paths) {
+    auto result = coding_agent::create_agent_session(sdk_resume_options(paths));
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().code == util::ErrorCode::Session);
+    CHECK(result.error().message == "unsupported_session_topology");
+}
+
 /// Save and restore an environment variable around a test.
 class EnvVarGuard {
 public:
@@ -663,12 +682,12 @@ TEST_CASE("SDK can resume a linear session", "[sdk][u3]") {
     }
 }
 
-TEST_CASE("SDK rejects non-linear resumed session topology", "[sdk][u3]") {
+TEST_CASE("SDK rejects branched active resumed topology", "[sdk][u3][resume-topology]") {
     TestPaths paths;
     auto store = harness::session::JsonlSessionStore::create_new(paths.session_file, test_metadata(paths));
     REQUIRE(store);
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("first")}));
-    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("second")}));
+    REQUIRE(store->append(user_msg("first")));
+    REQUIRE(store->append(user_msg("second")));
 
     auto pre = harness::session::JsonlSessionStore::load(paths.session_file);
     REQUIRE(pre);
@@ -679,15 +698,56 @@ TEST_CASE("SDK rejects non-linear resumed session topology", "[sdk][u3]") {
     REQUIRE(resumed);
     REQUIRE(resumed->append_leaf(std::nullopt, first_id));
 
-    coding_agent::CreateAgentSessionOptions opts;
-    opts.resume_path = paths.session_file;
-    opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    expect_unsupported_sdk_resume(paths);
+}
 
-    auto result = coding_agent::create_agent_session(std::move(opts));
-    REQUIRE_FALSE(result.has_value());
-    CHECK(result.error().code == util::ErrorCode::Session);
-    CHECK(result.error().message == "unsupported_session_topology");
+TEST_CASE("SDK rejects compacted active resumed topology", "[sdk][u3][resume-topology]") {
+    TestPaths paths;
+    auto store = harness::session::JsonlSessionStore::create_new(paths.session_file, test_metadata(paths));
+    REQUIRE(store);
+    REQUIRE(store->append(user_msg("before compaction")));
+    REQUIRE(store->append(user_msg("kept message")));
+
+    auto pre = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(pre);
+    REQUIRE(pre->entries.size() >= 3);
+    const auto kept_id = pre->entries[2].entry_id;
+
+    auto resumed = harness::session::JsonlSessionStore::open_existing(paths.session_file);
+    REQUIRE(resumed);
+    REQUIRE(resumed->append_compaction(std::nullopt, "summary", kept_id, 1000, std::nullopt, std::nullopt));
+
+    expect_unsupported_sdk_resume(paths);
+}
+
+TEST_CASE("SDK resumes linear active topology with inactive branch and compaction data", "[sdk][u3][resume-topology]") {
+    TestPaths paths;
+    auto store = harness::session::JsonlSessionStore::create_new(paths.session_file, test_metadata(paths));
+    REQUIRE(store);
+    REQUIRE(store->append(user_msg("first")));
+    REQUIRE(store->append(user_msg("second")));
+    REQUIRE(store->append(user_msg("third")));
+
+    auto pre = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(pre);
+    REQUIRE(pre->entries.size() >= 4);
+    const auto first_id = pre->entries[1].entry_id;
+    const auto third_id = pre->entries[3].entry_id;
+
+    auto resumed = harness::session::JsonlSessionStore::open_existing(paths.session_file);
+    REQUIRE(resumed);
+    REQUIRE(resumed->append_branch_summary(first_id, third_id, "inactive branch", std::nullopt, std::nullopt));
+    REQUIRE(resumed->append_compaction(first_id, "inactive compaction", third_id, 1000, std::nullopt, std::nullopt));
+    REQUIRE(resumed->append_leaf(std::nullopt, third_id));
+
+    auto result = coding_agent::create_agent_session(sdk_resume_options(paths));
+    REQUIRE(result.has_value());
+    CHECK(result->session->message_count() == 3);
+
+    auto prompt_result = result->session->prompt("continue linear path");
+    REQUIRE(prompt_result.has_value());
+    REQUIRE(prompt_result->success);
+    CHECK(result->session->close().has_value());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
