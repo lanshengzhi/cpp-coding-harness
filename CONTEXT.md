@@ -64,6 +64,14 @@ The adapter that converts domain session entries (messages, v3 tree metadata) in
 
 A read-only index over a loaded session's entries, supporting branch navigation, leaf tracking, and compaction-aware context reconstruction.
 
+### SessionResume
+
+The domain operation that reopens a persisted session into the agent-ready context at the current active leaf, including branch and compaction semantics. Distinct from `SessionTree`, which indexes and navigates entries.
+
+### SessionTopology
+
+A passive classification of a stored session's resume shape, such as linear, branched, or compacted. Used to decide which consumers can resume it; it is not an execution-completion state.
+
 ### ToolCallExecutor
 
 The adapter responsible for executing one batch of assistant tool calls. Hides sequential/parallel dispatch, before/after hooks, terminate-batch logic, and error-to-tool-result mapping behind a narrow interface.

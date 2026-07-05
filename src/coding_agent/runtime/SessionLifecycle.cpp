@@ -24,26 +24,30 @@ util::Expected<OpenSession> open_session(SessionOpenRequest request) {
     session.workspace = request.workspace;
 
     if (!request.resume_path.empty()) {
-        auto loaded = harness::session::JsonlSessionStore::load(request.resume_path);
-        if (!loaded) {
-            return std::unexpected(loaded.error());
+        auto resumed = harness::session::resume_session(request.resume_path);
+        if (!resumed) {
+            return std::unexpected(resumed.error());
         }
-        if (!loaded->metadata.workspace.empty()) {
-            if (request.workspace_explicit && !same_workspace(session.workspace, loaded->metadata.workspace)) {
+        if (!resumed->metadata.workspace.empty()) {
+            if (request.workspace_explicit && !same_workspace(session.workspace, resumed->metadata.workspace)) {
                 return std::unexpected(util::make_error(
                     util::ErrorCode::Session,
                     "resume workspace does not match session metadata",
                     "resume workspace does not match session metadata; omit --workspace to use " +
-                        loaded->metadata.workspace.string() + " or start a new session"));
+                        resumed->metadata.workspace.string() + " or start a new session"));
             }
             if (!request.workspace_explicit) {
-                session.workspace = loaded->metadata.workspace;
+                session.workspace = resumed->metadata.workspace;
             }
         }
-        session.history = std::move(loaded->messages);
-        // Preserve stored provider/model for config resolution chain
-        session.stored_provider = loaded->metadata.provider;
-        session.stored_model = loaded->metadata.model;
+        session.metadata = resumed->metadata;
+        session.history = std::move(resumed->history);
+        session.context_model = std::move(resumed->model);
+        session.context_thinking_level = std::move(resumed->thinking_level);
+        session.topology = resumed->topology;
+        // Preserve stored provider/model for config resolution chain.
+        session.stored_provider = session.metadata.provider;
+        session.stored_model = session.metadata.model;
         auto opened = harness::session::JsonlSessionStore::open_existing(request.resume_path);
         if (!opened) {
             return std::unexpected(opened.error());
@@ -59,7 +63,8 @@ util::Expected<OpenSession> open_session(SessionOpenRequest request) {
         std::move(request.provider),
         std::move(request.model),
     };
-    auto created = harness::session::JsonlSessionStore::create_new(request.session_path, metadata);
+    session.metadata = metadata;
+    auto created = harness::session::JsonlSessionStore::create_new(request.session_path, std::move(metadata));
     if (!created) {
         return std::unexpected(created.error());
     }

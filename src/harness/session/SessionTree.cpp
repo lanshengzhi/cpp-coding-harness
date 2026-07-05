@@ -108,9 +108,13 @@ void SessionTree::restore_leaf_position() {
         }
     }
 
-    // No Leaf entry found or target invalid — default to the last entry.
-    if (!entries_.empty()) {
-        leaf_id_ = entries_.back().entry_id;
+    // No Leaf entry found or target invalid: fall back to the last navigable
+    // entry rather than treating the stale Leaf marker as the active leaf.
+    for (auto it = entries_.rbegin(); it != entries_.rend(); ++it) {
+        if (it->kind != SessionEntryKind::Leaf && !it->entry_id.empty()) {
+            leaf_id_ = it->entry_id;
+            return;
+        }
     }
 }
 

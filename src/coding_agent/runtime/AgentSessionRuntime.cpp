@@ -125,10 +125,10 @@ PromptRunResult AgentSessionRuntime::run_prompt(
         processing.expanded_prompt = std::move(expanded_prompt);
     } else {
         CommandContext cmd_ctx{
-            .session_id = session_.store->metadata().session_id,
+            .session_id = session_.metadata.session_id,
             .workspace_path = session_.workspace.string(),
-            .provider = session_.store->metadata().provider,
-            .model = session_.store->metadata().model,
+            .provider = session_.metadata.provider,
+            .model = session_.metadata.model,
             .message_count = session_.history.size(),
         };
         processing = process_prompt(

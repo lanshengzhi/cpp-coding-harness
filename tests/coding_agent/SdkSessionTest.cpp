@@ -5,6 +5,7 @@
 #include "../../include/cch/agent/AgentTool.hpp"
 #include "../../include/cch/ai/Content.hpp"
 #include "../../include/cch/coding_agent/Skill.hpp"
+#include "../../include/cch/harness/session/JsonlSessionStore.hpp"
 #include "../../include/cch/util/Error.hpp"
 #include "ai/providers/FakeChatClient.hpp"
 #include "../support/TempWorkspace.hpp"
@@ -55,6 +56,10 @@ struct TestPaths {
         session_file = workspace.path() / "test-session.jsonl";
     }
 };
+
+harness::session::SessionMetadata test_metadata(const TestPaths& paths) {
+    return {"sdk-session-test", "2026-07-05T00:00:00Z", paths.workspace.path(), "fake", "fake-model"};
+}
 
 /// Save and restore an environment variable around a test.
 class EnvVarGuard {
@@ -656,6 +661,33 @@ TEST_CASE("SDK can resume a linear session", "[sdk][u3]") {
         REQUIRE(pr.has_value());
         CHECK(session->close().has_value());
     }
+}
+
+TEST_CASE("SDK rejects non-linear resumed session topology", "[sdk][u3]") {
+    TestPaths paths;
+    auto store = harness::session::JsonlSessionStore::create_new(paths.session_file, test_metadata(paths));
+    REQUIRE(store);
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("first")}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("second")}));
+
+    auto pre = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(pre);
+    REQUIRE(pre->entries.size() >= 3);
+    const auto first_id = pre->entries[1].entry_id;
+
+    auto resumed = harness::session::JsonlSessionStore::open_existing(paths.session_file);
+    REQUIRE(resumed);
+    REQUIRE(resumed->append_leaf(std::nullopt, first_id));
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.resume_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().code == util::ErrorCode::Session);
+    CHECK(result.error().message == "unsupported_session_topology");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

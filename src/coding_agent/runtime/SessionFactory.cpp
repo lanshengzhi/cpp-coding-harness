@@ -327,7 +327,7 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
     }
 
     const auto workspace = opened_session->workspace;
-    const auto metadata = opened_session->store->metadata();
+    const auto metadata = opened_session->metadata;
     const auto session_path = opened_session->store->path();
 
     ProjectResourcePolicy resource_policy;
@@ -497,28 +497,12 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
 
     auto& open = *open_result;
 
-    if (has_resume) {
-        auto preload = harness::session::JsonlSessionStore::load(*options.resume_path);
-        if (preload) {
-            bool has_non_linear{false};
-            for (const auto& entry : preload->entries) {
-                if (entry.parent_id.has_value() ||
-                    entry.kind == harness::session::SessionEntryKind::Compaction ||
-                    entry.kind == harness::session::SessionEntryKind::BranchSummary ||
-                    entry.kind == harness::session::SessionEntryKind::Label ||
-                    entry.kind == harness::session::SessionEntryKind::Leaf) {
-                    has_non_linear = true;
-                    break;
-                }
-            }
-            if (has_non_linear) {
-                return std::unexpected(util::make_error(
-                    util::ErrorCode::Session,
-                    "unsupported_session_topology",
-                    "SDK v1 supports only linear sessions; the resumed session contains branches, "
-                    "compactions, or tree metadata that cannot be appended linearly"));
-            }
-        }
+    if (has_resume && open.topology != harness::session::SessionTopology::Linear) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Session,
+            "unsupported_session_topology",
+            "SDK v1 supports only linear sessions; the resumed session contains branches, "
+            "compactions, or tree metadata that cannot be appended linearly"));
     }
 
     if (has_resume) {
@@ -786,7 +770,7 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
     runtime_config.model = model_name;
     runtime_config.capture_skill_diagnostics = true;
 
-    const auto metadata = open.store->metadata();
+    const auto metadata = open.metadata;
     auto runtime = std::make_unique<AgentSessionRuntime>(
         std::move(services),
         std::move(open),

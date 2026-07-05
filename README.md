@@ -132,7 +132,7 @@ Kimi's `ANTHROPIC_BASE_URL` / `ANTHROPIC_API_KEY` examples are for Anthropic-sha
 
 Live Kimi usage sends prompts, file contents read by tools, and tool outputs to the configured provider. JSONL session redaction is a persistence boundary, not a guarantee that terminal output, CI logs, provider diagnostics, or provider-bound tool results are redacted. Do not paste raw credentials into prompts, files, or tool-visible content.
 
-`--resume` loads the redacted transcript and workspace metadata. When you omit `--model`, `--base-url`, `--api-key-env`, or `--auth`, the harness falls back to values stored in the resumed session, then to `~/.cpp-harness/config.json`, then to built-in defaults. Explicit CLI flags always win. For Kimi sessions, repeating the Kimi base URL, model, and key source on resume is still recommended so runtime context stays explicit.
+`--resume` reconstructs the redacted active session path, including persisted leaf and compaction context, and restores workspace metadata. When you omit `--model`, `--base-url`, `--api-key-env`, or `--auth`, the harness falls back to values stored in the resumed session, then to `~/.cpp-harness/config.json`, then to built-in defaults. Explicit CLI flags always win. For Kimi sessions, repeating the Kimi base URL, model, and key source on resume is still recommended so runtime context stays explicit.
 
 Troubleshooting:
 
@@ -254,12 +254,12 @@ session->close();
 
 - ABI-stable binary distribution, plugin ABI, or package-manager integration.
 - Full pi `AgentSessionRuntime` replacement APIs (`newSession`, `switchSession`, `fork`, `clone`, import/export).
-- Public branch/tree navigation, compaction resume, or non-linear session topologies (SDK v1 returns `unsupported_session_topology` for branched/compacted sessions).
+- Public branch/tree navigation or SDK append support for non-linear session topologies (SDK v1 returns `unsupported_session_topology` for branched/compacted sessions).
 - In-memory sessions, concurrent prompts, cancellation, `abort`, `steer`, `followUp`, or queueing.
 - Dynamic TypeScript/JavaScript extensions, extension UI, hot reload, MCP, or package installation.
 - TUI run modes, themes, keybindings, widgets, OAuth/subscription providers, or model catalogs.
 
-One-shot mode runs one prompt. When no positional prompt is given in text mode, the CLI defaults to `--repl` and keeps history in memory for multiple prompts, supporting built-in slash commands: `/help`, `/clear`, `/compact`, and `/exit`. Loaded skills are explicitly invocable with `/skill:<name> [additional instructions]`; that input expands to a regular user prompt containing the skill instructions. Project-local resources can be trusted for one run with `--approve` / `-a`, denied for one run with `--no-approve`, and project skills can be suppressed with `--no-skills`. `--mode json` and `--mode rpc` cannot be combined with `--repl`; RPC mode reads prompts from stdin commands rather than positional CLI arguments. `--resume <session.jsonl>` loads the redacted typed JSONL history and appends new messages. `--session <path>` always creates a new file; use `--resume` to append.
+One-shot mode runs one prompt. When no positional prompt is given in text mode, the CLI defaults to `--repl` and keeps history in memory for multiple prompts, supporting built-in slash commands: `/help`, `/clear`, `/compact`, and `/exit`. Loaded skills are explicitly invocable with `/skill:<name> [additional instructions]`; that input expands to a regular user prompt containing the skill instructions. Project-local resources can be trusted for one run with `--approve` / `-a`, denied for one run with `--no-approve`, and project skills can be suppressed with `--no-skills`. `--mode json` and `--mode rpc` cannot be combined with `--repl`; RPC mode reads prompts from stdin commands rather than positional CLI arguments. `--resume <session.jsonl>` starts from the active tree path before persisting new messages through the current session store. `--session <path>` always creates a new file; use `--resume` to append.
 
 ## Skills
 
@@ -295,7 +295,7 @@ Sessions are JSONL:
 3. write support for pi-style v3 tree metadata entries (`model_change`, `thinking_level_change`, `active_tools_change`, `custom`, `custom_message`, `label`, `compaction`, `branch_summary`, `session_info`) and extended runtime messages (`BashExecutionMessage`, `CustomMessage`, `BranchSummaryMessage`, `CompactionSummaryMessage`),
 4. safely ignored unknown future entry types.
 
-The redacted v2 transcript is canonical for current resume/replay. The v3 session tree with branch navigation, leaf tracking, and compaction-aware context reconstruction (via `SessionTree::buildSessionContext()`) is also available. Exact unredacted replay is intentionally out of scope. Session files are still sensitive: they can contain source text, command output, workspace paths, and provider/model metadata.
+Current resume uses the v3 session tree to rebuild the active path, including persisted leaf selection and compaction summaries, through the session resume module. Exact unredacted replay is intentionally out of scope. Session files are still sensitive: they can contain source text, command output, workspace paths, and provider/model metadata.
 
 The workspace guard is not a sandbox. Prompts, file contents, and command outputs can be sent to the configured provider. Run this harness inside a VM/container if you need a real containment boundary.
 
