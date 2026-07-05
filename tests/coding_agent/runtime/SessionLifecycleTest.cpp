@@ -1,5 +1,6 @@
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
+#include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 
 #include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
@@ -118,6 +119,50 @@ TEST_CASE("open_session resume uses active leaf path", "[coding-agent][runtime][
     CHECK(opened->topology == harness::session::SessionTopology::Branched);
     REQUIRE(opened->history.size() == 1);
     CHECK(user_text_at(opened->history, 0) == "first");
+}
+
+TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point", "[coding-agent][runtime][session]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "leaf-continuation.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(user_msg("first")));
+    REQUIRE(store->append(user_msg("second")));
+    REQUIRE(store->append(user_msg("third")));
+
+    auto pre = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(pre);
+    REQUIRE(pre->entries.size() >= 4);
+    const auto first_id = pre->entries[1].entry_id;
+
+    auto resumed_store = harness::session::JsonlSessionStore::open_existing(path);
+    REQUIRE(resumed_store);
+    REQUIRE(resumed_store->append_leaf(std::nullopt, first_id));
+
+    runtime::AgentSessionCreationRequest request;
+    request.fake = true;
+    request.disable_project_skills = true;
+    request.disable_prompt_templates = true;
+    request.workspace = workspace.path();
+    request.workspace_explicit = true;
+    request.resume_path = path;
+
+    auto session_result = coding_agent::create_agent_session(std::move(request));
+    REQUIRE(session_result);
+    auto prompt_result = session_result->session->prompt("continue branch");
+    REQUIRE(prompt_result);
+    REQUIRE(prompt_result->success);
+    CHECK(session_result->session->close().has_value());
+
+    auto reopened = runtime::open_session(resume_request(path, workspace));
+    REQUIRE(reopened);
+    CHECK(reopened->topology == harness::session::SessionTopology::Branched);
+    REQUIRE(reopened->history.size() == 3);
+    CHECK(user_text_at(reopened->history, 0) == "first");
+    CHECK(user_text_at(reopened->history, 1) == "continue branch");
+    const auto* assistant = std::get_if<ai::AssistantMessage>(&reopened->history[2]);
+    REQUIRE(assistant != nullptr);
+    CHECK(ai::text_from_assistant_content(assistant->content) == "fake: continue branch");
 }
 
 TEST_CASE("open_session resume ignores invalid leaf target", "[coding-agent][runtime][session]") {

@@ -6,6 +6,8 @@
 #include "util/Json.hpp"
 
 #include <filesystem>
+#include <string>
+#include <unordered_set>
 #include <utility>
 
 namespace cch::harness::session {
@@ -15,6 +17,8 @@ struct JsonlSessionStore::Impl {
     SessionMetadata metadata;
     SessionJournal journal;
     std::size_t next_entry_id{1};
+    std::optional<std::string> active_append_parent_id;
+    bool persist_leaf_after_message_append{false};
 };
 
 namespace {
@@ -36,6 +40,42 @@ template <typename Dto>
         ++counter;
     }
     return result;
+}
+
+[[nodiscard]] std::optional<std::string> leaf_target_id(const SessionEntry& entry) {
+    if (const auto* object = entry.payload.get_if<util::JsonValue::object_t>()) {
+        const auto target = object->find("targetId");
+        if (target != object->end()) {
+            if (const auto* target_id = target->second.get_if<std::string>()) {
+                return *target_id;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] std::optional<std::string> latest_valid_leaf_target(const LoadedSession& loaded) {
+    std::unordered_set<std::string> known_ids;
+    for (const auto& entry : loaded.entries) {
+        if (entry.kind == SessionEntryKind::Header ||
+            entry.kind == SessionEntryKind::Unknown ||
+            entry.entry_id.empty()) {
+            continue;
+        }
+        known_ids.insert(entry.entry_id);
+    }
+
+    for (auto it = loaded.entries.rbegin(); it != loaded.entries.rend(); ++it) {
+        if (it->kind != SessionEntryKind::Leaf) {
+            continue;
+        }
+        auto target = leaf_target_id(*it);
+        if (target.has_value() && known_ids.contains(*target)) {
+            return target;
+        }
+    }
+
+    return std::nullopt;
 }
 
 } // namespace
@@ -85,6 +125,10 @@ util::Expected<JsonlSessionStore> JsonlSessionStore::open_existing(const std::fi
     store.impl_->metadata = loaded->metadata;
     store.impl_->journal = std::move(*journal);
     store.impl_->next_entry_id = loaded->entries.size();
+    if (auto active_leaf = latest_valid_leaf_target(*loaded)) {
+        store.impl_->active_append_parent_id = std::move(active_leaf);
+        store.impl_->persist_leaf_after_message_append = true;
+    }
     return store;
 }
 
@@ -113,16 +157,37 @@ util::Expected<SessionTree> JsonlSessionStore::open_as_tree(const std::filesyste
 
 util::ExpectedVoid JsonlSessionStore::append(const ai::MessageVariant& message) {
     EntrySerializer serializer;
-    auto entry_json = serializer.serialize_message(message);
-    if (!entry_json) {
-        return std::unexpected(entry_json.error());
+    auto parent_id = impl_->persist_leaf_after_message_append
+        ? impl_->active_append_parent_id
+        : std::nullopt;
+    auto entry = serializer.serialize_message_entry(message, std::move(parent_id));
+    if (!entry) {
+        return std::unexpected(entry.error());
     }
 
-    auto result = impl_->journal.append_line(*entry_json);
-    if (result) {
+    auto result = impl_->journal.append_line(entry->line);
+    if (!result) {
+        return result;
+    }
+    ++impl_->next_entry_id;
+
+    if (impl_->persist_leaf_after_message_append) {
+        auto leaf_line = serializer.serialize_leaf(std::nullopt, entry->entry_id);
+        if (!leaf_line) {
+            return std::unexpected(leaf_line.error());
+        }
+
+        auto leaf_result = impl_->journal.append_line(*leaf_line);
+        if (!leaf_result) {
+            return leaf_result;
+        }
         ++impl_->next_entry_id;
     }
-    return result;
+
+    if (impl_->persist_leaf_after_message_append) {
+        impl_->active_append_parent_id = std::move(entry->entry_id);
+    }
+    return {};
 }
 
 util::ExpectedVoid JsonlSessionStore::append_model_change(

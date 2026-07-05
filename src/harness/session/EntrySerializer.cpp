@@ -220,10 +220,14 @@ template <typename T>
         dto.model.value_or(std::string{})};
 }
 
-[[nodiscard]] MessageEntryDto to_dto(std::string entry_id, const ai::MessageVariant& message) {
+[[nodiscard]] MessageEntryDto to_dto(
+    std::string entry_id,
+    const ai::MessageVariant& message,
+    std::optional<std::string> parent_id = std::nullopt) {
     MessageEntryDto dto;
     dto.type = "message";
     dto.entryId = std::move(entry_id);
+    dto.parentId = std::move(parent_id);
     dto.message = ai::glaze::to_message_dto(message);
     return dto;
 }
@@ -464,12 +468,26 @@ util::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<std
 }
 
 util::Expected<std::string> EntrySerializer::serialize_message(const ai::MessageVariant& message) const {
+    auto serialized = serialize_message_entry(message, std::nullopt);
+    if (!serialized) {
+        return std::unexpected(serialized.error());
+    }
+    return std::move(serialized->line);
+}
+
+util::Expected<EntrySerializer::SerializedMessageEntry> EntrySerializer::serialize_message_entry(
+    const ai::MessageVariant& message,
+    std::optional<std::string> parent_id) const {
     auto redacted = redacted_message(message);
-    auto entry_json = util::write_json(to_dto(generate_entry_id(), redacted));
+    auto entry_id = generate_entry_id();
+    auto entry_json = util::write_json(to_dto(entry_id, redacted, std::move(parent_id)));
     if (!entry_json) {
         return std::unexpected(entry_json.error());
     }
-    return *entry_json + '\n';
+    return SerializedMessageEntry{
+        .line = *entry_json + '\n',
+        .entry_id = std::move(entry_id),
+    };
 }
 
 util::Expected<std::string> EntrySerializer::serialize_model_change(

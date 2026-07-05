@@ -17,11 +17,19 @@ namespace cch::harness::session {
 /// logic; JsonlSessionStore only coordinates file I/O through SessionJournal.
 class EntrySerializer {
 public:
+    struct SerializedMessageEntry {
+        std::string line;
+        std::string entry_id;
+    };
+
     [[nodiscard]] util::Expected<std::string> serialize_header(const SessionMetadata& metadata) const;
 
     [[nodiscard]] util::Expected<LoadedSession> parse_lines(const std::vector<std::string>& lines) const;
 
     [[nodiscard]] util::Expected<std::string> serialize_message(const ai::MessageVariant& message) const;
+    [[nodiscard]] util::Expected<SerializedMessageEntry> serialize_message_entry(
+        const ai::MessageVariant& message,
+        std::optional<std::string> parent_id) const;
 
     [[nodiscard]] util::Expected<std::string> serialize_model_change(
         std::optional<std::string> parent_id,
