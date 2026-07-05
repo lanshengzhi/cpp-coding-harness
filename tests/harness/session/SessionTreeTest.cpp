@@ -5,6 +5,7 @@
 #include "../../support/TempWorkspace.hpp"
 
 #include <string>
+#include <variant>
 
 using namespace cch;
 
@@ -365,6 +366,7 @@ TEST_CASE("buildSessionContext compaction skips pre-kept messages", "[harness][s
     // First message should be compaction summary
     CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(ctx.messages[0]));
     CHECK(std::get<ai::CompactionSummaryMessage>(ctx.messages[0]).summary == "summary of msg1-2");
+    CHECK(std::get<ai::CompactionSummaryMessage>(ctx.messages[0]).tokens_before == 1000);
     // Remaining should be msg3 and msg4
     CHECK(first_user_text({ctx.messages[1]}) == "msg3");
     CHECK(first_user_text({ctx.messages[2]}) == "msg4");
@@ -543,6 +545,10 @@ TEST_CASE("branchWithSummary generates summary and switches leaf", "[harness][se
     REQUIRE(appended_entries.size() == 1);
     CHECK(appended_entries[0].kind == harness::session::SessionEntryKind::BranchSummary);
     CHECK(appended_entries[0].parent_id == root_id);
+    REQUIRE(std::holds_alternative<harness::session::BranchSummaryEntryValue>(appended_entries[0].value));
+    const auto& value = std::get<harness::session::BranchSummaryEntryValue>(appended_entries[0].value);
+    CHECK(value.from_id == leaf_before);
+    CHECK(value.summary == "summarized 2 entries");
 }
 
 TEST_CASE("branchWithSummary nullopt skips summary", "[harness][session][tree]") {

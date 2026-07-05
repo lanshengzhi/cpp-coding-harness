@@ -3,12 +3,11 @@
 #include "EntrySerializer.hpp"
 #include "SessionJournal.hpp"
 
-#include "util/Json.hpp"
-
 #include <filesystem>
 #include <string>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 
 namespace cch::harness::session {
 
@@ -23,33 +22,9 @@ struct JsonlSessionStore::Impl {
 
 namespace {
 
-// Serialize a DTO and append through the journal. Tree entry metadata does not
-// contain user secrets — key-based redaction is too aggressive for fields like
-// "tokensBefore" (which contains "token"). Per-type methods handle any
-// payload redaction (e.g., custom.data) before constructing the DTO.
-template <typename Dto>
-[[nodiscard]] util::ExpectedVoid write_entry_line(SessionJournal& journal, const Dto& dto, std::size_t& counter) {
-    auto json_str = glz::write_json(dto);
-    if (!json_str) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Session, "failed to serialize tree entry"));
-    }
-    const auto line = *json_str + '\n';
-    auto result = journal.append_line(line);
-    if (result) {
-        ++counter;
-    }
-    return result;
-}
-
 [[nodiscard]] std::optional<std::string> leaf_target_id(const SessionEntry& entry) {
-    if (const auto* object = entry.payload.get_if<util::JsonValue::object_t>()) {
-        const auto target = object->find("targetId");
-        if (target != object->end()) {
-            if (const auto* target_id = target->second.get_if<std::string>()) {
-                return *target_id;
-            }
-        }
+    if (const auto* leaf = std::get_if<LeafEntryValue>(&entry.value)) {
+        return leaf->target_id;
     }
     return std::nullopt;
 }

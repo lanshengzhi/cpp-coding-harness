@@ -6,6 +6,7 @@
 
 #include <fstream>
 #include <sstream>
+#include <variant>
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <sys/stat.h>
@@ -143,6 +144,7 @@ TEST_CASE("Glaze JSONL session keeps unknown future entries", "[harness][session
     REQUIRE(loaded->unknown_lines.size() == 1);
     REQUIRE(loaded->entries.size() == 3);
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::Unknown);
+    CHECK(std::holds_alternative<std::monostate>(loaded->entries[1].value));
     CHECK(loaded->entries[2].kind == harness::session::SessionEntryKind::Message);
     CHECK(text_from_message(loaded->messages[0]) == "known");
 }
@@ -254,6 +256,12 @@ bool is_hex8(const std::string& s) {
     }
     return true;
 }
+
+template <typename Value>
+const Value& require_entry_value(const harness::session::SessionEntry& entry) {
+    REQUIRE(std::holds_alternative<Value>(entry.value));
+    return std::get<Value>(entry.value);
+}
 } // namespace
 
 TEST_CASE("v3 session header writes and loads correctly", "[harness][session][u9]") {
@@ -273,6 +281,35 @@ TEST_CASE("v3 session header writes and loads correctly", "[harness][session][u9
     const auto raw = read_all(path);
     CHECK(raw.find("\"type\":\"session\"") != std::string::npos);
     CHECK(raw.find("\"version\":3") != std::string::npos);
+}
+
+TEST_CASE("v3 tree entry writer keeps current JSONL wire field names", "[harness][session][wire]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "wire-fields.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append_model_change(std::nullopt, "openai", "gpt-4o"));
+    REQUIRE(store->append_thinking_level_change(std::nullopt, "high"));
+    REQUIRE(store->append_active_tools_change(std::nullopt, {"read"}));
+    REQUIRE(store->append_custom_entry(std::nullopt, "my-ext", util::JsonValue{nullptr}));
+    REQUIRE(store->append_custom_message_entry(std::nullopt, "my-ext", "context", true, std::nullopt));
+    REQUIRE(store->append_label_change(std::nullopt, "target-entry", std::string{"checkpoint"}));
+    REQUIRE(store->append_compaction(std::nullopt, "summary", "first-kept", 123, std::nullopt, true));
+    REQUIRE(store->append_branch_summary(std::nullopt, "from-entry", "branch summary", std::nullopt, false));
+    REQUIRE(store->append_session_info(std::nullopt, "Session name"));
+    REQUIRE(store->append_leaf(std::nullopt, "leaf-target"));
+
+    const auto raw = read_all(path);
+    CHECK(raw.find(R"("modelId":"gpt-4o")") != std::string::npos);
+    CHECK(raw.find(R"("thinkingLevel":"high")") != std::string::npos);
+    CHECK(raw.find(R"("tools":["read"])") != std::string::npos);
+    CHECK(raw.find(R"("customType":"my-ext")") != std::string::npos);
+    CHECK(raw.find(R"("targetId":"target-entry")") != std::string::npos);
+    CHECK(raw.find(R"("firstKeptEntryId":"first-kept")") != std::string::npos);
+    CHECK(raw.find(R"("tokensBefore":123)") != std::string::npos);
+    CHECK(raw.find(R"("fromId":"from-entry")") != std::string::npos);
+    CHECK(raw.find(R"("name":"Session name")") != std::string::npos);
+    CHECK(raw.find(R"("targetId":"leaf-target")") != std::string::npos);
 }
 
 TEST_CASE("entry IDs are 8-char random hex", "[harness][session][u9]") {
@@ -301,8 +338,9 @@ TEST_CASE("model_change entry round-trips", "[harness][session][u9]") {
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::ModelChange);
     CHECK(is_hex8(loaded->entries[1].entry_id));
     CHECK_FALSE(loaded->entries[1].parent_id.has_value());
-    CHECK(loaded->entries[1].payload.get<util::JsonValue::object_t>().at("provider").get<std::string>() == "openai");
-    CHECK(loaded->entries[1].payload.get<util::JsonValue::object_t>().at("modelId").get<std::string>() == "gpt-4o");
+    const auto& value = require_entry_value<harness::session::ModelChangeValue>(loaded->entries[1]);
+    CHECK(value.provider == "openai");
+    CHECK(value.model_id == "gpt-4o");
     CHECK(loaded->messages.empty());
 }
 
@@ -319,7 +357,8 @@ TEST_CASE("thinking_level_change entry round-trips", "[harness][session][u9]") {
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::ThinkingLevelChange);
     REQUIRE(loaded->entries[1].parent_id.has_value());
     CHECK(*loaded->entries[1].parent_id == "parent01");
-    CHECK(loaded->entries[1].payload.get<util::JsonValue::object_t>().at("thinkingLevel").get<std::string>() == "high");
+    const auto& value = require_entry_value<harness::session::ThinkingLevelChangeValue>(loaded->entries[1]);
+    CHECK(value.thinking_level == "high");
 }
 
 TEST_CASE("active_tools_change entry round-trips", "[harness][session][u9]") {
@@ -333,11 +372,33 @@ TEST_CASE("active_tools_change entry round-trips", "[harness][session][u9]") {
     REQUIRE(loaded);
     REQUIRE(loaded->entries.size() == 2);
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::ActiveToolsChange);
-    const auto& tools_arr = loaded->entries[1].payload.get<util::JsonValue::object_t>().at("tools").get<util::JsonValue::array_t>();
-    REQUIRE(tools_arr.size() == 3);
-    CHECK(tools_arr[0].get<std::string>() == "read");
-    CHECK(tools_arr[1].get<std::string>() == "write");
-    CHECK(tools_arr[2].get<std::string>() == "bash");
+    const auto& value = require_entry_value<harness::session::ActiveToolsChangeValue>(loaded->entries[1]);
+    REQUIRE(value.active_tool_names.size() == 3);
+    CHECK(value.active_tool_names[0] == "read");
+    CHECK(value.active_tool_names[1] == "write");
+    CHECK(value.active_tool_names[2] == "bash");
+}
+
+TEST_CASE("active_tools_change accepts activeToolNames compatibility field", "[harness][session][wire]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "tools-change-compat.jsonl";
+    {
+        std::ofstream output(path);
+        output << "{\"type\":\"session\",\"version\":3,\"id\":\"sess-v3\",\"timestamp\":\"2026-06-16T00:00:00.000Z\",\"cwd\":\""
+               << workspace.path().string() << "\"}\n";
+        output << "{\"type\":\"active_tools_change\",\"id\":\"tools001\",\"parentId\":null,\"timestamp\":\"2026-06-16T00:00:01.000Z\",\"activeToolNames\":[\"read\",\"bash\"]}\n";
+    }
+    make_private(path);
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+
+    REQUIRE(loaded);
+    REQUIRE(loaded->entries.size() == 2);
+    CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::ActiveToolsChange);
+    const auto& value = require_entry_value<harness::session::ActiveToolsChangeValue>(loaded->entries[1]);
+    REQUIRE(value.active_tool_names.size() == 2);
+    CHECK(value.active_tool_names[0] == "read");
+    CHECK(value.active_tool_names[1] == "bash");
 }
 
 TEST_CASE("custom entry round-trips", "[harness][session][u9]") {
@@ -352,9 +413,9 @@ TEST_CASE("custom entry round-trips", "[harness][session][u9]") {
     REQUIRE(loaded);
     REQUIRE(loaded->entries.size() == 2);
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::Custom);
-    const auto& obj = loaded->entries[1].payload.get<util::JsonValue::object_t>();
-    CHECK(obj.at("customType").get<std::string>() == "my-ext");
-    CHECK(obj.at("data").get<util::JsonValue::object_t>().at("count").get<double>() == 42.0);
+    const auto& value = require_entry_value<harness::session::CustomEntryValue>(loaded->entries[1]);
+    CHECK(value.custom_type == "my-ext");
+    CHECK(value.data.get<util::JsonValue::object_t>().at("count").get<double>() == 42.0);
 }
 
 TEST_CASE("custom_message entry round-trips", "[harness][session][u9]") {
@@ -369,10 +430,12 @@ TEST_CASE("custom_message entry round-trips", "[harness][session][u9]") {
     REQUIRE(loaded);
     REQUIRE(loaded->entries.size() == 2);
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::CustomMessage);
-    const auto& obj = loaded->entries[1].payload.get<util::JsonValue::object_t>();
-    CHECK(obj.at("customType").get<std::string>() == "my-ext");
-    CHECK(obj.at("content").get<std::string>() == "injected content");
-    CHECK(obj.at("display").get<bool>() == true);
+    const auto& value = require_entry_value<harness::session::CustomMessageEntryValue>(loaded->entries[1]);
+    CHECK(value.custom_type == "my-ext");
+    CHECK(value.content == "injected content");
+    CHECK(value.display == true);
+    REQUIRE(value.details.has_value());
+    CHECK(value.details->get<util::JsonValue::object_t>().at("key").get<std::string>() == "val");
     REQUIRE(loaded->entries[1].parent_id.has_value());
     CHECK(*loaded->entries[1].parent_id == "parent99");
 }
@@ -391,15 +454,17 @@ TEST_CASE("label entry round-trips with set and clear", "[harness][session][u9]"
     REQUIRE(loaded);
     REQUIRE(loaded->entries.size() == 3);  // header + 2 labels
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::Label);
-    const auto& set_obj = loaded->entries[1].payload.get<util::JsonValue::object_t>();
-    CHECK(set_obj.at("label").get<std::string>() == "checkpoint-1");
+    const auto& set_value = require_entry_value<harness::session::LabelEntryValue>(loaded->entries[1]);
+    CHECK(set_value.target_id == "target-entry");
+    REQUIRE(set_value.label.has_value());
+    CHECK(*set_value.label == "checkpoint-1");
     CHECK(loaded->entries[2].kind == harness::session::SessionEntryKind::Label);
     // Null label should omit the field (Glaze skips std::nullopt by default)
     const auto raw = read_all(path);
     CHECK(raw.find("checkpoint-1") != std::string::npos);
-    // Second label entry should have label absent
-    auto clear_obj = loaded->entries[2].payload.get<util::JsonValue::object_t>();
-    CHECK(clear_obj.find("label") == clear_obj.end());
+    const auto& clear_value = require_entry_value<harness::session::LabelEntryValue>(loaded->entries[2]);
+    CHECK(clear_value.target_id == "target-entry");
+    CHECK_FALSE(clear_value.label.has_value());
 }
 
 TEST_CASE("compaction entry round-trips", "[harness][session][u9]") {
@@ -414,11 +479,18 @@ TEST_CASE("compaction entry round-trips", "[harness][session][u9]") {
     REQUIRE(loaded);
     REQUIRE(loaded->entries.size() == 2);
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::Compaction);
-    const auto& obj = loaded->entries[1].payload.get<util::JsonValue::object_t>();
-    CHECK(obj.at("summary").get<std::string>() == "summary text");
-    CHECK(obj.at("firstKeptEntryId").get<std::string>() == "first-kept");
-    CHECK(obj.at("tokensBefore").get<double>() == 50000.0);
-    CHECK(obj.at("fromHook").get<bool>() == true);
+    const auto& value = require_entry_value<harness::session::CompactionEntryValue>(loaded->entries[1]);
+    CHECK(value.summary == "summary text");
+    CHECK(value.first_kept_entry_id == "first-kept");
+    CHECK(value.tokens_before == 50000);
+    REQUIRE(value.details.has_value());
+    const auto& read_files = value.details->get<util::JsonValue::object_t>()
+        .at("readFiles")
+        .get<util::JsonValue::array_t>();
+    REQUIRE(read_files.size() == 1);
+    CHECK(read_files[0].get<std::string>() == "a.txt");
+    REQUIRE(value.from_hook.has_value());
+    CHECK(*value.from_hook == true);
 }
 
 TEST_CASE("branch_summary entry round-trips", "[harness][session][u9]") {
@@ -433,10 +505,16 @@ TEST_CASE("branch_summary entry round-trips", "[harness][session][u9]") {
     REQUIRE(loaded);
     REQUIRE(loaded->entries.size() == 2);
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::BranchSummary);
-    const auto& obj = loaded->entries[1].payload.get<util::JsonValue::object_t>();
-    CHECK(obj.at("fromId").get<std::string>() == "branch-id");
-    CHECK(obj.at("summary").get<std::string>() == "branch explored X");
-    CHECK(obj.find("fromHook") == obj.end());  // not present when std::nullopt
+    const auto& value = require_entry_value<harness::session::BranchSummaryEntryValue>(loaded->entries[1]);
+    CHECK(value.from_id == "branch-id");
+    CHECK(value.summary == "branch explored X");
+    REQUIRE(value.details.has_value());
+    const auto& modified_files = value.details->get<util::JsonValue::object_t>()
+        .at("modifiedFiles")
+        .get<util::JsonValue::array_t>();
+    REQUIRE(modified_files.size() == 1);
+    CHECK(modified_files[0].get<std::string>() == "b.txt");
+    CHECK_FALSE(value.from_hook.has_value());
 }
 
 TEST_CASE("session_info entry round-trips", "[harness][session][u9]") {
@@ -450,7 +528,24 @@ TEST_CASE("session_info entry round-trips", "[harness][session][u9]") {
     REQUIRE(loaded);
     REQUIRE(loaded->entries.size() == 2);
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::SessionInfo);
-    CHECK(loaded->entries[1].payload.get<util::JsonValue::object_t>().at("name").get<std::string>() == "Refactor auth module");
+    const auto& value = require_entry_value<harness::session::SessionInfoEntryValue>(loaded->entries[1]);
+    CHECK(value.name == "Refactor auth module");
+}
+
+TEST_CASE("leaf entry round-trips as typed value", "[harness][session][u9]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "leaf-entry.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append_leaf(std::nullopt, "leaf-target"));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    REQUIRE(loaded->entries.size() == 2);
+    CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::Leaf);
+    const auto& value = require_entry_value<harness::session::LeafEntryValue>(loaded->entries[1]);
+    REQUIRE(value.target_id.has_value());
+    CHECK(*value.target_id == "leaf-target");
 }
 
 TEST_CASE("mixed tree entries and messages round-trip in order", "[harness][session][u9]") {

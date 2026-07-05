@@ -67,7 +67,8 @@ struct ActiveToolsChangeDto {
     std::string id;
     std::optional<std::string> parentId;
     std::string timestamp;
-    std::vector<std::string> tools;
+    std::optional<std::vector<std::string>> tools;
+    std::optional<std::vector<std::string>> activeToolNames;
 };
 
 struct CustomDto {
@@ -127,7 +128,7 @@ struct SessionInfoDto {
     std::string id;
     std::optional<std::string> parentId;
     std::string timestamp;
-    std::string name;
+    std::optional<std::string> name;
 };
 
 struct LeafDto {
@@ -135,7 +136,7 @@ struct LeafDto {
     std::string id;
     std::optional<std::string> parentId;
     std::string timestamp;
-    std::string targetId;
+    std::optional<std::string> targetId;
 };
 
 [[nodiscard]] util::Error session_error(std::string message, std::string detail = {}) {
@@ -273,6 +274,38 @@ void populate_tree_fields(SessionEntry& entry, const util::JsonValue& value) {
     }
 }
 
+template <typename Dto>
+void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
+    entry.entry_id = dto.id;
+    entry.parent_id = dto.parentId;
+}
+
+[[nodiscard]] std::optional<util::JsonValue> optional_json_field(
+    const util::JsonValue& value,
+    const std::string& key) {
+    const auto* object = value.get_if<util::JsonValue::object_t>();
+    if (object == nullptr) {
+        return std::nullopt;
+    }
+
+    const auto found = object->find(key);
+    if (found == object->end()) {
+        return std::nullopt;
+    }
+
+    return found->second;
+}
+
+[[nodiscard]] std::vector<std::string> active_tool_names_from_dto(const ActiveToolsChangeDto& dto) {
+    if (dto.tools.has_value()) {
+        return *dto.tools;
+    }
+    if (auto active_tool_names = dto.activeToolNames) {
+        return *active_tool_names;
+    }
+    return {};
+}
+
 [[nodiscard]] util::JsonValue redact_json_value(const util::JsonValue& value) {
     if (const auto* text = value.get_if<std::string>()) {
         return util::JsonValue{util::redact_text(*text)};
@@ -384,7 +417,6 @@ util::Expected<std::string> EntrySerializer::serialize_header(const SessionMetad
 
 util::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<std::string>& lines) const {
     LoadedSession loaded;
-    std::string line;
     std::size_t line_number = 0;
     bool saw_header = false;
 
@@ -399,7 +431,7 @@ util::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<std
             return std::unexpected(session_error(
                 "malformed JSONL",
                 "malformed JSONL at line " + std::to_string(line_number) + ": " +
-                    glz::format_error(generic.error(), line)));
+                    glz::format_error(generic.error(), stored_line)));
         }
 
         auto type = entry_type(*generic, line_number);
@@ -418,7 +450,7 @@ util::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<std
 
             SessionEntry entry;
             entry.kind = SessionEntryKind::Header;
-            entry.raw_line = line;
+            entry.raw_line = stored_line;
             entry.payload = std::move(payload);
             populate_tree_fields(entry, entry.payload);
             loaded.entries.push_back(std::move(entry));
@@ -432,7 +464,7 @@ util::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<std
             if (!dto) {
                 return std::unexpected(dto.error());
             }
-            auto message = ai::glaze::message_from_dto(dto->message, line);
+            auto message = ai::glaze::message_from_dto(dto->message, stored_line);
             if (!message) {
                 return std::unexpected(message.error());
             }
@@ -452,7 +484,128 @@ util::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<std
             entry.kind = kind;
             entry.raw_line = stored_line;
             entry.payload = std::move(payload);
-            populate_tree_fields(entry, entry.payload);
+            switch (kind) {
+            case SessionEntryKind::ModelChange: {
+                auto dto = entry_from_generic<ModelChangeDto>(*generic, stored_line, line_number);
+                if (!dto) {
+                    return std::unexpected(dto.error());
+                }
+                populate_tree_fields_from_dto(entry, *dto);
+                entry.value = ModelChangeValue{
+                    .provider = std::move(dto->provider),
+                    .model_id = std::move(dto->modelId),
+                };
+                break;
+            }
+            case SessionEntryKind::ThinkingLevelChange: {
+                auto dto = entry_from_generic<ThinkingLevelChangeDto>(*generic, stored_line, line_number);
+                if (!dto) {
+                    return std::unexpected(dto.error());
+                }
+                populate_tree_fields_from_dto(entry, *dto);
+                entry.value = ThinkingLevelChangeValue{.thinking_level = std::move(dto->thinkingLevel)};
+                break;
+            }
+            case SessionEntryKind::ActiveToolsChange: {
+                auto dto = entry_from_generic<ActiveToolsChangeDto>(*generic, stored_line, line_number);
+                if (!dto) {
+                    return std::unexpected(dto.error());
+                }
+                populate_tree_fields_from_dto(entry, *dto);
+                entry.value = ActiveToolsChangeValue{.active_tool_names = active_tool_names_from_dto(*dto)};
+                break;
+            }
+            case SessionEntryKind::Custom: {
+                auto dto = entry_from_generic<CustomDto>(*generic, stored_line, line_number);
+                if (!dto) {
+                    return std::unexpected(dto.error());
+                }
+                populate_tree_fields_from_dto(entry, *dto);
+                entry.value = CustomEntryValue{
+                    .custom_type = std::move(dto->customType),
+                    .data = optional_json_field(entry.payload, "data").value_or(util::JsonValue{}),
+                };
+                break;
+            }
+            case SessionEntryKind::CustomMessage: {
+                auto dto = entry_from_generic<CustomMessageDto>(*generic, stored_line, line_number);
+                if (!dto) {
+                    return std::unexpected(dto.error());
+                }
+                populate_tree_fields_from_dto(entry, *dto);
+                entry.value = CustomMessageEntryValue{
+                    .custom_type = std::move(dto->customType),
+                    .content = std::move(dto->content),
+                    .display = dto->display,
+                    .details = optional_json_field(entry.payload, "details"),
+                };
+                break;
+            }
+            case SessionEntryKind::Label: {
+                auto dto = entry_from_generic<LabelDto>(*generic, stored_line, line_number);
+                if (!dto) {
+                    return std::unexpected(dto.error());
+                }
+                populate_tree_fields_from_dto(entry, *dto);
+                entry.value = LabelEntryValue{
+                    .target_id = std::move(dto->targetId),
+                    .label = std::move(dto->label),
+                };
+                break;
+            }
+            case SessionEntryKind::Compaction: {
+                auto dto = entry_from_generic<CompactionDto>(*generic, stored_line, line_number);
+                if (!dto) {
+                    return std::unexpected(dto.error());
+                }
+                populate_tree_fields_from_dto(entry, *dto);
+                entry.value = CompactionEntryValue{
+                    .summary = std::move(dto->summary),
+                    .first_kept_entry_id = std::move(dto->firstKeptEntryId),
+                    .tokens_before = dto->tokensBefore,
+                    .details = optional_json_field(entry.payload, "details"),
+                    .from_hook = dto->fromHook,
+                };
+                break;
+            }
+            case SessionEntryKind::BranchSummary: {
+                auto dto = entry_from_generic<BranchSummaryDto>(*generic, stored_line, line_number);
+                if (!dto) {
+                    return std::unexpected(dto.error());
+                }
+                populate_tree_fields_from_dto(entry, *dto);
+                entry.value = BranchSummaryEntryValue{
+                    .from_id = std::move(dto->fromId),
+                    .summary = std::move(dto->summary),
+                    .details = optional_json_field(entry.payload, "details"),
+                    .from_hook = dto->fromHook,
+                };
+                break;
+            }
+            case SessionEntryKind::SessionInfo: {
+                auto dto = entry_from_generic<SessionInfoDto>(*generic, stored_line, line_number);
+                if (!dto) {
+                    return std::unexpected(dto.error());
+                }
+                populate_tree_fields_from_dto(entry, *dto);
+                entry.value = SessionInfoEntryValue{.name = std::move(dto->name).value_or(std::string{})};
+                break;
+            }
+            case SessionEntryKind::Leaf: {
+                auto dto = entry_from_generic<LeafDto>(*generic, stored_line, line_number);
+                if (!dto) {
+                    return std::unexpected(dto.error());
+                }
+                populate_tree_fields_from_dto(entry, *dto);
+                entry.value = LeafEntryValue{.target_id = std::move(dto->targetId)};
+                break;
+            }
+            case SessionEntryKind::Header:
+            case SessionEntryKind::Message:
+            case SessionEntryKind::Unknown:
+                populate_tree_fields(entry, entry.payload);
+                break;
+            }
             loaded.entries.push_back(std::move(entry));
             if (kind == SessionEntryKind::Unknown) {
                 loaded.unknown_lines.push_back(stored_line);
