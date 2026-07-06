@@ -10,11 +10,14 @@
 #include "ai/providers/FakeChatClient.hpp"
 #include "../support/TempWorkspace.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -78,6 +81,57 @@ void expect_unsupported_sdk_resume(const TestPaths& paths) {
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().code == util::ErrorCode::Session);
     CHECK(result.error().message == "unsupported_session_topology");
+}
+
+void write_project_skill(
+    const TestPaths& paths,
+    std::string name,
+    std::string body = "Project skill body.") {
+    paths.workspace.write(
+        ".cpp-harness/skills/" + name + "/SKILL.md",
+        "---\n"
+        "name: " + name + "\n"
+        "description: Project skill.\n"
+        "---\n" +
+        body + "\n");
+}
+
+void write_project_prompt(
+    const TestPaths& paths,
+    std::string name,
+    std::string body = "Project prompt body.") {
+    paths.workspace.write(
+        ".cpp-harness/prompts/" + name + ".md",
+        "---\n"
+        "description: Project prompt.\n"
+        "---\n" +
+        body + "\n");
+}
+
+coding_agent::Skill host_skill(std::string name, std::string body = "Host skill body.") {
+    return coding_agent::Skill{
+        .name = std::move(name),
+        .description = "Host skill.",
+        .content = std::move(body),
+        .filePath = "/host/SKILL.md",
+    };
+}
+
+coding_agent::PromptTemplate host_template(std::string name, std::string body = "Host prompt body.") {
+    return coding_agent::PromptTemplate{
+        .name = std::move(name),
+        .description = "Host template.",
+        .content = std::move(body),
+    };
+}
+
+bool has_sdk_diag(
+    const std::vector<coding_agent::SdkDiagnostic>& diagnostics,
+    std::string_view code) {
+    return std::any_of(
+        diagnostics.begin(),
+        diagnostics.end(),
+        [code](const auto& diag) { return diag.code == code; });
 }
 
 /// Save and restore an environment variable around a test.
@@ -569,6 +623,196 @@ TEST_CASE("SDK host-provided commands work", "[sdk][u4]") {
     CHECK(prompt_result->message.find("Hello from SDK") != std::string::npos);
 
     CHECK(session->close().has_value());
+}
+
+TEST_CASE("SDK loads trusted project resources through shared loader", "[sdk][project-resources]") {
+    TestPaths paths;
+    write_project_skill(paths, "project-skill", "Use project skill instructions.");
+    write_project_prompt(paths, "project-review", "Review project item: $1.");
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.load_project_resources = true;
+    opts.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    REQUIRE(result->session->skills().size() == 1);
+    CHECK(result->session->skills()[0].name == "project-skill");
+    REQUIRE(result->session->templates().size() == 1);
+    CHECK(result->session->templates()[0].name == "project-review");
+
+    auto skill_prompt = result->session->prompt("/skill:project-skill now");
+    REQUIRE(skill_prompt.has_value());
+    CHECK(skill_prompt->success);
+    CHECK(skill_prompt->diagnostics.empty());
+    REQUIRE(skill_prompt->last_assistant_text.has_value());
+    CHECK(skill_prompt->last_assistant_text->find("Use project skill instructions.") != std::string::npos);
+
+    auto template_prompt = result->session->prompt("/project-review Ada");
+    REQUIRE(template_prompt.has_value());
+    CHECK(template_prompt->success);
+    REQUIRE(template_prompt->last_assistant_text.has_value());
+    CHECK(template_prompt->last_assistant_text->find("Review project item: Ada.") != std::string::npos);
+
+    CHECK(result->session->close().has_value());
+}
+
+TEST_CASE("SDK keeps host resources when project resource loading is disabled", "[sdk][project-resources]") {
+    TestPaths paths;
+    write_project_skill(paths, "project-skill");
+    write_project_prompt(paths, "project-review");
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.load_project_resources = false;
+    opts.skills.push_back(host_skill("host-skill"));
+    opts.prompt_templates.push_back(host_template("host-review"));
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    REQUIRE(result->session->skills().size() == 1);
+    CHECK(result->session->skills()[0].name == "host-skill");
+    REQUIRE(result->session->templates().size() == 1);
+    CHECK(result->session->templates()[0].name == "host-review");
+    CHECK(result->session->close().has_value());
+}
+
+TEST_CASE("SDK keeps host resources and returns resource decisions when project is untrusted", "[sdk][project-resources]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace home;
+    EnvVarGuard home_guard{"HOME"};
+    home_guard.set(home.path().string());
+    home.write(
+        ".cpp-harness/trust.json",
+        "{\"" + paths.workspace.path().string() + "\":true}\n");
+    write_project_skill(paths, "project-skill");
+    write_project_prompt(paths, "project-review");
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.load_project_resources = true;
+    opts.skills.push_back(host_skill("host-skill"));
+    opts.prompt_templates.push_back(host_template("host-review"));
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    REQUIRE(result->session->skills().size() == 1);
+    CHECK(result->session->skills()[0].name == "host-skill");
+    REQUIRE(result->session->templates().size() == 1);
+    CHECK(result->session->templates()[0].name == "host-review");
+    CHECK(has_sdk_diag(result->diagnostics, "resource:project_skills"));
+    CHECK(has_sdk_diag(result->diagnostics, "resource:project_prompts"));
+    CHECK(result->session->close().has_value());
+}
+
+TEST_CASE("SDK project resource duplicates prefer host resources with structured diagnostics", "[sdk][project-resources]") {
+    TestPaths paths;
+    write_project_skill(paths, "same-skill", "Project skill body.");
+    write_project_prompt(paths, "same-template", "Project template body.");
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.load_project_resources = true;
+    opts.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    opts.skills.push_back(host_skill("same-skill", "Host skill body."));
+    opts.prompt_templates.push_back(host_template("same-template", "Host template body."));
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    REQUIRE(result->session->skills().size() == 1);
+    CHECK(result->session->skills()[0].content == "Host skill body.");
+    REQUIRE(result->session->templates().size() == 1);
+    CHECK(result->session->templates()[0].content == "Host template body.");
+    CHECK(has_sdk_diag(result->diagnostics, "duplicate:duplicate_skill_skipped"));
+    CHECK(has_sdk_diag(result->diagnostics, "duplicate:duplicate_template_skipped"));
+    CHECK(result->session->close().has_value());
+}
+
+TEST_CASE("SDK returns trust and adapter diagnostics as values", "[sdk][project-resources]") {
+    TestPaths paths;
+    paths.workspace.write(".cpp-harness/trust.json", "{not json");
+    paths.workspace.write(
+        ".cpp-harness/skills/bad/SKILL.md",
+        "---\n"
+        "name: bad\n"
+        "description:\n"
+        "---\n"
+        "Body.\n");
+
+    coding_agent::CreateAgentSessionOptions untrusted_opts;
+    untrusted_opts.session_path = paths.session_file;
+    untrusted_opts.workspace = paths.workspace.path();
+    untrusted_opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    untrusted_opts.load_project_resources = true;
+
+    auto untrusted = coding_agent::create_agent_session(std::move(untrusted_opts));
+    REQUIRE(untrusted.has_value());
+    CHECK(has_sdk_diag(untrusted->diagnostics, "trust:trust_store_unavailable"));
+    CHECK(has_sdk_diag(untrusted->diagnostics, "resource:project_skills"));
+    CHECK(untrusted->session->skills().empty());
+    CHECK(untrusted->session->close().has_value());
+
+    TestPaths trusted_paths;
+    trusted_paths.workspace.write(
+        ".cpp-harness/skills/bad/SKILL.md",
+        "---\n"
+        "name: bad\n"
+        "description:\n"
+        "---\n"
+        "Body.\n");
+
+    coding_agent::CreateAgentSessionOptions trusted_opts;
+    trusted_opts.session_path = trusted_paths.session_file;
+    trusted_opts.workspace = trusted_paths.workspace.path();
+    trusted_opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    trusted_opts.load_project_resources = true;
+    trusted_opts.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+
+    auto trusted = coding_agent::create_agent_session(std::move(trusted_opts));
+    REQUIRE(trusted.has_value());
+    CHECK(has_sdk_diag(trusted->diagnostics, "skill:invalid_metadata"));
+    CHECK(trusted->session->skills().empty());
+    CHECK(trusted->session->close().has_value());
+}
+
+TEST_CASE("SDK project resource diagnostics are not printed during creation", "[sdk][project-resources]") {
+    TestPaths paths;
+    paths.workspace.write(
+        ".cpp-harness/prompts/bad.md",
+        "---\n"
+        "bad line without colon\n"
+        "---\n"
+        "Body.\n");
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.load_project_resources = true;
+    opts.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+
+    std::ostringstream captured_out;
+    std::ostringstream captured_err;
+    auto* old_out = std::cout.rdbuf(captured_out.rdbuf());
+    auto* old_err = std::cerr.rdbuf(captured_err.rdbuf());
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    std::cout.rdbuf(old_out);
+    std::cerr.rdbuf(old_err);
+
+    REQUIRE(result.has_value());
+    CHECK(has_sdk_diag(result->diagnostics, "template:parse_failed"));
+    CHECK(captured_out.str().empty());
+    CHECK(captured_err.str().empty());
+    CHECK(result->session->close().has_value());
 }
 
 TEST_CASE("SDK duplicate command names fail creation", "[sdk][u4]") {

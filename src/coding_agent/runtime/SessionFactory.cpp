@@ -5,8 +5,6 @@
 #include "../../../include/cch/coding_agent/ProjectResources.hpp"
 #include "../../../include/cch/coding_agent/ProjectTrust.hpp"
 #include "coding_agent/ProjectResourceLoader.hpp"
-#include "coding_agent/SkillLoader.hpp"
-#include "coding_agent/PromptTemplateLoader.hpp"
 #include "../../../include/cch/tools/ToolFactories.hpp"
 #include "../../../include/cch/util/Error.hpp"
 #include "../../harness/WorkspaceFileSystem.hpp"
@@ -583,114 +581,30 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
     if (options.load_project_resources) {
         auto fs = harness::WorkspaceFileSystem::create(open.workspace);
         if (fs) {
-            auto default_trust = options.default_project_trust.value_or(DefaultProjectTrust::Ask);
-            auto skill_enablement = options.project_skills_enablement.value_or(ResourceEnablement::Auto);
-
-            ProjectTrustStore trust_store(open.workspace / ".cpp-harness" / "trust.json");
-
             ProjectResourcePolicy policy;
-            policy.project_skills = skill_enablement;
+            policy.project_skills = options.project_skills_enablement.value_or(ResourceEnablement::Auto);
 
-            auto detection = detect_project_resources(*fs);
-            bool needs_trust = needs_project_trust_resolution(detection, policy);
+            ProjectResourceLoadingRequest resource_request;
+            resource_request.workspace = open.workspace;
+            resource_request.policy = policy;
+            resource_request.default_project_trust =
+                options.default_project_trust.value_or(DefaultProjectTrust::Ask);
+            resource_request.host_skills = std::move(skills);
+            resource_request.host_prompt_templates = std::move(templates);
 
-            auto trust_resolution = resolve_project_trust(
-                open.workspace,
-                needs_trust,
+            ProjectTrustStore trust_store{open.workspace / ".cpp-harness" / "trust.json"};
+            auto resource_loading = load_project_resources(
+                *fs,
                 trust_store,
-                default_trust,
-                std::nullopt);
-
-            auto load_plan = build_project_resource_load_plan(detection, policy, trust_resolution);
-
-            for (const auto& td : trust_resolution.diagnostics) {
-                auto sev = SdkDiagnostic::Severity::Warning;
-                if (td.severity == ProjectTrustDiagnosticSeverity::Error) {
-                    sev = SdkDiagnostic::Severity::Error;
-                } else if (td.severity == ProjectTrustDiagnosticSeverity::Info) {
-                    sev = SdkDiagnostic::Severity::Info;
-                }
-                diagnostics.push_back(make_diag(sev, td.code, td.message, td.path));
-            }
-
-            for (const auto& rd : load_plan.diagnostics) {
-                auto sev = SdkDiagnostic::Severity::Warning;
-                if (rd.severity == ResourceDiagnosticSeverity::Error) {
-                    sev = SdkDiagnostic::Severity::Error;
-                } else if (rd.severity == ResourceDiagnosticSeverity::Info) {
-                    sev = SdkDiagnostic::Severity::Info;
-                }
-                diagnostics.push_back(make_diag(sev, rd.code, rd.message, rd.path));
-            }
-
-            if (project_skills_allowed(load_plan)) {
-                std::vector<SkillDirSpec> skill_dirs;
-                auto skills_dir = open.workspace / ".cpp-harness" / "skills";
-                skill_dirs.push_back({.path = skills_dir.string(), .includeRootFiles = false});
-
-                auto skill_load = loadSkills(*fs, skill_dirs);
-
-                std::set<std::string> host_names;
-                for (const auto& s : skills) {
-                    host_names.insert(s.name);
-                }
-                for (auto& s : skill_load.skills) {
-                    if (host_names.contains(s.name)) {
-                        diagnostics.push_back(make_diag(
-                            SdkDiagnostic::Severity::Info,
-                            "duplicate_skill_skipped",
-                            std::format("project skill '{}' skipped: host-provided skill takes precedence", s.name),
-                            s.filePath));
-                    } else {
-                        skills.push_back(std::move(s));
-                    }
-                }
-
-                for (const auto& sd : skill_load.diagnostics) {
-                    diagnostics.push_back(make_diag(
-                        SdkDiagnostic::Severity::Warning,
-                        "skill_load",
-                        sd.message,
-                        sd.path));
-                }
-            }
-
-            if (project_prompts_allowed(load_plan)) {
-                std::vector<PromptTemplateDirSpec> prompt_specs;
-                auto prompts_dir = open.workspace / ".cpp-harness" / "prompts";
-                prompt_specs.push_back({.path = prompts_dir.string(), .is_file = false});
-
-                auto prompt_load = loadPromptTemplates(*fs, prompt_specs);
-
-                std::set<std::string> host_tmpl_names;
-                for (const auto& t : templates) {
-                    host_tmpl_names.insert(t.name);
-                }
-                for (auto& t : prompt_load.templates) {
-                    if (host_tmpl_names.contains(t.name)) {
-                        diagnostics.push_back(make_diag(
-                            SdkDiagnostic::Severity::Info,
-                            "duplicate_template_skipped",
-                            std::format("project template '{}' skipped: host-provided template takes precedence", t.name),
-                            std::nullopt));
-                    } else {
-                        templates.push_back(std::move(t));
-                    }
-                }
-
-                for (const auto& pd : prompt_load.diagnostics) {
-                    diagnostics.push_back(make_diag(
-                        SdkDiagnostic::Severity::Warning,
-                        "template_load",
-                        pd.message,
-                        pd.path));
-                }
-            }
+                std::move(resource_request));
+            add_project_resource_loading_diagnostics(diagnostics, resource_loading);
+            skills = std::move(resource_loading.resources.skills);
+            templates = std::move(resource_loading.resources.prompt_templates);
         } else {
             diagnostics.push_back(make_diag(
                 SdkDiagnostic::Severity::Warning,
-                "workspace_fs_failed",
-                "Could not create workspace filesystem for project resource discovery",
+                "resource:workspace_fs_unavailable",
+                fs.error().message,
                 open.workspace.string()));
         }
     }
