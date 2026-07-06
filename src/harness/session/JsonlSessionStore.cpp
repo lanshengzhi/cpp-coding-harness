@@ -1,13 +1,12 @@
 #include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
 #include "../../../include/cch/harness/session/SessionTree.hpp"
 #include "EntrySerializer.hpp"
+#include "SessionLeaf.hpp"
 #include "SessionJournal.hpp"
 
 #include <filesystem>
 #include <string>
-#include <unordered_set>
 #include <utility>
-#include <variant>
 
 namespace cch::harness::session {
 
@@ -19,41 +18,6 @@ struct JsonlSessionStore::Impl {
     std::optional<std::string> active_append_parent_id;
     bool persist_leaf_after_message_append{false};
 };
-
-namespace {
-
-[[nodiscard]] std::optional<std::string> leaf_target_id(const SessionEntry& entry) {
-    if (const auto* leaf = std::get_if<LeafEntryValue>(&entry.value)) {
-        return leaf->target_id;
-    }
-    return std::nullopt;
-}
-
-[[nodiscard]] std::optional<std::string> latest_valid_leaf_target(const LoadedSession& loaded) {
-    std::unordered_set<std::string> known_ids;
-    for (const auto& entry : loaded.entries) {
-        if (entry.kind == SessionEntryKind::Header ||
-            entry.kind == SessionEntryKind::Unknown ||
-            entry.entry_id.empty()) {
-            continue;
-        }
-        known_ids.insert(entry.entry_id);
-    }
-
-    for (auto it = loaded.entries.rbegin(); it != loaded.entries.rend(); ++it) {
-        if (it->kind != SessionEntryKind::Leaf) {
-            continue;
-        }
-        auto target = leaf_target_id(*it);
-        if (target.has_value() && known_ids.contains(*target)) {
-            return target;
-        }
-    }
-
-    return std::nullopt;
-}
-
-} // namespace
 
 JsonlSessionStore::~JsonlSessionStore() = default;
 JsonlSessionStore::JsonlSessionStore(JsonlSessionStore&&) = default;
@@ -100,8 +64,9 @@ util::Expected<JsonlSessionStore> JsonlSessionStore::open_existing(const std::fi
     store.impl_->metadata = loaded->metadata;
     store.impl_->journal = std::move(*journal);
     store.impl_->next_entry_id = loaded->entries.size();
-    if (auto active_leaf = latest_valid_leaf_target(*loaded)) {
-        store.impl_->active_append_parent_id = std::move(active_leaf);
+    auto active_leaf = select_active_leaf_target(loaded->entries);
+    if (active_leaf.saw_leaf_marker) {
+        store.impl_->active_append_parent_id = std::move(active_leaf.target_id);
         store.impl_->persist_leaf_after_message_append = true;
     }
     return store;

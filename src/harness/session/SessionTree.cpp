@@ -2,6 +2,7 @@
 
 #include "../../../include/cch/ai/Message.hpp"
 #include "../../../include/cch/util/Error.hpp"
+#include "SessionLeaf.hpp"
 
 #include <algorithm>
 #include <set>
@@ -92,25 +93,8 @@ std::vector<const SessionEntry*> SessionTree::getChildren(std::string_view paren
 // ── Leaf navigation ──
 
 void SessionTree::restore_leaf_position() {
-    // Scan entries in reverse for the last Leaf entry.
-    for (auto it = entries_.rbegin(); it != entries_.rend(); ++it) {
-        if (it->kind == SessionEntryKind::Leaf) {
-            const auto* leaf = std::get_if<LeafEntryValue>(&it->value);
-            if (leaf != nullptr && leaf->target_id.has_value() && getEntry(*leaf->target_id) != nullptr) {
-                leaf_id_ = *leaf->target_id;
-                return;
-            }
-        }
-    }
-
-    // No Leaf entry found or target invalid: fall back to the last navigable
-    // entry rather than treating the stale Leaf marker as the active leaf.
-    for (auto it = entries_.rbegin(); it != entries_.rend(); ++it) {
-        if (it->kind != SessionEntryKind::Leaf && !it->entry_id.empty()) {
-            leaf_id_ = it->entry_id;
-            return;
-        }
-    }
+    auto active_leaf = select_active_leaf_target(entries_);
+    leaf_id_ = active_leaf.target_id.value_or("");
 }
 
 const SessionEntry* SessionTree::leaf_entry() const {

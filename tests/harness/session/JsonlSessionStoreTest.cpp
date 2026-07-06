@@ -595,6 +595,55 @@ TEST_CASE("open_existing succeeds and allows append on session with tree entries
     CHECK(text_from_message(loaded->messages[1]) == "second message");
 }
 
+TEST_CASE("open_existing appends after stale latest leaf marker at last navigable entry", "[harness][session][u9]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "stale-leaf-append.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(user_message("first")));
+    REQUIRE(store->append(user_message("second")));
+    REQUIRE(store->append(user_message("third")));
+
+    auto pre = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(pre);
+    REQUIRE(pre->entries.size() >= 4);
+    const auto first_id = pre->entries[1].entry_id;
+    const auto third_id = pre->entries[3].entry_id;
+
+    auto resumed = harness::session::JsonlSessionStore::open_existing(path);
+    REQUIRE(resumed);
+    REQUIRE(resumed->append_leaf(std::nullopt, first_id));
+    REQUIRE(resumed->append_leaf(std::nullopt, "missing-entry"));
+
+    auto reopened = harness::session::JsonlSessionStore::open_existing(path);
+    REQUIRE(reopened);
+    REQUIRE(reopened->append(user_message("after stale leaf")));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+
+    const harness::session::SessionEntry* appended = nullptr;
+    const harness::session::SessionEntry* latest_leaf = nullptr;
+    for (const auto& entry : loaded->entries) {
+        if (entry.kind == harness::session::SessionEntryKind::Message &&
+            entry.message.has_value() &&
+            text_from_message(*entry.message) == "after stale leaf") {
+            appended = &entry;
+        }
+        if (entry.kind == harness::session::SessionEntryKind::Leaf) {
+            latest_leaf = &entry;
+        }
+    }
+
+    REQUIRE(appended != nullptr);
+    REQUIRE(appended->parent_id.has_value());
+    CHECK(*appended->parent_id == third_id);
+    REQUIRE(latest_leaf != nullptr);
+    const auto& leaf = require_entry_value<harness::session::LeafEntryValue>(*latest_leaf);
+    REQUIRE(leaf.target_id.has_value());
+    CHECK(*leaf.target_id == appended->entry_id);
+}
+
 TEST_CASE("extended message types survive session append and load", "[harness][session][extended]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "extended-messages.jsonl";

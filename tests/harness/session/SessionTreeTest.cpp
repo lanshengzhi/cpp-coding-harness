@@ -648,6 +648,62 @@ TEST_CASE("append_leaf round-trips and restores leaf position", "[harness][sessi
     CHECK(tree->leaf_id() == second_id);
 }
 
+TEST_CASE("SessionTree ignores a stale latest leaf marker and falls back to last navigable entry", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "leaf-stale-latest.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(user_msg("first")));
+    REQUIRE(store->append(user_msg("second")));
+    REQUIRE(store->append(user_msg("third")));
+
+    auto pre = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(pre);
+    REQUIRE(pre->entries.size() >= 4);
+    const auto first_id = pre->entries[1].entry_id;
+    const auto third_id = pre->entries[3].entry_id;
+
+    auto resumed = harness::session::JsonlSessionStore::open_existing(path);
+    REQUIRE(resumed);
+    REQUIRE(resumed->append_leaf(std::nullopt, first_id));
+    REQUIRE(resumed->append_leaf(std::nullopt, "missing-entry"));
+
+    auto tree = harness::session::JsonlSessionStore::open_as_tree(path);
+    REQUIRE(tree.has_value());
+    CHECK(tree->leaf_id() == third_id);
+}
+
+TEST_CASE("SessionTree restores leaf from typed value instead of payload target field", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    harness::session::LoadedSession loaded;
+    loaded.metadata = test_metadata(workspace);
+
+    harness::session::SessionEntry first;
+    first.kind = harness::session::SessionEntryKind::Message;
+    first.entry_id = "first001";
+    first.message = user_msg("first");
+    loaded.entries.push_back(std::move(first));
+
+    harness::session::SessionEntry second;
+    second.kind = harness::session::SessionEntryKind::Message;
+    second.entry_id = "second01";
+    second.parent_id = "first001";
+    second.message = user_msg("second");
+    loaded.entries.push_back(std::move(second));
+
+    harness::session::SessionEntry leaf;
+    leaf.kind = harness::session::SessionEntryKind::Leaf;
+    leaf.entry_id = "leaf0001";
+    leaf.value = harness::session::LeafEntryValue{.target_id = std::string{"first001"}};
+    leaf.payload = util::JsonValue{util::JsonValue::object_t{
+        {"targetId", util::JsonValue{"second01"}},
+    }};
+    loaded.entries.push_back(std::move(leaf));
+
+    harness::session::SessionTree tree(std::move(loaded));
+    CHECK(tree.leaf_id() == "first001");
+}
+
 TEST_CASE("open_as_tree missing file returns error", "[harness][session][tree]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "nonexistent.jsonl";
