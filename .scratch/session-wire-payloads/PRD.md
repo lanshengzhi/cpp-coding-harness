@@ -1,6 +1,6 @@
 # PRD: Stop Leaking Session Wire Payloads
 
-Status: in-progress
+Status: implemented
 
 ## Problem Statement
 
@@ -107,6 +107,6 @@ gating, and simple linear session append should not change.
 ## Implementation Progress
 
 - Issue 01 implemented by `e10feaa Introduce typed session entry values`.
-- Issue 02 implemented by moving session tree context reconstruction to typed entry values.
-- Issue 03 is ready for a fresh implementation session.
-- Issue 04 remains blocked by issues 02 and 03.
+- Issue 02 implemented by `0b4ffe7 Use typed session values for tree context`.
+- Issue 03 implemented by `974a156 Fix typed leaf resume continuation`.
+- Issue 04 implemented by `9b05f9f Harden session serializer boundary tests`.
