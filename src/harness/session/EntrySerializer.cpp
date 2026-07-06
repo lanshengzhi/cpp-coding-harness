@@ -42,6 +42,7 @@ struct MessageEntryDto {
     std::string id;
     std::optional<std::string> parentId;
     std::optional<std::string> leafId;
+    std::optional<std::string> timestamp;
     ai::glaze::MessageDto message;
 };
 
@@ -192,6 +193,80 @@ template <typename T>
     return oss.str();
 }
 
+[[nodiscard]] std::optional<int> parse_fixed_int(std::string_view text, std::size_t offset, std::size_t count) {
+    if (offset + count > text.size()) {
+        return std::nullopt;
+    }
+
+    int value = 0;
+    for (std::size_t i = 0; i < count; ++i) {
+        const char ch = text[offset + i];
+        if (ch < '0' || ch > '9') {
+            return std::nullopt;
+        }
+        value = value * 10 + (ch - '0');
+    }
+    return value;
+}
+
+[[nodiscard]] std::int64_t days_from_civil(int year, unsigned month, unsigned day) {
+    year -= month <= 2 ? 1 : 0;
+    const int era = (year >= 0 ? year : year - 399) / 400;
+    const auto yoe = static_cast<unsigned>(year - era * 400);
+    const unsigned doy = (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1;
+    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return static_cast<std::int64_t>(era) * 146097 + static_cast<std::int64_t>(doe) - 719468;
+}
+
+[[nodiscard]] ai::TimestampMs parse_iso_timestamp_ms(std::string_view timestamp) {
+    if (timestamp.size() < 20 ||
+        timestamp[4] != '-' ||
+        timestamp[7] != '-' ||
+        (timestamp[10] != 'T' && timestamp[10] != ' ') ||
+        timestamp[13] != ':' ||
+        timestamp[16] != ':') {
+        return 0;
+    }
+
+    const auto year = parse_fixed_int(timestamp, 0, 4);
+    const auto month = parse_fixed_int(timestamp, 5, 2);
+    const auto day = parse_fixed_int(timestamp, 8, 2);
+    const auto hour = parse_fixed_int(timestamp, 11, 2);
+    const auto minute = parse_fixed_int(timestamp, 14, 2);
+    const auto second = parse_fixed_int(timestamp, 17, 2);
+    if (!year || !month || !day || !hour || !minute || !second) {
+        return 0;
+    }
+
+    std::size_t zone_pos = 19;
+    int millis = 0;
+    if (timestamp[zone_pos] == '.') {
+        ++zone_pos;
+        int scale = 100;
+        int digits = 0;
+        while (zone_pos < timestamp.size() && timestamp[zone_pos] >= '0' && timestamp[zone_pos] <= '9') {
+            if (digits < 3) {
+                millis += (timestamp[zone_pos] - '0') * scale;
+                scale /= 10;
+                ++digits;
+            }
+            ++zone_pos;
+        }
+    }
+
+    if (zone_pos >= timestamp.size() || timestamp[zone_pos] != 'Z') {
+        return 0;
+    }
+
+    const auto days = days_from_civil(
+        *year,
+        static_cast<unsigned>(*month),
+        static_cast<unsigned>(*day));
+    const auto total_seconds =
+        (((days * 24 + *hour) * 60 + *minute) * 60 + *second);
+    return total_seconds * 1000 + millis;
+}
+
 [[nodiscard]] WriteHeaderDto to_dto(const SessionMetadata& metadata) {
     return WriteHeaderDto{
         "session",
@@ -278,6 +353,16 @@ template <typename Dto>
 void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
     entry.entry_id = dto.id;
     entry.parent_id = dto.parentId;
+    if constexpr (requires { dto.timestamp; }) {
+        using TimestampField = std::remove_cvref_t<decltype(dto.timestamp)>;
+        if constexpr (std::is_same_v<TimestampField, std::optional<std::string>>) {
+            if (dto.timestamp.has_value()) {
+                entry.timestamp = parse_iso_timestamp_ms(*dto.timestamp);
+            }
+        } else {
+            entry.timestamp = parse_iso_timestamp_ms(dto.timestamp);
+        }
+    }
 }
 
 [[nodiscard]] std::optional<util::JsonValue> optional_json_field(
@@ -474,6 +559,9 @@ util::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<std
             entry.entry_id = !dto->entryId.empty() ? dto->entryId : dto->id;
             entry.parent_id = dto->parentId;
             entry.leaf_id = dto->leafId;
+            if (dto->timestamp.has_value()) {
+                entry.timestamp = parse_iso_timestamp_ms(*dto->timestamp);
+            }
             entry.message = *message;
             entry.payload = std::move(payload);
             entry.raw_line = stored_line;

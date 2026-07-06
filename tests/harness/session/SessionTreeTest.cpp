@@ -4,14 +4,28 @@
 #include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
 #include "../../support/TempWorkspace.hpp"
 
+#include <fstream>
 #include <string>
 #include <variant>
+
+#if defined(__unix__) || defined(__APPLE__)
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 using namespace cch;
 
 namespace {
 harness::session::SessionMetadata test_metadata(const tests::TempWorkspace& workspace) {
     return {"session-test", "2026-06-10T00:00:00Z", workspace.path(), "fake", "fake-model"};
+}
+
+void make_private(const std::filesystem::path& path) {
+#if defined(__unix__) || defined(__APPLE__)
+    chmod(path.c_str(), S_IRUSR | S_IWUSR);
+#else
+    (void)path;
+#endif
 }
 } // namespace
 
@@ -412,6 +426,144 @@ TEST_CASE("buildSessionContext custom message converted", "[harness][session][tr
     CHECK(cm.custom_type == "my-ext");
     REQUIRE_FALSE(cm.content.empty());
     CHECK(std::get<ai::TextContent>(cm.content.front()).text == "injected");
+}
+
+TEST_CASE("buildSessionContext uses typed timestamps for extended entries", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "ctx-typed-timestamps.jsonl";
+
+    std::ofstream output(path);
+    REQUIRE(output.good());
+    output << "{\"type\":\"session\",\"version\":3,\"id\":\"sess-v3\","
+              "\"timestamp\":\"2026-07-05T00:00:00.000Z\",\"cwd\":\""
+           << workspace.path().string()
+           << "\",\"provider\":\"fake\",\"model\":\"fake-model\"}\n";
+    output << "{\"type\":\"message\",\"id\":\"msg001\",\"parentId\":null,"
+              "\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"root\"}],"
+              "\"timestamp\":1783209600100}}\n";
+    output << "{\"type\":\"custom_message\",\"id\":\"cust001\",\"parentId\":\"msg001\","
+              "\"timestamp\":\"2026-07-05T00:00:01.234Z\",\"customType\":\"ext\","
+              "\"content\":\"injected\",\"display\":true}\n";
+    output << "{\"type\":\"branch_summary\",\"id\":\"branch001\",\"parentId\":\"cust001\","
+              "\"timestamp\":\"2026-07-05T00:00:02.345Z\",\"fromId\":\"oldleaf\","
+              "\"summary\":\"branch summary\"}\n";
+    output << "{\"type\":\"compaction\",\"id\":\"compact1\",\"parentId\":\"branch001\","
+              "\"timestamp\":\"2026-07-05T00:00:03.456Z\",\"summary\":\"compact summary\","
+              "\"firstKeptEntryId\":\"msg001\",\"tokensBefore\":42}\n";
+    output.close();
+    make_private(path);
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    harness::session::SessionTree tree(std::move(*loaded));
+
+    auto ctx = tree.buildSessionContext();
+    REQUIRE(ctx.messages.size() == 4);
+
+    const auto& compaction = std::get<ai::CompactionSummaryMessage>(ctx.messages[0]);
+    CHECK(compaction.summary == "compact summary");
+    CHECK(compaction.tokens_before == 42);
+    CHECK(compaction.timestamp == 1783209603456);
+
+    const auto& custom = std::get<ai::CustomMessage>(ctx.messages[2]);
+    CHECK(custom.custom_type == "ext");
+    CHECK(custom.timestamp == 1783209601234);
+
+    const auto& branch = std::get<ai::BranchSummaryMessage>(ctx.messages[3]);
+    CHECK(branch.summary == "branch summary");
+    CHECK(branch.from_id == "oldleaf");
+    CHECK(branch.timestamp == 1783209602345);
+}
+
+TEST_CASE("buildSessionContext ignores misleading payload fields for known entries", "[harness][session][tree]") {
+    tests::TempWorkspace workspace;
+    harness::session::LoadedSession loaded;
+    loaded.metadata = test_metadata(workspace);
+
+    harness::session::SessionEntry model;
+    model.kind = harness::session::SessionEntryKind::ModelChange;
+    model.entry_id = "model001";
+    model.value = harness::session::ModelChangeValue{.provider = "typed-provider", .model_id = "typed-model"};
+    model.payload = util::JsonValue{util::JsonValue::object_t{
+        {"modelId", util::JsonValue{"payload-model"}},
+    }};
+    loaded.entries.push_back(std::move(model));
+
+    harness::session::SessionEntry thinking;
+    thinking.kind = harness::session::SessionEntryKind::ThinkingLevelChange;
+    thinking.entry_id = "think001";
+    thinking.parent_id = "model001";
+    thinking.value = harness::session::ThinkingLevelChangeValue{.thinking_level = "typed-thinking"};
+    thinking.payload = util::JsonValue{util::JsonValue::object_t{
+        {"thinkingLevel", util::JsonValue{"payload-thinking"}},
+    }};
+    loaded.entries.push_back(std::move(thinking));
+
+    harness::session::SessionEntry custom;
+    custom.kind = harness::session::SessionEntryKind::CustomMessage;
+    custom.entry_id = "custom01";
+    custom.parent_id = "think001";
+    custom.value = harness::session::CustomMessageEntryValue{
+        .custom_type = "typed-ext",
+        .content = "typed content",
+        .display = true,
+        .details = std::nullopt,
+    };
+    custom.payload = util::JsonValue{util::JsonValue::object_t{
+        {"customType", util::JsonValue{"payload-ext"}},
+        {"content", util::JsonValue{"payload content"}},
+    }};
+    loaded.entries.push_back(std::move(custom));
+
+    harness::session::SessionEntry branch;
+    branch.kind = harness::session::SessionEntryKind::BranchSummary;
+    branch.entry_id = "branch01";
+    branch.parent_id = "custom01";
+    branch.value = harness::session::BranchSummaryEntryValue{
+        .from_id = "typed-from",
+        .summary = "typed branch",
+        .details = std::nullopt,
+        .from_hook = std::nullopt,
+    };
+    branch.payload = util::JsonValue{util::JsonValue::object_t{
+        {"fromId", util::JsonValue{"payload-from"}},
+        {"summary", util::JsonValue{"payload branch"}},
+    }};
+    loaded.entries.push_back(std::move(branch));
+
+    harness::session::SessionEntry compaction;
+    compaction.kind = harness::session::SessionEntryKind::Compaction;
+    compaction.entry_id = "compact1";
+    compaction.parent_id = "branch01";
+    compaction.value = harness::session::CompactionEntryValue{
+        .summary = "typed compact",
+        .first_kept_entry_id = "custom01",
+        .tokens_before = 77,
+        .details = std::nullopt,
+        .from_hook = std::nullopt,
+    };
+    compaction.payload = util::JsonValue{util::JsonValue::object_t{
+        {"summary", util::JsonValue{"payload compact"}},
+        {"firstKeptEntryId", util::JsonValue{"missing"}},
+        {"tokensBefore", util::JsonValue{999}},
+    }};
+    loaded.entries.push_back(std::move(compaction));
+
+    harness::session::SessionTree tree(std::move(loaded));
+    auto ctx = tree.buildSessionContext();
+
+    CHECK(ctx.model == "typed-model");
+    CHECK(ctx.thinking_level == "typed-thinking");
+    REQUIRE(ctx.messages.size() == 3);
+    const auto& compact_msg = std::get<ai::CompactionSummaryMessage>(ctx.messages[0]);
+    CHECK(compact_msg.summary == "typed compact");
+    CHECK(compact_msg.tokens_before == 77);
+    const auto& custom_msg = std::get<ai::CustomMessage>(ctx.messages[1]);
+    CHECK(custom_msg.custom_type == "typed-ext");
+    CHECK(std::get<ai::TextContent>(custom_msg.content.front()).text == "typed content");
+    const auto& branch_msg = std::get<ai::BranchSummaryMessage>(ctx.messages[2]);
+    CHECK(branch_msg.summary == "typed branch");
+    CHECK(branch_msg.from_id == "typed-from");
 }
 
 TEST_CASE("buildSessionContext empty tree returns empty context", "[harness][session][tree]") {

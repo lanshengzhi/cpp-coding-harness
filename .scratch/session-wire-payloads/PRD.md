@@ -107,5 +107,6 @@ gating, and simple linear session append should not change.
 ## Implementation Progress
 
 - Issue 01 implemented by `e10feaa Introduce typed session entry values`.
-- Issues 02 and 03 are ready for fresh implementation sessions.
+- Issue 02 implemented by moving session tree context reconstruction to typed entry values.
+- Issue 03 is ready for a fresh implementation session.
 - Issue 04 remains blocked by issues 02 and 03.

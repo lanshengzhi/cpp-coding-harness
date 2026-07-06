@@ -222,6 +222,7 @@ SessionContext SessionTree::buildSessionContext() const {
         if (!summary_text.empty()) {
             ai::CompactionSummaryMessage csm;
             csm.summary = summary_text;
+            csm.timestamp = compaction->timestamp;
             if (const auto* value = std::get_if<CompactionEntryValue>(&compaction->value)) {
                 csm.tokens_before = static_cast<decltype(csm.tokens_before)>(value->tokens_before);
             }
@@ -270,6 +271,7 @@ void SessionTree::emitEntryMessage(SessionContext& ctx, const SessionEntry* entr
             bsm.summary = value->summary;
             bsm.from_id = value->from_id;
         }
+        bsm.timestamp = entry->timestamp;
         ctx.messages.emplace_back(std::move(bsm));
     } else if (entry->kind == SessionEntryKind::CustomMessage) {
         ai::CustomMessage cm;
@@ -279,6 +281,7 @@ void SessionTree::emitEntryMessage(SessionContext& ctx, const SessionEntry* entr
             cm.display = value->display;
             cm.details = value->details;
         }
+        cm.timestamp = entry->timestamp;
         ctx.messages.emplace_back(std::move(cm));
     }
 }

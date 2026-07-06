@@ -1,6 +1,6 @@
 # Move SessionTree context reconstruction to typed values
 
-Status: ready-for-agent
+Status: implemented
 
 ## Parent
 
@@ -21,16 +21,26 @@ fields, branch summary fields, or custom message fields.
 
 ## Acceptance criteria
 
-- [ ] Session tree context reconstruction reads model change values from typed entries.
-- [ ] Session tree context reconstruction reads thinking-level values from typed entries.
-- [ ] Compaction context reconstruction reads summary, first-kept entry ID, and token metadata from typed entries.
-- [ ] Branch summary entries are converted to branch summary messages from typed values.
-- [ ] Custom message entries are converted to custom messages from typed values.
-- [ ] Generic JSON payload lookup is not used for known-entry context reconstruction.
-- [ ] Existing linear, branched, and compacted resume behavior is unchanged.
-- [ ] Session tree tests cover the same user-visible behavior after the refactor.
-- [ ] Focused session tree and resume lifecycle tests pass.
+- [x] Session tree context reconstruction reads model change values from typed entries.
+- [x] Session tree context reconstruction reads thinking-level values from typed entries.
+- [x] Compaction context reconstruction reads summary, first-kept entry ID, and token metadata from typed entries.
+- [x] Branch summary entries are converted to branch summary messages from typed values.
+- [x] Custom message entries are converted to custom messages from typed values.
+- [x] Generic JSON payload lookup is not used for known-entry context reconstruction.
+- [x] Existing linear, branched, and compacted resume behavior is unchanged.
+- [x] Session tree tests cover the same user-visible behavior after the refactor.
+- [x] Focused session tree and resume lifecycle tests pass.
 
 ## Blocked by
 
 None - issue 01 is implemented.
+
+## Comments
+
+- Implemented by moving `SessionTree` context reconstruction to typed
+  `SessionEntryValue` alternatives for model, thinking-level, compaction,
+  branch summary, and custom message entries.
+- Kept wire field names and raw payload extraction inside `EntrySerializer`;
+  `SessionTree` tests now cover behavior with misleading known-entry payloads.
+- Verified with focused session store/tree, runtime resume, SDK topology, and
+  architecture test slices.

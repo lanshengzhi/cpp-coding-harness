@@ -107,6 +107,7 @@ struct SessionEntry {
     std::string entry_id;
     std::optional<std::string> parent_id;
     std::optional<std::string> leaf_id;
+    ai::TimestampMs timestamp{};
     std::optional<ai::MessageVariant> message;
     SessionEntryValue value;
     util::JsonValue payload;
