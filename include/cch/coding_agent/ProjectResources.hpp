@@ -73,6 +73,7 @@ struct ResourceLoadDecision {
 
 struct ProjectResourcePolicy {
     ResourceEnablement project_skills{ResourceEnablement::Auto};
+    ResourceEnablement project_prompts{ResourceEnablement::Auto};
 };
 
 struct ProjectResourceLoadPlan {

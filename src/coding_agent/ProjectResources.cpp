@@ -64,7 +64,15 @@ constexpr std::array<MarkerSpec, 7> kMarkers{{
     ProjectResourceKind kind) {
     switch (kind) {
     case ProjectResourceKind::ProjectSkills:
+        return policy.project_skills;
     case ProjectResourceKind::ProjectPrompts:
+        if (policy.project_skills == ResourceEnablement::Off ||
+            policy.project_prompts == ResourceEnablement::Off) {
+            return ResourceEnablement::Off;
+        }
+        if (policy.project_prompts == ResourceEnablement::On) {
+            return ResourceEnablement::On;
+        }
         return policy.project_skills;
     case ProjectResourceKind::ProjectSettings:
     case ProjectResourceKind::ProjectExtensions:
