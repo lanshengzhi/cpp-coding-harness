@@ -1,6 +1,6 @@
 # PRD: Stop Leaking Session Wire Payloads
 
-Status: ready-for-agent
+Status: in-progress
 
 ## Problem Statement
 
@@ -103,3 +103,9 @@ gating, and simple linear session append should not change.
 - Relevant pi references: `packages/coding-agent/docs/session-format.md`, `packages/coding-agent/src/core/session-manager.ts`, and `packages/agent/src/harness/types.ts`.
 - This PRD follows the repository guardrail that data is passive value state and serialization machinery stays local to implementation layers.
 - The expected module shape is a deeper session serializer/domain boundary: more wire compatibility behind the serializer, less JSON-key knowledge in tree logic and behavior tests.
+
+## Implementation Progress
+
+- Issue 01 implemented by `e10feaa Introduce typed session entry values`.
+- Issues 02 and 03 are ready for fresh implementation sessions.
+- Issue 04 remains blocked by issues 02 and 03.

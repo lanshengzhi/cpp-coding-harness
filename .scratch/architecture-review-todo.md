@@ -28,6 +28,10 @@ PRD plus exactly one issue.
   - Flow: `to-issues`
 - [ ] Implement each issue in a fresh session.
   - Flow: `implement`
+  - [x] Issue 01: introduce typed session entry values.
+  - [ ] Issue 02: move `SessionTree` context reconstruction to typed values.
+  - [ ] Issue 03: move leaf resume and append continuation off wire payloads.
+  - [ ] Issue 04: harden tests around the serializer boundary.
 
 Suggested PRD prompt:
 

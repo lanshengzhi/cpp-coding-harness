@@ -32,6 +32,5 @@ logic, while still preserving diagnostics and unknown-entry compatibility.
 
 ## Blocked by
 
-- .scratch/session-wire-payloads/issues/01-introduce-typed-session-entry-values.md
 - .scratch/session-wire-payloads/issues/02-move-session-tree-context-to-typed-values.md
 - .scratch/session-wire-payloads/issues/03-move-leaf-resume-and-append-continuation-off-wire-payloads.md

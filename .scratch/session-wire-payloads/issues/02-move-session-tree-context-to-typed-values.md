@@ -33,4 +33,4 @@ fields, branch summary fields, or custom message fields.
 
 ## Blocked by
 
-- .scratch/session-wire-payloads/issues/01-introduce-typed-session-entry-values.md
+None - issue 01 is implemented.

@@ -30,4 +30,4 @@ from the leaf path.
 
 ## Blocked by
 
-- .scratch/session-wire-payloads/issues/01-introduce-typed-session-entry-values.md
+None - issue 01 is implemented.
