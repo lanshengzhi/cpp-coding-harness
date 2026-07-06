@@ -172,30 +172,13 @@ constexpr std::string_view kHostClientModel = "host-client";
     return SdkDiagnostic::Severity::Warning;
 }
 
-[[nodiscard]] std::string_view diagnostic_category(ProjectResourceLoadingDiagnosticSource source) {
-    switch (source) {
-    case ProjectResourceLoadingDiagnosticSource::Trust:
-        return "trust";
-    case ProjectResourceLoadingDiagnosticSource::LoadPlan:
-        return "resource";
-    case ProjectResourceLoadingDiagnosticSource::SkillAdapter:
-        return "skill";
-    case ProjectResourceLoadingDiagnosticSource::PromptTemplateAdapter:
-        return "template";
-    case ProjectResourceLoadingDiagnosticSource::Duplicate:
-        return "duplicate";
-    }
-    return "resource";
-}
-
 void add_project_resource_loading_diagnostics(
     std::vector<SdkDiagnostic>& diagnostics,
     const ProjectResourceLoadingResult& loading) {
     for (const auto& diag : loading.diagnostics) {
-        const auto category = diagnostic_category(diag.source);
         diagnostics.push_back(make_diag(
             to_sdk_severity(diag.severity),
-            std::string{category} + ":" + diag.code,
+            project_resource_loading_diagnostic_code(diag),
             diag.message,
             diag.path));
     }

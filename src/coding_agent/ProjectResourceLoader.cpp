@@ -81,7 +81,7 @@ void add_trust_diagnostics(
     for (const auto& diagnostic : trust.diagnostics) {
         result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
             .severity = to_resource_severity(diagnostic.severity),
-            .source = ProjectResourceLoadingDiagnosticSource::Trust,
+            .category = ProjectResourceLoadingDiagnosticCategory::Trust,
             .code = diagnostic.code,
             .message = diagnostic.message,
             .path = diagnostic.path,
@@ -96,7 +96,7 @@ void add_load_plan_diagnostics(
     for (const auto& diagnostic : plan.diagnostics) {
         result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
             .severity = diagnostic.severity,
-            .source = ProjectResourceLoadingDiagnosticSource::LoadPlan,
+            .category = ProjectResourceLoadingDiagnosticCategory::LoadPlan,
             .code = diagnostic.code,
             .message = diagnostic.message,
             .path = diagnostic.path.empty() ? std::nullopt : std::optional<std::string>{diagnostic.path},
@@ -110,7 +110,7 @@ void add_load_plan_diagnostics(
         }
         result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
             .severity = ResourceDiagnosticSeverity::Info,
-            .source = ProjectResourceLoadingDiagnosticSource::LoadPlan,
+            .category = ProjectResourceLoadingDiagnosticCategory::LoadPlan,
             .code = to_string(decision.kind),
             .message = to_string(decision.kind) + " skipped: " + to_string(decision.reason),
             .path = decision.path.empty() ? std::nullopt : std::optional<std::string>{decision.path},
@@ -124,10 +124,16 @@ void add_skill_diagnostics(
     const SkillLoadResult& load,
     ProjectResourceKind kind) {
     for (const auto& diagnostic : load.diagnostics) {
+        auto category = ProjectResourceLoadingDiagnosticCategory::SkillAdapter;
+        auto code = to_code(diagnostic.code);
+        if (diagnostic.code == SkillDiagnosticCode::duplicate_name) {
+            category = ProjectResourceLoadingDiagnosticCategory::Duplicate;
+            code = "duplicate_skill_skipped";
+        }
         result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
             .severity = ResourceDiagnosticSeverity::Warning,
-            .source = ProjectResourceLoadingDiagnosticSource::SkillAdapter,
-            .code = to_code(diagnostic.code),
+            .category = category,
+            .code = std::move(code),
             .message = diagnostic.message,
             .path = diagnostic.path.empty() ? std::nullopt : std::optional<std::string>{diagnostic.path},
             .kind = kind,
@@ -140,10 +146,16 @@ void add_prompt_template_diagnostics(
     const PromptTemplateLoadResult& load,
     std::optional<ProjectResourceKind> kind) {
     for (const auto& diagnostic : load.diagnostics) {
+        auto category = ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter;
+        auto code = to_code(diagnostic.code);
+        if (diagnostic.code == PromptTemplateDiagnosticCode::duplicate_name) {
+            category = ProjectResourceLoadingDiagnosticCategory::Duplicate;
+            code = "duplicate_template_skipped";
+        }
         result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
             .severity = ResourceDiagnosticSeverity::Warning,
-            .source = ProjectResourceLoadingDiagnosticSource::PromptTemplateAdapter,
-            .code = to_code(diagnostic.code),
+            .category = category,
+            .code = std::move(code),
             .message = diagnostic.message,
             .path = diagnostic.path.empty() ? std::nullopt : std::optional<std::string>{diagnostic.path},
             .kind = kind,
@@ -161,7 +173,7 @@ void append_project_skills(
         if (names.skill_names.contains(skill.name)) {
             result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
                 .severity = ResourceDiagnosticSeverity::Info,
-                .source = ProjectResourceLoadingDiagnosticSource::Duplicate,
+                .category = ProjectResourceLoadingDiagnosticCategory::Duplicate,
                 .code = "duplicate_skill_skipped",
                 .message = std::format(
                     "project skill '{}' skipped: earlier resource takes precedence",
@@ -187,7 +199,7 @@ void append_prompt_templates(
         if (names.prompt_template_names.contains(tmpl.name)) {
             result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
                 .severity = ResourceDiagnosticSeverity::Info,
-                .source = ProjectResourceLoadingDiagnosticSource::Duplicate,
+                .category = ProjectResourceLoadingDiagnosticCategory::Duplicate,
                 .code = "duplicate_template_skipped",
                 .message = std::format(
                     "prompt template '{}' skipped: earlier resource takes precedence",
@@ -308,6 +320,29 @@ ProjectResourceLoadingResult load_project_resources(
     }
 
     return result;
+}
+
+std::string_view project_resource_loading_diagnostic_category_name(
+    ProjectResourceLoadingDiagnosticCategory category) {
+    switch (category) {
+    case ProjectResourceLoadingDiagnosticCategory::Trust:
+        return "trust";
+    case ProjectResourceLoadingDiagnosticCategory::LoadPlan:
+        return "resource";
+    case ProjectResourceLoadingDiagnosticCategory::SkillAdapter:
+        return "skill";
+    case ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter:
+        return "template";
+    case ProjectResourceLoadingDiagnosticCategory::Duplicate:
+        return "duplicate";
+    }
+    return "resource";
+}
+
+std::string project_resource_loading_diagnostic_code(
+    const ProjectResourceLoadingDiagnostic& diagnostic) {
+    return std::string{project_resource_loading_diagnostic_category_name(diagnostic.category)} +
+           ":" + diagnostic.code;
 }
 
 } // namespace cch::coding_agent

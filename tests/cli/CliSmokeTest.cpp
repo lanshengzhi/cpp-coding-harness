@@ -11,6 +11,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #if defined(__unix__) || defined(__APPLE__)
@@ -101,6 +102,19 @@ std::vector<std::string> non_empty_lines(const std::string& text) {
         }
     }
     return result;
+}
+
+std::size_t count_occurrences(std::string_view haystack, std::string_view needle) {
+    if (needle.empty()) {
+        return 0;
+    }
+    std::size_t count = 0;
+    std::size_t pos = 0;
+    while ((pos = haystack.find(needle, pos)) != std::string_view::npos) {
+        ++count;
+        pos += needle.size();
+    }
+    return count;
 }
 
 cch::util::JsonValue parse_json_line(const std::string& line) {
@@ -886,6 +900,7 @@ TEST_CASE("CLI JSON duplicate resource diagnostics stay off stdout", "[cli][json
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.find("[duplicate:info] duplicate_template_skipped") != std::string::npos);
+    CHECK(count_occurrences(result.stderr_text, "duplicate_template_skipped") == 1);
     for (const auto& line : non_empty_lines(result.stdout_text)) {
         (void)parse_json_line(line);
     }

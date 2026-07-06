@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace cch::harness {
@@ -16,7 +17,7 @@ class WorkspaceFileSystem;
 
 namespace cch::coding_agent {
 
-enum class ProjectResourceLoadingDiagnosticSource {
+enum class ProjectResourceLoadingDiagnosticCategory {
     Trust,
     LoadPlan,
     SkillAdapter,
@@ -26,7 +27,7 @@ enum class ProjectResourceLoadingDiagnosticSource {
 
 struct ProjectResourceLoadingDiagnostic {
     ResourceDiagnosticSeverity severity{ResourceDiagnosticSeverity::Warning};
-    ProjectResourceLoadingDiagnosticSource source{ProjectResourceLoadingDiagnosticSource::LoadPlan};
+    ProjectResourceLoadingDiagnosticCategory category{ProjectResourceLoadingDiagnosticCategory::LoadPlan};
     std::string code;
     std::string message;
     std::optional<std::string> path;
@@ -66,5 +67,11 @@ struct ProjectResourceLoadingResult {
     const harness::WorkspaceFileSystem& fs,
     const ProjectTrustStore& trust_store,
     ProjectResourceLoadingRequest request);
+
+[[nodiscard]] std::string_view project_resource_loading_diagnostic_category_name(
+    ProjectResourceLoadingDiagnosticCategory category);
+
+[[nodiscard]] std::string project_resource_loading_diagnostic_code(
+    const ProjectResourceLoadingDiagnostic& diagnostic);
 
 } // namespace cch::coding_agent

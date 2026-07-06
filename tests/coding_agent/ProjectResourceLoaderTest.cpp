@@ -62,25 +62,46 @@ const coding_agent::ResourceLoadDecision* find_decision(
     return it == plan.decisions.end() ? nullptr : &*it;
 }
 
+void require_decision_reason(
+    const coding_agent::ProjectResourceLoadPlan& plan,
+    coding_agent::ProjectResourceKind kind,
+    coding_agent::ResourceSkipReason reason) {
+    const auto* decision = find_decision(plan, kind);
+    REQUIRE(decision != nullptr);
+    CHECK(decision->reason == reason);
+}
+
 bool has_diag_source(
     const coding_agent::ProjectResourceLoadingResult& result,
-    coding_agent::ProjectResourceLoadingDiagnosticSource source) {
+    coding_agent::ProjectResourceLoadingDiagnosticCategory category) {
     return std::any_of(
         result.diagnostics.begin(),
         result.diagnostics.end(),
-        [source](const auto& diagnostic) { return diagnostic.source == source; });
+        [category](const auto& diagnostic) { return diagnostic.category == category; });
 }
 
 bool has_diag(
     const coding_agent::ProjectResourceLoadingResult& result,
-    coding_agent::ProjectResourceLoadingDiagnosticSource source,
+    coding_agent::ProjectResourceLoadingDiagnosticCategory category,
     std::string_view code) {
     return std::any_of(
         result.diagnostics.begin(),
         result.diagnostics.end(),
-        [source, code](const auto& diagnostic) {
-            return diagnostic.source == source && diagnostic.code == code;
+        [category, code](const auto& diagnostic) {
+            return diagnostic.category == category && diagnostic.code == code;
         });
+}
+
+std::size_t count_diag(
+    const coding_agent::ProjectResourceLoadingResult& result,
+    coding_agent::ProjectResourceLoadingDiagnosticCategory category,
+    std::string_view code) {
+    return static_cast<std::size_t>(std::count_if(
+        result.diagnostics.begin(),
+        result.diagnostics.end(),
+        [category, code](const auto& diagnostic) {
+            return diagnostic.category == category && diagnostic.code == code;
+        }));
 }
 
 } // namespace
@@ -130,8 +151,8 @@ TEST_CASE("project resource loader skips untrusted resources before parsing adap
     const auto* skill_decision = find_decision(result.load_plan, coding_agent::ProjectResourceKind::ProjectSkills);
     REQUIRE(skill_decision != nullptr);
     CHECK(skill_decision->reason == coding_agent::ResourceSkipReason::Untrusted);
-    CHECK_FALSE(has_diag_source(result, coding_agent::ProjectResourceLoadingDiagnosticSource::SkillAdapter));
-    CHECK_FALSE(has_diag_source(result, coding_agent::ProjectResourceLoadingDiagnosticSource::PromptTemplateAdapter));
+    CHECK_FALSE(has_diag_source(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::SkillAdapter));
+    CHECK_FALSE(has_diag_source(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter));
 }
 
 TEST_CASE("project resource loader skips disabled project resources without trust or parsing", "[coding_agent][project-resource-loader]") {
@@ -154,8 +175,8 @@ TEST_CASE("project resource loader skips disabled project resources without trus
     const auto* prompt_decision = find_decision(result.load_plan, coding_agent::ProjectResourceKind::ProjectPrompts);
     REQUIRE(prompt_decision != nullptr);
     CHECK(prompt_decision->reason == coding_agent::ResourceSkipReason::Disabled);
-    CHECK_FALSE(has_diag_source(result, coding_agent::ProjectResourceLoadingDiagnosticSource::SkillAdapter));
-    CHECK_FALSE(has_diag_source(result, coding_agent::ProjectResourceLoadingDiagnosticSource::PromptTemplateAdapter));
+    CHECK_FALSE(has_diag_source(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::SkillAdapter));
+    CHECK_FALSE(has_diag_source(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter));
 }
 
 TEST_CASE("project resource loader marks project prompts disabled when prompt templates are off", "[coding_agent][project-resource-loader]") {
@@ -174,25 +195,45 @@ TEST_CASE("project resource loader marks project prompts disabled when prompt te
     REQUIRE(prompt_decision != nullptr);
     CHECK(prompt_decision->reason == coding_agent::ResourceSkipReason::Disabled);
     CHECK(result.resources.prompt_templates.empty());
-    CHECK_FALSE(has_diag_source(result, coding_agent::ProjectResourceLoadingDiagnosticSource::PromptTemplateAdapter));
+    CHECK_FALSE(has_diag_source(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter));
 }
 
 TEST_CASE("project resource loader reports unsupported markers without resolving trust", "[coding_agent][project-resource-loader]") {
     LoaderFixture fix;
+    fix.write(".cpp-harness/settings.json", "{}");
     std::filesystem::create_directories(fix.workspace.path() / ".cpp-harness" / "extensions");
+    std::filesystem::create_directories(fix.workspace.path() / ".cpp-harness" / "packages");
+    fix.write(".cpp-harness/SYSTEM.md", "system");
+    fix.write(".cpp-harness/APPEND_SYSTEM.md", "append");
     fix.write("trust.json", "{not json");
 
     auto result = fix.load();
 
     CHECK(result.trust.source == coding_agent::ProjectTrustSource::NoProjectResources);
-    REQUIRE(result.load_plan.decisions.size() == 1);
-    CHECK(result.load_plan.decisions[0].kind == coding_agent::ProjectResourceKind::ProjectExtensions);
-    CHECK(result.load_plan.decisions[0].reason == coding_agent::ResourceSkipReason::Unsupported);
+    REQUIRE(result.load_plan.decisions.size() == 5);
+    require_decision_reason(
+        result.load_plan,
+        coding_agent::ProjectResourceKind::ProjectSettings,
+        coding_agent::ResourceSkipReason::Unsupported);
+    require_decision_reason(
+        result.load_plan,
+        coding_agent::ProjectResourceKind::ProjectExtensions,
+        coding_agent::ResourceSkipReason::Unsupported);
+    require_decision_reason(
+        result.load_plan,
+        coding_agent::ProjectResourceKind::ProjectPackages,
+        coding_agent::ResourceSkipReason::Unsupported);
+    require_decision_reason(
+        result.load_plan,
+        coding_agent::ProjectResourceKind::ProjectSystemPrompt,
+        coding_agent::ResourceSkipReason::Unsupported);
+    require_decision_reason(
+        result.load_plan,
+        coding_agent::ProjectResourceKind::ProjectAppendSystemPrompt,
+        coding_agent::ResourceSkipReason::Unsupported);
     CHECK(result.resources.skills.empty());
     CHECK(result.resources.prompt_templates.empty());
-    CHECK_FALSE(has_diag_source(result, coding_agent::ProjectResourceLoadingDiagnosticSource::Trust));
-    CHECK_FALSE(has_diag_source(result, coding_agent::ProjectResourceLoadingDiagnosticSource::SkillAdapter));
-    CHECK_FALSE(has_diag_source(result, coding_agent::ProjectResourceLoadingDiagnosticSource::PromptTemplateAdapter));
+    CHECK(result.diagnostics.empty());
 }
 
 TEST_CASE("project resource loader loads explicit prompt template inputs apart from project markers", "[coding_agent][project-resource-loader]") {
@@ -239,8 +280,8 @@ TEST_CASE("project resource loader surfaces adapter diagnostics for malformed tr
 
     CHECK(result.resources.skills.empty());
     CHECK(result.resources.prompt_templates.empty());
-    CHECK(has_diag(result, coding_agent::ProjectResourceLoadingDiagnosticSource::SkillAdapter, "invalid_metadata"));
-    CHECK(has_diag(result, coding_agent::ProjectResourceLoadingDiagnosticSource::PromptTemplateAdapter, "parse_failed"));
+    CHECK(has_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::SkillAdapter, "invalid_metadata"));
+    CHECK(has_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter, "parse_failed"));
 }
 
 TEST_CASE("project resource loader diagnoses project duplicates against host resources", "[coding_agent][project-resource-loader]") {
@@ -268,6 +309,83 @@ TEST_CASE("project resource loader diagnoses project duplicates against host res
     CHECK(result.resources.skills[0].content == "Host skill body.");
     REQUIRE(result.resources.prompt_templates.size() == 1);
     CHECK(result.resources.prompt_templates[0].content == "Host template body.");
-    CHECK(has_diag(result, coding_agent::ProjectResourceLoadingDiagnosticSource::Duplicate, "duplicate_skill_skipped"));
-    CHECK(has_diag(result, coding_agent::ProjectResourceLoadingDiagnosticSource::Duplicate, "duplicate_template_skipped"));
+    CHECK(has_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::Duplicate, "duplicate_skill_skipped"));
+    CHECK(has_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::Duplicate, "duplicate_template_skipped"));
+}
+
+TEST_CASE("project resource loader uses stable diagnostic categories and formatted codes", "[coding_agent][project-resource-loader]") {
+    LoaderFixture fix;
+    write_valid_project_skill(fix);
+    fix.write("trust.json", "{not json");
+
+    auto result = fix.load();
+
+    CHECK(has_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::Trust, "trust_store_unavailable"));
+    CHECK(has_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::LoadPlan, "project_skills"));
+
+    const auto trust_diag = std::find_if(
+        result.diagnostics.begin(),
+        result.diagnostics.end(),
+        [](const auto& diag) {
+            return diag.category == coding_agent::ProjectResourceLoadingDiagnosticCategory::Trust;
+        });
+    REQUIRE(trust_diag != result.diagnostics.end());
+    CHECK(coding_agent::project_resource_loading_diagnostic_code(*trust_diag) ==
+          "trust:trust_store_unavailable");
+
+    const auto load_plan_diag = std::find_if(
+        result.diagnostics.begin(),
+        result.diagnostics.end(),
+        [](const auto& diag) {
+            return diag.category == coding_agent::ProjectResourceLoadingDiagnosticCategory::LoadPlan;
+        });
+    REQUIRE(load_plan_diag != result.diagnostics.end());
+    CHECK(coding_agent::project_resource_loading_diagnostic_code(*load_plan_diag) ==
+          "resource:project_skills");
+}
+
+TEST_CASE("project resource loader classifies adapter duplicate diagnostics once", "[coding_agent][project-resource-loader]") {
+    LoaderFixture fix;
+    fix.write(
+        ".cpp-harness/skills/first/SKILL.md",
+        "---\n"
+        "name: dupe-skill\n"
+        "description: First skill.\n"
+        "---\n"
+        "First skill body.\n");
+    fix.write(
+        ".cpp-harness/skills/second/SKILL.md",
+        "---\n"
+        "name: dupe-skill\n"
+        "description: Duplicate skill.\n"
+        "---\n"
+        "Duplicate skill body.\n");
+    fix.write(
+        ".cpp-harness/prompts/dupe.md",
+        "---\n"
+        "description: First prompt.\n"
+        "---\n"
+        "First prompt body.\n");
+    fix.write(
+        ".cpp-harness/prompts/dupe.MD",
+        "---\n"
+        "description: Duplicate prompt.\n"
+        "---\n"
+        "Duplicate prompt body.\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+
+    auto result = fix.load(std::move(request));
+
+    REQUIRE(result.resources.skills.size() == 1);
+    REQUIRE(result.resources.prompt_templates.size() == 1);
+    CHECK(count_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::Duplicate,
+                     "duplicate_skill_skipped") == 1);
+    CHECK(count_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::Duplicate,
+                     "duplicate_template_skipped") == 1);
+    CHECK(count_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::SkillAdapter,
+                     "duplicate_name") == 0);
+    CHECK(count_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter,
+                     "duplicate_name") == 0);
 }

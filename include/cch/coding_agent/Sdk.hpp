@@ -39,7 +39,7 @@ struct SdkDiagnostic {
 
     Severity severity{Severity::Warning};
     /// Stable machine-readable code (e.g. "provider_config_fallback",
-    /// "duplicate_skill_skipped").
+    /// "resource:project_skills", "duplicate:duplicate_skill_skipped").
     std::string code;
     /// Human-readable message.
     std::string message;
