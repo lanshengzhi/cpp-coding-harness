@@ -39,12 +39,12 @@ PRD plus exactly one issue.
 
 ### 2. `resource-loading`
 
-- [ ] Create PRD for "Deepen project resource loading".
+- [x] Create PRD for "Deepen project resource loading".
   - Suggested path: `.scratch/project-resource-loading/PRD.md`
   - Flow: `to-prd`
   - Scope: make project resource loading own trust, load decisions, resource
     adapters, precedence, and diagnostics.
-- [ ] Split the PRD into implementation issues.
+- [x] Split the PRD into implementation issues.
   - Suggested path: `.scratch/project-resource-loading/issues/`
   - Flow: `to-issues`
 - [ ] Implement each issue in a fresh session.
