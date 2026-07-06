@@ -173,9 +173,16 @@ TEST_CASE("Glaze JSONL session parses v3 tree metadata entries", "[harness][sess
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::ModelChange);
     CHECK(loaded->entries[1].entry_id == "model001");
     CHECK_FALSE(loaded->entries[1].parent_id.has_value());
+    REQUIRE(std::holds_alternative<harness::session::ModelChangeValue>(loaded->entries[1].value));
+    const auto& model_value = std::get<harness::session::ModelChangeValue>(loaded->entries[1].value);
+    CHECK(model_value.provider == "openai");
+    CHECK(model_value.model_id == "gpt-4o");
     CHECK(loaded->entries[2].kind == harness::session::SessionEntryKind::ThinkingLevelChange);
     REQUIRE(loaded->entries[2].parent_id.has_value());
     CHECK(*loaded->entries[2].parent_id == "model001");
+    REQUIRE(std::holds_alternative<harness::session::ThinkingLevelChangeValue>(loaded->entries[2].value));
+    const auto& thinking_value = std::get<harness::session::ThinkingLevelChangeValue>(loaded->entries[2].value);
+    CHECK(thinking_value.thinking_level == "high");
     CHECK(loaded->unknown_lines.empty());
 
     auto opened = harness::session::JsonlSessionStore::open_existing(path);
@@ -246,7 +253,7 @@ TEST_CASE("Glaze JSONL session rejects symlink and public readable files", "[har
 #endif
 }
 
-// --- U5: v3 tree entry write round-trip tests ---
+// --- U5: v3 typed entry load/write tests ---
 
 namespace {
 bool is_hex8(const std::string& s) {
@@ -283,7 +290,7 @@ TEST_CASE("v3 session header writes and loads correctly", "[harness][session][u9
     CHECK(raw.find("\"version\":3") != std::string::npos);
 }
 
-TEST_CASE("v3 tree entry writer keeps current JSONL wire field names", "[harness][session][wire]") {
+TEST_CASE("serializer wire test keeps current JSONL field names", "[harness][session][wire]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "wire-fields.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -379,7 +386,7 @@ TEST_CASE("active_tools_change entry round-trips", "[harness][session][u9]") {
     CHECK(value.active_tool_names[2] == "bash");
 }
 
-TEST_CASE("active_tools_change accepts activeToolNames compatibility field", "[harness][session][wire]") {
+TEST_CASE("wire parser accepts activeToolNames compatibility field", "[harness][session][wire]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "tools-change-compat.jsonl";
     {
