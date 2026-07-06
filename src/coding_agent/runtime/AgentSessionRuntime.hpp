@@ -75,8 +75,8 @@ public:
     [[nodiscard]] const std::filesystem::path& workspace() const { return session_.workspace; }
     [[nodiscard]] const std::vector<ai::MessageVariant>& history() const { return session_.history; }
     [[nodiscard]] const harness::session::JsonlSessionStore& store() const { return *session_.store; }
-    [[nodiscard]] const std::vector<Skill>& skills() const { return services_.skill_load_result.skills; }
-    [[nodiscard]] const std::vector<PromptTemplate>& templates() const { return services_.prompt_load_result.templates; }
+    [[nodiscard]] const std::vector<Skill>& skills() const { return services_.skills; }
+    [[nodiscard]] const std::vector<PromptTemplate>& templates() const { return services_.prompt_templates; }
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 

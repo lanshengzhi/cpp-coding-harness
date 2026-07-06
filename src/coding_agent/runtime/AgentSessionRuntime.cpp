@@ -61,7 +61,7 @@ AgentSessionRuntime::AgentSessionRuntime(
     options.max_turns = config_.max_turns > 0 ? config_.max_turns : 30;
     options.model = std::move(config_.model);
 
-    std::string skills_block = formatSkillsForPrompt(services_.skill_load_result.skills);
+    std::string skills_block = formatSkillsForPrompt(services_.skills);
     if (!skills_block.empty()) {
         auto existing_transform = std::move(options.transform_context);
         options.transform_context = [block = std::move(skills_block),
@@ -104,7 +104,7 @@ PromptRunResult AgentSessionRuntime::run_prompt(
 
     // Step 1: skill expansion (silent or printed).
     harness::WorkspaceFileSystem workspace_fs{session_.workspace};
-    SkillExpander skill_expander{services_.skill_load_result.skills, workspace_fs};
+    SkillExpander skill_expander{services_.skills, workspace_fs};
 
     SkillExpansionResult skill_result;
     if (config_.capture_skill_diagnostics) {
@@ -133,7 +133,7 @@ PromptRunResult AgentSessionRuntime::run_prompt(
         };
         processing = process_prompt(
             prompt,
-            services_.prompt_load_result.templates,
+            services_.prompt_templates,
             command_registry_,
             cmd_ctx);
     }

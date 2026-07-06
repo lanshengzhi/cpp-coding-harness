@@ -92,7 +92,8 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     app.add_flag("--no-skills", config.no_skills, "Disable project-local skills for this run");
     app.add_flag("--no-prompt-templates", config.no_prompt_templates, "Disable all prompt template loading");
     app.add_option("--prompt-template", config.prompt_template_paths, "Load a prompt template file or directory (repeatable)")
-        ->expected(0, -1);
+        ->expected(1, -1)
+        ->allow_extra_args(false);
     auto* workspace_option = app.add_option("--workspace", workspace_text, "Workspace boundary for tools (default: cwd)");
     auto* session_option = app.add_option("--session", session_text, "Create a new JSONL session at path");
     auto* resume_option = app.add_option("--resume", resume_text, "Resume and append to an existing JSONL session");

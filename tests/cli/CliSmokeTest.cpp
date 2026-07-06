@@ -666,6 +666,48 @@ TEST_CASE("CLI approve loads project skills for one run", "[cli][project-trust]"
     CHECK(result.stdout_text.find("Do demo.") != std::string::npos);
 }
 
+TEST_CASE("CLI no-approve skips project skills for one run", "[cli][project-trust]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    workspace.write(".cpp-harness/skills/demo/SKILL.md",
+                    "---\n"
+                    "name: demo\n"
+                    "description: Demo skill.\n"
+                    "---\n"
+                    "# Demo Skill\n\n"
+                    "Do demo.\n");
+    auto session = workspace.path() / "no-approve-skills.jsonl";
+
+    auto result = run_command_split(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --no-approve --workspace " + q(workspace.path()) +
+        " --session " + q(session) + " /skill:demo");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.find("project_skills skipped: untrusted") != std::string::npos);
+    CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
+}
+
+TEST_CASE("CLI approve loads project prompt templates for one run", "[cli][project-resources]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    workspace.write(".cpp-harness/prompts/greet.md",
+                    "---\n"
+                    "description: Greet someone\n"
+                    "---\n"
+                    "Project hello $1.\n");
+    auto session = workspace.path() / "trusted-prompts.jsonl";
+
+    auto result = run_command_split(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --approve --workspace " + q(workspace.path()) +
+        " --session " + q(session) + " /greet Ada");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.find("project_prompts skipped") == std::string::npos);
+    CHECK(result.stdout_text.find("Project hello Ada.") != std::string::npos);
+}
+
 TEST_CASE("CLI no-skills disables project skills even when approved", "[cli][project-trust]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
@@ -686,6 +728,67 @@ TEST_CASE("CLI no-skills disables project skills even when approved", "[cli][pro
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.find("project_skills skipped: disabled") != std::string::npos);
     CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
+}
+
+TEST_CASE("CLI no-skills disables project prompt templates even when approved", "[cli][project-resources]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    workspace.write(".cpp-harness/prompts/greet.md",
+                    "---\n"
+                    "description: Greet someone\n"
+                    "---\n"
+                    "Project hello $1.\n");
+    auto session = workspace.path() / "disabled-prompts.jsonl";
+
+    auto result = run_command_split(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --approve --no-skills --workspace " + q(workspace.path()) +
+        " --session " + q(session) + " /greet Ada");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.find("project_prompts skipped: disabled") != std::string::npos);
+    CHECK(result.stdout_text.find("Project hello Ada.") == std::string::npos);
+}
+
+TEST_CASE("CLI explicit prompt template file loads through resource inputs", "[cli][project-resources]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    workspace.write("custom.md",
+                    "---\n"
+                    "description: Custom greeting\n"
+                    "---\n"
+                    "Custom hello $1.\n");
+    auto session = workspace.path() / "explicit-template.jsonl";
+
+    auto result = run_command_split(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --session " + q(session) +
+        " --prompt-template custom.md /custom Ada");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.find("template:warn") == std::string::npos);
+    CHECK(result.stdout_text.find("Custom hello Ada.") != std::string::npos);
+}
+
+TEST_CASE("CLI no-prompt-templates disables explicit prompt template files", "[cli][project-resources]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    workspace.write("custom.md",
+                    "---\n"
+                    "description: Custom greeting\n"
+                    "---\n"
+                    "Custom hello $1.\n");
+    auto session = workspace.path() / "explicit-template-disabled.jsonl";
+
+    auto result = run_command_split(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --session " + q(session) +
+        " --prompt-template custom.md --no-prompt-templates /custom Ada");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stdout_text.find("Custom hello Ada.") == std::string::npos);
 }
 
 TEST_CASE("CLI JSON project trust diagnostics stay on stderr", "[cli][json][project-trust]") {
@@ -710,6 +813,110 @@ TEST_CASE("CLI JSON project trust diagnostics stay on stderr", "[cli][json][proj
     for (const auto& line : non_empty_lines(result.stdout_text)) {
         (void)parse_json_line(line);
     }
+}
+
+TEST_CASE("CLI text mode shows malformed project resource diagnostics on stderr", "[cli][project-resources]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    workspace.write(".cpp-harness/skills/bad/SKILL.md",
+                    "---\n"
+                    "name: bad\n"
+                    "---\n"
+                    "Bad skill body.\n");
+    workspace.write(".cpp-harness/prompts/bad.md",
+                    "---\n"
+                    "bad line without colon\n"
+                    "---\n"
+                    "Bad prompt body.\n");
+    auto session = workspace.path() / "malformed-resources.jsonl";
+
+    auto result = run_command_split(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --approve --workspace " + q(workspace.path()) +
+        " --session " + q(session) + " hello");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.find("[skill:warn] invalid_metadata") != std::string::npos);
+    CHECK(result.stderr_text.find("[template:warn] parse_failed") != std::string::npos);
+    CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
+}
+
+TEST_CASE("CLI JSON resource diagnostics stay off stdout for malformed resources", "[cli][json][project-resources]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    workspace.write(".cpp-harness/prompts/bad.md",
+                    "---\n"
+                    "bad line without colon\n"
+                    "---\n"
+                    "Bad prompt body.\n");
+    auto session = workspace.path() / "json-malformed-resources.jsonl";
+
+    auto result = run_command_split(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --approve --mode json --workspace " + q(workspace.path()) +
+        " --session " + q(session) + " hello");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.find("[template:warn] parse_failed") != std::string::npos);
+    for (const auto& line : non_empty_lines(result.stdout_text)) {
+        (void)parse_json_line(line);
+    }
+    CHECK(result.stdout_text.find("[template:warn]") == std::string::npos);
+}
+
+TEST_CASE("CLI JSON duplicate resource diagnostics stay off stdout", "[cli][json][project-resources]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    workspace.write(".cpp-harness/prompts/dupe.md",
+                    "---\n"
+                    "description: Project duplicate\n"
+                    "---\n"
+                    "Project duplicate.\n");
+    workspace.write("dupe.md",
+                    "---\n"
+                    "description: Explicit duplicate\n"
+                    "---\n"
+                    "Explicit duplicate.\n");
+    auto session = workspace.path() / "json-duplicate-resources.jsonl";
+
+    auto result = run_command_split(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --approve --mode json --workspace " + q(workspace.path()) +
+        " --session " + q(session) + " --prompt-template dupe.md hello");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.find("[duplicate:info] duplicate_template_skipped") != std::string::npos);
+    for (const auto& line : non_empty_lines(result.stdout_text)) {
+        (void)parse_json_line(line);
+    }
+    CHECK(result.stdout_text.find("duplicate_template_skipped") == std::string::npos);
+}
+
+TEST_CASE("CLI RPC resource diagnostics stay off command stream", "[cli][rpc][project-resources]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    workspace.write(".cpp-harness/prompts/bad.md",
+                    "---\n"
+                    "bad line without colon\n"
+                    "---\n"
+                    "Bad prompt body.\n");
+    auto session = workspace.path() / "rpc-malformed-resources.jsonl";
+    const std::string input =
+        "{\"id\":\"s1\",\"type\":\"get_state\"}\n"
+        "{\"id\":\"q1\",\"type\":\"shutdown\"}\n";
+
+    auto result = run_command_split_with_input(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --approve --mode rpc --workspace " + q(workspace.path()) +
+        " --session " + q(session),
+        input);
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.find("[template:warn] parse_failed") != std::string::npos);
+    auto records = parse_json_objects(result.stdout_text);
+    REQUIRE(find_response(records, "get_state") != nullptr);
+    REQUIRE(find_response(records, "shutdown") != nullptr);
+    CHECK(result.stdout_text.find("[template:warn]") == std::string::npos);
 }
 
 TEST_CASE("CLI applies config.json model when CLI omits --model", "[cli][config]") {

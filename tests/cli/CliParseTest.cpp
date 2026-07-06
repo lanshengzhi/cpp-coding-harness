@@ -94,6 +94,26 @@ TEST_CASE("parse_args maps approve flags to project trust override", "[cli][pars
     }
 }
 
+TEST_CASE("parse_args treats prompt-template as one repeatable path", "[cli][parse]") {
+    std::vector<std::string> args{
+        "cpp-harness",
+        "--fake",
+        "--prompt-template",
+        "custom.md",
+        "--prompt-template",
+        "more.md",
+        "/custom",
+        "Ada",
+    };
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    REQUIRE(parsed->prompt_template_paths.size() == 2);
+    CHECK(parsed->prompt_template_paths[0] == "custom.md");
+    CHECK(parsed->prompt_template_paths[1] == "more.md");
+    CHECK(parsed->prompt == "/custom Ada");
+}
+
 TEST_CASE("parse_args defaults output mode to text", "[cli][parse]") {
     std::vector<std::string> args{"cpp-harness", "--fake", "hello"};
     auto argv = argv_from_strings(args);

@@ -1,18 +1,14 @@
 #include "RuntimeServices.hpp"
 
 #include "../../../include/cch/ai/ProviderRegistry.hpp"
-#include "coding_agent/PromptTemplateLoader.hpp"
-#include "coding_agent/SkillLoader.hpp"
 #include "../../../include/cch/tools/ToolFactories.hpp"
-#include "../../harness/WorkspaceFileSystem.hpp"
 
-#include <iostream>
 #include <utility>
 #include <vector>
 
 namespace cch::coding_agent::runtime {
 
-util::Expected<RuntimeServices> make_runtime_services(const RuntimeServicesConfig& config) {
+util::Expected<RuntimeServices> make_runtime_services(RuntimeServicesConfig config) {
     auto provider_registry = ai::make_default_provider_registry();
     if (!provider_registry) {
         return std::unexpected(provider_registry.error());
@@ -50,77 +46,8 @@ util::Expected<RuntimeServices> make_runtime_services(const RuntimeServicesConfi
         return std::unexpected(added.error());
     }
 
-    // Load skills from configured directories.
-    if (!config.skill_dirs.empty()) {
-        auto fs = harness::WorkspaceFileSystem::create(config.workspace);
-        if (fs.has_value()) {
-            services.skill_load_result = loadSkills(*fs, config.skill_dirs);
-
-            if (config.print_skill_diagnostics) {
-                for (const auto& diag : services.skill_load_result.diagnostics) {
-                    std::cerr << "[skill:warn] ";
-                    switch (diag.code) {
-                    case SkillDiagnosticCode::file_info_failed:
-                        std::cerr << "file_info_failed";
-                        break;
-                    case SkillDiagnosticCode::list_failed:
-                        std::cerr << "list_failed";
-                        break;
-                    case SkillDiagnosticCode::read_failed:
-                        std::cerr << "read_failed";
-                        break;
-                    case SkillDiagnosticCode::parse_failed:
-                        std::cerr << "parse_failed";
-                        break;
-                    case SkillDiagnosticCode::invalid_metadata:
-                        std::cerr << "invalid_metadata";
-                        break;
-                    case SkillDiagnosticCode::duplicate_name:
-                        std::cerr << "duplicate_name";
-                        break;
-                    }
-                    std::cerr << ": " << diag.message << " (" << diag.path << ")\n";
-                }
-            }
-        }
-    }
-
-    // Load prompt templates from configured directories.
-    if (!config.prompt_dirs.empty()) {
-        auto fs = harness::WorkspaceFileSystem::create(config.workspace);
-        if (fs.has_value()) {
-            std::vector<PromptTemplateDirSpec> specs;
-            for (const auto& dir : config.prompt_dirs) {
-                specs.push_back({.path = dir, .is_file = false});
-            }
-            services.prompt_load_result = loadPromptTemplates(*fs, specs);
-
-            if (config.print_skill_diagnostics) {
-                for (const auto& diag : services.prompt_load_result.diagnostics) {
-                    std::cerr << "[template:warn] ";
-                    switch (diag.code) {
-                    case PromptTemplateDiagnosticCode::file_info_failed:
-                        std::cerr << "file_info_failed";
-                        break;
-                    case PromptTemplateDiagnosticCode::list_failed:
-                        std::cerr << "list_failed";
-                        break;
-                    case PromptTemplateDiagnosticCode::read_failed:
-                        std::cerr << "read_failed";
-                        break;
-                    case PromptTemplateDiagnosticCode::parse_failed:
-                        std::cerr << "parse_failed";
-                        break;
-                    case PromptTemplateDiagnosticCode::duplicate_name:
-                        std::cerr << "duplicate_name";
-                        break;
-                    }
-                    std::cerr << ": " << diag.message << " (" << diag.path << ")\n";
-                }
-            }
-        }
-    }
-
+    services.skills = std::move(config.skills);
+    services.prompt_templates = std::move(config.prompt_templates);
     return services;
 }
 

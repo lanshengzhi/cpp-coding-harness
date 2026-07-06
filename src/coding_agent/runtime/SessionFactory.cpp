@@ -4,7 +4,7 @@
 #include "../../../include/cch/coding_agent/Config.hpp"
 #include "../../../include/cch/coding_agent/ProjectResources.hpp"
 #include "../../../include/cch/coding_agent/ProjectTrust.hpp"
-#include "coding_agent/SkillFormatting.hpp"
+#include "coding_agent/ProjectResourceLoader.hpp"
 #include "coding_agent/SkillLoader.hpp"
 #include "coding_agent/PromptTemplateLoader.hpp"
 #include "../../../include/cch/tools/ToolFactories.hpp"
@@ -162,18 +162,6 @@ constexpr std::string_view kHostClientModel = "host-client";
                 : std::filesystem::path{};
 }
 
-[[nodiscard]] SdkDiagnostic::Severity to_sdk_severity(ProjectTrustDiagnosticSeverity severity) {
-    switch (severity) {
-    case ProjectTrustDiagnosticSeverity::Info:
-        return SdkDiagnostic::Severity::Info;
-    case ProjectTrustDiagnosticSeverity::Warning:
-        return SdkDiagnostic::Severity::Warning;
-    case ProjectTrustDiagnosticSeverity::Error:
-        return SdkDiagnostic::Severity::Error;
-    }
-    return SdkDiagnostic::Severity::Warning;
-}
-
 [[nodiscard]] SdkDiagnostic::Severity to_sdk_severity(ResourceDiagnosticSeverity severity) {
     switch (severity) {
     case ResourceDiagnosticSeverity::Info:
@@ -186,87 +174,51 @@ constexpr std::string_view kHostClientModel = "host-client";
     return SdkDiagnostic::Severity::Warning;
 }
 
-void add_project_diagnostics(
+[[nodiscard]] std::string_view diagnostic_category(ProjectResourceLoadingDiagnosticSource source) {
+    switch (source) {
+    case ProjectResourceLoadingDiagnosticSource::Trust:
+        return "trust";
+    case ProjectResourceLoadingDiagnosticSource::LoadPlan:
+        return "resource";
+    case ProjectResourceLoadingDiagnosticSource::SkillAdapter:
+        return "skill";
+    case ProjectResourceLoadingDiagnosticSource::PromptTemplateAdapter:
+        return "template";
+    case ProjectResourceLoadingDiagnosticSource::Duplicate:
+        return "duplicate";
+    }
+    return "resource";
+}
+
+void add_project_resource_loading_diagnostics(
     std::vector<SdkDiagnostic>& diagnostics,
-    const ProjectTrustResolution& trust,
-    const ProjectResourceLoadPlan& plan) {
-    for (const auto& td : trust.diagnostics) {
+    const ProjectResourceLoadingResult& loading) {
+    for (const auto& diag : loading.diagnostics) {
+        const auto category = diagnostic_category(diag.source);
         diagnostics.push_back(make_diag(
-            to_sdk_severity(td.severity),
-            "trust:" + td.code,
-            td.message,
-            td.path));
+            to_sdk_severity(diag.severity),
+            std::string{category} + ":" + diag.code,
+            diag.message,
+            diag.path));
     }
-    for (const auto& rd : plan.diagnostics) {
-        diagnostics.push_back(make_diag(
-            to_sdk_severity(rd.severity),
-            "resource:" + rd.code,
-            rd.message,
-            rd.path.empty() ? std::nullopt : std::optional<std::string>{rd.path}));
-    }
-    for (const auto& decision : plan.decisions) {
-        if (decision.detected && !decision.allowed && decision.reason != ResourceSkipReason::Unsupported) {
-            diagnostics.push_back(make_diag(
-                SdkDiagnostic::Severity::Info,
-                "resource:" + to_string(decision.kind),
-                to_string(decision.kind) + " skipped: " + to_string(decision.reason),
-                decision.path.empty() ? std::nullopt : std::optional<std::string>{decision.path}));
+}
+
+[[nodiscard]] std::vector<ExplicitPromptTemplateInput> explicit_prompt_template_inputs(
+    const harness::WorkspaceFileSystem& fs,
+    const std::vector<std::string>& paths) {
+    std::vector<ExplicitPromptTemplateInput> inputs;
+    inputs.reserve(paths.size());
+    for (const auto& path : paths) {
+        bool is_file = true;
+        if (auto info = fs.fileInfo(path); info && info->kind == harness::FileKind::Directory) {
+            is_file = false;
         }
+        inputs.push_back(ExplicitPromptTemplateInput{
+            .path = path,
+            .is_file = is_file,
+        });
     }
-}
-
-[[nodiscard]] std::string_view to_string(SkillDiagnosticCode code) {
-    switch (code) {
-    case SkillDiagnosticCode::file_info_failed:
-        return "file_info_failed";
-    case SkillDiagnosticCode::list_failed:
-        return "list_failed";
-    case SkillDiagnosticCode::read_failed:
-        return "read_failed";
-    case SkillDiagnosticCode::parse_failed:
-        return "parse_failed";
-    case SkillDiagnosticCode::invalid_metadata:
-        return "invalid_metadata";
-    case SkillDiagnosticCode::duplicate_name:
-        return "duplicate_name";
-    }
-    return "invalid_metadata";
-}
-
-[[nodiscard]] std::string_view to_string(PromptTemplateDiagnosticCode code) {
-    switch (code) {
-    case PromptTemplateDiagnosticCode::file_info_failed:
-        return "file_info_failed";
-    case PromptTemplateDiagnosticCode::list_failed:
-        return "list_failed";
-    case PromptTemplateDiagnosticCode::read_failed:
-        return "read_failed";
-    case PromptTemplateDiagnosticCode::parse_failed:
-        return "parse_failed";
-    case PromptTemplateDiagnosticCode::duplicate_name:
-        return "duplicate_name";
-    }
-    return "parse_failed";
-}
-
-
-void add_runtime_resource_diagnostics(
-    std::vector<SdkDiagnostic>& diagnostics,
-    const RuntimeServices& services) {
-    for (const auto& diag : services.skill_load_result.diagnostics) {
-        diagnostics.push_back(make_diag(
-            SdkDiagnostic::Severity::Warning,
-            "skill:" + std::string{to_string(diag.code)},
-            diag.message,
-            diag.path));
-    }
-    for (const auto& diag : services.prompt_load_result.diagnostics) {
-        diagnostics.push_back(make_diag(
-            SdkDiagnostic::Severity::Warning,
-            "template:" + std::string{to_string(diag.code)},
-            diag.message,
-            diag.path));
-    }
+    return inputs;
 }
 
 } // namespace
@@ -336,47 +288,35 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
         resource_policy.project_skills = ResourceEnablement::Off;
     }
 
-    ProjectResourceDetectionResult resource_detection;
+    LoadedProjectResources loaded_resources;
     auto resource_fs = harness::WorkspaceFileSystem::create(workspace);
     if (resource_fs) {
-        resource_detection = detect_project_resources(*resource_fs);
+        ProjectTrustStore trust_store{default_trust_store_path()};
+        ProjectResourceLoadingRequest resource_request;
+        resource_request.workspace = workspace;
+        resource_request.policy = resource_policy;
+        resource_request.default_project_trust =
+            request.config.default_project_trust.value_or(DefaultProjectTrust::Ask);
+        resource_request.project_trust_override = request.project_trust_override;
+        resource_request.prompt_templates_enabled = !request.disable_prompt_templates;
+        if (!request.disable_prompt_templates) {
+            resource_request.explicit_prompt_templates = explicit_prompt_template_inputs(
+                *resource_fs,
+                request.prompt_template_paths);
+        }
+
+        auto resource_loading = load_project_resources(
+            *resource_fs,
+            trust_store,
+            std::move(resource_request));
+        add_project_resource_loading_diagnostics(diagnostics, resource_loading);
+        loaded_resources = std::move(resource_loading.resources);
     } else {
-        resource_detection.diagnostics.push_back(ResourceDiagnostic{
-            .severity = ResourceDiagnosticSeverity::Warning,
-            .code = "workspace_fs_unavailable",
-            .message = resource_fs.error().message,
-            .path = workspace.string(),
-            .kind = std::nullopt,
-        });
-    }
-
-    const bool trust_needed = needs_project_trust_resolution(resource_detection, resource_policy);
-    ProjectTrustStore trust_store{default_trust_store_path()};
-    auto trust_resolution = resolve_project_trust(
-        workspace,
-        trust_needed,
-        trust_store,
-        request.config.default_project_trust.value_or(DefaultProjectTrust::Ask),
-        request.project_trust_override);
-    auto resource_plan = build_project_resource_load_plan(
-        resource_detection,
-        resource_policy,
-        trust_resolution);
-    add_project_diagnostics(diagnostics, trust_resolution, resource_plan);
-
-    std::vector<SkillDirSpec> skill_dirs;
-    if (project_skills_allowed(resource_plan)) {
-        skill_dirs.push_back({.path = ".cpp-harness/skills", .includeRootFiles = false});
-    }
-
-    std::vector<std::string> prompt_dirs;
-    if (!request.disable_prompt_templates) {
-        if (project_prompts_allowed(resource_plan)) {
-            prompt_dirs.push_back(".cpp-harness/prompts");
-        }
-        for (const auto& path : request.prompt_template_paths) {
-            prompt_dirs.push_back(path);
-        }
+        diagnostics.push_back(make_diag(
+            SdkDiagnostic::Severity::Warning,
+            "resource:workspace_fs_unavailable",
+            resource_fs.error().message,
+            workspace.string()));
     }
 
     auto services = make_runtime_services(RuntimeServicesConfig{
@@ -389,9 +329,8 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
         resolved.base_url,
         resolved.api_key,
         resolved.api_key_env,
-        std::move(skill_dirs),
-        std::move(prompt_dirs),
-        false,
+        std::move(loaded_resources.skills),
+        std::move(loaded_resources.prompt_templates),
     });
     if (!services) {
         return std::unexpected(util::make_error(
@@ -399,8 +338,6 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
             "could not create runtime services",
             services.error().message + ": " + services.error().detail));
     }
-    add_runtime_resource_diagnostics(diagnostics, *services);
-
     auto runtime = std::make_unique<AgentSessionRuntime>(
         std::move(*services),
         std::move(*opened_session),
@@ -762,8 +699,8 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
     services.client = std::move(chat_client);
     services.env = std::move(exec_env);
     services.tools = std::move(tools);
-    services.skill_load_result.skills = std::move(skills);
-    services.prompt_load_result.templates = std::move(templates);
+    services.skills = std::move(skills);
+    services.prompt_templates = std::move(templates);
 
     AgentSessionRuntimeConfig runtime_config;
     runtime_config.max_turns = options.max_turns;
