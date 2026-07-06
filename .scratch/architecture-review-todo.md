@@ -1,6 +1,10 @@
 # Architecture Review Follow-up TODO
 
-Source report: `/tmp/architecture-review-20260705-175740.html`
+The original architecture review report is no longer available after a system
+restart. Treat this file as the durable follow-up record. For future PRDs,
+reconstruct any needed rationale from this TODO, the current repository context,
+`README.md`, `CMakeLists.txt`, `docs/agents/module-routing.md`, and relevant
+active plans under `docs/plans/`.
 
 Rule of thumb: one architecture candidate becomes one PRD, then one issue set.
 Do not combine multiple candidates into a single PRD. After `to-issues`, start a
@@ -33,17 +37,6 @@ PRD plus exactly one issue.
   - [x] Issue 03: move leaf resume and append continuation off wire payloads.
   - [x] Issue 04: harden tests around the serializer boundary.
 
-Suggested PRD prompt:
-
-```text
-$mattpocock-skills:to-prd
-
-Based on /tmp/architecture-review-20260705-175740.html, create a PRD only for
-the #session-wire candidate, "Stop leaking session wire payloads".
-Do not include any other architecture candidate.
-Output to .scratch/session-wire-payloads/PRD.md.
-```
-
 ### 2. `resource-loading`
 
 - [ ] Create PRD for "Deepen project resource loading".
@@ -61,7 +54,8 @@ Output to .scratch/session-wire-payloads/PRD.md.
 
 - [ ] Sharpen the candidate before PRD.
   - Flow: `grill-with-docs`
-  - Reason: report marks this as "Worth exploring", not an immediate build.
+  - Reason: the review summary captured here marks this as "Worth exploring",
+    not an immediate build.
 - [ ] If accepted, create PRD for "Retire the legacy execution surface".
   - Suggested path: `.scratch/execution-capability-seam/PRD.md`
   - Flow: `to-prd`
@@ -75,8 +69,8 @@ Output to .scratch/session-wire-payloads/PRD.md.
 
 - [ ] Re-check current prompt-processing implementation and old plans.
   - Flow: `grill-with-docs`
-  - Reason: report asks for a deeper module, while an earlier prompt-processing
-    feature already exists.
+  - Reason: the review summary captured here asks for a deeper module, while an
+    earlier prompt-processing feature already exists.
 - [ ] If accepted, create PRD for "Deepen prompt input processing".
   - Suggested path: `.scratch/prompt-input-module/PRD.md`
   - Flow: `to-prd`
@@ -90,7 +84,8 @@ Output to .scratch/session-wire-payloads/PRD.md.
 
 - [ ] Do design clarification before PRD.
   - Flow: `grill-with-docs`
-  - Reason: report marks this as speculative and it touches public AI contracts.
+  - Reason: the review summary captured here marks this as speculative and it
+    touches public AI contracts.
 - [ ] If accepted, create PRD for "Move runtime messages out of AI contracts".
   - Suggested path: `.scratch/runtime-message-boundary/PRD.md`
   - Flow: `to-prd`
