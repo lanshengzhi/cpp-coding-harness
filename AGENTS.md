@@ -87,6 +87,20 @@ Final responses must include:
 - **Validation performed:** tests, markdown checks, link checks, or no-information-loss checks run.
 - **Skipped validation:** any intentionally skipped validation and the reason.
 
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs live as markdown files in `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default mattpocock/skills vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context repo: read root `CONTEXT.md` plus `docs/adr/` (when present). See `docs/agents/domain.md`.
+
 ## Agent References
 
 - Worktree discipline: `docs/agents/worktree-discipline.md` (branch, merge, publish, PR, and cleanup conventions).
