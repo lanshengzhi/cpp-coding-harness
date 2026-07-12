@@ -28,8 +28,6 @@ struct AgentSessionCreationRequest {
     std::filesystem::path workspace;
     std::filesystem::path session_path;
     std::filesystem::path resume_path;
-    std::string session_id;
-    std::string created_at;
     CliProviderOverrides provider_overrides;
     ConfigData config;
     CommandRegistry command_registry;

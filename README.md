@@ -242,11 +242,13 @@ session->close();
 - Explicit create/resume path: exactly one of `session_path` (create new) or `resume_path` (resume existing) must be set.
 - Blocking `prompt()` — serial, single-prompt-at-a-time.
 - Event subscriptions via move-only `agent::AgentEventSink`; per-prompt sinks also supported.
-- Host-provided chat clients and execution environments; SDK convenience provider construction from `SdkProviderConfig` when no host client is supplied.
+- Host-provided chat clients and execution environments. Chat clients and custom tools passed by `unique_ptr` transfer ownership to the session; `shared_ptr` execution environments remain host-owned and are not cleaned up by session close.
+- SDK convenience provider construction from `SdkProviderConfig` when no host client is supplied.
 - Built-in tool selection with safe defaults: `read`, `write`, and `edit_file` by default; `bash` requires explicit opt-in.
 - Custom tool registration via existing `agent::AsyncAgentTool` contracts; duplicate tool names fail creation.
 - Programmatic skills, prompt templates, and slash-command handlers; host resources take precedence over project-discovered duplicates.
 - Optional project resource discovery (`.cpp-harness/skills/`, `.cpp-harness/prompts/`) behind explicit trust/resource controls.
+- Optional absolute external `trust_store_path` for SDK project-resource trust decisions; workspace-local trust-store paths are rejected.
 - Diagnostics returned as `CreateAgentSessionResult::diagnostics` values — no stdout/stderr output from the SDK path.
 - Resolved session metadata on `CreateAgentSessionResult::metadata`, matching the created/resumed JSONL session header.
 

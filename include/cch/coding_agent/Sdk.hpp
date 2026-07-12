@@ -106,19 +106,21 @@ struct CreateAgentSessionOptions {
     std::optional<SdkProviderConfig> provider_config;
 
     // ── Host-provided capabilities ───────────────────────────────────────
-    /// Host-owned streaming chat client. If set, provider_config is ignored
-    /// and a diagnostic notes that metadata is host-provided.
+    /// Host-provided streaming chat client. If set, provider_config is
+    /// ignored for execution and a diagnostic notes that metadata is
+    /// host-provided. Ownership transfers to the session.
     std::unique_ptr<ai::StreamingChatClient> chat_client;
-    /// Host-owned execution environment. If not set, a local execution
-    /// environment is constructed for the workspace.
+    /// Host-provided execution environment. If not set, a local execution
+    /// environment is constructed for the workspace. Host-provided environments
+    /// are never cleaned up by the session.
     std::shared_ptr<harness::AsyncExecutionEnv> execution_env;
 
     // ── Built-in tool selection ──────────────────────────────────────────
     SdkBuiltinTools builtin_tools{};
 
     // ── Custom tools ─────────────────────────────────────────────────────
-    /// Host-owned custom tools. Duplicate names (including clashes with
-    /// built-in tools) fail session creation.
+    /// Custom tools whose ownership transfers to the session. Duplicate names
+    /// (including clashes with built-in tools) fail session creation.
     std::vector<std::unique_ptr<agent::AsyncAgentTool>> custom_tools;
 
     // ── Host-provided resources ──────────────────────────────────────────
@@ -138,10 +140,15 @@ struct CreateAgentSessionOptions {
     /// templates from `.cpp-harness/`. Diagnostics are returned as values,
     /// not printed.
     bool load_project_resources{false};
-    /// Default trust decision for project resource loading.
+    /// Default trust decision for project resource loading. Defaults to `ask`.
     std::optional<DefaultProjectTrust> default_project_trust;
     /// Resource enablement for project skills.
     std::optional<ResourceEnablement> project_skills_enablement;
+    /// Optional absolute path to a user-controlled trust store outside the
+    /// workspace. If omitted, the user-level default `~/.cpp-harness/trust.json`
+    /// is used. A supplied path must be absolute and must not resolve to the
+    /// workspace or any path inside it.
+    std::optional<std::filesystem::path> trust_store_path;
 
     // ── Reserved ─────────────────────────────────────────────────────────
     /// Max agent turns per prompt (passed through to AsyncAgentOptions).

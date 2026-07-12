@@ -583,9 +583,12 @@ TEST_CASE("CLI fake bash request is blocked by default", "[cli][u6]") {
     auto result = run_command(bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " bash echo hi");
 
     REQUIRE(result.exit_code == 0);
+    // With bash disabled, the bash tool is not registered. The scripted fake
+    // client still asks for bash, so the executor reports an unknown tool.
     CHECK(result.output.find("[tool-call] bash#fake-bash-1") != std::string::npos);
     CHECK(result.output.find("[tool-error] fake-bash-1") != std::string::npos);
-    CHECK(result.output.find("bash is disabled") != std::string::npos);
+    CHECK(result.output.find("bash is disabled") == std::string::npos);
+    CHECK(result.output.find("unknown tool: bash") != std::string::npos);
 }
 
 TEST_CASE("CLI fake read loop prints max-turn marker when turn budget is exhausted", "[cli][u1]") {
@@ -967,4 +970,22 @@ TEST_CASE("CLI accepts config.json api_key_env chain without explicit --api-key-
 
     CHECK(result.output.find("missing API key") == std::string::npos);
     CHECK(std::filesystem::exists(session));
+}
+
+TEST_CASE("CLI invalid explicit prompt template fails before session creation", "[cli][project-resources][assembly]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    auto session = workspace.path() / "explicit-fail.jsonl";
+
+    auto result = run_command_split(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --session " + q(session) +
+        " --prompt-template missing.md hello");
+
+    REQUIRE(result.exit_code != 0);
+    CHECK(result.stdout_text.empty());
+    CHECK(result.stderr_text.find("template") != std::string::npos ||
+          result.stderr_text.find("explicit") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(session));
 }

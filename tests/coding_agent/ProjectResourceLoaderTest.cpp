@@ -257,6 +257,29 @@ TEST_CASE("project resource loader loads explicit prompt template inputs apart f
     CHECK(result.resources.skills.empty());
 }
 
+TEST_CASE("project resource loader explicit prompt templates take precedence over project prompts", "[coding_agent][project-resource-loader]") {
+    LoaderFixture fix;
+    write_valid_project_prompt(fix, "shared");
+    fix.write(
+        "shared.md",
+        "---\n"
+        "description: Explicit prompt.\n"
+        "---\n"
+        "Explicit body.\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    request.explicit_prompt_templates.push_back({.path = "shared.md", .is_file = true});
+
+    auto result = fix.load(std::move(request));
+
+    REQUIRE(result.resources.prompt_templates.size() == 1);
+    CHECK(result.resources.prompt_templates[0].name == "shared");
+    CHECK(result.resources.prompt_templates[0].content.find("Explicit body") != std::string::npos);
+    CHECK(result.resources.prompt_templates[0].content.find("Project prompt body") == std::string::npos);
+    CHECK(has_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::Duplicate, "duplicate_template_skipped"));
+}
+
 TEST_CASE("project resource loader surfaces adapter diagnostics for malformed trusted inputs", "[coding_agent][project-resource-loader]") {
     LoaderFixture fix;
     fix.write(
@@ -388,4 +411,18 @@ TEST_CASE("project resource loader classifies adapter duplicate diagnostics once
                      "duplicate_name") == 0);
     CHECK(count_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter,
                      "duplicate_name") == 0);
+}
+
+TEST_CASE("project resource loader treats explicit prompt template read failure as fatal", "[coding_agent][project-resource-loader]") {
+    LoaderFixture fix;
+    // No file named missing.md exists.
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.explicit_prompt_templates.push_back({.path = "missing.md", .is_file = true});
+
+    auto result = fix.load(std::move(request));
+
+    REQUIRE(!result.fatal_errors.empty());
+    CHECK(result.fatal_errors[0].category == coding_agent::ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter);
+    CHECK(result.resources.prompt_templates.empty());
+    CHECK(result.diagnostics.empty());
 }

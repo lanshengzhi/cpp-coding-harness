@@ -66,6 +66,9 @@ struct ResolvedProviderSettings {
     std::string api_key;
     /// Name of the auth entry used to obtain api_key.
     std::string auth;
+    /// Full environment variable chain used for API key lookup and secret
+    /// filtering. The first element is the resolved single env var name.
+    std::vector<std::string> api_key_env_chain;
 };
 
 /// Priority: CLI explicit > session stored provider/model > config file > provider default.

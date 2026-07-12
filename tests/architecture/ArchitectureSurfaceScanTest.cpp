@@ -155,6 +155,51 @@ TEST_CASE("coding_agent loaders stay out of the public contract surface", "[arch
     CHECK_FALSE(std::filesystem::exists(source_root / "include" / "cch" / "coding_agent" / "SkillFormatting.hpp"));
 }
 
+TEST_CASE("RuntimeServices remains internal to the coding_agent runtime package", "[architecture][session]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto files = files_under({"src", "tests"});
+    const auto runtime_dir = source_root / "src" / "coding_agent" / "runtime";
+    REQUIRE_FALSE(files.empty());
+
+    // Build the needle dynamically so this test file does not match itself.
+    const auto header_needle = std::string{"RuntimeServices"} + ".hpp";
+
+    for (const auto& file : files) {
+        if (file.parent_path() == runtime_dir) {
+            continue;
+        }
+        const auto text = read_text(file);
+        CHECK(text.find(header_needle) == std::string::npos);
+    }
+}
+
+
+TEST_CASE("AgentSessionRuntime is constructed only by the session factory", "[architecture][session]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto files = files_under({"src", "tests"});
+    const auto factory = source_root / "src" / "coding_agent" / "runtime" / "SessionFactory.cpp";
+    REQUIRE_FALSE(files.empty());
+
+    // Build the needles dynamically so this test file does not match itself.
+    const auto make_unique_needle = std::string{"std::make_unique"} + "<AgentSessionRuntime>";
+    const auto new_needle = std::string{"new "} + "AgentSessionRuntime";
+
+    std::size_t factory_constructions = 0;
+    for (const auto& file : files) {
+        const auto text = read_text(file);
+        const auto make_unique_count = count_occurrences(text, make_unique_needle);
+        const auto new_count = count_occurrences(text, new_needle);
+        if (file == factory) {
+            factory_constructions += make_unique_count + new_count;
+        } else {
+            CHECK(make_unique_count == 0);
+            CHECK(new_count == 0);
+        }
+    }
+    CHECK(factory_constructions > 0);
+}
+
+
 TEST_CASE("active source tree does not retain legacy sync contracts", "[architecture][u2]") {
     const auto files = files_under({"include", "src", "tests"});
     REQUIRE_FALSE(files.empty());
@@ -172,3 +217,5 @@ TEST_CASE("active source tree does not retain legacy sync contracts", "[architec
         CHECK(text.find("make_bash_tool") == std::string::npos);
     }
 }
+
+

@@ -266,8 +266,10 @@ void AgentSessionRuntime::close() {
 
     loop_.reset();
 
-    // Best-effort async cleanup of the execution environment.
-    if (services_.env) {
+    // Best-effort async cleanup of the execution environment only when the
+    // factory owns it. Host-provided shared environments must outlive the
+    // session and are never cleaned up here.
+    if (services_.env && services_.env_owned) {
         boost::asio::io_context io;
         boost::asio::co_spawn(io, services_.env->cleanup(), boost::asio::detached);
         io.run();

@@ -297,12 +297,6 @@ ProjectResourceLoadingResult load_project_resources(
     add_trust_diagnostics(result, result.trust);
     add_load_plan_diagnostics(result, result.load_plan);
 
-    for (const auto& adapter : kProjectResourceAdapters) {
-        if (adapter.plan_allows(result.load_plan)) {
-            adapter.load(fs, result, names);
-        }
-    }
-
     if (request.prompt_templates_enabled && !request.explicit_prompt_templates.empty()) {
         std::vector<PromptTemplateDirSpec> specs;
         specs.reserve(request.explicit_prompt_templates.size());
@@ -312,11 +306,53 @@ ProjectResourceLoadingResult load_project_resources(
                 .is_file = input.is_file,
             });
         }
-        append_prompt_templates(
-            result,
-            loadPromptTemplates(fs, specs),
-            names,
-            std::nullopt);
+
+        auto explicit_load = loadPromptTemplates(fs, specs);
+        for (auto& diag : explicit_load.diagnostics) {
+            if (diag.code == PromptTemplateDiagnosticCode::duplicate_name) {
+                result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
+                    .severity = ResourceDiagnosticSeverity::Warning,
+                    .category = ProjectResourceLoadingDiagnosticCategory::Duplicate,
+                    .code = "duplicate_template_skipped",
+                    .message = diag.message,
+                    .path = diag.path.empty() ? std::nullopt : std::optional<std::string>{diag.path},
+                    .kind = std::nullopt,
+                });
+            } else {
+                result.fatal_errors.push_back(ProjectResourceLoadingDiagnostic{
+                    .severity = ResourceDiagnosticSeverity::Error,
+                    .category = ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter,
+                    .code = to_code(diag.code),
+                    .message = diag.message,
+                    .path = diag.path.empty() ? std::nullopt : std::optional<std::string>{diag.path},
+                    .kind = std::nullopt,
+                });
+            }
+        }
+
+        for (auto& tmpl : explicit_load.templates) {
+            if (names.prompt_template_names.contains(tmpl.name)) {
+                result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
+                    .severity = ResourceDiagnosticSeverity::Info,
+                    .category = ProjectResourceLoadingDiagnosticCategory::Duplicate,
+                    .code = "duplicate_template_skipped",
+                    .message = std::format(
+                        "explicit prompt template '{}' skipped: earlier resource takes precedence",
+                        tmpl.name),
+                    .path = std::nullopt,
+                    .kind = std::nullopt,
+                });
+                continue;
+            }
+            names.prompt_template_names.insert(tmpl.name);
+            result.resources.prompt_templates.push_back(std::move(tmpl));
+        }
+    }
+
+    for (const auto& adapter : kProjectResourceAdapters) {
+        if (adapter.plan_allows(result.load_plan)) {
+            adapter.load(fs, result, names);
+        }
     }
 
     return result;

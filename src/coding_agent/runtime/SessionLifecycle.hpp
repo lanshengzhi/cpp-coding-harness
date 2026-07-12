@@ -41,6 +41,31 @@ struct OpenSession {
     harness::session::SessionTopology topology{harness::session::SessionTopology::Linear};
 };
 
+struct PreparedResumeTarget {
+    std::filesystem::path resume_path;
+    std::filesystem::path workspace;
+    harness::session::SessionResumeResult resume;
+};
+
+/// Read-only resume target preparation. Does not open a writable store and
+/// does not modify the existing session file.
+[[nodiscard]] util::Expected<PreparedResumeTarget> prepare_resume_target(
+    std::filesystem::path resume_path,
+    std::filesystem::path explicit_workspace,
+    bool workspace_explicit);
+
+/// Publish a new session file after all fallible prerequisites have succeeded.
+[[nodiscard]] util::Expected<OpenSession> publish_new_session(
+    std::filesystem::path session_path,
+    std::filesystem::path workspace,
+    harness::session::SessionMetadata metadata);
+
+/// Open an existing session file for resumption after all fallible
+/// prerequisites have succeeded.
+[[nodiscard]] util::Expected<OpenSession> publish_resume_session(
+    const PreparedResumeTarget& target);
+
+/// Legacy one-step open for tests. Prefer prepare/publish for production paths.
 [[nodiscard]] util::Expected<OpenSession> open_session(SessionOpenRequest request);
 
 } // namespace cch::coding_agent::runtime

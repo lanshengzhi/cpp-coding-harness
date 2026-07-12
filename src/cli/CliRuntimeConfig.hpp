@@ -29,8 +29,6 @@ struct AsyncCliRuntimeConfig {
     std::filesystem::path workspace;
     std::filesystem::path session_path;
     std::filesystem::path resume_path;
-    std::string session_id;
-    std::string created_at;
     coding_agent::CliProviderOverrides provider_overrides;
     std::string prompt;
 };

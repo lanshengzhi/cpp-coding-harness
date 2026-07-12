@@ -60,6 +60,8 @@ struct ProjectResourceLoadingResult {
     ProjectTrustResolution trust;
     ProjectResourceLoadPlan load_plan;
     LoadedProjectResources resources;
+    /// Errors that must abort session creation (e.g. explicit resource failures).
+    std::vector<ProjectResourceLoadingDiagnostic> fatal_errors;
     std::vector<ProjectResourceLoadingDiagnostic> diagnostics;
 };
 

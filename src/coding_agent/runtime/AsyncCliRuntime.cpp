@@ -62,8 +62,6 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
     request.workspace = config.workspace;
     request.session_path = config.session_path;
     request.resume_path = config.resume_path;
-    request.session_id = config.session_id;
-    request.created_at = config.created_at;
     request.provider_overrides = config.provider_overrides;
     request.config = *config_data;
     request.command_registry = std::move(command_registry);

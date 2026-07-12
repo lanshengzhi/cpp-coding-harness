@@ -110,8 +110,6 @@ AsyncCliRuntimeConfig to_runtime_config(CliConfig config) {
         .workspace = std::move(config.workspace),
         .session_path = config.session_path.empty() ? default_session_path() : std::move(config.session_path),
         .resume_path = std::move(config.resume_path),
-        .session_id = run_timestamp,
-        .created_at = run_timestamp,
         .provider_overrides = std::move(config.provider_overrides),
         .prompt = std::move(config.prompt),
     };
