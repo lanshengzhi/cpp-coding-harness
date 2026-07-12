@@ -1,3 +1,4 @@
+.pi-subagents/
 build/
 .deps/
 .cpp-harness/sessions/*.jsonl
