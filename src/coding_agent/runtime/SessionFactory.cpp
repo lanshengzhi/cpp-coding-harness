@@ -503,6 +503,28 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
         resolved.model = std::string{kHostClientModel};
     }
 
+    // Resume: explicit provider/model overrides are allowed but warned.
+    if (is_resume) {
+        const bool provider_overridden = plan.provider_request.provider.has_value() &&
+                                         stored_provider.has_value() &&
+                                         *plan.provider_request.provider != *stored_provider;
+        const bool model_overridden = plan.provider_request.model.has_value() &&
+                                      stored_model.has_value() &&
+                                      *plan.provider_request.model != *stored_model;
+        if (provider_overridden || model_overridden) {
+            diagnostics.push_back(make_diag(
+                SdkDiagnostic::Severity::Warning,
+                "resume_provider_override",
+                std::format(
+                    "Resumed session provider/model metadata overridden by explicit request; "
+                    "was ({}/{}) now ({}/{})",
+                    stored_provider.value_or(""),
+                    stored_model.value_or(""),
+                    resolved.provider,
+                    resolved.model)));
+        }
+    }
+
     // 4. Build or adopt the chat client.
     std::unique_ptr<ai::StreamingChatClient> chat_client;
     if (plan.host_client) {
@@ -516,15 +538,6 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
                 SdkDiagnostic::Severity::Info,
                 "host_client_resume",
                 "Resumed session with host-provided chat client; stored provider/model metadata may differ"));
-        }
-        if (is_resume && plan.provider_request.provider) {
-            diagnostics.push_back(make_diag(
-                SdkDiagnostic::Severity::Warning,
-                "resume_provider_override",
-                std::format(
-                    "Resumed session provider/model ({}/{}) overridden by explicit provider_config ({}/{})",
-                    *stored_provider, *stored_model,
-                    resolved.provider, resolved.model)));
         }
     } else {
         auto client_result = build_chat_client(plan.provider_request, resolved, diagnostics);

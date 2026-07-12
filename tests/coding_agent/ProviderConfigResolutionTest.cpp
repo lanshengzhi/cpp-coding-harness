@@ -324,3 +324,50 @@ TEST_CASE("ProviderRequest resolution explicit api_key_env overrides config chai
     REQUIRE(resolved.api_key_env_chain.size() == 1);
     CHECK(resolved.api_key_env_chain.front() == "SDK_KEY");
 }
+
+TEST_CASE("ProviderRequest resolution uses config provider for all registry names", "[config][resolution]") {
+    cch::coding_agent::ProviderRequest request;
+    cch::coding_agent::ConfigData config;
+    config.provider = "kimi-coding";
+
+    const auto resolved = cch::coding_agent::resolve_provider_settings(
+        "sdk-host",
+        request,
+        config,
+        std::nullopt,
+        std::nullopt);
+
+    CHECK(resolved.provider_registry_name == "sdk-host");
+    CHECK(resolved.provider == "kimi-coding");
+}
+
+TEST_CASE("ProviderRequest resolution explicit provider wins over config provider", "[config][resolution]") {
+    cch::coding_agent::ProviderRequest request;
+    request.provider = "openai";
+    cch::coding_agent::ConfigData config;
+    config.provider = "kimi-coding";
+
+    const auto resolved = cch::coding_agent::resolve_provider_settings(
+        "sdk-host",
+        request,
+        config,
+        std::nullopt,
+        std::nullopt);
+
+    CHECK(resolved.provider == "openai");
+}
+
+TEST_CASE("ProviderRequest resolution stored provider wins over config provider", "[config][resolution]") {
+    cch::coding_agent::ProviderRequest request;
+    cch::coding_agent::ConfigData config;
+    config.provider = "kimi-coding";
+
+    const auto resolved = cch::coding_agent::resolve_provider_settings(
+        "openai-compatible",
+        request,
+        config,
+        std::string{"stored-provider"},
+        std::string{"stored-model"});
+
+    CHECK(resolved.provider == "stored-provider");
+}

@@ -60,7 +60,7 @@ ResolvedProviderSettings resolve_provider_settings(
         resolved_provider = *explicit_request.provider;
     } else if (stored_provider) {
         resolved_provider = *stored_provider;
-    } else if (resolved_provider == "openai-compatible" && config.provider) {
+    } else if (config.provider) {
         resolved_provider = *config.provider;
     }
 

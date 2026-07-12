@@ -989,3 +989,80 @@ TEST_CASE("CLI invalid explicit prompt template fails before session creation", 
           result.stderr_text.find("explicit") != std::string::npos);
     CHECK_FALSE(std::filesystem::exists(session));
 }
+
+TEST_CASE("CLI applies config.json provider identity when no explicit provider", "[cli][config][provider-resolution]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    std::filesystem::create_directories(home.path() / ".cpp-harness");
+    std::ofstream(home.path() / ".cpp-harness" / "config.json") << R"({"provider":"kimi-coding","model":"kimi-for-coding"})";
+    auto session = workspace.path() / "config-provider-rpc.jsonl";
+
+    auto result = run_command_split_with_input(
+        "env -u OPENAI_API_KEY CCH_CONFIG_PROVIDER_KEY=unused HOME=" + q(home.path()) + " " + bin() +
+        " --workspace " + q(workspace.path()) +
+        " --session " + q(session) +
+        " --api-key-env CCH_CONFIG_PROVIDER_KEY --mode rpc",
+        "{\"type\":\"get_state\"}\n{\"type\":\"shutdown\"}\n");
+
+    REQUIRE(result.exit_code == 0);
+    auto records = parse_json_objects(result.stdout_text);
+    auto* state = find_response(records, "get_state");
+    REQUIRE(state != nullptr);
+    auto data = state->at("data").get<cch::util::JsonValue::object_t>();
+    CHECK(json_string_at(data, "provider") == "kimi-coding");
+    CHECK(json_string_at(data, "model") == "kimi-for-coding");
+}
+
+TEST_CASE("CLI resume with explicit model override reports diagnostic and uses override", "[cli][provider-resolution]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    auto session = workspace.path() / "resume-override.jsonl";
+
+    auto first = run_command(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --session " + q(session) + " first");
+    REQUIRE(first.exit_code == 0);
+
+    auto second = run_command_split_with_input(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --resume " + q(session) +
+        " --model override-model --mode rpc",
+        "{\"type\":\"get_state\"}\n{\"type\":\"shutdown\"}\n");
+
+    REQUIRE(second.exit_code == 0);
+    CHECK(second.stderr_text.find("resume_provider_override") != std::string::npos);
+    auto records = parse_json_objects(second.stdout_text);
+    auto* state = find_response(records, "get_state");
+    REQUIRE(state != nullptr);
+    auto data = state->at("data").get<cch::util::JsonValue::object_t>();
+    CHECK(json_string_at(data, "model") == "override-model");
+}
+
+TEST_CASE("CLI resume without override retains stored provider and model", "[cli][provider-resolution]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    auto session = workspace.path() / "resume-retain.jsonl";
+
+    auto first = run_command(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --session " + q(session) + " first");
+    REQUIRE(first.exit_code == 0);
+
+    auto second = run_command_split_with_input(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --resume " + q(session) + " --mode rpc",
+        "{\"type\":\"get_state\"}\n{\"type\":\"shutdown\"}\n");
+
+    REQUIRE(second.exit_code == 0);
+    CHECK(second.stderr_text.find("resume_provider_override") == std::string::npos);
+    auto records = parse_json_objects(second.stdout_text);
+    auto* state = find_response(records, "get_state");
+    REQUIRE(state != nullptr);
+    auto data = state->at("data").get<cch::util::JsonValue::object_t>();
+    CHECK(json_string_at(data, "provider") == "fake");
+    CHECK(json_string_at(data, "model") == "fake-model");
+}

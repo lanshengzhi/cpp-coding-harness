@@ -1111,6 +1111,9 @@ TEST_CASE("SDK state accessors reflect committed history", "[sdk][u3]") {
 
 TEST_CASE("CreateAgentSessionResult contains metadata", "[sdk][u2]") {
     TestPaths paths;
+    cch::tests::TempWorkspace home;
+    EnvVarGuard home_guard{"HOME"};
+    home_guard.set(home.path().string());
 
     coding_agent::CreateAgentSessionOptions opts;
     opts.session_path = paths.session_file;
@@ -1330,5 +1333,142 @@ TEST_CASE("SDK accepts external not-yet-created trust_store_path", "[sdk][assemb
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
     CHECK(result->session->close().has_value());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Provider resolution and metadata precedence
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST_CASE("SDK host client new session uses config provider but host model sentinel", "[sdk][provider-resolution]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace home;
+    EnvVarGuard home_guard{"HOME"};
+    home_guard.set(home.path().string());
+    std::filesystem::create_directories(home.path() / ".cpp-harness");
+    std::ofstream(home.path() / ".cpp-harness" / "config.json") << R"({"provider":"kimi-coding"})";
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    CHECK(result->provider == "kimi-coding");
+    CHECK(result->model == "host-client");
+    CHECK(result->session->provider() == "kimi-coding");
+    CHECK(result->session->model() == "host-client");
+    CHECK(result->session->close().has_value());
+}
+
+TEST_CASE("SDK host client resume without override retains stored metadata", "[sdk][provider-resolution]") {
+    TestPaths paths;
+
+    {
+        coding_agent::CreateAgentSessionOptions opts;
+        opts.session_path = paths.session_file;
+        opts.workspace = paths.workspace.path();
+        opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+        opts.provider_config = coding_agent::SdkProviderConfig{
+            .provider = "fake",
+            .model = "fake-model",
+        };
+
+        auto result = coding_agent::create_agent_session(std::move(opts));
+        REQUIRE(result.has_value());
+        CHECK(result->provider == "fake");
+        CHECK(result->model == "fake-model");
+        CHECK(result->session->close().has_value());
+    }
+
+    {
+        coding_agent::CreateAgentSessionOptions opts;
+        opts.resume_path = paths.session_file;
+        opts.workspace = paths.workspace.path();
+        opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+        auto result = coding_agent::create_agent_session(std::move(opts));
+        REQUIRE(result.has_value());
+        CHECK(result->provider == "fake");
+        CHECK(result->model == "fake-model");
+        CHECK_FALSE(has_sdk_diag(result->diagnostics, "resume_provider_override"));
+        CHECK(result->session->provider() == "fake");
+        CHECK(result->session->model() == "fake-model");
+        CHECK(result->session->close().has_value());
+    }
+}
+
+TEST_CASE("SDK resume with explicit provider/model override reports diagnostic", "[sdk][provider-resolution]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace home;
+    EnvVarGuard home_guard{"HOME"};
+    home_guard.set(home.path().string());
+
+    {
+        coding_agent::CreateAgentSessionOptions opts;
+        opts.session_path = paths.session_file;
+        opts.workspace = paths.workspace.path();
+        opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+        auto result = coding_agent::create_agent_session(std::move(opts));
+        REQUIRE(result.has_value());
+        CHECK(result->provider == "sdk-host");
+        CHECK(result->model == "host-client");
+        CHECK(result->session->close().has_value());
+    }
+
+    {
+        coding_agent::CreateAgentSessionOptions opts;
+        opts.resume_path = paths.session_file;
+        opts.workspace = paths.workspace.path();
+        opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+        opts.provider_config = coding_agent::SdkProviderConfig{
+            .provider = "openai-compatible",
+            .model = "gpt-4o",
+        };
+
+        auto result = coding_agent::create_agent_session(std::move(opts));
+        REQUIRE(result.has_value());
+        CHECK(result->provider == "openai-compatible");
+        CHECK(result->model == "gpt-4o");
+        CHECK(has_sdk_diag(result->diagnostics, "resume_provider_override"));
+        CHECK(result->session->close().has_value());
+    }
+}
+
+TEST_CASE("SDK resume with explicit model override alone reports diagnostic", "[sdk][provider-resolution]") {
+    TestPaths paths;
+
+    {
+        coding_agent::CreateAgentSessionOptions opts;
+        opts.session_path = paths.session_file;
+        opts.workspace = paths.workspace.path();
+        opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+        opts.provider_config = coding_agent::SdkProviderConfig{
+            .provider = "openai-compatible",
+            .model = "gpt-4.1-mini",
+        };
+
+        auto result = coding_agent::create_agent_session(std::move(opts));
+        REQUIRE(result.has_value());
+        CHECK(result->session->close().has_value());
+    }
+
+    {
+        coding_agent::CreateAgentSessionOptions opts;
+        opts.resume_path = paths.session_file;
+        opts.workspace = paths.workspace.path();
+        opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+        opts.provider_config = coding_agent::SdkProviderConfig{
+            .provider = "openai-compatible",
+            .model = "gpt-4o",
+        };
+
+        auto result = coding_agent::create_agent_session(std::move(opts));
+        REQUIRE(result.has_value());
+        CHECK(result->model == "gpt-4o");
+        CHECK(has_sdk_diag(result->diagnostics, "resume_provider_override"));
+        CHECK(result->session->close().has_value());
+    }
 }
 
