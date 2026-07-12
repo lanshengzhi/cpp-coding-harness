@@ -26,7 +26,7 @@ A move-only runtime handle representing one open agent conversation session. The
 
 ### SessionFactory
 
-The adapter responsible for assembling an `AgentSession` from resolved configuration, project resources, provider client, tools, session store, and other runtime parts. Returns a thin handle plus creation-time diagnostics.
+The adapter responsible for assembling an `AgentSession` from source-specific creation intent. CLI and SDK adapters only translate their inputs into that intent; `SessionFactory` owns the shared provider, resume, trust, resource, tool, default, and security-sensitive assembly policy. Returns a thin handle plus creation-time diagnostics.
 
 ### PromptProcessingPipeline
 
