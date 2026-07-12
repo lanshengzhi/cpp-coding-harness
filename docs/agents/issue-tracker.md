@@ -12,9 +12,9 @@ Issues and PRDs for this repo live as markdown files in `.scratch/`.
 - Use `implemented` when the acceptance criteria are satisfied, implementation is committed, and validation is recorded in the issue or PRD
 - Comments and conversation history append to the bottom of the file under a `## Comments` heading
 
-## Local Terminal Statuses
+## Local lifecycle states
 
-These are local Markdown tracker lifecycle states, not mattpocock/skills triage roles:
+These are tracker-specific states, not mattpocock/skills triage roles:
 
 | Status | Meaning |
 | ------ | ------- |

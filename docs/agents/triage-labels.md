@@ -14,10 +14,4 @@ When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the 
 
 Edit the right-hand column to match whatever vocabulary you actually use.
 
-## Local Terminal Statuses
-
-These are local Markdown tracker lifecycle states, not mattpocock/skills triage roles:
-
-| Status | Meaning |
-| ------ | ------- |
-| `implemented` | Acceptance criteria are satisfied, implementation is committed, and validation is recorded. |
+For local tracker lifecycle states (for example `implemented`), see [`docs/agents/issue-tracker.md`](issue-tracker.md).
