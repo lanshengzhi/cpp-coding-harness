@@ -59,16 +59,40 @@ TEST_CASE("built-in /session command returns session info", "[coding_agent][prom
     CHECK(result.display_text->find("5") != std::string::npos);
 }
 
-TEST_CASE("built-in /quit command signals shutdown", "[coding_agent][prompt]") {
+TEST_CASE("built-in /quit and /exit commands signal shutdown through the same handler", "[coding_agent][prompt]") {
     coding_agent::CommandRegistry registry;
     REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
 
     coding_agent::CommandContext ctx;
-    auto result = coding_agent::process_prompt("/quit", {}, registry, ctx);
-    CHECK(result.command_handled == true);
-    CHECK(result.shutdown_requested == true);
-    REQUIRE(result.display_text);
-    CHECK(result.display_text->find("Shutting down") != std::string::npos);
+    auto quit = coding_agent::process_prompt("/quit", {}, registry, ctx);
+    auto exit = coding_agent::process_prompt("/exit", {}, registry, ctx);
+
+    CHECK(quit.command_handled == true);
+    CHECK(quit.shutdown_requested == true);
+    REQUIRE(quit.display_text);
+    CHECK(*quit.display_text == "Shutting down.");
+    CHECK(exit.command_handled == true);
+    CHECK(exit.shutdown_requested == true);
+    REQUIRE(exit.display_text);
+    CHECK(*exit.display_text == *quit.display_text);
+}
+
+TEST_CASE("built-in /clear is a no-op command outside the text presentation seam", "[coding_agent][prompt]") {
+    coding_agent::CommandRegistry registry;
+    REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
+
+    coding_agent::CommandContext ctx;
+    auto clear = coding_agent::process_prompt("/clear", {}, registry, ctx);
+    CHECK(clear.command_handled == true);
+    CHECK_FALSE(clear.shutdown_requested);
+    REQUIRE(clear.display_text);
+    CHECK(clear.display_text->empty());
+
+    auto with_arguments = coding_agent::process_prompt("/clear now", {}, registry, ctx);
+    CHECK(with_arguments.command_handled == true);
+    CHECK_FALSE(with_arguments.shutdown_requested);
+    REQUIRE(with_arguments.display_text);
+    CHECK(*with_arguments.display_text == "Usage: /clear");
 }
 
 TEST_CASE("built-in /new command returns instruction text", "[coding_agent][prompt]") {
@@ -110,21 +134,26 @@ TEST_CASE("built-in command metadata describes the implemented operations", "[co
     REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
 
     const auto commands = registry.list_commands();
-    REQUIRE(commands.size() == 6);
-    CHECK(commands[0].name == "commands");
-    CHECK(commands[0].alias_for == "help");
-    CHECK(commands[1].name == "help");
-    CHECK(commands[1].description == "Show available commands or help for one command");
-    CHECK(commands[1].argument_hint == "[command]");
-    CHECK(commands[2].name == "new");
-    CHECK(commands[2].description == "Show restart instructions for a new session");
-    CHECK(commands[3].name == "quit");
-    CHECK(commands[3].description == "Quit the session");
-    CHECK(commands[4].name == "resume");
-    CHECK(commands[4].description == "Show restart instructions for resuming a session");
-    CHECK(commands[4].argument_hint == "<session-id>");
-    CHECK(commands[5].name == "session");
-    CHECK(commands[5].description == "Show current session information");
+    REQUIRE(commands.size() == 8);
+    CHECK(commands[0].name == "clear");
+    CHECK(commands[0].description == "Clear the terminal screen");
+    CHECK(commands[1].name == "commands");
+    CHECK(commands[1].alias_for == "help");
+    CHECK(commands[2].name == "exit");
+    CHECK(commands[2].alias_for == "quit");
+    CHECK(commands[2].description == "Quit the session");
+    CHECK(commands[3].name == "help");
+    CHECK(commands[3].description == "Show available commands or help for one command");
+    CHECK(commands[3].argument_hint == "[command]");
+    CHECK(commands[4].name == "new");
+    CHECK(commands[4].description == "Show restart instructions for a new session");
+    CHECK(commands[5].name == "quit");
+    CHECK(commands[5].description == "Quit the session");
+    CHECK(commands[6].name == "resume");
+    CHECK(commands[6].description == "Show restart instructions for resuming a session");
+    CHECK(commands[6].argument_hint == "<session-id>");
+    CHECK(commands[7].name == "session");
+    CHECK(commands[7].description == "Show current session information");
 }
 
 TEST_CASE("built-in /help lists the passive command snapshot deterministically", "[coding_agent][prompt]") {
@@ -141,7 +170,9 @@ TEST_CASE("built-in /help lists the passive command snapshot deterministically",
     REQUIRE(result.has_value());
     CHECK(result->display_text ==
           "Available commands:\n"
+          "  /clear                  Clear the terminal screen\n"
           "  /commands               Alias for /help\n"
+          "  /exit                   Alias for /quit\n"
           "  /help [command]         Show available commands or help for one command\n"
           "  /new                    Show restart instructions for a new session\n"
           "  /quit                   Quit the session\n"

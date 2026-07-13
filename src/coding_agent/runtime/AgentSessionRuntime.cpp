@@ -140,13 +140,12 @@ PromptRunResult AgentSessionRuntime::run_prompt(
     }
 
     if (processing.command_handled) {
+        result.success = true;
+        result.message = processing.display_text.value_or("");
         if (processing.shutdown_requested) {
-            result.success = true;
             result.code = "shutdown";
         } else {
-            result.success = true;
             result.code = "command_handled";
-            result.message = processing.display_text.value_or("");
         }
         state_ = State::Open;
         return result;

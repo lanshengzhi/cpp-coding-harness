@@ -221,6 +221,43 @@ TEST_CASE("CLI text REPL dispatches /commands as /help", "[cli][commands]") {
     CHECK(result.output.find("[model-request]") == std::string::npos);
 }
 
+TEST_CASE("CLI text one-shot /clear emits terminal controls without invoking the model", "[cli][commands]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "clear-one-shot.jsonl";
+    auto result = run_command_split(
+        bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " /clear");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.empty());
+    CHECK(result.stdout_text == "\033[2J\033[H");
+    CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
+}
+
+TEST_CASE("CLI text REPL /clear stays in the frontend and /exit displays shutdown text", "[cli][commands]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "clear-exit-repl.jsonl";
+    auto result = run_command(
+        "printf '/clear\\n/exit\\nignored\\n' | " + bin() + " --fake --repl --workspace " +
+        q(workspace.path()) + " --session " + q(session));
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.output.find("\033[2J\033[H") != std::string::npos);
+    CHECK(result.output.find("Shutting down.") != std::string::npos);
+    CHECK(result.output.find("fake: ignored") == std::string::npos);
+    CHECK(result.output.find("[model-request]") == std::string::npos);
+}
+
+TEST_CASE("CLI text one-shot /exit displays shutdown text", "[cli][commands]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "exit-one-shot.jsonl";
+    auto result = run_command(
+        bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " /exit");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.output.find("Shutting down.") != std::string::npos);
+    CHECK(result.output.find("[model-request]") == std::string::npos);
+}
+
 TEST_CASE("CLI fake one-shot streams through the current event path", "[cli][u8][ae5]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "event-path.jsonl";
@@ -327,6 +364,41 @@ TEST_CASE("CLI JSON /help stores help text in the terminal message field", "[cli
     CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
 }
 
+TEST_CASE("CLI JSON /exit emits shutdown terminal text and exits successfully", "[cli][json][commands]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "json-exit.jsonl";
+    auto result = run_command_split(
+        bin() + " --fake --mode json --workspace " + q(workspace.path()) +
+        " --session " + q(session) + " /exit");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.empty());
+    const auto records = parse_json_objects(result.stdout_text);
+    const auto* terminal = find_terminal(records);
+    REQUIRE(terminal != nullptr);
+    CHECK(json_string_at(*terminal, "code") == "shutdown");
+    CHECK(json_string_at(*terminal, "message") == "Shutting down.");
+    CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
+}
+
+TEST_CASE("CLI JSON /clear is handled without ANSI bytes", "[cli][json][commands]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "json-clear.jsonl";
+    auto result = run_command_split(
+        bin() + " --fake --mode json --workspace " + q(workspace.path()) +
+        " --session " + q(session) + " /clear");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.empty());
+    const auto records = parse_json_objects(result.stdout_text);
+    const auto* terminal = find_terminal(records);
+    REQUIRE(terminal != nullptr);
+    CHECK(json_string_at(*terminal, "code") == "command_handled");
+    CHECK(terminal->find("message") == terminal->end());
+    CHECK(result.stdout_text.find('\033') == std::string::npos);
+    CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
+}
+
 TEST_CASE("CLI JSON fake tool flow emits correlated tool events", "[cli][json]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "json-tool.jsonl";
@@ -426,6 +498,50 @@ TEST_CASE("CLI RPC /help stores help text in the terminal message field", "[cli]
     REQUIRE(terminal != nullptr);
     CHECK(json_string_at(*terminal, "code") == "command_handled");
     CHECK(json_string_at(*terminal, "message").find("Available commands:") != std::string::npos);
+}
+
+TEST_CASE("CLI RPC /exit emits shutdown terminal text and ignores later records", "[cli][rpc][commands]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "rpc-exit.jsonl";
+    const std::string input =
+        "{\"id\":\"p1\",\"type\":\"prompt\",\"message\":\"/exit\"}\n"
+        "{\"id\":\"later\",\"type\":\"get_state\"}\n";
+    auto result = run_command_split_with_input(
+        bin() + " --fake --mode rpc --workspace " + q(workspace.path()) + " --session " + q(session),
+        input);
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.empty());
+    const auto records = parse_json_objects(result.stdout_text);
+    REQUIRE(find_response(records, "prompt") != nullptr);
+    CHECK(find_response(records, "get_state") == nullptr);
+    const auto* terminal = find_terminal(records);
+    REQUIRE(terminal != nullptr);
+    CHECK(json_string_at(*terminal, "code") == "shutdown");
+    CHECK(json_string_at(*terminal, "message") == "Shutting down.");
+    CHECK(result.stdout_text.find('\033') == std::string::npos);
+}
+
+TEST_CASE("CLI RPC /clear is handled without ANSI bytes", "[cli][rpc][commands]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "rpc-clear.jsonl";
+    const std::string input =
+        "{\"id\":\"p1\",\"type\":\"prompt\",\"message\":\"/clear\"}\n"
+        "{\"id\":\"q1\",\"type\":\"shutdown\"}\n";
+    auto result = run_command_split_with_input(
+        bin() + " --fake --mode rpc --workspace " + q(workspace.path()) + " --session " + q(session),
+        input);
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.empty());
+    const auto records = parse_json_objects(result.stdout_text);
+    REQUIRE(find_response(records, "prompt") != nullptr);
+    REQUIRE(find_response(records, "shutdown") != nullptr);
+    const auto* terminal = find_terminal(records);
+    REQUIRE(terminal != nullptr);
+    CHECK(json_string_at(*terminal, "code") == "command_handled");
+    CHECK(terminal->find("message") == terminal->end());
+    CHECK(result.stdout_text.find('\033') == std::string::npos);
 }
 
 TEST_CASE("CLI RPC exits cleanly on EOF without shutdown", "[cli][rpc]") {

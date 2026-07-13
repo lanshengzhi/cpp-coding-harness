@@ -35,6 +35,11 @@ bool print_json_terminal(coding_agent::runtime::JsonEventPrinter& printer, bool 
     return true;
 }
 
+bool clear_text_terminal() {
+    std::cout << "\033[2J\033[H";
+    std::cout.flush();
+    return static_cast<bool>(std::cout);
+}
 
 } // namespace
 
@@ -199,7 +204,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             }
             return result;
         }
-        if (result.code == "command_handled" && !result.message.empty()) {
+        if ((result.code == "command_handled" || result.code == "shutdown") && !result.message.empty()) {
             std::cout << result.message << '\n';
         } else if (result.code == "completed" && result.last_assistant_text) {
             std::cout << *result.last_assistant_text << '\n';
@@ -212,15 +217,20 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         while (std::cout << "> " && std::getline(std::cin, line)) {
             if (line == "exit" || line == "quit") break;
             if (line.empty()) continue;
+            if (line == "/clear") {
+                if (!clear_text_terminal()) return 1;
+                continue;
+            }
 
             auto result = run_prompt(line);
             if (!result.success) return 1;
-            if (result.code == "shutdown" && !result.message.empty()) {
-                std::cout << result.message << '\n';
-            }
             if (result.code == "shutdown") return 0;
         }
         return 0;
+    }
+
+    if (!json_mode && config.prompt == "/clear") {
+        return clear_text_terminal() ? 0 : 1;
     }
 
     auto result = run_prompt(config.prompt);

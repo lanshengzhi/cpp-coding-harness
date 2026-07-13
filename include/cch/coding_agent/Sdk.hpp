@@ -194,6 +194,7 @@ struct PromptResult {
     /// Stable machine-readable code:
     ///   "completed"          — agent stopped normally
     ///   "command_handled"    — slash-command consumed the input
+    ///   "shutdown"           — slash-command requested frontend shutdown
     ///   "max_turns_exceeded" — turn limit reached
     ///   "session_persist_failed" — append to JSONL failed
     ///   "runtime_error"      — other agent-loop failure

@@ -264,6 +264,26 @@ util::ExpectedVoid register_builtin_commands(CommandRegistry& registry) {
         return std::unexpected(registered.error());
     }
 
+    if (auto registered = registry.register_alias("exit", "quit"); !registered) {
+        return std::unexpected(registered.error());
+    }
+
+    // /clear — structured modes consume this as a no-op. The text frontend
+    // intercepts exact /clear before prompt dispatch and emits terminal bytes.
+    if (auto registered = registry.register_command(
+            "clear",
+            "Clear the terminal screen",
+            {},
+            [](const CommandContext& /*ctx*/, std::string_view args) {
+                if (!args.empty()) {
+                    return CommandResult{"Usage: /clear"};
+                }
+                return CommandResult{};
+            });
+        !registered) {
+        return std::unexpected(registered.error());
+    }
+
     // /new — return restart instructions rather than replacing the session.
     if (auto registered = registry.register_command(
             "new",
