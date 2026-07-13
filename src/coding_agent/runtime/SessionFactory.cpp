@@ -632,7 +632,11 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
             }
         }
         for (auto& cmd : plan.commands) {
-            command_registry.register_command(std::move(cmd.name), std::move(cmd.handler));
+            if (auto registered = command_registry.register_command(std::move(cmd.name), std::move(cmd.handler));
+                !registered) {
+                cleanup_on_failure();
+                return std::unexpected(registered.error());
+            }
         }
     }
 

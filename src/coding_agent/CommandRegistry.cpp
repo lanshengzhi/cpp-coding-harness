@@ -1,7 +1,10 @@
 #include "../../include/cch/coding_agent/CommandRegistry.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace cch::coding_agent {
 namespace {
@@ -15,40 +18,131 @@ namespace {
 
 } // namespace
 
-void register_builtin_commands(CommandRegistry& registry) {
-    // /session — print current session info
-    registry.register_command("session", [](const CommandContext& ctx, std::string_view /*args*/) {
-        std::string text;
-        text += "Session: " + ctx.session_id + "\n";
-        text += "Workspace: " + ctx.workspace_path + "\n";
-        text += "Provider: " + ctx.provider + "\n";
-        text += "Model: " + ctx.model + "\n";
-        text += "Messages: " + std::to_string(ctx.message_count);
-        return CommandResult{std::move(text)};
+util::ExpectedVoid CommandRegistry::register_command(
+    std::string name,
+    std::string description,
+    std::string argument_hint,
+    CommandHandler handler) {
+    if (name.empty()) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "command name must not be empty"));
+    }
+    if (name.front() == '/') {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "command name must not start with '/'",
+            {},
+            name));
+    }
+    if (std::any_of(name.begin(), name.end(), [](unsigned char ch) { return std::isspace(ch) != 0; })) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "command name must not contain whitespace",
+            {},
+            name));
+    }
+    if (!handler) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "command handler must not be empty",
+            {},
+            name));
+    }
+    if (entries_.contains(name)) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "duplicate canonical command name: '" + name + "'",
+            {},
+            name));
+    }
+
+    auto key = name;
+    entries_.emplace(
+        std::move(key),
+        Entry{
+            .info = CommandInfo{
+                .name = std::move(name),
+                .description = std::move(description),
+                .argument_hint = std::move(argument_hint),
+                .alias_for = std::nullopt,
+            },
+            .handler = std::move(handler),
+        });
+    return {};
+}
+
+util::ExpectedVoid CommandRegistry::register_command(std::string name, CommandHandler handler) {
+    return register_command(std::move(name), {}, {}, std::move(handler));
+}
+
+std::vector<CommandInfo> CommandRegistry::list_commands() const {
+    std::vector<CommandInfo> commands;
+    commands.reserve(entries_.size());
+    for (const auto& [name, entry] : entries_) {
+        (void)name;
+        commands.push_back(entry.info);
+    }
+    std::sort(commands.begin(), commands.end(), [](const CommandInfo& lhs, const CommandInfo& rhs) {
+        return lhs.name < rhs.name;
     });
+    return commands;
+}
+
+std::optional<CommandInfo> CommandRegistry::find_command_info(std::string_view name) const {
+    const auto it = entries_.find(std::string{name});
+    if (it == entries_.end()) return std::nullopt;
+    return it->second.info;
+}
+
+util::ExpectedVoid register_builtin_commands(CommandRegistry& registry) {
+    // /session — print current session info
+    if (auto registered = registry.register_command("session", [](const CommandContext& ctx, std::string_view /*args*/) {
+            std::string text;
+            text += "Session: " + ctx.session_id + "\n";
+            text += "Workspace: " + ctx.workspace_path + "\n";
+            text += "Provider: " + ctx.provider + "\n";
+            text += "Model: " + ctx.model + "\n";
+            text += "Messages: " + std::to_string(ctx.message_count);
+            return CommandResult{std::move(text)};
+        });
+        !registered) {
+        return std::unexpected(registered.error());
+    }
 
     // /quit — signal shutdown
-    registry.register_command("quit", [](const CommandContext& /*ctx*/, std::string_view /*args*/) {
-        return CommandResult{"Shutting down.", true};
-    });
+    if (auto registered = registry.register_command("quit", [](const CommandContext& /*ctx*/, std::string_view /*args*/) {
+            return CommandResult{"Shutting down.", true};
+        });
+        !registered) {
+        return std::unexpected(registered.error());
+    }
 
     // /new — start a new session (returns instruction text)
-    registry.register_command("new", [](const CommandContext& /*ctx*/, std::string_view /*args*/) {
-        return CommandResult{"To start a new session, restart cpp-harness without --resume."};
-    });
+    if (auto registered = registry.register_command("new", [](const CommandContext& /*ctx*/, std::string_view /*args*/) {
+            return CommandResult{"To start a new session, restart cpp-harness without --resume."};
+        });
+        !registered) {
+        return std::unexpected(registered.error());
+    }
 
     // /resume <session-id> — resume a previous session
-    registry.register_command("resume", [](const CommandContext& /*ctx*/, std::string_view args) {
-        auto trimmed = trim_left(args);
-        if (trimmed.empty()) {
-            return CommandResult{"Usage: /resume <session-id>\nRestart with: cpp-harness --resume <path-to-session.jsonl>"};
-        }
-        std::string text;
-        text += "To resume session '";
-        text += trimmed;
-        text += "', restart with: cpp-harness --resume <path-to-session.jsonl>";
-        return CommandResult{std::move(text)};
-    });
+    if (auto registered = registry.register_command("resume", [](const CommandContext& /*ctx*/, std::string_view args) {
+            auto trimmed = trim_left(args);
+            if (trimmed.empty()) {
+                return CommandResult{"Usage: /resume <session-id>\nRestart with: cpp-harness --resume <path-to-session.jsonl>"};
+            }
+            std::string text;
+            text += "To resume session '";
+            text += trimmed;
+            text += "', restart with: cpp-harness --resume <path-to-session.jsonl>";
+            return CommandResult{std::move(text)};
+        });
+        !registered) {
+        return std::unexpected(registered.error());
+    }
+
+    return {};
 }
 
 } // namespace cch::coding_agent

@@ -173,6 +173,7 @@ if(CCH_BUILD_TESTS)
         tests/cli/CliSmokeTest.cpp
         tests/cli/CliParseTest.cpp
         tests/coding_agent/BuiltinCommandsTest.cpp
+        tests/coding_agent/CommandRegistryTest.cpp
         tests/coding_agent/PromptExpanderTest.cpp
         tests/coding_agent/AuthLoaderTest.cpp
         tests/coding_agent/ConfigLoaderTest.cpp

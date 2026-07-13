@@ -48,7 +48,10 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
     }
 
     coding_agent::CommandRegistry command_registry;
-    register_builtin_commands(command_registry);
+    if (auto registered = register_builtin_commands(command_registry); !registered) {
+        std::cerr << "could not register built-in command: " << registered.error().message << '\n';
+        return 1;
+    }
 
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.fake = config.fake;

@@ -38,7 +38,7 @@ TEST_CASE("process_prompt detects shell passthrough prefix", "[coding_agent][pro
 
 TEST_CASE("built-in /session command returns session info", "[coding_agent][prompt]") {
     coding_agent::CommandRegistry registry;
-    coding_agent::register_builtin_commands(registry);
+    REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
 
     coding_agent::CommandContext ctx{
         .session_id = "test-session-1",
@@ -60,7 +60,7 @@ TEST_CASE("built-in /session command returns session info", "[coding_agent][prom
 
 TEST_CASE("built-in /quit command signals shutdown", "[coding_agent][prompt]") {
     coding_agent::CommandRegistry registry;
-    coding_agent::register_builtin_commands(registry);
+    REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
 
     coding_agent::CommandContext ctx;
     auto result = coding_agent::process_prompt("/quit", {}, registry, ctx);
@@ -72,7 +72,7 @@ TEST_CASE("built-in /quit command signals shutdown", "[coding_agent][prompt]") {
 
 TEST_CASE("built-in /new command returns instruction text", "[coding_agent][prompt]") {
     coding_agent::CommandRegistry registry;
-    coding_agent::register_builtin_commands(registry);
+    REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
 
     coding_agent::CommandContext ctx;
     auto result = coding_agent::process_prompt("/new", {}, registry, ctx);
@@ -83,7 +83,7 @@ TEST_CASE("built-in /new command returns instruction text", "[coding_agent][prom
 
 TEST_CASE("built-in /resume command with args returns instruction", "[coding_agent][prompt]") {
     coding_agent::CommandRegistry registry;
-    coding_agent::register_builtin_commands(registry);
+    REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
 
     coding_agent::CommandContext ctx;
     auto result = coding_agent::process_prompt("/resume abc123", {}, registry, ctx);
@@ -95,7 +95,7 @@ TEST_CASE("built-in /resume command with args returns instruction", "[coding_age
 
 TEST_CASE("built-in /resume without args shows usage", "[coding_agent][prompt]") {
     coding_agent::CommandRegistry registry;
-    coding_agent::register_builtin_commands(registry);
+    REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
 
     coding_agent::CommandContext ctx;
     auto result = coding_agent::process_prompt("/resume", {}, registry, ctx);
