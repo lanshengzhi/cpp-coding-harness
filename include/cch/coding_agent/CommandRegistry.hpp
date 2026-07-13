@@ -65,19 +65,26 @@ public:
     /// Register a canonical command with empty description and argument hint.
     [[nodiscard]] util::ExpectedVoid register_command(std::string name, CommandHandler handler);
 
-    /// Return canonical command metadata sorted lexicographically by name.
+    /// Register an alias for an existing canonical command.
+    [[nodiscard]] util::ExpectedVoid register_alias(std::string alias, std::string canonical_target);
+
+    /// Return canonical and alias metadata sorted lexicographically by name.
     [[nodiscard]] std::vector<CommandInfo> list_commands() const;
 
-    /// Find canonical command metadata by name.
+    /// Find canonical or alias command metadata by name.
     [[nodiscard]] std::optional<CommandInfo> find_command_info(std::string_view name) const;
 
-    /// Dispatch a canonical command by name. Returns std::nullopt if not found.
+    /// Dispatch a canonical command or alias by name. Returns std::nullopt if not found.
     [[nodiscard]] std::optional<CommandResult> dispatch(
         std::string_view name,
         const CommandContext& ctx,
         std::string_view args) {
         auto it = entries_.find(std::string{name});
-        if (it == entries_.end()) return std::nullopt;
+        if (it == entries_.end()) {
+            const auto alias = aliases_.find(std::string{name});
+            if (alias == aliases_.end()) return std::nullopt;
+            it = entries_.find(alias->second);
+        }
         return it->second.handler(ctx, args);
     }
 
@@ -91,6 +98,7 @@ private:
     };
 
     std::unordered_map<std::string, Entry> entries_;
+    std::unordered_map<std::string, std::string> aliases_;
 };
 
 /// Registers the built-in session-lifecycle slash commands.

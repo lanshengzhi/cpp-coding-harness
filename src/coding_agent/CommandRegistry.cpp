@@ -9,6 +9,41 @@
 namespace cch::coding_agent {
 namespace {
 
+[[nodiscard]] util::ExpectedVoid validate_command_name(std::string_view name, std::string_view kind) {
+    if (name.empty()) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            std::string{kind} + " name must not be empty"));
+    }
+    if (name.front() == '/') {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            std::string{kind} + " name must not start with '/'",
+            {},
+            std::string{name}));
+    }
+    if (std::any_of(name.begin(), name.end(), [](unsigned char ch) { return std::isspace(ch) != 0; })) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            std::string{kind} + " name must not contain whitespace",
+            {},
+            std::string{name}));
+    }
+    return {};
+}
+
+[[nodiscard]] CommandInfo make_alias_info(
+    std::string_view alias,
+    std::string_view canonical_name,
+    const CommandInfo& canonical) {
+    return CommandInfo{
+        .name = std::string{alias},
+        .description = canonical.description,
+        .argument_hint = canonical.argument_hint,
+        .alias_for = std::string{canonical_name},
+    };
+}
+
 [[nodiscard]] std::string_view trim_left(std::string_view sv) {
     while (!sv.empty() && (sv.front() == ' ' || sv.front() == '\t')) {
         sv.remove_prefix(1);
@@ -23,24 +58,8 @@ util::ExpectedVoid CommandRegistry::register_command(
     std::string description,
     std::string argument_hint,
     CommandHandler handler) {
-    if (name.empty()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "command name must not be empty"));
-    }
-    if (name.front() == '/') {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "command name must not start with '/'",
-            {},
-            name));
-    }
-    if (std::any_of(name.begin(), name.end(), [](unsigned char ch) { return std::isspace(ch) != 0; })) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "command name must not contain whitespace",
-            {},
-            name));
+    if (auto valid_name = validate_command_name(name, "command"); !valid_name) {
+        return std::unexpected(valid_name.error());
     }
     if (!handler) {
         return std::unexpected(util::make_error(
@@ -49,10 +68,10 @@ util::ExpectedVoid CommandRegistry::register_command(
             {},
             name));
     }
-    if (entries_.contains(name)) {
+    if (entries_.contains(name) || aliases_.contains(name)) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
-            "duplicate canonical command name: '" + name + "'",
+            "duplicate command name: '" + name + "'",
             {},
             name));
     }
@@ -76,12 +95,45 @@ util::ExpectedVoid CommandRegistry::register_command(std::string name, CommandHa
     return register_command(std::move(name), {}, {}, std::move(handler));
 }
 
+util::ExpectedVoid CommandRegistry::register_alias(std::string alias, std::string canonical_target) {
+    if (auto valid_name = validate_command_name(alias, "alias"); !valid_name) {
+        return std::unexpected(valid_name.error());
+    }
+    if (aliases_.contains(canonical_target)) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "alias target must not be another alias: '" + canonical_target + "'",
+            {},
+            canonical_target));
+    }
+    if (!entries_.contains(canonical_target)) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "alias target must be an existing canonical command: '" + canonical_target + "'",
+            {},
+            canonical_target));
+    }
+    if (entries_.contains(alias) || aliases_.contains(alias)) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "duplicate command name: '" + alias + "'",
+            {},
+            alias));
+    }
+
+    aliases_.emplace(std::move(alias), std::move(canonical_target));
+    return {};
+}
+
 std::vector<CommandInfo> CommandRegistry::list_commands() const {
     std::vector<CommandInfo> commands;
-    commands.reserve(entries_.size());
+    commands.reserve(entries_.size() + aliases_.size());
     for (const auto& [name, entry] : entries_) {
         (void)name;
         commands.push_back(entry.info);
+    }
+    for (const auto& [alias, canonical_name] : aliases_) {
+        commands.push_back(make_alias_info(alias, canonical_name, entries_.at(canonical_name).info));
     }
     std::sort(commands.begin(), commands.end(), [](const CommandInfo& lhs, const CommandInfo& rhs) {
         return lhs.name < rhs.name;
@@ -91,8 +143,11 @@ std::vector<CommandInfo> CommandRegistry::list_commands() const {
 
 std::optional<CommandInfo> CommandRegistry::find_command_info(std::string_view name) const {
     const auto it = entries_.find(std::string{name});
-    if (it == entries_.end()) return std::nullopt;
-    return it->second.info;
+    if (it != entries_.end()) return it->second.info;
+
+    const auto alias = aliases_.find(std::string{name});
+    if (alias == aliases_.end()) return std::nullopt;
+    return make_alias_info(alias->first, alias->second, entries_.at(alias->second).info);
 }
 
 util::ExpectedVoid register_builtin_commands(CommandRegistry& registry) {
