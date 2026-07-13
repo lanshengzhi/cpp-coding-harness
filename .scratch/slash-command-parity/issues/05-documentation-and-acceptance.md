@@ -33,3 +33,5 @@ Completed validation:
 - `git diff --check` — passed
 
 All PRD acceptance criteria were checked and satisfied. Direct pi slash-command parity beyond this Phase 1 line-CLI slice remains intentionally deferred, including operational `/new` and `/resume`, `/compact`, and the other pi built-ins listed in the roadmap. `/help`, `/commands`, `/clear`, and `/exit` remain explicitly classified as C++ line-CLI adaptations rather than direct pi parity.
+
+Code review found two documentation consistency issues, both corrected before handoff: the active contract inventory still pointed to the old registry location and four-command baseline, and the implemented PRD described its pre-implementation baseline in present tense. Standards review found no remaining baseline code smells; spec review found no scope creep.

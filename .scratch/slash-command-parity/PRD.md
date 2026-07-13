@@ -9,7 +9,7 @@
 
 ## 1. Summary
 
-The README claims the text REPL supports `/help`, `/clear`, `/compact`, and `/exit`, but the current registry contains only `/session`, `/quit`, `/new`, and `/resume`; `/new` and `/resume` only print restart instructions.
+Before Phase 1, the README claimed the text REPL supported `/help`, `/clear`, `/compact`, and `/exit`, but the registry contained only `/session`, `/quit`, `/new`, and `/resume`; `/new` and `/resume` only printed restart instructions.
 
 This slice corrects the highest-value documentation and interaction gap without introducing session replacement, runtime reconfiguration, or tree mutation. It adds four CLI-oriented commands:
 
@@ -49,15 +49,17 @@ Make the documented Phase 1 slash commands truthful and testable while preservin
 
 ---
 
-## 4. Current state
+## 4. Pre-implementation baseline
 
-- `include/cch/coding_agent/CommandRegistry.hpp` stores only `name -> CommandHandler` in an unordered map.
-- Duplicate registration is silently ignored by `unordered_map::emplace`.
-- The registry cannot list commands or describe them.
-- `CommandContext` contains session facts but no passive command metadata snapshot.
-- `/quit` uses the existing `shutdown_requested` result field.
-- `CommandContext` is constructed centrally in `AgentSessionRuntime`, not separately by CLI and RPC adapters.
-- Text, JSON, and RPC paths all eventually call `AgentSession::prompt()`, except text-only frontend operations that are deliberately intercepted by the text adapter.
+The following was the baseline when this PRD was written:
+
+- `include/cch/coding_agent/CommandRegistry.hpp` stored only `name -> CommandHandler` in an unordered map.
+- Duplicate registration was silently ignored by `unordered_map::emplace`.
+- The registry could not list commands or describe them.
+- `CommandContext` contained session facts but no passive command metadata snapshot.
+- `/quit` used the existing `shutdown_requested` result field.
+- `CommandContext` was constructed centrally in `AgentSessionRuntime`, not separately by CLI and RPC adapters.
+- Text, JSON, and RPC paths all eventually called `AgentSession::prompt()`, except text-only frontend operations deliberately intercepted by the text adapter.
 
 ---
 
