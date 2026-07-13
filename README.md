@@ -193,6 +193,31 @@ The default text CLI prints stable semantic event lines:
 
 `--mode rpc` is a narrow JSONL stdin/stdout command loop. It supports `prompt`, `get_state`, `get_last_assistant_text`, and `shutdown`; unsupported pi RPC commands return structured `success:false` responses. RPC mode emits no startup session header, writes command responses and prompt lifecycle events to stdout, and keeps startup/pre-session failures on stderr. It is sequential only: no `abort`, `steer`, `follow_up`, session switching, fork/clone, compaction, or extension UI yet.
 
+### Slash commands
+
+The effective built-in command names are:
+
+| Command | Behavior |
+| --- | --- |
+| `/help [command]` | List all effective registry names, or show detailed help for one name. Both `/help name` and `/help /name` are accepted. |
+| `/commands` | Alias for `/help`. |
+| `/session` | Show the current session id, workspace, provider, model, and message count. |
+| `/new` | **Instructional placeholder:** explain how to restart without `--resume`; it does not replace the current session. |
+| `/resume <session-id>` | **Instructional placeholder:** explain how to restart with `--resume`; it does not switch the current session. |
+| `/clear` | Clear the terminal only in the text frontend. Arguments produce `Usage: /clear`. |
+| `/quit` | Request a clean frontend shutdown. |
+| `/exit` | Alias for `/quit`. |
+
+Aliases are resolved by the command registry and appear in `/help`. Registry help does not list prompt templates or `/skill:<name>` invocations as built-in commands.
+
+Command presentation depends on the frontend:
+
+| Input | Text REPL / one-shot | JSON mode | RPC `prompt` |
+| --- | --- | --- | --- |
+| Help, session information, or restart instructions | Display the command message without invoking the model. | Emit `runtime_terminal` with `code: "command_handled"` and the command message. | Emit `runtime_terminal` with `code: "command_handled"` and the command message. |
+| Exact `/clear` | Write the terminal clear sequence from the text frontend, flush, and succeed without prompting the session. | Emit `command_handled` with an empty message and no ANSI bytes. | Emit `command_handled` with an empty message and no ANSI bytes. |
+| `/quit` or `/exit` | Display `Shutting down.` and exit successfully. | Emit the shutdown terminal record, then exit successfully. | Emit the shutdown terminal record, then stop the RPC loop successfully. |
+
 ## Embeddable C++ SDK
 
 The project exposes an experimental same-process C++23 SDK surface for host applications that want to embed the agent loop without shelling out to `cpp_harness` or depending on CLI/RPC globals. The SDK is source-level only (not ABI-stable) and lives under `include/cch/coding_agent/Sdk.hpp`.
@@ -261,7 +286,7 @@ session->close();
 - Dynamic TypeScript/JavaScript extensions, extension UI, hot reload, MCP, or package installation.
 - TUI run modes, themes, keybindings, widgets, OAuth/subscription providers, or model catalogs.
 
-One-shot mode runs one prompt. When no positional prompt is given in text mode, the CLI defaults to `--repl` and keeps history in memory for multiple prompts, supporting built-in slash commands: `/help`, `/clear`, `/compact`, and `/exit`. Loaded skills are explicitly invocable with `/skill:<name> [additional instructions]`; that input expands to a regular user prompt containing the skill instructions. Project-local resources can be trusted for one run with `--approve` / `-a`, denied for one run with `--no-approve`, and project skills can be suppressed with `--no-skills`. `--mode json` and `--mode rpc` cannot be combined with `--repl`; RPC mode reads prompts from stdin commands rather than positional CLI arguments. `--resume <session.jsonl>` starts from the active tree path before persisting new messages through the current session store. `--session <path>` always creates a new file; use `--resume` to append.
+One-shot text mode runs one prompt. When no positional prompt is given in text mode, the CLI defaults to `--repl` and keeps history in memory for multiple prompts. Loaded skills are explicitly invocable with `/skill:<name> [additional instructions]`; that input expands to a regular user prompt containing the skill instructions. Project-local resources can be trusted for one run with `--approve` / `-a`, denied for one run with `--no-approve`, and project skills can be suppressed with `--no-skills`. `--mode json` and `--mode rpc` cannot be combined with `--repl`; RPC mode reads prompts from stdin commands rather than positional CLI arguments. `--resume <session.jsonl>` starts from the active tree path before persisting new messages through the current session store. `--session <path>` always creates a new file; use `--resume` to append.
 
 ## Skills
 

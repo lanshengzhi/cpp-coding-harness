@@ -195,10 +195,12 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **References:** `pi:packages/coding-agent/src/core/slash-commands.ts`, `pi:packages/coding-agent/src/core/prompt-templates.ts`, `pi:packages/coding-agent/docs/usage.md`, `pi:packages/coding-agent/docs/prompt-templates.md`.
   - **Implementation plan:** `docs/plans/2026-06-20-005-feat-slash-command-prompt-processing-plan.md`.
   - **Status:** `CommandRegistry` dispatch framework, `process_prompt()` pipeline in REPL/runner/RPC, and `expand_prompt_template()` with bash-style arg substitution are implemented. 22 new tests pass.
-- [ ] Implement pi-aligned built-in slash commands.
-  - **References:** `pi:packages/coding-agent/src/core/slash-commands.ts` (25 built-in commands).
-  - **Current gap:** Only 4 CLI-shaped placeholder commands exist (`/session`, `/quit`, `/new`, `/resume`), and `/new`/`/resume` only print restart-instruction text rather than performing session operations. Missing pi-aligned commands include: `/help`, `/clear`, `/compact`, `/exit`, `/model`, `/cost`, `/stats`, `/theme`, `/doctor`, `/ide`, `/output-style`, and others. README incorrectly claims `/help`, `/clear`, `/compact`, `/exit` are available.
-  - **Done when:** each implemented command matches pi's behavior and has test coverage; README accurately reflects the implemented set.
+- [ ] Implement the remaining pi-aligned built-in slash commands.
+  - **Reference baseline:** `pi:packages/coding-agent/src/core/slash-commands.ts` currently defines 22 built-in commands.
+  - [x] **Phase 1 line-CLI slice:** the C++ registry now exposes 8 effective names: canonical `/help`, `/session`, `/quit`, `/clear`, `/new`, and `/resume`, plus `/commands` and `/exit` aliases. Metadata, alias resolution, deterministic help, and text/JSON/RPC behavior have focused test coverage.
+  - **Adaptation boundary:** `/help`, `/commands`, `/clear`, and `/exit` are deliberate C++ line-CLI adaptations, not claims of direct pi command parity. `/new` and `/resume` remain instructional placeholders and do not perform session replacement.
+  - **Remaining gap:** pi-aligned session operations and commands such as `/settings`, `/model`, `/scoped-models`, `/export`, `/import`, `/share`, `/copy`, `/name`, `/changelog`, `/hotkeys`, `/fork`, `/clone`, `/tree`, `/trust`, `/login`, `/logout`, `/compact`, and `/reload` remain deferred to separately designed slices.
+  - **Done when:** each pi-aligned command implemented by the C++ harness matches the corresponding pi behavior and has test coverage; C++-specific adaptations stay explicitly classified; README accurately reflects the implemented set.
 
 ### T6. Resources, Skills, Extensions, and Packages
 

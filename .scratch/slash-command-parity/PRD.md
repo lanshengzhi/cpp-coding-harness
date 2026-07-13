@@ -2,7 +2,7 @@
 
 **Feature slug:** `slash-command-parity`  
 **Target repo:** `cpp-coding-harness`  
-**Status:** tickets ready for implementation  
+**Status:** implemented
 **Date:** 2026-07-13
 
 ---
@@ -220,18 +220,18 @@ This trades a small per-command copy for simple ownership, stable lifetimes, SDK
 
 ## 10. Acceptance criteria
 
-- [ ] `CommandRegistry` owns passive command metadata, aliases, dispatch, and deterministic introspection.
-- [ ] Invalid, duplicate, and colliding registrations fail explicitly without changing the registry.
-- [ ] `/help` lists all effective registry names in deterministic order.
-- [ ] `/help <command>` works for canonical names and aliases.
-- [ ] `/commands` dispatches as an alias of `/help`.
-- [ ] `/exit` dispatches as an alias of `/quit` and shuts down each supported frontend as specified.
-- [ ] `/clear` emits ANSI only from text frontend code.
-- [ ] JSON and RPC output contain no terminal escape bytes.
-- [ ] No `CommandAction` or `PromptResult::action` is introduced.
-- [ ] Existing `/new` and `/resume` behavior is unchanged.
-- [ ] README lists only the actually implemented command set and no longer claims `/compact` support.
-- [ ] Focused coding-agent, CLI, SDK, and architecture tests pass.
+- [x] `CommandRegistry` owns passive command metadata, aliases, dispatch, and deterministic introspection.
+- [x] Invalid, duplicate, and colliding registrations fail explicitly without changing the registry.
+- [x] `/help` lists all effective registry names in deterministic order.
+- [x] `/help <command>` works for canonical names and aliases.
+- [x] `/commands` dispatches as an alias of `/help`.
+- [x] `/exit` dispatches as an alias of `/quit` and shuts down each supported frontend as specified.
+- [x] `/clear` emits ANSI only from text frontend code.
+- [x] JSON and RPC output contain no terminal escape bytes.
+- [x] No `CommandAction` or `PromptResult::action` is introduced.
+- [x] Existing `/new` and `/resume` behavior is unchanged.
+- [x] README lists only the actually implemented command set and no longer claims `/compact` support.
+- [x] Focused coding-agent, CLI, SDK, and architecture tests pass.
 
 ---
 
