@@ -130,6 +130,7 @@ PromptRunResult AgentSessionRuntime::run_prompt(
             .provider = session_.metadata.provider,
             .model = session_.metadata.model,
             .message_count = session_.history.size(),
+            .available_commands = command_registry_.list_commands(),
         };
         processing = process_prompt(
             prompt,

@@ -11,6 +11,16 @@
 
 namespace cch::coding_agent {
 
+/// Passive metadata describing an effective slash-command name.
+struct CommandInfo {
+    /// Command name without a leading slash.
+    std::string name;
+    std::string description;
+    std::string argument_hint;
+    /// Canonical command name when this entry is an alias.
+    std::optional<std::string> alias_for;
+};
+
 /// Context passed to command handlers.
 struct CommandContext {
     /// Current session id (empty if no active session).
@@ -23,6 +33,8 @@ struct CommandContext {
     std::string model;
     /// Number of messages in the current history.
     std::size_t message_count{0};
+    /// Passive snapshot of effective commands available for this dispatch.
+    std::vector<CommandInfo> available_commands;
 };
 
 /// Result returned by a command handler.
@@ -31,16 +43,6 @@ struct CommandResult {
     std::string display_text;
     /// True if the session should shut down after this command.
     bool shutdown_requested{false};
-};
-
-/// Passive metadata describing an effective slash-command name.
-struct CommandInfo {
-    /// Command name without a leading slash.
-    std::string name;
-    std::string description;
-    std::string argument_hint;
-    /// Canonical command name when this entry is an alias.
-    std::optional<std::string> alias_for;
 };
 
 /// Handler signature for slash-commands.

@@ -158,6 +158,16 @@ const cch::util::JsonValue::object_t* find_response(
     }
     return nullptr;
 }
+
+const cch::util::JsonValue::object_t* find_terminal(
+    const std::vector<cch::util::JsonValue::object_t>& records) {
+    for (const auto& record : records) {
+        if (json_string_at(record, "type") == "runtime_terminal") {
+            return &record;
+        }
+    }
+    return nullptr;
+}
 }
 
 TEST_CASE("CLI fake one-shot prints transcript and writes session", "[cli][u6]") {
@@ -170,6 +180,45 @@ TEST_CASE("CLI fake one-shot prints transcript and writes session", "[cli][u6]")
     CHECK(result.output.find("[assistant] fake: hello") != std::string::npos);
     CHECK(result.output.find("[completed]") != std::string::npos);
     CHECK(std::filesystem::exists(session));
+}
+
+TEST_CASE("CLI text one-shot displays /help without invoking the model", "[cli][commands]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "help-one-shot.jsonl";
+    auto result = run_command(
+        bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " /help");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.output.find("Available commands:") != std::string::npos);
+    CHECK(result.output.find("/commands") != std::string::npos);
+    CHECK(result.output.find("/help [command]") != std::string::npos);
+    CHECK(result.output.find("[model-request]") == std::string::npos);
+}
+
+TEST_CASE("CLI text one-shot unknown /help target does not invoke the model", "[cli][commands]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "help-unknown.jsonl";
+    auto result = run_command(
+        bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) +
+        " '/help missing'");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.output.find("Unknown command: /missing") != std::string::npos);
+    CHECK(result.output.find("[model-request]") == std::string::npos);
+    CHECK(result.output.find("[assistant]") == std::string::npos);
+}
+
+TEST_CASE("CLI text REPL dispatches /commands as /help", "[cli][commands]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "commands-repl.jsonl";
+    auto result = run_command(
+        "printf '/commands\\nquit\\n' | " + bin() + " --fake --repl --workspace " +
+        q(workspace.path()) + " --session " + q(session));
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.output.find("Available commands:") != std::string::npos);
+    CHECK(result.output.find("Alias for /help") != std::string::npos);
+    CHECK(result.output.find("[model-request]") == std::string::npos);
 }
 
 TEST_CASE("CLI fake one-shot streams through the current event path", "[cli][u8][ae5]") {
@@ -261,6 +310,23 @@ TEST_CASE("CLI JSON fake one-shot emits JSONL only", "[cli][json]") {
     CHECK(std::filesystem::exists(session));
 }
 
+TEST_CASE("CLI JSON /help stores help text in the terminal message field", "[cli][json][commands]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "json-help.jsonl";
+    auto result = run_command_split(
+        bin() + " --fake --mode json --workspace " + q(workspace.path()) +
+        " --session " + q(session) + " /help");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.empty());
+    const auto records = parse_json_objects(result.stdout_text);
+    const auto* terminal = find_terminal(records);
+    REQUIRE(terminal != nullptr);
+    CHECK(json_string_at(*terminal, "code") == "command_handled");
+    CHECK(json_string_at(*terminal, "message").find("Available commands:") != std::string::npos);
+    CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
+}
+
 TEST_CASE("CLI JSON fake tool flow emits correlated tool events", "[cli][json]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "json-tool.jsonl";
@@ -339,6 +405,27 @@ TEST_CASE("CLI RPC fake command loop drives a session with JSONL responses and e
     REQUIRE(find_response(records, "shutdown") != nullptr);
     CHECK(result.stdout_text.find("[assistant]") == std::string::npos);
     CHECK(std::filesystem::exists(session));
+}
+
+TEST_CASE("CLI RPC /help stores help text in the terminal message field", "[cli][rpc][commands]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "rpc-help.jsonl";
+    const std::string input =
+        "{\"id\":\"p1\",\"type\":\"prompt\",\"message\":\"/help\"}\n"
+        "{\"id\":\"q1\",\"type\":\"shutdown\"}\n";
+    auto result = run_command_split_with_input(
+        bin() + " --fake --mode rpc --workspace " + q(workspace.path()) + " --session " + q(session),
+        input);
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.empty());
+    const auto records = parse_json_objects(result.stdout_text);
+    REQUIRE(find_response(records, "prompt") != nullptr);
+    REQUIRE(find_response(records, "shutdown") != nullptr);
+    const auto* terminal = find_terminal(records);
+    REQUIRE(terminal != nullptr);
+    CHECK(json_string_at(*terminal, "code") == "command_handled");
+    CHECK(json_string_at(*terminal, "message").find("Available commands:") != std::string::npos);
 }
 
 TEST_CASE("CLI RPC exits cleanly on EOF without shutdown", "[cli][rpc]") {

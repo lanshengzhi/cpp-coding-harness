@@ -190,7 +190,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             return result;
         }
         if (json_mode) {
-            if (!print_json_terminal(*json_printer, true, result.code)) {
+            if (!print_json_terminal(*json_printer, true, result.code, result.message)) {
                 coding_agent::PromptResult failed;
                 failed.success = false;
                 failed.code = "event_print_failed";
@@ -199,7 +199,9 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             }
             return result;
         }
-        if (result.code == "completed" && result.last_assistant_text) {
+        if (result.code == "command_handled" && !result.message.empty()) {
+            std::cout << result.message << '\n';
+        } else if (result.code == "completed" && result.last_assistant_text) {
             std::cout << *result.last_assistant_text << '\n';
         }
         return result;
@@ -213,7 +215,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
 
             auto result = run_prompt(line);
             if (!result.success) return 1;
-            if ((result.code == "command_handled" || result.code == "shutdown") && !result.message.empty()) {
+            if (result.code == "shutdown" && !result.message.empty()) {
                 std::cout << result.message << '\n';
             }
             if (result.code == "shutdown") return 0;
