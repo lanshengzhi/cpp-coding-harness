@@ -11,3 +11,8 @@
 - [x] No queue-origin-specific lifecycle event is advertised or emitted.
 - [x] Single-message, multi-message, and cross-turn queue ordering are covered through the public agent-loop surface.
 - [x] Focused `[agent][async]` queue tests pass, with public queue APIs remaining out of scope.
+
+## Comments
+
+- Implemented by `c6f8d72`.
+- Verified with `./build/cpp_harness_tests` (587 tests, 0 failures).
