@@ -48,6 +48,18 @@ bool clear_text_terminal() {
 
 } // namespace
 
+void write_text_prompt_result(
+    const coding_agent::PromptResult& result,
+    std::ostream& output) {
+    const bool has_local_feedback = result.code == "command_handled" ||
+        result.code == "shutdown" || result.code == "command_handler_failed";
+    if (has_local_feedback && !result.message.empty()) {
+        output << result.message << '\n';
+    } else if (result.code == "completed" && result.last_assistant_text) {
+        output << *result.last_assistant_text << '\n';
+    }
+}
+
 int run_async_cli(const AsyncCliRuntimeConfig& config) {
     const auto json_mode = is_json_mode(config.output_mode);
     const std::string config_path = coding_agent::ConfigLoader::default_config_path();
@@ -209,11 +221,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             }
             return result;
         }
-        if ((result.code == "command_handled" || result.code == "shutdown") && !result.message.empty()) {
-            std::cout << result.message << '\n';
-        } else if (result.code == "completed" && result.last_assistant_text) {
-            std::cout << *result.last_assistant_text << '\n';
-        }
+        write_text_prompt_result(result, std::cout);
         return result;
     };
 

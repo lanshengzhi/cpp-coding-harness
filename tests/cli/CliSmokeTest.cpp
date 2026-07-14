@@ -2,6 +2,8 @@
 
 #include "../support/TempWorkspace.hpp"
 
+#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/runtime/AsyncCliRuntime.hpp"
 #include "util/Json.hpp"
 
 #include <array>
@@ -180,6 +182,22 @@ TEST_CASE("CLI fake one-shot prints transcript and writes session", "[cli][u6]")
     CHECK(result.output.find("[assistant] fake: hello") != std::string::npos);
     CHECK(result.output.find("[completed]") != std::string::npos);
     CHECK(std::filesystem::exists(session));
+}
+
+TEST_CASE("CLI text presentation shows contained command handler failures", "[cli][commands][presentation]") {
+    cch::coding_agent::PromptResult result{
+        .success = true,
+        .code = "command_handler_failed",
+        .message = "Command handler failed.",
+        .last_assistant_text = std::nullopt,
+        .message_count = 0,
+        .diagnostics = {},
+    };
+    std::ostringstream output;
+
+    cch::cli::write_text_prompt_result(result, output);
+
+    CHECK(output.str() == "Command handler failed.\n");
 }
 
 TEST_CASE("CLI text one-shot displays /help without invoking the model", "[cli][commands]") {
