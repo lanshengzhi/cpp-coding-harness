@@ -441,13 +441,11 @@ TEST_CASE("CLI JSON max-turn flow emits terminal error code", "[cli][json]") {
     CHECK(last.at("success").get<bool>() == false);
 }
 
-TEST_CASE("CLI RPC fake command loop drives a session with JSONL responses and events", "[cli][rpc]") {
+TEST_CASE("CLI RPC wires stdin and JSONL stdout to a session", "[cli][rpc]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "rpc-loop.jsonl";
     const std::string input =
-        "{\"id\":\"s1\",\"type\":\"get_state\"}\n"
         "{\"id\":\"p1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
-        "{\"id\":\"l1\",\"type\":\"get_last_assistant_text\"}\n"
         "{\"id\":\"q1\",\"type\":\"shutdown\"}\n";
     auto result = run_command_split_with_input(
         bin() + " --fake --mode rpc --workspace " + q(workspace.path()) + " --session " + q(session),
@@ -455,184 +453,14 @@ TEST_CASE("CLI RPC fake command loop drives a session with JSONL responses and e
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.empty());
-    auto records = parse_json_objects(result.stdout_text);
-    REQUIRE(records.size() >= 6);
-    auto* state = find_response(records, "get_state");
-    REQUIRE(state != nullptr);
-    CHECK(state->at("success").get<bool>() == true);
-    CHECK(json_string_at(*state, "id") == "s1");
-    auto state_data = state->at("data").get<cch::util::JsonValue::object_t>();
-    CHECK(json_string_at(state_data, "provider") == "fake");
-    CHECK(state_data.find("baseUrl") == state_data.end());
-    CHECK(state_data.find("apiKeyEnv") == state_data.end());
-    CHECK(state_data.find("sessionPath") == state_data.end());
-
+    const auto records = parse_json_objects(result.stdout_text);
     REQUIRE(find_response(records, "prompt") != nullptr);
+    REQUIRE(find_response(records, "shutdown") != nullptr);
     CHECK(has_json_event_type(non_empty_lines(result.stdout_text), "message_update"));
     CHECK(has_json_event_type(non_empty_lines(result.stdout_text), "runtime_terminal"));
-    auto* last_text = find_response(records, "get_last_assistant_text");
-    REQUIRE(last_text != nullptr);
-    auto last_data = last_text->at("data").get<cch::util::JsonValue::object_t>();
-    CHECK(json_string_at(last_data, "text") == "fake: hello");
-    REQUIRE(find_response(records, "shutdown") != nullptr);
     CHECK(result.stdout_text.find("[assistant]") == std::string::npos);
+    CHECK(result.stdout_text.find('\033') == std::string::npos);
     CHECK(std::filesystem::exists(session));
-}
-
-TEST_CASE("CLI RPC /help stores help text in the terminal message field", "[cli][rpc][commands]") {
-    cch::tests::TempWorkspace workspace;
-    auto session = workspace.path() / "rpc-help.jsonl";
-    const std::string input =
-        "{\"id\":\"p1\",\"type\":\"prompt\",\"message\":\"/help\"}\n"
-        "{\"id\":\"q1\",\"type\":\"shutdown\"}\n";
-    auto result = run_command_split_with_input(
-        bin() + " --fake --mode rpc --workspace " + q(workspace.path()) + " --session " + q(session),
-        input);
-
-    REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.empty());
-    const auto records = parse_json_objects(result.stdout_text);
-    REQUIRE(find_response(records, "prompt") != nullptr);
-    REQUIRE(find_response(records, "shutdown") != nullptr);
-    const auto* terminal = find_terminal(records);
-    REQUIRE(terminal != nullptr);
-    CHECK(json_string_at(*terminal, "code") == "command_handled");
-    CHECK(json_string_at(*terminal, "message").find("Available commands:") != std::string::npos);
-}
-
-TEST_CASE("CLI RPC /exit emits shutdown terminal text and ignores later records", "[cli][rpc][commands]") {
-    cch::tests::TempWorkspace workspace;
-    auto session = workspace.path() / "rpc-exit.jsonl";
-    const std::string input =
-        "{\"id\":\"p1\",\"type\":\"prompt\",\"message\":\"/exit\"}\n"
-        "{\"id\":\"later\",\"type\":\"get_state\"}\n";
-    auto result = run_command_split_with_input(
-        bin() + " --fake --mode rpc --workspace " + q(workspace.path()) + " --session " + q(session),
-        input);
-
-    REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.empty());
-    const auto records = parse_json_objects(result.stdout_text);
-    REQUIRE(find_response(records, "prompt") != nullptr);
-    CHECK(find_response(records, "get_state") == nullptr);
-    const auto* terminal = find_terminal(records);
-    REQUIRE(terminal != nullptr);
-    CHECK(json_string_at(*terminal, "code") == "shutdown");
-    CHECK(json_string_at(*terminal, "message") == "Shutting down.");
-    CHECK(result.stdout_text.find('\033') == std::string::npos);
-}
-
-TEST_CASE("CLI RPC /clear is handled without ANSI bytes", "[cli][rpc][commands]") {
-    cch::tests::TempWorkspace workspace;
-    auto session = workspace.path() / "rpc-clear.jsonl";
-    const std::string input =
-        "{\"id\":\"p1\",\"type\":\"prompt\",\"message\":\"/clear\"}\n"
-        "{\"id\":\"q1\",\"type\":\"shutdown\"}\n";
-    auto result = run_command_split_with_input(
-        bin() + " --fake --mode rpc --workspace " + q(workspace.path()) + " --session " + q(session),
-        input);
-
-    REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.empty());
-    const auto records = parse_json_objects(result.stdout_text);
-    REQUIRE(find_response(records, "prompt") != nullptr);
-    REQUIRE(find_response(records, "shutdown") != nullptr);
-    const auto* terminal = find_terminal(records);
-    REQUIRE(terminal != nullptr);
-    CHECK(json_string_at(*terminal, "code") == "command_handled");
-    CHECK(terminal->find("message") == terminal->end());
-    CHECK(result.stdout_text.find('\033') == std::string::npos);
-}
-
-TEST_CASE("CLI RPC exits cleanly on EOF without shutdown", "[cli][rpc]") {
-    cch::tests::TempWorkspace workspace;
-    auto session = workspace.path() / "rpc-eof.jsonl";
-    auto result = run_command_split_with_input(
-        bin() + " --fake --mode rpc --workspace " + q(workspace.path()) + " --session " + q(session),
-        "{\"id\":\"s1\",\"type\":\"get_state\"}");
-
-    REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.empty());
-    auto records = parse_json_objects(result.stdout_text);
-    REQUIRE(records.size() == 1);
-    CHECK(json_string_at(records.front(), "command") == "get_state");
-}
-
-TEST_CASE("CLI RPC parse and validation errors are recoverable responses", "[cli][rpc]") {
-    cch::tests::TempWorkspace workspace;
-    auto session = workspace.path() / "rpc-errors.jsonl";
-    const std::string input =
-        "{bad json}\n"
-        "[]\n"
-        "{}\n"
-        "{\"id\":5,\"type\":\"get_state\"}\n"
-        "{\"id\":\"p1\",\"type\":\"prompt\",\"message\":\"\"}\n"
-        "{\"id\":\"u1\",\"type\":\"set_model\"}\n"
-        "{\"id\":\"s1\",\"type\":\"get_state\"}\n";
-    auto result = run_command_split_with_input(
-        bin() + " --fake --mode rpc --workspace " + q(workspace.path()) + " --session " + q(session),
-        input);
-
-    REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.empty());
-    auto records = parse_json_objects(result.stdout_text);
-    REQUIRE(records.size() == 7);
-    CHECK(json_string_at(records[0], "command") == "parse");
-    CHECK(records[0].at("success").get<bool>() == false);
-    CHECK(json_string_at(records[1], "command") == "invalid");
-    CHECK(json_string_at(records[2], "command") == "invalid");
-    CHECK(json_string_at(records[3], "command") == "get_state");
-    CHECK(records[3].at("success").get<bool>() == false);
-    CHECK(json_string_at(records[4], "command") == "prompt");
-    CHECK(records[4].at("success").get<bool>() == false);
-    CHECK(json_string_at(records[5], "command") == "set_model");
-    CHECK(records[5].at("success").get<bool>() == false);
-    CHECK(json_string_at(records[6], "command") == "get_state");
-    CHECK(records[6].at("success").get<bool>() == true);
-}
-
-TEST_CASE("CLI RPC framing treats CRLF and Unicode separators as record content", "[cli][rpc]") {
-    cch::tests::TempWorkspace workspace;
-    auto session = workspace.path() / "rpc-framing.jsonl";
-    const std::string input =
-        "{\"id\":\"p1\",\"type\":\"prompt\",\"message\":\"hello\\u2028there\"}\r\n"
-        "{\"id\":\"q1\",\"type\":\"shutdown\"}\r\n";
-    auto result = run_command_split_with_input(
-        bin() + " --fake --mode rpc --workspace " + q(workspace.path()) + " --session " + q(session),
-        input);
-
-    REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.empty());
-    auto records = parse_json_objects(result.stdout_text);
-    REQUIRE(find_response(records, "prompt") != nullptr);
-    REQUIRE(find_response(records, "shutdown") != nullptr);
-    CHECK(has_json_event_type(non_empty_lines(result.stdout_text), "message_update"));
-}
-
-TEST_CASE("CLI RPC event sequence is process-global across prompts", "[cli][rpc]") {
-    cch::tests::TempWorkspace workspace;
-    auto session = workspace.path() / "rpc-seq.jsonl";
-    const std::string input =
-        "{\"type\":\"prompt\",\"message\":\"one\"}\n"
-        "{\"type\":\"prompt\",\"message\":\"two\"}\n";
-    auto result = run_command_split_with_input(
-        bin() + " --fake --mode rpc --workspace " + q(workspace.path()) + " --session " + q(session),
-        input);
-
-    REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.empty());
-    int previous = 0;
-    int event_count = 0;
-    for (const auto& record : parse_json_objects(result.stdout_text)) {
-        if (record.find("seq") == record.end()) {
-            continue;
-        }
-        const auto seq = static_cast<int>(record.at("seq").get<double>());
-        CHECK(seq > previous);
-        previous = seq;
-        ++event_count;
-    }
-    CHECK(event_count >= 10);
 }
 
 TEST_CASE("CLI JSON preflight errors do not write stdout", "[cli][json]") {

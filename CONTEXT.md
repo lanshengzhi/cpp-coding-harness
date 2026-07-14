@@ -52,6 +52,10 @@ The internal implementation behind the `AgentSession` handle. Coordinates the pr
 
 A passive value summarising the introspectable state of an open session: provider, model, session id, workspace, and message count.
 
+### RpcMode
+
+The machine-readable interaction protocol for driving one `AgentSession` through sequential JSONL commands. It owns command acceptance, response/event ordering, recoverable-versus-terminal failure classification, process-wide event sequencing, and clean EOF or shutdown semantics; the CLI adapter only connects startup policy and streams.
+
 ### SessionJournal
 
 The adapter responsible for durable, append-only line storage of the JSONL session file. Operates on raw string lines; knows nothing about message schemas or redaction.

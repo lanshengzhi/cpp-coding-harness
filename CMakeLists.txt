@@ -189,6 +189,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/SdkSessionTest.cpp
         tests/coding_agent/SkillIntegrationTest.cpp
         tests/coding_agent/runtime/JsonEventPrinterTest.cpp
+        tests/coding_agent/runtime/RpcModeTest.cpp
         tests/coding_agent/runtime/SessionLifecycleTest.cpp
         tests/harness/AsyncLocalExecutionEnvTest.cpp
         tests/harness/session/JsonlSessionStoreTest.cpp
