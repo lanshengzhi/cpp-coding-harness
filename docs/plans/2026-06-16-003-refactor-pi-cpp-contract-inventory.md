@@ -70,7 +70,7 @@ Classification:
 | `ToolExecutionMode`, `QueueMode` | `ToolExecutionPolicy` and `ToolConcurrency` in `include/cch/agent/` (queue modes still missing) | MVP tool-scheduling parity / queue modes deferred | Sequential is the safe default. Bounded parallel execution requires an explicit run cap and every resolved tool to claim `ParallelSafe`; result insertion remains in assistant source order. |
 | `AgentToolCall` | `include/cch/ai/Content.hpp::ToolCallContent` and `include/cch/agent/AgentTool.hpp::ToolInvocation` | MVP parity | Existing loop maps provider tool calls into tool invocations. |
 | Tool hooks: `BeforeToolCall*`, `AfterToolCall*`, `PrepareNextTurn*`, `ShouldStopAfterTurn*` | Missing | Deferred parity | Pre/post hooks and next-turn transforms follow after U5 event/state seam. |
-| `AgentLoopTurnUpdate` | Partial: lifecycle events in `include/cch/agent/AgentEvent.hpp` | Near-term parity | U5 expands lifecycle events to include thinking/tool-call stream phases. |
+| `AgentLoopTurnUpdate` | Partial: lifecycle events in `include/cch/agent/AgentEvent.hpp` | Near-term parity | Assistant stream phases are now delivered through `message_update` carrying the provider-neutral `AssistantStreamEvent`; standalone thinking/tool-call stream events were removed. |
 | `AgentLoopConfig` | `include/cch/agent/AgentContext.hpp::AsyncAgentOptions` | MVP parity | Current options cover max turns, tools, and event sink; richer queue/hook/options remain deferred. |
 | Agent `ThinkingLevel` | Missing | Near-term parity | U5 introduces an observable field if needed by current state seam; provider-specific model support remains later T2/T3. |
 | `CustomAgentMessages`, `AgentMessage` | `include/cch/ai/Message.hpp::MessageVariant` | MVP parity | `BashExecutionMessage`, `CustomMessage`, `BranchSummaryMessage`, `CompactionSummaryMessage` added as passive aggregates with LLM conversion helpers. |
@@ -79,7 +79,7 @@ Classification:
 | `AgentState` | Missing | Near-term parity | U5 adds passive `AgentState` for active tools, messages, streaming message, pending tool calls, model, and thinking level. |
 | `AgentToolResult`, `AgentToolUpdateCallback`, `AgentTool` | `include/cch/agent/AgentTool.hpp` (`AsyncToolExecutionResult`, `AsyncAgentTool`, `ToolConcurrency`) | MVP parity | Current contract is async and value-oriented. Tools default to `Exclusive`; adapters opt into `ParallelSafe` only after concurrent-use validation. Progress/update callbacks are deferred. |
 | `AgentContext` | `include/cch/agent/AgentContext.hpp` | Near-term parity | The header owns run options/results, including the closed sequential/bounded-parallel `ToolExecutionPolicy`; state remains a passive value in the same package. |
-| `AgentEvent` | `include/cch/agent/AgentEvent.hpp::AgentLifecycleEvent` | Near-term parity | Current events preserve CLI output; U5 adds new variants without removing old ones. |
+| `AgentEvent` | `include/cch/agent/AgentEvent.hpp::AgentLifecycleEvent` | Near-term parity | Cut over to pi-aligned shapes in ticket 01: removed prompt copy, numeric turn fields, queued-message alternatives, and standalone thinking/tool-call stream events; message updates now carry the current assistant message and provider-neutral stream event. |
 
 ## Harness and Execution Environment Contracts
 

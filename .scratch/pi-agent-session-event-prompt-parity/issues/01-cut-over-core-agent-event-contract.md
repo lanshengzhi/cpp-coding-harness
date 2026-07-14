@@ -4,10 +4,10 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Compare the implementation with PRD stories 9–12, 17, 19, and 43–44 and the current pi `AgentEvent` contract before changing it.
-- [ ] `agent_start`, `agent_end`, `turn_start`, `turn_end`, and message lifecycle values expose the supported pi field meanings as passive aggregates.
-- [ ] Legacy queued-message alternatives, raw-prompt fields, numeric turn fields, and standalone thinking/tool-call stream alternatives are absent.
-- [ ] Existing event consumers are migrated mechanically so the repository builds without compatibility shims; behavioral emission coverage remains scoped to tickets 02–04.
-- [ ] Move-only event sinks remain supported and the architecture test slice passes.
+- [x] Compare the implementation with PRD stories 9–12, 17, 19, and 43–44 and the current pi `AgentEvent` contract before changing it.
+- [x] `agent_start`, `agent_end`, `turn_start`, `turn_end`, and message lifecycle values expose the supported pi field meanings as passive aggregates.
+- [x] Legacy queued-message alternatives, raw-prompt fields, numeric turn fields, and standalone thinking/tool-call stream alternatives are absent.
+- [x] Existing event consumers are migrated mechanically so the repository builds without compatibility shims; behavioral emission coverage remains scoped to tickets 02–04.
+- [x] Move-only event sinks remain supported and the architecture test slice passes.
