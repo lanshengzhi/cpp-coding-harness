@@ -260,32 +260,33 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
 
     CCH_TRY_VOID(emit(sink, AgentStartEvent{}));
 
-    context.messages.push_back(ai::MessageVariant{ai::user_text_message(std::move(user_prompt))});
-    sync_state(state, context);
+    ai::MessageVariant user_message = ai::user_text_message(std::move(user_prompt));
 
     std::vector<ai::MessageVariant> pending_messages;
-    if (options_.get_steering_messages) {
-        auto steering = invoke_get_steering_messages_hook(*options_.get_steering_messages);
-        if (!steering) {
-            CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
-            co_return std::unexpected(steering.error());
-        }
-        if (auto validated = validate_queued_messages(*steering); !validated) {
-            CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
-            co_return std::unexpected(validated.error());
-        }
-        pending_messages = std::move(*steering);
-    }
 
     for (int turn = 1; turn <= options_.max_turns; ++turn) {
         CCH_TRY_VOID(emit(sink, TurnStartEvent{}));
 
+        if (turn == 1) {
+            CCH_TRY_VOID(append_message_with_lifecycle(state, context, sink, std::move(user_message)));
+        }
+
+        if (turn == 1 && options_.get_steering_messages) {
+            auto steering = invoke_get_steering_messages_hook(*options_.get_steering_messages);
+            if (!steering) {
+                CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
+                co_return std::unexpected(steering.error());
+            }
+            if (auto validated = validate_queued_messages(*steering); !validated) {
+                CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
+                co_return std::unexpected(validated.error());
+            }
+            pending_messages = std::move(*steering);
+        }
+
         if (!pending_messages.empty()) {
             for (auto& message : pending_messages) {
-                CCH_TRY_VOID(emit(sink, MessageStartEvent{message}));
-                context.messages.push_back(std::move(message));
-                sync_state(state, context);
-                CCH_TRY_VOID(emit(sink, MessageEndEvent{context.messages.back()}));
+                CCH_TRY_VOID(append_message_with_lifecycle(state, context, sink, std::move(message)));
             }
             pending_messages.clear();
         }
@@ -551,6 +552,19 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         "agent reached max_turns before a final assistant response");
     CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
     co_return std::unexpected(error);
+}
+
+util::ExpectedVoid AsyncAgentLoop::append_message_with_lifecycle(
+    AgentState& state,
+    ai::AiContext& context,
+    AgentEventSink& sink,
+    ai::MessageVariant message) const {
+    if (auto r = emit(sink, MessageStartEvent{message}); !r) {
+        return r;
+    }
+    context.messages.push_back(std::move(message));
+    sync_state(state, context);
+    return emit(sink, MessageEndEvent{context.messages.back()});
 }
 
 util::ExpectedVoid AsyncAgentLoop::emit(AgentEventSink& sink, const AgentLifecycleEvent& event) const {

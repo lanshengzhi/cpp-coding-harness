@@ -178,11 +178,110 @@ TEST_CASE("async agent loop emits deterministic lifecycle events for text", "[ag
     REQUIRE(run.result->context.messages.size() == 2);
     CHECK(count_events<agent::AgentStartEvent>(run.events) == 1);
     CHECK(count_events<agent::TurnStartEvent>(run.events) == 1);
-    CHECK(count_events<agent::MessageStartEvent>(run.events) == 1);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 2);
     CHECK(count_events<agent::MessageUpdateEvent>(run.events) == 1);
-    CHECK(count_events<agent::MessageEndEvent>(run.events) == 1);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
     CHECK(count_events<agent::TurnEndEvent>(run.events) == 1);
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+}
+
+TEST_CASE("async agent loop emits user message lifecycle before assistant response", "[agent][async]") {
+    FakeStreamingClient client;
+    client.responses.push_back(ai::assistant_text_message("hello user"));
+    agent::AsyncToolRegistry registry;
+    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{3, "gpt-test"});
+
+    auto run = run_loop(loop, "hi");
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->context.messages.size() == 2);
+
+    // Exact semantic order: agent_start, turn_start, user lifecycle, assistant lifecycle, turn_end, agent_end.
+    std::size_t index = 0;
+    REQUIRE(std::holds_alternative<agent::AgentStartEvent>(run.events[index++]));
+    REQUIRE(std::holds_alternative<agent::TurnStartEvent>(run.events[index++]));
+
+    const auto* user_start = std::get_if<agent::MessageStartEvent>(&run.events[index++]);
+    REQUIRE(user_start);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(user_start->message));
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(user_start->message).content) == "hi");
+
+    const auto* user_end = std::get_if<agent::MessageEndEvent>(&run.events[index++]);
+    REQUIRE(user_end);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(user_end->message));
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(user_end->message).content) == "hi");
+
+    const auto* assistant_start = std::get_if<agent::MessageStartEvent>(&run.events[index++]);
+    REQUIRE(assistant_start);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(assistant_start->message));
+
+    const auto* assistant_update = std::get_if<agent::MessageUpdateEvent>(&run.events[index++]);
+    REQUIRE(assistant_update);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(assistant_update->message));
+    CHECK(std::holds_alternative<ai::TextDeltaEvent>(assistant_update->assistant_event));
+    CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(assistant_update->message).content) == "hello user");
+
+    const auto* assistant_end = std::get_if<agent::MessageEndEvent>(&run.events[index++]);
+    REQUIRE(assistant_end);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(assistant_end->message));
+    CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(assistant_end->message).content) == "hello user");
+
+    const auto* turn_end = std::get_if<agent::TurnEndEvent>(&run.events[index++]);
+    REQUIRE(turn_end);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(turn_end->message));
+    CHECK(turn_end->tool_results.empty());
+    CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(turn_end->message).content) == "hello user");
+
+    const auto* agent_end = std::get_if<agent::AgentEndEvent>(&run.events[index++]);
+    REQUIRE(agent_end);
+    REQUIRE(agent_end->messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(agent_end->messages[0]));
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(agent_end->messages[1]));
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(agent_end->messages[0]).content) == "hi");
+    CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(agent_end->messages[1]).content) == "hello user");
+
+    CHECK(index == run.events.size());
+}
+
+TEST_CASE("async agent loop emits user lifecycle before steering failure", "[agent][async]") {
+    FakeStreamingClient client;
+    client.responses.push_back(ai::assistant_text_message("should not reach"));
+    agent::AsyncToolRegistry registry;
+
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.get_steering_messages = []() -> util::Expected<std::vector<ai::MessageVariant>> {
+        return std::unexpected(util::make_error(util::ErrorCode::Validation, "steering validation failed"));
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "hi");
+
+    REQUIRE_FALSE(run.result);
+    CHECK(run.result.error().message == "steering validation failed");
+
+    std::size_t user_start_count = 0;
+    std::size_t user_end_count = 0;
+    for (const auto& event : run.events) {
+        if (const auto* start = std::get_if<agent::MessageStartEvent>(&event)) {
+            if (std::holds_alternative<ai::UserMessage>(start->message)) {
+                ++user_start_count;
+                CHECK(ai::text_from_content(std::get<ai::UserMessage>(start->message).content) == "hi");
+            }
+        } else if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+            if (std::holds_alternative<ai::UserMessage>(end->message)) {
+                ++user_end_count;
+                CHECK(ai::text_from_content(std::get<ai::UserMessage>(end->message).content) == "hi");
+            }
+        }
+    }
+    CHECK(user_start_count == 1);
+    CHECK(user_end_count == 1);
+
+    const auto* agent_end = std::get_if<agent::AgentEndEvent>(&run.events.back());
+    REQUIRE(agent_end);
+    REQUIRE(agent_end->messages.size() == 1);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(agent_end->messages[0]));
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(agent_end->messages[0]).content) == "hi");
 }
 
 TEST_CASE("async agent loop forwards thinking and tool-call stream lifecycle events", "[agent][async][u5]") {
@@ -912,8 +1011,8 @@ TEST_CASE("steering message is injected before next LLM request", "[agent][async
             }
         }
     }
-    CHECK(queued_start_events == 1);
-    CHECK(queued_end_events == 1);
+    CHECK(queued_start_events == 2);
+    CHECK(queued_end_events == 2);
 }
 
 TEST_CASE("follow-up message triggers an additional turn", "[agent][async][u8]") {
