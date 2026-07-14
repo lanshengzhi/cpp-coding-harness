@@ -1,233 +1,306 @@
 #include "../../include/cch/coding_agent/PromptProcessing.hpp"
+#include "coding_agent/prompt/PromptProcessor.hpp"
 
-#include <cctype>
-#include <cstdlib>
-#include <sstream>
+#include <algorithm>
+#include <cstdint>
+#include <limits>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace cch::coding_agent {
 namespace {
 
-[[nodiscard]] std::string_view trim_left(std::string_view sv) {
-    while (!sv.empty() && (sv.front() == ' ' || sv.front() == '\t')) {
-        sv.remove_prefix(1);
+struct DecodedCodePoint {
+    std::uint32_t value;
+    std::size_t length;
+};
+
+[[nodiscard]] DecodedCodePoint decode_first(std::string_view text) {
+    const auto first = static_cast<unsigned char>(text.front());
+    if (first < 0x80) {
+        return {first, 1};
     }
-    return sv;
+
+    std::size_t length = 0;
+    std::uint32_t value = 0;
+    if ((first & 0xE0) == 0xC0) {
+        length = 2;
+        value = first & 0x1F;
+    } else if ((first & 0xF0) == 0xE0) {
+        length = 3;
+        value = first & 0x0F;
+    } else if ((first & 0xF8) == 0xF0) {
+        length = 4;
+        value = first & 0x07;
+    } else {
+        return {first, 1};
+    }
+
+    if (text.size() < length) {
+        return {first, 1};
+    }
+    for (std::size_t index = 1; index < length; ++index) {
+        const auto byte = static_cast<unsigned char>(text[index]);
+        if ((byte & 0xC0) != 0x80) {
+            return {first, 1};
+        }
+        value = (value << 6) | (byte & 0x3F);
+    }
+
+    const bool overlong = (length == 2 && value < 0x80) ||
+        (length == 3 && value < 0x800) ||
+        (length == 4 && value < 0x10000);
+    if (overlong || value > 0x10FFFF || (value >= 0xD800 && value <= 0xDFFF)) {
+        return {first, 1};
+    }
+    return {value, length};
 }
 
-[[nodiscard]] std::string_view extract_command_name(std::string_view input) {
-    auto trimmed = trim_left(input);
-    if (trimmed.empty() || trimmed.front() != '/') return {};
-    trimmed.remove_prefix(1); // strip '/'
-    auto end = trimmed.find_first_of(" \t\n\r");
-    return trimmed.substr(0, end);
+[[nodiscard]] bool is_unicode_whitespace(std::uint32_t code_point) {
+    return (code_point >= 0x0009 && code_point <= 0x000D) ||
+        code_point == 0x0020 || code_point == 0x00A0 || code_point == 0x1680 ||
+        (code_point >= 0x2000 && code_point <= 0x200A) ||
+        code_point == 0x2028 || code_point == 0x2029 || code_point == 0x202F ||
+        code_point == 0x205F || code_point == 0x3000 || code_point == 0xFEFF;
 }
 
-[[nodiscard]] std::string_view extract_args(std::string_view input) {
-    auto trimmed = trim_left(input);
-    if (trimmed.empty() || trimmed.front() != '/') return {};
-    trimmed.remove_prefix(1);
-    auto space = trimmed.find_first_of(" \t");
-    if (space == std::string_view::npos) return {};
-    return trim_left(trimmed.substr(space + 1));
+[[nodiscard]] std::size_t whitespace_prefix_length(std::string_view text) {
+    if (text.empty()) {
+        return 0;
+    }
+    const auto decoded = decode_first(text);
+    return is_unicode_whitespace(decoded.value) ? decoded.length : 0;
 }
 
-// ── Argument parsing (bash-style quote-aware) ──
+struct TemplateInvocation {
+    std::string_view name;
+    std::string_view arguments;
+};
 
-std::vector<std::string> parse_command_args(std::string_view input) {
-    std::vector<std::string> args;
-    if (input.empty()) return args;
+[[nodiscard]] std::optional<TemplateInvocation> parse_template_invocation(std::string_view input) {
+    if (input.empty() || input.front() != '/') {
+        return std::nullopt;
+    }
 
-    std::string current;
-    enum { Normal, SingleQuote, DoubleQuote } state = Normal;
-
-    for (size_t i = 0; i < input.size(); ++i) {
-        char c = input[i];
-        switch (state) {
-        case Normal:
-            if (c == '\'') {
-                state = SingleQuote;
-            } else if (c == '"') {
-                state = DoubleQuote;
-            } else if (c == ' ' || c == '\t') {
-                if (!current.empty()) {
-                    args.push_back(std::move(current));
-                    current.clear();
-                }
-            } else {
-                current += c;
-            }
-            break;
-        case SingleQuote:
-            if (c == '\'') {
-                state = Normal;
-            } else {
-                current += c;
-            }
-            break;
-        case DoubleQuote:
-            if (c == '"') {
-                state = Normal;
-            } else if (c == '\\' && i + 1 < input.size() && input[i + 1] == '"') {
-                current += '"';
-                ++i; // skip escaped quote
-            } else {
-                current += c;
-            }
+    const auto body = input.substr(1);
+    std::size_t delimiter = 0;
+    while (delimiter < body.size()) {
+        if (whitespace_prefix_length(body.substr(delimiter)) > 0) {
             break;
         }
+        delimiter += decode_first(body.substr(delimiter)).length;
     }
+    if (delimiter == 0) {
+        return std::nullopt;
+    }
+
+    std::size_t arguments_start = delimiter;
+    while (arguments_start < body.size()) {
+        const auto whitespace_length = whitespace_prefix_length(body.substr(arguments_start));
+        if (whitespace_length == 0) {
+            break;
+        }
+        arguments_start += whitespace_length;
+    }
+    return TemplateInvocation{body.substr(0, delimiter), body.substr(arguments_start)};
+}
+
+[[nodiscard]] std::vector<std::string> parse_command_args(std::string_view input) {
+    std::vector<std::string> args;
+    std::string current;
+    char quote = '\0';
+
+    std::size_t index = 0;
+    while (index < input.size()) {
+        const char ch = input[index];
+        if (quote != '\0') {
+            if (ch == quote) {
+                quote = '\0';
+                ++index;
+            } else {
+                const auto decoded = decode_first(input.substr(index));
+                current.append(input.substr(index, decoded.length));
+                index += decoded.length;
+            }
+        } else if (ch == '\'' || ch == '"') {
+            quote = ch;
+            ++index;
+        } else if (const auto whitespace_length = whitespace_prefix_length(input.substr(index));
+                   whitespace_length > 0) {
+            if (!current.empty()) {
+                args.push_back(std::move(current));
+                current.clear();
+            }
+            index += whitespace_length;
+        } else {
+            const auto decoded = decode_first(input.substr(index));
+            current.append(input.substr(index, decoded.length));
+            index += decoded.length;
+        }
+    }
+
     if (!current.empty()) {
         args.push_back(std::move(current));
     }
     return args;
 }
 
-// ── Argument substitution ──
-
-/// Parse a number from string view, return -1 on failure.
-int parse_number(std::string_view sv) {
-    int result = 0;
-    for (char c : sv) {
-        if (c < '0' || c > '9') return -1;
-        result = result * 10 + (c - '0');
+[[nodiscard]] std::optional<std::size_t> parse_unsigned(std::string_view text) {
+    if (text.empty()) {
+        return std::nullopt;
     }
-    return result;
+
+    std::size_t value = 0;
+    for (const char ch : text) {
+        if (ch < '0' || ch > '9') {
+            return std::nullopt;
+        }
+        const auto digit = static_cast<std::size_t>(ch - '0');
+        if (value > (std::numeric_limits<std::size_t>::max() - digit) / 10) {
+            return std::numeric_limits<std::size_t>::max();
+        }
+        value = value * 10 + digit;
+    }
+    return value;
 }
 
-std::string substitute_args(std::string_view body, const std::vector<std::string>& args) {
-    std::string result;
-    result.reserve(body.size());
+void append_joined(
+    std::string& output,
+    const std::vector<std::string>& args,
+    std::size_t begin,
+    std::size_t end) {
+    begin = std::min(begin, args.size());
+    end = std::min(end, args.size());
+    for (std::size_t index = begin; index < end; ++index) {
+        if (index > begin) {
+            output += ' ';
+        }
+        output += args[index];
+    }
+}
 
-    for (size_t i = 0; i < body.size(); ++i) {
-        if (body[i] == '$' && i + 1 < body.size()) {
-            // $@ — all arguments
-            if (body[i + 1] == '@') {
-                for (size_t a = 0; a < args.size(); ++a) {
-                    if (a > 0) result += ' ';
-                    result += args[a];
-                }
-                ++i; // skip '@'
-                continue;
+[[nodiscard]] std::string substitute_args(
+    std::string_view content,
+    const std::vector<std::string>& args) {
+    std::string output;
+    output.reserve(content.size());
+
+    std::size_t index = 0;
+    while (index < content.size()) {
+        if (content[index] != '$' || index + 1 >= content.size()) {
+            output += content[index++];
+            continue;
+        }
+
+        if (content.substr(index).starts_with("$ARGUMENTS")) {
+            append_joined(output, args, 0, args.size());
+            index += 10;
+            continue;
+        }
+        if (content[index + 1] == '@') {
+            append_joined(output, args, 0, args.size());
+            index += 2;
+            continue;
+        }
+
+        if (content[index + 1] >= '0' && content[index + 1] <= '9') {
+            std::size_t end = index + 1;
+            while (end < content.size() && content[end] >= '0' && content[end] <= '9') {
+                ++end;
             }
-
-            // $ARGUMENTS — alias for $@
-            if (i + 9 < body.size() && body.substr(i, 10) == "$ARGUMENTS") {
-                for (size_t a = 0; a < args.size(); ++a) {
-                    if (a > 0) result += ' ';
-                    result += args[a];
-                }
-                i += 9; // skip 'ARGUMENTS'
-                continue;
+            const auto position = parse_unsigned(content.substr(index + 1, end - index - 1));
+            if (position && *position >= 1 && *position <= args.size()) {
+                output += args[*position - 1];
             }
+            index = end;
+            continue;
+        }
 
-            // $N — positional argument
-            if (body[i + 1] >= '1' && body[i + 1] <= '9') {
-                int pos = body[i + 1] - '1';
-                ++i;
-                if (static_cast<size_t>(pos) < args.size()) {
-                    result += args[pos];
-                }
-                continue;
-            }
-
-            // ${...} — extended substitution
-            if (body[i + 1] == '{') {
-                auto close = body.find('}', i + 2);
-                if (close == std::string_view::npos) {
-                    result += "${";
-                    ++i;
-                    continue;
-                }
-                auto inner = body.substr(i + 2, close - (i + 2));
-
-                // ${N:-default}
-                auto colon = inner.find(":-");
-                if (colon != std::string_view::npos && colon > 0) {
-                    auto num_str = inner.substr(0, colon);
-                    auto def = inner.substr(colon + 2);
-                    int pos = parse_number(num_str);
-                    if (pos >= 1 && static_cast<size_t>(pos - 1) < args.size()) {
-                        result += args[pos - 1];
-                    } else {
-                        result += def;
-                    }
-                    i = close;
-                    continue;
-                }
-
-                // ${@:N} or ${@:N:L}
-                if (inner.size() > 2 && inner[0] == '@' && inner[1] == ':') {
-                    auto rest = inner.substr(2);
-                    auto colon2 = rest.find(':');
-                    if (colon2 == std::string_view::npos) {
-                        // ${@:N}
-                        int start = parse_number(rest);
-                        if (start >= 1) {
-                            for (size_t a = static_cast<size_t>(start - 1); a < args.size(); ++a) {
-                                if (a > static_cast<size_t>(start - 1)) result += ' ';
-                                result += args[a];
-                            }
+        if (content[index + 1] == '{') {
+            const auto close = content.find('}', index + 2);
+            if (close != std::string_view::npos) {
+                const auto inner = content.substr(index + 2, close - index - 2);
+                const auto default_separator = inner.find(":-");
+                if (default_separator != std::string_view::npos) {
+                    const auto position = parse_unsigned(inner.substr(0, default_separator));
+                    if (position) {
+                        const auto argument_index = *position >= 1 ? *position - 1 : args.size();
+                        if (argument_index < args.size() && !args[argument_index].empty()) {
+                            output += args[argument_index];
+                        } else {
+                            output += inner.substr(default_separator + 2);
                         }
-                    } else {
-                        // ${@:N:L}
-                        int start = parse_number(rest.substr(0, colon2));
-                        int len = parse_number(rest.substr(colon2 + 1));
-                        if (start >= 1 && len > 0) {
-                            size_t begin = static_cast<size_t>(start - 1);
-                            size_t end = std::min(begin + static_cast<size_t>(len), args.size());
-                            for (size_t a = begin; a < end; ++a) {
-                                if (a > begin) result += ' ';
-                                result += args[a];
-                            }
-                        }
+                        index = close + 1;
+                        continue;
                     }
-                    i = close;
-                    continue;
                 }
 
-                // Unrecognized ${...} — pass through
-                result += body.substr(i, close - i + 1);
-                i = close;
-                continue;
+                if (inner.starts_with("@:")) {
+                    const auto slice = inner.substr(2);
+                    const auto length_separator = slice.find(':');
+                    const auto start_text = length_separator == std::string_view::npos
+                        ? slice
+                        : slice.substr(0, length_separator);
+                    const auto start_value = parse_unsigned(start_text);
+                    const auto length_value = length_separator == std::string_view::npos
+                        ? std::optional<std::size_t>{}
+                        : parse_unsigned(slice.substr(length_separator + 1));
+                    if (start_value && (length_separator == std::string_view::npos || length_value)) {
+                        const auto begin = *start_value >= 1 ? *start_value - 1 : 0;
+                        const auto end = length_value && *length_value <= std::numeric_limits<std::size_t>::max() - begin
+                            ? begin + *length_value
+                            : args.size();
+                        append_joined(output, args, begin, end);
+                        index = close + 1;
+                        continue;
+                    }
+                }
             }
         }
-        result += body[i];
+
+        output += '$';
+        ++index;
     }
-    return result;
+
+    return output;
 }
 
 } // namespace
 
-// ── Public expand_prompt_template ──
+namespace prompt::detail {
+
+std::optional<std::string> try_expand_prompt_template(
+    std::string_view input,
+    const std::vector<PromptTemplate>& templates) {
+    const auto invocation = parse_template_invocation(input);
+    if (!invocation) {
+        return std::nullopt;
+    }
+
+    const auto match = std::find_if(
+        templates.begin(),
+        templates.end(),
+        [name = invocation->name](const PromptTemplate& candidate) {
+            return candidate.name == name;
+        });
+    if (match == templates.end()) {
+        return std::nullopt;
+    }
+
+    return substitute_args(match->content, parse_command_args(invocation->arguments));
+}
+
+} // namespace prompt::detail
 
 std::string expand_prompt_template(
     std::string_view input,
     const std::vector<PromptTemplate>& templates) {
-
-    // Only process inputs starting with '/'
-    auto trimmed = trim_left(input);
-    if (trimmed.empty() || trimmed.front() != '/') {
-        return std::string{input};
+    if (auto expanded = prompt::detail::try_expand_prompt_template(input, templates)) {
+        return std::move(*expanded);
     }
-
-    // Extract template name (first token after '/')
-    auto name = extract_command_name(trimmed);
-    if (name.empty()) return std::string{input};
-
-    // Find matching template
-    const PromptTemplate* match = nullptr;
-    for (const auto& tmpl : templates) {
-        if (tmpl.name == name) {
-            match = &tmpl;
-            break;
-        }
-    }
-    if (match == nullptr) return std::string{input};
-
-    // Extract args and substitute
-    auto args_str = extract_args(trimmed);
-    auto args = parse_command_args(args_str);
-    return substitute_args(match->content, args);
+    return std::string{input};
 }
 
 } // namespace cch::coding_agent

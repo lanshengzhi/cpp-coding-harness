@@ -168,7 +168,7 @@ Package targets and responsibilities:
 - `cch_agent` (`include/cch/agent`, `src/agent`): coroutine agent loop, observable state values, lifecycle event values, move-only event sinks, async tool registry, expected-style tool execution contracts, optional pre/post tool-call hooks (`beforeToolCall`/`afterToolCall`), context transform / LLM conversion hooks, steering/follow-up queues, prepare-next-turn updates, and sequential/parallel tool execution modes.
 - `cch_harness` (`include/cch/harness`, `src/harness`): pi-shaped filesystem and shell execution capability contracts (`FileSystem`/`Shell`), local implementation with workspace containment, symlink safety, atomic writes, split-stream process execution, secret environment filtering, and JSONL session persistence.
 - `cch_tools` (`include/cch/tools`, `src/tools`): built-in read/write/edit/bash tool factories bridging agent tool contracts to harness capabilities.
-- `cch_coding_agent_runtime` (`src/cli/` for CLI11 parsing/preflight/`CliConfig`/`CliRuntimeConfig`, `src/coding_agent/runtime/AsyncCliRuntime.*`, `src/coding_agent/runtime/`, `include/cch/coding_agent/`, `src/coding_agent/`): CLI argument parsing and preflight (including `config.json` precedence), runtime orchestration, session lifecycle, provider/tool service assembly, semantic event printing, JSON/RPC output modes, slash-command/prompt-template processing (`PromptProcessing`, `PromptExpander`), project trust/resource controls (`ProjectTrust`, `ProjectResources`, `ProjectResourceLoader`), project-local skill discovery/loading and prompt formatting (loaders in `src/coding_agent/`), `/skill:name` expansion, and prompt-template file loading with `--prompt-template`/`--no-prompt-templates` CLI flags.
+- `cch_coding_agent_runtime` (`src/cli/` for CLI11 parsing/preflight/`CliConfig`/`CliRuntimeConfig`, `src/coding_agent/runtime/AsyncCliRuntime.*`, `src/coding_agent/runtime/`, `include/cch/coding_agent/`, `src/coding_agent/`): CLI argument parsing and preflight (including `config.json` precedence), runtime orchestration, session lifecycle, provider/tool service assembly, semantic event printing, JSON/RPC output modes, private owning prompt interpretation (`prompt/PromptProcessor`) with legacy free-function wrappers, project trust/resource controls (`ProjectTrust`, `ProjectResources`, `ProjectResourceLoader`), project-local skill discovery/loading and prompt formatting, `/skill:name` expansion from cached content, and prompt-template file loading with `--prompt-template`/`--no-prompt-templates` CLI flags.
 
 The build publishes `include` as the public surface and keeps `src` private. Legacy synchronous tools, Boost.JSON contracts, `util::Result`, and duplicate `src` contract headers have been removed.
 
@@ -208,7 +208,9 @@ The effective built-in command names are:
 | `/quit` | Request a clean frontend shutdown. |
 | `/exit` | Alias for `/quit`. |
 
-Aliases are resolved by the command registry and appear in `/help`. Registry help does not list prompt templates or `/skill:<name>` invocations as built-in commands.
+Aliases are resolved by the command registry and appear in `/help`. Registry help does not list prompt templates or `/skill:<name>` invocations as built-in commands. Prompt interpretation activates only for a slash at column zero and applies command → cached skill → prompt-template precedence. Bare `/` and unmatched slash input pass through to the model unchanged.
+
+`!command` and `!!command` are not prompt-processing syntax. The text REPL temporarily intercepts them with a not-implemented message; one-shot, JSON, RPC, and SDK paths currently send them as ordinary prompts until the separate UserBash persistence slice lands.
 
 Command presentation depends on the frontend:
 
@@ -272,6 +274,7 @@ session->close();
 - Built-in tool selection with safe defaults: `read`, `write`, and `edit_file` by default; `bash` requires explicit opt-in.
 - Custom tool registration via existing `agent::AsyncAgentTool` contracts; duplicate tool names fail creation.
 - Programmatic skills, prompt templates, and slash-command handlers; host resources take precedence over project-discovered duplicates.
+- Per-prompt `PromptOptions::expand_prompt_templates` (default `true`); `false` bypasses command, skill, and template processing and sends raw text to the agent loop.
 - Optional project resource discovery (`.cpp-harness/skills/`, `.cpp-harness/prompts/`) behind explicit trust/resource controls.
 - Optional absolute external `trust_store_path` for SDK project-resource trust decisions; workspace-local trust-store paths are rejected.
 - Diagnostics returned as `CreateAgentSessionResult::diagnostics` values — no stdout/stderr output from the SDK path.

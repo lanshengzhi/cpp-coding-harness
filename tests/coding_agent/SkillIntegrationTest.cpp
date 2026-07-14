@@ -74,22 +74,19 @@ TEST_CASE("expand_skill_command with arguments", "[coding_agent][skill-integrati
     CHECK(expanded.find("</skill>\n\nextra args here") != std::string::npos);
 }
 
-TEST_CASE("expand_skill_command unknown skill passthrough", "[coding_agent][skill-integration][u5]") {
+TEST_CASE("expand_skill_command unknown skill passes through without printing", "[coding_agent][skill-integration][u5]") {
     tests::TempWorkspace tmp;
     harness::WorkspaceFileSystem fs(tmp.path());
     std::vector<coding_agent::Skill> skills;
 
-    // Redirect stderr to suppress diagnostic output in test output
     std::stringstream stderr_capture;
     auto* old_stderr = std::cerr.rdbuf(stderr_capture.rdbuf());
-
     auto result = coding_agent::expand_skill_command(
         "/skill:unknown-skill", skills, fs);
-    // Restore stderr
     std::cerr.rdbuf(old_stderr);
 
-    CHECK(result == "/skill:unknown-skill"); // Passthrough unchanged
-    CHECK_FALSE(stderr_capture.str().empty()); // Diagnostic was printed
+    CHECK(result == "/skill:unknown-skill");
+    CHECK(stderr_capture.str().empty());
 }
 
 TEST_CASE("expand_skill_command bare prefix passthrough", "[coding_agent][skill-integration][u5]") {

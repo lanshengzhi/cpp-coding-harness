@@ -21,6 +21,7 @@
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -248,12 +249,15 @@ TEST_CASE("SDK types compile with only public headers", "[sdk][u1]") {
     opts.max_turns = 10;
 
     coding_agent::PromptOptions prompt_opts;
+    coding_agent::PromptOptions legacy_aggregate{
+        agent::AgentEventSink{[](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid { return {}; }}};
     coding_agent::PromptResult result;
     result.code = "completed";
     result.success = true;
 
     CHECK(result.success);
     CHECK(result.code == "completed");
+    CHECK(legacy_aggregate.expand_prompt_templates);
 }
 
 TEST_CASE("AgentSession is move-only", "[sdk][u1]") {
@@ -600,7 +604,7 @@ TEST_CASE("SDK host-provided skills are accessible", "[sdk][u4]") {
     CHECK(session->close().has_value());
 }
 
-TEST_CASE("SDK prompt returns diagnostics for unknown skill command", "[sdk][u4][skill-diagnostics]") {
+TEST_CASE("SDK unknown skill command reaches the provider without diagnostics", "[sdk][u4][skill-diagnostics]") {
     TestPaths paths;
 
     coding_agent::CreateAgentSessionOptions opts;
@@ -614,9 +618,9 @@ TEST_CASE("SDK prompt returns diagnostics for unknown skill command", "[sdk][u4]
     auto& session = create_result->session;
     auto prompt_result = session->prompt("/skill:unknown");
     REQUIRE(prompt_result.has_value());
-    CHECK(prompt_result->code == "command_handled");
-    REQUIRE(prompt_result->diagnostics.size() == 1);
-    CHECK(prompt_result->diagnostics[0] == "[skill:warn] unknown skill: unknown");
+    CHECK(prompt_result->success);
+    CHECK(prompt_result->code == "completed");
+    CHECK(prompt_result->diagnostics.empty());
 
     CHECK(session->close().has_value());
 }
@@ -647,7 +651,7 @@ TEST_CASE("SDK prompt leaves diagnostics empty for valid and bare skill commands
 
     auto bare_result = session->prompt("/skill:");
     REQUIRE(bare_result.has_value());
-    CHECK(bare_result->code == "command_handled");
+    CHECK(bare_result->code == "completed");
     CHECK(bare_result->diagnostics.empty());
 
     CHECK(session->close().has_value());
@@ -677,6 +681,35 @@ TEST_CASE("SDK host-provided templates are accessible", "[sdk][u4]") {
     CHECK(session->close().has_value());
 }
 
+TEST_CASE("moved SDK session retains its owned prompt resource snapshot", "[sdk][u4][prompt-processing]") {
+    TestPaths paths;
+    auto capture = std::make_unique<CaptureChatClient>();
+    auto* capture_ptr = capture.get();
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::move(capture);
+    opts.prompt_templates.push_back(host_template("review", "Review cached: $1"));
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+    coding_agent::AgentSession moved_session{std::move(*created->session)};
+
+    auto result = moved_session.prompt("/review target.cpp");
+    REQUIRE(result.has_value());
+    CHECK(result->success);
+    REQUIRE(capture_ptr->captured_request.has_value());
+    const auto& messages = capture_ptr->captured_request->context.messages;
+    const auto user = std::find_if(messages.begin(), messages.end(), [](const ai::MessageVariant& message) {
+        return std::holds_alternative<ai::UserMessage>(message);
+    });
+    REQUIRE(user != messages.end());
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(*user).content) == "Review cached: target.cpp");
+
+    CHECK(moved_session.close().has_value());
+}
+
 TEST_CASE("SDK host-provided commands work", "[sdk][u4]") {
     TestPaths paths;
 
@@ -700,8 +733,118 @@ TEST_CASE("SDK host-provided commands work", "[sdk][u4]") {
     REQUIRE(prompt_result.has_value());
     CHECK(prompt_result->code == "command_handled");
     CHECK(prompt_result->message.find("Hello from SDK") != std::string::npos);
+    CHECK(prompt_result->message_count == 0);
 
     CHECK(session->close().has_value());
+}
+
+TEST_CASE("SDK contains command handler failures and restores the session for the next prompt", "[sdk][u4][prompt-processing]") {
+    TestPaths paths;
+    auto capture = std::make_unique<CaptureChatClient>();
+    auto* capture_ptr = capture.get();
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::move(capture);
+    opts.commands.push_back(coding_agent::SdkCommand{
+        .name = "explode",
+        .handler = [](const coding_agent::CommandContext&, std::string_view) -> coding_agent::CommandResult {
+            throw std::runtime_error{"secret failure detail"};
+        },
+    });
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+    auto& session = created->session;
+
+    auto failed_command = session->prompt("/explode");
+    REQUIRE(failed_command.has_value());
+    CHECK(failed_command->success);
+    CHECK(failed_command->code == "command_handler_failed");
+    CHECK(failed_command->message == "Command handler failed.");
+    CHECK(failed_command->message_count == 0);
+    CHECK_FALSE(capture_ptr->captured_request.has_value());
+    CHECK_FALSE(session->is_busy());
+
+    auto next = session->prompt("next prompt");
+    REQUIRE(next.has_value());
+    CHECK(next->success);
+    CHECK(next->code == "completed");
+    REQUIRE(capture_ptr->captured_request.has_value());
+    CHECK_FALSE(session->is_busy());
+
+    CHECK(session->close().has_value());
+}
+
+TEST_CASE("SDK expand_prompt_templates false sends command-shaped input raw to the provider", "[sdk][u4][prompt-processing]") {
+    TestPaths paths;
+    auto capture = std::make_unique<CaptureChatClient>();
+    auto* capture_ptr = capture.get();
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::move(capture);
+    opts.commands.push_back(coding_agent::SdkCommand{
+        .name = "local",
+        .handler = [](const coding_agent::CommandContext&, std::string_view) {
+            return coding_agent::CommandResult{"should not run"};
+        },
+    });
+    opts.skills.push_back(host_skill("cached"));
+    opts.prompt_templates.push_back(host_template("review", "expanded: $1"));
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+
+    for (const std::string raw : {"/local", "/skill:cached", "/review arg"}) {
+        coding_agent::PromptOptions prompt_options;
+        prompt_options.expand_prompt_templates = false;
+        auto result = created->session->prompt(raw, std::move(prompt_options));
+        REQUIRE(result.has_value());
+        CHECK(result->success);
+        CHECK(result->code == "completed");
+        REQUIRE(capture_ptr->captured_request.has_value());
+        const auto& messages = capture_ptr->captured_request->context.messages;
+        const auto user = std::find_if(messages.rbegin(), messages.rend(), [](const ai::MessageVariant& message) {
+            return std::holds_alternative<ai::UserMessage>(message);
+        });
+        REQUIRE(user != messages.rend());
+        CHECK(ai::text_from_content(std::get<ai::UserMessage>(*user).content) == raw);
+    }
+
+    CHECK(created->session->close().has_value());
+}
+
+TEST_CASE("SDK treats user bash prefixes as ordinary prompts", "[sdk][u4][prompt-processing][user-bash]") {
+    TestPaths paths;
+    auto capture = std::make_unique<CaptureChatClient>();
+    auto* capture_ptr = capture.get();
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::move(capture);
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+
+    for (const std::string raw : {"!echo visible", "!!echo excluded-later"}) {
+        auto result = created->session->prompt(raw);
+        REQUIRE(result.has_value());
+        CHECK(result->success);
+        CHECK(result->code == "completed");
+        REQUIRE(capture_ptr->captured_request.has_value());
+        const auto& messages = capture_ptr->captured_request->context.messages;
+        const auto user = std::find_if(messages.rbegin(), messages.rend(), [](const ai::MessageVariant& message) {
+            return std::holds_alternative<ai::UserMessage>(message);
+        });
+        REQUIRE(user != messages.rend());
+        CHECK(ai::text_from_content(std::get<ai::UserMessage>(*user).content) == raw);
+    }
+
+    CHECK(created->session->close().has_value());
 }
 
 TEST_CASE("SDK loads trusted project resources through shared loader", "[sdk][project-resources]") {

@@ -1,10 +1,10 @@
 #pragma once
 
 #include "../../../include/cch/agent/AgentLoop.hpp"
-#include "../../../include/cch/coding_agent/CommandRegistry.hpp"
 #include "../../../include/cch/coding_agent/PromptTemplate.hpp"
 #include "../../../include/cch/coding_agent/Skill.hpp"
 #include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
+#include "coding_agent/prompt/PromptProcessor.hpp"
 #include "../../../include/cch/util/Error.hpp"
 #include "RuntimeServices.hpp"
 #include "SessionLifecycle.hpp"
@@ -27,9 +27,6 @@ struct PromptRunResult {
 struct AgentSessionRuntimeConfig {
     int max_turns{30};
     std::string model;
-    /// When true, skill-expansion diagnostics are captured into
-    /// PromptRunResult::diagnostics instead of being printed to stderr.
-    bool capture_skill_diagnostics{false};
 };
 
 /// Internal runtime behind AgentSession. Owns the agent loop, session store,
@@ -39,7 +36,7 @@ public:
     AgentSessionRuntime(
         RuntimeServices services,
         OpenSession session,
-        CommandRegistry command_registry,
+        prompt::PromptProcessor prompt_processor,
         AgentSessionRuntimeConfig config);
 
     AgentSessionRuntime(const AgentSessionRuntime&) = delete;
@@ -47,10 +44,11 @@ public:
     AgentSessionRuntime(AgentSessionRuntime&&) = default;
     AgentSessionRuntime& operator=(AgentSessionRuntime&&) = default;
 
-    /// Run one blocking prompt: skill expansion, slash-command/template dispatch,
+    /// Run one blocking prompt through optional prompt interpretation, the
     /// agent loop, persistence, and event fanout.
     [[nodiscard]] PromptRunResult run_prompt(
         std::string prompt,
+        bool expand_prompt_templates,
         agent::AgentEventSink sink = {});
 
     // ── Subscriptions ──────────────────────────────────────────────────────
@@ -75,8 +73,8 @@ public:
     [[nodiscard]] const std::filesystem::path& workspace() const { return session_.workspace; }
     [[nodiscard]] const std::vector<ai::MessageVariant>& history() const { return session_.history; }
     [[nodiscard]] const harness::session::JsonlSessionStore& store() const { return *session_.store; }
-    [[nodiscard]] const std::vector<Skill>& skills() const { return services_.skills; }
-    [[nodiscard]] const std::vector<PromptTemplate>& templates() const { return services_.prompt_templates; }
+    [[nodiscard]] const std::vector<Skill>& skills() const { return prompt_processor_.skills(); }
+    [[nodiscard]] const std::vector<PromptTemplate>& templates() const { return prompt_processor_.templates(); }
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -99,7 +97,7 @@ private:
 
     RuntimeServices services_;
     OpenSession session_;
-    CommandRegistry command_registry_;
+    prompt::PromptProcessor prompt_processor_;
     std::optional<agent::AsyncAgentLoop> loop_;
 
     std::vector<SubscriberEntry> subscribers_;

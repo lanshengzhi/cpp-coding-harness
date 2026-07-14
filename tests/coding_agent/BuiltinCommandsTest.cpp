@@ -2,6 +2,9 @@
 
 #include "../../include/cch/coding_agent/PromptProcessing.hpp"
 
+#include <stdexcept>
+#include <string>
+
 using namespace cch;
 
 TEST_CASE("process_prompt passes through normal text unchanged", "[coding_agent][prompt]") {
@@ -12,28 +15,26 @@ TEST_CASE("process_prompt passes through normal text unchanged", "[coding_agent]
     CHECK_FALSE(result.shutdown_requested);
 }
 
-TEST_CASE("process_prompt detects slash command with no name", "[coding_agent][prompt]") {
+TEST_CASE("process_prompt passes through bare and unmatched slash input", "[coding_agent][prompt]") {
     coding_agent::CommandRegistry registry;
-    auto result = coding_agent::process_prompt("/", {}, registry);
-    CHECK(result.command_handled == true);
-    REQUIRE(result.display_text);
-    CHECK(result.display_text->find("command name") != std::string::npos);
+
+    for (const std::string input : {"/", "/nonexistent", "/skill:missing"}) {
+        auto result = coding_agent::process_prompt(input, {}, registry);
+        CHECK_FALSE(result.command_handled);
+        CHECK_FALSE(result.display_text.has_value());
+        CHECK(result.expanded_prompt == input);
+    }
 }
 
-TEST_CASE("process_prompt returns error for unknown command", "[coding_agent][prompt]") {
+TEST_CASE("process_prompt only interprets slash commands at column zero", "[coding_agent][prompt]") {
     coding_agent::CommandRegistry registry;
-    auto result = coding_agent::process_prompt("/nonexistent", {}, registry);
-    CHECK(result.command_handled == true);
-    REQUIRE(result.display_text);
-    CHECK(result.display_text->find("Unknown command") != std::string::npos);
-}
+    REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
 
-TEST_CASE("process_prompt detects shell passthrough prefix", "[coding_agent][prompt]") {
-    coding_agent::CommandRegistry registry;
-    auto result = coding_agent::process_prompt("!echo hello", {}, registry);
-    CHECK(result.command_handled == true);
-    REQUIRE(result.display_text);
-    CHECK(result.display_text->find("not yet implemented") != std::string::npos);
+    for (const std::string input : {" /quit", "\t/quit", "!echo hello", "!!echo hello"}) {
+        auto result = coding_agent::process_prompt(input, {}, registry);
+        CHECK_FALSE(result.command_handled);
+        CHECK(result.expanded_prompt == input);
+    }
 }
 
 TEST_CASE("built-in /session command returns session info", "[coding_agent][prompt]") {
@@ -49,14 +50,13 @@ TEST_CASE("built-in /session command returns session info", "[coding_agent][prom
         .available_commands = {},
     };
 
-    auto result = coding_agent::process_prompt("/session", {}, registry, ctx);
-    CHECK(result.command_handled == true);
-    REQUIRE(result.display_text);
-    CHECK(result.display_text->find("test-session-1") != std::string::npos);
-    CHECK(result.display_text->find("/tmp/ws") != std::string::npos);
-    CHECK(result.display_text->find("openai") != std::string::npos);
-    CHECK(result.display_text->find("gpt-4.1-mini") != std::string::npos);
-    CHECK(result.display_text->find("5") != std::string::npos);
+    auto result = registry.dispatch("session", ctx, "");
+    REQUIRE(result.has_value());
+    CHECK(result->display_text.find("test-session-1") != std::string::npos);
+    CHECK(result->display_text.find("/tmp/ws") != std::string::npos);
+    CHECK(result->display_text.find("openai") != std::string::npos);
+    CHECK(result->display_text.find("gpt-4.1-mini") != std::string::npos);
+    CHECK(result->display_text.find("5") != std::string::npos);
 }
 
 TEST_CASE("built-in /quit and /exit commands signal shutdown through the same handler", "[coding_agent][prompt]") {
@@ -64,17 +64,15 @@ TEST_CASE("built-in /quit and /exit commands signal shutdown through the same ha
     REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
 
     coding_agent::CommandContext ctx;
-    auto quit = coding_agent::process_prompt("/quit", {}, registry, ctx);
-    auto exit = coding_agent::process_prompt("/exit", {}, registry, ctx);
+    auto quit = registry.dispatch("quit", ctx, "");
+    auto exit = registry.dispatch("exit", ctx, "");
 
-    CHECK(quit.command_handled == true);
-    CHECK(quit.shutdown_requested == true);
-    REQUIRE(quit.display_text);
-    CHECK(*quit.display_text == "Shutting down.");
-    CHECK(exit.command_handled == true);
-    CHECK(exit.shutdown_requested == true);
-    REQUIRE(exit.display_text);
-    CHECK(*exit.display_text == *quit.display_text);
+    REQUIRE(quit.has_value());
+    REQUIRE(exit.has_value());
+    CHECK(quit->shutdown_requested);
+    CHECK(quit->display_text == "Shutting down.");
+    CHECK(exit->shutdown_requested);
+    CHECK(exit->display_text == quit->display_text);
 }
 
 TEST_CASE("built-in /clear is a no-op command outside the text presentation seam", "[coding_agent][prompt]") {
@@ -82,17 +80,15 @@ TEST_CASE("built-in /clear is a no-op command outside the text presentation seam
     REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
 
     coding_agent::CommandContext ctx;
-    auto clear = coding_agent::process_prompt("/clear", {}, registry, ctx);
-    CHECK(clear.command_handled == true);
-    CHECK_FALSE(clear.shutdown_requested);
-    REQUIRE(clear.display_text);
-    CHECK(clear.display_text->empty());
+    auto clear = registry.dispatch("clear", ctx, "");
+    REQUIRE(clear.has_value());
+    CHECK_FALSE(clear->shutdown_requested);
+    CHECK(clear->display_text.empty());
 
-    auto with_arguments = coding_agent::process_prompt("/clear now", {}, registry, ctx);
-    CHECK(with_arguments.command_handled == true);
-    CHECK_FALSE(with_arguments.shutdown_requested);
-    REQUIRE(with_arguments.display_text);
-    CHECK(*with_arguments.display_text == "Usage: /clear");
+    auto with_arguments = registry.dispatch("clear", ctx, "now");
+    REQUIRE(with_arguments.has_value());
+    CHECK_FALSE(with_arguments->shutdown_requested);
+    CHECK(with_arguments->display_text == "Usage: /clear");
 }
 
 TEST_CASE("built-in /new command returns instruction text", "[coding_agent][prompt]") {
@@ -100,10 +96,9 @@ TEST_CASE("built-in /new command returns instruction text", "[coding_agent][prom
     REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
 
     coding_agent::CommandContext ctx;
-    auto result = coding_agent::process_prompt("/new", {}, registry, ctx);
-    CHECK(result.command_handled == true);
-    REQUIRE(result.display_text);
-    CHECK(result.display_text->find("restart") != std::string::npos);
+    auto result = registry.dispatch("new", ctx, "");
+    REQUIRE(result.has_value());
+    CHECK(result->display_text.find("restart") != std::string::npos);
 }
 
 TEST_CASE("built-in /resume command with args returns instruction", "[coding_agent][prompt]") {
@@ -111,11 +106,10 @@ TEST_CASE("built-in /resume command with args returns instruction", "[coding_age
     REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
 
     coding_agent::CommandContext ctx;
-    auto result = coding_agent::process_prompt("/resume abc123", {}, registry, ctx);
-    CHECK(result.command_handled == true);
-    REQUIRE(result.display_text);
-    CHECK(result.display_text->find("abc123") != std::string::npos);
-    CHECK(result.display_text->find("--resume") != std::string::npos);
+    auto result = registry.dispatch("resume", ctx, "abc123");
+    REQUIRE(result.has_value());
+    CHECK(result->display_text.find("abc123") != std::string::npos);
+    CHECK(result->display_text.find("--resume") != std::string::npos);
 }
 
 TEST_CASE("built-in /resume without args shows usage", "[coding_agent][prompt]") {
@@ -123,10 +117,9 @@ TEST_CASE("built-in /resume without args shows usage", "[coding_agent][prompt]")
     REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
 
     coding_agent::CommandContext ctx;
-    auto result = coding_agent::process_prompt("/resume", {}, registry, ctx);
-    CHECK(result.command_handled == true);
-    REQUIRE(result.display_text);
-    CHECK(result.display_text->find("Usage:") != std::string::npos);
+    auto result = registry.dispatch("resume", ctx, "");
+    REQUIRE(result.has_value());
+    CHECK(result->display_text.find("Usage:") != std::string::npos);
 }
 
 TEST_CASE("built-in command metadata describes the implemented operations", "[coding_agent][prompt]") {
@@ -218,15 +211,28 @@ TEST_CASE("built-in /help handles invalid arity and unknown detailed targets", "
     coding_agent::CommandContext ctx;
     ctx.available_commands = registry.list_commands();
 
-    auto invalid_arity = coding_agent::process_prompt("/help session extra", {}, registry, ctx);
-    CHECK(invalid_arity.command_handled);
-    REQUIRE(invalid_arity.display_text);
-    CHECK(*invalid_arity.display_text == "Usage: /help [command]");
+    auto invalid_arity = registry.dispatch("help", ctx, "session extra");
+    REQUIRE(invalid_arity.has_value());
+    CHECK(invalid_arity->display_text == "Usage: /help [command]");
 
-    auto unknown = coding_agent::process_prompt("/help missing", {}, registry, ctx);
-    CHECK(unknown.command_handled);
-    REQUIRE(unknown.display_text);
-    CHECK(*unknown.display_text == "Unknown command: /missing");
+    auto unknown = registry.dispatch("help", ctx, "missing");
+    REQUIRE(unknown.has_value());
+    CHECK(unknown->display_text == "Unknown command: /missing");
+}
+
+TEST_CASE("process_prompt contains command handler exceptions with fixed feedback", "[coding_agent][prompt]") {
+    coding_agent::CommandRegistry registry;
+    REQUIRE(registry.register_command(
+        "throw",
+        [](const coding_agent::CommandContext&, std::string_view) -> coding_agent::CommandResult {
+            throw std::runtime_error{"secret path /tmp/private"};
+        }).has_value());
+
+    auto result = coding_agent::process_prompt("/throw", {}, registry);
+    CHECK(result.command_handled);
+    REQUIRE(result.display_text);
+    CHECK(*result.display_text == "Command handler failed.");
+    CHECK_FALSE(result.shutdown_requested);
 }
 
 TEST_CASE("built-in /commands dispatches through the /help handler", "[coding_agent][prompt]") {
@@ -235,10 +241,10 @@ TEST_CASE("built-in /commands dispatches through the /help handler", "[coding_ag
 
     coding_agent::CommandContext ctx;
     ctx.available_commands = registry.list_commands();
-    auto help = coding_agent::process_prompt("/help session", {}, registry, ctx);
-    auto commands = coding_agent::process_prompt("/commands session", {}, registry, ctx);
+    auto help = registry.dispatch("help", ctx, "session");
+    auto commands = registry.dispatch("commands", ctx, "session");
 
-    REQUIRE(help.display_text);
-    REQUIRE(commands.display_text);
-    CHECK(*commands.display_text == *help.display_text);
+    REQUIRE(help.has_value());
+    REQUIRE(commands.has_value());
+    CHECK(commands->display_text == help->display_text);
 }

@@ -194,7 +194,7 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **Files:** `include/cch/coding_agent/PromptProcessing.hpp`, `src/coding_agent/PromptProcessing.cpp`, `src/coding_agent/PromptExpander.cpp`, `src/coding_agent/runtime/AgentSessionRunner.cpp`, `src/AsyncCliRuntime.cpp`, `tests/coding_agent/BuiltinCommandsTest.cpp`, `tests/coding_agent/PromptExpanderTest.cpp`.
   - **References:** `pi:packages/coding-agent/src/core/slash-commands.ts`, `pi:packages/coding-agent/src/core/prompt-templates.ts`, `pi:packages/coding-agent/docs/usage.md`, `pi:packages/coding-agent/docs/prompt-templates.md`.
   - **Implementation plan:** `docs/plans/2026-06-20-005-feat-slash-command-prompt-processing-plan.md`.
-  - **Status:** `CommandRegistry` dispatch framework, `process_prompt()` pipeline in REPL/runner/RPC, and `expand_prompt_template()` with bash-style arg substitution are implemented. 22 new tests pass.
+  - **Status:** `CommandRegistry` dispatch and a private owning `PromptProcessor` now provide one command → cached skill → prompt-template policy for SDK/CLI/RPC. Unmatched slash input passes through silently, command-handler failures are contained, legacy `process_prompt()` wrappers reuse the same policy, and `PromptOptions::expand_prompt_templates` can bypass interpretation. Template substitution covers pi's positional, default, slice, quote, whitespace, and single-pass semantics.
 - [ ] Implement the remaining pi-aligned built-in slash commands.
   - **Reference baseline:** `pi:packages/coding-agent/src/core/slash-commands.ts` currently defines 22 built-in commands.
   - [x] **Phase 1 line-CLI slice:** the C++ registry now exposes 8 effective names: canonical `/help`, `/session`, `/quit`, `/clear`, `/new`, and `/resume`, plus `/commands` and `/exit` aliases. Metadata, alias resolution, deterministic help, and text/JSON/RPC behavior have focused test coverage.
@@ -213,12 +213,12 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **References:** `pi:packages/coding-agent/docs/skills.md`, `pi:packages/agent/src/harness/skills.ts`.
   - **Test scenarios:** project skill discovery, reusable global-style `includeRootFiles` loader behavior, relative reference resolution, disabled model invocation, prompt formatting, and duplicate handling.
   - **Implementation plans:** `docs/plans/2026-06-20-006-feat-skill-file-discovery-plan.md`, `docs/plans/2026-06-20-007-feat-skill-model-visible-integration-plan.md`.
-  - **Status:** `Skill`/diagnostic contracts, frontmatter parsing, recursive/deduplicating loader, trust-gated runtime startup loading, `<available_skills>` context injection, and `/skill:name [args]` expansion are implemented. Global `~/.cpp-harness/skills`, config-driven skill directories, and live skill reload are deferred.
+  - **Status:** `Skill`/diagnostic contracts, frontmatter parsing, recursive/deduplicating loader, trust-gated runtime startup loading, `<available_skills>` context injection, and `/skill:name [args]` expansion are implemented. Invocation and model visibility use one immutable session snapshot with no prompt-time filesystem access. Global `~/.cpp-harness/skills`, config-driven skill directories, and live skill reload are deferred.
 - [x] Implement prompt template loading and invocation.
   - **Files:** `include/cch/coding_agent/PromptTemplateLoader.hpp`, `src/coding_agent/PromptTemplateLoader.cpp`, `tests/coding_agent/PromptTemplateLoaderTest.cpp`.
   - **References:** `pi:packages/coding-agent/docs/prompt-templates.md`, `pi:packages/agent/src/harness/prompt-templates.ts`.
   - **Implementation plan:** `docs/plans/2026-06-20-009-feat-prompt-template-loading-plan.md`.
-  - **Status:** PromptTemplateLoader with YAML frontmatter parsing and directory scanning. expand_prompt_template() with $1/$@/$ARGUMENTS/${N:-default}/${@:N}/${@:N:L} substitution. Runtime wiring in RuntimeServices. 26 tests pass.
+  - **Status:** `PromptTemplateLoader` provides YAML frontmatter parsing and directory scanning. `expand_prompt_template()` supports multi-digit positions, `$0`, `$@`/`$ARGUMENTS`, defaults, slices including `${@:0}`, quote-aware mixed-whitespace arguments, and non-recursive substitution. Templates are owned by the session's private prompt processor rather than `RuntimeServices`.
 - [ ] Implement package discovery/installation only after resource loading exists.
   - **References:** `pi:packages/coding-agent/docs/packages.md`.
   - **Scope boundary:** do not add npm/git package installation silently; it is a supply-chain surface and needs an explicit design/test plan.
@@ -260,7 +260,7 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **Files:** `include/cch/coding_agent/Sdk.hpp`, `src/coding_agent/Sdk.cpp`, `tests/coding_agent/SdkSessionTest.cpp`.
   - **References:** `pi:packages/coding-agent/docs/sdk.md`, `pi:packages/coding-agent/src/core/sdk.ts`.
   - **Implementation plan:** `docs/plans/2026-06-21-001-feat-t8-embeddable-sdk-surface-plan.md`.
-  - **Status:** SDK v1 is available as a same-process C++23 source-level API. Host apps can create/resume sessions, register tools/resources, send prompts, subscribe to events, and close cleanly without CLI/RPC globals. Full pi SDK parity (session replacement runtime, concurrent prompts, compaction, in-memory sessions, ABI stability) is deferred.
+  - **Status:** SDK v1 is available as a same-process C++23 source-level API. Host apps can create/resume sessions, register tools/resources, send prompts, optionally bypass command/skill/template expansion per prompt, subscribe to events, and close cleanly without CLI/RPC globals. Full pi SDK parity (session replacement runtime, concurrent prompts, compaction, in-memory sessions, ABI stability) is deferred.
   - **Done when:** a host application can create a session, register tools/resources, send prompts, receive events, and shut down cleanly without depending on CLI globals.
 
 ### T9. Security, Platform, and Distribution

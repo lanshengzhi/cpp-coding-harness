@@ -1,31 +1,55 @@
 #include "../../include/cch/coding_agent/PromptProcessing.hpp"
 
-#include "../../include/cch/coding_agent/CommandRegistry.hpp"
-#include "../../include/cch/coding_agent/PromptProcessingPipeline.hpp"
-#include "../../include/cch/coding_agent/PromptTemplate.hpp"
-#include "../../include/cch/coding_agent/PromptTemplateExpander.hpp"
-#include "../../include/cch/coding_agent/Skill.hpp"
-#include "../../include/cch/coding_agent/SkillExpander.hpp"
-#include "harness/WorkspaceFileSystem.hpp"
+#include "coding_agent/prompt/PromptProcessor.hpp"
 
 #include <string>
 #include <string_view>
+#include <utility>
+#include <variant>
 #include <vector>
 
 namespace cch::coding_agent {
+namespace {
+
+[[nodiscard]] PromptProcessingResult to_legacy_result(
+    prompt::PromptProcessingOutcome outcome) {
+    if (auto* agent_prompt = std::get_if<prompt::AgentPrompt>(&outcome)) {
+        return PromptProcessingResult{
+            .command_handled = false,
+            .display_text = std::nullopt,
+            .expanded_prompt = std::move(agent_prompt->text),
+            .shutdown_requested = false,
+        };
+    }
+
+    auto& handled = std::get<prompt::CommandHandled>(outcome);
+    return PromptProcessingResult{
+        .command_handled = true,
+        .display_text = std::move(handled.feedback),
+        .expanded_prompt = {},
+        .shutdown_requested = handled.shutdown_requested,
+    };
+}
+
+} // namespace
 
 std::string expand_skill_command(
     std::string_view input,
     const std::vector<Skill>& skills,
-    const harness::WorkspaceFileSystem& fs) {
-    return SkillExpander{skills, fs}.expand_and_print(input);
+    const harness::WorkspaceFileSystem& /*fs*/) {
+    if (auto expanded = prompt::detail::try_expand_skill(input, skills)) {
+        return std::move(*expanded);
+    }
+    return std::string{input};
 }
 
 SkillExpansionResult expand_skill_command_silent(
     std::string_view input,
     const std::vector<Skill>& skills) {
-    const harness::WorkspaceFileSystem default_fs{};
-    return SkillExpander{skills, default_fs}.expand(input);
+    return SkillExpansionResult{
+        .expanded = prompt::detail::try_expand_skill(input, skills).value_or(std::string{input}),
+        .diagnostics = {},
+    };
 }
 
 PromptProcessingResult process_prompt(
@@ -33,14 +57,13 @@ PromptProcessingResult process_prompt(
     const std::vector<PromptTemplate>& templates,
     CommandRegistry& registry,
     const CommandContext& ctx) {
-    const std::vector<Skill> empty_skills_vec{};
-    const harness::WorkspaceFileSystem default_fs{};
-    SkillExpander empty_skills{empty_skills_vec, default_fs};
-    PromptProcessingPipeline pipeline{
-        PromptTemplateExpander{templates},
+    static const std::vector<Skill> no_skills;
+    return to_legacy_result(prompt::detail::process_prompt_borrowed(
+        std::string{raw_input},
         registry,
-        empty_skills};
-    return pipeline.process(raw_input, ctx);
+        no_skills,
+        templates,
+        ctx));
 }
 
 PromptProcessingResult process_prompt(
@@ -49,12 +72,13 @@ PromptProcessingResult process_prompt(
     CommandRegistry& registry,
     const CommandContext& ctx,
     const std::vector<Skill>& skills,
-    const harness::WorkspaceFileSystem& fs) {
-    PromptProcessingPipeline pipeline{
-        PromptTemplateExpander{templates},
+    const harness::WorkspaceFileSystem& /*fs*/) {
+    return to_legacy_result(prompt::detail::process_prompt_borrowed(
+        std::string{raw_input},
         registry,
-        SkillExpander{skills, fs}};
-    return pipeline.process(raw_input, ctx);
+        skills,
+        templates,
+        ctx));
 }
 
 } // namespace cch::coding_agent

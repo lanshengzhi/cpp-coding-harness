@@ -2,8 +2,6 @@
 
 #include "../../../include/cch/agent/ToolRegistry.hpp"
 #include "../../../include/cch/ai/ChatClient.hpp"
-#include "../../../include/cch/coding_agent/PromptTemplate.hpp"
-#include "../../../include/cch/coding_agent/Skill.hpp"
 #include "../../../include/cch/harness/LocalExecutionEnv.hpp"
 
 #include <filesystem>
@@ -22,8 +20,6 @@ struct RuntimeServices {
     /// it up on session close. Host-provided environments are never owned.
     bool env_owned{true};
     agent::AsyncToolRegistry tools;
-    std::vector<Skill> skills;
-    std::vector<PromptTemplate> prompt_templates;
 };
 
 } // namespace cch::coding_agent::runtime

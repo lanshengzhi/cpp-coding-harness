@@ -1,55 +1,63 @@
 #pragma once
 
-// Prompt processing is now split into focused modules. This header remains a
-// compatibility umbrella; new code should include the specific module headers.
-
 #include "CommandRegistry.hpp"
-#include "PromptProcessingPipeline.hpp"
 #include "PromptTemplate.hpp"
-#include "PromptTemplateExpander.hpp"
-#include "SkillExpander.hpp"
-
 #include "Skill.hpp"
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
+namespace cch::harness {
+class WorkspaceFileSystem;
+}
+
 namespace cch::coding_agent {
 
-// ── Backward-compatible free functions ──
-// These delegate to the PromptProcessingPipeline / adapters below.
+/// Legacy compatibility result for prompt processing.
+/// New production code uses the private two-alternative PromptProcessingOutcome.
+struct PromptProcessingResult {
+    bool command_handled{false};
+    std::optional<std::string> display_text;
+    std::string expanded_prompt;
+    bool shutdown_requested{false};
+};
 
-/// Expand a skill command (/skill:name args) to its full <skill> XML block.
-/// Returns the expanded text, or the original input if no skill matched.
-/// Prints diagnostics to stderr for unknown skills and file read failures.
+/// Legacy compatibility result for silent skill expansion.
+struct SkillExpansionResult {
+    std::string expanded;
+    std::vector<std::string> diagnostics;
+};
+
+/// Legacy compatibility wrapper for `/skill:name` expansion.
+/// The filesystem argument is retained for source compatibility; expansion uses
+/// the already-authorized cached Skill::content snapshot and never prints.
 [[nodiscard]] std::string expand_skill_command(
     std::string_view input,
     const std::vector<Skill>& skills,
     const harness::WorkspaceFileSystem& fs);
 
-/// Expand a skill command without writing to stderr.
-/// Diagnostics are returned as values for SDK/non-interactive use.
+/// Legacy compatibility wrapper returning diagnostics as values.
+/// Unknown skills pass through silently, so diagnostics are currently empty.
 [[nodiscard]] SkillExpansionResult expand_skill_command_silent(
     std::string_view input,
     const std::vector<Skill>& skills);
 
-/// Expand a prompt template if input matches `/templateName args`.
-/// Returns the expanded text, or the original input if no match.
+/// Expand a prompt template if input matches `/templateName args` at column zero.
 [[nodiscard]] std::string expand_prompt_template(
     std::string_view input,
     const std::vector<PromptTemplate>& templates);
 
-/// Process raw user input: dispatch slash-commands, expand prompt templates.
-/// Called before the agent loop in both REPL and RPC paths.
+/// Legacy compatibility wrapper for command/template prompt processing.
 [[nodiscard]] PromptProcessingResult process_prompt(
     std::string_view raw_input,
     const std::vector<PromptTemplate>& templates,
     CommandRegistry& registry,
     const CommandContext& ctx = {});
 
-/// Process raw user input with skill expansion support.
-/// Expands /skill:name inline before slash-command dispatch.
+/// Legacy compatibility wrapper with skill expansion support.
+/// The filesystem argument is retained for source compatibility only.
 [[nodiscard]] PromptProcessingResult process_prompt(
     std::string_view raw_input,
     const std::vector<PromptTemplate>& templates,

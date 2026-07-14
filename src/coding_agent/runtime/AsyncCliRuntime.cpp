@@ -12,6 +12,7 @@
 #include <iostream>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 
@@ -24,6 +25,10 @@ namespace {
 
 [[nodiscard]] bool is_rpc_mode(OutputMode mode) {
     return mode == OutputMode::Rpc;
+}
+
+[[nodiscard]] bool is_user_bash(std::string_view input) {
+    return !input.empty() && input.front() == '!';
 }
 
 bool print_json_terminal(coding_agent::runtime::JsonEventPrinter& printer, bool success, std::string code, std::string message = {}) {
@@ -219,6 +224,10 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             if (line.empty()) continue;
             if (line == "/clear") {
                 if (!clear_text_terminal()) return 1;
+                continue;
+            }
+            if (is_user_bash(line)) {
+                std::cout << "Shell passthrough (!) is not yet implemented.\n";
                 continue;
             }
 

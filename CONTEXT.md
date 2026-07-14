@@ -30,11 +30,19 @@ The adapter responsible for assembling an `AgentSession` from source-specific cr
 
 ### PromptProcessingPipeline
 
-A thin orchestrator that runs raw user input through slash-command dispatch, skill expansion, and prompt-template expansion in the correct order. Owns references to the three lower-level adapters but contains no business logic itself.
+The internal deep module that deterministically interprets one user input before agent execution: command handling short-circuits, otherwise skill expansion flows into prompt-template expansion, and unmatched slash input remains an agent prompt. It owns an immutable session resource snapshot; `AgentSession` remains the public prompt seam and `AgentSessionRuntime` owns the end-to-end lifecycle.
+
+### PromptProcessingOutcome
+
+A passive internal result of prompt interpretation containing either the final agent prompt or a locally handled command result. A handled command, including one whose handler fails, is accepted without starting the agent or appending prompt history; normal feedback remains caller-presented, while handler failures use fixed non-sensitive feedback.
+
+### UserBash
+
+An interactive frontend operation triggered by `!command` or `!!command` that executes through the session's execution environment and persists a `BashExecutionMessage`. `!` participates in later model context, while `!!` remains persisted but is excluded from model context; neither is prompt processing.
 
 ### SkillExpander
 
-The adapter that expands a `/skill:name` command into the full skill instructions block. Construction-time dependencies: the session's loaded skills and the workspace filesystem.
+The adapter that expands `/skill:name` from the session's immutable, already-authorized skill snapshot. It has no prompt-time filesystem capability; future reload behavior replaces the resource snapshot explicitly.
 
 ### PromptTemplateExpander
 

@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -237,6 +238,21 @@ TEST_CASE("RPC mode accepts a prompt before events and exposes committed assista
     CHECK(static_cast<int>(state->at("data").get<JsonObject>().at("messageCount").get<double>()) == 2);
 }
 
+TEST_CASE("RPC mode treats user bash prefixes as ordinary prompts", "[coding-agent][runtime][rpc][user-bash]") {
+    const auto result = run_transcript(
+        "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"!echo visible\"}\n"
+        "{\"id\":\"prompt-2\",\"type\":\"prompt\",\"message\":\"!!echo excluded-later\"}\n"
+        "{\"id\":\"last-1\",\"type\":\"get_last_assistant_text\"}\n"
+        "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n");
+
+    REQUIRE(result.exit_code == 0);
+    REQUIRE(find_response(result.records, "prompt", "prompt-1") != nullptr);
+    REQUIRE(find_response(result.records, "prompt", "prompt-2") != nullptr);
+    const auto* last = find_response(result.records, "get_last_assistant_text", "last-1");
+    REQUIRE(last != nullptr);
+    CHECK(string_at(last->at("data").get<JsonObject>(), "text") == "fake: !!echo excluded-later");
+}
+
 TEST_CASE("RPC mode keeps one event sequence across prompts", "[coding-agent][runtime][rpc]") {
     const auto result = run_transcript(
         "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"first\"}\n"
@@ -347,6 +363,39 @@ TEST_CASE("RPC mode terminates after an accepted prompt fails", "[coding-agent][
     CHECK(terminal_index + 1 == result.records.size());
     CHECK(find_response(result.records, "get_state", "later") == nullptr);
     CHECK(count_responses(result.records, "prompt", "prompt-1") == 1);
+}
+
+TEST_CASE("RPC mode accepts contained command handler failures and remains usable", "[coding-agent][runtime][rpc]") {
+    std::vector<coding_agent::SdkCommand> commands;
+    commands.push_back(coding_agent::SdkCommand{
+        .name = "explode",
+        .handler = [](const coding_agent::CommandContext&, std::string_view) -> coding_agent::CommandResult {
+            throw std::runtime_error{"sensitive handler detail"};
+        },
+    });
+
+    const auto result = run_transcript(
+        "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"/explode\"}\n"
+        "{\"id\":\"state-1\",\"type\":\"get_state\"}\n"
+        "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n",
+        ai::providers::make_scripted_fake_chat_client(),
+        std::move(commands));
+
+    REQUIRE(result.exit_code == 0);
+    const auto response_index = find_response_index(result.records, "prompt", "prompt-1");
+    const auto terminal_index = find_record_index(result.records, "runtime_terminal");
+    REQUIRE(response_index < result.records.size());
+    REQUIRE(terminal_index < result.records.size());
+    CHECK(response_index < terminal_index);
+    CHECK(result.records[response_index].at("success").get<bool>());
+    CHECK(result.records[terminal_index].at("success").get<bool>());
+    CHECK(string_at(result.records[terminal_index], "code") == "command_handler_failed");
+    CHECK(string_at(result.records[terminal_index], "message") == "Command handler failed.");
+
+    const auto* state = find_response(result.records, "get_state", "state-1");
+    REQUIRE(state != nullptr);
+    CHECK(state->at("success").get<bool>());
+    CHECK(static_cast<int>(state->at("data").get<JsonObject>().at("messageCount").get<double>()) == 0);
 }
 
 TEST_CASE("RPC mode stops after a prompt requests shutdown", "[coding-agent][runtime][rpc]") {

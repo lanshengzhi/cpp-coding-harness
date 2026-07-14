@@ -109,3 +109,57 @@ TEST_CASE("expand_prompt_template out of range positional ref is empty", "[codin
     auto result = coding_agent::expand_prompt_template("/cmd one", templates);
     CHECK(result == "Arg: [one][]");
 }
+
+TEST_CASE("expand_prompt_template matches pi positional and slice edge cases", "[coding_agent][prompt][expand]") {
+    std::vector<coding_agent::PromptTemplate> templates = {
+        {"args", std::nullopt, "[$0][$10][${@:0}][${@:2:0}][${11:-fallback}]"},
+    };
+    const auto result = coding_agent::expand_prompt_template(
+        "/args a b '' d e f g h i j ten",
+        templates);
+    CHECK(result == "[][ten][a b d e f g h i j ten][][fallback]");
+}
+
+TEST_CASE("expand_prompt_template treats unquoted mixed whitespace as separators", "[coding_agent][prompt][expand]") {
+    std::vector<coding_agent::PromptTemplate> templates = {
+        {"args", std::nullopt, "$1|$2|${@:3}"},
+    };
+    const auto result = coding_agent::expand_prompt_template(
+        "/args\nfirst\n\n\tsecond  third fourth",
+        templates);
+    CHECK(result == "first|second|third fourth");
+}
+
+TEST_CASE("expand_prompt_template treats Unicode whitespace as separators", "[coding_agent][prompt][expand]") {
+    std::vector<coding_agent::PromptTemplate> templates = {
+        {"args", std::nullopt, "$1|$2"},
+    };
+    const std::string input = std::string{"/args"} + "\xC2\xA0" + "first" + "\xE3\x80\x80" + "second";
+    CHECK(coding_agent::expand_prompt_template(input, templates) == "first|second");
+}
+
+TEST_CASE("expand_prompt_template preserves pi quote and escaped-quote parsing", "[coding_agent][prompt][expand]") {
+    std::vector<coding_agent::PromptTemplate> templates = {
+        {"args", std::nullopt, "$1|$2"},
+    };
+    const auto result = coding_agent::expand_prompt_template(
+        "/args \"first value\" \"quoted \\\"text\\\"\"",
+        templates);
+    CHECK(result == "first value|quoted \\text\\");
+}
+
+TEST_CASE("expand_prompt_template substitution is single-pass and preserves malformed placeholders", "[coding_agent][prompt][expand]") {
+    std::vector<coding_agent::PromptTemplate> templates = {
+        {"args", std::nullopt, "$1|${2:-$ARGUMENTS}|${bad}|${1-default}|${@:}"},
+    };
+    const auto result = coding_agent::expand_prompt_template("/args '$ARGUMENTS'", templates);
+    CHECK(result == "$ARGUMENTS|$ARGUMENTS|${bad}|${1-default}|${@:}");
+}
+
+TEST_CASE("expand_prompt_template only recognizes a slash at column zero", "[coding_agent][prompt][expand]") {
+    std::vector<coding_agent::PromptTemplate> templates = {
+        {"args", std::nullopt, "expanded"},
+    };
+    CHECK(coding_agent::expand_prompt_template(" /args", templates) == " /args");
+    CHECK(coding_agent::expand_prompt_template("\t/args", templates) == "\t/args");
+}

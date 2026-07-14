@@ -1,18 +1,15 @@
 #include "AgentSessionRuntime.hpp"
 
 #include "../../../include/cch/ai/Content.hpp"
-#include "../../../include/cch/coding_agent/PromptProcessing.hpp"
-#include "../../../include/cch/coding_agent/SkillExpander.hpp"
 #include "coding_agent/SkillFormatting.hpp"
-#include "../../harness/WorkspaceFileSystem.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
 
-#include <iostream>
 #include <optional>
 #include <utility>
+#include <variant>
 
 namespace cch::coding_agent::runtime {
 
@@ -32,6 +29,18 @@ namespace {
     return message == "max turns exceeded" ? "max_turns_exceeded" : message;
 }
 
+template <typename Callback>
+class ScopeExit final {
+public:
+    explicit ScopeExit(Callback callback) : callback_(std::move(callback)) {}
+    ScopeExit(const ScopeExit&) = delete;
+    ScopeExit& operator=(const ScopeExit&) = delete;
+    ~ScopeExit() { callback_(); }
+
+private:
+    Callback callback_;
+};
+
 [[nodiscard]] std::optional<std::string> last_assistant_text_from(
     const std::vector<ai::MessageVariant>& history) {
     for (auto it = history.rbegin(); it != history.rend(); ++it) {
@@ -47,21 +56,19 @@ namespace {
 AgentSessionRuntime::AgentSessionRuntime(
     RuntimeServices services,
     OpenSession session,
-    CommandRegistry command_registry,
+    prompt::PromptProcessor prompt_processor,
     AgentSessionRuntimeConfig config)
     : services_(std::move(services)),
       session_(std::move(session)),
-      command_registry_(std::move(command_registry)),
+      prompt_processor_(std::move(prompt_processor)),
       config_(std::move(config)) {
-    // Build the <available_skills> block once at construction time and inject
-    // it into each provider request via transform_context. Unlike queued
-    // steering messages, this does not mutate conversation history or force an
-    // extra turn after the assistant stops.
+    // Build the <available_skills> block once from the same immutable snapshot
+    // used for explicit /skill:name invocation.
     agent::AsyncAgentOptions options;
     options.max_turns = config_.max_turns > 0 ? config_.max_turns : 30;
     options.model = std::move(config_.model);
 
-    std::string skills_block = formatSkillsForPrompt(services_.skills);
+    std::string skills_block = formatSkillsForPrompt(prompt_processor_.skills());
     if (!skills_block.empty()) {
         auto existing_transform = std::move(options.transform_context);
         options.transform_context = [block = std::move(skills_block),
@@ -92,6 +99,7 @@ AgentSessionRuntime::AgentSessionRuntime(
 
 PromptRunResult AgentSessionRuntime::run_prompt(
     std::string prompt,
+    bool expand_prompt_templates,
     agent::AgentEventSink sink) {
     if (state_ == State::Closed) {
         return PromptRunResult{false, "session_closed", "session is closed", {}};
@@ -101,64 +109,40 @@ PromptRunResult AgentSessionRuntime::run_prompt(
     }
 
     state_ = State::RunningPrompt;
-
-    // Step 1: skill expansion (silent or printed).
-    harness::WorkspaceFileSystem workspace_fs{session_.workspace};
-    SkillExpander skill_expander{services_.skills, workspace_fs};
-
-    SkillExpansionResult skill_result;
-    if (config_.capture_skill_diagnostics) {
-        skill_result = skill_expander.expand(prompt);
-    } else {
-        skill_result.expanded = skill_expander.expand_and_print(prompt);
-    }
-
-    PromptRunResult result;
-    result.diagnostics = std::move(skill_result.diagnostics);
-    std::string expanded_prompt = std::move(skill_result.expanded);
-
-    // Step 2: if skill expansion changed the prompt, skip command/template
-    // processing. Otherwise dispatch slash-commands and expand templates.
-    PromptProcessingResult processing;
-    if (expanded_prompt != prompt) {
-        processing.command_handled = false;
-        processing.expanded_prompt = std::move(expanded_prompt);
-    } else {
-        CommandContext cmd_ctx{
-            .session_id = session_.metadata.session_id,
-            .workspace_path = session_.workspace.string(),
-            .provider = session_.metadata.provider,
-            .model = session_.metadata.model,
-            .message_count = session_.history.size(),
-            .available_commands = command_registry_.list_commands(),
-        };
-        processing = process_prompt(
-            prompt,
-            services_.prompt_templates,
-            command_registry_,
-            cmd_ctx);
-    }
-
-    if (processing.command_handled) {
-        result.success = true;
-        result.message = processing.display_text.value_or("");
-        if (processing.shutdown_requested) {
-            result.code = "shutdown";
-        } else {
-            result.code = "command_handled";
+    ScopeExit restore_state{[this] {
+        if (state_ != State::Closed) {
+            state_ = State::Open;
         }
-        state_ = State::Open;
-        return result;
+    }};
+
+    prompt::PromptProcessingOutcome processing = prompt::AgentPrompt{std::move(prompt)};
+    if (expand_prompt_templates) {
+        auto* raw_prompt = std::get_if<prompt::AgentPrompt>(&processing);
+        processing = prompt_processor_.process(
+            std::move(raw_prompt->text),
+            CommandContext{
+                .session_id = session_.metadata.session_id,
+                .workspace_path = session_.workspace.string(),
+                .provider = session_.metadata.provider,
+                .model = session_.metadata.model,
+                .message_count = session_.history.size(),
+                .available_commands = {},
+            });
     }
 
-    // Step 3: run the agent loop with the combined event sink.
-    auto combined_sink = make_combined_sink(std::move(sink));
-    auto loop_result = run_agent_loop(
-        std::move(processing.expanded_prompt),
-        std::move(combined_sink));
+    if (auto* handled = std::get_if<prompt::CommandHandled>(&processing)) {
+        return PromptRunResult{
+            .success = true,
+            .code = std::move(handled->code),
+            .message = std::move(handled->feedback),
+            .diagnostics = {},
+        };
+    }
 
-    state_ = State::Open;
-    return loop_result;
+    auto combined_sink = make_combined_sink(std::move(sink));
+    return run_agent_loop(
+        std::move(std::get<prompt::AgentPrompt>(processing).text),
+        std::move(combined_sink));
 }
 
 PromptRunResult AgentSessionRuntime::run_agent_loop(

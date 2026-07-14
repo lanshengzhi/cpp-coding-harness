@@ -6,6 +6,7 @@
 
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include "coding_agent/ProviderConfigResolution.hpp"
+#include "coding_agent/prompt/PromptProcessor.hpp"
 
 #include "../../../include/cch/ai/ProviderRegistry.hpp"
 #include "../../../include/cch/coding_agent/Config.hpp"
@@ -76,7 +77,6 @@ struct AssemblyPlan {
     std::optional<bool> project_trust_override;
     int max_turns{30};
     CommandRegistry command_registry;
-    bool capture_skill_diagnostics{false};
 };
 
 [[nodiscard]] SdkDiagnostic make_diag(SdkDiagnostic::Severity severity,
@@ -351,7 +351,6 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
     plan.prompt_template_paths = request.prompt_template_paths;
     plan.max_turns = request.max_turns;
     plan.command_registry = std::move(request.command_registry);
-    plan.capture_skill_diagnostics = false;
 
     return plan;
 }
@@ -419,7 +418,6 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
     plan.default_project_trust = options.default_project_trust;
     plan.project_skills_enablement = options.project_skills_enablement;
     plan.max_turns = options.max_turns;
-    plan.capture_skill_diagnostics = true;
     plan.trust_store_path = options.trust_store_path;
 
     return plan;
@@ -723,20 +721,23 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
     services.env = std::move(exec_env);
     services.env_owned = env_owned;
     services.tools = std::move(tools);
-    services.skills = std::move(skills);
-    services.prompt_templates = std::move(templates);
+
+    prompt::PromptResources prompt_resources;
+    prompt_resources.commands = std::move(command_registry);
+    prompt_resources.skills = std::move(skills);
+    prompt_resources.templates = std::move(templates);
+    prompt::PromptProcessor prompt_processor{std::move(prompt_resources)};
 
     AgentSessionRuntimeConfig runtime_config;
     runtime_config.max_turns = plan.max_turns;
     runtime_config.model = resolved.model;
-    runtime_config.capture_skill_diagnostics = plan.capture_skill_diagnostics;
 
     const auto session_path = open.store->path();
     const auto metadata = open.metadata;
     auto runtime = std::make_unique<AgentSessionRuntime>(
         std::move(services),
         std::move(open),
-        std::move(command_registry),
+        std::move(prompt_processor),
         std::move(runtime_config));
 
     CreateAgentSessionResult result;

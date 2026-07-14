@@ -184,6 +184,9 @@ struct PromptOptions {
     /// Per-prompt event sink. Called in addition to persistent subscribers.
     /// A failing sink fails the prompt.
     agent::AgentEventSink event_sink;
+    /// When false, bypass command, skill, and prompt-template processing and
+    /// send the raw text to the agent loop. Appended for aggregate source compatibility.
+    bool expand_prompt_templates{true};
 };
 
 // ── PromptResult ─────────────────────────────────────────────────────────────
@@ -195,6 +198,7 @@ struct PromptResult {
     ///   "completed"          — agent stopped normally
     ///   "command_handled"    — slash-command consumed the input
     ///   "shutdown"           — slash-command requested frontend shutdown
+    ///   "command_handler_failed" — command was handled but its handler failed
     ///   "max_turns_exceeded" — turn limit reached
     ///   "session_persist_failed" — append to JSONL failed
     ///   "runtime_error"      — other agent-loop failure
@@ -210,8 +214,8 @@ struct PromptResult {
     /// Number of messages in committed history after this prompt.
     std::size_t message_count{0};
 
-    /// Diagnostics produced during prompt processing
-    /// (e.g. unknown /skill:name warnings).
+    /// Diagnostics produced during prompt processing. Retained for source
+    /// compatibility; current command/skill/template interpretation is silent.
     std::vector<std::string> diagnostics;
 };
 

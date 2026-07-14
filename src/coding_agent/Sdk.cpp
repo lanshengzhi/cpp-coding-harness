@@ -9,6 +9,21 @@
 #include <utility>
 
 namespace cch::coding_agent {
+namespace {
+
+template <typename Callback>
+class ScopeExit final {
+public:
+    explicit ScopeExit(Callback callback) : callback_(std::move(callback)) {}
+    ScopeExit(const ScopeExit&) = delete;
+    ScopeExit& operator=(const ScopeExit&) = delete;
+    ~ScopeExit() { callback_(); }
+
+private:
+    Callback callback_;
+};
+
+} // namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pimpl definitions
@@ -87,8 +102,16 @@ util::Expected<PromptResult> AgentSession::prompt(std::string text, PromptOption
     }
 
     impl_->state = AgentSession::Impl::State::RunningPrompt;
+    ScopeExit restore_state{[this] {
+        if (impl_ && impl_->state != AgentSession::Impl::State::Closed) {
+            impl_->state = AgentSession::Impl::State::Open;
+        }
+    }};
 
-    auto run_result = impl_->runtime->run_prompt(std::move(text), std::move(options.event_sink));
+    auto run_result = impl_->runtime->run_prompt(
+        std::move(text),
+        options.expand_prompt_templates,
+        std::move(options.event_sink));
 
     PromptResult result;
     result.success = run_result.success;
@@ -97,8 +120,6 @@ util::Expected<PromptResult> AgentSession::prompt(std::string text, PromptOption
     result.diagnostics = std::move(run_result.diagnostics);
     result.last_assistant_text = impl_->runtime->last_assistant_text();
     result.message_count = impl_->runtime->message_count();
-
-    impl_->state = AgentSession::Impl::State::Open;
     return result;
 }
 

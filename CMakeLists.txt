@@ -108,11 +108,9 @@ add_library(cch_coding_agent_runtime
     src/coding_agent/ProjectResources.cpp
     src/coding_agent/ProjectTrust.cpp
     src/coding_agent/PromptProcessing.cpp
-    src/coding_agent/PromptProcessingPipeline.cpp
+    src/coding_agent/prompt/PromptProcessor.cpp
     src/coding_agent/PromptExpander.cpp
-    src/coding_agent/PromptTemplateExpander.cpp
     src/coding_agent/Sdk.cpp
-    src/coding_agent/SkillExpander.cpp
     src/coding_agent/SkillFrontmatterParser.cpp
     src/coding_agent/SkillLoader.cpp
     src/coding_agent/PromptTemplateLoader.cpp
@@ -175,6 +173,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/BuiltinCommandsTest.cpp
         tests/coding_agent/CommandRegistryTest.cpp
         tests/coding_agent/PromptExpanderTest.cpp
+        tests/coding_agent/PromptProcessorTest.cpp
         tests/coding_agent/AuthLoaderTest.cpp
         tests/coding_agent/ConfigLoaderTest.cpp
         tests/coding_agent/ProviderConfigResolutionTest.cpp

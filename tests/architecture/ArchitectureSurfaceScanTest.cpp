@@ -155,6 +155,15 @@ TEST_CASE("coding_agent loaders stay out of the public contract surface", "[arch
     CHECK_FALSE(std::filesystem::exists(source_root / "include" / "cch" / "coding_agent" / "SkillFormatting.hpp"));
 }
 
+TEST_CASE("concrete prompt processors stay out of the public contract surface", "[architecture][prompt]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto public_prompt_dir = source_root / "include" / "cch" / "coding_agent";
+
+    CHECK_FALSE(std::filesystem::exists(public_prompt_dir / "PromptProcessingPipeline.hpp"));
+    CHECK_FALSE(std::filesystem::exists(public_prompt_dir / "PromptTemplateExpander.hpp"));
+    CHECK_FALSE(std::filesystem::exists(public_prompt_dir / "SkillExpander.hpp"));
+}
+
 TEST_CASE("RuntimeServices remains internal to the coding_agent runtime package", "[architecture][session]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
     const auto files = files_under({"src", "tests"});

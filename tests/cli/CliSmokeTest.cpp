@@ -221,6 +221,48 @@ TEST_CASE("CLI text REPL dispatches /commands as /help", "[cli][commands]") {
     CHECK(result.output.find("[model-request]") == std::string::npos);
 }
 
+TEST_CASE("CLI text one-shot sends unmatched slash input to the model", "[cli][commands]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "unknown-slash.jsonl";
+    auto result = run_command(
+        bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " /missing");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.output.find("fake: /missing") != std::string::npos);
+    CHECK(result.output.find("Unknown command") == std::string::npos);
+}
+
+TEST_CASE("CLI text REPL temporarily intercepts user bash while one-shot does not", "[cli][commands][user-bash]") {
+    cch::tests::TempWorkspace repl_workspace;
+    auto repl_session = repl_workspace.path() / "repl-user-bash.jsonl";
+    auto repl = run_command(
+        "printf '!echo hi\\n!!echo hidden\\nquit\\n' | " + bin() + " --fake --repl --workspace " +
+        q(repl_workspace.path()) + " --session " + q(repl_session));
+
+    REQUIRE(repl.exit_code == 0);
+    CHECK(count_occurrences(repl.output, "Shell passthrough (!) is not yet implemented.") == 2);
+    CHECK(repl.output.find("fake: !echo hi") == std::string::npos);
+    CHECK(repl.output.find("fake: !!echo hidden") == std::string::npos);
+
+    cch::tests::TempWorkspace one_shot_workspace;
+    auto one_shot_session = one_shot_workspace.path() / "oneshot-user-bash.jsonl";
+    auto one_shot = run_command(
+        bin() + " --fake --workspace " + q(one_shot_workspace.path()) + " --session " +
+        q(one_shot_session) + " '!echo hi'");
+
+    REQUIRE(one_shot.exit_code == 0);
+    CHECK(one_shot.output.find("fake: !echo hi") != std::string::npos);
+
+    cch::tests::TempWorkspace double_bang_workspace;
+    auto double_bang_session = double_bang_workspace.path() / "oneshot-double-bang.jsonl";
+    auto double_bang = run_command(
+        bin() + " --fake --workspace " + q(double_bang_workspace.path()) + " --session " +
+        q(double_bang_session) + " '!!echo hidden'");
+
+    REQUIRE(double_bang.exit_code == 0);
+    CHECK(double_bang.output.find("fake: !!echo hidden") != std::string::npos);
+}
+
 TEST_CASE("CLI text one-shot /clear emits terminal controls without invoking the model", "[cli][commands]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "clear-one-shot.jsonl";
