@@ -131,7 +131,7 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **Files:** `include/cch/agent/AgentTool.hpp`, `include/cch/agent/AgentContext.hpp`, `src/agent/AgentLoop.cpp`, `src/agent/ToolCallExecutor.*`, `tests/agent/AsyncAgentLoopTest.cpp`, `tests/agent/ToolCallExecutorTest.cpp`.
   - **References:** `pi:packages/agent/src/types.ts`, `pi:packages/agent/src/agent-loop.ts`.
   - **Test scenarios:** tools may complete out of order while tool-result messages are appended in assistant source order; `Exclusive` is the safe tool default; bounded parallel execution requires explicit tool and run-policy opt-ins.
-  - **Status:** scheduling vocabulary is agent-owned, `max_in_flight` is an actual bound, length-truncated tool calls are rejected before hooks/execution, and built-in tools remain exclusive pending concurrent-use proof.
+  - **Status:** scheduling vocabulary is agent-owned, `max_in_flight` is an actual bound, length-truncated tool calls are rejected before hooks/execution, built-in tools remain exclusive pending concurrent-use proof, and every finalized tool result (including truncated-call error results) emits ordinary `message_start`/`message_end` in assistant source order. See `.scratch/pi-agent-session-event-prompt-parity/issues/04-align-tool-events-and-results.md`.
   - **Historical implementation plan:** `docs/plans/2026-06-19-003-feat-agent-loop-pi-parity-plan.md` records the earlier flat mode/cap design that this deepening supersedes.
 - [x] Preserve move-only event sink semantics while adding missing lifecycle events.
   - **Files:** `include/cch/agent/AgentEvent.hpp`, `tests/architecture/MoveOnlyCallbackTest.cpp`, `tests/agent/AsyncAgentLoopTest.cpp`.
