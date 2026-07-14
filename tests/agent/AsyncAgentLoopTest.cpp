@@ -305,6 +305,8 @@ TEST_CASE("async agent loop forwards thinking and tool-call stream lifecycle eve
 
     REQUIRE(run.result);
     CHECK(count_events<agent::MessageUpdateEvent>(run.events) >= 1);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
     CHECK(run.result->state.model == "gpt-test");
     CHECK(run.result->state.pending_tool_call_ids.empty());
     CHECK(run.result->state.active_tool_names.empty());
@@ -338,6 +340,8 @@ TEST_CASE("async agent loop executes tool calls and continues with tool result c
     REQUIRE(client.requests[1].context.messages.size() == 3);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client.requests[1].context.messages.back()));
     CHECK(count_events<agent::MessageUpdateEvent>(run.events) >= 1);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
     CHECK(count_events<agent::ToolExecutionStartEvent>(run.events) == 1);
     CHECK(count_events<agent::ToolExecutionEndEvent>(run.events) == 1);
     CHECK(run.result->state.pending_tool_call_ids.empty());
@@ -360,6 +364,8 @@ TEST_CASE("async agent loop turns malformed tool arguments into error tool resul
     const auto& result = std::get<ai::ToolResultMessage>(client.requests[1].context.messages.back());
     CHECK(result.is_error);
     CHECK(count_events<agent::ToolExecutionEndEvent>(run.events) == 1);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
 }
 
 TEST_CASE("async agent loop reports max turn exhaustion", "[agent][async][u5]") {
@@ -398,6 +404,8 @@ TEST_CASE("beforeToolCall hook can block a tool call", "[agent][async][u7]") {
     CHECK(tool_ptr->invocations.empty());
     CHECK(count_events<agent::ToolExecutionStartEvent>(run.events) == 1);
     CHECK(count_events<agent::ToolExecutionEndEvent>(run.events) == 1);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
 
     const agent::ToolExecutionEndEvent* end_event = nullptr;
     for (const auto& event : run.events) {
@@ -439,6 +447,8 @@ TEST_CASE("beforeToolCall hook passes context and skips execution on block", "[a
 
     REQUIRE(run.result);
     CHECK(tool_ptr->invocations.size() == 1);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
 }
 
 TEST_CASE("beforeToolCall hook failure aborts the run", "[agent][async][u7]") {
@@ -458,6 +468,8 @@ TEST_CASE("beforeToolCall hook failure aborts the run", "[agent][async][u7]") {
     REQUIRE_FALSE(run.result);
     CHECK(run.result.error().code == util::ErrorCode::Tool);
     CHECK(run.result.error().message == "policy rejected");
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 2);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
 
     const auto* end_event = std::get_if<agent::AgentEndEvent>(&run.events.back());
     REQUIRE(end_event);
@@ -480,6 +492,8 @@ TEST_CASE("beforeToolCall hook exception becomes a tool error", "[agent][async][
     REQUIRE_FALSE(run.result);
     CHECK(run.result.error().code == util::ErrorCode::Tool);
     CHECK(run.result.error().detail.find("boom") != std::string::npos);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 2);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
 }
 
 TEST_CASE("afterToolCall hook overrides tool result content", "[agent][async][u7]") {
@@ -503,6 +517,8 @@ TEST_CASE("afterToolCall hook overrides tool result content", "[agent][async][u7
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client.requests[1].context.messages.back()));
     const auto& result = std::get<ai::ToolResultMessage>(client.requests[1].context.messages.back());
     CHECK(ai::text_from_content(result.content) == "overridden");
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
 }
 
 TEST_CASE("afterToolCall hook overrides error flag", "[agent][async][u7]") {
@@ -525,6 +541,8 @@ TEST_CASE("afterToolCall hook overrides error flag", "[agent][async][u7]") {
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client.requests[1].context.messages.back()));
     const auto& result = std::get<ai::ToolResultMessage>(client.requests[1].context.messages.back());
     CHECK(result.is_error);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
 }
 
 namespace {
@@ -698,6 +716,8 @@ TEST_CASE("afterToolCall terminate hint stops the run when all calls agree", "[a
     CHECK(run.result->turns == 1);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 3);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 3);
     const auto* end_event = std::get_if<agent::AgentEndEvent>(&run.events.back());
     REQUIRE(end_event);
 }
@@ -725,6 +745,8 @@ TEST_CASE("terminate batch continues when one call declines", "[agent][async][u7
     REQUIRE(run.result);
     CHECK(run.result->turns == 2);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 }
 
 TEST_CASE("blocked call prevents terminate batch", "[agent][async][u7]") {
@@ -752,6 +774,8 @@ TEST_CASE("blocked call prevents terminate batch", "[agent][async][u7]") {
 
     REQUIRE(run.result);
     CHECK(run.result->turns == 2);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 }
 
 TEST_CASE("tool execution error prevents terminate batch", "[agent][async][u7]") {
@@ -776,6 +800,8 @@ TEST_CASE("tool execution error prevents terminate batch", "[agent][async][u7]")
 
     REQUIRE(run.result);
     CHECK(run.result->turns == 2);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 }
 
 TEST_CASE("afterToolCall hook failure aborts the run", "[agent][async][u7]") {
@@ -795,6 +821,8 @@ TEST_CASE("afterToolCall hook failure aborts the run", "[agent][async][u7]") {
     REQUIRE_FALSE(run.result);
     CHECK(run.result.error().code == util::ErrorCode::Tool);
     CHECK(run.result.error().message == "post-processor failed");
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 2);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
 }
 
 TEST_CASE("afterToolCall hook exception becomes a tool error", "[agent][async][u7]") {
@@ -814,6 +842,8 @@ TEST_CASE("afterToolCall hook exception becomes a tool error", "[agent][async][u
     REQUIRE_FALSE(run.result);
     CHECK(run.result.error().code == util::ErrorCode::Tool);
     CHECK(run.result.error().detail.find("after boom") != std::string::npos);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 2);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
 }
 
 TEST_CASE("AsyncAgentOptions hooks are move-only", "[agent][async][u7]") {
@@ -1597,6 +1627,20 @@ TEST_CASE("bounded parallel execution preserves source order in the transcript",
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(second_request.context.messages[3]));
     CHECK(std::get<ai::ToolResultMessage>(second_request.context.messages[2]).tool_name == "alpha");
     CHECK(std::get<ai::ToolResultMessage>(second_request.context.messages[3]).tool_name == "beta");
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
+
+    std::vector<std::string> message_order;
+    for (const auto& event : run.events) {
+        if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+            if (const auto* result = std::get_if<ai::ToolResultMessage>(&end->message)) {
+                message_order.push_back(result->tool_name);
+            }
+        }
+    }
+    REQUIRE(message_order.size() == 2);
+    CHECK(message_order[0] == "alpha");
+    CHECK(message_order[1] == "beta");
 }
 
 TEST_CASE("bounded parallel limit one executes sequentially", "[agent][async][u8]") {
@@ -1623,6 +1667,8 @@ TEST_CASE("bounded parallel limit one executes sequentially", "[agent][async][u8
 
     REQUIRE(run.result);
     CHECK(probe.max_active.load() == 1);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 }
 
 TEST_CASE("bounded parallel policy rejects zero before tools start", "[agent][async][u8]") {
@@ -1693,6 +1739,8 @@ TEST_CASE("bounded parallel execution keeps blocked calls out of tool adapters",
     CHECK(alpha_result.is_error);
     CHECK(ai::text_from_content(alpha_result.content) == "blocked alpha");
     CHECK_FALSE(beta_result.is_error);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 }
 
 TEST_CASE("bounded parallel before-hook failure starts no workers", "[agent][async][u8]") {
@@ -1724,6 +1772,8 @@ TEST_CASE("bounded parallel before-hook failure starts no workers", "[agent][asy
     CHECK(run.result.error().message == "preflight failed");
     CHECK(probe.max_active.load() == 0);
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 2);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
 }
 
 TEST_CASE("bounded parallel execution preserves peer success after a tool error", "[agent][async][u8]") {
@@ -1751,6 +1801,8 @@ TEST_CASE("bounded parallel execution preserves peer success after a tool error"
     const auto& beta_result = std::get<ai::ToolResultMessage>(client.requests[1].context.messages[3]);
     CHECK(alpha_result.is_error);
     CHECK_FALSE(beta_result.is_error);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 }
 
 TEST_CASE("bounded parallel event-sink failure drains workers and emits one agent end", "[agent][async][u8]") {
@@ -1774,12 +1826,18 @@ TEST_CASE("bounded parallel event-sink failure drains workers and emits one agen
     boost::asio::thread_pool pool{4};
     std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
     std::atomic<int> agent_end_events{0};
+    std::vector<agent::AgentLifecycleEvent> events;
+    std::mutex events_mutex;
     boost::asio::co_spawn(
         pool,
         [&]() -> boost::asio::awaitable<void> {
             result = co_await loop.run(
                 "read",
                 [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+                    {
+                        std::lock_guard lock(events_mutex);
+                        events.push_back(event);
+                    }
                     if (std::holds_alternative<agent::ToolExecutionEndEvent>(event)) {
                         throw std::runtime_error("sink boom");
                     }
@@ -1797,6 +1855,8 @@ TEST_CASE("bounded parallel event-sink failure drains workers and emits one agen
     REQUIRE_FALSE(*result);
     CHECK(result->error().message == "agent event sink failed");
     CHECK(agent_end_events.load() == 1);
+    CHECK(count_events<agent::MessageStartEvent>(events) == 2);
+    CHECK(count_events<agent::MessageEndEvent>(events) == 2);
 }
 
 TEST_CASE("bounded parallel execution keeps hook failures as agent errors", "[agent][async][u8]") {
@@ -1830,6 +1890,8 @@ TEST_CASE("bounded parallel execution keeps hook failures as agent errors", "[ag
     CHECK(run.result.error().code == util::ErrorCode::Tool);
     CHECK(run.result.error().message == "post-processor failed");
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 2);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
 }
 
 TEST_CASE("bounded parallel execution emits end events in completion order", "[agent][async][u8]") {
@@ -1864,6 +1926,20 @@ TEST_CASE("bounded parallel execution emits end events in completion order", "[a
     REQUIRE(end_order.size() == 2);
     CHECK(end_order[0] == "beta");
     CHECK(end_order[1] == "alpha");
+
+    std::vector<std::string> message_order;
+    for (const auto& event : run.events) {
+        if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+            if (const auto* result = std::get_if<ai::ToolResultMessage>(&end->message)) {
+                message_order.push_back(result->tool_name);
+            }
+        }
+    }
+    REQUIRE(message_order.size() == 2);
+    CHECK(message_order[0] == "alpha");
+    CHECK(message_order[1] == "beta");
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 }
 
 TEST_CASE("length-truncated tool calls emit errors without crossing the executor seam", "[agent][async][u8]") {
@@ -1913,6 +1989,8 @@ TEST_CASE("length-truncated tool calls emit errors without crossing the executor
     CHECK(after_calls == 0);
     CHECK(count_events<agent::ToolExecutionStartEvent>(run.events) == 2);
     CHECK(count_events<agent::ToolExecutionEndEvent>(run.events) == 2);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 
     REQUIRE(client.requests.size() == 2);
     const auto& messages = client.requests[1].context.messages;

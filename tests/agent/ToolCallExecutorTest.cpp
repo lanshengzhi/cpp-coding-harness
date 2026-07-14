@@ -147,7 +147,7 @@ ExecuteResult run_executor(
         pool,
         [&]() -> boost::asio::awaitable<void> {
             result = co_await executor.execute(
-                agent::ToolCallBatchRequest{1, assistant_message, context},
+                agent::ToolCallBatchRequest{assistant_message, context},
                 sink);
             co_return;
         },
@@ -222,6 +222,8 @@ TEST_CASE("ToolCallExecutor defaults to source-order sequential execution", "[ag
     CHECK(tool_ptr->invocation_count() == 1);
     CHECK(count_events<agent::ToolExecutionStartEvent>(run.events) == 1);
     CHECK(count_events<agent::ToolExecutionEndEvent>(run.events) == 1);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 1);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 1);
 }
 
 TEST_CASE("exclusive tools force a bounded batch to execute sequentially", "[agent][tool-executor]") {
@@ -363,6 +365,18 @@ TEST_CASE("bounded parallel execution preserves source-order results", "[agent][
     REQUIRE(end_order.size() == 2);
     CHECK(end_order[0] == "beta");
     CHECK(end_order[1] == "alpha");
+
+    std::vector<std::string> message_order;
+    for (const auto& event : run.events) {
+        if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+            if (const auto* result = std::get_if<ai::ToolResultMessage>(&end->message)) {
+                message_order.push_back(result->tool_name);
+            }
+        }
+    }
+    REQUIRE(message_order.size() == 2);
+    CHECK(message_order[0] == "alpha");
+    CHECK(message_order[1] == "beta");
 }
 
 TEST_CASE("bounded parallel execution serializes hooks and lifecycle callbacks", "[agent][tool-executor]") {
@@ -416,7 +430,7 @@ TEST_CASE("bounded parallel execution serializes hooks and lifecycle callbacks",
         pool,
         [&]() -> boost::asio::awaitable<void> {
             result = co_await executor.execute(
-                agent::ToolCallBatchRequest{1, assistant, context},
+                agent::ToolCallBatchRequest{assistant, context},
                 sink);
             co_return;
         },
@@ -445,6 +459,8 @@ TEST_CASE("ToolCallExecutor maps lookup and argument failures to results", "[age
     CHECK(run.result->results[0].is_error);
     CHECK(run.result->results[1].is_error);
     CHECK(count_events<agent::ToolExecutionEndEvent>(run.events) == 2);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 2);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
 }
 
 TEST_CASE("ToolCallExecutor keeps hook policy behind its interface", "[agent][tool-executor]") {
@@ -469,6 +485,8 @@ TEST_CASE("ToolCallExecutor keeps hook policy behind its interface", "[agent][to
     CHECK(run.result->results[0].is_error);
     CHECK(ai::text_from_content(run.result->results[0].content) == "blocked");
     CHECK(tool_ptr->invocation_count() == 0);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 1);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 1);
 }
 
 TEST_CASE("ToolCallExecutor applies after-hook overrides and termination", "[agent][tool-executor]") {
@@ -494,6 +512,8 @@ TEST_CASE("ToolCallExecutor applies after-hook overrides and termination", "[age
     REQUIRE(run.result->results.size() == 1);
     CHECK(ai::text_from_content(run.result->results[0].content) == "overridden");
     CHECK(run.result->terminate_batch);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 1);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 1);
 }
 
 TEST_CASE("tool errors prevent batch termination", "[agent][tool-executor]") {

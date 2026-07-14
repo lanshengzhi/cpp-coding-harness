@@ -458,6 +458,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                 execution_result.is_error = true;
                 CCH_TRY_VOID(emit(sink, ToolExecutionEndEvent{
                     call.id, call.name, std::move(execution_result), true}));
+                CCH_TRY_VOID(emit(sink, MessageStartEvent{ai::MessageVariant{result}}));
+                CCH_TRY_VOID(emit(sink, MessageEndEvent{ai::MessageVariant{result}}));
                 tool_results.push_back(std::move(result));
             }
         } else if (!calls.empty()) {
@@ -480,7 +482,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             agent::ToolCallExecutor executor{registry_, std::move(executor_options)};
 
             auto execution = co_await executor.execute(
-                agent::ToolCallBatchRequest{turn, *assistant, context},
+                agent::ToolCallBatchRequest{*assistant, context},
                 sink);
             if (!execution) {
                 CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));

@@ -22,7 +22,6 @@ struct ToolCallExecutorOptions {
 };
 
 struct ToolCallBatchRequest {
-    int turn{};
     const ai::AssistantMessage& assistant_message;
     const ai::AiContext& context;
 };

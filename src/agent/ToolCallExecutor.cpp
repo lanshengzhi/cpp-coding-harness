@@ -92,7 +92,7 @@ namespace {
     }
 }
 
-util::ExpectedVoid emit(AgentEventSink& sink, const AgentLifecycleEvent& event) {
+[[nodiscard]] util::ExpectedVoid emit(AgentEventSink& sink, const AgentLifecycleEvent& event) {
     if (!sink) {
         return {};
     }
@@ -109,6 +109,15 @@ util::ExpectedVoid emit(AgentEventSink& sink, const AgentLifecycleEvent& event) 
             "agent event sink failed",
             "unknown exception"));
     }
+}
+
+[[nodiscard]] util::ExpectedVoid emit_tool_result_message(
+    AgentEventSink& sink,
+    const ai::ToolResultMessage& message) {
+    if (auto r = emit(sink, MessageStartEvent{ai::MessageVariant{message}}); !r) {
+        return r;
+    }
+    return emit(sink, MessageEndEvent{ai::MessageVariant{message}});
 }
 
 struct FinalizedToolCall {
@@ -283,6 +292,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
         execution_result.terminate = call_terminate;
         CCH_TRY_VOID(emit(sink, ToolExecutionEndEvent{
             call.id, call.name, std::move(execution_result), tool_result.is_error}));
+        CCH_TRY_VOID(emit_tool_result_message(sink, tool_result));
         finalized.push_back(FinalizedToolCall{std::move(tool_result), call_terminate});
     }
 
@@ -377,8 +387,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                         next_index,
                         finalized,
                         parallel_emit,
-                        state,
-                        turn = request.turn]() -> boost::asio::awaitable<void> {
+                        state]() -> boost::asio::awaitable<void> {
         try {
             while (true) {
                 const auto index = next_index->fetch_add(1);
@@ -496,6 +505,10 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
         if (state->fatal_error) {
             co_return std::unexpected(*state->fatal_error);
         }
+    }
+
+    for (const auto& finalized_call : *finalized) {
+        CCH_TRY_VOID(emit_tool_result_message(sink, finalized_call.result));
     }
 
     co_return make_batch_result(std::move(*finalized));
