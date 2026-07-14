@@ -27,17 +27,45 @@ namespace {
     return mode == OutputMode::Rpc;
 }
 
-[[nodiscard]] bool is_user_bash(std::string_view input) {
-    return !input.empty() && input.front() == '!';
+[[nodiscard]] bool is_ascii_whitespace(char ch) {
+    return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '\f' || ch == '\v';
 }
 
-bool print_json_terminal(coding_agent::runtime::JsonEventPrinter& printer, bool success, std::string code, std::string message = {}) {
-    if (auto printed = printer.print_terminal(success, std::move(code), std::move(message)); !printed) {
-        std::cerr << "event printer failed: " << printed.error().message << '\n';
-        return false;
+[[nodiscard]] std::optional<std::pair<std::string_view, std::string_view>> try_parse_slash_command(
+    std::string_view input) {
+    if (input.empty() || input.front() != '/') {
+        return std::nullopt;
     }
-    std::cout.flush();
-    return true;
+
+    const auto body = input.substr(1);
+    std::size_t delimiter = 0;
+    while (delimiter < body.size() && !is_ascii_whitespace(body[delimiter])) {
+        ++delimiter;
+    }
+
+    auto arguments = std::string_view{};
+    if (delimiter < body.size()) {
+        arguments = body.substr(delimiter + 1);
+    }
+    return std::pair<std::string_view, std::string_view>{body.substr(0, delimiter), arguments};
+}
+
+[[nodiscard]] std::optional<coding_agent::CommandResult> dispatch_text_cli_command(
+    coding_agent::CommandRegistry& registry,
+    std::string_view input,
+    const coding_agent::CommandContext& base_context) {
+    const auto parsed = try_parse_slash_command(input);
+    if (!parsed) {
+        return std::nullopt;
+    }
+
+    auto context = base_context;
+    context.available_commands = registry.list_commands();
+    return registry.dispatch(parsed->first, context, parsed->second);
+}
+
+[[nodiscard]] bool is_user_bash(std::string_view input) {
+    return !input.empty() && input.front() == '!';
 }
 
 bool clear_text_terminal() {
@@ -69,8 +97,8 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         config_data = coding_agent::ConfigData{};
     }
 
-    coding_agent::CommandRegistry command_registry;
-    if (auto registered = register_builtin_commands(command_registry); !registered) {
+    coding_agent::CommandRegistry cli_command_registry;
+    if (auto registered = register_builtin_commands(cli_command_registry); !registered) {
         std::cerr << "could not register built-in command: " << registered.error().message << '\n';
         return 1;
     }
@@ -89,7 +117,6 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
     request.resume_path = config.resume_path;
     request.provider_overrides = config.provider_overrides;
     request.config = *config_data;
-    request.command_registry = std::move(command_registry);
 
     auto created = coding_agent::create_agent_session(std::move(request));
     if (!created) {
@@ -154,7 +181,62 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         });
     }
 
+    auto make_command_context = [&]() {
+        return coding_agent::CommandContext{
+            .session_id = session.session_id(),
+            .workspace_path = session.workspace().string(),
+            .provider = session.provider(),
+            .model = session.model(),
+            .message_count = session.message_count(),
+            .available_commands = {},
+        };
+    };
+
+    auto present_result = [&](coding_agent::PromptResult result) -> coding_agent::PromptResult {
+        if (!result.success) {
+            if (json_mode) {
+                if (auto printed = json_printer->print_terminal(false, result.code, result.message); !printed) {
+                    std::cerr << "event printer failed: " << printed.error().message << '\n';
+                }
+            } else if (result.code == "session_persist_failed") {
+                std::cerr << result.message << '\n';
+            } else {
+                std::cerr << "loop failed: " << result.message << '\n';
+            }
+            return result;
+        }
+        if (json_mode) {
+            if (auto printed = json_printer->print_terminal(true, result.code, result.message); !printed) {
+                coding_agent::PromptResult failed;
+                failed.success = false;
+                failed.code = "event_print_failed";
+                failed.message = "failed to print terminal event";
+                return failed;
+            }
+            return result;
+        }
+        write_text_prompt_result(result, std::cout);
+        return result;
+    };
+
     auto run_prompt = [&](const std::string& prompt) -> coding_agent::PromptResult {
+        // Frontend commands are resolved by the CLI adapter before ordinary input reaches AgentSession.
+        if (auto command_result = dispatch_text_cli_command(cli_command_registry, prompt, make_command_context())) {
+            coding_agent::PromptResult result;
+            result.success = true;
+            result.code = command_result->shutdown_requested ? "shutdown" : "command_handled";
+            result.message = command_result->display_text;
+
+            if (!json_mode && prompt == "/clear") {
+                if (!clear_text_terminal()) {
+                    result.success = false;
+                    result.code = "event_print_failed";
+                    result.message = "failed to clear terminal";
+                }
+            }
+            return present_result(result);
+        }
+
         std::optional<boost::asio::io_context> print_io;
         std::optional<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>> print_work;
         std::optional<std::jthread> print_thread;
@@ -201,28 +283,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             result.message = prompt_result.error().message;
         }
 
-        if (!result.success) {
-            if (json_mode) {
-                (void)print_json_terminal(*json_printer, false, result.code, result.message);
-            } else if (result.code == "session_persist_failed") {
-                std::cerr << result.message << '\n';
-            } else {
-                std::cerr << "loop failed: " << result.message << '\n';
-            }
-            return result;
-        }
-        if (json_mode) {
-            if (!print_json_terminal(*json_printer, true, result.code, result.message)) {
-                coding_agent::PromptResult failed;
-                failed.success = false;
-                failed.code = "event_print_failed";
-                failed.message = "failed to print terminal event";
-                return failed;
-            }
-            return result;
-        }
-        write_text_prompt_result(result, std::cout);
-        return result;
+        return present_result(result);
     };
 
     if (config.repl) {
@@ -230,10 +291,6 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         while (std::cout << "> " && std::getline(std::cin, line)) {
             if (line == "exit" || line == "quit") break;
             if (line.empty()) continue;
-            if (line == "/clear") {
-                if (!clear_text_terminal()) return 1;
-                continue;
-            }
             if (is_user_bash(line)) {
                 std::cout << "Shell passthrough (!) is not yet implemented.\n";
                 continue;
@@ -244,10 +301,6 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             if (result.code == "shutdown") return 0;
         }
         return 0;
-    }
-
-    if (!json_mode && config.prompt == "/clear") {
-        return clear_text_terminal() ? 0 : 1;
     }
 
     auto result = run_prompt(config.prompt);

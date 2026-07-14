@@ -1156,3 +1156,25 @@ TEST_CASE("CLI resume without override retains stored provider and model", "[cli
     CHECK(json_string_at(data, "provider") == "fake");
     CHECK(json_string_at(data, "model") == "fake-model");
 }
+
+TEST_CASE("CLI text command is resolved by the adapter and does not reach AgentSession", "[cli][commands]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "command-adapter.jsonl";
+    auto result = run_command(
+        bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " /help");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.output.find("Available commands:") != std::string::npos);
+    CHECK(result.output.find("[model-request]") == std::string::npos);
+
+    const auto content = read_file(session);
+    const auto lines = non_empty_lines(content);
+    REQUIRE(lines.size() >= 1);
+    auto header = parse_json_line(lines.front());
+    CHECK(json_string_at(as_object(header), "type") == "session");
+
+    for (std::size_t i = 1; i < lines.size(); ++i) {
+        auto record = parse_json_line(lines[i]);
+        CHECK(json_string_at(as_object(record), "type") != "message");
+    }
+}
