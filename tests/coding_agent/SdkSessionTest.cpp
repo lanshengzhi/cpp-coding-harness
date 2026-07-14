@@ -1148,6 +1148,123 @@ TEST_CASE("SDK state accessors reflect committed history", "[sdk][u3]") {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Live state updates before subscribers
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST_CASE("SDK message_end subscribers observe live state updated before delivery", "[sdk][live-state]") {
+    TestPaths paths;
+    paths.workspace.write("target.txt", "target content\n");
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    auto& session = result->session;
+
+    std::size_t seen_message_ends = 0;
+    std::size_t user_message_ends = 0;
+    std::size_t assistant_message_ends = 0;
+    std::size_t tool_result_message_ends = 0;
+    std::optional<std::string> assistant_text_in_subscriber;
+
+    auto sub = session->subscribe([&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+        if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+            const auto& message = end->message;
+            // Live history is updated before subscribers run, so the message count
+            // equals the number of message_end events already delivered plus the
+            // current one.
+            CHECK(session->message_count() == seen_message_ends + 1);
+
+            if (std::holds_alternative<ai::UserMessage>(message)) {
+                ++user_message_ends;
+            } else if (std::holds_alternative<ai::AssistantMessage>(message)) {
+                ++assistant_message_ends;
+                assistant_text_in_subscriber = session->last_assistant_text();
+            } else if (std::holds_alternative<ai::ToolResultMessage>(message)) {
+                ++tool_result_message_ends;
+            }
+            ++seen_message_ends;
+        }
+        return {};
+    });
+    REQUIRE(sub.has_value());
+
+    auto first = session->prompt("hello");
+    REQUIRE(first.has_value());
+    CHECK(first->success);
+    CHECK(user_message_ends == 1);
+    CHECK(assistant_message_ends == 1);
+    CHECK(tool_result_message_ends == 0);
+    CHECK(seen_message_ends == 2);
+    REQUIRE(assistant_text_in_subscriber.has_value());
+    CHECK(assistant_text_in_subscriber->find("fake: hello") != std::string::npos);
+    CHECK(session->last_assistant_text() == assistant_text_in_subscriber);
+    CHECK(session->message_count() == 2);
+
+    // Tool-using prompt: user, assistant with tool call, tool result, final assistant.
+    assistant_text_in_subscriber.reset();
+    auto second = session->prompt("read target.txt");
+    REQUIRE(second.has_value());
+    CHECK(second->success);
+    CHECK(user_message_ends == 2);
+    CHECK(tool_result_message_ends == 1);
+    CHECK(assistant_message_ends == 3);
+    CHECK(seen_message_ends == 6);
+    REQUIRE(assistant_text_in_subscriber.has_value());
+    CHECK(assistant_text_in_subscriber->find("observed") != std::string::npos);
+    CHECK(session->last_assistant_text() == assistant_text_in_subscriber);
+
+    CHECK(session->close().has_value());
+}
+
+TEST_CASE("SDK live state remains after subscriber failure and session stays usable", "[sdk][live-state]") {
+    TestPaths paths;
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    auto& session = result->session;
+
+    std::size_t seen_message_ends = 0;
+    auto sub = session->subscribe([&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+        if (std::holds_alternative<agent::MessageEndEvent>(event)) {
+            ++seen_message_ends;
+            if (seen_message_ends == 2) {
+                return std::unexpected(util::make_error(
+                    util::ErrorCode::Tool,
+                    "subscriber rejects assistant message_end"));
+            }
+        }
+        return {};
+    });
+    REQUIRE(sub.has_value());
+
+    auto failed = session->prompt("hello");
+    REQUIRE(failed.has_value());
+    CHECK_FALSE(failed->success);
+    // The user and assistant messages entered live history before the subscriber failed.
+    CHECK(session->message_count() == 2);
+    CHECK(session->last_assistant_text().has_value());
+    CHECK(session->is_open());
+
+    // Remove the failing subscriber; the session remains usable.
+    sub->unsubscribe();
+    auto recovered = session->prompt("again");
+    REQUIRE(recovered.has_value());
+    CHECK(recovered->success);
+    CHECK(session->message_count() > 2);
+
+    CHECK(session->close().has_value());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CreateAgentSessionResult metadata
 // ─────────────────────────────────────────────────────────────────────────────
 

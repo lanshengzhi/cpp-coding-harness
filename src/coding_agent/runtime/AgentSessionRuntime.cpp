@@ -116,10 +116,9 @@ PromptRunResult AgentSessionRuntime::run_prompt(
 
     auto expanded = prompt_processor_.process(std::move(prompt), expand_prompt_templates);
 
-    auto combined_sink = make_combined_sink(std::move(sink));
     return run_agent_loop(
         std::move(expanded.text),
-        std::move(combined_sink));
+        std::move(sink));
 }
 
 PromptRunResult AgentSessionRuntime::run_agent_loop(
@@ -129,10 +128,13 @@ PromptRunResult AgentSessionRuntime::run_agent_loop(
     std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
     const auto previous_size = session_.history.size();
 
+    auto combined_sink = make_combined_sink(std::move(sink));
+
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            result = co_await loop_->continue_with(session_.history, std::move(prompt), std::move(sink));
+            result = co_await loop_->continue_with(
+                session_.history, std::move(prompt), std::move(combined_sink));
             co_return;
         },
         boost::asio::detached);
@@ -148,14 +150,15 @@ PromptRunResult AgentSessionRuntime::run_agent_loop(
         };
     }
 
-    auto new_history = std::move((*result)->context.messages);
-    for (std::size_t index = previous_size; index < new_history.size(); ++index) {
-        if (auto appended = session_.store->append(new_history[index]); !appended) {
+    // Persist the messages that entered live history during this run. Live
+    // history is updated incrementally on message_end events, so only the
+    // entries beyond the previous size are new for this prompt.
+    for (std::size_t index = previous_size; index < session_.history.size(); ++index) {
+        if (auto appended = session_.store->append(session_.history[index]); !appended) {
             return PromptRunResult{false, "session_persist_failed", "could not persist session entry", {}};
         }
     }
 
-    session_.history = std::move(new_history);
     return PromptRunResult{true, "completed", {}, {}};
 }
 
@@ -167,9 +170,13 @@ agent::AgentEventSink AgentSessionRuntime::make_combined_sink(agent::AgentEventS
         }
     }
 
-    return [persistent = std::move(persistent),
-            per_prompt = std::move(per_prompt)](const agent::AgentLifecycleEvent& event) mutable
-        -> util::ExpectedVoid {
+    return [this, persistent = std::move(persistent), per_prompt = std::move(per_prompt)](
+               const agent::AgentLifecycleEvent& event) mutable -> util::ExpectedVoid {
+        // Update live session history before any subscriber observes the
+        // completed message. This matches pi's state-first event ordering.
+        if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+            session_.history.push_back(end->message);
+        }
         for (auto* sink : *persistent) {
             if (*sink) {
                 auto r = (*sink)(event);
