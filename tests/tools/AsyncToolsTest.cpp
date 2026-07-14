@@ -86,6 +86,21 @@ agent::ToolInvocation invocation(std::string name, std::string json) {
 
 } // namespace
 
+TEST_CASE("built-in tools default to exclusive execution", "[tools][async]") {
+    tests::TempWorkspace workspace;
+    auto env = std::make_shared<CapturingEnv>(workspace.path());
+
+    auto read = tools::make_async_read_file_tool(env);
+    auto write = tools::make_async_write_file_tool(env);
+    auto edit = tools::make_async_edit_file_tool(env);
+    auto bash = tools::make_async_bash_tool(env);
+
+    CHECK(read->concurrency() == agent::ToolConcurrency::Exclusive);
+    CHECK(write->concurrency() == agent::ToolConcurrency::Exclusive);
+    CHECK(edit->concurrency() == agent::ToolConcurrency::Exclusive);
+    CHECK(bash->concurrency() == agent::ToolConcurrency::Exclusive);
+}
+
 TEST_CASE("async read_file tool uses Glaze typed args and workspace guard", "[tools][async][u6]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "line1\nline2\n");

@@ -128,10 +128,11 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **Done when:** continuation and multi-turn control can be implemented without special cases in CLI runtime.
   - **Implementation plan:** `docs/plans/2026-06-19-003-feat-agent-loop-pi-parity-plan.md`.
 - [x] Evaluate sequential versus parallel tool execution with deterministic result insertion.
-  - **Files:** `include/cch/agent/AgentTool.hpp`, `src/agent/AgentLoop.cpp`, `tests/agent/AsyncAgentLoopTest.cpp`.
-  - **References:** `pi:packages/agent/src/types.ts`.
-  - **Test scenarios:** tools may complete out of order while tool-result messages are appended in assistant source order; tool-level sequential overrides and the run default keep mutating/stateful tools serialized.
-  - **Implementation plan:** `docs/plans/2026-06-19-003-feat-agent-loop-pi-parity-plan.md`.
+  - **Files:** `include/cch/agent/AgentTool.hpp`, `include/cch/agent/AgentContext.hpp`, `src/agent/AgentLoop.cpp`, `src/agent/ToolCallExecutor.*`, `tests/agent/AsyncAgentLoopTest.cpp`, `tests/agent/ToolCallExecutorTest.cpp`.
+  - **References:** `pi:packages/agent/src/types.ts`, `pi:packages/agent/src/agent-loop.ts`.
+  - **Test scenarios:** tools may complete out of order while tool-result messages are appended in assistant source order; `Exclusive` is the safe tool default; bounded parallel execution requires explicit tool and run-policy opt-ins.
+  - **Status:** scheduling vocabulary is agent-owned, `max_in_flight` is an actual bound, length-truncated tool calls are rejected before hooks/execution, and built-in tools remain exclusive pending concurrent-use proof.
+  - **Historical implementation plan:** `docs/plans/2026-06-19-003-feat-agent-loop-pi-parity-plan.md` records the earlier flat mode/cap design that this deepening supersedes.
 - [x] Preserve move-only event sink semantics while adding missing lifecycle events.
   - **Files:** `include/cch/agent/AgentEvent.hpp`, `tests/architecture/MoveOnlyCallbackTest.cpp`, `tests/agent/AsyncAgentLoopTest.cpp`.
   - **References:** `pi:packages/agent/src/types.ts`, `pi:packages/coding-agent/docs/extensions.md`.

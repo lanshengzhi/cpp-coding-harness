@@ -100,6 +100,20 @@ TEST_CASE("core public contracts do not expose Glaze generic machinery", "[archi
     }
 }
 
+TEST_CASE("tool scheduling vocabulary stays in the agent package", "[architecture][agent]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto ai_tool = read_text(source_root / "include" / "cch" / "ai" / "Tool.hpp");
+    const auto agent_tool = read_text(source_root / "include" / "cch" / "agent" / "AgentTool.hpp");
+    const auto agent_context = read_text(source_root / "include" / "cch" / "agent" / "AgentContext.hpp");
+
+    CHECK(ai_tool.find("ToolConcurrency") == std::string::npos);
+    CHECK(ai_tool.find("ToolExecutionPolicy") == std::string::npos);
+    CHECK(ai_tool.find("ToolExecutionMode") == std::string::npos);
+    CHECK(agent_tool.find("ToolConcurrency") != std::string::npos);
+    CHECK(agent_context.find("ToolExecutionPolicy") != std::string::npos);
+    CHECK(agent_context.find("BoundedParallelToolExecution") != std::string::npos);
+}
+
 TEST_CASE("provider DTOs stay out of the public contract surface", "[architecture][u4]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
     CHECK_FALSE(std::filesystem::exists(source_root / "include" / "cch" / "ai" / "glaze" / "ProviderDtos.hpp"));

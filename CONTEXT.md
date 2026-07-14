@@ -84,17 +84,25 @@ The domain operation that reopens a persisted session into the agent-ready conte
 
 A passive classification of a stored session's resume shape, such as linear, branched, or compacted. Used to decide which consumers can resume it; it is not an execution-completion state.
 
+### ToolConcurrency
+
+A passive agent-layer claim made by an `AsyncAgentTool`: `Exclusive` is the safe default, while `ParallelSafe` explicitly permits overlapping execution when the run policy also allows it. It never appears in the provider-visible `ai::Tool` schema.
+
+### ToolExecutionPolicy
+
+A closed agent-layer run policy: either sequential execution or bounded parallel execution with an explicit `max_in_flight`. Parallel execution requires every resolved tool in the batch to claim `ParallelSafe`; otherwise the complete batch runs sequentially.
+
 ### ToolCallExecutor
 
-The adapter responsible for executing one batch of assistant tool calls. Hides sequential/parallel dispatch, before/after hooks, terminate-batch logic, and error-to-tool-result mapping behind a narrow interface.
+The private adapter responsible for executing one accepted batch of assistant tool calls. Hides tool-call extraction, sequential/bounded-parallel dispatch, before/after hooks, lifecycle events, terminate-batch logic, and error-to-tool-result mapping behind a narrow interface. `AgentLoop` rejects length-truncated tool intent before this seam.
 
 ### ToolCallExecutorOptions
 
-Passive configuration for `ToolCallExecutor`: optional before/after hooks, execution mode (sequential or parallel), and maximum parallel tools.
+Passive private configuration for `ToolCallExecutor`: optional before/after hooks plus one `ToolExecutionPolicy`. It has no independent mode/cap fields.
 
 ### ToolCallBatchResult
 
-Passive result of executing a batch of tool calls: the list of tool-result messages and a flag indicating whether the batch requested early termination.
+Passive result of executing a batch of tool calls: source-ordered tool-result messages plus a flag indicating whether every call completed successfully and requested early termination.
 
 ### TriageState
 

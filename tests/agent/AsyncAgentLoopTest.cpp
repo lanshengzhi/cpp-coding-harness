@@ -444,13 +444,17 @@ class ConfigurableFakeTool final : public agent::AsyncAgentTool {
 public:
     ConfigurableFakeTool(
         ai::Tool definition,
-        std::optional<ai::ToolExecutionMode> mode,
+        agent::ToolConcurrency concurrency,
         std::string result_text = "tool says ok")
-        : definition_(std::move(definition)), mode_(mode), result_text_(std::move(result_text)) {}
+        : definition_(std::move(definition)),
+          concurrency_(concurrency),
+          result_text_(std::move(result_text)) {}
 
     const ai::Tool& definition() const override { return definition_; }
 
-    std::optional<ai::ToolExecutionMode> execution_mode() const override { return mode_; }
+    agent::ToolConcurrency concurrency() const noexcept override {
+        return concurrency_;
+    }
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
         agent::ToolInvocation invocation) override {
@@ -460,7 +464,7 @@ public:
     }
 
     ai::Tool definition_;
-    std::optional<ai::ToolExecutionMode> mode_;
+    agent::ToolConcurrency concurrency_;
     std::string result_text_;
     std::vector<agent::ToolInvocation> invocations;
 };
@@ -475,8 +479,8 @@ public:
 
     const ai::Tool& definition() const override { return definition_; }
 
-    std::optional<ai::ToolExecutionMode> execution_mode() const override {
-        return ai::ToolExecutionMode::Parallel;
+    agent::ToolConcurrency concurrency() const noexcept override {
+        return agent::ToolConcurrency::ParallelSafe;
     }
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
@@ -500,8 +504,8 @@ public:
 
     const ai::Tool& definition() const override { return definition_; }
 
-    std::optional<ai::ToolExecutionMode> execution_mode() const override {
-        return ai::ToolExecutionMode::Parallel;
+    agent::ToolConcurrency concurrency() const noexcept override {
+        return agent::ToolConcurrency::ParallelSafe;
     }
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
@@ -523,13 +527,15 @@ class ProbedFakeTool final : public agent::AsyncAgentTool {
 public:
     ProbedFakeTool(
         ai::Tool definition,
-        std::optional<ai::ToolExecutionMode> mode,
+        agent::ToolConcurrency concurrency,
         ConcurrencyProbe& probe)
-        : definition_(std::move(definition)), mode_(mode), probe_(probe) {}
+        : definition_(std::move(definition)), concurrency_(concurrency), probe_(probe) {}
 
     const ai::Tool& definition() const override { return definition_; }
 
-    std::optional<ai::ToolExecutionMode> execution_mode() const override { return mode_; }
+    agent::ToolConcurrency concurrency() const noexcept override {
+        return concurrency_;
+    }
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
         agent::ToolInvocation invocation) override {
@@ -545,7 +551,7 @@ public:
     }
 
     ai::Tool definition_;
-    std::optional<ai::ToolExecutionMode> mode_;
+    agent::ToolConcurrency concurrency_;
     ConcurrencyProbe& probe_;
     std::vector<agent::ToolInvocation> invocations;
 };
@@ -1267,12 +1273,12 @@ TEST_CASE("prepareNextTurn and turn-update validation exceptions abort cleanly",
     }
 }
 
-TEST_CASE("tool execution mode defaults to sequential", "[agent][async][u8]") {
+TEST_CASE("tool execution policy defaults to sequential", "[agent][async][u8]") {
     agent::AsyncAgentOptions options;
-    CHECK(options.tool_execution_mode == ai::ToolExecutionMode::Sequential);
+    CHECK(std::holds_alternative<agent::SequentialToolExecution>(options.tool_execution));
 }
 
-TEST_CASE("per-tool sequential override forces sequential execution", "[agent][async][u8]") {
+TEST_CASE("an exclusive tool forces a bounded batch to execute sequentially", "[agent][async][u8]") {
     FakeStreamingClient client;
     client.responses.push_back(two_tool_call_response());
     client.responses.push_back(ai::assistant_text_message("done"));
@@ -1281,15 +1287,15 @@ TEST_CASE("per-tool sequential override forces sequential execution", "[agent][a
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
         ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
-        ai::ToolExecutionMode::Parallel,
+        agent::ToolConcurrency::ParallelSafe,
         probe)));
     REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
         ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
-        ai::ToolExecutionMode::Sequential,
+        agent::ToolConcurrency::Exclusive,
         probe)));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
-    options.tool_execution_mode = ai::ToolExecutionMode::Parallel;
+    options.tool_execution = agent::BoundedParallelToolExecution{2};
 
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
@@ -1299,7 +1305,7 @@ TEST_CASE("per-tool sequential override forces sequential execution", "[agent][a
     CHECK(probe.max_active.load() == 1);
 }
 
-TEST_CASE("parallel tool execution runs both tools and preserves source order in transcript", "[agent][async][u8]") {
+TEST_CASE("bounded parallel execution preserves source order in the transcript", "[agent][async][u8]") {
     FakeStreamingClient client;
     client.responses.push_back(two_tool_call_response());
     client.responses.push_back(ai::assistant_text_message("done"));
@@ -1307,11 +1313,11 @@ TEST_CASE("parallel tool execution runs both tools and preserves source order in
     agent::AsyncToolRegistry registry;
     auto alpha = std::make_unique<ConfigurableFakeTool>(
         ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
-        ai::ToolExecutionMode::Parallel,
+        agent::ToolConcurrency::ParallelSafe,
         "alpha result");
     auto beta = std::make_unique<ConfigurableFakeTool>(
         ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
-        ai::ToolExecutionMode::Parallel,
+        agent::ToolConcurrency::ParallelSafe,
         "beta result");
     auto* alpha_ptr = alpha.get();
     auto* beta_ptr = beta.get();
@@ -1319,7 +1325,7 @@ TEST_CASE("parallel tool execution runs both tools and preserves source order in
     REQUIRE(registry.add(std::move(beta)));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
-    options.tool_execution_mode = ai::ToolExecutionMode::Parallel;
+    options.tool_execution = agent::BoundedParallelToolExecution{2};
 
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
@@ -1337,7 +1343,7 @@ TEST_CASE("parallel tool execution runs both tools and preserves source order in
     CHECK(std::get<ai::ToolResultMessage>(second_request.context.messages[3]).tool_name == "beta");
 }
 
-TEST_CASE("run-mode sequential override forces sequential execution", "[agent][async][u8]") {
+TEST_CASE("bounded parallel limit one executes sequentially", "[agent][async][u8]") {
     FakeStreamingClient client;
     client.responses.push_back(two_tool_call_response());
     client.responses.push_back(ai::assistant_text_message("done"));
@@ -1346,71 +1352,74 @@ TEST_CASE("run-mode sequential override forces sequential execution", "[agent][a
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
         ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
-        ai::ToolExecutionMode::Parallel,
+        agent::ToolConcurrency::ParallelSafe,
         probe)));
     REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
         ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
-        ai::ToolExecutionMode::Parallel,
+        agent::ToolConcurrency::ParallelSafe,
         probe)));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
-    options.tool_execution_mode = ai::ToolExecutionMode::Sequential;
+    options.tool_execution = agent::BoundedParallelToolExecution{1};
 
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
     REQUIRE(run.result);
-    REQUIRE(client.requests.size() == 2);
     CHECK(probe.max_active.load() == 1);
 }
 
-TEST_CASE("max_parallel_tools cap falls back to sequential execution", "[agent][async][u8]") {
+TEST_CASE("bounded parallel policy rejects zero before tools start", "[agent][async][u8]") {
     FakeStreamingClient client;
     client.responses.push_back(two_tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("done"));
 
     ConcurrencyProbe probe;
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
         ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
-        ai::ToolExecutionMode::Parallel,
+        agent::ToolConcurrency::ParallelSafe,
         probe)));
     REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
         ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
-        ai::ToolExecutionMode::Parallel,
+        agent::ToolConcurrency::ParallelSafe,
         probe)));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
-    options.tool_execution_mode = ai::ToolExecutionMode::Parallel;
-    options.max_parallel_tools = 1;
+    options.tool_execution = agent::BoundedParallelToolExecution{0};
 
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
-    REQUIRE(run.result);
-    REQUIRE(client.requests.size() == 2);
-    CHECK(probe.max_active.load() == 1);
+    REQUIRE_FALSE(run.result);
+    CHECK(run.result.error().code == util::ErrorCode::Validation);
+    CHECK(probe.max_active.load() == 0);
+    CHECK(count_events<agent::ToolExecutionStartEvent>(run.events) == 0);
 }
 
-TEST_CASE("parallel tool execution handles beforeToolCall blocks before execution", "[agent][async][u8]") {
+TEST_CASE("bounded parallel execution keeps blocked calls out of tool adapters", "[agent][async][u8]") {
     FakeStreamingClient client;
     client.responses.push_back(two_tool_call_response());
     client.responses.push_back(ai::assistant_text_message("done"));
 
     agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
+    auto alpha = std::make_unique<ConfigurableFakeTool>(
         ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
-        ai::ToolExecutionMode::Parallel,
-        "alpha result")));
-    REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
+        agent::ToolConcurrency::ParallelSafe,
+        "alpha result");
+    auto beta = std::make_unique<ConfigurableFakeTool>(
         ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
-        ai::ToolExecutionMode::Parallel,
-        "beta result")));
+        agent::ToolConcurrency::ParallelSafe,
+        "beta result");
+    auto* alpha_ptr = alpha.get();
+    auto* beta_ptr = beta.get();
+    REQUIRE(registry.add(std::move(alpha)));
+    REQUIRE(registry.add(std::move(beta)));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
-    options.tool_execution_mode = ai::ToolExecutionMode::Parallel;
-    options.before_tool_call = [](const agent::BeforeToolCallContext& ctx) -> util::Expected<agent::BeforeToolCallResult> {
-        if (ctx.tool_call.name == "alpha") {
+    options.tool_execution = agent::BoundedParallelToolExecution{2};
+    options.before_tool_call = [](const agent::BeforeToolCallContext& context)
+        -> util::Expected<agent::BeforeToolCallResult> {
+        if (context.tool_call.name == "alpha") {
             return agent::BeforeToolCallResult{true, "blocked alpha"};
         }
         return agent::BeforeToolCallResult{};
@@ -1420,18 +1429,17 @@ TEST_CASE("parallel tool execution handles beforeToolCall blocks before executio
     auto run = run_loop_on_pool(loop, "read");
 
     REQUIRE(run.result);
+    CHECK(alpha_ptr->invocations.empty());
+    CHECK(beta_ptr->invocations.size() == 1);
     REQUIRE(client.requests.size() == 2);
-    const auto& second_request = client.requests[1];
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(second_request.context.messages[2]));
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(second_request.context.messages[3]));
-    const auto& alpha = std::get<ai::ToolResultMessage>(second_request.context.messages[2]);
-    const auto& beta = std::get<ai::ToolResultMessage>(second_request.context.messages[3]);
-    CHECK(alpha.is_error);
-    CHECK(ai::text_from_content(alpha.content) == "blocked alpha");
-    CHECK_FALSE(beta.is_error);
+    const auto& alpha_result = std::get<ai::ToolResultMessage>(client.requests[1].context.messages[2]);
+    const auto& beta_result = std::get<ai::ToolResultMessage>(client.requests[1].context.messages[3]);
+    CHECK(alpha_result.is_error);
+    CHECK(ai::text_from_content(alpha_result.content) == "blocked alpha");
+    CHECK_FALSE(beta_result.is_error);
 }
 
-TEST_CASE("parallel tool execution aborts on beforeToolCall failure before workers start", "[agent][async][u8]") {
+TEST_CASE("bounded parallel before-hook failure starts no workers", "[agent][async][u8]") {
     FakeStreamingClient client;
     client.responses.push_back(two_tool_call_response());
 
@@ -1439,16 +1447,17 @@ TEST_CASE("parallel tool execution aborts on beforeToolCall failure before worke
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
         ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
-        ai::ToolExecutionMode::Parallel,
+        agent::ToolConcurrency::ParallelSafe,
         probe)));
     REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
         ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
-        ai::ToolExecutionMode::Parallel,
+        agent::ToolConcurrency::ParallelSafe,
         probe)));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
-    options.tool_execution_mode = ai::ToolExecutionMode::Parallel;
-    options.before_tool_call = [](const agent::BeforeToolCallContext&) -> util::Expected<agent::BeforeToolCallResult> {
+    options.tool_execution = agent::BoundedParallelToolExecution{2};
+    options.before_tool_call = [](const agent::BeforeToolCallContext&)
+        -> util::Expected<agent::BeforeToolCallResult> {
         return std::unexpected(util::make_error(util::ErrorCode::Tool, "preflight failed"));
     };
 
@@ -1458,9 +1467,10 @@ TEST_CASE("parallel tool execution aborts on beforeToolCall failure before worke
     REQUIRE_FALSE(run.result);
     CHECK(run.result.error().message == "preflight failed");
     CHECK(probe.max_active.load() == 0);
+    CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }
 
-TEST_CASE("parallel tool execution preserves success when one tool fails", "[agent][async][u8]") {
+TEST_CASE("bounded parallel execution preserves peer success after a tool error", "[agent][async][u8]") {
     FakeStreamingClient client;
     client.responses.push_back(two_tool_call_response());
     client.responses.push_back(ai::assistant_text_message("done"));
@@ -1470,43 +1480,119 @@ TEST_CASE("parallel tool execution preserves success when one tool fails", "[age
         ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()})));
     REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
         ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
-        ai::ToolExecutionMode::Parallel,
+        agent::ToolConcurrency::ParallelSafe,
         "beta result")));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
-    options.tool_execution_mode = ai::ToolExecutionMode::Parallel;
+    options.tool_execution = agent::BoundedParallelToolExecution{2};
 
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
     REQUIRE(run.result);
     REQUIRE(client.requests.size() == 2);
-    const auto& second_request = client.requests[1];
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(second_request.context.messages[2]));
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(second_request.context.messages[3]));
-    CHECK(std::get<ai::ToolResultMessage>(second_request.context.messages[2]).is_error);
-    CHECK_FALSE(std::get<ai::ToolResultMessage>(second_request.context.messages[3]).is_error);
+    const auto& alpha_result = std::get<ai::ToolResultMessage>(client.requests[1].context.messages[2]);
+    const auto& beta_result = std::get<ai::ToolResultMessage>(client.requests[1].context.messages[3]);
+    CHECK(alpha_result.is_error);
+    CHECK_FALSE(beta_result.is_error);
 }
 
-TEST_CASE("parallel tool execution emits end events in completion order", "[agent][async][u8]") {
+TEST_CASE("bounded parallel event-sink failure drains workers and emits one agent end", "[agent][async][u8]") {
+    FakeStreamingClient client;
+    client.responses.push_back(two_tool_call_response());
+
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
+        ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
+        agent::ToolConcurrency::ParallelSafe,
+        "alpha result")));
+    REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
+        ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
+        agent::ToolConcurrency::ParallelSafe,
+        "beta result")));
+
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.tool_execution = agent::BoundedParallelToolExecution{2};
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+
+    boost::asio::thread_pool pool{4};
+    std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
+    std::atomic<int> agent_end_events{0};
+    boost::asio::co_spawn(
+        pool,
+        [&]() -> boost::asio::awaitable<void> {
+            result = co_await loop.run(
+                "read",
+                [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+                    if (std::holds_alternative<agent::ToolExecutionEndEvent>(event)) {
+                        throw std::runtime_error("sink boom");
+                    }
+                    if (std::holds_alternative<agent::AgentEndEvent>(event)) {
+                        ++agent_end_events;
+                    }
+                    return {};
+                });
+            co_return;
+        },
+        boost::asio::detached);
+    pool.join();
+
+    REQUIRE(result.has_value());
+    REQUIRE_FALSE(*result);
+    CHECK(result->error().message == "agent event sink failed");
+    CHECK(agent_end_events.load() == 1);
+}
+
+TEST_CASE("bounded parallel execution keeps hook failures as agent errors", "[agent][async][u8]") {
+    FakeStreamingClient client;
+    client.responses.push_back(two_tool_call_response());
+
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
+        ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
+        agent::ToolConcurrency::ParallelSafe,
+        "alpha result")));
+    REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
+        ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
+        agent::ToolConcurrency::ParallelSafe,
+        "beta result")));
+
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.tool_execution = agent::BoundedParallelToolExecution{2};
+    options.after_tool_call = [](const agent::AfterToolCallContext& context)
+        -> util::Expected<agent::AfterToolCallResult> {
+        if (context.tool_call.name == "alpha") {
+            return std::unexpected(util::make_error(util::ErrorCode::Tool, "post-processor failed"));
+        }
+        return agent::AfterToolCallResult{};
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop_on_pool(loop, "read");
+
+    REQUIRE_FALSE(run.result);
+    CHECK(run.result.error().code == util::ErrorCode::Tool);
+    CHECK(run.result.error().message == "post-processor failed");
+    CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+}
+
+TEST_CASE("bounded parallel execution emits end events in completion order", "[agent][async][u8]") {
     FakeStreamingClient client;
     client.responses.push_back(two_tool_call_response());
     client.responses.push_back(ai::assistant_text_message("done"));
 
     agent::AsyncToolRegistry registry;
-    auto alpha = std::make_unique<DelayedFakeTool>(
+    REQUIRE(registry.add(std::make_unique<DelayedFakeTool>(
         ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
         std::chrono::milliseconds{100},
-        "alpha result");
-    auto beta = std::make_unique<DelayedFakeTool>(
+        "alpha result")));
+    REQUIRE(registry.add(std::make_unique<DelayedFakeTool>(
         ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
         std::chrono::milliseconds{10},
-        "beta result");
-    REQUIRE(registry.add(std::move(alpha)));
-    REQUIRE(registry.add(std::move(beta)));
+        "beta result")));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
-    options.tool_execution_mode = ai::ToolExecutionMode::Parallel;
+    options.tool_execution = agent::BoundedParallelToolExecution{2};
 
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
@@ -1524,81 +1610,72 @@ TEST_CASE("parallel tool execution emits end events in completion order", "[agen
     CHECK(end_order[1] == "alpha");
 }
 
-TEST_CASE("parallel tool execution preserves hook failure as an agent error", "[agent][async][u8]") {
+TEST_CASE("length-truncated tool calls emit errors without crossing the executor seam", "[agent][async][u8]") {
     FakeStreamingClient client;
-    client.responses.push_back(two_tool_call_response());
+    auto truncated = two_tool_call_response();
+    truncated.stop_reason = ai::AssistantStopReason::Length;
+    client.responses.push_back(std::move(truncated));
+    client.responses.push_back(ai::assistant_text_message("recovered"));
 
     agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
+    auto alpha = std::make_unique<ConfigurableFakeTool>(
         ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
-        ai::ToolExecutionMode::Parallel,
-        "alpha result")));
-    REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
+        agent::ToolConcurrency::ParallelSafe,
+        "alpha result");
+    auto beta = std::make_unique<ConfigurableFakeTool>(
         ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
-        ai::ToolExecutionMode::Parallel,
-        "beta result")));
+        agent::ToolConcurrency::ParallelSafe,
+        "beta result");
+    auto* alpha_ptr = alpha.get();
+    auto* beta_ptr = beta.get();
+    REQUIRE(registry.add(std::move(alpha)));
+    REQUIRE(registry.add(std::move(beta)));
 
+    int before_calls = 0;
+    int after_calls = 0;
     agent::AsyncAgentOptions options{4, "gpt-test"};
-    options.tool_execution_mode = ai::ToolExecutionMode::Parallel;
-    options.after_tool_call = [](const agent::AfterToolCallContext& ctx) -> util::Expected<agent::AfterToolCallResult> {
-        if (ctx.tool_call.name == "alpha") {
-            return std::unexpected(util::make_error(util::ErrorCode::Tool, "post-processor failed"));
-        }
+    options.tool_execution = agent::BoundedParallelToolExecution{2};
+    options.before_tool_call = [&](const agent::BeforeToolCallContext&)
+        -> util::Expected<agent::BeforeToolCallResult> {
+        ++before_calls;
+        return agent::BeforeToolCallResult{};
+    };
+    options.after_tool_call = [&](const agent::AfterToolCallContext&)
+        -> util::Expected<agent::AfterToolCallResult> {
+        ++after_calls;
         return agent::AfterToolCallResult{};
     };
 
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
-    REQUIRE_FALSE(run.result);
-    CHECK(run.result.error().code == util::ErrorCode::Tool);
-    CHECK(run.result.error().message == "post-processor failed");
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 2);
+    CHECK(alpha_ptr->invocations.empty());
+    CHECK(beta_ptr->invocations.empty());
+    CHECK(before_calls == 0);
+    CHECK(after_calls == 0);
+    CHECK(count_events<agent::ToolExecutionStartEvent>(run.events) == 2);
+    CHECK(count_events<agent::ToolExecutionEndEvent>(run.events) == 2);
+
+    REQUIRE(client.requests.size() == 2);
+    const auto& messages = client.requests[1].context.messages;
+    REQUIRE(messages.size() == 4);
+    const auto& alpha_result = std::get<ai::ToolResultMessage>(messages[2]);
+    const auto& beta_result = std::get<ai::ToolResultMessage>(messages[3]);
+    CHECK(alpha_result.is_error);
+    CHECK(beta_result.is_error);
+    CHECK(alpha_result.tool_name == "alpha");
+    CHECK(beta_result.tool_name == "beta");
+    CHECK(ai::text_from_content(alpha_result.content).find("output token limit") != std::string::npos);
+    CHECK(ai::text_from_content(alpha_result.content).find(R"({"x":1})") == std::string::npos);
+    CHECK(run.result->state.pending_tool_call_ids.empty());
+    CHECK(run.result->state.active_tool_names.empty());
 }
 
-TEST_CASE("parallel tool execution returns event sink failures", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(two_tool_call_response());
-
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
-        ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
-        ai::ToolExecutionMode::Parallel,
-        "alpha result")));
-    REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
-        ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
-        ai::ToolExecutionMode::Parallel,
-        "beta result")));
-
-    agent::AsyncAgentOptions options{4, "gpt-test"};
-    options.tool_execution_mode = ai::ToolExecutionMode::Parallel;
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
-
-    boost::asio::thread_pool pool{4};
-    std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
-    boost::asio::co_spawn(
-        pool,
-        [&]() -> boost::asio::awaitable<void> {
-            result = co_await loop.run(
-                "read",
-                [](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
-                    if (std::holds_alternative<agent::ToolExecutionEndEvent>(event)) {
-                        throw std::runtime_error("sink boom");
-                    }
-                    return {};
-                });
-            co_return;
-        },
-        boost::asio::detached);
-    pool.join();
-
-    REQUIRE(result.has_value());
-    REQUIRE_FALSE(*result);
-    CHECK(result->error().code == util::ErrorCode::Tool);
-    CHECK(result->error().message == "agent event sink failed");
-    CHECK(result->error().detail.find("sink boom") != std::string::npos);
-}
-
-TEST_CASE("ToolExecutionMode is usable from cch::ai without agent headers", "[agent][async][u8]") {
-    static_assert(std::is_enum_v<ai::ToolExecutionMode>);
-    CHECK(ai::ToolExecutionMode::Sequential != ai::ToolExecutionMode::Parallel);
+TEST_CASE("tool scheduling vocabulary belongs to cch::agent", "[agent][async][u8]") {
+    static_assert(std::is_enum_v<agent::ToolConcurrency>);
+    static_assert(std::is_same_v<
+        agent::ToolExecutionPolicy,
+        std::variant<agent::SequentialToolExecution, agent::BoundedParallelToolExecution>>);
 }

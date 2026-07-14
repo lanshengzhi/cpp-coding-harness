@@ -61,6 +61,11 @@ struct AfterToolCallResult {
 using BeforeToolCallHook = std::move_only_function<util::Expected<BeforeToolCallResult>(const BeforeToolCallContext&)>;
 using AfterToolCallHook = std::move_only_function<util::Expected<AfterToolCallResult>(const AfterToolCallContext&)>;
 
+enum class ToolConcurrency {
+    Exclusive,
+    ParallelSafe,
+};
+
 class AsyncAgentTool {
 public:
     virtual ~AsyncAgentTool() = default;
@@ -69,9 +74,9 @@ public:
     [[nodiscard]] virtual boost::asio::awaitable<util::Expected<AsyncToolExecutionResult>> execute(
         ToolInvocation invocation) = 0;
 
-    /** Per-tool execution-mode hint. Returning std::nullopt defers to the run default. */
-    [[nodiscard]] virtual std::optional<ai::ToolExecutionMode> execution_mode() const {
-        return std::nullopt;
+    /** Ordinary tools are exclusive until their adapter proves concurrent execution is safe. */
+    [[nodiscard]] virtual ToolConcurrency concurrency() const noexcept {
+        return ToolConcurrency::Exclusive;
     }
 };
 

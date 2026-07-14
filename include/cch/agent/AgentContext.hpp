@@ -5,9 +5,11 @@
 #include "../ai/Tool.hpp"
 #include "../util/Error.hpp"
 
+#include <cstddef>
 #include <functional>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace cch::agent {
@@ -46,6 +48,16 @@ using PrepareNextTurnHook = std::move_only_function<
 using ValidateTurnUpdateHook = std::move_only_function<
     util::ExpectedVoid(const AgentLoopTurnUpdate&)>;
 
+struct SequentialToolExecution {};
+
+struct BoundedParallelToolExecution {
+    std::size_t max_in_flight{1};
+};
+
+using ToolExecutionPolicy = std::variant<
+    SequentialToolExecution,
+    BoundedParallelToolExecution>;
+
 struct AsyncAgentOptions {
     int max_turns{8};
     std::string model;
@@ -57,8 +69,7 @@ struct AsyncAgentOptions {
     std::optional<GetFollowUpMessagesHook> get_follow_up_messages;
     std::optional<PrepareNextTurnHook> prepare_next_turn;
     std::optional<ValidateTurnUpdateHook> validate_turn_update;
-    ai::ToolExecutionMode tool_execution_mode{ai::ToolExecutionMode::Sequential};
-    std::size_t max_parallel_tools{8};
+    ToolExecutionPolicy tool_execution{SequentialToolExecution{}};
 
     AsyncAgentOptions() = default;
     AsyncAgentOptions(AsyncAgentOptions&&) = default;

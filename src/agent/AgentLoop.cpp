@@ -406,28 +406,47 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
 
         std::vector<ai::ToolResultMessage> tool_results;
         bool terminate_batch = false;
-        if (!calls.empty()) {
-            agent::ToolCallExecutorOptions exec_options;
+        if (!calls.empty() && assistant->stop_reason == ai::AssistantStopReason::Length) {
+            tool_results.reserve(calls.size());
+            for (const auto& call : calls) {
+                CCH_TRY_VOID(emit(sink, ToolExecutionStartEvent{turn, call.id, call.name}));
+
+                ai::ToolResultMessage result;
+                result.tool_call_id = call.id;
+                result.tool_name = call.name;
+                result.is_error = true;
+                result.content.emplace_back(ai::text_content(
+                    "Tool call \"" + call.name +
+                    "\" was not executed because the response hit the output token limit and its arguments may be "
+                    "truncated. Re-issue the tool call with complete arguments."));
+
+                const auto text = ai::text_from_content(result.content);
+                CCH_TRY_VOID(emit(sink, ToolExecutionEndEvent{
+                    turn, call.id, call.name, true, text}));
+                tool_results.push_back(std::move(result));
+            }
+        } else if (!calls.empty()) {
+            agent::ToolCallExecutorOptions executor_options;
             if (options_.before_tool_call) {
-                exec_options.before_tool_call = [&hook = options_.before_tool_call](
-                                                    const BeforeToolCallContext& ctx)
-                                                    -> util::Expected<BeforeToolCallResult> {
-                    return (*hook)(ctx);
+                executor_options.before_tool_call = [&hook = options_.before_tool_call](
+                                                         const BeforeToolCallContext& context)
+                                                         -> util::Expected<BeforeToolCallResult> {
+                    return (*hook)(context);
                 };
             }
             if (options_.after_tool_call) {
-                exec_options.after_tool_call = [&hook = options_.after_tool_call](
-                                                   const AfterToolCallContext& ctx)
-                                                   -> util::Expected<AfterToolCallResult> {
-                    return (*hook)(ctx);
+                executor_options.after_tool_call = [&hook = options_.after_tool_call](
+                                                        const AfterToolCallContext& context)
+                                                        -> util::Expected<AfterToolCallResult> {
+                    return (*hook)(context);
                 };
             }
-            exec_options.mode = options_.tool_execution_mode;
-            exec_options.max_parallel_tools = options_.max_parallel_tools;
-            agent::ToolCallExecutor executor{registry_, std::move(exec_options)};
+            executor_options.execution = options_.tool_execution;
+            agent::ToolCallExecutor executor{registry_, std::move(executor_options)};
 
-            auto execution = co_await executor.execute(turn, *assistant, calls, context, state, sink);
-
+            auto execution = co_await executor.execute(
+                agent::ToolCallBatchRequest{turn, *assistant, context},
+                sink);
             if (!execution) {
                 CCH_TRY_VOID(emit(sink, AgentEndEvent{false, execution.error().message}));
                 co_return std::unexpected(execution.error());
@@ -435,10 +454,14 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
 
             tool_results = std::move(execution->results);
             terminate_batch = execution->terminate_batch;
+        }
 
-            for (auto& result : tool_results) {
-                context.messages.push_back(ai::MessageVariant{std::move(result)});
+        if (!tool_results.empty()) {
+            for (const auto& result : tool_results) {
+                context.messages.push_back(ai::MessageVariant{result});
             }
+            state.active_tool_names.clear();
+            state.pending_tool_call_ids.clear();
             sync_state(state, context);
         }
 
