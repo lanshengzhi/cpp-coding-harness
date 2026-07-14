@@ -5,6 +5,7 @@
 #include "coding_agent/runtime/EventPrinter.hpp"
 #include "coding_agent/runtime/JsonEventPrinter.hpp"
 #include "coding_agent/runtime/RpcMode.hpp"
+#include "coding_agent/prompt/SlashCommandParser.hpp"
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
@@ -27,41 +28,25 @@ namespace {
     return mode == OutputMode::Rpc;
 }
 
-[[nodiscard]] bool is_ascii_whitespace(char ch) {
-    return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '\f' || ch == '\v';
-}
-
-[[nodiscard]] std::optional<std::pair<std::string_view, std::string_view>> try_parse_slash_command(
-    std::string_view input) {
-    if (input.empty() || input.front() != '/') {
-        return std::nullopt;
-    }
-
-    const auto body = input.substr(1);
-    std::size_t delimiter = 0;
-    while (delimiter < body.size() && !is_ascii_whitespace(body[delimiter])) {
-        ++delimiter;
-    }
-
-    auto arguments = std::string_view{};
-    if (delimiter < body.size()) {
-        arguments = body.substr(delimiter + 1);
-    }
-    return std::pair<std::string_view, std::string_view>{body.substr(0, delimiter), arguments};
-}
-
 [[nodiscard]] std::optional<coding_agent::CommandResult> dispatch_text_cli_command(
     coding_agent::CommandRegistry& registry,
     std::string_view input,
     const coding_agent::CommandContext& base_context) {
-    const auto parsed = try_parse_slash_command(input);
+    const auto parsed = coding_agent::prompt::try_parse_slash_command(input);
     if (!parsed) {
         return std::nullopt;
     }
 
     auto context = base_context;
     context.available_commands = registry.list_commands();
-    return registry.dispatch(parsed->first, context, parsed->second);
+    try {
+        return registry.dispatch(parsed->first, context, parsed->second);
+    } catch (...) {
+        return coding_agent::CommandResult{
+            .display_text = "Command handler failed.",
+            .shutdown_requested = false,
+        };
+    }
 }
 
 [[nodiscard]] bool is_user_bash(std::string_view input) {

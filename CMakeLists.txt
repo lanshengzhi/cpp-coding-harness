@@ -109,6 +109,7 @@ add_library(cch_coding_agent_runtime
     src/coding_agent/ProjectTrust.cpp
     src/coding_agent/prompt/PromptProcessor.cpp
     src/coding_agent/prompt/PromptTemplateExpander.cpp
+    src/coding_agent/prompt/SlashCommandParser.cpp
     src/coding_agent/Sdk.cpp
     src/coding_agent/SkillFrontmatterParser.cpp
     src/coding_agent/SkillLoader.cpp

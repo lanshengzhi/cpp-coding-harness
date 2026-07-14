@@ -1,6 +1,7 @@
 #include "coding_agent/prompt/PromptProcessor.hpp"
 
 #include "coding_agent/prompt/PromptTemplateExpander.hpp"
+#include "coding_agent/prompt/SlashCommandParser.hpp"
 #include "coding_agent/SkillFormatting.hpp"
 
 #include <algorithm>
@@ -11,33 +12,6 @@
 namespace cch::coding_agent::prompt {
 namespace {
 
-[[nodiscard]] bool is_ascii_whitespace(char ch) {
-    return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '\f' || ch == '\v';
-}
-
-struct SlashInvocation {
-    std::string_view name;
-    std::string_view arguments;
-};
-
-[[nodiscard]] std::optional<SlashInvocation> parse_slash_invocation(std::string_view input) {
-    if (input.empty() || input.front() != '/') {
-        return std::nullopt;
-    }
-
-    const auto body = input.substr(1);
-    std::size_t delimiter = 0;
-    while (delimiter < body.size() && !is_ascii_whitespace(body[delimiter])) {
-        ++delimiter;
-    }
-
-    auto arguments = std::string_view{};
-    if (delimiter < body.size()) {
-        arguments = body.substr(delimiter + 1);
-    }
-    return SlashInvocation{body.substr(0, delimiter), arguments};
-}
-
 std::optional<std::string> try_expand_skill(
     std::string_view input,
     const std::vector<Skill>& skills) {
@@ -45,11 +19,11 @@ std::optional<std::string> try_expand_skill(
         return std::nullopt;
     }
 
-    const auto invocation = parse_slash_invocation(input);
-    if (!invocation || !invocation->name.starts_with("skill:")) {
+    const auto invocation = prompt::try_parse_slash_command(input);
+    if (!invocation || !invocation->first.starts_with("skill:")) {
         return std::nullopt;
     }
-    const auto skill_name = invocation->name.substr(6);
+    const auto skill_name = invocation->first.substr(6);
     if (skill_name.empty()) {
         return std::nullopt;
     }
@@ -62,7 +36,7 @@ std::optional<std::string> try_expand_skill(
         return std::nullopt;
     }
 
-    return formatSkillInvocation(*found, found->content, invocation->arguments);
+    return formatSkillInvocation(*found, found->content, invocation->second);
 }
 
 } // namespace
@@ -75,14 +49,14 @@ PromptProcessor::PromptProcessor(PromptResources resources)
 PromptProcessingOutcome PromptProcessor::process(
     std::string input,
     CommandContext context) {
-    const auto invocation = parse_slash_invocation(input);
+    const auto invocation = prompt::try_parse_slash_command(input);
     if (!invocation) {
         return AgentPrompt{std::move(input)};
     }
 
     context.available_commands = commands_.list_commands();
     try {
-        if (auto handled = commands_.dispatch(invocation->name, context, invocation->arguments)) {
+        if (auto handled = commands_.dispatch(invocation->first, context, invocation->second)) {
             const bool shutdown = handled->shutdown_requested;
             return CommandHandled{
                 .code = shutdown ? "shutdown" : "command_handled",
