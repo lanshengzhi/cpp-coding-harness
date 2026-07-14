@@ -3,7 +3,6 @@
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/agent/AgentTool.hpp>
 #include <cch/ai/ChatClient.hpp>
-#include <cch/coding_agent/CommandRegistry.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
@@ -72,15 +71,6 @@ struct SdkBuiltinTools {
     bool bash{false};
 };
 
-// ── Command registration ─────────────────────────────────────────────────────
-
-/// A slash-command registered by the host.
-/// `handler` is called when the user types `/name [args]`.
-struct SdkCommand {
-    std::string name;
-    CommandHandler handler;
-};
-
 // ── CreateAgentSessionOptions ────────────────────────────────────────────────
 
 /// Options passed to create_agent_session().
@@ -132,9 +122,6 @@ struct CreateAgentSessionOptions {
     /// Host-provided templates take precedence over project-discovered
     /// duplicates.
     std::vector<PromptTemplate> prompt_templates;
-    /// Slash-commands registered by the host. CLI built-ins are not
-    /// automatically registered.
-    std::vector<SdkCommand> commands;
 
     // ── Project resource loading (opt-in) ────────────────────────────────
     /// When true, discover and load project-local skills and prompt
@@ -185,8 +172,8 @@ struct PromptOptions {
     /// Per-prompt event sink. Called in addition to persistent subscribers.
     /// A failing sink fails the prompt.
     agent::AgentEventSink event_sink;
-    /// When false, bypass command, skill, and prompt-template processing and
-    /// send the raw text to the agent loop. Appended for aggregate source compatibility.
+    /// When false, bypass skill and prompt-template expansion and send the raw
+    /// text to the agent loop.
     bool expand_prompt_templates{true};
 };
 
@@ -197,9 +184,6 @@ struct PromptResult {
     bool success{false};
     /// Stable machine-readable code:
     ///   "completed"          — agent stopped normally
-    ///   "command_handled"    — slash-command consumed the input
-    ///   "shutdown"           — slash-command requested frontend shutdown
-    ///   "command_handler_failed" — command was handled but its handler failed
     ///   "max_turns_exceeded" — turn limit reached
     ///   "session_persist_failed" — append to JSONL failed
     ///   "runtime_error"      — other agent-loop failure

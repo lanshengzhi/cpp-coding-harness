@@ -9,7 +9,6 @@
 
 #include <optional>
 #include <utility>
-#include <variant>
 
 namespace cch::coding_agent::runtime {
 
@@ -115,33 +114,11 @@ PromptRunResult AgentSessionRuntime::run_prompt(
         }
     }};
 
-    prompt::PromptProcessingOutcome processing = prompt::AgentPrompt{std::move(prompt)};
-    if (expand_prompt_templates) {
-        auto* raw_prompt = std::get_if<prompt::AgentPrompt>(&processing);
-        processing = prompt_processor_.process(
-            std::move(raw_prompt->text),
-            CommandContext{
-                .session_id = session_.metadata.session_id,
-                .workspace_path = session_.workspace.string(),
-                .provider = session_.metadata.provider,
-                .model = session_.metadata.model,
-                .message_count = session_.history.size(),
-                .available_commands = {},
-            });
-    }
-
-    if (auto* handled = std::get_if<prompt::CommandHandled>(&processing)) {
-        return PromptRunResult{
-            .success = true,
-            .code = std::move(handled->code),
-            .message = std::move(handled->feedback),
-            .diagnostics = {},
-        };
-    }
+    auto expanded = prompt_processor_.process(std::move(prompt), expand_prompt_templates);
 
     auto combined_sink = make_combined_sink(std::move(sink));
     return run_agent_loop(
-        std::move(std::get<prompt::AgentPrompt>(processing).text),
+        std::move(expanded.text),
         std::move(combined_sink));
 }
 

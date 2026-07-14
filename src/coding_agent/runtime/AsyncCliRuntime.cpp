@@ -2,6 +2,7 @@
 
 #include "../include/cch/coding_agent/Config.hpp"
 #include "coding_agent/AgentSessionBridge.hpp"
+#include "coding_agent/CommandRegistry.hpp"
 #include "coding_agent/runtime/EventPrinter.hpp"
 #include "coding_agent/runtime/JsonEventPrinter.hpp"
 #include "coding_agent/runtime/RpcMode.hpp"

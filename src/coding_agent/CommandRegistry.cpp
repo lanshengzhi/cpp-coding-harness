@@ -1,4 +1,4 @@
-#include "../../include/cch/coding_agent/CommandRegistry.hpp"
+#include "coding_agent/CommandRegistry.hpp"
 
 #include <algorithm>
 #include <cctype>

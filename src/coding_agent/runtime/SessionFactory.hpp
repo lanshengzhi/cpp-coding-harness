@@ -30,7 +30,6 @@ struct AgentSessionCreationRequest {
     std::filesystem::path resume_path;
     CliProviderOverrides provider_overrides;
     ConfigData config;
-    CommandRegistry command_registry;
 };
 
 /// Internal result of SessionFactory::create(). The Sdk.cpp public

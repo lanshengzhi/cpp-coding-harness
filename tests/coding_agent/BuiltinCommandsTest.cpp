@@ -1,25 +1,12 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include "coding_agent/prompt/PromptProcessor.hpp"
+#include "coding_agent/CommandRegistry.hpp"
 
 #include <string>
 #include <utility>
 #include <variant>
 
 using namespace cch;
-
-TEST_CASE("prompt processor dispatches registered built-in commands", "[coding_agent][prompt]") {
-    coding_agent::prompt::PromptResources resources;
-    REQUIRE(coding_agent::register_builtin_commands(resources.commands).has_value());
-    coding_agent::prompt::PromptProcessor processor{std::move(resources)};
-
-    const auto result = processor.process("/quit", {});
-    REQUIRE(std::holds_alternative<coding_agent::prompt::CommandHandled>(result));
-    const auto& handled = std::get<coding_agent::prompt::CommandHandled>(result);
-    CHECK(handled.code == "shutdown");
-    CHECK(handled.feedback == "Shutting down.");
-    CHECK(handled.shutdown_requested);
-}
 
 TEST_CASE("built-in /session command returns session info", "[coding_agent][prompt]") {
     coding_agent::CommandRegistry registry;

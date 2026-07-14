@@ -41,35 +41,15 @@ std::optional<std::string> try_expand_skill(
 
 } // namespace
 
-PromptProcessor::PromptProcessor(PromptResources resources)
-    : commands_(std::move(resources.commands)),
-      skills_(std::move(resources.skills)),
-      templates_(std::move(resources.templates)) {}
+PromptProcessor::PromptProcessor(std::vector<Skill> skills, std::vector<PromptTemplate> templates)
+    : skills_(std::move(skills)),
+      templates_(std::move(templates)) {}
 
-PromptProcessingOutcome PromptProcessor::process(
+AgentPrompt PromptProcessor::process(
     std::string input,
-    CommandContext context) {
-    const auto invocation = prompt::try_parse_slash_command(input);
-    if (!invocation) {
+    bool expand_templates) {
+    if (!expand_templates) {
         return AgentPrompt{std::move(input)};
-    }
-
-    context.available_commands = commands_.list_commands();
-    try {
-        if (auto handled = commands_.dispatch(invocation->first, context, invocation->second)) {
-            const bool shutdown = handled->shutdown_requested;
-            return CommandHandled{
-                .code = shutdown ? "shutdown" : "command_handled",
-                .feedback = std::move(handled->display_text),
-                .shutdown_requested = shutdown,
-            };
-        }
-    } catch (...) {
-        return CommandHandled{
-            .code = "command_handler_failed",
-            .feedback = "Command handler failed.",
-            .shutdown_requested = false,
-        };
     }
 
     std::string expanded = std::move(input);

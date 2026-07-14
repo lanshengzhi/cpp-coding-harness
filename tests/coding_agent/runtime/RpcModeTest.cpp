@@ -129,8 +129,7 @@ int count_responses(
 
 TranscriptResult run_transcript(
     std::string input,
-    std::unique_ptr<ai::StreamingChatClient> chat_client = ai::providers::make_scripted_fake_chat_client(),
-    std::vector<coding_agent::SdkCommand> commands = {}) {
+    std::unique_ptr<ai::StreamingChatClient> chat_client = ai::providers::make_scripted_fake_chat_client()) {
     cch::tests::TempWorkspace workspace;
 
     coding_agent::CreateAgentSessionOptions options;
@@ -143,8 +142,6 @@ TranscriptResult run_transcript(
         .edit_file = false,
         .bash = false,
     };
-    options.commands = std::move(commands);
-
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
 
@@ -365,21 +362,11 @@ TEST_CASE("RPC mode terminates after an accepted prompt fails", "[coding-agent][
     CHECK(count_responses(result.records, "prompt", "prompt-1") == 1);
 }
 
-TEST_CASE("RPC mode accepts contained command handler failures and remains usable", "[coding-agent][runtime][rpc]") {
-    std::vector<coding_agent::SdkCommand> commands;
-    commands.push_back(coding_agent::SdkCommand{
-        .name = "explode",
-        .handler = [](const coding_agent::CommandContext&, std::string_view) -> coding_agent::CommandResult {
-            throw std::runtime_error{"sensitive handler detail"};
-        },
-    });
-
+TEST_CASE("RPC mode treats slash-shaped input as an ordinary prompt", "[coding-agent][runtime][rpc]") {
     const auto result = run_transcript(
-        "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"/explode\"}\n"
+        "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"/exit\"}\n"
         "{\"id\":\"state-1\",\"type\":\"get_state\"}\n"
-        "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n",
-        ai::providers::make_scripted_fake_chat_client(),
-        std::move(commands));
+        "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n");
 
     REQUIRE(result.exit_code == 0);
     const auto response_index = find_response_index(result.records, "prompt", "prompt-1");
@@ -389,32 +376,19 @@ TEST_CASE("RPC mode accepts contained command handler failures and remains usabl
     CHECK(response_index < terminal_index);
     CHECK(result.records[response_index].at("success").get<bool>());
     CHECK(result.records[terminal_index].at("success").get<bool>());
-    CHECK(string_at(result.records[terminal_index], "code") == "command_handler_failed");
-    CHECK(string_at(result.records[terminal_index], "message") == "Command handler failed.");
+    CHECK(string_at(result.records[terminal_index], "code") == "completed");
 
     const auto* state = find_response(result.records, "get_state", "state-1");
     REQUIRE(state != nullptr);
     CHECK(state->at("success").get<bool>());
-    CHECK(static_cast<int>(state->at("data").get<JsonObject>().at("messageCount").get<double>()) == 0);
+    CHECK(static_cast<int>(state->at("data").get<JsonObject>().at("messageCount").get<double>()) == 2);
 }
 
 TEST_CASE("RPC mode stops after a prompt requests shutdown", "[coding-agent][runtime][rpc]") {
-    std::vector<coding_agent::SdkCommand> commands;
-    commands.push_back(coding_agent::SdkCommand{
-        .name = "exit",
-        .handler = [](const coding_agent::CommandContext&, std::string_view) {
-            return coding_agent::CommandResult{
-                .display_text = "test shutdown",
-                .shutdown_requested = true,
-            };
-        },
-    });
-
     const auto result = run_transcript(
-        "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"/exit\"}\n"
-        "{\"id\":\"later\",\"type\":\"get_state\"}\n",
-        ai::providers::make_scripted_fake_chat_client(),
-        std::move(commands));
+        "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
+        "{\"id\":\"later\",\"type\":\"get_state\"}\n"
+        "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n");
 
     REQUIRE(result.exit_code == 0);
     const auto response_index = find_response_index(result.records, "prompt", "prompt-1");
@@ -423,8 +397,8 @@ TEST_CASE("RPC mode stops after a prompt requests shutdown", "[coding-agent][run
     REQUIRE(terminal_index < result.records.size());
     CHECK(response_index < terminal_index);
     CHECK(result.records[terminal_index].at("success").get<bool>());
-    CHECK(string_at(result.records[terminal_index], "code") == "shutdown");
-    CHECK(terminal_index + 1 == result.records.size());
+    CHECK(string_at(result.records[terminal_index], "code") == "completed");
     CHECK(count_responses(result.records, "prompt", "prompt-1") == 1);
-    CHECK(find_response(result.records, "get_state", "later") == nullptr);
+    CHECK(find_response(result.records, "get_state", "later") != nullptr);
+    CHECK(find_response(result.records, "shutdown", "stop-1") != nullptr);
 }

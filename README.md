@@ -208,7 +208,7 @@ The effective built-in command names are:
 | `/quit` | Request a clean frontend shutdown. |
 | `/exit` | Alias for `/quit`. |
 
-Aliases are resolved by the command registry and appear in `/help`. Registry help does not list prompt templates or `/skill:<name>` invocations as built-in commands. Prompt interpretation activates only for a slash at column zero and applies command → cached skill → prompt-template precedence. Bare `/` and unmatched slash input pass through to the model unchanged.
+Aliases are resolved by the command registry and appear in `/help`. Registry help does not list prompt templates or `/skill:<name>` invocations as built-in commands. Prompt interpretation in `AgentSession` activates only for a slash at column zero and applies cached skill → prompt-template precedence; CLI built-in commands are resolved by the CLI adapter before ordinary input reaches the session. Bare `/` and unmatched slash input pass through to the model unchanged.
 
 `!command` and `!!command` are not prompt-processing syntax. The text REPL temporarily intercepts them with a not-implemented message; one-shot, JSON, RPC, and SDK paths currently send them as ordinary prompts until the separate UserBash persistence slice lands.
 
@@ -273,8 +273,8 @@ session->close();
 - SDK convenience provider construction from `SdkProviderConfig` when no host client is supplied.
 - Built-in tool selection with safe defaults: `read`, `write`, and `edit_file` by default; `bash` requires explicit opt-in.
 - Custom tool registration via existing `agent::AsyncAgentTool` contracts; duplicate tool names fail creation.
-- Programmatic skills, prompt templates, and slash-command handlers; host resources take precedence over project-discovered duplicates.
-- Per-prompt `PromptOptions::expand_prompt_templates` (default `true`); `false` bypasses command, skill, and template processing and sends raw text to the agent loop.
+- Programmatic skills and prompt templates; host resources take precedence over project-discovered duplicates.
+- Per-prompt `PromptOptions::expand_prompt_templates` (default `true`); `false` bypasses skill and prompt-template expansion and sends raw text to the agent loop.
 - Optional project resource discovery (`.cpp-harness/skills/`, `.cpp-harness/prompts/`) behind explicit trust/resource controls.
 - Optional absolute external `trust_store_path` for SDK project-resource trust decisions; workspace-local trust-store paths are rejected.
 - Diagnostics returned as `CreateAgentSessionResult::diagnostics` values — no stdout/stderr output from the SDK path.

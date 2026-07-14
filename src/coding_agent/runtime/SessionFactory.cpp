@@ -67,7 +67,6 @@ struct AssemblyPlan {
     std::vector<std::unique_ptr<agent::AsyncAgentTool>> custom_tools;
     std::vector<Skill> host_skills;
     std::vector<PromptTemplate> host_prompt_templates;
-    std::vector<SdkCommand> commands;
     std::vector<std::string> prompt_template_paths;
     bool load_project_resources{false};
     std::optional<DefaultProjectTrust> default_project_trust;
@@ -76,7 +75,6 @@ struct AssemblyPlan {
     std::optional<std::filesystem::path> trust_store_path;
     std::optional<bool> project_trust_override;
     int max_turns{30};
-    CommandRegistry command_registry;
 };
 
 [[nodiscard]] SdkDiagnostic make_diag(SdkDiagnostic::Severity severity,
@@ -350,7 +348,6 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
     plan.prompt_templates_enabled = !request.disable_prompt_templates;
     plan.prompt_template_paths = request.prompt_template_paths;
     plan.max_turns = request.max_turns;
-    plan.command_registry = std::move(request.command_registry);
 
     return plan;
 }
@@ -413,7 +410,6 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
     plan.custom_tools = std::move(options.custom_tools);
     plan.host_skills = std::move(options.skills);
     plan.host_prompt_templates = std::move(options.prompt_templates);
-    plan.commands = std::move(options.commands);
     plan.load_project_resources = options.load_project_resources;
     plan.default_project_trust = options.default_project_trust;
     plan.project_skills_enablement = options.project_skills_enablement;
@@ -617,28 +613,7 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
         }
     }
 
-    // 7. Validate and register slash-commands.
-    CommandRegistry command_registry = std::move(plan.command_registry);
-    {
-        std::set<std::string> cmd_names;
-        for (auto& cmd : plan.commands) {
-            if (!cmd_names.insert(cmd.name).second) {
-                cleanup_on_failure();
-                return std::unexpected(util::make_error(
-                    util::ErrorCode::Validation,
-                    std::format("duplicate command name: '{}'", cmd.name)));
-            }
-        }
-        for (auto& cmd : plan.commands) {
-            if (auto registered = command_registry.register_command(std::move(cmd.name), std::move(cmd.handler));
-                !registered) {
-                cleanup_on_failure();
-                return std::unexpected(registered.error());
-            }
-        }
-    }
-
-    // 8. Load project resources if requested.
+    // 7. Load project resources if requested.
     std::vector<Skill> skills = std::move(plan.host_skills);
     std::vector<PromptTemplate> templates = std::move(plan.host_prompt_templates);
 
@@ -715,18 +690,14 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
         open = std::move(*published);
     }
 
-    // 10. Assemble the runtime.
+    // 9. Assemble the runtime.
     RuntimeServices services;
     services.client = std::move(chat_client);
     services.env = std::move(exec_env);
     services.env_owned = env_owned;
     services.tools = std::move(tools);
 
-    prompt::PromptResources prompt_resources;
-    prompt_resources.commands = std::move(command_registry);
-    prompt_resources.skills = std::move(skills);
-    prompt_resources.templates = std::move(templates);
-    prompt::PromptProcessor prompt_processor{std::move(prompt_resources)};
+    prompt::PromptProcessor prompt_processor{std::move(skills), std::move(templates)};
 
     AgentSessionRuntimeConfig runtime_config;
     runtime_config.max_turns = plan.max_turns;

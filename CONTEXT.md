@@ -30,11 +30,11 @@ The adapter responsible for assembling an `AgentSession` from source-specific cr
 
 ### PromptProcessingPipeline
 
-The internal deep module that deterministically interprets one user input before agent execution: command handling short-circuits, otherwise skill expansion flows into prompt-template expansion, and unmatched slash input remains an agent prompt. It owns an immutable session resource snapshot; `AgentSession` remains the public prompt seam and `AgentSessionRuntime` owns the end-to-end lifecycle.
+The internal deep module that deterministically interprets one user input before agent execution: skill expansion flows into prompt-template expansion, and unmatched slash input remains an agent prompt. It owns an immutable session resource snapshot; `AgentSession` remains the public prompt seam and `AgentSessionRuntime` owns the end-to-end lifecycle.
 
 ### PromptProcessingOutcome
 
-A passive internal result of prompt interpretation containing either the final agent prompt or a locally handled command result. A handled command, including one whose handler fails, is accepted without starting the agent or appending prompt history; normal feedback remains caller-presented, while handler failures use fixed non-sensitive feedback.
+A passive internal result of prompt interpretation containing the final agent prompt after skill and prompt-template expansion. There is no command-handling branch; command dispatch belongs to the CLI adapter and RPC mode.
 
 ### UserBash
 

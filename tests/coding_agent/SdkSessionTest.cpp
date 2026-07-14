@@ -710,35 +710,7 @@ TEST_CASE("moved SDK session retains its owned prompt resource snapshot", "[sdk]
     CHECK(moved_session.close().has_value());
 }
 
-TEST_CASE("SDK host-provided commands work", "[sdk][u4]") {
-    TestPaths paths;
-
-    coding_agent::CreateAgentSessionOptions opts;
-    opts.session_path = paths.session_file;
-    opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
-
-    coding_agent::SdkCommand cmd;
-    cmd.name = "hello";
-    cmd.handler = [](const coding_agent::CommandContext& /*ctx*/, std::string_view /*args*/) {
-        return coding_agent::CommandResult{"Hello from SDK command!"};
-    };
-    opts.commands.push_back(std::move(cmd));
-
-    auto create_result = coding_agent::create_agent_session(std::move(opts));
-    REQUIRE(create_result.has_value());
-
-    auto& session = create_result->session;
-    auto prompt_result = session->prompt("/hello");
-    REQUIRE(prompt_result.has_value());
-    CHECK(prompt_result->code == "command_handled");
-    CHECK(prompt_result->message.find("Hello from SDK") != std::string::npos);
-    CHECK(prompt_result->message_count == 0);
-
-    CHECK(session->close().has_value());
-}
-
-TEST_CASE("SDK contains command handler failures and restores the session for the next prompt", "[sdk][u4][prompt-processing]") {
+TEST_CASE("SDK expand_prompt_templates false sends slash-shaped input raw to the provider", "[sdk][u4][prompt-processing]") {
     TestPaths paths;
     auto capture = std::make_unique<CaptureChatClient>();
     auto* capture_ptr = capture.get();
@@ -747,58 +719,13 @@ TEST_CASE("SDK contains command handler failures and restores the session for th
     opts.session_path = paths.session_file;
     opts.workspace = paths.workspace.path();
     opts.chat_client = std::move(capture);
-    opts.commands.push_back(coding_agent::SdkCommand{
-        .name = "explode",
-        .handler = [](const coding_agent::CommandContext&, std::string_view) -> coding_agent::CommandResult {
-            throw std::runtime_error{"secret failure detail"};
-        },
-    });
-
-    auto created = coding_agent::create_agent_session(std::move(opts));
-    REQUIRE(created.has_value());
-    auto& session = created->session;
-
-    auto failed_command = session->prompt("/explode");
-    REQUIRE(failed_command.has_value());
-    CHECK(failed_command->success);
-    CHECK(failed_command->code == "command_handler_failed");
-    CHECK(failed_command->message == "Command handler failed.");
-    CHECK(failed_command->message_count == 0);
-    CHECK_FALSE(capture_ptr->captured_request.has_value());
-    CHECK_FALSE(session->is_busy());
-
-    auto next = session->prompt("next prompt");
-    REQUIRE(next.has_value());
-    CHECK(next->success);
-    CHECK(next->code == "completed");
-    REQUIRE(capture_ptr->captured_request.has_value());
-    CHECK_FALSE(session->is_busy());
-
-    CHECK(session->close().has_value());
-}
-
-TEST_CASE("SDK expand_prompt_templates false sends command-shaped input raw to the provider", "[sdk][u4][prompt-processing]") {
-    TestPaths paths;
-    auto capture = std::make_unique<CaptureChatClient>();
-    auto* capture_ptr = capture.get();
-
-    coding_agent::CreateAgentSessionOptions opts;
-    opts.session_path = paths.session_file;
-    opts.workspace = paths.workspace.path();
-    opts.chat_client = std::move(capture);
-    opts.commands.push_back(coding_agent::SdkCommand{
-        .name = "local",
-        .handler = [](const coding_agent::CommandContext&, std::string_view) {
-            return coding_agent::CommandResult{"should not run"};
-        },
-    });
     opts.skills.push_back(host_skill("cached"));
     opts.prompt_templates.push_back(host_template("review", "expanded: $1"));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
 
-    for (const std::string raw : {"/local", "/skill:cached", "/review arg"}) {
+    for (const std::string raw : {"/skill:cached", "/review arg"}) {
         coding_agent::PromptOptions prompt_options;
         prompt_options.expand_prompt_templates = false;
         auto result = created->session->prompt(raw, std::move(prompt_options));
@@ -1040,34 +967,6 @@ TEST_CASE("SDK project resource diagnostics are not printed during creation", "[
     CHECK(captured_out.str().empty());
     CHECK(captured_err.str().empty());
     CHECK(result->session->close().has_value());
-}
-
-TEST_CASE("SDK duplicate command names fail creation", "[sdk][u4]") {
-    TestPaths paths;
-
-    coding_agent::CreateAgentSessionOptions opts;
-    opts.session_path = paths.session_file;
-    opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
-
-    coding_agent::SdkCommand cmd1;
-    cmd1.name = "dup";
-    cmd1.handler = [](const coding_agent::CommandContext&, std::string_view) {
-        return coding_agent::CommandResult{"first"};
-    };
-    opts.commands.push_back(std::move(cmd1));
-
-    coding_agent::SdkCommand cmd2;
-    cmd2.name = "dup";
-    cmd2.handler = [](const coding_agent::CommandContext&, std::string_view) {
-        return coding_agent::CommandResult{"second"};
-    };
-    opts.commands.push_back(std::move(cmd2));
-
-    auto create_result = coding_agent::create_agent_session(std::move(opts));
-    REQUIRE_FALSE(create_result.has_value());
-    CHECK(create_result.error().code == util::ErrorCode::Validation);
-    CHECK(create_result.error().message.find("duplicate") != std::string::npos);
 }
 
 TEST_CASE("SDK default built-in tools exclude bash", "[sdk][u4]") {

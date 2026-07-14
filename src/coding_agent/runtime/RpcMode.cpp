@@ -191,9 +191,6 @@ int run_rpc_mode(RpcModeConfig config) {
             if (!result->success) {
                 return 1;
             }
-            if (result->code == "shutdown") {
-                return 0;
-            }
             continue;
         }
 

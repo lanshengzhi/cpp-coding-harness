@@ -7,7 +7,6 @@
 #include <sstream>
 #include <string>
 #include <utility>
-#include <variant>
 #include <vector>
 
 using namespace cch;
@@ -27,13 +26,9 @@ namespace {
 [[nodiscard]] std::string process_with_skills(
     std::string input,
     std::vector<coding_agent::Skill> skills) {
-    coding_agent::prompt::PromptResources resources;
-    resources.skills = std::move(skills);
-    coding_agent::prompt::PromptProcessor processor{std::move(resources)};
-
-    auto outcome = processor.process(std::move(input), {});
-    REQUIRE(std::holds_alternative<coding_agent::prompt::AgentPrompt>(outcome));
-    return std::move(std::get<coding_agent::prompt::AgentPrompt>(outcome).text);
+    coding_agent::prompt::PromptProcessor processor{
+        std::move(skills), std::vector<coding_agent::PromptTemplate>{}};
+    return processor.process(std::move(input), true).text;
 }
 
 } // namespace
