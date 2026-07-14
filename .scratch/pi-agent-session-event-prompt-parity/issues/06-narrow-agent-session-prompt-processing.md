@@ -4,7 +4,7 @@
 
 **Blocked by:** 05 — Move text CLI built-ins to the CLI adapter.
 
-**Status:** done
+**Status:** implemented
 
 - [x] Use PRD stories 37–41 and the current pi skill/template expansion order as the contract authority.
 - [x] Skill invocation and prompt-template expansion still use the session's authorized immutable resource snapshot.
