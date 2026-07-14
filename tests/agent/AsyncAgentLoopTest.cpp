@@ -1063,6 +1063,112 @@ TEST_CASE("follow-up empty ends after the final response", "[agent][async][u8]")
     REQUIRE(client.requests.size() == 1);
 }
 
+TEST_CASE("steering messages emit ordinary message lifecycle in order", "[agent][async]") {
+    FakeStreamingClient client;
+    client.responses.push_back(ai::assistant_text_message("ok"));
+
+    agent::AsyncToolRegistry registry;
+    bool steering_returned = false;
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.get_steering_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        if (steering_returned) {
+            return std::vector<ai::MessageVariant>{};
+        }
+        steering_returned = true;
+        return std::vector<ai::MessageVariant>{
+            ai::user_text_message("steer-one"),
+            ai::user_text_message("steer-two"),
+        };
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "hi");
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->context.messages.size() == 4);
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(run.result->context.messages[0]).content) == "hi");
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(run.result->context.messages[1]).content) == "steer-one");
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(run.result->context.messages[2]).content) == "steer-two");
+    CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(run.result->context.messages[3]).content) == "ok");
+
+    std::vector<std::string> user_starts;
+    std::vector<std::string> user_ends;
+    for (const auto& event : run.events) {
+        if (const auto* start = std::get_if<agent::MessageStartEvent>(&event)) {
+            if (std::holds_alternative<ai::UserMessage>(start->message)) {
+                user_starts.push_back(ai::text_from_content(std::get<ai::UserMessage>(start->message).content));
+            }
+        } else if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+            if (std::holds_alternative<ai::UserMessage>(end->message)) {
+                user_ends.push_back(ai::text_from_content(std::get<ai::UserMessage>(end->message).content));
+            }
+        }
+    }
+    REQUIRE((user_starts == std::vector<std::string>{"hi", "steer-one", "steer-two"}));
+    REQUIRE((user_ends == std::vector<std::string>{"hi", "steer-one", "steer-two"}));
+
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
+    CHECK(count_events<agent::MessageUpdateEvent>(run.events) == 1);
+}
+
+TEST_CASE("follow-up messages emit ordinary message lifecycle across turns", "[agent][async]") {
+    FakeStreamingClient client;
+    client.responses.push_back(ai::assistant_text_message("first"));
+    client.responses.push_back(ai::assistant_text_message("second"));
+
+    agent::AsyncToolRegistry registry;
+    bool follow_up_returned = false;
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.get_follow_up_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        if (follow_up_returned) {
+            return std::vector<ai::MessageVariant>{};
+        }
+        follow_up_returned = true;
+        return std::vector<ai::MessageVariant>{
+            ai::user_text_message("follow-one"),
+            ai::user_text_message("follow-two"),
+        };
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "hi");
+
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 2);
+    REQUIRE(client.requests.size() == 2);
+    REQUIRE(client.requests[1].context.messages.size() == 4);
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(client.requests[1].context.messages[2]).content) == "follow-one");
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(client.requests[1].context.messages[3]).content) == "follow-two");
+
+    std::vector<std::string> user_starts;
+    std::vector<std::size_t> user_start_indices;
+    for (std::size_t i = 0; i < run.events.size(); ++i) {
+        if (const auto* start = std::get_if<agent::MessageStartEvent>(&run.events[i])) {
+            if (std::holds_alternative<ai::UserMessage>(start->message)) {
+                user_starts.push_back(ai::text_from_content(std::get<ai::UserMessage>(start->message).content));
+                user_start_indices.push_back(i);
+            }
+        }
+    }
+    REQUIRE((user_starts == std::vector<std::string>{"hi", "follow-one", "follow-two"}));
+
+    std::size_t turn2_start_index = 0;
+    std::size_t turn_start_count = 0;
+    for (std::size_t i = 0; i < run.events.size(); ++i) {
+        if (std::holds_alternative<agent::TurnStartEvent>(run.events[i])) {
+            ++turn_start_count;
+            if (turn_start_count == 2) {
+                turn2_start_index = i;
+            }
+        }
+    }
+    REQUIRE(turn_start_count == 2);
+    REQUIRE(turn2_start_index > 0);
+    REQUIRE(turn2_start_index < user_start_indices[1]);
+    REQUIRE(turn2_start_index < user_start_indices[2]);
+}
+
 TEST_CASE("steering and follow-up callback failures abort the run", "[agent][async][u8]") {
     {
         FakeStreamingClient client;
@@ -1257,6 +1363,62 @@ TEST_CASE("prepareNextTurn append_messages appends to transcript", "[agent][asyn
     REQUIRE(run.result->context.messages.size() == 3);
     REQUIRE(std::holds_alternative<ai::UserMessage>(run.result->context.messages.back()));
     CHECK(ai::text_from_content(std::get<ai::UserMessage>(run.result->context.messages.back()).content) == "appended");
+}
+
+TEST_CASE("prepareNextTurn append_messages emits ordinary message lifecycle", "[agent][async]") {
+    FakeStreamingClient client;
+    client.responses.push_back(ai::assistant_text_message("first"));
+
+    agent::AsyncToolRegistry registry;
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
+        -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+        return agent::AgentLoopTurnUpdate{
+            std::vector<ai::MessageVariant>{ai::user_text_message("appended")},
+            std::nullopt,
+            std::nullopt};
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "hi");
+
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 1);
+    REQUIRE(run.result->context.messages.size() == 3);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(run.result->context.messages.back()));
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(run.result->context.messages.back()).content) == "appended");
+
+    std::size_t turn_end_index = 0;
+    std::size_t agent_end_index = 0;
+    for (std::size_t i = 0; i < run.events.size(); ++i) {
+        if (std::holds_alternative<agent::TurnEndEvent>(run.events[i])) {
+            turn_end_index = i;
+        } else if (std::holds_alternative<agent::AgentEndEvent>(run.events[i])) {
+            agent_end_index = i;
+        }
+    }
+    REQUIRE(turn_end_index > 0);
+    REQUIRE(agent_end_index > turn_end_index);
+
+    std::size_t appended_starts = 0;
+    std::size_t appended_ends = 0;
+    std::optional<std::string> appended_text;
+    for (std::size_t i = turn_end_index + 1; i < agent_end_index; ++i) {
+        if (const auto* start = std::get_if<agent::MessageStartEvent>(&run.events[i])) {
+            if (std::holds_alternative<ai::UserMessage>(start->message)) {
+                ++appended_starts;
+                appended_text = ai::text_from_content(std::get<ai::UserMessage>(start->message).content);
+            }
+        } else if (const auto* end = std::get_if<agent::MessageEndEvent>(&run.events[i])) {
+            if (std::holds_alternative<ai::UserMessage>(end->message)) {
+                ++appended_ends;
+            }
+        }
+    }
+    CHECK(appended_starts == 1);
+    CHECK(appended_ends == 1);
+    REQUIRE(appended_text.has_value());
+    CHECK(*appended_text == "appended");
 }
 
 TEST_CASE("prepareNextTurn no update leaves model and thinking level unchanged", "[agent][async][u8]") {

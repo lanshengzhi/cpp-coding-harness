@@ -33,6 +33,38 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
     state.messages = context.messages;
 }
 
+[[nodiscard]] util::ExpectedVoid emit_event_impl(AgentEventSink& sink, const AgentLifecycleEvent& event) {
+    if (!sink) {
+        return {};
+    }
+    try {
+        return sink(event);
+    } catch (const std::exception& e) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Tool,
+            "agent event sink failed",
+            e.what()));
+    } catch (...) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Tool,
+            "agent event sink failed",
+            "unknown exception"));
+    }
+}
+
+[[nodiscard]] util::ExpectedVoid append_message_with_lifecycle_impl(
+    AgentState& state,
+    ai::AiContext& context,
+    AgentEventSink& sink,
+    ai::MessageVariant message) {
+    if (auto r = emit_event_impl(sink, MessageStartEvent{message}); !r) {
+        return r;
+    }
+    context.messages.push_back(std::move(message));
+    sync_state(state, context);
+    return emit_event_impl(sink, MessageEndEvent{context.messages.back()});
+}
+
 [[nodiscard]] std::size_t approximate_content_size(const ai::Content& block) {
     return std::visit(
         [](const auto& c) -> std::size_t {
@@ -114,6 +146,7 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
     AsyncAgentOptions& options,
     ai::AiContext& context,
     AgentState& state,
+    AgentEventSink& sink,
     const AgentLoopTurnUpdate& update) {
     if (update.append_messages) {
         if (auto validated = validate_queued_messages(*update.append_messages); !validated) {
@@ -135,9 +168,10 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
 
     if (update.append_messages) {
         for (auto& message : *update.append_messages) {
-            context.messages.push_back(std::move(message));
+            if (auto r = append_message_with_lifecycle_impl(state, context, sink, message); !r) {
+                return r;
+            }
         }
-        sync_state(state, context);
     }
 
     if (update.model) {
@@ -531,7 +565,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                         co_return std::unexpected(validated.error());
                     }
                 }
-                if (auto applied = apply_turn_update(options_, context, state, **update); !applied) {
+                if (auto applied = apply_turn_update(options_, context, state, sink, **update); !applied) {
                     CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
                     co_return std::unexpected(applied.error());
                 }
@@ -559,31 +593,11 @@ util::ExpectedVoid AsyncAgentLoop::append_message_with_lifecycle(
     ai::AiContext& context,
     AgentEventSink& sink,
     ai::MessageVariant message) const {
-    if (auto r = emit(sink, MessageStartEvent{message}); !r) {
-        return r;
-    }
-    context.messages.push_back(std::move(message));
-    sync_state(state, context);
-    return emit(sink, MessageEndEvent{context.messages.back()});
+    return append_message_with_lifecycle_impl(state, context, sink, std::move(message));
 }
 
 util::ExpectedVoid AsyncAgentLoop::emit(AgentEventSink& sink, const AgentLifecycleEvent& event) const {
-    if (!sink) {
-        return {};
-    }
-    try {
-        return sink(event);
-    } catch (const std::exception& e) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool,
-            "agent event sink failed",
-            e.what()));
-    } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool,
-            "agent event sink failed",
-            "unknown exception"));
-    }
+    return emit_event_impl(sink, event);
 }
 
 std::vector<ai::ToolCallContent> AsyncAgentLoop::tool_calls(const ai::AssistantMessage& message) const {
