@@ -4,9 +4,7 @@
 #include <cch/coding_agent/PromptTemplate.hpp>
 #include <cch/coding_agent/Skill.hpp>
 
-#include <optional>
 #include <string>
-#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -29,26 +27,6 @@ struct CommandHandled {
 };
 
 using PromptProcessingOutcome = std::variant<AgentPrompt, CommandHandled>;
-
-namespace detail {
-
-[[nodiscard]] std::optional<std::string> try_expand_skill(
-    std::string_view input,
-    const std::vector<Skill>& skills);
-
-[[nodiscard]] std::optional<std::string> try_expand_prompt_template(
-    std::string_view input,
-    const std::vector<PromptTemplate>& templates);
-
-/// Borrowed orchestration used only by the legacy public free-function wrappers.
-[[nodiscard]] PromptProcessingOutcome process_prompt_borrowed(
-    std::string input,
-    CommandRegistry& commands,
-    const std::vector<Skill>& skills,
-    const std::vector<PromptTemplate>& templates,
-    CommandContext context);
-
-} // namespace detail
 
 class PromptProcessor final {
 public:

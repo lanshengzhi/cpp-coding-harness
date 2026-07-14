@@ -42,11 +42,11 @@ An interactive frontend operation triggered by `!command` or `!!command` that ex
 
 ### SkillExpander
 
-The adapter that expands `/skill:name` from the session's immutable, already-authorized skill snapshot. It has no prompt-time filesystem capability; future reload behavior replaces the resource snapshot explicitly.
+Expansion of `/skill:name` from the session's immutable, already-authorized skill snapshot. It never performs prompt-time resource discovery; future reload behavior replaces the snapshot explicitly.
 
 ### PromptTemplateExpander
 
-The adapter that expands a `/templateName args` command using bash-style argument substitution. Construction-time dependency: the session's loaded prompt templates.
+Expansion of `/templateName args` from the session's immutable prompt-template snapshot using bash-style argument substitution.
 
 ### CommandRegistry
 

@@ -1,5 +1,4 @@
-#include "../../include/cch/coding_agent/PromptProcessing.hpp"
-#include "coding_agent/prompt/PromptProcessor.hpp"
+#include "coding_agent/prompt/PromptTemplateExpander.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -9,7 +8,7 @@
 #include <string_view>
 #include <vector>
 
-namespace cch::coding_agent {
+namespace cch::coding_agent::prompt {
 namespace {
 
 struct DecodedCodePoint {
@@ -269,8 +268,6 @@ void append_joined(
 
 } // namespace
 
-namespace prompt::detail {
-
 std::optional<std::string> try_expand_prompt_template(
     std::string_view input,
     const std::vector<PromptTemplate>& templates) {
@@ -292,15 +289,4 @@ std::optional<std::string> try_expand_prompt_template(
     return substitute_args(match->content, parse_command_args(invocation->arguments));
 }
 
-} // namespace prompt::detail
-
-std::string expand_prompt_template(
-    std::string_view input,
-    const std::vector<PromptTemplate>& templates) {
-    if (auto expanded = prompt::detail::try_expand_prompt_template(input, templates)) {
-        return std::move(*expanded);
-    }
-    return std::string{input};
-}
-
-} // namespace cch::coding_agent
+} // namespace cch::coding_agent::prompt

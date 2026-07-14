@@ -159,7 +159,9 @@ TEST_CASE("concrete prompt processors stay out of the public contract surface", 
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
     const auto public_prompt_dir = source_root / "include" / "cch" / "coding_agent";
 
+    CHECK_FALSE(std::filesystem::exists(public_prompt_dir / "PromptProcessing.hpp"));
     CHECK_FALSE(std::filesystem::exists(public_prompt_dir / "PromptProcessingPipeline.hpp"));
+    CHECK_FALSE(std::filesystem::exists(public_prompt_dir / "PromptProcessor.hpp"));
     CHECK_FALSE(std::filesystem::exists(public_prompt_dir / "PromptTemplateExpander.hpp"));
     CHECK_FALSE(std::filesystem::exists(public_prompt_dir / "SkillExpander.hpp"));
 }

@@ -1,5 +1,6 @@
 #include "coding_agent/prompt/PromptProcessor.hpp"
 
+#include "coding_agent/prompt/PromptTemplateExpander.hpp"
 #include "coding_agent/SkillFormatting.hpp"
 
 #include <algorithm>
@@ -37,10 +38,6 @@ struct SlashInvocation {
     return SlashInvocation{body.substr(0, delimiter), arguments};
 }
 
-} // namespace
-
-namespace detail {
-
 std::optional<std::string> try_expand_skill(
     std::string_view input,
     const std::vector<Skill>& skills) {
@@ -68,20 +65,24 @@ std::optional<std::string> try_expand_skill(
     return formatSkillInvocation(*found, found->content, invocation->arguments);
 }
 
-PromptProcessingOutcome process_prompt_borrowed(
+} // namespace
+
+PromptProcessor::PromptProcessor(PromptResources resources)
+    : commands_(std::move(resources.commands)),
+      skills_(std::move(resources.skills)),
+      templates_(std::move(resources.templates)) {}
+
+PromptProcessingOutcome PromptProcessor::process(
     std::string input,
-    CommandRegistry& commands,
-    const std::vector<Skill>& skills,
-    const std::vector<PromptTemplate>& templates,
     CommandContext context) {
     const auto invocation = parse_slash_invocation(input);
     if (!invocation) {
         return AgentPrompt{std::move(input)};
     }
 
-    context.available_commands = commands.list_commands();
+    context.available_commands = commands_.list_commands();
     try {
-        if (auto handled = commands.dispatch(invocation->name, context, invocation->arguments)) {
+        if (auto handled = commands_.dispatch(invocation->name, context, invocation->arguments)) {
             const bool shutdown = handled->shutdown_requested;
             return CommandHandled{
                 .code = shutdown ? "shutdown" : "command_handled",
@@ -98,32 +99,14 @@ PromptProcessingOutcome process_prompt_borrowed(
     }
 
     std::string expanded = std::move(input);
-    if (auto expanded_skill = try_expand_skill(expanded, skills)) {
+    if (auto expanded_skill = try_expand_skill(expanded, skills_)) {
         expanded = std::move(*expanded_skill);
     }
-    if (auto expanded_template = try_expand_prompt_template(expanded, templates)) {
+    if (auto expanded_template = try_expand_prompt_template(expanded, templates_)) {
         expanded = std::move(*expanded_template);
     }
 
     return AgentPrompt{std::move(expanded)};
-}
-
-} // namespace detail
-
-PromptProcessor::PromptProcessor(PromptResources resources)
-    : commands_(std::move(resources.commands)),
-      skills_(std::move(resources.skills)),
-      templates_(std::move(resources.templates)) {}
-
-PromptProcessingOutcome PromptProcessor::process(
-    std::string input,
-    CommandContext context) {
-    return detail::process_prompt_borrowed(
-        std::move(input),
-        commands_,
-        skills_,
-        templates_,
-        std::move(context));
 }
 
 } // namespace cch::coding_agent::prompt

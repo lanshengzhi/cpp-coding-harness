@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/coding_agent/PromptProcessing.hpp>
+#include <cch/coding_agent/PromptTemplate.hpp>
 
 #include <string>
 #include <string_view>

@@ -1,40 +1,24 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include "../../include/cch/coding_agent/PromptProcessing.hpp"
+#include "coding_agent/prompt/PromptProcessor.hpp"
 
-#include <stdexcept>
 #include <string>
+#include <utility>
+#include <variant>
 
 using namespace cch;
 
-TEST_CASE("process_prompt passes through normal text unchanged", "[coding_agent][prompt]") {
-    coding_agent::CommandRegistry registry;
-    auto result = coding_agent::process_prompt("hello world", {}, registry);
-    CHECK(result.command_handled == false);
-    CHECK(result.expanded_prompt == "hello world");
-    CHECK_FALSE(result.shutdown_requested);
-}
+TEST_CASE("prompt processor dispatches registered built-in commands", "[coding_agent][prompt]") {
+    coding_agent::prompt::PromptResources resources;
+    REQUIRE(coding_agent::register_builtin_commands(resources.commands).has_value());
+    coding_agent::prompt::PromptProcessor processor{std::move(resources)};
 
-TEST_CASE("process_prompt passes through bare and unmatched slash input", "[coding_agent][prompt]") {
-    coding_agent::CommandRegistry registry;
-
-    for (const std::string input : {"/", "/nonexistent", "/skill:missing"}) {
-        auto result = coding_agent::process_prompt(input, {}, registry);
-        CHECK_FALSE(result.command_handled);
-        CHECK_FALSE(result.display_text.has_value());
-        CHECK(result.expanded_prompt == input);
-    }
-}
-
-TEST_CASE("process_prompt only interprets slash commands at column zero", "[coding_agent][prompt]") {
-    coding_agent::CommandRegistry registry;
-    REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
-
-    for (const std::string input : {" /quit", "\t/quit", "!echo hello", "!!echo hello"}) {
-        auto result = coding_agent::process_prompt(input, {}, registry);
-        CHECK_FALSE(result.command_handled);
-        CHECK(result.expanded_prompt == input);
-    }
+    const auto result = processor.process("/quit", {});
+    REQUIRE(std::holds_alternative<coding_agent::prompt::CommandHandled>(result));
+    const auto& handled = std::get<coding_agent::prompt::CommandHandled>(result);
+    CHECK(handled.code == "shutdown");
+    CHECK(handled.feedback == "Shutting down.");
+    CHECK(handled.shutdown_requested);
 }
 
 TEST_CASE("built-in /session command returns session info", "[coding_agent][prompt]") {
@@ -218,21 +202,6 @@ TEST_CASE("built-in /help handles invalid arity and unknown detailed targets", "
     auto unknown = registry.dispatch("help", ctx, "missing");
     REQUIRE(unknown.has_value());
     CHECK(unknown->display_text == "Unknown command: /missing");
-}
-
-TEST_CASE("process_prompt contains command handler exceptions with fixed feedback", "[coding_agent][prompt]") {
-    coding_agent::CommandRegistry registry;
-    REQUIRE(registry.register_command(
-        "throw",
-        [](const coding_agent::CommandContext&, std::string_view) -> coding_agent::CommandResult {
-            throw std::runtime_error{"secret path /tmp/private"};
-        }).has_value());
-
-    auto result = coding_agent::process_prompt("/throw", {}, registry);
-    CHECK(result.command_handled);
-    REQUIRE(result.display_text);
-    CHECK(*result.display_text == "Command handler failed.");
-    CHECK_FALSE(result.shutdown_requested);
 }
 
 TEST_CASE("built-in /commands dispatches through the /help handler", "[coding_agent][prompt]") {

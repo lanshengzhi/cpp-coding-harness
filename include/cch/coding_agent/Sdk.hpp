@@ -3,7 +3,8 @@
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/agent/AgentTool.hpp>
 #include <cch/ai/ChatClient.hpp>
-#include <cch/coding_agent/PromptProcessing.hpp>
+#include <cch/coding_agent/CommandRegistry.hpp>
+#include <cch/coding_agent/PromptTemplate.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/coding_agent/Skill.hpp>
