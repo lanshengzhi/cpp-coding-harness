@@ -70,14 +70,16 @@ TEST_CASE("JSON event printer emits escaped assistant text delta", "[coding-agen
     std::ostringstream output;
     cch::coding_agent::runtime::JsonEventPrinter printer{output};
 
-    auto printed = printer.print_agent_event(cch::agent::MessageUpdateEvent{2, "hello\n\"json\"\r"});
+    cch::ai::AssistantMessage partial;
+    auto printed = printer.print_agent_event(cch::agent::MessageUpdateEvent{
+        cch::ai::MessageVariant{partial},
+        cch::ai::AssistantStreamEvent{cch::ai::TextDeltaEvent{0, "hello\n\"json\"\r", std::move(partial)}}});
 
     REQUIRE(printed.has_value());
     auto emitted = lines(output.str());
     REQUIRE(emitted.size() == 1);
     auto record = object(parse_line(emitted.front()));
     CHECK(string_at(record, "type") == "message_update");
-    CHECK(int_at(record, "turn") == 2);
     const auto& assistant = record.at("assistantMessageEvent").get<cch::util::JsonValue::object_t>();
     CHECK(string_at(assistant, "type") == "text_delta");
     CHECK(string_at(assistant, "delta") == "hello\n\"json\"\r");
@@ -87,8 +89,15 @@ TEST_CASE("JSON event printer omits prompt and tool result bodies by policy", "[
     std::ostringstream output;
     cch::coding_agent::runtime::JsonEventPrinter printer{output};
 
-    REQUIRE(printer.print_agent_event(cch::agent::AgentStartEvent{"secret prompt TOKEN=abc123"}).has_value());
-    REQUIRE(printer.print_agent_event(cch::agent::ToolExecutionEndEvent{1, "call-1", "bash", true, "SECRET=abc123\n/path/to/private"}).has_value());
+    REQUIRE(printer.print_agent_event(cch::agent::AgentStartEvent{}).has_value());
+    REQUIRE(printer.print_agent_event(cch::agent::ToolExecutionEndEvent{
+        "call-1",
+        "bash",
+        cch::agent::AsyncToolExecutionResult{
+            std::vector<cch::ai::Content>{cch::ai::text_content("SECRET=abc123\n/path/to/private")},
+            std::nullopt,
+            true},
+        true}).has_value());
 
     auto emitted = lines(output.str());
     REQUIRE(emitted.size() == 2);
@@ -107,14 +116,19 @@ TEST_CASE("JSON event printer omits prompt and tool result bodies by policy", "[
     CHECK(string_at(status, "reason") == "unsupported_in_v1");
 }
 
-TEST_CASE("JSON event printer skips unsupported sensitive stream variants", "[coding-agent][json-events]") {
+TEST_CASE("JSON event printer emits message updates for thinking stream events", "[coding-agent][json-events]") {
     std::ostringstream output;
     cch::coding_agent::runtime::JsonEventPrinter printer{output};
 
-    REQUIRE(printer.print_agent_event(cch::agent::ThinkingUpdateEvent{1, 0, "private reasoning"}).has_value());
-    REQUIRE(printer.print_agent_event(cch::agent::ToolCallStreamUpdateEvent{1, 1, "{\"token\":\"abc\"}"}).has_value());
+    cch::ai::AssistantMessage partial;
+    REQUIRE(printer.print_agent_event(cch::agent::MessageUpdateEvent{
+        cch::ai::MessageVariant{partial},
+        cch::ai::AssistantStreamEvent{cch::ai::ThinkingDeltaEvent{0, "private reasoning", std::move(partial)}}}).has_value());
 
-    CHECK(output.str().empty());
+    auto emitted = lines(output.str());
+    REQUIRE(emitted.size() == 1);
+    auto record = object(parse_line(emitted.front()));
+    CHECK(string_at(record, "type") == "message_update");
 }
 
 TEST_CASE("JSON event printer emits durable terminal records", "[coding-agent][json-events]") {

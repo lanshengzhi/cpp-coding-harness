@@ -48,7 +48,7 @@ TEST_CASE("move-only event sinks can own unique state", "[architecture][u5]") {
     };
 
     REQUIRE(sink);
-    auto emitted = sink(agent::TurnStartEvent{1});
+    auto emitted = sink(agent::TurnStartEvent{});
 
     REQUIRE(emitted);
     CHECK(observed == 42);

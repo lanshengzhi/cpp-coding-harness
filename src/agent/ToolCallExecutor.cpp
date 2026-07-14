@@ -192,7 +192,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
     finalized.reserve(calls.size());
 
     for (const auto& call : calls) {
-        CCH_TRY_VOID(emit(sink, ToolExecutionStartEvent{request.turn, call.id, call.name}));
+        CCH_TRY_VOID(emit(sink, ToolExecutionStartEvent{call.id, call.name, call.arguments.value_or(util::JsonValue{})}));
 
         ai::ToolResultMessage tool_result;
         bool executed_successfully = false;
@@ -275,8 +275,14 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
         }
 
         const auto tool_text = ai::text_from_content(tool_result.content);
+        (void)tool_text;
+        AsyncToolExecutionResult execution_result;
+        execution_result.content = tool_result.content;
+        execution_result.details = tool_result.details;
+        execution_result.is_error = tool_result.is_error;
+        execution_result.terminate = call_terminate;
         CCH_TRY_VOID(emit(sink, ToolExecutionEndEvent{
-            request.turn, call.id, call.name, tool_result.is_error, tool_text}));
+            call.id, call.name, std::move(execution_result), tool_result.is_error}));
         finalized.push_back(FinalizedToolCall{std::move(tool_result), call_terminate});
     }
 
@@ -300,7 +306,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
     prepared.reserve(calls.size());
 
     for (const auto& call : calls) {
-        CCH_TRY_VOID(emit(sink, ToolExecutionStartEvent{request.turn, call.id, call.name}));
+        CCH_TRY_VOID(emit(sink, ToolExecutionStartEvent{call.id, call.name, call.arguments.value_or(util::JsonValue{})}));
 
         auto* tool = registry_.find(call.name);
         if (tool == nullptr) {
@@ -450,12 +456,17 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                 }
 
                 const auto tool_text = ai::text_from_content(outcome.result.content);
+                (void)tool_text;
+                AsyncToolExecutionResult execution_result;
+                execution_result.content = outcome.result.content;
+                execution_result.details = outcome.result.details;
+                execution_result.is_error = outcome.result.is_error;
+                execution_result.terminate = outcome.call_terminate;
                 (void)parallel_emit(ToolExecutionEndEvent{
-                    turn,
                     prepared_call.tool_call.id,
                     prepared_call.tool_call.name,
-                    outcome.result.is_error,
-                    tool_text});
+                    std::move(execution_result),
+                    outcome.result.is_error});
                 (*finalized)[index] = std::move(outcome);
             }
         } catch (...) {

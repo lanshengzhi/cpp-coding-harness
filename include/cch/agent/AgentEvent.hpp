@@ -1,109 +1,67 @@
 #pragma once
 
 #include "../ai/Message.hpp"
+#include "../ai/StreamEvent.hpp"
+#include "AgentTool.hpp"
 #include "../util/Error.hpp"
-#include <cstddef>
+#include "../util/JsonValue.hpp"
+
 #include <functional>
 #include <string>
 #include <variant>
+#include <vector>
 
 namespace cch::agent {
 
-struct AgentStartEvent {
-    std::string prompt;
+struct AgentStartEvent {};
+
+struct AgentEndEvent {
+    std::vector<ai::MessageVariant> messages;
 };
 
-struct TurnStartEvent {
-    int turn{};
+struct TurnStartEvent {};
+
+struct TurnEndEvent {
+    ai::MessageVariant message;
+    std::vector<ai::ToolResultMessage> tool_results;
 };
 
 struct MessageStartEvent {
-    int turn{};
-};
-
-struct QueuedMessageStartEvent {
-    int turn{};
     ai::MessageVariant message;
 };
 
 struct MessageUpdateEvent {
-    int turn{};
-    std::string delta;
+    ai::MessageVariant message;
+    ai::AssistantStreamEvent assistant_event;
 };
 
 struct MessageEndEvent {
-    int turn{};
-    ai::AssistantMessage message;
-};
-
-struct QueuedMessageEndEvent {
-    int turn{};
     ai::MessageVariant message;
 };
 
-struct ThinkingUpdateEvent {
-    int turn{};
-    std::size_t content_index{};
-    std::string delta;
-};
-
-struct ToolCallStreamStartEvent {
-    int turn{};
-    std::size_t content_index{};
-};
-
-struct ToolCallStreamUpdateEvent {
-    int turn{};
-    std::size_t content_index{};
-    std::string delta;
-};
-
-struct ToolCallStreamEndEvent {
-    int turn{};
-    std::size_t content_index{};
-    ai::ToolCallContent tool_call;
-};
-
 struct ToolExecutionStartEvent {
-    int turn{};
     std::string tool_call_id;
     std::string tool_name;
+    util::JsonValue args;
 };
 
 struct ToolExecutionEndEvent {
-    int turn{};
     std::string tool_call_id;
     std::string tool_name;
-    bool is_error{false};
-    std::string content;
-};
-
-struct TurnEndEvent {
-    int turn{};
-    ai::AssistantStopReason stop_reason{ai::AssistantStopReason::Unknown};
-};
-
-struct AgentEndEvent {
-    bool success{false};
-    std::string reason;
+    AsyncToolExecutionResult result;
+    bool is_error;
 };
 
 using AgentLifecycleEvent = std::variant<
     AgentStartEvent,
+    AgentEndEvent,
     TurnStartEvent,
+    TurnEndEvent,
     MessageStartEvent,
-    QueuedMessageStartEvent,
     MessageUpdateEvent,
     MessageEndEvent,
-    QueuedMessageEndEvent,
-    ThinkingUpdateEvent,
-    ToolCallStreamStartEvent,
-    ToolCallStreamUpdateEvent,
-    ToolCallStreamEndEvent,
     ToolExecutionStartEvent,
-    ToolExecutionEndEvent,
-    TurnEndEvent,
-    AgentEndEvent>;
+    ToolExecutionEndEvent>;
 
 using AgentEventSink = std::move_only_function<util::ExpectedVoid(const AgentLifecycleEvent&)>;
 

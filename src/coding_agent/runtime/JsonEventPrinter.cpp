@@ -81,57 +81,47 @@ util::ExpectedVoid JsonEventPrinter::print_agent_event(const agent::AgentLifecyc
     if (std::holds_alternative<agent::AgentEndEvent>(event)) {
         return {};
     }
-    if (std::holds_alternative<agent::ThinkingUpdateEvent>(event) ||
-        std::holds_alternative<agent::QueuedMessageStartEvent>(event) ||
-        std::holds_alternative<agent::QueuedMessageEndEvent>(event) ||
-        std::holds_alternative<agent::ToolCallStreamStartEvent>(event) ||
-        std::holds_alternative<agent::ToolCallStreamUpdateEvent>(event) ||
-        std::holds_alternative<agent::ToolCallStreamEndEvent>(event)) {
-        return {};
-    }
 
     util::JsonValue::object_t record;
     if (std::holds_alternative<agent::AgentStartEvent>(event)) {
         record.emplace("type", util::JsonValue{"agent_start"});
-    } else if (const auto* turn = std::get_if<agent::TurnStartEvent>(&event)) {
+    } else if (std::holds_alternative<agent::TurnStartEvent>(event)) {
         record.emplace("type", util::JsonValue{"turn_start"});
-        record.emplace("turn", util::JsonValue{turn->turn});
     } else if (const auto* start = std::get_if<agent::MessageStartEvent>(&event)) {
         record.emplace("type", util::JsonValue{"message_start"});
-        record.emplace("turn", util::JsonValue{start->turn});
-        record.emplace("contentStatus", util::JsonValue{content_status("omitted", "unsupported_in_v1", 0)});
+        (void)start;
     } else if (const auto* update = std::get_if<agent::MessageUpdateEvent>(&event)) {
-        const auto truncated = was_truncated(update->delta, kMaxTextBytes);
         util::JsonValue::object_t assistant_event;
-        assistant_event.emplace("type", util::JsonValue{"text_delta"});
-        assistant_event.emplace("delta", util::JsonValue{bounded(update->delta, kMaxTextBytes)});
-        assistant_event.emplace("truncated", util::JsonValue{truncated});
-        if (truncated) {
-            assistant_event.emplace("omissionReason", util::JsonValue{"truncated"});
+        if (const auto* delta = std::get_if<ai::TextDeltaEvent>(&update->assistant_event)) {
+            const auto truncated = was_truncated(delta->delta, kMaxTextBytes);
+            assistant_event.emplace("type", util::JsonValue{"text_delta"});
+            assistant_event.emplace("delta", util::JsonValue{bounded(delta->delta, kMaxTextBytes)});
+            assistant_event.emplace("truncated", util::JsonValue{truncated});
+            if (truncated) {
+                assistant_event.emplace("omissionReason", util::JsonValue{"truncated"});
+            }
+        } else {
+            assistant_event.emplace("type", util::JsonValue{"stream_event"});
         }
         record.emplace("type", util::JsonValue{"message_update"});
-        record.emplace("turn", util::JsonValue{update->turn});
         record.emplace("assistantMessageEvent", util::JsonValue{std::move(assistant_event)});
     } else if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
         record.emplace("type", util::JsonValue{"message_end"});
-        record.emplace("turn", util::JsonValue{end->turn});
-        record.emplace("contentStatus", util::JsonValue{content_status("omitted", "unsupported_in_v1", 0)});
+        (void)end;
     } else if (const auto* start = std::get_if<agent::ToolExecutionStartEvent>(&event)) {
         record.emplace("type", util::JsonValue{"tool_execution_start"});
-        record.emplace("turn", util::JsonValue{start->turn});
         record.emplace("toolCallId", util::JsonValue{start->tool_call_id});
         record.emplace("toolName", util::JsonValue{start->tool_name});
     } else if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
         record.emplace("type", util::JsonValue{"tool_execution_end"});
-        record.emplace("turn", util::JsonValue{end->turn});
         record.emplace("toolCallId", util::JsonValue{end->tool_call_id});
         record.emplace("toolName", util::JsonValue{end->tool_name});
         record.emplace("isError", util::JsonValue{end->is_error});
-        record.emplace("contentStatus", util::JsonValue{content_status("omitted", "unsupported_in_v1", end->content.size())});
+        record.emplace("contentStatus", util::JsonValue{content_status("omitted", "unsupported_in_v1", ai::text_from_content(end->result.content).size())});
     } else if (const auto* turn = std::get_if<agent::TurnEndEvent>(&event)) {
         record.emplace("type", util::JsonValue{"turn_end"});
-        record.emplace("turn", util::JsonValue{turn->turn});
-        record.emplace("stopReason", util::JsonValue{stop_reason(turn->stop_reason)});
+        const auto* assistant = std::get_if<ai::AssistantMessage>(&turn->message);
+        record.emplace("stopReason", util::JsonValue{stop_reason(assistant ? assistant->stop_reason : ai::AssistantStopReason::Unknown)});
     } else {
         return {};
     }
