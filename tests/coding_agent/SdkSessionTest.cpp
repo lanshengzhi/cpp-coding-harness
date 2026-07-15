@@ -11,6 +11,7 @@
 #include "../../include/cch/harness/session/JsonlSessionStore.hpp"
 #include "../../include/cch/util/Error.hpp"
 #include "ai/providers/FakeChatClient.hpp"
+#include "harness/session/SessionJournalTestHooks.hpp"
 #include "../support/TempWorkspace.hpp"
 
 #include <algorithm>
@@ -1377,6 +1378,74 @@ TEST_CASE(
     CHECK(std::holds_alternative<ai::AssistantMessage>(durable_after_recovery->messages[2]));
 
     CHECK(session->close().has_value());
+}
+
+TEST_CASE(
+    "SDK persistence failure retains live history and permits later durable appends",
+    "[sdk][live-state][persistence-failure]") {
+    TestPaths paths;
+    auto capture = std::make_unique<CaptureChatClient>();
+    auto* capture_ptr = capture.get();
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::move(capture);
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    auto& session = result->session;
+
+    // The user message reaches storage, then the assistant append fails. The
+    // one-shot private hook leaves the next prompt free to persist normally.
+    harness::session::testing::fail_nth_append_for_test(paths.session_file, 2);
+    auto failed = session->prompt("first");
+    REQUIRE(failed.has_value());
+    CHECK_FALSE(failed->success);
+    CHECK(failed->code == "session_persist_failed");
+    CHECK(failed->message == "could not persist session entry");
+    CHECK(session->is_open());
+    CHECK(session->message_count() == 2);
+    CHECK(session->last_assistant_text() == "captured");
+
+    auto durable_after_failure = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable_after_failure.has_value());
+    REQUIRE(durable_after_failure->messages.size() == 1);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(durable_after_failure->messages[0]));
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(durable_after_failure->messages[0]).content) == "first");
+
+    auto recovered = session->prompt("second");
+    REQUIRE(recovered.has_value());
+    CHECK(recovered->success);
+    CHECK(session->message_count() == 4);
+
+    // The later provider request uses retained live state even though the first
+    // assistant message never reached durable storage.
+    REQUIRE(capture_ptr->captured_request.has_value());
+    const auto& request_messages = capture_ptr->captured_request->context.messages;
+    REQUIRE(request_messages.size() == 3);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(request_messages[0]));
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(request_messages[1]));
+    REQUIRE(std::holds_alternative<ai::UserMessage>(request_messages[2]));
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(request_messages[0]).content) == "first");
+    CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(request_messages[1]).content) == "captured");
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(request_messages[2]).content) == "second");
+
+    auto durable_after_recovery = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable_after_recovery.has_value());
+    REQUIRE(durable_after_recovery->messages.size() == 3);
+    CHECK(std::holds_alternative<ai::UserMessage>(durable_after_recovery->messages[0]));
+    CHECK(std::holds_alternative<ai::UserMessage>(durable_after_recovery->messages[1]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(durable_after_recovery->messages[2]));
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(durable_after_recovery->messages[1]).content) == "second");
+
+    CHECK(session->close().has_value());
+    auto reopened = coding_agent::create_agent_session(sdk_resume_options(paths));
+    REQUIRE(reopened.has_value());
+    CHECK(reopened->session->message_count() == 3);
+    REQUIRE(reopened->session->last_assistant_text().has_value());
+    CHECK(*reopened->session->last_assistant_text() == "captured");
+    CHECK(reopened->session->close().has_value());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

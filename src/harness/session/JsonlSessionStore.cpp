@@ -112,6 +112,11 @@ util::ExpectedVoid JsonlSessionStore::append(const ai::MessageVariant& message) 
     ++impl_->next_entry_id;
 
     if (impl_->persist_leaf_after_message_append) {
+        // The message itself is already durable. Advance the in-process append
+        // parent before writing the leaf marker so a marker failure does not
+        // poison or roll back later appends.
+        impl_->active_append_parent_id = entry->entry_id;
+
         auto leaf_line = serializer.serialize_leaf(std::nullopt, entry->entry_id);
         if (!leaf_line) {
             return std::unexpected(leaf_line.error());
@@ -122,10 +127,6 @@ util::ExpectedVoid JsonlSessionStore::append(const ai::MessageVariant& message) 
             return leaf_result;
         }
         ++impl_->next_entry_id;
-    }
-
-    if (impl_->persist_leaf_after_message_append) {
-        impl_->active_append_parent_id = std::move(entry->entry_id);
     }
     return {};
 }

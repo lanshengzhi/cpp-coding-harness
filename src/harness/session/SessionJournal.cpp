@@ -1,9 +1,12 @@
 #include "SessionJournal.hpp"
+#include "SessionJournalTestHooks.hpp"
 
 #include <array>
 #include <cerrno>
 #include <cstring>
 #include <fstream>
+#include <mutex>
+#include <optional>
 #include <sstream>
 #include <system_error>
 
@@ -95,7 +98,40 @@ namespace {
     return (mode & perms::others_read) != perms::none || (mode & perms::group_read) != perms::none;
 }
 
+struct InjectedAppendFailure {
+    std::filesystem::path path;
+    std::size_t attempts_remaining{0};
+};
+
+std::mutex injected_append_failure_mutex;
+std::optional<InjectedAppendFailure> injected_append_failure;
+
+[[nodiscard]] bool consume_injected_append_failure(const std::filesystem::path& path) {
+    std::scoped_lock lock{injected_append_failure_mutex};
+    if (!injected_append_failure ||
+        injected_append_failure->path != path.lexically_normal()) {
+        return false;
+    }
+    if (--injected_append_failure->attempts_remaining != 0) {
+        return false;
+    }
+    injected_append_failure.reset();
+    return true;
+}
+
 } // namespace
+
+namespace testing {
+
+void fail_nth_append_for_test(const std::filesystem::path& path, std::size_t attempt) {
+    std::scoped_lock lock{injected_append_failure_mutex};
+    injected_append_failure = InjectedAppendFailure{
+        .path = path.lexically_normal(),
+        .attempts_remaining = attempt == 0 ? 1 : attempt,
+    };
+}
+
+} // namespace testing
 
 util::Expected<SessionJournal> SessionJournal::create_new(
     const std::filesystem::path& path, std::string_view header_line) {
@@ -151,6 +187,10 @@ util::Expected<SessionJournal> SessionJournal::open_existing(const std::filesyst
 }
 
 util::ExpectedVoid SessionJournal::append_line(std::string_view line) const {
+    if (consume_injected_append_failure(path_)) {
+        return std::unexpected(session_error(
+            "could not persist session entry", "injected append failure"));
+    }
 #if defined(__unix__) || defined(__APPLE__)
     int flags = O_WRONLY | O_APPEND | O_CREAT;
 #ifdef O_NOFOLLOW

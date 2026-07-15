@@ -4,6 +4,7 @@
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 
 #include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
+#include "harness/session/SessionJournalTestHooks.hpp"
 #include "../../support/TempWorkspace.hpp"
 
 #include <cstddef>
@@ -32,6 +33,13 @@ std::string user_text_at(const std::vector<ai::MessageVariant>& messages, std::s
     const auto* user = std::get_if<ai::UserMessage>(&messages[index]);
     REQUIRE(user != nullptr);
     return ai::text_from_content(user->content);
+}
+
+std::string assistant_text_at(const std::vector<ai::MessageVariant>& messages, std::size_t index) {
+    REQUIRE(index < messages.size());
+    const auto* assistant = std::get_if<ai::AssistantMessage>(&messages[index]);
+    REQUIRE(assistant != nullptr);
+    return ai::text_from_assistant_content(assistant->content);
 }
 
 runtime::SessionOpenRequest resume_request(const std::filesystem::path& path,
@@ -163,6 +171,73 @@ TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point",
     const auto* assistant = std::get_if<ai::AssistantMessage>(&reopened->history[2]);
     REQUIRE(assistant != nullptr);
     CHECK(ai::text_from_assistant_content(assistant->content) == "fake: continue branch");
+}
+
+TEST_CASE(
+    "resumed AgentSession recovers when the message write succeeds but its leaf write fails",
+    "[coding-agent][runtime][session][persistence-failure]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "leaf-partial-append.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(user_msg("first")));
+    REQUIRE(store->append(user_msg("inactive second")));
+    REQUIRE(store->append(user_msg("inactive third")));
+
+    auto loaded_before_resume = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded_before_resume);
+    REQUIRE(loaded_before_resume->entries.size() >= 4);
+    const auto first_id = loaded_before_resume->entries[1].entry_id;
+
+    auto resumed_store = harness::session::JsonlSessionStore::open_existing(path);
+    REQUIRE(resumed_store);
+    REQUIRE(resumed_store->append_leaf(std::nullopt, first_id));
+
+    runtime::AgentSessionCreationRequest request;
+    request.fake = true;
+    request.disable_project_skills = true;
+    request.disable_prompt_templates = true;
+    request.workspace = workspace.path();
+    request.workspace_explicit = true;
+    request.resume_path = path;
+
+    auto session_result = coding_agent::create_agent_session(std::move(request));
+    REQUIRE(session_result);
+    auto& session = session_result->session;
+
+    // A resumed branch message append writes the message and then its active
+    // leaf marker. Fail only the second physical write.
+    harness::session::testing::fail_nth_append_for_test(path, 2);
+    auto failed = session->prompt("continue after partial write");
+    REQUIRE(failed);
+    CHECK_FALSE(failed->success);
+    CHECK(failed->code == "session_persist_failed");
+    CHECK(session->is_open());
+    CHECK(session->message_count() == 2);
+
+    // Reopening immediately follows the durable message even though its leaf
+    // marker was the failed physical write.
+    auto after_failure = runtime::open_session(resume_request(path, workspace));
+    REQUIRE(after_failure);
+    REQUIRE(after_failure->history.size() == 2);
+    CHECK(user_text_at(after_failure->history, 0) == "first");
+    CHECK(user_text_at(after_failure->history, 1) == "continue after partial write");
+
+    // The live store advances to the successfully written message, so a later
+    // prompt extends it instead of retrying or abandoning it.
+    auto recovered = session->prompt("recover branch");
+    REQUIRE(recovered);
+    CHECK(recovered->success);
+    CHECK(session->message_count() == 4);
+    CHECK(session->close().has_value());
+
+    auto reopened = runtime::open_session(resume_request(path, workspace));
+    REQUIRE(reopened);
+    REQUIRE(reopened->history.size() == 4);
+    CHECK(user_text_at(reopened->history, 0) == "first");
+    CHECK(user_text_at(reopened->history, 1) == "continue after partial write");
+    CHECK(user_text_at(reopened->history, 2) == "recover branch");
+    CHECK(assistant_text_at(reopened->history, 3) == "fake: recover branch");
 }
 
 TEST_CASE("open_session resume ignores invalid leaf target", "[coding-agent][runtime][session]") {

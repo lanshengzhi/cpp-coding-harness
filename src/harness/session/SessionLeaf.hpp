@@ -2,6 +2,7 @@
 
 #include "../../../include/cch/harness/session/SessionEntry.hpp"
 
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <unordered_set>
@@ -25,20 +26,31 @@ struct LeafTargetSelection {
 [[nodiscard]] inline LeafTargetSelection select_active_leaf_target(const std::vector<SessionEntry>& entries) {
     std::unordered_set<std::string> navigable_ids;
     std::optional<std::string> last_navigable_id;
-    for (const auto& entry : entries) {
+    std::optional<std::size_t> last_navigable_index;
+    for (std::size_t index = 0; index < entries.size(); ++index) {
+        const auto& entry = entries[index];
         if (!is_navigable_leaf_target(entry)) {
             continue;
         }
         navigable_ids.insert(entry.entry_id);
         last_navigable_id = entry.entry_id;
+        last_navigable_index = index;
     }
 
-    for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
-        if (it->kind != SessionEntryKind::Leaf) {
+    for (std::size_t index = entries.size(); index > 0; --index) {
+        const auto& entry = entries[index - 1];
+        if (entry.kind != SessionEntryKind::Leaf) {
             continue;
         }
 
-        const auto* leaf = std::get_if<LeafEntryValue>(&it->value);
+        // A durable topology entry after the latest leaf marker is a newer
+        // resume point. This occurs when a message write succeeds but the
+        // following leaf-marker write fails.
+        if (last_navigable_index && *last_navigable_index > index - 1) {
+            return LeafTargetSelection{last_navigable_id, true};
+        }
+
+        const auto* leaf = std::get_if<LeafEntryValue>(&entry.value);
         if (leaf != nullptr && !leaf->target_id.has_value()) {
             return LeafTargetSelection{std::nullopt, true};
         }
