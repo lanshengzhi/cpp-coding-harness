@@ -79,7 +79,7 @@ Classification:
 | `AgentState` | Missing | Near-term parity | U5 adds passive `AgentState` for active tools, messages, streaming message, pending tool calls, model, and thinking level. |
 | `AgentToolResult`, `AgentToolUpdateCallback`, `AgentTool` | `include/cch/agent/AgentTool.hpp` (`AsyncToolExecutionResult`, `AsyncAgentTool`, `ToolConcurrency`) | MVP parity | Current contract is async and value-oriented. Tools default to `Exclusive`; adapters opt into `ParallelSafe` only after concurrent-use validation. Progress/update callbacks are deferred. |
 | `AgentContext` | `include/cch/agent/AgentContext.hpp` | Near-term parity | The header owns run options/results, including the closed sequential/bounded-parallel `ToolExecutionPolicy`; state remains a passive value in the same package. |
-| `AgentEvent` | `include/cch/agent/AgentEvent.hpp::AgentLifecycleEvent` | Near-term parity | Cut over to pi-aligned shapes in ticket 01: removed prompt copy, numeric turn fields, queued-message alternatives, and standalone thinking/tool-call stream events; message updates now carry the current assistant message and provider-neutral stream event. |
+| `AgentEvent` | `include/cch/agent/AgentEvent.hpp::AgentLifecycleEvent` | MVP parity for the supported subset | Cut over to pi-aligned shapes in ticket 01: removed prompt copy, numeric turn fields, queued-message alternatives, and standalone thinking/tool-call stream events; message updates carry the current assistant message and provider-neutral stream event. Unsupported queue, compaction, retry, and progress events remain absent rather than appearing as placeholders. |
 
 ## Harness and Execution Environment Contracts
 
@@ -100,7 +100,7 @@ Classification:
 | --- | --- | --- | --- |
 | `Args`, `Mode`, `parseArgs`, `printHelp`, `isValidThinkingLevel` | `src/main.cpp` hand parser; `src/AsyncCliRuntime.hpp::AsyncCliRuntimeConfig` | Near-term parity | U3 migrates parsing to CLI11 while preserving current flags and validation. |
 | One-shot, REPL, resume/session flags | `src/main.cpp`, `src/AsyncCliRuntime.cpp`, CLI smoke tests | MVP parity | Current line-oriented CLI behavior must remain stable. |
-| JSON/RPC modes | Missing | Deferred parity | T8 after runtime services are separated from event printing. |
+| JSON/RPC modes | `src/coding_agent/runtime/JsonEventPrinter.*`, `RpcMode.*`, and `RpcJsonl.*` | MVP parity / partial | JSON mode emits the pi v3 session header followed by direct, redacted, bounded supported AgentSession events with no C++ schema metadata, sequence counters, content-status substitutions, or runtime terminal records. Narrow RPC supports prompt/state/last-text/shutdown responses and reuses direct event serialization; its remaining preflight/interleaving and terminal-record alignment is tracked by issue 14. |
 | SDK `CreateAgentSessionOptions`, `CreateAgentSessionResult`, `createAgentSession` | Missing | Deferred parity | U7 splits runtime internals but does not expose an SDK. |
 | Runtime service split (`agent-session-runtime`, services, session lifecycle, event printer) | Partial: `src/AsyncCliRuntime.*` | Near-term parity | U7 extracts only seams with current CLI/test consumers. |
 | Settings/model resolver/project trust/resources | Missing | Deferred parity | Follow-up T5/T6 once provider registry and runtime split exist. |
@@ -129,7 +129,7 @@ Classification:
 | AI contracts | Text/thinking/image/tool-call content, messages, tools, usage, streaming chat seam, OpenAI-compatible adapter | Provider registry, fake provider registration, forwarding stream phases through agent events | Full model catalog, cost accounting, OAuth/subscription flows, image generation, provider-specific reasoning compatibility |
 | Agent loop | Async loop, tool execution, move-only lifecycle event sink, max-turn behavior | Observable state and thinking/tool-call lifecycle events | Hooks, context transforms, parallel tool execution, queue modes, update callbacks |
 | Harness | Workspace-guarded file tools, bash opt-in, redaction, JSONL v2 sessions | True async process I/O, parse-only session tree entry model | Full filesystem/shell parity, compaction, branch summaries, harness extension event pipeline |
-| Coding-agent runtime | One-shot/REPL/resume CLI, semantic event lines | CLI11 parsing, provider/model registry wiring, runtime service split | Settings, resources, skills, extensions, prompt templates, JSON/RPC, SDK |
+| Coding-agent runtime | One-shot/REPL/resume CLI, semantic event lines, direct JSON events, narrow RPC, source-level SDK, settings, project resources, skills, and prompt templates | Remaining AgentSession/RPC contract alignment and additional pi commands | Extensions, packages, full RPC/SDK parity, compaction/retry protocol events, and TUI integration |
 | TUI/platform/distribution | Line-oriented CLI only | None in cleanup | Native TUI, themes, keybindings, packages, self-update, platform-specific terminal integrations |
 
 ## Recurring Checklist for Future Parity Slices

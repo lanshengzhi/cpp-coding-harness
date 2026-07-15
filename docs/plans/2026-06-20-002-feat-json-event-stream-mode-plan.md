@@ -1,9 +1,10 @@
 ---
 title: "feat: Add JSON event stream mode"
 type: feat
-status: completed
+status: superseded
 date: "2026-06-20"
 deepened: "2026-06-20"
+superseded_by: ".scratch/pi-agent-session-event-prompt-parity/issues/12-emit-direct-json-events.md"
 ---
 
 # feat: Add JSON event stream mode
@@ -11,6 +12,8 @@ deepened: "2026-06-20"
 ## Summary
 
 Add the first T8 machine-readable surface by introducing a pi-aligned JSON event stream mode for one-shot runs. The plan keeps the existing text CLI unchanged, emits JSONL-only stdout in JSON mode, and deliberately defers the larger RPC command loop and C++ SDK surface until the runtime/session/resource seams are ready.
+
+> **Historical plan:** This document records the original C++ schema-v1 implementation and is no longer the current wire-contract authority. Issue 12 superseded its schema metadata, sequence counters, payload omissions, and `runtime_terminal` decisions. Current JSON mode emits the pi v3 session header followed by direct, redacted, bounded AgentSession events; see `README.md`, `docs/agents/module-routing.md`, and `.scratch/pi-agent-session-event-prompt-parity/issues/12-emit-direct-json-events.md`.
 
 ---
 

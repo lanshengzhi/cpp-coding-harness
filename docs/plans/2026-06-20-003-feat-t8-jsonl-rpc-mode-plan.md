@@ -1,8 +1,9 @@
 ---
 title: "feat: Add narrow JSONL RPC mode"
 type: feat
-status: completed
+status: superseded
 date: "2026-06-20"
+superseded_by: ".scratch/pi-agent-session-event-prompt-parity/PRD.md"
 ---
 
 # feat: Add narrow JSONL RPC mode
@@ -10,6 +11,8 @@ date: "2026-06-20"
 ## Summary
 
 Implement the next open T8 TODO: a narrow, stdin/stdout JSONL RPC mode that can drive existing sessions without TUI assumptions. The plan starts by extracting a reusable prompt/session runner from CLI printing, then adds a conservative `--mode rpc` protocol over strict JSONL. It deliberately does not attempt full pi RPC parity, SDK surface, session tree operations, extension UI, compaction, resources, or active T5 tool/config changes.
+
+> **Historical plan:** This document records the original narrow RPC-v1 implementation and is no longer the current protocol authority. Issue 12 already replaced the shared C++ schema-v1 event serialization with direct AgentSession event records. RPC response ordering, preflight acknowledgement, and removal of its remaining terminal records are governed by `.scratch/pi-agent-session-event-prompt-parity/issues/14-align-rpc-preflight-and-events.md`.
 
 ---
 
