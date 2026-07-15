@@ -90,7 +90,7 @@ AgentSession::~AgentSession() {
     }
 }
 
-util::Expected<PromptResult> AgentSession::prompt(std::string text, PromptOptions options) {
+util::ExpectedVoid AgentSession::prompt(std::string text, PromptOptions options) {
     if (!impl_) {
         return std::unexpected(util::make_error(util::ErrorCode::Validation, "session is not initialized"));
     }
@@ -108,19 +108,9 @@ util::Expected<PromptResult> AgentSession::prompt(std::string text, PromptOption
         }
     }};
 
-    auto run_result = impl_->runtime->run_prompt(
+    return impl_->runtime->run_prompt(
         std::move(text),
-        options.expand_prompt_templates,
-        std::move(options.event_sink));
-
-    PromptResult result;
-    result.success = run_result.success;
-    result.code = run_result.code;
-    result.message = run_result.message;
-    result.diagnostics = std::move(run_result.diagnostics);
-    result.last_assistant_text = impl_->runtime->last_assistant_text();
-    result.message_count = impl_->runtime->message_count();
-    return result;
+        options.expand_prompt_templates);
 }
 
 util::Expected<EventSubscription> AgentSession::subscribe(agent::AgentEventSink sink) {

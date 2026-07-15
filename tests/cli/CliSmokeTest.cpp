@@ -495,7 +495,7 @@ TEST_CASE("CLI JSON max-turn flow ends with the direct agent event", "[cli][json
     CHECK(json_string_at(last, "type") == "agent_end");
     CHECK(last.contains("messages"));
     CHECK(result.stdout_text.find("runtime_terminal") == std::string::npos);
-    CHECK(result.stderr_text.find("max_turns_exceeded") != std::string::npos);
+    CHECK(result.stderr_text.find("max turns exceeded") != std::string::npos);
 }
 
 TEST_CASE("CLI RPC wires stdin and JSONL stdout to a session", "[cli][rpc]") {
@@ -688,7 +688,7 @@ TEST_CASE("CLI fake read loop prints max-turn marker when turn budget is exhaust
     CHECK(result.output.find("[model-request]") != std::string::npos);
     CHECK(result.output.find("[tool-call] read#fake-read-1") != std::string::npos);
     CHECK(result.output.find("[tool-error] fake-read-1") != std::string::npos);
-    CHECK(result.output.find("loop failed: max_turns_exceeded") != std::string::npos);
+    CHECK(result.output.find("loop failed: max turns exceeded") != std::string::npos);
 }
 
 TEST_CASE("CLI real-provider mode reports missing API key before model request", "[cli][u6]") {

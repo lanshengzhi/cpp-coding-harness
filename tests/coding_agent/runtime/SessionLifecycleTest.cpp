@@ -159,7 +159,6 @@ TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point",
     REQUIRE(session_result);
     auto prompt_result = session_result->session->prompt("continue branch");
     REQUIRE(prompt_result);
-    REQUIRE(prompt_result->success);
     CHECK(session_result->session->close().has_value());
 
     auto reopened = runtime::open_session(resume_request(path, workspace));
@@ -209,9 +208,9 @@ TEST_CASE(
     // leaf marker. Fail only the second physical write.
     harness::session::testing::fail_nth_append_for_test(path, 2);
     auto failed = session->prompt("continue after partial write");
-    REQUIRE(failed);
-    CHECK_FALSE(failed->success);
-    CHECK(failed->code == "session_persist_failed");
+    REQUIRE_FALSE(failed);
+    CHECK(failed.error().code == util::ErrorCode::Session);
+    CHECK(failed.error().message == "could not persist session entry");
     CHECK(session->is_open());
     CHECK(session->message_count() == 2);
 
@@ -227,7 +226,6 @@ TEST_CASE(
     // prompt extends it instead of retrying or abandoning it.
     auto recovered = session->prompt("recover branch");
     REQUIRE(recovered);
-    CHECK(recovered->success);
     CHECK(session->message_count() == 4);
     CHECK(session->close().has_value());
 

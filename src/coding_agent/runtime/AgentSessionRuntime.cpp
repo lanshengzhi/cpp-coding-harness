@@ -14,20 +14,6 @@ namespace cch::coding_agent::runtime {
 
 namespace {
 
-[[nodiscard]] std::string terminal_code_for_loop_error(const std::string& message) {
-    if (message == "max turns exceeded") {
-        return "max_turns_exceeded";
-    }
-    if (message == "agent event sink failed") {
-        return "event_sink_failed";
-    }
-    return "runtime_error";
-}
-
-[[nodiscard]] std::string display_message_for_loop_error(const std::string& message) {
-    return message == "max turns exceeded" ? "max_turns_exceeded" : message;
-}
-
 template <typename Callback>
 class ScopeExit final {
 public:
@@ -102,15 +88,18 @@ AgentSessionRuntime::AgentSessionRuntime(
     loop_.emplace(*services_.client, std::move(services_.tools), std::move(options));
 }
 
-PromptRunResult AgentSessionRuntime::run_prompt(
+util::ExpectedVoid AgentSessionRuntime::run_prompt(
     std::string prompt,
-    bool expand_prompt_templates,
-    agent::AgentEventSink sink) {
+    bool expand_prompt_templates) {
     if (state_ == State::Closed) {
-        return PromptRunResult{false, "session_closed", "session is closed", {}};
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is closed"));
     }
     if (state_ == State::RunningPrompt) {
-        return PromptRunResult{false, "session_busy", "session is busy (prompt already in flight)", {}};
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is busy (prompt already in flight)"));
     }
 
     state_ = State::RunningPrompt;
@@ -121,53 +110,47 @@ PromptRunResult AgentSessionRuntime::run_prompt(
     }};
 
     auto expanded = prompt_processor_.process(std::move(prompt), expand_prompt_templates);
-
-    return run_agent_loop(
-        std::move(expanded.text),
-        std::move(sink));
+    return run_agent_loop(std::move(expanded.text));
 }
 
-PromptRunResult AgentSessionRuntime::run_agent_loop(
-    std::string prompt,
-    agent::AgentEventSink sink) {
+util::ExpectedVoid AgentSessionRuntime::run_agent_loop(std::string prompt) {
     boost::asio::io_context io;
     std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
-    bool subscriber_delivery_failed = false;
-    bool persistence_failed = false;
+    std::optional<util::Error> subscriber_error;
+    std::optional<util::Error> persistence_error;
 
-    auto combined_sink = make_combined_sink(
-        std::move(sink), subscriber_delivery_failed, persistence_failed);
+    auto event_sink = make_event_sink(subscriber_error, persistence_error);
 
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
             result = co_await loop_->continue_with(
-                session_.history, std::move(prompt), std::move(combined_sink));
+                session_.history, std::move(prompt), std::move(event_sink));
             co_return;
         },
         boost::asio::detached);
     io.run();
 
-    if (!result || !*result) {
-        if (persistence_failed) {
-            return PromptRunResult{false, "session_persist_failed", "could not persist session entry", {}};
-        }
-        const auto message = result ? (*result).error().message : std::string{"async loop did not finish"};
-        return PromptRunResult{
-            false,
-            subscriber_delivery_failed ? "event_sink_failed" : terminal_code_for_loop_error(message),
-            display_message_for_loop_error(message),
-            {},
-        };
+    if (persistence_error) {
+        return std::unexpected(std::move(*persistence_error));
     }
-
-    return PromptRunResult{true, "completed", {}, {}};
+    if (subscriber_error) {
+        return std::unexpected(std::move(*subscriber_error));
+    }
+    if (!result) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Unknown,
+            "async loop did not finish"));
+    }
+    if (!*result) {
+        return std::unexpected((*result).error());
+    }
+    return {};
 }
 
-agent::AgentEventSink AgentSessionRuntime::make_combined_sink(
-    agent::AgentEventSink per_prompt,
-    bool& subscriber_delivery_failed,
-    bool& persistence_failed) {
+agent::AgentEventSink AgentSessionRuntime::make_event_sink(
+    std::optional<util::Error>& subscriber_error,
+    std::optional<util::Error>& persistence_error) {
     auto persistent = std::make_shared<std::vector<agent::AgentEventSink*>>();
     for (auto& sub : subscribers_) {
         if (sub.active && sub.sink) {
@@ -176,10 +159,9 @@ agent::AgentEventSink AgentSessionRuntime::make_combined_sink(
     }
 
     return [this,
-            &subscriber_delivery_failed,
-            &persistence_failed,
-            persistent = std::move(persistent),
-            per_prompt = std::move(per_prompt)](
+            &subscriber_error,
+            &persistence_error,
+            persistent = std::move(persistent)](
                const agent::AgentLifecycleEvent& event) mutable -> util::ExpectedVoid {
         // Update live session history before any subscriber observes the
         // completed message. This matches pi's state-first event ordering.
@@ -190,23 +172,16 @@ agent::AgentEventSink AgentSessionRuntime::make_combined_sink(
             if (*sink) {
                 auto r = (*sink)(event);
                 if (!r) {
-                    subscriber_delivery_failed = true;
+                    subscriber_error = r.error();
                     return r;
                 }
-            }
-        }
-        if (per_prompt) {
-            auto delivered = per_prompt(event);
-            if (!delivered) {
-                subscriber_delivery_failed = true;
-                return delivered;
             }
         }
         if (const auto* end = std::get_if<agent::MessageEndEvent>(&event);
             end != nullptr && is_incrementally_persisted_message(end->message)) {
             auto appended = session_.store->append(end->message);
             if (!appended) {
-                persistence_failed = true;
+                persistence_error = appended.error();
                 return std::unexpected(appended.error());
             }
         }

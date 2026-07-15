@@ -199,6 +199,29 @@ TEST_CASE("RuntimeServices remains internal to the coding_agent runtime package"
 }
 
 
+TEST_CASE("AgentSession has one prompt completion and event subscription path", "[architecture][session][sdk]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto sdk_header = read_text(source_root / "include" / "cch" / "coding_agent" / "Sdk.hpp");
+    const auto runtime_header = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "AgentSessionRuntime.hpp");
+    const auto rpc_source = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "RpcMode.cpp");
+
+    const auto public_result = std::string{"Prompt"} + "Result";
+    const auto private_result = std::string{"Prompt"} + "RunResult";
+    const auto prompt_sink_field = std::string{"event"} + "_sink";
+    const auto prompt_scope_name = std::string{"per"} + "_prompt";
+
+    CHECK(sdk_header.find(public_result) == std::string::npos);
+    CHECK(runtime_header.find(private_result) == std::string::npos);
+    CHECK(sdk_header.find(prompt_sink_field) == std::string::npos);
+    CHECK(runtime_header.find(prompt_scope_name) == std::string::npos);
+    CHECK(sdk_header.find("util::ExpectedVoid prompt(") != std::string::npos);
+    CHECK(sdk_header.find("subscribe(") != std::string::npos);
+    CHECK(count_occurrences(rpc_source, "config.session.subscribe(") == 1);
+    CHECK(rpc_source.find("PromptOptions") == std::string::npos);
+}
+
 TEST_CASE("AgentSessionRuntime is constructed only by the session factory", "[architecture][session]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
     const auto files = files_under({"src", "tests"});

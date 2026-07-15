@@ -255,10 +255,12 @@ auto sub = session->subscribe(
         return {};
     });
 
-// Run a prompt
-if (auto pr = session->prompt("hello")) {
-    // pr->last_assistant_text has the committed assistant response
+// Run a prompt. Progress arrives through the persistent subscription.
+if (auto prompted = session->prompt("hello"); !prompted) {
+    // handle prompted.error()
 }
+auto last_text = session->last_assistant_text();
+auto message_count = session->message_count();
 
 // Close (idempotent — repeated close is safe)
 session->close();
@@ -267,14 +269,14 @@ session->close();
 **Supported SDK v1 behavior:**
 
 - Explicit create/resume path: exactly one of `session_path` (create new) or `resume_path` (resume existing) must be set.
-- Blocking `prompt()` — serial, single-prompt-at-a-time.
-- Event subscriptions via move-only `agent::AgentEventSink`; per-prompt sinks also supported.
+- Blocking `prompt()` — serial, single-prompt-at-a-time, returning only success or an explicit `util::Error`.
+- One persistent event-subscription path via move-only `agent::AgentEventSink`; prompt progress is not returned or delivered through per-prompt sinks.
 - Host-provided chat clients and execution environments. Chat clients and custom tools passed by `unique_ptr` transfer ownership to the session; `shared_ptr` execution environments remain host-owned and are not cleaned up by session close.
 - SDK convenience provider construction from `SdkProviderConfig` when no host client is supplied.
 - Built-in tool selection with safe defaults: `read`, `write`, and `edit_file` by default; `bash` requires explicit opt-in.
 - Custom tool registration via existing `agent::AsyncAgentTool` contracts; duplicate tool names fail creation.
 - Programmatic skills and prompt templates; host resources take precedence over project-discovered duplicates.
-- Per-prompt `PromptOptions::expand_prompt_templates` (default `true`); `false` bypasses skill and prompt-template expansion and sends raw text to the agent loop.
+- Per-prompt `PromptOptions::expand_prompt_templates` (default `true`); `false` bypasses skill and prompt-template expansion and sends raw text to the agent loop. Resulting message count and last assistant text are queried through `AgentSession` state accessors.
 - Optional project resource discovery (`.cpp-harness/skills/`, `.cpp-harness/prompts/`) behind explicit trust/resource controls.
 - Optional absolute external `trust_store_path` for SDK project-resource trust decisions; workspace-local trust-store paths are rejected.
 - Diagnostics returned as `CreateAgentSessionResult::diagnostics` values — no stdout/stderr output from the SDK path.

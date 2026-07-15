@@ -17,13 +17,6 @@
 
 namespace cch::coding_agent::runtime {
 
-struct PromptRunResult {
-    bool success{false};
-    std::string code;
-    std::string message;
-    std::vector<std::string> diagnostics;
-};
-
 struct AgentSessionRuntimeConfig {
     int max_turns{30};
     std::string model;
@@ -46,10 +39,9 @@ public:
 
     /// Run one blocking prompt through optional prompt interpretation, the
     /// agent loop, persistence, and event fanout.
-    [[nodiscard]] PromptRunResult run_prompt(
+    [[nodiscard]] util::ExpectedVoid run_prompt(
         std::string prompt,
-        bool expand_prompt_templates,
-        agent::AgentEventSink sink = {});
+        bool expand_prompt_templates);
 
     // ── Subscriptions ──────────────────────────────────────────────────────
 
@@ -90,13 +82,10 @@ private:
         bool active{true};
     };
 
-    [[nodiscard]] agent::AgentEventSink make_combined_sink(
-        agent::AgentEventSink per_prompt,
-        bool& subscriber_delivery_failed,
-        bool& persistence_failed);
-    [[nodiscard]] PromptRunResult run_agent_loop(
-        std::string prompt,
-        agent::AgentEventSink sink);
+    [[nodiscard]] agent::AgentEventSink make_event_sink(
+        std::optional<util::Error>& subscriber_error,
+        std::optional<util::Error>& persistence_error);
+    [[nodiscard]] util::ExpectedVoid run_agent_loop(std::string prompt);
 
     RuntimeServices services_;
     OpenSession session_;

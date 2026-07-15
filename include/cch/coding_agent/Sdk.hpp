@@ -169,39 +169,9 @@ struct CreateAgentSessionResult {
 
 /// Per-prompt options passed to AgentSession::prompt().
 struct PromptOptions {
-    /// Per-prompt event sink. Called in addition to persistent subscribers.
-    /// A failing sink fails the prompt.
-    agent::AgentEventSink event_sink;
     /// When false, bypass skill and prompt-template expansion and send the raw
     /// text to the agent loop.
     bool expand_prompt_templates{true};
-};
-
-// ── PromptResult ─────────────────────────────────────────────────────────────
-
-/// Result of a prompt() call.
-struct PromptResult {
-    bool success{false};
-    /// Stable machine-readable code:
-    ///   "completed"          — agent stopped normally
-    ///   "max_turns_exceeded" — turn limit reached
-    ///   "session_persist_failed" — append to JSONL failed
-    ///   "runtime_error"      — other agent-loop failure
-    ///   "event_sink_failed"  — a subscriber or per-prompt sink returned error
-    std::string code;
-    /// Human-readable message.
-    std::string message;
-
-    /// Last assistant text from live history, absent if no assistant messages
-    /// have completed.
-    std::optional<std::string> last_assistant_text;
-
-    /// Number of messages in live history after this prompt.
-    std::size_t message_count{0};
-
-    /// Diagnostics produced during prompt processing. Retained for source
-    /// compatibility; current command/skill/template interpretation is silent.
-    std::vector<std::string> diagnostics;
 };
 
 // ── EventSubscription ────────────────────────────────────────────────────────
@@ -259,9 +229,11 @@ public:
 
     // ── Prompt execution ─────────────────────────────────────────────────
 
-    /// Run a blocking prompt. Returns an error if the session is closed,
-    /// busy (another prompt is in flight), or otherwise invalid.
-    [[nodiscard]] util::Expected<PromptResult> prompt(
+    /// Run a blocking prompt to completion. Progress is delivered through
+    /// persistent subscriptions, and resulting state is queried separately.
+    /// Returns an error if the session is closed, busy, event delivery or
+    /// persistence fails, or agent execution otherwise fails.
+    [[nodiscard]] util::ExpectedVoid prompt(
         std::string text,
         PromptOptions options = {});
 
@@ -276,11 +248,11 @@ public:
 
     // ── State accessors ──────────────────────────────────────────────────
 
-    /// Number of messages in committed history.
+    /// Number of messages in live history.
     [[nodiscard]] std::size_t message_count() const;
 
-    /// Last assistant text from committed history, absent if no assistant
-    /// messages have been persisted.
+    /// Last assistant text from live history, absent if no assistant message
+    /// has completed.
     [[nodiscard]] std::optional<std::string> last_assistant_text() const;
 
     /// Session identifier.

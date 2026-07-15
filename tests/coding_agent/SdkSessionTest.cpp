@@ -242,23 +242,19 @@ public:
 // U1: Public SDK contracts compile and are move-only
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE("SDK types compile with only public headers", "[sdk][u1]") {
-    // Verify that SDK options can be declared with public headers only
+TEST_CASE("SDK prompt contract exposes success-or-error and separate state", "[sdk][u1]") {
     coding_agent::CreateAgentSessionOptions opts;
     opts.session_path = std::filesystem::path{"/tmp/test"};
     opts.workspace = std::filesystem::path{"/tmp"};
     opts.max_turns = 10;
 
     coding_agent::PromptOptions prompt_opts;
-    coding_agent::PromptOptions legacy_aggregate{
-        agent::AgentEventSink{[](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid { return {}; }}};
-    coding_agent::PromptResult result;
-    result.code = "completed";
-    result.success = true;
+    CHECK(prompt_opts.expand_prompt_templates);
 
-    CHECK(result.success);
-    CHECK(result.code == "completed");
-    CHECK(legacy_aggregate.expand_prompt_templates);
+    using PromptCompletion = decltype(
+        std::declval<coding_agent::AgentSession&>().prompt(std::declval<std::string>()));
+    static_assert(std::is_same_v<PromptCompletion, util::ExpectedVoid>);
+    static_assert(!std::is_constructible_v<coding_agent::PromptOptions, agent::AgentEventSink>);
 }
 
 TEST_CASE("AgentSession is move-only", "[sdk][u1]") {
@@ -449,12 +445,10 @@ TEST_CASE("SDK create/prompt/close cycle with fake client", "[sdk][u3]") {
     CHECK(session->is_open());
     CHECK_FALSE(session->is_busy());
 
-    // Prompt returns success
+    // Prompt completion reports success; resulting state is queried separately.
     auto prompt_result = session->prompt("hello world");
     REQUIRE(prompt_result.has_value());
-    CHECK(prompt_result->success);
-    CHECK(prompt_result->code == "completed");
-    CHECK(prompt_result->message_count > 0);
+    CHECK(session->message_count() > 0);
 
     // Close is idempotent
     auto close1 = session->close();
@@ -506,33 +500,6 @@ TEST_CASE("SDK event subscription delivers lifecycle events", "[sdk][u3]") {
     CHECK(session->close().has_value());
 }
 
-TEST_CASE("SDK per-prompt event sink receives events", "[sdk][u3]") {
-    TestPaths paths;
-
-    coding_agent::CreateAgentSessionOptions opts;
-    opts.session_path = paths.session_file;
-    opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
-
-    auto create_result = coding_agent::create_agent_session(std::move(opts));
-    REQUIRE(create_result.has_value());
-
-    auto& session = create_result->session;
-
-    int per_prompt_count = 0;
-    coding_agent::PromptOptions prompt_opts;
-    prompt_opts.event_sink = [&per_prompt_count](const agent::AgentLifecycleEvent& /*event*/) -> util::ExpectedVoid {
-        ++per_prompt_count;
-        return {};
-    };
-
-    auto prompt_result = session->prompt("test per-prompt sink", std::move(prompt_opts));
-    REQUIRE(prompt_result.has_value());
-    CHECK(per_prompt_count > 0);
-
-    CHECK(session->close().has_value());
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // U4: Tool and resource injection
 // ─────────────────────────────────────────────────────────────────────────────
@@ -556,7 +523,6 @@ TEST_CASE("SDK custom tool is registered and can be called", "[sdk][u4]") {
     auto& session = create_result->session;
     auto prompt_result = session->prompt("hello");
     REQUIRE(prompt_result.has_value());
-    CHECK(prompt_result->success);
 
     CHECK(session->close().has_value());
 }
@@ -619,9 +585,6 @@ TEST_CASE("SDK unknown skill command reaches the provider without diagnostics", 
     auto& session = create_result->session;
     auto prompt_result = session->prompt("/skill:unknown");
     REQUIRE(prompt_result.has_value());
-    CHECK(prompt_result->success);
-    CHECK(prompt_result->code == "completed");
-    CHECK(prompt_result->diagnostics.empty());
 
     CHECK(session->close().has_value());
 }
@@ -647,13 +610,9 @@ TEST_CASE("SDK prompt leaves diagnostics empty for valid and bare skill commands
     auto& session = create_result->session;
     auto valid_result = session->prompt("/skill:valid-skill with args");
     REQUIRE(valid_result.has_value());
-    CHECK(valid_result->success);
-    CHECK(valid_result->diagnostics.empty());
 
     auto bare_result = session->prompt("/skill:");
     REQUIRE(bare_result.has_value());
-    CHECK(bare_result->code == "completed");
-    CHECK(bare_result->diagnostics.empty());
 
     CHECK(session->close().has_value());
 }
@@ -699,7 +658,6 @@ TEST_CASE("moved SDK session retains its owned prompt resource snapshot", "[sdk]
 
     auto result = moved_session.prompt("/review target.cpp");
     REQUIRE(result.has_value());
-    CHECK(result->success);
     REQUIRE(capture_ptr->captured_request.has_value());
     const auto& messages = capture_ptr->captured_request->context.messages;
     const auto user = std::find_if(messages.begin(), messages.end(), [](const ai::MessageVariant& message) {
@@ -731,8 +689,6 @@ TEST_CASE("SDK expand_prompt_templates false sends slash-shaped input raw to the
         prompt_options.expand_prompt_templates = false;
         auto result = created->session->prompt(raw, std::move(prompt_options));
         REQUIRE(result.has_value());
-        CHECK(result->success);
-        CHECK(result->code == "completed");
         REQUIRE(capture_ptr->captured_request.has_value());
         const auto& messages = capture_ptr->captured_request->context.messages;
         const auto user = std::find_if(messages.rbegin(), messages.rend(), [](const ai::MessageVariant& message) {
@@ -761,8 +717,6 @@ TEST_CASE("SDK treats user bash prefixes as ordinary prompts", "[sdk][u4][prompt
     for (const std::string raw : {"!echo visible", "!!echo excluded-later"}) {
         auto result = created->session->prompt(raw);
         REQUIRE(result.has_value());
-        CHECK(result->success);
-        CHECK(result->code == "completed");
         REQUIRE(capture_ptr->captured_request.has_value());
         const auto& messages = capture_ptr->captured_request->context.messages;
         const auto user = std::find_if(messages.rbegin(), messages.rend(), [](const ai::MessageVariant& message) {
@@ -796,16 +750,13 @@ TEST_CASE("SDK loads trusted project resources through shared loader", "[sdk][pr
 
     auto skill_prompt = result->session->prompt("/skill:project-skill now");
     REQUIRE(skill_prompt.has_value());
-    CHECK(skill_prompt->success);
-    CHECK(skill_prompt->diagnostics.empty());
-    REQUIRE(skill_prompt->last_assistant_text.has_value());
-    CHECK(skill_prompt->last_assistant_text->find("Use project skill instructions.") != std::string::npos);
+    REQUIRE(result->session->last_assistant_text().has_value());
+    CHECK(result->session->last_assistant_text()->find("Use project skill instructions.") != std::string::npos);
 
     auto template_prompt = result->session->prompt("/project-review Ada");
     REQUIRE(template_prompt.has_value());
-    CHECK(template_prompt->success);
-    REQUIRE(template_prompt->last_assistant_text.has_value());
-    CHECK(template_prompt->last_assistant_text->find("Review project item: Ada.") != std::string::npos);
+    REQUIRE(result->session->last_assistant_text().has_value());
+    CHECK(result->session->last_assistant_text()->find("Review project item: Ada.") != std::string::npos);
 
     CHECK(result->session->close().has_value());
 }
@@ -1117,7 +1068,6 @@ TEST_CASE("SDK resumes linear active topology with inactive branch and compactio
 
     auto prompt_result = result->session->prompt("continue linear path");
     REQUIRE(prompt_result.has_value());
-    REQUIRE(prompt_result->success);
     CHECK(result->session->close().has_value());
 }
 
@@ -1142,8 +1092,8 @@ TEST_CASE("SDK state accessors reflect committed history", "[sdk][u3]") {
 
     auto pr = session->prompt("hello");
     REQUIRE(pr.has_value());
-    CHECK(pr->message_count > 0);
-    CHECK(pr->last_assistant_text.has_value());
+    CHECK(session->message_count() > 0);
+    CHECK(session->last_assistant_text().has_value());
 
     CHECK(session->close().has_value());
 }
@@ -1195,7 +1145,6 @@ TEST_CASE("SDK message_end subscribers observe live state updated before deliver
 
     auto first = session->prompt("hello");
     REQUIRE(first.has_value());
-    CHECK(first->success);
     CHECK(user_message_ends == 1);
     CHECK(assistant_message_ends == 1);
     CHECK(tool_result_message_ends == 0);
@@ -1209,7 +1158,6 @@ TEST_CASE("SDK message_end subscribers observe live state updated before deliver
     assistant_text_in_subscriber.reset();
     auto second = session->prompt("read target.txt");
     REQUIRE(second.has_value());
-    CHECK(second->success);
     CHECK(user_message_ends == 2);
     CHECK(tool_result_message_ends == 1);
     CHECK(assistant_message_ends == 3);
@@ -1259,7 +1207,6 @@ TEST_CASE(
 
     auto prompt = session->prompt("read target.txt");
     REQUIRE(prompt.has_value());
-    REQUIRE(prompt->success);
     CHECK(delivered_message_ends == 4);
 
     auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
@@ -1337,10 +1284,9 @@ TEST_CASE(
     REQUIRE(second.has_value());
 
     auto failed = session->prompt("hello");
-    REQUIRE(failed.has_value());
-    CHECK_FALSE(failed->success);
-    CHECK(failed->code == "event_sink_failed");
-    CHECK(failed->message == "subscriber rejects assistant message_end");
+    REQUIRE_FALSE(failed.has_value());
+    CHECK(failed.error().code == util::ErrorCode::Tool);
+    CHECK(failed.error().message == "subscriber rejects assistant message_end");
 
     CHECK(second_message_ends == 1);
     const std::vector<std::string> expected_delivery_order{
@@ -1366,7 +1312,6 @@ TEST_CASE(
     first->unsubscribe();
     auto recovered = session->prompt("again");
     REQUIRE(recovered.has_value());
-    CHECK(recovered->success);
     CHECK(session->message_count() == 4);
     CHECK(second_message_ends == 3);
 
@@ -1400,10 +1345,9 @@ TEST_CASE(
     // one-shot private hook leaves the next prompt free to persist normally.
     harness::session::testing::fail_nth_append_for_test(paths.session_file, 2);
     auto failed = session->prompt("first");
-    REQUIRE(failed.has_value());
-    CHECK_FALSE(failed->success);
-    CHECK(failed->code == "session_persist_failed");
-    CHECK(failed->message == "could not persist session entry");
+    REQUIRE_FALSE(failed.has_value());
+    CHECK(failed.error().code == util::ErrorCode::Session);
+    CHECK(failed.error().message == "could not persist session entry");
     CHECK(session->is_open());
     CHECK(session->message_count() == 2);
     CHECK(session->last_assistant_text() == "captured");
@@ -1416,7 +1360,6 @@ TEST_CASE(
 
     auto recovered = session->prompt("second");
     REQUIRE(recovered.has_value());
-    CHECK(recovered->success);
     CHECK(session->message_count() == 4);
 
     // The later provider request uses retained live state even though the first
@@ -1598,7 +1541,6 @@ TEST_CASE("SDK disabled bash is absent from the model-visible tool registry", "[
     REQUIRE(result.has_value());
     auto prompt_result = result->session->prompt("hello");
     REQUIRE(prompt_result.has_value());
-    REQUIRE(prompt_result->success);
 
     REQUIRE(capture_ptr->captured_request.has_value());
     CHECK_FALSE(tool_registry_contains(capture_ptr->captured_request->context, "bash"));
@@ -1623,7 +1565,6 @@ TEST_CASE("SDK enabled bash appears in the model-visible tool registry", "[sdk][
     REQUIRE(result.has_value());
     auto prompt_result = result->session->prompt("hello");
     REQUIRE(prompt_result.has_value());
-    REQUIRE(prompt_result->success);
 
     REQUIRE(capture_ptr->captured_request.has_value());
     CHECK(tool_registry_contains(capture_ptr->captured_request->context, "bash"));

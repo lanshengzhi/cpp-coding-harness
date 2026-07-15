@@ -236,12 +236,6 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
             return 1;
         }
 
-        const auto& result = *prompt_result;
-        if (!result.success) {
-            present_text_error(result.message);
-            return 1;
-        }
-
         // Responses and tool activity have already been rendered by the
         // persistent subscription; do not present session state a second time.
         return 0;

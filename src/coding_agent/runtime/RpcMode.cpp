@@ -78,6 +78,14 @@ using util::JsonValue;
 
 int run_rpc_mode(RpcModeConfig config) {
     JsonEventPrinter printer(config.output);
+    auto event_subscription = config.session.subscribe(
+        [&printer](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            return printer.print_agent_event(event);
+        });
+    if (!event_subscription) {
+        return 1;
+    }
+
     std::string line;
     while (std::getline(config.input, line)) {
         line = rpc_jsonl::strip_trailing_cr(std::move(line));
@@ -168,27 +176,18 @@ int run_rpc_mode(RpcModeConfig config) {
                 return 1;
             }
 
-            auto result = config.session.prompt(
-                std::move(*message),
-                PromptOptions{
-                    .event_sink = [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
-                        return printer.print_agent_event(event);
-                    },
-                });
+            auto result = config.session.prompt(std::move(*message));
             if (!result) {
                 if (auto terminal = printer.print_terminal(false, "runtime_error", result.error().message); !terminal) {
                     return 1;
                 }
                 return 1;
             }
-            if (auto terminal = printer.print_terminal(result->success, result->code, result->message); !terminal) {
+            if (auto terminal = printer.print_terminal(true, "completed"); !terminal) {
                 return 1;
             }
             config.output.flush();
             if (!config.output) {
-                return 1;
-            }
-            if (!result->success) {
                 return 1;
             }
             continue;
