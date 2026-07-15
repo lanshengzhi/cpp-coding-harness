@@ -22,7 +22,7 @@ The smallest validation scope that proves a change at its affected documentation
 
 ### AgentSession
 
-A move-only runtime handle representing one open agent conversation session. The public seam exposes prompt execution, lifecycle event subscription, and close; assembly complexity lives behind it in a factory.
+A move-only runtime handle representing one open agent conversation session. The public seam exposes success-or-error prompt completion, one persistent lifecycle-event subscription path, live-state accessors, and close; assembly complexity lives behind it in a factory.
 
 ### SessionFactory
 
@@ -54,7 +54,7 @@ A generic name-to-handler dispatch seam for slash-commands. Domain-specific comm
 
 ### AgentSessionRuntime
 
-The internal implementation behind the `AgentSession` handle. Coordinates the prompt-processing pipeline, agent loop, session store, history, and event subscriber fanout.
+The internal implementation behind the `AgentSession` handle. Coordinates the prompt-processing pipeline and agent loop, updates live history before notifying persistent subscribers, and incrementally persists completed messages after subscriber delivery.
 
 ### AgentSessionState
 

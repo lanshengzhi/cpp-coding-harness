@@ -261,7 +261,7 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **Files:** `include/cch/coding_agent/Sdk.hpp`, `src/coding_agent/Sdk.cpp`, `tests/coding_agent/SdkSessionTest.cpp`.
   - **References:** `pi:packages/coding-agent/docs/sdk.md`, `pi:packages/coding-agent/src/core/sdk.ts`.
   - **Implementation plan:** `docs/plans/2026-06-21-001-feat-t8-embeddable-sdk-surface-plan.md`.
-  - **Status:** SDK v1 is available as a same-process C++23 source-level API. Host apps can create/resume sessions, register tools/resources, send prompts, optionally bypass command/skill/template expansion per prompt, subscribe to events, and close cleanly without CLI/RPC globals. Full pi SDK parity (session replacement runtime, concurrent prompts, compaction, in-memory sessions, ABI stability) is deferred.
+  - **Status:** SDK v1 is available as a same-process C++23 source-level API. Host apps can create/resume sessions, register tools/resources, complete prompts with success or an explicit C++ error, optionally bypass skill/template expansion per prompt, observe progress through one persistent move-only subscription path, query resulting live state separately, and close cleanly without CLI/RPC globals. Public/private prompt-result status models, per-prompt event sinks, and SDK command registration are absent. Full pi SDK parity (session replacement runtime, concurrent prompts, compaction, in-memory sessions, ABI stability) is deferred.
   - **Done when:** a host application can create a session, register tools/resources, send prompts, receive events, and shut down cleanly without depending on CLI globals.
 
 ### T9. Security, Platform, and Distribution

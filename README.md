@@ -180,14 +180,14 @@ Long-term work tracks pi module and contract parity in `docs/plans/2026-06-16-00
 
 The default text CLI prints stable semantic event lines:
 
-- `[model-request] turn N`
-- `[assistant] <text>`
+- `[model-request]`
+- `[assistant] <text delta>`
 - `[tool-call] <name>#<id>`
 - `[tool-success] <id>`
 - `[tool-error] <id>`
-- `[provider-error] <message>`
-- `[max-turns] max_turns_exceeded`
-- `[completed] <stop reason>`
+- `[completed]`
+
+Prompt completion failures are reported on stderr as `loop failed: <message>` and return a non-zero exit status; they do not introduce a second text-event status model.
 
 `--mode json` emits one compact JSON object per stdout line. The first record is the pi v3 session header; every later record is a directly serialized supported AgentSession event such as `agent_start`, `turn_start`, `message_start`, `message_update`, `tool_execution_start`, `tool_execution_end`, `turn_end`, and `agent_end`. Event payloads retain their message/tool structure after secret redaction and bounded-output transformation. JSON mode has no C++ schema/version envelope, sequence counter, content-status substitution, or `runtime_terminal` record. Prompt failures are reported on stderr with a non-zero exit. Frontend-only slash commands produce no post-header JSON record because they do not enter AgentSession.
 
