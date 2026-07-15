@@ -1220,6 +1220,65 @@ TEST_CASE("SDK message_end subscribers observe live state updated before deliver
     CHECK(session->close().has_value());
 }
 
+TEST_CASE(
+    "SDK persists each completed message after subscribers and reopens in durable order",
+    "[sdk][incremental-persistence]") {
+    TestPaths paths;
+    paths.workspace.write("target.txt", "target content\n");
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    auto& session = result->session;
+
+    std::size_t delivered_message_ends = 0;
+    auto sub = session->subscribe([&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+        if (!std::holds_alternative<agent::MessageEndEvent>(event)) {
+            return {};
+        }
+
+        auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
+        CHECK(durable.has_value());
+        if (!durable) {
+            return std::unexpected(durable.error());
+        }
+
+        // The current message is live before delivery, but becomes durable only
+        // after every subscriber has observed its message_end event.
+        CHECK(session->message_count() == delivered_message_ends + 1);
+        CHECK(durable->messages.size() == delivered_message_ends);
+        ++delivered_message_ends;
+        return {};
+    });
+    REQUIRE(sub.has_value());
+
+    auto prompt = session->prompt("read target.txt");
+    REQUIRE(prompt.has_value());
+    REQUIRE(prompt->success);
+    CHECK(delivered_message_ends == 4);
+
+    auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable.has_value());
+    REQUIRE(durable->messages.size() == 4);
+    CHECK(std::holds_alternative<ai::UserMessage>(durable->messages[0]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(durable->messages[1]));
+    CHECK(std::holds_alternative<ai::ToolResultMessage>(durable->messages[2]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(durable->messages[3]));
+
+    CHECK(session->close().has_value());
+
+    auto reopened = coding_agent::create_agent_session(sdk_resume_options(paths));
+    REQUIRE(reopened.has_value());
+    CHECK(reopened->session->message_count() == 4);
+    REQUIRE(reopened->session->last_assistant_text().has_value());
+    CHECK(reopened->session->last_assistant_text()->find("observed") != std::string::npos);
+    CHECK(reopened->session->close().has_value());
+}
+
 TEST_CASE("SDK live state remains after subscriber failure and session stays usable", "[sdk][live-state]") {
     TestPaths paths;
 

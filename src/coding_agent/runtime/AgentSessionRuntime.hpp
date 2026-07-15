@@ -90,7 +90,9 @@ private:
         bool active{true};
     };
 
-    [[nodiscard]] agent::AgentEventSink make_combined_sink(agent::AgentEventSink per_prompt);
+    [[nodiscard]] agent::AgentEventSink make_combined_sink(
+        agent::AgentEventSink per_prompt,
+        bool& persistence_failed);
     [[nodiscard]] PromptRunResult run_agent_loop(
         std::string prompt,
         agent::AgentEventSink sink);

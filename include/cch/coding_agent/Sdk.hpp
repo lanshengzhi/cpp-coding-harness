@@ -192,11 +192,11 @@ struct PromptResult {
     /// Human-readable message.
     std::string message;
 
-    /// Last assistant text from committed history, absent if no assistant
-    /// messages have been committed.
+    /// Last assistant text from live history, absent if no assistant messages
+    /// have completed.
     std::optional<std::string> last_assistant_text;
 
-    /// Number of messages in committed history after this prompt.
+    /// Number of messages in live history after this prompt.
     std::size_t message_count{0};
 
     /// Diagnostics produced during prompt processing. Retained for source
@@ -242,9 +242,9 @@ private:
 ///   - close() is idempotent; prompts after close return an error.
 ///   - subscribers are cleared on close.
 ///
-/// State accessors (message_count(), last_assistant_text(), ...) reflect only
-/// committed (persisted) history. Uncommitted assistant text from a failed
-/// prompt is not exposed.
+/// State accessors (message_count(), last_assistant_text(), ...) reflect live
+/// history as each message completes. A completed message remains visible if
+/// later subscriber delivery or persistence fails.
 class AgentSession {
 public:
     /// Opaque implementation type. Defined in the SDK implementation source.
