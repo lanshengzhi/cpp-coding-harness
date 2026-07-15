@@ -161,15 +161,6 @@ const cch::util::JsonValue::object_t* find_response(
     return nullptr;
 }
 
-const cch::util::JsonValue::object_t* find_terminal(
-    const std::vector<cch::util::JsonValue::object_t>& records) {
-    for (const auto& record : records) {
-        if (json_string_at(record, "type") == "runtime_terminal") {
-            return &record;
-        }
-    }
-    return nullptr;
-}
 }
 
 TEST_CASE("CLI fake one-shot prints transcript and writes session", "[cli][u6]") {
@@ -384,7 +375,7 @@ TEST_CASE("CLI rejects RPC repl before session creation", "[cli][rpc]") {
     CHECK_FALSE(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI JSON fake one-shot emits JSONL only", "[cli][json]") {
+TEST_CASE("CLI JSON fake one-shot emits a header followed by direct session events", "[cli][json]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "json-one-shot.jsonl";
     auto result = run_command_split(bin() + " --fake --mode json --workspace " + q(workspace.path()) + " --session " + q(session) + " hello");
@@ -393,72 +384,74 @@ TEST_CASE("CLI JSON fake one-shot emits JSONL only", "[cli][json]") {
     CHECK(result.stderr_text.empty());
     auto output_lines = non_empty_lines(result.stdout_text);
     REQUIRE(output_lines.size() >= 5);
-    for (const auto& line : output_lines) {
-        (void)parse_json_line(line);
-    }
-    auto first = as_object(parse_json_line(output_lines.front()));
+    auto records = parse_json_objects(result.stdout_text);
+    const auto& first = records.front();
+    CHECK(first.size() == 5);
     CHECK(json_string_at(first, "type") == "session");
+    CHECK(static_cast<int>(first.at("version").get<double>()) == 3);
     CHECK(json_string_at(first, "id").empty() == false);
+    for (std::size_t index = 1; index < records.size(); ++index) {
+        const auto& record = records[index];
+        CHECK_FALSE(record.contains("schemaVersion"));
+        CHECK_FALSE(record.contains("seq"));
+        CHECK_FALSE(record.contains("contentStatus"));
+        CHECK(json_string_at(record, "type") != "runtime_terminal");
+    }
     CHECK(has_json_event_type(output_lines, "turn_start"));
     CHECK(has_json_event_type(output_lines, "message_update"));
-    auto last = as_object(parse_json_line(output_lines.back()));
-    CHECK(json_string_at(last, "type") == "runtime_terminal");
-    CHECK(json_string_at(last, "code") == "completed");
-    CHECK(last.at("success").get<bool>() == true);
+    CHECK(has_json_event_type(output_lines, "message_end"));
+
+    std::size_t assistant_start = records.size();
+    std::size_t assistant_update = records.size();
+    for (std::size_t index = 1; index < records.size(); ++index) {
+        const auto& record = records[index];
+        const auto type = json_string_at(record, "type");
+        if ((type == "message_start" || type == "message_update" || type == "message_end") &&
+            record.contains("message")) {
+            const auto& message = record.at("message").get<cch::util::JsonValue::object_t>();
+            if (json_string_at(message, "role") == "assistant") {
+                CHECK(message.contains("api"));
+                CHECK(message.contains("provider"));
+                CHECK(message.contains("model"));
+                CHECK(message.contains("usage"));
+                CHECK(json_string_at(message, "stopReason") != "unknown");
+                if (type == "message_start" && assistant_start == records.size()) {
+                    assistant_start = index;
+                }
+                if (type == "message_update" && assistant_update == records.size()) {
+                    assistant_update = index;
+                }
+            }
+        }
+    }
+    REQUIRE(assistant_start < records.size());
+    REQUIRE(assistant_update < records.size());
+    CHECK(assistant_start < assistant_update);
+
+    const auto& last = records.back();
+    CHECK(json_string_at(last, "type") == "agent_end");
+    CHECK(last.contains("messages"));
     CHECK(result.stdout_text.find("[assistant]") == std::string::npos);
     CHECK(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI JSON /help stores help text in the terminal message field", "[cli][json][commands]") {
-    cch::tests::TempWorkspace workspace;
-    auto session = workspace.path() / "json-help.jsonl";
-    auto result = run_command_split(
-        bin() + " --fake --mode json --workspace " + q(workspace.path()) +
-        " --session " + q(session) + " /help");
+TEST_CASE("CLI JSON frontend commands emit no synthetic terminal records", "[cli][json][commands]") {
+    for (const std::string command : {"/help", "/exit", "/clear"}) {
+        cch::tests::TempWorkspace workspace;
+        auto session = workspace.path() / "json-command.jsonl";
+        auto result = run_command_split(
+            bin() + " --fake --mode json --workspace " + q(workspace.path()) +
+            " --session " + q(session) + " " + command);
 
-    REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.empty());
-    const auto records = parse_json_objects(result.stdout_text);
-    const auto* terminal = find_terminal(records);
-    REQUIRE(terminal != nullptr);
-    CHECK(json_string_at(*terminal, "code") == "command_handled");
-    CHECK(json_string_at(*terminal, "message").find("Available commands:") != std::string::npos);
-    CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
-}
-
-TEST_CASE("CLI JSON /exit emits shutdown terminal text and exits successfully", "[cli][json][commands]") {
-    cch::tests::TempWorkspace workspace;
-    auto session = workspace.path() / "json-exit.jsonl";
-    auto result = run_command_split(
-        bin() + " --fake --mode json --workspace " + q(workspace.path()) +
-        " --session " + q(session) + " /exit");
-
-    REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.empty());
-    const auto records = parse_json_objects(result.stdout_text);
-    const auto* terminal = find_terminal(records);
-    REQUIRE(terminal != nullptr);
-    CHECK(json_string_at(*terminal, "code") == "shutdown");
-    CHECK(json_string_at(*terminal, "message") == "Shutting down.");
-    CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
-}
-
-TEST_CASE("CLI JSON /clear is handled without ANSI bytes", "[cli][json][commands]") {
-    cch::tests::TempWorkspace workspace;
-    auto session = workspace.path() / "json-clear.jsonl";
-    auto result = run_command_split(
-        bin() + " --fake --mode json --workspace " + q(workspace.path()) +
-        " --session " + q(session) + " /clear");
-
-    REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.empty());
-    const auto records = parse_json_objects(result.stdout_text);
-    const auto* terminal = find_terminal(records);
-    REQUIRE(terminal != nullptr);
-    CHECK(json_string_at(*terminal, "code") == "command_handled");
-    CHECK(terminal->find("message") == terminal->end());
-    CHECK(result.stdout_text.find('\033') == std::string::npos);
-    CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
+        REQUIRE(result.exit_code == 0);
+        CHECK(result.stderr_text.empty());
+        const auto records = parse_json_objects(result.stdout_text);
+        REQUIRE(records.size() == 1);
+        CHECK(json_string_at(records.front(), "type") == "session");
+        CHECK(result.stdout_text.find("runtime_terminal") == std::string::npos);
+        CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
+        CHECK(result.stdout_text.find('\033') == std::string::npos);
+    }
 }
 
 TEST_CASE("CLI JSON fake tool flow emits correlated tool events", "[cli][json]") {
@@ -477,16 +470,17 @@ TEST_CASE("CLI JSON fake tool flow emits correlated tool events", "[cli][json]")
             saw_tool_end = true;
             CHECK(json_string_at(record, "toolCallId") == "fake-read-1");
             CHECK(json_string_at(record, "toolName") == "read");
-            CHECK(record.find("content") == record.end());
+            const auto& tool_result = record.at("result").get<cch::util::JsonValue::object_t>();
+            CHECK(tool_result.contains("content"));
+            CHECK(record.find("contentStatus") == record.end());
         }
     }
     CHECK(saw_tool_end);
     auto last = as_object(parse_json_line(output_lines.back()));
-    CHECK(json_string_at(last, "type") == "runtime_terminal");
-    CHECK(last.at("success").get<bool>() == true);
+    CHECK(json_string_at(last, "type") == "agent_end");
 }
 
-TEST_CASE("CLI JSON max-turn flow emits terminal error code", "[cli][json]") {
+TEST_CASE("CLI JSON max-turn flow ends with the direct agent event", "[cli][json]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "json-max-turn.jsonl";
     auto result = run_command_split(bin() + " --fake --mode json --workspace " + q(workspace.path()) + " --session " + q(session) + " --max-turns 1 read missing.txt");
@@ -498,9 +492,10 @@ TEST_CASE("CLI JSON max-turn flow emits terminal error code", "[cli][json]") {
         (void)parse_json_line(line);
     }
     auto last = as_object(parse_json_line(output_lines.back()));
-    CHECK(json_string_at(last, "type") == "runtime_terminal");
-    CHECK(json_string_at(last, "code") == "max_turns_exceeded");
-    CHECK(last.at("success").get<bool>() == false);
+    CHECK(json_string_at(last, "type") == "agent_end");
+    CHECK(last.contains("messages"));
+    CHECK(result.stdout_text.find("runtime_terminal") == std::string::npos);
+    CHECK(result.stderr_text.find("max_turns_exceeded") != std::string::npos);
 }
 
 TEST_CASE("CLI RPC wires stdin and JSONL stdout to a session", "[cli][rpc]") {

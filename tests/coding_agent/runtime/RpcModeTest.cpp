@@ -215,12 +215,10 @@ TEST_CASE("RPC mode accepts a prompt before events and exposes committed assista
     CHECK(result.records[terminal_index].at("success").get<bool>());
     CHECK(string_at(result.records[terminal_index], "code") == "completed");
 
-    int previous_seq = 0;
     for (std::size_t index = first_event_index; index <= terminal_index; ++index) {
-        REQUIRE(result.records[index].contains("seq"));
-        const auto seq = static_cast<int>(result.records[index].at("seq").get<double>());
-        CHECK(seq > previous_seq);
-        previous_seq = seq;
+        CHECK_FALSE(result.records[index].contains("schemaVersion"));
+        CHECK_FALSE(result.records[index].contains("seq"));
+        CHECK_FALSE(result.records[index].contains("contentStatus"));
     }
 
     const auto last_text_index = find_response_index(result.records, "get_last_assistant_text", "last-1");
@@ -250,7 +248,7 @@ TEST_CASE("RPC mode treats user bash prefixes as ordinary prompts", "[coding-age
     CHECK(string_at(last->at("data").get<JsonObject>(), "text") == "fake: !!echo excluded-later");
 }
 
-TEST_CASE("RPC mode keeps one event sequence across prompts", "[coding-agent][runtime][rpc]") {
+TEST_CASE("RPC mode reuses direct event serialization across prompts", "[coding-agent][runtime][rpc]") {
     const auto result = run_transcript(
         "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"first\"}\n"
         "{\"id\":\"prompt-2\",\"type\":\"prompt\",\"message\":\"second\"}\n"
@@ -261,15 +259,13 @@ TEST_CASE("RPC mode keeps one event sequence across prompts", "[coding-agent][ru
     REQUIRE(find_response(result.records, "prompt", "prompt-2") != nullptr);
 
     int terminal_count = 0;
-    int previous_seq = 0;
     for (const auto& record : result.records) {
         if (string_at(record, "type") == "response") {
             continue;
         }
-        REQUIRE(record.contains("seq"));
-        const auto seq = static_cast<int>(record.at("seq").get<double>());
-        CHECK(seq > previous_seq);
-        previous_seq = seq;
+        CHECK_FALSE(record.contains("schemaVersion"));
+        CHECK_FALSE(record.contains("seq"));
+        CHECK_FALSE(record.contains("contentStatus"));
         if (string_at(record, "type") == "runtime_terminal") {
             ++terminal_count;
         }

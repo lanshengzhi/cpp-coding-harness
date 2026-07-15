@@ -68,13 +68,22 @@ void present_text_command(std::string_view display_text) {
     }
 }
 
-/// Subscribe once to AgentSession events for text-mode rendering.
+/// Subscribe once to AgentSession events for frontend rendering.
 [[nodiscard]] util::Expected<coding_agent::EventSubscription> subscribe_text_events(
     coding_agent::AgentSession& session) {
     return session.subscribe(
         [](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
             coding_agent::runtime::print_agent_event(event, std::cout);
             return {};
+        });
+}
+
+[[nodiscard]] util::Expected<coding_agent::EventSubscription> subscribe_json_events(
+    coding_agent::AgentSession& session,
+    coding_agent::runtime::JsonEventPrinter& printer) {
+    return session.subscribe(
+        [&printer](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            return printer.print_agent_event(event);
         });
 }
 
@@ -173,18 +182,17 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         });
     }
 
-    // Text mode owns one persistent presentation subscription. JSON mode
-    // retains its per-prompt event path until the direct-event protocol slice.
-    std::optional<coding_agent::EventSubscription> text_event_subscription;
-    if (!json_mode) {
-        auto subscribed = subscribe_text_events(session);
-        if (!subscribed) {
-            std::cerr << "could not subscribe text event renderer: "
-                      << subscribed.error().message << '\n';
-            return 2;
-        }
-        text_event_subscription.emplace(std::move(*subscribed));
+    // Both frontends consume the same persistent AgentSession event stream.
+    std::optional<coding_agent::EventSubscription> event_subscription;
+    auto subscribed = json_mode
+        ? subscribe_json_events(session, *json_printer)
+        : subscribe_text_events(session);
+    if (!subscribed) {
+        std::cerr << "could not subscribe event renderer: "
+                  << subscribed.error().message << '\n';
+        return 2;
     }
+    event_subscription.emplace(std::move(*subscribed));
 
     auto make_command_context = [&]() {
         return coding_agent::CommandContext{
@@ -197,18 +205,6 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         };
     };
 
-    // ── Command/terminal output for JSON mode ─────────────────────────────
-    // JSON mode uses runtime_terminal records for command results and
-    // prompt completion/error signals.
-    auto json_print_terminal = [&](bool success, const std::string& code,
-                                   const std::string& message) -> bool {
-        if (auto printed = json_printer->print_terminal(success, code, message); !printed) {
-            std::cerr << "event printer failed: " << printed.error().message << '\n';
-            return false;
-        }
-        return true;
-    };
-
     // ── Prompt loop ───────────────────────────────────────────────────────
     // Returns 0 to continue, 1 for error, 2 for shutdown.
     auto run_prompt = [&](const std::string& prompt) -> int {
@@ -217,11 +213,8 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         if (auto command_result = dispatch_text_cli_command(
                 cli_command_registry, prompt, make_command_context())) {
             if (json_mode) {
-                // JSON mode emits a runtime_terminal for command results.
-                std::string code = command_result->shutdown_requested ? "shutdown" : "command_handled";
-                if (!json_print_terminal(true, code, command_result->display_text)) {
-                    return 1;
-                }
+                // Frontend command outcomes are not AgentSession events. JSON
+                // mode therefore emits no synthetic protocol record for them.
             } else if (prompt == "/clear") {
                 if (!clear_text_terminal()) {
                     std::cerr << "failed to clear terminal\n";
@@ -234,41 +227,23 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         }
 
         // Unmatched slash input reaches AgentSession via ordinary prompt.
-        coding_agent::PromptOptions prompt_options;
-        if (json_mode) {
-            prompt_options.event_sink =
-                [&printer = *json_printer](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
-                return printer.print_agent_event(event);
-            };
-        }
-        auto prompt_result = session.prompt(prompt, std::move(prompt_options));
+        auto prompt_result = session.prompt(prompt);
 
         std::cout.flush();
 
         if (!prompt_result) {
-            if (json_mode) {
-                (void)json_print_terminal(false, "runtime_error", prompt_result.error().message);
-            } else {
-                present_text_error(prompt_result.error().message);
-            }
+            present_text_error(prompt_result.error().message);
             return 1;
         }
 
         const auto& result = *prompt_result;
         if (!result.success) {
-            if (json_mode) {
-                (void)json_print_terminal(false, result.code, result.message);
-            } else {
-                present_text_error(result.message);
-            }
+            present_text_error(result.message);
             return 1;
         }
 
-        // Text responses and tool activity have already been rendered by the
+        // Responses and tool activity have already been rendered by the
         // persistent subscription; do not present session state a second time.
-        if (json_mode && !json_print_terminal(true, "completed", {})) {
-            return 1;
-        }
         return 0;
     };
 

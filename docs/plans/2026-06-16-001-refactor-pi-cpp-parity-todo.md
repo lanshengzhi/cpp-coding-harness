@@ -250,7 +250,7 @@ The first implementation pass should execute that cleanup plan and produce the T
   - **References:** `pi:packages/coding-agent/docs/json.md`.
   - **Test scenarios:** stable event objects for model request, assistant deltas, tool call, tool result, errors, max turns, and completion.
   - **Implementation plan:** `docs/plans/2026-06-20-002-feat-json-event-stream-mode-plan.md`.
-  - **Status:** `--mode json` emits JSONL stdout with a session header, pi-named C++ schema v1 lifecycle subset, correlated tool execution events, and final `runtime_terminal`; text mode remains default. RPC and SDK remain deferred.
+  - **Status:** `--mode json` emits the pi v3 session header followed by direct supported AgentSession events with redacted, bounded message/tool payloads. C++ schema metadata, sequence counters, content-status substitutions, and runtime terminal records are absent; text mode remains default.
 - [x] Add RPC mode only after runtime services are separated from CLI printing.
   - **Files:** `src/main.cpp`, `src/AsyncCliRuntime.*`, `src/coding_agent/runtime/AgentSessionRunner.*`, `src/coding_agent/runtime/RpcJsonl.*`, `src/coding_agent/runtime/RpcMode.*`, `tests/cli/CliSmokeTest.cpp`.
   - **References:** `pi:packages/coding-agent/docs/rpc.md`.

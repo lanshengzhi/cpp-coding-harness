@@ -18,11 +18,9 @@ public:
     [[nodiscard]] util::ExpectedVoid print_terminal(bool success, std::string code, std::string message = {});
 
 private:
-    [[nodiscard]] int next_seq();
     [[nodiscard]] util::ExpectedVoid write_record(util::JsonValue::object_t record);
 
     std::ostream* out_;
-    int next_seq_{1};
 };
 
 } // namespace cch::coding_agent::runtime

@@ -15,6 +15,18 @@
 namespace cch::ai::providers {
 namespace {
 
+void set_fake_metadata(ai::AssistantMessage& assistant, const std::string& model) {
+    assistant.model = model;
+    assistant.provider = "fake";
+    assistant.api = "scripted-fake";
+    if (!assistant.usage) {
+        assistant.usage = ai::Usage{};
+    }
+    if (assistant.stop_reason == ai::AssistantStopReason::Unknown) {
+        assistant.stop_reason = ai::AssistantStopReason::Stop;
+    }
+}
+
 [[nodiscard]] util::Expected<std::string> make_tool_arguments(std::string key, std::string value) {
     util::JsonValue::object_t object;
     object.emplace(std::move(key), util::JsonValue{std::move(value)});
@@ -27,15 +39,15 @@ public:
         const ai::StreamChatRequest& request,
         ai::AssistantEventSink sink) override {
         ai::AssistantMessage assistant;
-        assistant.model = request.model;
-        assistant.provider = "fake";
-        assistant.api = "scripted-fake";
+        set_fake_metadata(assistant, request.model);
+        if (sink) {
+            CCH_TRY_VOID(sink(ai::AssistantStartEvent{assistant}));
+        }
 
         if (!request.context.messages.empty()) {
             if (const auto* last_tool = std::get_if<ai::ToolResultMessage>(&request.context.messages.back())) {
                 assistant = ai::assistant_text_message("fake observed: " + ai::text_from_content(last_tool->content));
-                assistant.provider = "fake";
-                assistant.api = "scripted-fake";
+                set_fake_metadata(assistant, request.model);
                 co_return co_await emit_text(std::move(assistant), sink);
             }
         }
@@ -67,6 +79,7 @@ public:
             assistant.stop_reason = ai::AssistantStopReason::ToolUse;
             if (sink) {
                 CCH_TRY_VOID(sink(ai::TextDeltaEvent{0, "reading " + path, assistant}));
+                CCH_TRY_VOID(sink(ai::AssistantDoneEvent{assistant.stop_reason, assistant}));
             }
             co_return assistant;
         }
@@ -89,13 +102,13 @@ public:
             assistant.stop_reason = ai::AssistantStopReason::ToolUse;
             if (sink) {
                 CCH_TRY_VOID(sink(ai::TextDeltaEvent{0, "running bash", assistant}));
+                CCH_TRY_VOID(sink(ai::AssistantDoneEvent{assistant.stop_reason, assistant}));
             }
             co_return assistant;
         }
 
         assistant = ai::assistant_text_message("fake: " + prompt);
-        assistant.provider = "fake";
-        assistant.api = "scripted-fake";
+        set_fake_metadata(assistant, request.model);
         co_return co_await emit_text(std::move(assistant), sink);
     }
 
@@ -106,6 +119,7 @@ private:
         if (sink && !assistant.content.empty()) {
             auto text = ai::text_from_assistant_content(assistant.content);
             CCH_TRY_VOID(sink(ai::TextDeltaEvent{0, text, assistant}));
+            CCH_TRY_VOID(sink(ai::AssistantDoneEvent{assistant.stop_reason, assistant}));
         }
         co_return assistant;
     }

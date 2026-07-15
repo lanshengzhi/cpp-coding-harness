@@ -9,6 +9,8 @@
 #include <vector>
 
 namespace {
+using JsonValue = cch::util::JsonValue;
+
 std::vector<std::string> lines(const std::string& text) {
     std::vector<std::string> result;
     std::istringstream input{text};
@@ -21,26 +23,52 @@ std::vector<std::string> lines(const std::string& text) {
     return result;
 }
 
-cch::util::JsonValue parse_line(const std::string& line) {
-    auto parsed = cch::util::read_json<cch::util::JsonValue>(line);
+JsonValue parse_line(const std::string& line) {
+    auto parsed = cch::util::read_json<JsonValue>(line);
     REQUIRE(parsed.has_value());
     return *parsed;
 }
 
-const cch::util::JsonValue::object_t& object(const cch::util::JsonValue& value) {
-    return value.get<cch::util::JsonValue::object_t>();
+JsonValue::object_t object(const JsonValue& value) {
+    return value.get<JsonValue::object_t>();
 }
 
-std::string string_at(const cch::util::JsonValue::object_t& value, const std::string& key) {
+JsonValue::object_t object_at(const JsonValue::object_t& value, const std::string& key) {
+    return value.at(key).get<JsonValue::object_t>();
+}
+
+JsonValue::array_t array_at(const JsonValue::object_t& value, const std::string& key) {
+    return value.at(key).get<JsonValue::array_t>();
+}
+
+std::string string_at(const JsonValue::object_t& value, const std::string& key) {
     return value.at(key).get<std::string>();
 }
 
-int int_at(const cch::util::JsonValue::object_t& value, const std::string& key) {
+int int_at(const JsonValue::object_t& value, const std::string& key) {
     return static_cast<int>(value.at(key).get<double>());
+}
+
+void check_no_cpp_envelope_fields(const JsonValue::object_t& record) {
+    CHECK_FALSE(record.contains("schemaVersion"));
+    CHECK_FALSE(record.contains("seq"));
+    CHECK_FALSE(record.contains("contentStatus"));
+}
+
+cch::ai::AssistantMessage assistant_message(std::string text) {
+    cch::ai::AssistantMessage message;
+    message.content.emplace_back(cch::ai::text_content(std::move(text)));
+    message.api = "openai-completions";
+    message.provider = "fake";
+    message.model = "fake-model";
+    message.usage = cch::ai::Usage{1, 2, 0, 0, std::nullopt, 3, {0.1, 0.2, 0.0, 0.0, 0.3}};
+    message.stop_reason = cch::ai::AssistantStopReason::Stop;
+    message.timestamp = 1234;
+    return message;
 }
 } // namespace
 
-TEST_CASE("JSON event printer emits session header with schema metadata", "[coding-agent][json-events]") {
+TEST_CASE("JSON event printer emits the exact v3 session header", "[coding-agent][json-events]") {
     std::ostringstream output;
     cch::coding_agent::runtime::JsonEventPrinter printer{output};
 
@@ -51,96 +79,210 @@ TEST_CASE("JSON event printer emits session header with schema metadata", "[codi
     metadata.provider = "fake";
     metadata.model = "fake-model";
 
-    auto printed = printer.print_session_header(metadata);
+    REQUIRE(printer.print_session_header(metadata).has_value());
 
-    REQUIRE(printed.has_value());
-    auto emitted = lines(output.str());
+    const auto emitted = lines(output.str());
     REQUIRE(emitted.size() == 1);
-    auto record = object(parse_line(emitted.front()));
+    const auto& record = object(parse_line(emitted.front()));
+    CHECK(record.size() == 5);
     CHECK(string_at(record, "type") == "session");
-    CHECK(int_at(record, "schemaVersion") == 1);
-    CHECK(int_at(record, "seq") == 1);
+    CHECK(int_at(record, "version") == 3);
     CHECK(string_at(record, "id") == "session-1");
+    CHECK(string_at(record, "timestamp") == "2026-06-20T00:00:00Z");
     CHECK(string_at(record, "cwd") == "/tmp/workspace");
-    CHECK(record.find("baseUrl") == record.end());
-    CHECK(record.find("apiKeyEnv") == record.end());
+    check_no_cpp_envelope_fields(record);
 }
 
-TEST_CASE("JSON event printer emits escaped assistant text delta", "[coding-agent][json-events]") {
+TEST_CASE("JSON event printer emits direct semantically complete agent events", "[coding-agent][json-events]") {
     std::ostringstream output;
     cch::coding_agent::runtime::JsonEventPrinter printer{output};
 
-    cch::ai::AssistantMessage partial;
-    auto printed = printer.print_agent_event(cch::agent::MessageUpdateEvent{
-        cch::ai::MessageVariant{partial},
-        cch::ai::AssistantStreamEvent{cch::ai::TextDeltaEvent{0, "hello\n\"json\"\r", std::move(partial)}}});
+    auto user = cch::ai::user_text_message("hello", 1000);
+    auto assistant = assistant_message("answer");
+    JsonValue::object_t tool_arguments;
+    tool_arguments.emplace("path", JsonValue{"README.md"});
+    assistant.content.emplace_back(cch::ai::tool_call_content(
+        "call-1", "read", R"({"path":"README.md"})", JsonValue{tool_arguments}));
+    auto tool_result = cch::ai::tool_result_message("call-1", "read", "file text", false, 1200);
 
-    REQUIRE(printed.has_value());
-    auto emitted = lines(output.str());
-    REQUIRE(emitted.size() == 1);
-    auto record = object(parse_line(emitted.front()));
-    CHECK(string_at(record, "type") == "message_update");
-    const auto& assistant = record.at("assistantMessageEvent").get<cch::util::JsonValue::object_t>();
-    CHECK(string_at(assistant, "type") == "text_delta");
-    CHECK(string_at(assistant, "delta") == "hello\n\"json\"\r");
-}
-
-TEST_CASE("JSON event printer omits prompt and tool result bodies by policy", "[coding-agent][json-events]") {
-    std::ostringstream output;
-    cch::coding_agent::runtime::JsonEventPrinter printer{output};
+    JsonValue::object_t args;
+    args.emplace("path", JsonValue{"README.md"});
 
     REQUIRE(printer.print_agent_event(cch::agent::AgentStartEvent{}).has_value());
+    REQUIRE(printer.print_agent_event(cch::agent::TurnStartEvent{}).has_value());
+    REQUIRE(printer.print_agent_event(cch::agent::MessageStartEvent{cch::ai::MessageVariant{user}}).has_value());
+    REQUIRE(printer.print_agent_event(cch::agent::MessageUpdateEvent{
+        cch::ai::MessageVariant{assistant},
+        cch::ai::AssistantStreamEvent{cch::ai::TextDeltaEvent{0, "answer", assistant}}}).has_value());
+    REQUIRE(printer.print_agent_event(cch::agent::ToolExecutionStartEvent{
+        "call-1", "read", JsonValue{args}}).has_value());
+    REQUIRE(printer.print_agent_event(cch::agent::ToolExecutionEndEvent{
+        "call-1",
+        "read",
+        cch::agent::AsyncToolExecutionResult{
+            tool_result.content,
+            std::nullopt,
+            false,
+            true},
+        false}).has_value());
+    REQUIRE(printer.print_agent_event(cch::agent::MessageEndEvent{cch::ai::MessageVariant{tool_result}}).has_value());
+    REQUIRE(printer.print_agent_event(cch::agent::TurnEndEvent{
+        cch::ai::MessageVariant{assistant}, {tool_result}}).has_value());
+    REQUIRE(printer.print_agent_event(cch::agent::AgentEndEvent{
+        {cch::ai::MessageVariant{user}, cch::ai::MessageVariant{assistant}, cch::ai::MessageVariant{tool_result}}}).has_value());
+
+    const auto emitted = lines(output.str());
+    REQUIRE(emitted.size() == 9);
+    for (const auto& line : emitted) {
+        check_no_cpp_envelope_fields(object(parse_line(line)));
+        CHECK(line.find("runtime_terminal") == std::string::npos);
+    }
+
+    const auto& message_start = object(parse_line(emitted[2]));
+    CHECK(string_at(message_start, "type") == "message_start");
+    const auto& start_message = object_at(message_start, "message");
+    CHECK(string_at(start_message, "role") == "user");
+    CHECK(string_at(object(array_at(start_message, "content").front()), "text") == "hello");
+
+    const auto& message_update = object(parse_line(emitted[3]));
+    CHECK(string_at(message_update, "type") == "message_update");
+    const auto& update_message = object_at(message_update, "message");
+    CHECK(string_at(update_message, "role") == "assistant");
+    CHECK(string_at(update_message, "model") == "fake-model");
+    CHECK(update_message.contains("usage"));
+    CHECK(int_at(object_at(update_message, "usage"), "totalTokens") == 3);
+    CHECK(string_at(update_message, "stopReason") == "stop");
+    const auto update_content = array_at(update_message, "content");
+    REQUIRE(update_content.size() == 2);
+    const auto tool_call = object(update_content[1]);
+    CHECK(string_at(tool_call, "type") == "toolCall");
+    CHECK(tool_call.contains("arguments"));
+    CHECK_FALSE(tool_call.contains("rawArguments"));
+    CHECK_FALSE(tool_call.contains("argumentsValid"));
+    CHECK_FALSE(tool_call.contains("argumentError"));
+    const auto& assistant_event = object_at(message_update, "assistantMessageEvent");
+    CHECK(string_at(assistant_event, "type") == "text_delta");
+    CHECK(int_at(assistant_event, "contentIndex") == 0);
+    CHECK(string_at(assistant_event, "delta") == "answer");
+    CHECK(string_at(object_at(assistant_event, "partial"), "role") == "assistant");
+
+    const auto& tool_start = object(parse_line(emitted[4]));
+    CHECK(string_at(tool_start, "type") == "tool_execution_start");
+    CHECK(string_at(tool_start, "toolCallId") == "call-1");
+    CHECK(string_at(tool_start, "toolName") == "read");
+    CHECK(string_at(object_at(tool_start, "args"), "path") == "README.md");
+
+    const auto& tool_end = object(parse_line(emitted[5]));
+    CHECK(string_at(tool_end, "type") == "tool_execution_end");
+    CHECK(tool_end.at("isError").get<bool>() == false);
+    const auto& result = object_at(tool_end, "result");
+    CHECK(string_at(object(array_at(result, "content").front()), "text") == "file text");
+    CHECK(result.at("details").holds<JsonValue::null_t>());
+    CHECK(result.at("terminate").get<bool>() == true);
+
+    const auto& turn_end = object(parse_line(emitted[7]));
+    CHECK(string_at(turn_end, "type") == "turn_end");
+    CHECK(string_at(object_at(turn_end, "message"), "role") == "assistant");
+    REQUIRE(array_at(turn_end, "toolResults").size() == 1);
+    CHECK(string_at(object(array_at(turn_end, "toolResults").front()), "role") == "toolResult");
+
+    const auto& agent_end = object(parse_line(emitted[8]));
+    CHECK(string_at(agent_end, "type") == "agent_end");
+    REQUIRE(array_at(agent_end, "messages").size() == 3);
+}
+
+TEST_CASE("JSON event printer preserves payload structure while redacting and bounding output", "[coding-agent][json-events]") {
+    std::ostringstream output;
+    cch::coding_agent::runtime::JsonEventPrinter printer{output};
+
+    const std::string long_text(9000, 'x');
+    const std::string boundary_secret = std::string(8189, 'x') + "sk-ABCDEFGHIJK" + long_text;
+    auto user = cch::ai::user_text_message(boundary_secret, 1000);
+
+    JsonValue::array_t oversized_array;
+    for (int value = 0; value < 300; ++value) {
+        oversized_array.emplace_back(value);
+    }
+
+    JsonValue::object_t args;
+    args.emplace("token", JsonValue{"super-secret"});
+    args.emplace("nested", JsonValue{JsonValue::object_t{{"note", JsonValue{"password=hunter2"}}}});
+    args.emplace("many", JsonValue{oversized_array});
+
+    JsonValue::object_t details;
+    details.emplace("authorization", JsonValue{"Bearer hidden"});
+    details.emplace("safe", JsonValue{"value"});
+
+    REQUIRE(printer.print_agent_event(cch::agent::MessageStartEvent{cch::ai::MessageVariant{user}}).has_value());
+    REQUIRE(printer.print_agent_event(cch::agent::ToolExecutionStartEvent{
+        "call-1", "bash", JsonValue{args}}).has_value());
     REQUIRE(printer.print_agent_event(cch::agent::ToolExecutionEndEvent{
         "call-1",
         "bash",
         cch::agent::AsyncToolExecutionResult{
-            std::vector<cch::ai::Content>{cch::ai::text_content("SECRET=abc123\n/path/to/private")},
-            std::nullopt,
-            true},
-        true}).has_value());
+            {cch::ai::text_content("API_KEY='single-quoted-secret value' " + long_text)},
+            JsonValue{details},
+            false,
+            false},
+        false}).has_value());
 
-    auto emitted = lines(output.str());
-    REQUIRE(emitted.size() == 2);
-    auto start = object(parse_line(emitted[0]));
-    CHECK(string_at(start, "type") == "agent_start");
-    CHECK(start.find("prompt") == start.end());
-    CHECK(emitted[0].find("secret prompt") == std::string::npos);
+    const auto emitted = lines(output.str());
+    REQUIRE(emitted.size() == 3);
+    CHECK(output.str().find("super-secret") == std::string::npos);
+    CHECK(output.str().find("sk-ABCDEFGHIJK") == std::string::npos);
+    CHECK(output.str().find("hunter2") == std::string::npos);
+    CHECK(output.str().find("Bearer hidden") == std::string::npos);
+    CHECK(output.str().find("single-quoted-secret") == std::string::npos);
 
-    auto tool = object(parse_line(emitted[1]));
-    CHECK(string_at(tool, "type") == "tool_execution_end");
-    CHECK(string_at(tool, "toolCallId") == "call-1");
-    CHECK(tool.find("content") == tool.end());
-    CHECK(emitted[1].find("SECRET=abc123") == std::string::npos);
-    const auto& status = tool.at("contentStatus").get<cch::util::JsonValue::object_t>();
-    CHECK(string_at(status, "status") == "omitted");
-    CHECK(string_at(status, "reason") == "unsupported_in_v1");
+    const auto& message = object_at(object(parse_line(emitted[0])), "message");
+    const auto redacted_user_text = string_at(object(array_at(message, "content").front()), "text");
+    CHECK(redacted_user_text.find("[REDACTED]") != std::string::npos);
+    CHECK(redacted_user_text.size() <= 8192);
+
+    const auto& start_args = object_at(object(parse_line(emitted[1])), "args");
+    CHECK(string_at(start_args, "token") == "[REDACTED]");
+    CHECK(string_at(object_at(start_args, "nested"), "note").find("[REDACTED]") != std::string::npos);
+    CHECK(array_at(start_args, "many").size() == 256);
+
+    const auto& result = object_at(object(parse_line(emitted[2])), "result");
+    const auto result_text = string_at(object(array_at(result, "content").front()), "text");
+    CHECK(result_text.find("[REDACTED]") != std::string::npos);
+    CHECK(result_text.size() <= 8192);
+    CHECK(string_at(object_at(result, "details"), "authorization") == "[REDACTED]");
+    CHECK(string_at(object_at(result, "details"), "safe") == "value");
 }
 
-TEST_CASE("JSON event printer emits message updates for thinking stream events", "[coding-agent][json-events]") {
+TEST_CASE("JSON event printer keeps bounded text valid UTF-8", "[coding-agent][json-events]") {
     std::ostringstream output;
     cch::coding_agent::runtime::JsonEventPrinter printer{output};
 
-    cch::ai::AssistantMessage partial;
-    REQUIRE(printer.print_agent_event(cch::agent::MessageUpdateEvent{
-        cch::ai::MessageVariant{partial},
-        cch::ai::AssistantStreamEvent{cch::ai::ThinkingDeltaEvent{0, "private reasoning", std::move(partial)}}}).has_value());
+    std::string text(8191, 'x');
+    text += "€";
+    REQUIRE(printer.print_agent_event(cch::agent::MessageStartEvent{
+        cch::ai::MessageVariant{cch::ai::user_text_message(std::move(text), 1000)}}).has_value());
 
-    auto emitted = lines(output.str());
+    const auto emitted = lines(output.str());
     REQUIRE(emitted.size() == 1);
-    auto record = object(parse_line(emitted.front()));
-    CHECK(string_at(record, "type") == "message_update");
+    const auto record = object(parse_line(emitted.front()));
+    const auto message = object_at(record, "message");
+    const auto bounded_text = string_at(object(array_at(message, "content").front()), "text");
+    CHECK(bounded_text.size() <= 8192);
 }
 
-TEST_CASE("JSON event printer emits durable terminal records", "[coding-agent][json-events]") {
+TEST_CASE("JSON event printer enforces an aggregate record budget", "[coding-agent][json-events]") {
     std::ostringstream output;
     cch::coding_agent::runtime::JsonEventPrinter printer{output};
 
-    REQUIRE(printer.print_terminal(false, "max_turns_exceeded", "max turns exceeded").has_value());
+    std::vector<cch::ai::MessageVariant> messages;
+    for (int index = 0; index < 256; ++index) {
+        messages.emplace_back(cch::ai::user_text_message(std::string(8192, 'x'), index));
+    }
+    REQUIRE(printer.print_agent_event(cch::agent::AgentEndEvent{std::move(messages)}).has_value());
 
-    auto emitted = lines(output.str());
+    const auto emitted = lines(output.str());
     REQUIRE(emitted.size() == 1);
-    auto record = object(parse_line(emitted.front()));
-    CHECK(string_at(record, "type") == "runtime_terminal");
-    CHECK(string_at(record, "code") == "max_turns_exceeded");
-    CHECK(record.at("success").get<bool>() == false);
+    CHECK(emitted.front().size() <= 512 * 1024);
+    const auto record = object(parse_line(emitted.front()));
+    CHECK(string_at(record, "type") == "agent_end");
+    CHECK(record.contains("messages"));
 }
