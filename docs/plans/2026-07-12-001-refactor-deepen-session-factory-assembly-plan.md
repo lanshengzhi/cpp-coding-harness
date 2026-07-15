@@ -1,7 +1,7 @@
 ---
 title: "refactor: Deepen SessionFactory assembly"
 type: refactor
-status: active
+status: completed
 date: "2026-07-12"
 target_repo: "cpp-coding-harness"
 reference_repo: "pi"
@@ -318,6 +318,21 @@ Also run focused provider/resource tests selected by their existing Catch2 tags 
 - SDK remains silent and linear-resume-only.
 - Architecture tests, focused SDK/CLI/session tests, and full `ctest` pass.
 - Documentation describes actual behavior without claiming new pi parity features or sandbox guarantees.
+
+## Completion evidence
+
+Validated on 2026-07-15 against this plan, ADR 0001, PRD story 48, and the parity definition of done.
+
+- Both CLI/RPC and SDK inputs normalize to the private `AssemblyPlan` and call the same `run_assembly()` implementation in `src/coding_agent/runtime/SessionFactory.cpp`; architecture coverage rejects direct `AgentSessionRuntime` construction outside the factory.
+- New session identity and UTC creation time are generated independently, while resume preserves both values. `[sdk][assembly]` covers fresh identity and resume preservation.
+- New-session publication remains after provider, capability, tool, trust, and resource validation. `[sdk][assembly]` proves failed creation leaves no session file and failed resume leaves its file byte-for-byte unchanged.
+- Provider precedence and host-client metadata behavior are covered by `[config][resolution]` and SDK provider-resolution tests. Equivalent SDK and process-level CLI scenarios prove project-controlled default trust state fails closed; SDK coverage also protects relative, equal, descendant, symlinked-parent, indeterminate, and external not-yet-created paths.
+- Validation found and fixed one closing blocker: when `HOME` resolved to the workspace, the default trust store could be project-controlled. The factory now treats that store as unavailable, fails project-resource authorization closed, and returns diagnostics instead of loading project-authored resources.
+- Host/project resource precedence, fatal explicit-resource errors, discovered-resource diagnostics, enabled-tool visibility, SDK silence, and linear-only SDK resume are covered by the focused SDK, resource, CLI, and session slices.
+- `RuntimeServices` remains a private passive bundle. Explicit `env_owned` state distinguishes factory-created from host-provided environments; host cleanup count and idempotent session close tests protect the lifecycle policy.
+- Documentation continues to describe the centralized factory, external trust-store requirement, diagnostics-as-values behavior, and SDK deferrals without claiming sandboxing or unsupported pi features.
+
+The authoritative command ledger is recorded in [issue 16](../../.scratch/pi-agent-session-event-prompt-parity/issues/16-validate-and-close-plans.md): every focused slice passed, and `ctest --preset system --output-on-failure` passed its complete CTest target. Live-provider and network tests were intentionally skipped because fake providers and local session files satisfy this plan and PRD's validation scope without credentials, quota, or network access.
 
 ## References
 

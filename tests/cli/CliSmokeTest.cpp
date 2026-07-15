@@ -752,6 +752,31 @@ TEST_CASE("CLI skips project skills by default when project trust is unknown", "
     CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
 }
 
+TEST_CASE("CLI project-controlled default trust store cannot authorize project skills", "[cli][project-trust]") {
+    cch::tests::TempWorkspace workspace;
+    workspace.write(".cpp-harness/skills/demo/SKILL.md",
+                    "---\n"
+                    "name: demo\n"
+                    "description: Demo skill.\n"
+                    "---\n"
+                    "# Demo Skill\n\n"
+                    "Do demo.\n");
+    workspace.write(
+        ".cpp-harness/trust.json",
+        "{\"" + std::filesystem::weakly_canonical(workspace.path()).string() + "\":true}\n");
+    auto session = workspace.path() / "project-controlled-trust.jsonl";
+
+    auto result = run_command_split(
+        "HOME=" + q(workspace.path()) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --session " + q(session) + " /skill:demo");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.find("[trust:warn] trust_store_unavailable") != std::string::npos);
+    CHECK(result.stderr_text.find("project_skills skipped: untrusted") != std::string::npos);
+    CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
+}
+
 TEST_CASE("CLI approve loads project skills for one run", "[cli][project-trust]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;

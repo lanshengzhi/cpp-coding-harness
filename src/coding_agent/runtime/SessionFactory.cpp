@@ -623,6 +623,14 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
             cleanup_on_failure();
             return std::unexpected(valid.error());
         }
+    } else if (plan.load_project_resources) {
+        // The default user trust store must not become project-controlled when
+        // HOME resolves to the workspace. An unavailable store fails closed in
+        // ProjectResourceLoader while an explicit same-run trust override can
+        // still authorize resources without consulting workspace-local state.
+        if (auto valid = validate_trust_store_path(trust_store_path, workspace); !valid) {
+            trust_store_path.clear();
+        }
     }
 
     if (plan.load_project_resources) {

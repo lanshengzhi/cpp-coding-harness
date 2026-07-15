@@ -1422,6 +1422,42 @@ TEST_CASE("CreateAgentSessionResult contains metadata", "[sdk][u2]") {
     CHECK(result->session->close().has_value());
 }
 
+TEST_CASE("SDK new sessions receive fresh identity and resume preserves it", "[sdk][assembly]") {
+    TestPaths first_paths;
+    TestPaths second_paths;
+
+    coding_agent::CreateAgentSessionOptions first_opts;
+    first_opts.session_path = first_paths.session_file;
+    first_opts.workspace = first_paths.workspace.path();
+    first_opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+    auto first = coding_agent::create_agent_session(std::move(first_opts));
+    REQUIRE(first.has_value());
+    const auto first_id = first->metadata.session_id;
+    const auto first_created_at = first->metadata.created_at;
+    CHECK_FALSE(first_id.empty());
+    CHECK_FALSE(first_created_at.empty());
+    CHECK(first_id != first_created_at);
+    CHECK(first->session->close().has_value());
+
+    coding_agent::CreateAgentSessionOptions second_opts;
+    second_opts.session_path = second_paths.session_file;
+    second_opts.workspace = second_paths.workspace.path();
+    second_opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+    auto second = coding_agent::create_agent_session(std::move(second_opts));
+    REQUIRE(second.has_value());
+    CHECK(second->metadata.session_id != first_id);
+    CHECK_FALSE(second->metadata.created_at.empty());
+    CHECK(second->session->close().has_value());
+
+    auto resumed = coding_agent::create_agent_session(sdk_resume_options(first_paths));
+    REQUIRE(resumed.has_value());
+    CHECK(resumed->metadata.session_id == first_id);
+    CHECK(resumed->metadata.created_at == first_created_at);
+    CHECK(resumed->session->close().has_value());
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Diagnostics from host client
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1585,6 +1621,82 @@ TEST_CASE("SDK rejects workspace-local trust_store_path", "[sdk][assembly][trust
     CHECK(result.error().message.find("workspace") != std::string::npos);
     CHECK_FALSE(std::filesystem::exists(paths.session_file));
 }
+
+TEST_CASE("SDK rejects trust_store_path equal to the workspace", "[sdk][assembly][trust]") {
+    TestPaths paths;
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.trust_store_path = paths.workspace.path();
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().message.find("workspace") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(paths.session_file));
+}
+
+TEST_CASE("SDK default trust store inside the workspace cannot authorize project resources", "[sdk][assembly][trust]") {
+    TestPaths paths;
+    EnvVarGuard home_guard{"HOME"};
+    home_guard.set(paths.workspace.path().string());
+    write_project_skill(paths, "workspace-authorized");
+    paths.workspace.write(
+        ".cpp-harness/trust.json",
+        "{\"" + std::filesystem::weakly_canonical(paths.workspace.path()).string() + "\":true}\n");
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.load_project_resources = true;
+    opts.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    CHECK(result->session->skills().empty());
+    CHECK(has_sdk_diag(result->diagnostics, "trust:trust_store_unavailable"));
+    CHECK(result->session->close().has_value());
+}
+
+#if defined(__unix__) || defined(__APPLE__)
+TEST_CASE("SDK rejects trust_store_path through a symlinked parent into the workspace", "[sdk][assembly][trust]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace external;
+    const auto linked_workspace = external.path() / "workspace-link";
+    std::filesystem::create_directory_symlink(paths.workspace.path(), linked_workspace);
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.trust_store_path = linked_workspace / ".cpp-harness" / "trust.json";
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().message.find("workspace") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(paths.session_file));
+}
+
+TEST_CASE("SDK rejects trust_store_path when containment cannot be determined", "[sdk][assembly][trust]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace external;
+    const auto loop = external.path() / "loop";
+    std::filesystem::create_directory_symlink("loop", loop);
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_path = paths.session_file;
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.trust_store_path = loop / "trust.json";
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().message.find("canonicalized") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(paths.session_file));
+}
+#endif
 
 TEST_CASE("SDK rejects relative trust_store_path", "[sdk][assembly][trust]") {
     TestPaths paths;

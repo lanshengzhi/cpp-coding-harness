@@ -216,12 +216,50 @@ TEST_CASE("AgentSession has one prompt completion and event subscription path", 
     CHECK(runtime_header.find(private_result) == std::string::npos);
     CHECK(sdk_header.find(prompt_sink_field) == std::string::npos);
     CHECK(runtime_header.find(prompt_scope_name) == std::string::npos);
-    CHECK(sdk_header.find("util::ExpectedVoid prompt(") != std::string::npos);
+    CHECK(count_occurrences(sdk_header, "util::ExpectedVoid prompt(") == 1);
+    CHECK(count_occurrences(sdk_header, "AgentEventSink") == 1);
     CHECK(sdk_header.find("subscribe(") != std::string::npos);
     CHECK(count_occurrences(rpc_source, "config.session.subscribe(") == 1);
     CHECK(rpc_source.find(prompt_sink_field) == std::string::npos);
     CHECK(sdk_header.find("preflight_result") == std::string::npos);
     CHECK(rpc_source.find("AgentSessionPromptAccess::prompt") != std::string::npos);
+}
+
+TEST_CASE("removed event and command contracts stay out of session ownership", "[architecture][agent][session][sdk]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto event_header = read_text(source_root / "include" / "cch" / "agent" / "AgentEvent.hpp");
+    const auto sdk_header = read_text(source_root / "include" / "cch" / "coding_agent" / "Sdk.hpp");
+    const auto runtime_header = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "AgentSessionRuntime.hpp");
+    const auto factory_header = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "SessionFactory.hpp");
+    const auto factory_source = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "SessionFactory.cpp");
+    const auto cli_source = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "AsyncCliRuntime.cpp");
+
+    const std::vector<std::string> removed_event_types{
+        std::string{"QueuedMessage"} + "StartEvent",
+        std::string{"QueuedMessage"} + "EndEvent",
+        std::string{"Thinking"} + "UpdateEvent",
+        std::string{"ToolCallStream"} + "StartEvent",
+        std::string{"ToolCallStream"} + "UpdateEvent",
+        std::string{"ToolCallStream"} + "EndEvent",
+    };
+    for (const auto& removed : removed_event_types) {
+        CHECK(event_header.find(removed) == std::string::npos);
+    }
+
+    const auto registry_name = std::string{"Command"} + "Registry";
+    CHECK(runtime_header.find(registry_name) == std::string::npos);
+    CHECK(factory_header.find(registry_name) == std::string::npos);
+    CHECK(factory_source.find(registry_name) == std::string::npos);
+    CHECK(cli_source.find(registry_name) != std::string::npos);
+
+    const auto sdk_command = std::string{"Sdk"} + "Command";
+    const auto command_handler = std::string{"Command"} + "Handler";
+    CHECK(sdk_header.find(sdk_command) == std::string::npos);
+    CHECK(sdk_header.find(command_handler) == std::string::npos);
 }
 
 TEST_CASE("AgentSessionRuntime is constructed only by the session factory", "[architecture][session]") {
