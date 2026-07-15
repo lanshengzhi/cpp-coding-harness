@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-human
+**Status:** implemented
 
 - [x] Compare the implementation with PRD stories 9–12, 17, 19, and 43–44 and the current pi `AgentEvent` contract before changing it.
 - [x] `agent_start`, `agent_end`, `turn_start`, `turn_end`, and message lifecycle values expose the supported pi field meanings as passive aggregates.

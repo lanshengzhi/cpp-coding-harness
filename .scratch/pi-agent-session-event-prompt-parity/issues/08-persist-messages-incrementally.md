@@ -4,7 +4,7 @@
 
 **Blocked by:** 07 — Update live session state on message end.
 
-**Status:** completed
+**Status:** implemented
 
 - [x] Use PRD stories 21–22 and 24–25 and pi's message-end append behavior as the persistence authority.
 - [x] Supported user, assistant, and tool-result messages append only on `message_end` and only after subscriber delivery completes.

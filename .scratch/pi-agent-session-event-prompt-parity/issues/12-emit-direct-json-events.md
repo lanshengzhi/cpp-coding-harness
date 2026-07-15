@@ -4,7 +4,7 @@
 
 **Blocked by:** 04 — Align tool execution events and tool-result messages; 08 — Persist completed messages incrementally.
 
-**Status:** completed
+**Status:** implemented
 
 - [x] Use PRD stories 27–30 and the current pi JSON event-stream documentation as the wire-contract authority.
 - [x] The first record remains the v3 session header and every following record is a direct supported AgentSession event.

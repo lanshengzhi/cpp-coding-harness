@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** done
+**Status:** implemented
 
 - [x] Use PRD stories 34–35 and 41 and pi's separation between interactive built-ins and AgentSession prompting as the ownership authority.
 - [x] Existing help, clear, exit, session, and other currently supported text commands preserve their observable text-mode behavior.

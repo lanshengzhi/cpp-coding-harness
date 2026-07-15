@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 — Complete the no-tool message lifecycle.
 
-**Status:** completed
+**Status:** implemented
 
 - [x] Use PRD stories 12, 15, and 18 plus the current pi tool execution and `emitToolResultMessage` behavior as the authority.
 - [x] Tool execution start/end events carry the supported call id, name, arguments/result, and error meaning without numeric turn fields or flattened content substitutions.

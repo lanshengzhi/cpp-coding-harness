@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 — Complete the no-tool message lifecycle.
 
-**Status:** ready-for-human
+**Status:** implemented
 
 - [x] Use PRD stories 16 and 19 and the current pi pending-message loop as the behavioral authority.
 - [x] Every delivered queued message emits ordinary `message_start` and `message_end` carrying the message value.

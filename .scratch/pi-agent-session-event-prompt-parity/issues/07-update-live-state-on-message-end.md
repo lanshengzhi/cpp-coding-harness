@@ -4,7 +4,7 @@
 
 **Blocked by:** 03 — Unify queued-message lifecycle events; 04 — Align tool execution events and tool-result messages.
 
-**Status:** completed
+**Status:** implemented
 
 - [x] Use PRD stories 4 and 20 and pi's state-first AgentSession event handling as the ordering authority.
 - [x] Completed user, assistant, queued, and tool-result messages enter live history exactly once before subscribers run.

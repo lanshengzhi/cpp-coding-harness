@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 — Cut over the core AgentEvent value contract.
 
-**Status:** ready-for-human
+**Status:** implemented
 
 - [x] Use PRD stories 10, 12–14, and 17 plus the current pi no-tool `runAgentLoop` and assistant-stream flow as the behavioral authority.
 - [x] A fake-provider prompt emits user `message_start` and `message_end` before the assistant response lifecycle.
