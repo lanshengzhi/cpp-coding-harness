@@ -1279,7 +1279,9 @@ TEST_CASE(
     CHECK(reopened->session->close().has_value());
 }
 
-TEST_CASE("SDK live state remains after subscriber failure and session stays usable", "[sdk][live-state]") {
+TEST_CASE(
+    "SDK subscriber failure stops delivery and persistence without closing the session",
+    "[sdk][live-state][subscriber-failure]") {
     TestPaths paths;
 
     coding_agent::CreateAgentSessionOptions opts;
@@ -1291,34 +1293,88 @@ TEST_CASE("SDK live state remains after subscriber failure and session stays usa
     REQUIRE(result.has_value());
     auto& session = result->session;
 
-    std::size_t seen_message_ends = 0;
-    auto sub = session->subscribe([&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
-        if (std::holds_alternative<agent::MessageEndEvent>(event)) {
-            ++seen_message_ends;
-            if (seen_message_ends == 2) {
+    std::vector<std::string> delivery_order;
+    auto first = session->subscribe(
+        [state = std::make_unique<std::size_t>(0), &delivery_order](
+            const agent::AgentLifecycleEvent& event) mutable -> util::ExpectedVoid {
+            const auto* end = std::get_if<agent::MessageEndEvent>(&event);
+            if (end == nullptr) {
+                return {};
+            }
+
+            ++*state;
+            if (std::holds_alternative<ai::UserMessage>(end->message)) {
+                delivery_order.emplace_back("first:user:" + std::to_string(*state));
+                return {};
+            }
+            if (std::holds_alternative<ai::AssistantMessage>(end->message)) {
+                delivery_order.emplace_back("first:assistant:" + std::to_string(*state));
                 return std::unexpected(util::make_error(
                     util::ErrorCode::Tool,
                     "subscriber rejects assistant message_end"));
             }
-        }
-        return {};
-    });
-    REQUIRE(sub.has_value());
+            return {};
+        });
+    REQUIRE(first.has_value());
+
+    std::size_t second_message_ends = 0;
+    auto second = session->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            const auto* end = std::get_if<agent::MessageEndEvent>(&event);
+            if (end == nullptr) {
+                return {};
+            }
+
+            ++second_message_ends;
+            if (std::holds_alternative<ai::UserMessage>(end->message)) {
+                delivery_order.emplace_back("second:user");
+            } else if (std::holds_alternative<ai::AssistantMessage>(end->message)) {
+                delivery_order.emplace_back("second:assistant");
+            }
+            return {};
+        });
+    REQUIRE(second.has_value());
 
     auto failed = session->prompt("hello");
     REQUIRE(failed.has_value());
     CHECK_FALSE(failed->success);
-    // The user and assistant messages entered live history before the subscriber failed.
+    CHECK(failed->code == "event_sink_failed");
+    CHECK(failed->message == "subscriber rejects assistant message_end");
+
+    CHECK(second_message_ends == 1);
+    const std::vector<std::string> expected_delivery_order{
+        "first:user:1",
+        "second:user",
+        "first:assistant:2",
+    };
+    CHECK(delivery_order == expected_delivery_order);
+
+    // The rejected assistant message is live, but subscriber short-circuiting
+    // prevented it from becoming durable.
     CHECK(session->message_count() == 2);
-    CHECK(session->last_assistant_text().has_value());
+    REQUIRE(session->last_assistant_text().has_value());
+    CHECK(session->last_assistant_text()->find("fake: hello") != std::string::npos);
+    auto durable_after_failure = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable_after_failure.has_value());
+    REQUIRE(durable_after_failure->messages.size() == 1);
+    CHECK(std::holds_alternative<ai::UserMessage>(durable_after_failure->messages[0]));
     CHECK(session->is_open());
 
-    // Remove the failing subscriber; the session remains usable.
-    sub->unsubscribe();
+    // Remove only the rejecting subscriber. The same session accepts another
+    // prompt, and later completed messages continue to persist.
+    first->unsubscribe();
     auto recovered = session->prompt("again");
     REQUIRE(recovered.has_value());
     CHECK(recovered->success);
-    CHECK(session->message_count() > 2);
+    CHECK(session->message_count() == 4);
+    CHECK(second_message_ends == 3);
+
+    auto durable_after_recovery = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable_after_recovery.has_value());
+    REQUIRE(durable_after_recovery->messages.size() == 3);
+    CHECK(std::holds_alternative<ai::UserMessage>(durable_after_recovery->messages[0]));
+    CHECK(std::holds_alternative<ai::UserMessage>(durable_after_recovery->messages[1]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(durable_after_recovery->messages[2]));
 
     CHECK(session->close().has_value());
 }

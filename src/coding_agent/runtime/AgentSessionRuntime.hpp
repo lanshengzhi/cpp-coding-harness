@@ -92,6 +92,7 @@ private:
 
     [[nodiscard]] agent::AgentEventSink make_combined_sink(
         agent::AgentEventSink per_prompt,
+        bool& subscriber_delivery_failed,
         bool& persistence_failed);
     [[nodiscard]] PromptRunResult run_agent_loop(
         std::string prompt,

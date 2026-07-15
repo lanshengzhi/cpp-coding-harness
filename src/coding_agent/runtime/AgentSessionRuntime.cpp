@@ -132,9 +132,11 @@ PromptRunResult AgentSessionRuntime::run_agent_loop(
     agent::AgentEventSink sink) {
     boost::asio::io_context io;
     std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
+    bool subscriber_delivery_failed = false;
     bool persistence_failed = false;
 
-    auto combined_sink = make_combined_sink(std::move(sink), persistence_failed);
+    auto combined_sink = make_combined_sink(
+        std::move(sink), subscriber_delivery_failed, persistence_failed);
 
     boost::asio::co_spawn(
         io,
@@ -153,7 +155,7 @@ PromptRunResult AgentSessionRuntime::run_agent_loop(
         const auto message = result ? (*result).error().message : std::string{"async loop did not finish"};
         return PromptRunResult{
             false,
-            terminal_code_for_loop_error(message),
+            subscriber_delivery_failed ? "event_sink_failed" : terminal_code_for_loop_error(message),
             display_message_for_loop_error(message),
             {},
         };
@@ -164,6 +166,7 @@ PromptRunResult AgentSessionRuntime::run_agent_loop(
 
 agent::AgentEventSink AgentSessionRuntime::make_combined_sink(
     agent::AgentEventSink per_prompt,
+    bool& subscriber_delivery_failed,
     bool& persistence_failed) {
     auto persistent = std::make_shared<std::vector<agent::AgentEventSink*>>();
     for (auto& sub : subscribers_) {
@@ -173,6 +176,7 @@ agent::AgentEventSink AgentSessionRuntime::make_combined_sink(
     }
 
     return [this,
+            &subscriber_delivery_failed,
             &persistence_failed,
             persistent = std::move(persistent),
             per_prompt = std::move(per_prompt)](
@@ -185,12 +189,18 @@ agent::AgentEventSink AgentSessionRuntime::make_combined_sink(
         for (auto* sink : *persistent) {
             if (*sink) {
                 auto r = (*sink)(event);
-                if (!r) return r;
+                if (!r) {
+                    subscriber_delivery_failed = true;
+                    return r;
+                }
             }
         }
         if (per_prompt) {
             auto delivered = per_prompt(event);
-            if (!delivered) return delivered;
+            if (!delivered) {
+                subscriber_delivery_failed = true;
+                return delivered;
+            }
         }
         if (const auto* end = std::get_if<agent::MessageEndEvent>(&event);
             end != nullptr && is_incrementally_persisted_message(end->message)) {
