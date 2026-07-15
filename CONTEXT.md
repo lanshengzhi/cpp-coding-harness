@@ -22,7 +22,7 @@ The smallest validation scope that proves a change at its affected documentation
 
 ### AgentSession
 
-A move-only runtime handle representing one open agent conversation session. The public seam exposes success-or-error prompt completion, one persistent lifecycle-event subscription path, live-state accessors, and close; assembly complexity lives behind it in a factory.
+A move-only runtime handle representing one open agent conversation session. The public seam exposes success-or-error prompt completion, one persistent lifecycle-event subscription path, live-state accessors, and close; assembly complexity lives behind it in a factory. Prompt progress is never returned through a per-prompt event sink.
 
 ### SessionFactory
 
@@ -54,15 +54,15 @@ A generic name-to-handler dispatch seam for slash-commands. Domain-specific comm
 
 ### AgentSessionRuntime
 
-The internal implementation behind the `AgentSession` handle. Coordinates the prompt-processing pipeline and agent loop, updates live history before notifying persistent subscribers, and incrementally persists completed messages after subscriber delivery.
+The internal implementation behind the `AgentSession` handle. Coordinates prompt processing and the agent loop. On each completed message it updates live history first, notifies persistent subscribers in registration order, then appends the message to durable storage. Subscriber or persistence failure fails the active prompt without rolling back live history or closing the session.
 
-### AgentSessionState
+### LiveSessionState
 
-A passive value summarising the introspectable state of an open session: provider, model, session id, workspace, and message count.
+The in-process conversation history and state derived from it, observed through `AgentSession` accessors such as message count and last assistant text. A completed message enters live state before subscriber delivery and persistence, so live state may be ahead of durable storage after a failure. Later prompts continue from retained live history; reopening reconstructs only durable entries.
 
 ### RpcMode
 
-The machine-readable interaction protocol for driving one `AgentSession` through sequential JSONL commands. It owns command acceptance, response/event ordering, recoverable-versus-terminal failure classification, process-wide event sequencing, and clean EOF or shutdown semantics; the CLI adapter only connects startup policy and streams.
+The machine-readable interaction protocol for driving one `AgentSession` through sequential JSONL commands. It owns command validation and correlation, prompt preflight acknowledgement, direct response/event interleaving, recoverable command errors, and clean EOF or shutdown semantics; the CLI adapter only connects startup policy and streams. Accepted prompts receive one success response before their events, preflight rejection receives one error response, and later execution outcomes never create a second response or terminal record.
 
 ### SessionJournal
 

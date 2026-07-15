@@ -168,7 +168,7 @@ Package targets and responsibilities:
 - `cch_agent` (`include/cch/agent`, `src/agent`): coroutine agent loop, observable state values, lifecycle event values, move-only event sinks, async tool registry, expected-style tool execution contracts, optional pre/post tool-call hooks (`beforeToolCall`/`afterToolCall`), context transform / LLM conversion hooks, steering/follow-up queues, prepare-next-turn updates, and a safe-default sequential/bounded-parallel tool execution policy.
 - `cch_harness` (`include/cch/harness`, `src/harness`): pi-shaped filesystem and shell execution capability contracts (`FileSystem`/`Shell`), local implementation with workspace containment, symlink safety, atomic writes, split-stream process execution, secret environment filtering, and JSONL session persistence.
 - `cch_tools` (`include/cch/tools`, `src/tools`): built-in read/write/edit/bash tool factories bridging agent tool contracts to harness capabilities.
-- `cch_coding_agent_runtime` (`src/cli/` for CLI11 parsing/preflight/`CliConfig`/`CliRuntimeConfig`, `src/coding_agent/runtime/AsyncCliRuntime.*`, `src/coding_agent/runtime/`, `include/cch/coding_agent/`, `src/coding_agent/`): CLI argument parsing and preflight (including `config.json` precedence), runtime orchestration, session lifecycle, provider/tool service assembly, semantic event printing, JSON/RPC output modes, private owning prompt interpretation (`prompt/PromptProcessor`) with a private `PromptTemplateExpander` implementation, project trust/resource controls (`ProjectTrust`, `ProjectResources`, `ProjectResourceLoader`), project-local skill discovery/loading and prompt formatting, `/skill:name` expansion from cached content, and prompt-template file loading with `--prompt-template`/`--no-prompt-templates` CLI flags.
+- `cch_coding_agent_runtime` (`src/cli/` for CLI11 parsing/preflight/`CliConfig`/`CliRuntimeConfig`, `src/coding_agent/runtime/AsyncCliRuntime.*`, `src/coding_agent/runtime/`, `include/cch/coding_agent/`, `src/coding_agent/`): CLI argument parsing and preflight (including `config.json` precedence), runtime orchestration, session lifecycle, provider/tool service assembly, semantic event printing, JSON/RPC output modes, private skill/template prompt interpretation (`prompt/PromptProcessor`), live-state-first event handling with incremental message persistence, project trust/resource controls (`ProjectTrust`, `ProjectResources`, `ProjectResourceLoader`), project-local skill discovery/loading and prompt formatting, `/skill:name` expansion from cached content, and prompt-template file loading with `--prompt-template`/`--no-prompt-templates` CLI flags.
 
 The build publishes `include` as the public surface and keeps `src` private. Legacy synchronous tools, Boost.JSON contracts, `util::Result`, and duplicate `src` contract headers have been removed.
 
@@ -322,12 +322,12 @@ The registry owns tool capabilities directly. Tools default to `Exclusive`; boun
 
 Sessions are JSONL:
 
-1. a v2 `header` line with session/workspace/provider/model metadata,
+1. a pi-style v3 `session` header with session/workspace/provider/model metadata (legacy v2 headers remain readable),
 2. append-only typed `message` entries containing redacted user, assistant, and tool-result messages,
-3. write support for pi-style v3 tree metadata entries (`model_change`, `thinking_level_change`, `active_tools_change`, `custom`, `custom_message`, `label`, `compaction`, `branch_summary`, `session_info`) and extended runtime messages (`BashExecutionMessage`, `CustomMessage`, `BranchSummaryMessage`, `CompactionSummaryMessage`),
+3. write support for v3 tree metadata entries (`model_change`, `thinking_level_change`, `active_tools_change`, `custom`, `custom_message`, `label`, `compaction`, `branch_summary`, `session_info`) and extended runtime messages (`BashExecutionMessage`, `CustomMessage`, `BranchSummaryMessage`, `CompactionSummaryMessage`),
 4. safely ignored unknown future entry types.
 
-Current resume uses the v3 session tree to rebuild the active path, including persisted leaf selection and compaction summaries, through the session resume module. Exact unredacted replay is intentionally out of scope. Session files are still sensitive: they can contain source text, command output, workspace paths, and provider/model metadata.
+Each completed user, assistant, or tool-result message enters live history before subscribers run and is appended after successful subscriber delivery. Subscriber or persistence failure does not roll back live history or close the session; later in-process prompts use retained live state, while reopening reconstructs only entries that reached durable storage. Current resume uses the v3 session tree to rebuild the active path, including persisted leaf selection and compaction summaries, through the session resume module. Exact unredacted replay is intentionally out of scope. Session files are still sensitive: they can contain source text, command output, workspace paths, and provider/model metadata.
 
 The workspace guard is not a sandbox. Prompts, file contents, and command outputs can be sent to the configured provider. Run this harness inside a VM/container if you need a real containment boundary.
 
@@ -342,6 +342,10 @@ Useful default validation slices:
 ./build/cpp_harness_tests "[agent][async]"
 ./build/cpp_harness_tests "[tools][async]"
 ./build/cpp_harness_tests "[harness][session]"
+./build/cpp_harness_tests "[sdk][live-state]"
+./build/cpp_harness_tests "[sdk][incremental-persistence]"
+./build/cpp_harness_tests "[coding-agent][json-events]"
+./build/cpp_harness_tests "[coding-agent][runtime][rpc]"
 ./build/cpp_harness_tests "[cli]"
 ```
 
@@ -352,6 +356,8 @@ These cover:
 - move-only event sinks can capture unique state and propagate errors;
 - provider-specific OpenAI/SSE/Glaze wire mapping stays isolated from the agent loop;
 - JSONL resume reconstructs typed message ordering for the next request;
+- AgentSession tests protect live-state-before-subscriber-before-persistence ordering and failure recovery;
+- JSON/RPC transcript tests protect direct events, prompt preflight acknowledgement, response correlation, and terminal-record absence;
 - CLI fake-provider smoke tests demonstrate the current event/subscriber path without compatibility-only flags.
 
 ## Deferred
