@@ -54,7 +54,7 @@ A generic name-to-handler dispatch seam for slash-commands. Domain-specific comm
 
 ### AgentSessionRuntime
 
-The internal implementation behind the `AgentSession` handle. Coordinates prompt processing and the agent loop. On each completed message it updates live history first, notifies persistent subscribers in registration order, then appends the message to durable storage. Subscriber or persistence failure fails the active prompt without rolling back live history or closing the session.
+The internal implementation behind the `AgentSession` handle. Coordinates prompt processing and the agent loop. Its event-handling order is live-state update, future extension handling when that module exists, persistent subscriber delivery in registration order, then completed-message persistence; no inert extension placeholder exists today. Subscriber or persistence failure fails the active prompt without rolling back live history or closing the session.
 
 ### LiveSessionState
 
