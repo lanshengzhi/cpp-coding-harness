@@ -8,14 +8,10 @@
 #include "coding_agent/runtime/RpcMode.hpp"
 #include "coding_agent/prompt/SlashCommandParser.hpp"
 
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/post.hpp>
-
 #include <iostream>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <utility>
 
 namespace cch::cli {
@@ -60,19 +56,29 @@ bool clear_text_terminal() {
     return static_cast<bool>(std::cout);
 }
 
-} // namespace
+/// Print a text-mode error message for a failed prompt.
+void present_text_error(std::string_view message) {
+    std::cerr << "loop failed: " << message << '\n';
+}
 
-void write_text_prompt_result(
-    const coding_agent::PromptResult& result,
-    std::ostream& output) {
-    const bool has_local_feedback = result.code == "command_handled" ||
-        result.code == "shutdown" || result.code == "command_handler_failed";
-    if (has_local_feedback && !result.message.empty()) {
-        output << result.message << '\n';
-    } else if (result.code == "completed" && result.last_assistant_text) {
-        output << *result.last_assistant_text << '\n';
+/// Print a text-mode command result to stdout.
+void present_text_command(std::string_view display_text) {
+    if (!display_text.empty()) {
+        std::cout << display_text << '\n';
     }
 }
+
+/// Subscribe once to AgentSession events for text-mode rendering.
+[[nodiscard]] util::Expected<coding_agent::EventSubscription> subscribe_text_events(
+    coding_agent::AgentSession& session) {
+    return session.subscribe(
+        [](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            coding_agent::runtime::print_agent_event(event, std::cout);
+            return {};
+        });
+}
+
+} // namespace
 
 int run_async_cli(const AsyncCliRuntimeConfig& config) {
     const auto json_mode = is_json_mode(config.output_mode);
@@ -167,6 +173,19 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         });
     }
 
+    // Text mode owns one persistent presentation subscription. JSON mode
+    // retains its per-prompt event path until the direct-event protocol slice.
+    std::optional<coding_agent::EventSubscription> text_event_subscription;
+    if (!json_mode) {
+        auto subscribed = subscribe_text_events(session);
+        if (!subscribed) {
+            std::cerr << "could not subscribe text event renderer: "
+                      << subscribed.error().message << '\n';
+            return 2;
+        }
+        text_event_subscription.emplace(std::move(*subscribed));
+    }
+
     auto make_command_context = [&]() {
         return coding_agent::CommandContext{
             .session_id = session.session_id(),
@@ -178,98 +197,79 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
         };
     };
 
-    auto present_result = [&](coding_agent::PromptResult result) -> coding_agent::PromptResult {
-        if (!result.success) {
-            if (json_mode) {
-                if (auto printed = json_printer->print_terminal(false, result.code, result.message); !printed) {
-                    std::cerr << "event printer failed: " << printed.error().message << '\n';
-                }
-            } else if (result.code == "session_persist_failed") {
-                std::cerr << result.message << '\n';
-            } else {
-                std::cerr << "loop failed: " << result.message << '\n';
-            }
-            return result;
+    // ── Command/terminal output for JSON mode ─────────────────────────────
+    // JSON mode uses runtime_terminal records for command results and
+    // prompt completion/error signals.
+    auto json_print_terminal = [&](bool success, const std::string& code,
+                                   const std::string& message) -> bool {
+        if (auto printed = json_printer->print_terminal(success, code, message); !printed) {
+            std::cerr << "event printer failed: " << printed.error().message << '\n';
+            return false;
         }
-        if (json_mode) {
-            if (auto printed = json_printer->print_terminal(true, result.code, result.message); !printed) {
-                coding_agent::PromptResult failed;
-                failed.success = false;
-                failed.code = "event_print_failed";
-                failed.message = "failed to print terminal event";
-                return failed;
-            }
-            return result;
-        }
-        write_text_prompt_result(result, std::cout);
-        return result;
+        return true;
     };
 
-    auto run_prompt = [&](const std::string& prompt) -> coding_agent::PromptResult {
-        // Frontend commands are resolved by the CLI adapter before ordinary input reaches AgentSession.
-        if (auto command_result = dispatch_text_cli_command(cli_command_registry, prompt, make_command_context())) {
-            coding_agent::PromptResult result;
-            result.success = true;
-            result.code = command_result->shutdown_requested ? "shutdown" : "command_handled";
-            result.message = command_result->display_text;
-
-            if (!json_mode && prompt == "/clear") {
-                if (!clear_text_terminal()) {
-                    result.success = false;
-                    result.code = "event_print_failed";
-                    result.message = "failed to clear terminal";
+    // ── Prompt loop ───────────────────────────────────────────────────────
+    // Returns 0 to continue, 1 for error, 2 for shutdown.
+    auto run_prompt = [&](const std::string& prompt) -> int {
+        // Frontend commands are resolved by the CLI adapter before ordinary
+        // input reaches AgentSession.
+        if (auto command_result = dispatch_text_cli_command(
+                cli_command_registry, prompt, make_command_context())) {
+            if (json_mode) {
+                // JSON mode emits a runtime_terminal for command results.
+                std::string code = command_result->shutdown_requested ? "shutdown" : "command_handled";
+                if (!json_print_terminal(true, code, command_result->display_text)) {
+                    return 1;
                 }
+            } else if (prompt == "/clear") {
+                if (!clear_text_terminal()) {
+                    std::cerr << "failed to clear terminal\n";
+                    return 1;
+                }
+            } else {
+                present_text_command(command_result->display_text);
             }
-            return present_result(result);
+            return command_result->shutdown_requested ? 2 : 0;
         }
 
-        std::optional<boost::asio::io_context> print_io;
-        std::optional<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>> print_work;
-        std::optional<std::jthread> print_thread;
-        if (!json_mode) {
-            print_io.emplace();
-            print_work.emplace(boost::asio::make_work_guard(*print_io));
-            print_thread.emplace([&]() { print_io->run(); });
+        // Unmatched slash input reaches AgentSession via ordinary prompt.
+        coding_agent::PromptOptions prompt_options;
+        if (json_mode) {
+            prompt_options.event_sink =
+                [&printer = *json_printer](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+                return printer.print_agent_event(event);
+            };
         }
+        auto prompt_result = session.prompt(prompt, std::move(prompt_options));
 
-        auto prompt_result = session.prompt(
-            prompt,
-            coding_agent::PromptOptions{
-                .event_sink = [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
-                    if (json_mode) {
-                        return json_printer->print_agent_event(event);
-                    }
-                    try {
-                        boost::asio::post(*print_io, [event]() {
-                            try {
-                                coding_agent::runtime::print_agent_event(event, std::cout);
-                            } catch (const std::exception& e) {
-                                std::cerr << "event printer failed: " << e.what() << '\n';
-                            }
-                        });
-                        return util::ExpectedVoid{};
-                    } catch (const std::exception& e) {
-                        return std::unexpected(util::make_error(util::ErrorCode::Tool, "event printer failed", e.what()));
-                    }
-                },
-            });
-
-        if (!json_mode) {
-            print_work->reset();
-            print_thread->join();
-        }
         std::cout.flush();
 
-        coding_agent::PromptResult result;
-        if (prompt_result) {
-            result = std::move(*prompt_result);
-        } else {
-            result.success = false;
-            result.code = "runtime_error";
-            result.message = prompt_result.error().message;
+        if (!prompt_result) {
+            if (json_mode) {
+                (void)json_print_terminal(false, "runtime_error", prompt_result.error().message);
+            } else {
+                present_text_error(prompt_result.error().message);
+            }
+            return 1;
         }
 
-        return present_result(result);
+        const auto& result = *prompt_result;
+        if (!result.success) {
+            if (json_mode) {
+                (void)json_print_terminal(false, result.code, result.message);
+            } else {
+                present_text_error(result.message);
+            }
+            return 1;
+        }
+
+        // Text responses and tool activity have already been rendered by the
+        // persistent subscription; do not present session state a second time.
+        if (json_mode && !json_print_terminal(true, "completed", {})) {
+            return 1;
+        }
+        return 0;
     };
 
     if (config.repl) {
@@ -282,15 +282,16 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
                 continue;
             }
 
-            auto result = run_prompt(line);
-            if (!result.success) return 1;
-            if (result.code == "shutdown") return 0;
+            int rc = run_prompt(line);
+            if (rc == 1) return 1;
+            if (rc == 2) return 0;
         }
         return 0;
     }
 
-    auto result = run_prompt(config.prompt);
-    return result.success ? 0 : 1;
+    int rc = run_prompt(config.prompt);
+    if (rc == 1) return 1;
+    return 0;
 }
 
 } // namespace cch::cli

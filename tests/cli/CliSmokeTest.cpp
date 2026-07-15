@@ -180,24 +180,9 @@ TEST_CASE("CLI fake one-shot prints transcript and writes session", "[cli][u6]")
     REQUIRE(result.exit_code == 0);
     CHECK(result.output.find("[model-request]") != std::string::npos);
     CHECK(result.output.find("[assistant] fake: hello") != std::string::npos);
+    CHECK(count_occurrences(result.output, "fake: hello") == 1);
     CHECK(result.output.find("[completed]") != std::string::npos);
     CHECK(std::filesystem::exists(session));
-}
-
-TEST_CASE("CLI text presentation shows contained command handler failures", "[cli][commands][presentation]") {
-    cch::coding_agent::PromptResult result{
-        .success = true,
-        .code = "command_handler_failed",
-        .message = "Command handler failed.",
-        .last_assistant_text = std::nullopt,
-        .message_count = 0,
-        .diagnostics = {},
-    };
-    std::ostringstream output;
-
-    cch::cli::write_text_prompt_result(result, output);
-
-    CHECK(output.str() == "Command handler failed.\n");
 }
 
 TEST_CASE("CLI text one-shot displays /help without invoking the model", "[cli][commands]") {
@@ -326,7 +311,24 @@ TEST_CASE("CLI fake one-shot streams through the current event path", "[cli][u8]
     REQUIRE(result.exit_code == 0);
     CHECK(result.output.find("[model-request]") != std::string::npos);
     CHECK(result.output.find("[assistant] fake: hello") != std::string::npos);
+    CHECK(count_occurrences(result.output, "fake: hello") == 1);
     CHECK(result.output.find("[completed]") != std::string::npos);
+    CHECK(std::filesystem::exists(session));
+}
+
+TEST_CASE("CLI text tool flow renders subscription events without duplicate presentation", "[cli][presentation]") {
+    cch::tests::TempWorkspace workspace;
+    std::ofstream(workspace.path() / "note.txt") << "subscription text";
+    auto session = workspace.path() / "text-tool-flow.jsonl";
+    auto result = run_command(
+        bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) +
+        " 'read note.txt'");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(count_occurrences(result.output, "[tool-call] read#fake-read-1") == 1);
+    CHECK(count_occurrences(result.output, "[tool-success] fake-read-1") == 1);
+    CHECK(result.output.find("[assistant] fake observed: subscription text") != std::string::npos);
+    CHECK(count_occurrences(result.output, "fake observed: subscription text") == 1);
     CHECK(std::filesystem::exists(session));
 }
 
