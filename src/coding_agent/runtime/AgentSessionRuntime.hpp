@@ -10,6 +10,7 @@
 #include "SessionLifecycle.hpp"
 
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -41,7 +42,8 @@ public:
     /// agent loop, persistence, and event fanout.
     [[nodiscard]] util::ExpectedVoid run_prompt(
         std::string prompt,
-        bool expand_prompt_templates);
+        bool expand_prompt_templates,
+        std::move_only_function<util::ExpectedVoid()> on_preflight_accepted = {});
 
     // ── Subscriptions ──────────────────────────────────────────────────────
 

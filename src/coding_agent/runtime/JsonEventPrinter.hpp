@@ -15,7 +15,6 @@ public:
 
     [[nodiscard]] util::ExpectedVoid print_session_header(const harness::session::SessionMetadata& metadata);
     [[nodiscard]] util::ExpectedVoid print_agent_event(const agent::AgentLifecycleEvent& event);
-    [[nodiscard]] util::ExpectedVoid print_terminal(bool success, std::string code, std::string message = {});
 
 private:
     [[nodiscard]] util::ExpectedVoid write_record(util::JsonValue::object_t record);

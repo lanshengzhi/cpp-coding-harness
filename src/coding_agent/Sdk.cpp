@@ -1,5 +1,6 @@
 #include "../../include/cch/coding_agent/Sdk.hpp"
 
+#include "coding_agent/runtime/AgentSessionPromptAccess.hpp"
 #include "coding_agent/runtime/AgentSessionRuntime.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 
@@ -91,26 +92,41 @@ AgentSession::~AgentSession() {
 }
 
 util::ExpectedVoid AgentSession::prompt(std::string text, PromptOptions options) {
-    if (!impl_) {
+    return detail::AgentSessionPromptAccess::prompt(
+        *this,
+        std::move(text),
+        options.expand_prompt_templates,
+        {});
+}
+
+util::ExpectedVoid detail::AgentSessionPromptAccess::prompt(
+    AgentSession& session,
+    std::string text,
+    bool expand_prompt_templates,
+    std::move_only_function<util::ExpectedVoid()> on_preflight_accepted) {
+    if (!session.impl_) {
         return std::unexpected(util::make_error(util::ErrorCode::Validation, "session is not initialized"));
     }
-    if (impl_->state == AgentSession::Impl::State::Closed) {
+    if (session.impl_->state == AgentSession::Impl::State::Closed) {
         return std::unexpected(util::make_error(util::ErrorCode::Validation, "session is closed"));
     }
-    if (impl_->state == AgentSession::Impl::State::RunningPrompt) {
-        return std::unexpected(util::make_error(util::ErrorCode::Validation, "session is busy (prompt already in flight)"));
+    if (session.impl_->state == AgentSession::Impl::State::RunningPrompt) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is busy (prompt already in flight)"));
     }
 
-    impl_->state = AgentSession::Impl::State::RunningPrompt;
-    ScopeExit restore_state{[this] {
-        if (impl_ && impl_->state != AgentSession::Impl::State::Closed) {
-            impl_->state = AgentSession::Impl::State::Open;
+    session.impl_->state = AgentSession::Impl::State::RunningPrompt;
+    ScopeExit restore_state{[&session] {
+        if (session.impl_ && session.impl_->state != AgentSession::Impl::State::Closed) {
+            session.impl_->state = AgentSession::Impl::State::Open;
         }
     }};
 
-    return impl_->runtime->run_prompt(
+    return session.impl_->runtime->run_prompt(
         std::move(text),
-        options.expand_prompt_templates);
+        expand_prompt_templates,
+        std::move(on_preflight_accepted));
 }
 
 util::Expected<EventSubscription> AgentSession::subscribe(agent::AgentEventSink sink) {

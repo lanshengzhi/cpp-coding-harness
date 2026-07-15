@@ -513,8 +513,13 @@ TEST_CASE("CLI RPC wires stdin and JSONL stdout to a session", "[cli][rpc]") {
     const auto records = parse_json_objects(result.stdout_text);
     REQUIRE(find_response(records, "prompt") != nullptr);
     REQUIRE(find_response(records, "shutdown") != nullptr);
+    REQUIRE(records.size() >= 3);
+    CHECK(json_string_at(records.front(), "type") == "response");
+    CHECK(json_string_at(records.front(), "command") == "prompt");
+    CHECK(json_string_at(records[1], "type") == "agent_start");
     CHECK(has_json_event_type(non_empty_lines(result.stdout_text), "message_update"));
-    CHECK(has_json_event_type(non_empty_lines(result.stdout_text), "runtime_terminal"));
+    CHECK_FALSE(has_json_event_type(non_empty_lines(result.stdout_text), "runtime_terminal"));
+    CHECK_FALSE(has_json_event_type(non_empty_lines(result.stdout_text), "session"));
     CHECK(result.stdout_text.find("[assistant]") == std::string::npos);
     CHECK(result.stdout_text.find('\033') == std::string::npos);
     CHECK(std::filesystem::exists(session));

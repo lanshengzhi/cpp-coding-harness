@@ -219,7 +219,9 @@ TEST_CASE("AgentSession has one prompt completion and event subscription path", 
     CHECK(sdk_header.find("util::ExpectedVoid prompt(") != std::string::npos);
     CHECK(sdk_header.find("subscribe(") != std::string::npos);
     CHECK(count_occurrences(rpc_source, "config.session.subscribe(") == 1);
-    CHECK(rpc_source.find("PromptOptions") == std::string::npos);
+    CHECK(rpc_source.find(prompt_sink_field) == std::string::npos);
+    CHECK(sdk_header.find("preflight_result") == std::string::npos);
+    CHECK(rpc_source.find("AgentSessionPromptAccess::prompt") != std::string::npos);
 }
 
 TEST_CASE("AgentSessionRuntime is constructed only by the session factory", "[architecture][session]") {

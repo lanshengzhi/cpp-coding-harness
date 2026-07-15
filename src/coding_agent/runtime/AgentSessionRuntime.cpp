@@ -90,7 +90,8 @@ AgentSessionRuntime::AgentSessionRuntime(
 
 util::ExpectedVoid AgentSessionRuntime::run_prompt(
     std::string prompt,
-    bool expand_prompt_templates) {
+    bool expand_prompt_templates,
+    std::move_only_function<util::ExpectedVoid()> on_preflight_accepted) {
     if (state_ == State::Closed) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
@@ -110,6 +111,11 @@ util::ExpectedVoid AgentSessionRuntime::run_prompt(
     }};
 
     auto expanded = prompt_processor_.process(std::move(prompt), expand_prompt_templates);
+    if (on_preflight_accepted) {
+        if (auto acknowledged = on_preflight_accepted(); !acknowledged) {
+            return acknowledged;
+        }
+    }
     return run_agent_loop(std::move(expanded.text));
 }
 

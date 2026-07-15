@@ -191,7 +191,7 @@ Prompt completion failures are reported on stderr as `loop failed: <message>` an
 
 `--mode json` emits one compact JSON object per stdout line. The first record is the pi v3 session header; every later record is a directly serialized supported AgentSession event such as `agent_start`, `turn_start`, `message_start`, `message_update`, `tool_execution_start`, `tool_execution_end`, `turn_end`, and `agent_end`. Event payloads retain their message/tool structure after secret redaction and bounded-output transformation. JSON mode has no C++ schema/version envelope, sequence counter, content-status substitution, or `runtime_terminal` record. Prompt failures are reported on stderr with a non-zero exit. Frontend-only slash commands produce no post-header JSON record because they do not enter AgentSession.
 
-`--mode rpc` is a narrow JSONL stdin/stdout command loop. It supports `prompt`, `get_state`, `get_last_assistant_text`, and `shutdown`; unsupported pi RPC commands return structured `success:false` responses. RPC mode emits no startup session header, writes command responses and prompt lifecycle events to stdout, and keeps startup/pre-session failures on stderr. It is sequential only: no `abort`, `steer`, `follow_up`, session switching, fork/clone, compaction, or extension UI yet.
+`--mode rpc` is a narrow JSONL stdin/stdout command loop. It supports `prompt`, `get_state`, `get_last_assistant_text`, and `shutdown`; unsupported pi RPC commands return structured `success:false` responses. RPC mode emits no startup session header and interleaves command responses with direct AgentSession events on stdout. Prompt success is acknowledged after session preflight accepts the prompt and before its first event; preflight rejection returns `success:false`. Later execution success or failure never emits a second response or a `runtime_terminal` record. Startup/pre-session failures remain on stderr. The protocol is sequential only: no `abort`, `steer`, `follow_up`, session switching, fork/clone, compaction, or extension UI yet.
 
 ### Slash commands
 
@@ -216,9 +216,9 @@ Command presentation depends on the frontend:
 
 | Input | Text REPL / one-shot | JSON mode | RPC `prompt` |
 | --- | --- | --- | --- |
-| Help, session information, or restart instructions | Display the command message without invoking the model. | Emit only the session header; frontend command outcomes are not AgentSession events. | Emit `runtime_terminal` with `code: "command_handled"` and the command message. |
-| Exact `/clear` | Write the terminal clear sequence from the text frontend, flush, and succeed without prompting the session. | Emit only the session header and no ANSI bytes. | Emit `command_handled` with an empty message and no ANSI bytes. |
-| `/quit` or `/exit` | Display `Shutting down.` and exit successfully. | Emit only the session header, then exit successfully. | Emit the shutdown terminal record, then stop the RPC loop successfully. |
+| Help, session information, or restart instructions | Display the command message without invoking the model. | Emit only the session header; frontend command outcomes are not AgentSession events. | Sent as ordinary prompt text; RPC built-ins are JSON commands, not text-frontend slash commands. |
+| Exact `/clear` | Write the terminal clear sequence from the text frontend, flush, and succeed without prompting the session. | Emit only the session header and no ANSI bytes. | Sent as ordinary prompt text; no terminal-control bytes are emitted by the adapter. |
+| `/quit` or `/exit` | Display `Shutting down.` and exit successfully. | Emit only the session header, then exit successfully. | Sent as ordinary prompt text; use the RPC `shutdown` command to stop the loop. |
 
 ## Embeddable C++ SDK
 

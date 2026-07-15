@@ -5,6 +5,7 @@
 #include "../../support/TempWorkspace.hpp"
 #include "util/Json.hpp"
 
+#include <functional>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -34,6 +35,29 @@ public:
         co_return std::unexpected(util::make_error(
             util::ErrorCode::Provider,
             "synthetic provider failure"));
+    }
+};
+
+class BusyProbeChatClient final : public ai::StreamingChatClient {
+public:
+    std::function<void()> on_stream;
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest&,
+        ai::AssistantEventSink) override {
+        on_stream();
+        co_return ai::assistant_text_message("outer completed");
+    }
+};
+
+class SyncCountingBuffer final : public std::stringbuf {
+public:
+    int sync_count{0};
+
+protected:
+    int sync() override {
+        ++sync_count;
+        return std::stringbuf::sync();
     }
 };
 
@@ -129,7 +153,8 @@ int count_responses(
 
 TranscriptResult run_transcript(
     std::string input,
-    std::unique_ptr<ai::StreamingChatClient> chat_client = ai::providers::make_scripted_fake_chat_client()) {
+    std::unique_ptr<ai::StreamingChatClient> chat_client = ai::providers::make_scripted_fake_chat_client(),
+    bool close_before_run = false) {
     cch::tests::TempWorkspace workspace;
 
     coding_agent::CreateAgentSessionOptions options;
@@ -144,6 +169,9 @@ TranscriptResult run_transcript(
     };
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
+    if (close_before_run) {
+        REQUIRE(created->session->close().has_value());
+    }
 
     std::istringstream rpc_input{std::move(input)};
     std::ostringstream rpc_output;
@@ -192,7 +220,7 @@ TEST_CASE("RPC mode reports safe session state through its interface", "[coding-
     CHECK(shutdown->at("success").get<bool>());
 }
 
-TEST_CASE("RPC mode accepts a prompt before events and exposes committed assistant text", "[coding-agent][runtime][rpc]") {
+TEST_CASE("RPC mode acknowledges an accepted prompt before direct events", "[coding-agent][runtime][rpc]") {
     const auto result = run_transcript(
         "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
         "{\"id\":\"last-1\",\"type\":\"get_last_assistant_text\"}\n"
@@ -203,19 +231,18 @@ TEST_CASE("RPC mode accepts a prompt before events and exposes committed assista
     const auto response_index = find_response_index(result.records, "prompt", "prompt-1");
     const auto first_event_index = find_first_event_index(result.records);
     const auto agent_start_index = find_record_index(result.records, "agent_start");
-    const auto terminal_index = find_record_index(result.records, "runtime_terminal");
+    const auto agent_end_index = find_record_index(result.records, "agent_end");
     REQUIRE(response_index < result.records.size());
     REQUIRE(first_event_index < result.records.size());
     REQUIRE(agent_start_index < result.records.size());
-    REQUIRE(terminal_index < result.records.size());
+    REQUIRE(agent_end_index < result.records.size());
     CHECK(response_index < first_event_index);
-    CHECK(first_event_index <= agent_start_index);
-    CHECK(agent_start_index < terminal_index);
+    CHECK(first_event_index == agent_start_index);
+    CHECK(agent_start_index < agent_end_index);
     CHECK(count_responses(result.records, "prompt", "prompt-1") == 1);
-    CHECK(result.records[terminal_index].at("success").get<bool>());
-    CHECK(string_at(result.records[terminal_index], "code") == "completed");
+    CHECK(find_record_index(result.records, "runtime_terminal") == result.records.size());
 
-    for (std::size_t index = first_event_index; index <= terminal_index; ++index) {
+    for (std::size_t index = first_event_index; index <= agent_end_index; ++index) {
         CHECK_FALSE(result.records[index].contains("schemaVersion"));
         CHECK_FALSE(result.records[index].contains("seq"));
         CHECK_FALSE(result.records[index].contains("contentStatus"));
@@ -223,7 +250,7 @@ TEST_CASE("RPC mode accepts a prompt before events and exposes committed assista
 
     const auto last_text_index = find_response_index(result.records, "get_last_assistant_text", "last-1");
     REQUIRE(last_text_index < result.records.size());
-    CHECK(terminal_index + 1 == last_text_index);
+    CHECK(agent_end_index + 1 == last_text_index);
     const auto* last_text = find_response(result.records, "get_last_assistant_text", "last-1");
     REQUIRE(last_text != nullptr);
     CHECK(string_at(last_text->at("data").get<JsonObject>(), "text") == "fake: hello");
@@ -248,6 +275,49 @@ TEST_CASE("RPC mode treats user bash prefixes as ordinary prompts", "[coding-age
     CHECK(string_at(last->at("data").get<JsonObject>(), "text") == "fake: !!echo excluded-later");
 }
 
+TEST_CASE("RPC mode flushes direct events while a prompt is running", "[coding-agent][runtime][rpc]") {
+    cch::tests::TempWorkspace workspace;
+    auto chat_client = std::make_unique<BusyProbeChatClient>();
+    auto* stream_probe = chat_client.get();
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_path = workspace.path() / "rpc-flush-session.jsonl";
+    options.workspace = workspace.path();
+    options.chat_client = std::move(chat_client);
+    options.builtin_tools = coding_agent::SdkBuiltinTools{
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created.has_value());
+
+    SyncCountingBuffer buffer;
+    std::ostream output{&buffer};
+    int flushes_before_provider = 0;
+    stream_probe->on_stream = [&] {
+        flushes_before_provider = buffer.sync_count;
+    };
+    std::istringstream input{
+        "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
+        "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n"};
+
+    const auto exit_code = coding_agent::runtime::run_rpc_mode({
+        .input = input,
+        .output = output,
+        .session = *created->session,
+        .provider = "test-provider",
+        .model = "test-model",
+        .workspace = workspace.path(),
+    });
+
+    REQUIRE(exit_code == 0);
+    CHECK(flushes_before_provider >= 5);
+    CHECK(find_response(parse_records(buffer.str()), "shutdown", "stop-1") != nullptr);
+    REQUIRE(created->session->close().has_value());
+}
+
 TEST_CASE("RPC mode reuses direct event serialization across prompts", "[coding-agent][runtime][rpc]") {
     const auto result = run_transcript(
         "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"first\"}\n"
@@ -258,7 +328,7 @@ TEST_CASE("RPC mode reuses direct event serialization across prompts", "[coding-
     REQUIRE(find_response(result.records, "prompt", "prompt-1") != nullptr);
     REQUIRE(find_response(result.records, "prompt", "prompt-2") != nullptr);
 
-    int terminal_count = 0;
+    int agent_start_count = 0;
     for (const auto& record : result.records) {
         if (string_at(record, "type") == "response") {
             continue;
@@ -266,11 +336,12 @@ TEST_CASE("RPC mode reuses direct event serialization across prompts", "[coding-
         CHECK_FALSE(record.contains("schemaVersion"));
         CHECK_FALSE(record.contains("seq"));
         CHECK_FALSE(record.contains("contentStatus"));
-        if (string_at(record, "type") == "runtime_terminal") {
-            ++terminal_count;
+        CHECK(string_at(record, "type") != "runtime_terminal");
+        if (string_at(record, "type") == "agent_start") {
+            ++agent_start_count;
         }
     }
-    CHECK(terminal_count == 2);
+    CHECK(agent_start_count == 2);
 }
 
 TEST_CASE("RPC mode recovers from invalid records and processes the next command", "[coding-agent][runtime][rpc]") {
@@ -336,26 +407,80 @@ TEST_CASE("RPC mode uses LF framing and processes the final record at EOF", "[co
     CHECK(response_count == 2);
 }
 
-TEST_CASE("RPC mode terminates after an accepted prompt fails", "[coding-agent][runtime][rpc]") {
+TEST_CASE("RPC mode reports accepted prompt failures only through events", "[coding-agent][runtime][rpc]") {
     const auto result = run_transcript(
         "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"fail\"}\n"
-        "{\"id\":\"later\",\"type\":\"get_state\"}\n",
+        "{\"id\":\"later\",\"type\":\"get_state\"}\n"
+        "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n",
         std::make_unique<FailingChatClient>());
 
-    REQUIRE(result.exit_code != 0);
+    REQUIRE(result.exit_code == 0);
     const auto response_index = find_response_index(result.records, "prompt", "prompt-1");
     const auto first_event_index = find_first_event_index(result.records);
-    const auto terminal_index = find_record_index(result.records, "runtime_terminal");
+    const auto agent_end_index = find_record_index(result.records, "agent_end");
     REQUIRE(response_index < result.records.size());
     REQUIRE(first_event_index < result.records.size());
-    REQUIRE(terminal_index < result.records.size());
+    REQUIRE(agent_end_index < result.records.size());
     CHECK(response_index < first_event_index);
-    CHECK(first_event_index <= terminal_index);
+    CHECK(first_event_index <= agent_end_index);
     CHECK(result.records[response_index].at("success").get<bool>());
-    CHECK_FALSE(result.records[terminal_index].at("success").get<bool>());
-    CHECK(terminal_index + 1 == result.records.size());
-    CHECK(find_response(result.records, "get_state", "later") == nullptr);
+    CHECK(find_record_index(result.records, "runtime_terminal") == result.records.size());
+    CHECK(find_response(result.records, "get_state", "later") != nullptr);
+    CHECK(find_response(result.records, "shutdown", "stop-1") != nullptr);
     CHECK(count_responses(result.records, "prompt", "prompt-1") == 1);
+}
+
+TEST_CASE("RPC mode does not report rejection after accepted subscriber failure", "[coding-agent][runtime][rpc]") {
+    cch::tests::TempWorkspace workspace;
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_path = workspace.path() / "rpc-subscriber-failure.jsonl";
+    options.workspace = workspace.path();
+    options.chat_client = ai::providers::make_scripted_fake_chat_client();
+    options.builtin_tools = coding_agent::SdkBuiltinTools{
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created.has_value());
+
+    auto rejecting = created->session->subscribe(
+        [](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            if (std::holds_alternative<agent::AgentStartEvent>(event)) {
+                return std::unexpected(util::make_error(
+                    util::ErrorCode::Unknown,
+                    "synthetic subscriber failure"));
+            }
+            return {};
+        });
+    REQUIRE(rejecting.has_value());
+
+    std::istringstream input{
+        "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
+        "{\"id\":\"state-1\",\"type\":\"get_state\"}\n"
+        "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n"};
+    std::ostringstream output;
+    const auto exit_code = coding_agent::runtime::run_rpc_mode({
+        .input = input,
+        .output = output,
+        .session = *created->session,
+        .provider = "test-provider",
+        .model = "test-model",
+        .workspace = workspace.path(),
+    });
+
+    REQUIRE(exit_code == 0);
+    const auto records = parse_records(output.str());
+    REQUIRE(records.size() == 3);
+    const auto* prompt = find_response(records, "prompt", "prompt-1");
+    REQUIRE(prompt != nullptr);
+    CHECK(prompt->at("success").get<bool>());
+    CHECK(count_responses(records, "prompt", "prompt-1") == 1);
+    CHECK(find_response(records, "get_state", "state-1") != nullptr);
+    CHECK(find_response(records, "shutdown", "stop-1") != nullptr);
+    CHECK(find_first_event_index(records) == records.size());
+    REQUIRE(created->session->close().has_value());
 }
 
 TEST_CASE("RPC mode treats slash-shaped input as an ordinary prompt", "[coding-agent][runtime][rpc]") {
@@ -366,13 +491,12 @@ TEST_CASE("RPC mode treats slash-shaped input as an ordinary prompt", "[coding-a
 
     REQUIRE(result.exit_code == 0);
     const auto response_index = find_response_index(result.records, "prompt", "prompt-1");
-    const auto terminal_index = find_record_index(result.records, "runtime_terminal");
+    const auto agent_start_index = find_record_index(result.records, "agent_start");
     REQUIRE(response_index < result.records.size());
-    REQUIRE(terminal_index < result.records.size());
-    CHECK(response_index < terminal_index);
+    REQUIRE(agent_start_index < result.records.size());
+    CHECK(response_index < agent_start_index);
     CHECK(result.records[response_index].at("success").get<bool>());
-    CHECK(result.records[terminal_index].at("success").get<bool>());
-    CHECK(string_at(result.records[terminal_index], "code") == "completed");
+    CHECK(find_record_index(result.records, "runtime_terminal") == result.records.size());
 
     const auto* state = find_response(result.records, "get_state", "state-1");
     REQUIRE(state != nullptr);
@@ -380,7 +504,7 @@ TEST_CASE("RPC mode treats slash-shaped input as an ordinary prompt", "[coding-a
     CHECK(static_cast<int>(state->at("data").get<JsonObject>().at("messageCount").get<double>()) == 2);
 }
 
-TEST_CASE("RPC mode stops after a prompt requests shutdown", "[coding-agent][runtime][rpc]") {
+TEST_CASE("RPC mode stops after the shutdown response", "[coding-agent][runtime][rpc]") {
     const auto result = run_transcript(
         "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
         "{\"id\":\"later\",\"type\":\"get_state\"}\n"
@@ -388,13 +512,78 @@ TEST_CASE("RPC mode stops after a prompt requests shutdown", "[coding-agent][run
 
     REQUIRE(result.exit_code == 0);
     const auto response_index = find_response_index(result.records, "prompt", "prompt-1");
-    const auto terminal_index = find_record_index(result.records, "runtime_terminal");
+    const auto agent_start_index = find_record_index(result.records, "agent_start");
     REQUIRE(response_index < result.records.size());
-    REQUIRE(terminal_index < result.records.size());
-    CHECK(response_index < terminal_index);
-    CHECK(result.records[terminal_index].at("success").get<bool>());
-    CHECK(string_at(result.records[terminal_index], "code") == "completed");
+    REQUIRE(agent_start_index < result.records.size());
+    CHECK(response_index < agent_start_index);
+    CHECK(find_record_index(result.records, "runtime_terminal") == result.records.size());
     CHECK(count_responses(result.records, "prompt", "prompt-1") == 1);
     CHECK(find_response(result.records, "get_state", "later") != nullptr);
     CHECK(find_response(result.records, "shutdown", "stop-1") != nullptr);
+}
+
+TEST_CASE("RPC mode returns a correlated error when a closed session rejects prompt preflight", "[coding-agent][runtime][rpc]") {
+    const auto result = run_transcript(
+        "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
+        "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n",
+        ai::providers::make_scripted_fake_chat_client(),
+        true);
+
+    REQUIRE(result.exit_code == 0);
+    REQUIRE(result.records.size() == 2);
+    const auto* prompt = find_response(result.records, "prompt", "prompt-1");
+    REQUIRE(prompt != nullptr);
+    CHECK_FALSE(prompt->at("success").get<bool>());
+    CHECK(string_at(*prompt, "error") == "session is closed");
+    CHECK(find_response(result.records, "shutdown", "stop-1") != nullptr);
+    CHECK(find_first_event_index(result.records) == result.records.size());
+}
+
+TEST_CASE("RPC mode returns a correlated error when a busy session rejects prompt preflight", "[coding-agent][runtime][rpc]") {
+    cch::tests::TempWorkspace workspace;
+    auto chat_client = std::make_unique<BusyProbeChatClient>();
+    auto* busy_probe = chat_client.get();
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_path = workspace.path() / "rpc-busy-session.jsonl";
+    options.workspace = workspace.path();
+    options.chat_client = std::move(chat_client);
+    options.builtin_tools = coding_agent::SdkBuiltinTools{
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created.has_value());
+
+    int nested_exit_code = -1;
+    std::string nested_output;
+    busy_probe->on_stream = [&] {
+        std::istringstream input{
+            "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"nested\"}\n"
+            "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n"};
+        std::ostringstream output;
+        nested_exit_code = coding_agent::runtime::run_rpc_mode({
+            .input = input,
+            .output = output,
+            .session = *created->session,
+            .provider = "test-provider",
+            .model = "test-model",
+            .workspace = workspace.path(),
+        });
+        nested_output = output.str();
+    };
+
+    REQUIRE(created->session->prompt("outer").has_value());
+    REQUIRE(nested_exit_code == 0);
+    const auto records = parse_records(nested_output);
+    REQUIRE(records.size() == 2);
+    const auto* prompt = find_response(records, "prompt", "prompt-1");
+    REQUIRE(prompt != nullptr);
+    CHECK_FALSE(prompt->at("success").get<bool>());
+    CHECK(string_at(*prompt, "error") == "session is busy (prompt already in flight)");
+    CHECK(find_response(records, "shutdown", "stop-1") != nullptr);
+    CHECK(find_first_event_index(records) == records.size());
+    REQUIRE(created->session->close().has_value());
 }

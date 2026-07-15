@@ -21,7 +21,6 @@ constexpr std::size_t kMaxJsonDepth = 32;
 constexpr std::size_t kMaxRecordStringBytes = 256 * 1024;
 constexpr std::size_t kMaxRecordNodes = 4096;
 constexpr std::size_t kMaxSerializedRecordBytes = 512 * 1024;
-constexpr std::size_t kMaxDiagnosticBytes = 512;
 
 struct JsonSafetyBudget {
     std::size_t string_bytes{kMaxRecordStringBytes};
@@ -565,15 +564,5 @@ util::ExpectedVoid JsonEventPrinter::print_agent_event(const agent::AgentLifecyc
     return write_record(std::move(record));
 }
 
-util::ExpectedVoid JsonEventPrinter::print_terminal(bool success, std::string code, std::string message) {
-    util::JsonValue::object_t record;
-    record.emplace("type", util::JsonValue{"runtime_terminal"});
-    record.emplace("success", util::JsonValue{success});
-    record.emplace("code", util::JsonValue{bounded_redacted(std::move(code), kMaxDiagnosticBytes)});
-    if (!message.empty()) {
-        record.emplace("message", util::JsonValue{bounded_redacted(std::move(message), kMaxDiagnosticBytes)});
-    }
-    return write_record(std::move(record));
-}
 
 } // namespace cch::coding_agent::runtime

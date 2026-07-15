@@ -1,5 +1,6 @@
 #include "RpcMode.hpp"
 
+#include "AgentSessionPromptAccess.hpp"
 #include "JsonEventPrinter.hpp"
 #include "RpcJsonl.hpp"
 
@@ -46,11 +47,7 @@ using util::JsonValue;
     return data;
 }
 
-[[nodiscard]] util::ExpectedVoid write_response(std::ostream& out, JsonValue::object_t record) {
-    auto written = rpc_jsonl::write_record(out, std::move(record));
-    if (!written) {
-        return written;
-    }
+[[nodiscard]] util::ExpectedVoid flush_output(std::ostream& out) {
     out.flush();
     if (!out) {
         return std::unexpected(util::make_error(
@@ -59,6 +56,14 @@ using util::JsonValue;
             "output stream failed"));
     }
     return {};
+}
+
+[[nodiscard]] util::ExpectedVoid write_response(std::ostream& out, JsonValue::object_t record) {
+    auto written = rpc_jsonl::write_record(out, std::move(record));
+    if (!written) {
+        return written;
+    }
+    return flush_output(out);
 }
 
 [[nodiscard]] std::string invalid_command_name(const std::optional<std::string>& type) {
@@ -77,13 +82,30 @@ using util::JsonValue;
 } // namespace
 
 int run_rpc_mode(RpcModeConfig config) {
+    struct PendingPromptResponse {
+        std::optional<std::string> id;
+        bool accepted{false};
+    };
+
     JsonEventPrinter printer(config.output);
-    auto event_subscription = config.session.subscribe(
-        [&printer](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
-            return printer.print_agent_event(event);
+    std::optional<PendingPromptResponse> pending_prompt;
+    std::optional<util::Error> output_error;
+    std::optional<EventSubscription> event_subscription;
+    auto subscribed = config.session.subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            auto printed = printer.print_agent_event(event);
+            if (!printed) {
+                output_error = printed.error();
+                return printed;
+            }
+            auto flushed = flush_output(config.output);
+            if (!flushed) {
+                output_error = flushed.error();
+            }
+            return flushed;
         });
-    if (!event_subscription) {
-        return 1;
+    if (subscribed) {
+        event_subscription.emplace(std::move(*subscribed));
     }
 
     std::string line;
@@ -172,24 +194,41 @@ int run_rpc_mode(RpcModeConfig config) {
                 continue;
             }
 
-            if (auto written = write_response(config.output, rpc_jsonl::success_response(id, *type)); !written) {
+            pending_prompt = PendingPromptResponse{.id = id};
+            auto result = detail::AgentSessionPromptAccess::prompt(
+                config.session,
+                std::move(*message),
+                true,
+                [&]() -> util::ExpectedVoid {
+                    auto written = write_response(
+                        config.output,
+                        rpc_jsonl::success_response(pending_prompt->id, "prompt"));
+                    if (!written) {
+                        output_error = written.error();
+                        return written;
+                    }
+                    pending_prompt->accepted = true;
+                    return {};
+                });
+            if (output_error) {
                 return 1;
             }
-
-            auto result = config.session.prompt(std::move(*message));
             if (!result) {
-                if (auto terminal = printer.print_terminal(false, "runtime_error", result.error().message); !terminal) {
-                    return 1;
+                if (!pending_prompt->accepted) {
+                    if (auto written = write_response(
+                            config.output,
+                            rpc_jsonl::error_response(id, *type, result.error().message));
+                        !written) {
+                        return 1;
+                    }
                 }
+                pending_prompt.reset();
+                continue;
+            }
+            if (!pending_prompt->accepted) {
                 return 1;
             }
-            if (auto terminal = printer.print_terminal(true, "completed"); !terminal) {
-                return 1;
-            }
-            config.output.flush();
-            if (!config.output) {
-                return 1;
-            }
+            pending_prompt.reset();
             continue;
         }
 
