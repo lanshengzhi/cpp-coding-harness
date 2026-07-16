@@ -1,10 +1,11 @@
 # Issue 03: Add Verify Slice, Handoff, and documentation integrity checks
 
-Status: ready-for-agent
+Category: enhancement
+Status: implemented
 
 ## Parent
 
-.scratch/optimize-agents-md-root-router/PRD.md
+.scratch/optimize-agents-md-root-router/spec.md
 
 ## What to build
 
@@ -21,7 +22,7 @@ This slice also performs the no-information-loss pass over the refactor: links, 
 - [x] The verification pass checks that the affected agent-facing documentation is clear English and optimized for agent execution.
 - [x] Detailed routing content remains reachable from the root document after the rewrite.
 - [x] Existing plan references to the agent routing document remain resolvable to equivalent concepts.
-- [x] The issue-tracker PRD and derived issue workflow remain marked with the ready-for-agent triage vocabulary.
+- [x] The issue-tracker spec and derived issue workflow use the configured triage vocabulary while open and the `implemented` lifecycle state when completed.
 - [x] The final state is documentation-only and does not alter C++ behavior, build configuration, CLI behavior, provider behavior, tool behavior, or session behavior.
 
 ## Blocked by
@@ -30,4 +31,4 @@ This slice also performs the no-information-loss pass over the refactor: links, 
 
 ## Comments
 
-- 2026-07-03 post-build review: Verify Slice and Handoff are present in the RootRouter; detailed route, historical section, branch guidance, issue-tracker, triage-label, and domain-doc references are reachable. Completion evidence is recorded in checkboxes while `Status: ready-for-agent` remains triage readiness.
+- 2026-07-03 post-build review: Verify Slice and Handoff are present in the RootRouter; detailed route, historical section, branch guidance, issue-tracker, triage-label, and domain-doc references are reachable. Completion evidence is recorded in checkboxes, and `Status: implemented` records the completed local lifecycle.

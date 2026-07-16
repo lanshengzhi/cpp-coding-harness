@@ -1,10 +1,11 @@
 # Move leaf resume and append continuation off wire payloads
 
+Category: enhancement
 Status: implemented
 
 ## Parent
 
-.scratch/session-wire-payloads/PRD.md
+.scratch/session-wire-payloads/spec.md
 
 ## What to build
 

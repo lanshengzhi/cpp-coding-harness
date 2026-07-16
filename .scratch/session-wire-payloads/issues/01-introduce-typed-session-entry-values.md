@@ -1,10 +1,11 @@
 # Introduce typed session entry values
 
+Category: enhancement
 Status: implemented
 
 ## Parent
 
-.scratch/session-wire-payloads/PRD.md
+.scratch/session-wire-payloads/spec.md
 
 ## What to build
 

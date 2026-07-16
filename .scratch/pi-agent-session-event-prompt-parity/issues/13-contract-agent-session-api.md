@@ -1,12 +1,13 @@
 # 13 — Contract AgentSession to one prompt and subscription path
 
+Category: enhancement
 **What to build:** Give SDK hosts one prompt completion contract—success or explicit error—and one persistent subscription path for progress, with resulting state queried separately.
 
 **Blocked by:** 06 — Narrow AgentSession prompt interpretation; 09 — Recover from subscriber delivery failure; 10 — Recover from incremental persistence failure; 11 — Render text CLI output from AgentSession subscriptions; 12 — Emit direct pi-shaped JSON events.
 
 **Status:** implemented
 
-- [x] Use PRD stories 1–3, 5, 8, 42–43, and 51 plus pi `AgentSession.prompt` and `subscribe` as the public-contract authority.
+- [x] Use spec stories 1–3, 5, 8, 42–43, and 51 plus pi `AgentSession.prompt` and `subscribe` as the public-contract authority.
 - [x] Public prompt completion returns only success or an explicit C++ error; PromptResult and private status/result models are absent.
 - [x] Per-prompt event sinks, sink-composition policy, compatibility overloads, and duplicate event paths are absent.
 - [x] State accessors remain the only way to query message count and last assistant text after completion or failure.

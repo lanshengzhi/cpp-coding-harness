@@ -1,17 +1,18 @@
 # 16 — Validate the parity slice and close verified plans
 
+Category: enhancement
 **What to build:** Produce final evidence that the event/prompt parity slice and the already-implemented SessionFactory assembly satisfy their contracts before changing any plan status.
 
 **Blocked by:** 15 — Synchronize domain, routing, and parity documentation.
 
 **Status:** implemented
 
-- [x] Use PRD stories 48–52, the parity definition of done, and every SessionFactory completion criterion as the validation authority.
+- [x] Use spec stories 48–52, the parity definition of done, and every SessionFactory completion criterion as the validation authority.
 - [x] Run the focused agent, tool-executor, SDK, prompt, CLI, session, JSON-event, RPC, and architecture slices and record the commands and outcomes.
 - [x] Build the system preset and finish with `ctest --preset system`; any failure is resolved or recorded as a blocker rather than waived.
 - [x] Mark the SessionFactory plan complete only if its focused checks and full suite pass and every completion criterion has observable evidence.
 - [x] Confirm removed event alternatives, PromptResult models, per-prompt sinks, session-owned CommandRegistry, SDK commands, schema metadata, and terminal records cannot return unnoticed.
-- [x] Record that live-provider/network tests were intentionally skipped because fake providers and local sessions satisfy this PRD's validation scope.
+- [x] Record that live-provider/network tests were intentionally skipped because fake providers and local sessions satisfy this spec's validation scope.
 
 ## Comments
 
@@ -24,7 +25,7 @@
 
 ### SessionFactory completion evidence
 
-The plan at `docs/plans/2026-07-12-001-refactor-deepen-session-factory-assembly-plan.md` now records the criterion-by-criterion evidence and is marked `status: completed`. Both source-facing paths use the same private assembly implementation; persistence visibility, provider precedence, trust/resource policy, tool visibility, capability ownership, diagnostics, SDK topology limits, and documentation claims have focused evidence.
+The completed tracker record is `.scratch/deepen-session-factory-assembly/spec.md`, with the durable decision in `docs/adr/0001-centralize-session-assembly-policy.md`. Both source-facing paths use the same private assembly implementation; persistence visibility, provider precedence, trust/resource policy, tool visibility, capability ownership, diagnostics, SDK topology limits, and documentation claims have focused evidence.
 
 ### Validation
 
@@ -47,4 +48,4 @@ cmake --build --preset system                              PASS
 ctest --preset system --output-on-failure                  PASS (1/1)
 ```
 
-Live-provider and network tests were intentionally skipped. Fake providers, process transcripts, and local session files cover this PRD's contract, failure, persistence, and protocol scope without credentials or network access.
+Live-provider and network tests were intentionally skipped. Fake providers, process transcripts, and local session files cover this spec's contract, failure, persistence, and protocol scope without credentials or network access.

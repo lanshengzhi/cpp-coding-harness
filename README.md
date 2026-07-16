@@ -172,9 +172,9 @@ Package targets and responsibilities:
 
 The build publishes `include` as the public surface and keeps `src` private. Legacy synchronous tools, Boost.JSON contracts, `util::Result`, and duplicate `src` contract headers have been removed.
 
-### pi parity roadmap
+### pi parity direction
 
-Long-term work tracks pi module and contract parity in `docs/plans/2026-06-16-001-refactor-pi-cpp-parity-todo.md`. The pre-implementation cleanup in `docs/plans/2026-06-16-002-refactor-pre-implementation-cleanup-plan.md` established the structural prerequisites for larger parity slices: package-style CMake targets, CLI11 parsing in `src/cli/`, provider registry wiring with a registered fake provider, true async shell execution, expanded agent event/state seams, runtime service split, and v3 session tree with write support, branch navigation, and compaction-aware context reconstruction.
+The harness aims for idiomatic C++ parity with pi's module and contract semantics rather than mechanical TypeScript translation. The current implemented boundary is described by this README, the public headers, tests, and `docs/agents/module-routing.md`. Open product and scope decisions are indexed in `.scratch/pi-cpp-parity/map.md`; an approved feature leaves that map and becomes its own tracker spec and tickets.
 
 ## CLI states
 

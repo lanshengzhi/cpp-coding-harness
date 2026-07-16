@@ -1,5 +1,6 @@
 # 02 — Add registry-owned command aliases
 
+Category: enhancement
 **What to build:** Add alias resolution to `CommandRegistry` so `/commands` and `/exit` reuse canonical handlers without copying move-only handlers or duplicating command behavior.
 
 **Blocked by:** 01 — Add command metadata and deterministic registry introspection.

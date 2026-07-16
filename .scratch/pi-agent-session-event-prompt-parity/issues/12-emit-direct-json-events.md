@@ -1,12 +1,13 @@
 # 12 — Emit direct pi-shaped JSON events
 
+Category: enhancement
 **What to build:** Give JSON-mode consumers a v3 session header followed by direct, semantically complete AgentSession events that remain safe to expose.
 
 **Blocked by:** 04 — Align tool execution events and tool-result messages; 08 — Persist completed messages incrementally.
 
 **Status:** implemented
 
-- [x] Use PRD stories 27–30 and the current pi JSON event-stream documentation as the wire-contract authority.
+- [x] Use spec stories 27–30 and the current pi JSON event-stream documentation as the wire-contract authority.
 - [x] The first record remains the v3 session header and every following record is a direct supported AgentSession event.
 - [x] `schemaVersion`, sequence counters, content-status substitution objects, wrapper envelopes, and runtime-terminal records are absent.
 - [x] Message and tool payloads retain their semantic structure after required secret redaction and bounded-output transformation.

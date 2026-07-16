@@ -1,1 +1,0 @@
-An experimental C++23 harness and embeddable SDK for running local coding agents with OpenAI-compatible providers, tool execution, and JSONL session persistence.

@@ -1,10 +1,11 @@
 # Harden Resource Loading Diagnostics And Routing
 
+Category: enhancement
 Status: implemented
 
 ## Parent
 
-.scratch/project-resource-loading/PRD.md
+.scratch/project-resource-loading/spec.md
 
 ## What to build
 

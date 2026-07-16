@@ -1,10 +1,11 @@
 # Deepen SessionResume at the open_session seam
 
+Category: enhancement
 Status: implemented
 
 ## Parent
 
-.scratch/session-resume-module/PRD.md
+.scratch/session-resume-module/spec.md
 
 ## What to build
 

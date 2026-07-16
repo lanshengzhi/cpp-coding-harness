@@ -7,6 +7,7 @@ This file preserves the detailed branch, merge, and publishing conventions for a
 - Treat this repository as a single-maintainer experimental repo; pull requests are not mandatory by default.
 - Prefer a feature branch for extended work so `main` does not hold unfinished changes.
 - Do not commit, merge, push, delete branches, or force-push unless the user explicitly asks for that operation.
+- Invoking `/implement` is explicit authorization for Matt's native task-scoped review and commit on the current branch. It does not authorize creating or switching branches/worktrees, pushing, merging, deleting branches, or including unrelated user changes.
 - Treat pre-existing modified or untracked files as user-owned. Do not overwrite, reformat, delete, or clean them up unless the task explicitly targets them.
 
 ## Merge and publish flow

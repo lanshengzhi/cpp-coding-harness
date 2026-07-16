@@ -1,12 +1,13 @@
 # 04 — Align tool execution events and tool-result messages
 
+Category: enhancement
 **What to build:** Make tool activity reconstructible through pi-aligned tool execution values and ordinary tool-result message lifecycles, including deterministic result ordering and safe handling of truncated calls.
 
 **Blocked by:** 02 — Complete the no-tool message lifecycle.
 
 **Status:** implemented
 
-- [x] Use PRD stories 12, 15, and 18 plus the current pi tool execution and `emitToolResultMessage` behavior as the authority.
+- [x] Use spec stories 12, 15, and 18 plus the current pi tool execution and `emitToolResultMessage` behavior as the authority.
 - [x] Tool execution start/end events carry the supported call id, name, arguments/result, and error meaning without numeric turn fields or flattened content substitutions.
 - [x] Every finalized tool result emits ordinary `message_start` and `message_end` before it appears in `turn_end`.
 - [x] Multiple tool results remain in assistant source order even when execution completion order differs.

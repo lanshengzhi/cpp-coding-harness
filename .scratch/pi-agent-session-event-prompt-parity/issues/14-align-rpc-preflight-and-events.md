@@ -1,12 +1,13 @@
 # 14 — Align RPC preflight and event interleaving
 
+Category: enhancement
 **What to build:** Let RPC clients receive direct AgentSession events interleaved with response records, with prompt acceptance acknowledged only after AgentSession preflight succeeds.
 
 **Blocked by:** 13 — Contract AgentSession to one prompt and subscription path.
 
 **Status:** implemented
 
-- [x] Use PRD stories 31–33 and 36 and the current pi RPC prompt acknowledgement rules as the protocol authority.
+- [x] Use spec stories 31–33 and 36 and the current pi RPC prompt acknowledgement rules as the protocol authority.
 - [x] RPC emits direct AgentSession events and response records without a startup session header or runtime-terminal record.
 - [x] A valid prompt gets one success response after preflight acceptance and before later execution events; it never gets a second response for execution outcome.
 - [x] Closed, busy, empty, or otherwise preflight-rejected prompts produce RPC error responses without claiming acceptance.

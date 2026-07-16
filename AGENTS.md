@@ -1,16 +1,10 @@
 # AGENTS.md
 
-This file is the **RootRouter**: the entry point for every agent run. Its job is to route you to the right context, guardrails, and validation slice with minimal reading.
-
-**How to use this file:** follow the three-step loop — **Start Gate** → **Route** → **Verify** — then hand off. Each section states its purpose and completion criterion so you know when to stop reading.
-
----
+This file is the **RootRouter** for every agent run. Use it to reach the smallest authoritative context, preserve user work, select validation, and hand off clearly.
 
 ## Start Gate
 
 **Purpose:** protect user work and classify the task before reading broadly.
-
-**Completion criterion:** you know the task family and which reference file is authoritative for it.
 
 1. Inspect the working tree:
 
@@ -18,125 +12,87 @@ This file is the **RootRouter**: the entry point for every agent run. Its job is
    git status --short
    ```
 
-2. Protect user work. Treat every pre-existing modified or untracked file as user-owned unless the task explicitly targets it. Do not overwrite, reformat, delete, or “clean up” unrelated changes. If a target file already has changes, inspect enough diff/context to preserve them and edit only the requested scope.
-
-3. Classify the task:
-   - **Docs/route/issue maintenance:** read the referenced issue/PRD and the affected docs only.
-   - **Implementation or bug fix:** read `README.md` for behavior/safety context, `CMakeLists.txt` for targets, then the matching route row in `docs/agents/module-routing.md`.
-   - **Architecture, public contracts, include boundaries, or pi parity:** read `CONTEXT.md` for domain terms, discover active plans with `status: active` under `docs/plans/`, read the relevant plan(s), and read the matching `pi:` reference files or docs before designing changes.
-
-4. Select the smallest useful context. Stop initial exploration when you know the task family, authoritative route reference, safety constraints, and validation slice.
-
----
+2. Treat every pre-existing modified or untracked file as user-owned unless the task explicitly targets it. Do not overwrite, reformat, delete, or clean unrelated changes.
+3. Classify the task and read only its entry context:
+   - **Docs, tracker, or route maintenance:** read the referenced spec/ticket and affected docs.
+   - **Implementation or bug fix:** read `README.md`, `CMakeLists.txt`, and the matching row in `docs/agents/module-routing.md`.
+   - **Architecture or public contracts:** read `CONTEXT.md`, relevant accepted ADRs under `docs/adr/`, and the matching route row.
+   - **pi parity:** also read `.scratch/pi-cpp-parity/map.md` at low resolution and the relevant current `pi:` contract or documentation. Read individual map tickets only when selected.
+4. Stop initial exploration when the task family, authoritative seam, safety constraints, and validation slice are known. Do not scan implemented tracker records by default.
 
 ## Guardrails
 
-**Purpose:** always-on architecture rules. Every change must preserve them.
-
-**Completion criterion:** your change does not reintroduce a forbidden pattern and does not violate any rule below.
-
 1. **Data is passive value state.** Public contracts use aggregate-friendly `struct`, `std::variant`, `std::expected`, and project `util::JsonValue` values.
-2. **Capabilities cross physical seams.** Chat clients, stream transports, execution environments, session stores, and tools are exposed through interfaces or dependency-heavy concrete implementations hidden behind narrow headers.
+2. **Capabilities cross physical seams.** Chat clients, stream transports, execution environments, session stores, and tools are exposed through interfaces or dependency-heavy implementations hidden behind narrow headers.
 3. **Events are weak connections.** Agent/provider event sinks use `std::move_only_function`; do not regress to copyability requirements such as `std::function`.
-4. **Generic and serialization machinery stays local.** Glaze DTOs, schema conversion, visitors, parsing helpers, and similar machinery stay in serialization/implementation layers, not domain-facing APIs.
-5. **Security and containment remain explicit.** Any shell, file, environment-variable, provider, or session change must preserve workspace containment, secret redaction, output truncation, and the documented “not a sandbox” boundary.
+4. **Generic and serialization machinery stays local.** Glaze DTOs, schema conversion, visitors, parsing helpers, and similar machinery stay in serialization or implementation layers.
+5. **Security and containment remain explicit.** Shell, file, environment-variable, provider, and session changes must preserve workspace containment, secret redaction, output truncation, and the documented “not a sandbox” boundary.
 
-**Forbidden regressions:** do not reintroduce the legacy synchronous tool surface, `util::Result`, Boost.JSON domain contracts, `src` as a public include surface, or compatibility-only empty flags.
-
-> **Why these rules?** They encode the anti-fragile architecture decision: passive values at public seams, replaceable adapters behind narrow headers, move-only callbacks, and serialization kept private. For the full domain vocabulary see `CONTEXT.md`.
-
----
+Do not reintroduce the legacy synchronous tool surface, `util::Result`, Boost.JSON domain contracts, `src` as a public include surface, or compatibility-only empty flags.
 
 ## pi C++ Parity Direction
 
-**Purpose:** state the long-term strategic direction so you can judge whether a change touches a parity area.
+The long-term direction is an idiomatic C++ implementation of pi's module and contract architecture, not a mechanical TypeScript translation.
 
-**Completion criterion:** you know whether the changed seam is part of the pi C++ parity roadmap, and if so, which active plan governs it.
-
-The long-term direction is for this repository to become an idiomatic C++ implementation of pi’s module and contract architecture. Prefer module/contract parity over mechanical TypeScript translation.
-
-- Roadmap: `docs/plans/2026-06-16-001-refactor-pi-cpp-parity-todo.md`.
-- Contract inventory: `docs/plans/2026-06-16-003-refactor-pi-cpp-contract-inventory.md`.
-- Current implementation plans: files under `docs/plans/` with `status: active`.
-- Reference paths from the pi repository use the `pi:` prefix, for example `pi:packages/ai/src/types.ts`; this repository’s paths stay repo-relative.
-
-Before changing a parity area, read the relevant roadmap/inventory entry and the referenced `pi:` contract or documentation.
-
----
+- The current planning authority is `.scratch/pi-cpp-parity/map.md`.
+- Stable current behavior belongs in code, tests, `README.md`, and `docs/agents/module-routing.md`.
+- Hard-to-reverse decisions belong in accepted ADRs.
+- A decided feature leaves the map and follows `/to-spec` → `/to-tickets` → `/implement` as its own effort.
+- Reference paths from pi use the `pi:` prefix, for example `pi:packages/ai/src/types.ts`.
 
 ## Route
 
-**Purpose:** find the right entry point and authoritative reference for your task family.
-
-**Completion criterion:** you have opened the file(s) listed in the matching route row.
-
-Use the compact table below for a first guess; read [`docs/agents/module-routing.md`](docs/agents/module-routing.md) when the target seam is unclear, when you are editing routing docs, or when a task touches provider, tool, session, CLI/runtime, public-boundary, documentation, or pi-parity details. The detailed reference also carries the **validation slice** for each task family.
+Use the compact table for dispatch. Open `docs/agents/module-routing.md` for the detailed entry points and validation slice.
 
 | Task family | Continue with |
 | --- | --- |
-| Agent loop, lifecycle events, tool-call orchestration | `docs/agents/module-routing.md` → Agent loop row |
-| AI contracts, content, usage, provider-neutral messages | `docs/agents/module-routing.md` → AI messages/contracts row |
-| Providers, OpenAI-compatible transport, SSE, model registry | `docs/agents/module-routing.md` → provider rows |
-| Built-in tools, workspace/file/shell capabilities | `docs/agents/module-routing.md` → built-in tools and workspace/path/shell rows |
-| CLI, REPL, JSON/RPC modes, runtime services, prompt processing | `docs/agents/module-routing.md` → CLI/runtime, JSON/RPC, and prompt rows |
-| Config, project trust, resources, skills, prompt templates | `docs/agents/module-routing.md` → config, project trust, skills/resources rows |
-| Sessions, resume, tree navigation, compaction context | `docs/agents/module-routing.md` → session row |
-| Public headers, dependency direction, architecture guards | `docs/agents/module-routing.md` → public boundary/architecture row |
-| Documentation, plans, issue tracker, route maintenance | The referenced issue/PRD and affected docs in this file, `docs/agents/module-routing.md`, `docs/plans/`, or `.scratch/<feature-slug>/` |
+| Agent loop, lifecycle events, tool-call orchestration | Agent loop row |
+| AI contracts, content, usage, provider-neutral messages | AI messages/contracts row |
+| Providers, OpenAI-compatible transport, SSE, model registry | Provider rows |
+| Built-in tools, workspace/file/shell capabilities | Built-in tools and workspace/path/shell rows |
+| CLI, REPL, JSON/RPC modes, runtime services, prompt processing | CLI/runtime, JSON/RPC, and prompt rows |
+| Config, project trust, resources, skills, prompt templates | Config, project trust, and skills/resources rows |
+| Sessions, resume, tree navigation, compaction context | Session row |
+| Public headers, dependency direction, architecture guards | Public boundary/architecture row |
+| Documentation and tracker maintenance | Referenced spec/ticket plus affected `README.md`, `CONTEXT.md`, `docs/agents/`, or `docs/adr/` |
 
-Condensed or removed detailed route content from the old root document is preserved in `docs/agents/module-routing.md`. Historical references to old `AGENTS.md` section numbers are mapped there. Build/test command examples remain in `README.md`; source/target membership remains authoritative in `CMakeLists.txt`.
-
----
+Build and test commands remain authoritative in `README.md`; target membership remains authoritative in `CMakeLists.txt`.
 
 ## Verify Slice
 
-**Purpose:** choose the smallest validation that proves the changed seam, and no more.
-
-**Completion criterion:** you know exactly which checks to run for this task, and why larger checks are unnecessary.
-
-- **Docs-only changes:** check markdown structure, relative links, headings, and no-information-loss against the referenced source (`docs/agents/module-routing.md`, the issue/PRD, or the old section being condensed). For agent-facing docs, also verify clear English optimized for agent execution. No C++ build is required unless code/build files changed.
+- **Docs-only changes:** check Markdown structure, relative links, headings, tracker-state consistency, clear agent-facing English, and no-information-loss for migrated current facts. No C++ build is required unless code or build files changed.
 - **Implementation changes:** run the focused test tag or executable slice listed in `README.md` and the relevant route row.
-- **Public-boundary or contract changes:** if you change public headers, include surfaces, dependency directions, provider/tool/session contracts, or CMake public/private target boundaries, run the architecture tests before handoff.
-- **Provider changes requiring real API keys or network:** do not run live provider validation by default; use fake/provider unit tests unless the user explicitly asks for live validation.
+- **Public-boundary or contract changes:** run architecture tests when public headers, include surfaces, dependency directions, provider/tool/session contracts, or CMake public/private boundaries change.
+- **Provider changes requiring real API keys or network:** use fake/provider unit tests unless the user explicitly asks for live validation.
 
-Tests should protect current architecture intent and safety properties, not only old class names, old JSONL shapes, or transcript wording.
-
-> **Why smallest-first?** Kent Beck’s rule applies here: run the cheapest test that can fail for the change you made. Escalate only when a cheaper slice cannot give you confidence.
-
----
+Use the cheapest check that can fail for the changed seam, then escalate only when needed.
 
 ## Worktree Discipline
 
-**Purpose:** keep changes minimal, user-owned, and safely reversible.
-
-**Completion criterion:** only task-related files are modified, and pre-existing user changes are preserved.
-
-- Edit the minimum file set needed for the task.
-- Prefer a feature branch for extended work, but do not commit, merge, push, delete branches, or force-push unless the user explicitly asks.
-- Detailed branch, merge, publish, PR, and cleanup conventions live in `docs/agents/worktree-discipline.md`; read it only when the task asks for those operations.
-- Before final response, re-check `git status --short` and ensure listed changes are task-related.
-
----
+- Edit the minimum task-related file set.
+- Prefer a feature branch for extended work, but do not commit, merge, push, delete branches, or force-push unless the user explicitly authorizes that operation.
+- Invoking `/implement` is explicit authorization for its native task-scoped review and commit on the current branch. It does not authorize creating or switching branches/worktrees, pushing, merging, deleting branches, or including unrelated changes.
+- Detailed branch and publishing conventions live in `docs/agents/worktree-discipline.md`; read them only when those operations are requested.
+- Re-check `git status --short` before handoff.
 
 ## Handoff
 
-**Purpose:** close the loop with clear accountability.
+Final responses must state:
 
-**Completion criterion:** the user can answer three questions from your response: what changed, how was it validated, and what was skipped.
+- **Changed scope:** files or seams changed and why.
+- **Validation performed:** tests or documentation checks run.
+- **Skipped validation:** intentionally skipped checks and why.
 
-Final responses must include:
+## Agent skills
 
-- **Changed scope:** the files or seams changed and why they were in scope.
-- **Validation performed:** tests, markdown checks, link checks, or no-information-loss checks run.
-- **Skipped validation:** any intentionally skipped validation and the reason.
+### Issue tracker
 
----
+Specs and tickets use the local Markdown tracker under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
 
-## Agent skills and references
+### Triage labels
 
-**Purpose:** point to supporting conventions without inlining them.
+The tracker uses Matt's canonical triage roles and local lifecycle states. See `docs/agents/triage-labels.md`.
 
-- **Issue tracker:** Issues and PRDs live as markdown files in `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
-- **Triage labels:** Default mattpocock/skills vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
-- **Domain docs:** Single-context repo: read root `CONTEXT.md` plus `docs/adr/` (when present). See `docs/agents/domain.md`.
-- **Worktree discipline:** `docs/agents/worktree-discipline.md` (branch, merge, publish, PR, and cleanup conventions).
+### Domain docs
+
+This is a single-context repo: use root `CONTEXT.md` and relevant accepted ADRs under `docs/adr/`. See `docs/agents/domain.md`.

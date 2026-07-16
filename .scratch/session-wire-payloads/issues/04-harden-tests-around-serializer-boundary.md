@@ -1,10 +1,11 @@
 # Harden tests around the serializer boundary
 
+Category: enhancement
 Status: implemented
 
 ## Parent
 
-.scratch/session-wire-payloads/PRD.md
+.scratch/session-wire-payloads/spec.md
 
 ## What to build
 
@@ -15,7 +16,7 @@ to the serializer or wire-format boundary. This issue should also remove or
 rename any stale test helpers or comments that imply generic payload access is
 the primary domain interface.
 
-This issue is the final integration pass for the PRD. It should verify that the
+This issue is the final integration pass for the spec. It should verify that the
 session module no longer relies on raw wire payloads in known-entry domain
 logic, while still preserving diagnostics and unknown-entry compatibility.
 

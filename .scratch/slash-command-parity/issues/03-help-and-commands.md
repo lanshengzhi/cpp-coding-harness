@@ -1,5 +1,6 @@
 # 03 — Implement `/help` and `/commands`
 
+Category: enhancement
 **What to build:** Register metadata for the existing built-ins, add a passive registry snapshot to `CommandContext`, and implement deterministic command help without giving handlers a registry pointer.
 
 **Blocked by:** 01 — Add command metadata and deterministic registry introspection; 02 — Add registry-owned command aliases.
@@ -16,7 +17,7 @@
 - [x] Return `Usage: /help [command]` for more than one argument.
 - [x] Return `Unknown command: /<name>` for an unknown detailed-help target without invoking the agent loop.
 - [x] Register `/commands` as an alias of `/help`.
-- [x] Add handler and pipeline tests plus the PRD mode tests; explicitly assert one-shot text `/help` output and the existing JSON/RPC terminal message field for `/help`.
+- [x] Add handler and pipeline tests plus the spec mode tests; explicitly assert one-shot text `/help` output and the existing JSON/RPC terminal message field for `/help`.
 - [x] Run focused coding-agent, CLI, SDK, and architecture tests.
 
 ## Comments

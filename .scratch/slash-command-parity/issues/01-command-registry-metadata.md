@@ -1,5 +1,6 @@
 # 01 — Add command metadata and deterministic registry introspection
 
+Category: enhancement
 **What to build:** Deepen `CommandRegistry` so it owns passive command metadata, explicit registration failures, lookup, and deterministic listing alongside move-only handlers.
 
 **Blocked by:** None — can start immediately.

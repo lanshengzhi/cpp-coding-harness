@@ -1,4 +1,0 @@
-- Use of `std::expected` (via `util::Expected`) for all fallible operations instead of exceptions for control flow.
-- Move-only callback semantics (`std::move_only_function`) for event sinks to avoid shared ownership overhead.
-- Passive data contracts using aggregates and `std::variant` in public headers, keeping generic serialization machinery (Glaze) in implementation files.
-- Strict separation of interface headers in `include/cch/` from implementation details in `src/`, enforced by CMake target visibility.

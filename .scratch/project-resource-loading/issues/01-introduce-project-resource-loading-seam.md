@@ -1,14 +1,15 @@
 # Introduce Project Resource Loading Seam
 
+Category: enhancement
 Status: implemented
 
 ## Parent
 
-.scratch/project-resource-loading/PRD.md
+.scratch/project-resource-loading/spec.md
 
 ## What to build
 
-Create the central project resource-loading seam described by the PRD. It should
+Create the central project resource-loading seam described by the spec. It should
 accept session-start resource inputs, apply existing project trust/resource
 policy, invoke resource adapters for the implemented kinds, and return a loaded
 resource bundle plus structured diagnostics.

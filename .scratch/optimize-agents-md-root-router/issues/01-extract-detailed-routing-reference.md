@@ -1,10 +1,11 @@
 # Issue 01: Prefactor detailed routing into an external Route reference
 
-Status: ready-for-agent
+Category: enhancement
+Status: implemented
 
 ## Parent
 
-.scratch/optimize-agents-md-root-router/PRD.md
+.scratch/optimize-agents-md-root-router/spec.md
 
 ## What to build
 
@@ -28,4 +29,4 @@ None - can start immediately
 
 ## Comments
 
-- 2026-07-03 post-build review: `docs/agents/module-routing.md` is reachable from the RootRouter and preserves the pre-router module matrix row-for-row. Completion evidence is recorded in checkboxes while `Status: ready-for-agent` remains triage readiness.
+- 2026-07-03 post-build review: `docs/agents/module-routing.md` is reachable from the RootRouter and preserves the pre-router module matrix row-for-row. Completion evidence is recorded in checkboxes, and `Status: implemented` records the completed local lifecycle.

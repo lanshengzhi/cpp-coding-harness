@@ -1,10 +1,11 @@
 # Route SDK Project Resources Through Shared Loading
 
+Category: enhancement
 Status: implemented
 
 ## Parent
 
-.scratch/project-resource-loading/PRD.md
+.scratch/project-resource-loading/spec.md
 
 ## What to build
 
