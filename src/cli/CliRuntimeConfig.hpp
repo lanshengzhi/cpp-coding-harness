@@ -28,8 +28,9 @@ struct AsyncCliRuntimeConfig {
     int max_turns{8};
     bool workspace_explicit{false};
     std::filesystem::path workspace;
-    /// Normalized session intent. An omitted --session/--resume selects
-    /// workspace-keyed default persistence, never an empty-path sentinel.
+    /// Normalized session intent. An omitted --session/--resume/--no-session
+    /// selects workspace-keyed default persistence, never an empty-path
+    /// sentinel.
     coding_agent::SessionTarget session_target{};
     coding_agent::CliProviderOverrides provider_overrides;
     std::string prompt;

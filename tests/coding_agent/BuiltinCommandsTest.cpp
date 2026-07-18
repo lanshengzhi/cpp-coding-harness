@@ -14,6 +14,7 @@ TEST_CASE("built-in /session command returns session info", "[coding_agent][prom
 
     coding_agent::CommandContext ctx{
         .session_id = "test-session-1",
+        .session_path = "/tmp/ws/session.jsonl",
         .workspace_path = "/tmp/ws",
         .provider = "openai",
         .model = "gpt-4.1-mini",
@@ -28,6 +29,28 @@ TEST_CASE("built-in /session command returns session info", "[coding_agent][prom
     CHECK(result->display_text.find("openai") != std::string::npos);
     CHECK(result->display_text.find("gpt-4.1-mini") != std::string::npos);
     CHECK(result->display_text.find("5") != std::string::npos);
+    CHECK(result->display_text.find("File: /tmp/ws/session.jsonl") != std::string::npos);
+    CHECK(result->display_text.find("In-memory") == std::string::npos);
+}
+
+TEST_CASE("built-in /session command identifies an in-memory session explicitly", "[coding_agent][prompt]") {
+    coding_agent::CommandRegistry registry;
+    REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
+
+    coding_agent::CommandContext ctx{
+        .session_id = "test-session-mem",
+        .workspace_path = "/tmp/ws",
+        .provider = "openai",
+        .model = "gpt-4.1-mini",
+        .message_count = 0,
+        .available_commands = {},
+    };
+
+    auto result = registry.dispatch("session", ctx, "");
+    REQUIRE(result.has_value());
+    // The absent path must never surface as an ambiguous empty value.
+    CHECK(result->display_text.find("File: In-memory") != std::string::npos);
+    CHECK(result->display_text.find("File: \n") == std::string::npos);
 }
 
 TEST_CASE("built-in /quit and /exit commands signal shutdown through the same handler", "[coding_agent][prompt]") {

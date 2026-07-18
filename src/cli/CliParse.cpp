@@ -78,9 +78,11 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
 
     CLI::App app{"C++ coding-agent harness", "cpp-harness"};
     app.footer(
-        "Sessions: without --session/--resume, a new session persists under the agent config\n"
-        "directory's workspace-keyed sessions root (~/.cpp-harness/agent/sessions/<workspace-key>/,\n"
-        "root override: CCH_CODING_AGENT_DIR). Explicit paths may live anywhere.\n"
+        "Sessions: without --session/--resume/--no-session, a new session persists\n"
+        "under the agent config directory's workspace-keyed sessions root\n"
+        "(~/.cpp-harness/agent/sessions/<workspace-key>/, root override:\n"
+        "CCH_CODING_AGENT_DIR). Explicit paths may live anywhere; --no-session runs\n"
+        "in memory without a transcript.\n"
         "Safety: prompts, file contents, and command outputs may be sent to the configured provider.\n"
         "Sessions are local sensitive transcripts even after secret-looking text is redacted.");
     app.set_help_flag("-h,--help", "Print this help message and exit");
@@ -102,6 +104,7 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     auto* resume_option = app.add_option("--resume", resume_text, "Resume and append to an existing JSONL session");
     session_option->excludes(resume_option);
     resume_option->excludes(session_option);
+    auto* no_session_option = app.add_flag("--no-session", "Run the session in memory without persisting a transcript");
     app.add_option("--max-turns", max_turns_option, "Maximum model turns per prompt")
         ->check(CLI::Range(1, 64));
     auto* model_option = app.add_option("--model", model_text, "Provider model name")->default_str("gpt-4.1-mini");
@@ -131,11 +134,20 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
         config.workspace_explicit = true;
         config.workspace = workspace_text;
     }
+    if (no_session_option->count() > 0 && session_option->count() > 0) {
+        return std::unexpected(cli_error("--no-session cannot be combined with --session"));
+    }
+    if (no_session_option->count() > 0 && resume_option->count() > 0) {
+        return std::unexpected(cli_error("--no-session cannot be combined with --resume"));
+    }
     if (session_option->count() > 0) {
         config.session_target = coding_agent::ExplicitNewSessionTarget{session_text};
     }
     if (resume_option->count() > 0) {
         config.session_target = coding_agent::ExplicitResumeSessionTarget{resume_text};
+    }
+    if (no_session_option->count() > 0) {
+        config.session_target = coding_agent::InMemorySessionTarget{};
     }
     if (app.count("--max-turns") > 0) {
         config.max_turns = max_turns_option;

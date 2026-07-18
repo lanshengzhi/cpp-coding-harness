@@ -195,8 +195,12 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
     event_subscription.emplace(std::move(*subscribed));
 
     auto make_command_context = [&]() {
+        const auto& session_path = session.session_path();
         return coding_agent::CommandContext{
             .session_id = session.session_id(),
+            .session_path = session_path
+                ? std::optional<std::string>(session_path->string())
+                : std::nullopt,
             .workspace_path = session.workspace().string(),
             .provider = session.provider(),
             .model = session.model(),

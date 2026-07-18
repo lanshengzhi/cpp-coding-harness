@@ -67,7 +67,7 @@ cmake --build --preset system
 ctest --preset system
 ```
 
-Run the binary with the deterministic fake provider. With no `--session` or `--resume`, each run persists a new session under the workspace-keyed user-level default (see [Session storage](#session-storage)):
+Run the binary with the deterministic fake provider. With no `--session`, `--resume`, or `--no-session`, each run persists a new session under the workspace-keyed user-level default (see [Session storage](#session-storage)):
 
 ```bash
 ./build/cpp_harness --fake "hello"
@@ -75,6 +75,12 @@ Run the binary with the deterministic fake provider. With no `--session` or `--r
 ./build/cpp_harness --fake --mode json "hello" | jq -c 'select(.type == "message_update")'
 printf '{"type":"get_state"}\n{"type":"shutdown"}\n' | ./build/cpp_harness --fake --mode rpc
 ./build/cpp_harness --fake --repl
+```
+
+Pass `--no-session` to run any frontend in memory with no transcript left behind:
+
+```bash
+./build/cpp_harness --fake --no-session "hello"
 ```
 
 Explicit create and resume paths remain available and may live anywhere:
@@ -106,6 +112,8 @@ User-level state lives in the agent config directory `~/.cpp-harness/agent/`, mi
 Without `--session` or `--resume`, the CLI persists each new session under `<agent config directory>/sessions/<encoded workspace>/<UTC timestamp>_<session id>.jsonl`, mirroring pi's layout. The workspace key is pi's readable encoding of the canonical physical workspace path: an explicit `--workspace` — not the process working directory — selects the location, and symbolic-link aliases of one workspace share one session directory. The filename UUID matches the Session ID stored in the session header and reported by runtime state.
 
 `--session PATH` and `--resume PATH` keep their exact paths and may live outside the default root. Old project-local `.cpp-harness/sessions/` files are neither scanned nor migrated; pass such a file explicitly through `--resume` if it is still needed. A missing or unwritable default store fails before any model work with the attempted path and reason — the harness never falls back to a workspace-local or temporary transcript. On POSIX, harness-created session directories are owner-only (`0700`) and new session files are `0600`.
+
+`--no-session` selects an explicit in-memory Agent Session in every frontend (text one-shot, REPL, JSON, and RPC): provider, tools, events, live state, errors, and shutdown behave normally, but no sessions root, workspace-local session directory, or transcript file is created — including after failures. It cannot be combined with `--session` or `--resume`. In-memory operation happens only when explicitly requested; storage unavailability is never silently treated as `--no-session`. `/session` prints the persisted file path, or `File: In-memory` for these runs.
 
 ### Auth file
 
@@ -206,7 +214,7 @@ Prompt completion failures are reported on stderr as `loop failed: <message>` an
 
 `--mode json` emits one compact JSON object per stdout line. The first record is the pi v3 session header; every later record is a directly serialized supported AgentSession event such as `agent_start`, `turn_start`, `message_start`, `message_update`, `tool_execution_start`, `tool_execution_end`, `turn_end`, and `agent_end`. Event payloads retain their message/tool structure after secret redaction and bounded-output transformation. JSON mode has no C++ schema/version envelope, sequence counter, content-status substitution, or `runtime_terminal` record. Prompt failures are reported on stderr with a non-zero exit. Frontend-only slash commands produce no post-header JSON record because they do not enter AgentSession.
 
-`--mode rpc` is a narrow JSONL stdin/stdout command loop. It supports `prompt`, `get_state`, `get_last_assistant_text`, and `shutdown`; unsupported pi RPC commands return structured `success:false` responses. RPC mode emits no startup session header and interleaves command responses with direct AgentSession events on stdout. Prompt success is acknowledged after session preflight accepts the prompt and before its first event; preflight rejection returns `success:false`. Later execution success or failure never emits a second response or a `runtime_terminal` record. Startup/pre-session failures remain on stderr. The protocol is sequential only: no `abort`, `steer`, `follow_up`, session switching, fork/clone, compaction, or extension UI yet.
+`--mode rpc` is a narrow JSONL stdin/stdout command loop. It supports `prompt`, `get_state`, `get_last_assistant_text`, and `shutdown`; unsupported pi RPC commands return structured `success:false` responses. `get_state` reports the persisted transcript path as `sessionFile` and omits that key for in-memory sessions, matching pi's `RpcSessionState`. RPC mode emits no startup session header and interleaves command responses with direct AgentSession events on stdout. Prompt success is acknowledged after session preflight accepts the prompt and before its first event; preflight rejection returns `success:false`. Later execution success or failure never emits a second response or a `runtime_terminal` record. Startup/pre-session failures remain on stderr. The protocol is sequential only: no `abort`, `steer`, `follow_up`, session switching, fork/clone, compaction, or extension UI yet.
 
 ### Slash commands
 
@@ -216,7 +224,7 @@ The effective built-in command names are:
 | --- | --- |
 | `/help [command]` | List all effective registry names, or show detailed help for one name. Both `/help name` and `/help /name` are accepted. |
 | `/commands` | Alias for `/help`. |
-| `/session` | Show the current session id, workspace, provider, model, and message count. |
+| `/session` | Show the current session id, session file (`In-memory` when running with `--no-session`), workspace, provider, model, and message count. |
 | `/new` | **Instructional placeholder:** explain how to restart without `--resume`; it does not replace the current session. |
 | `/resume <session-id>` | **Instructional placeholder:** explain how to restart with `--resume`; it does not switch the current session. |
 | `/clear` | Clear the terminal only in the text frontend. Arguments produce `Usage: /clear`. |

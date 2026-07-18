@@ -242,6 +242,9 @@ util::ExpectedVoid register_builtin_commands(CommandRegistry& registry) {
             [](const CommandContext& ctx, std::string_view /*args*/) {
                 std::string text;
                 text += "Session: " + ctx.session_id + "\n";
+                // In-memory sessions have no file; name that state explicitly
+                // instead of printing an ambiguous empty path.
+                text += "File: " + ctx.session_path.value_or("In-memory") + "\n";
                 text += "Workspace: " + ctx.workspace_path + "\n";
                 text += "Provider: " + ctx.provider + "\n";
                 text += "Model: " + ctx.model + "\n";

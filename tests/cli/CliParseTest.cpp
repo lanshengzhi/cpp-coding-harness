@@ -160,6 +160,39 @@ TEST_CASE("parse_args maps --resume to an explicit resume target", "[cli][parse]
     CHECK(target->path == "old.jsonl");
 }
 
+TEST_CASE("parse_args maps --no-session to the in-memory target", "[cli][parse][session-target]") {
+    std::vector<std::string> args{"cpp-harness", "--fake", "--no-session", "hello"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    CHECK(std::holds_alternative<cch::coding_agent::InMemorySessionTarget>(parsed->session_target));
+}
+
+TEST_CASE("parse_args rejects --no-session with an explicit create target", "[cli][parse][session-target]") {
+    std::vector<std::string> args{"cpp-harness", "--fake", "--no-session", "--session", "new.jsonl", "hello"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE_FALSE(parsed);
+    CHECK(parsed.error().message.find("--no-session cannot be combined with --session") != std::string::npos);
+}
+
+TEST_CASE("parse_args rejects --no-session with an explicit resume target", "[cli][parse][session-target]") {
+    std::vector<std::string> args{"cpp-harness", "--fake", "--no-session", "--resume", "old.jsonl", "hello"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE_FALSE(parsed);
+    CHECK(parsed.error().message.find("--no-session cannot be combined with --resume") != std::string::npos);
+}
+
+TEST_CASE("parse_args help text advertises --no-session", "[cli][parse][session-target]") {
+    std::vector<std::string> args{"cpp-harness", "--help"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    REQUIRE(parsed->help);
+    CHECK(parsed->help_text.find("--no-session") != std::string::npos);
+}
+
 TEST_CASE("parse_args still requires prompt for json mode", "[cli][parse]") {
     std::vector<std::string> args{"cpp-harness", "--fake", "--mode", "json"};
     auto argv = argv_from_strings(args);

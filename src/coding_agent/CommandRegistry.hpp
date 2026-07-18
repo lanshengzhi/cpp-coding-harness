@@ -25,6 +25,8 @@ struct CommandInfo {
 struct CommandContext {
     /// Current session id (empty if no active session).
     std::string session_id;
+    /// Persisted session file path; absent for in-memory sessions.
+    std::optional<std::string> session_path;
     /// Current workspace path.
     std::string workspace_path;
     /// Current provider name.

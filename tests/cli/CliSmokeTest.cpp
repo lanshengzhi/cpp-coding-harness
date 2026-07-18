@@ -1576,3 +1576,185 @@ TEST_CASE("CLI failed assembly publishes no default session file", "[cli][defaul
     CHECK(jsonl_files_under(agent_dir / "sessions").empty());
     CHECK_FALSE(std::filesystem::exists(workspace.path() / ".cpp-harness" / "sessions"));
 }
+
+/// An explicit in-memory run must publish nothing: no agent config sessions
+/// root, no workspace-local sessions directory, and no transcript file.
+void require_no_session_filesystem_state(
+    const std::filesystem::path& agent_dir,
+    const std::filesystem::path& workspace) {
+    CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
+    CHECK_FALSE(std::filesystem::exists(workspace / ".cpp-harness" / "sessions"));
+    CHECK(jsonl_files_under(agent_dir).empty());
+    CHECK(jsonl_files_under(workspace).empty());
+}
+
+TEST_CASE("CLI --no-session runs a text prompt without publishing session state", "[cli][no-session]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace agent_root;
+    const auto agent_dir = agent_root.path() / "agent";
+
+    auto result = run_command_split(
+        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
+        " --fake --no-session --workspace " + q(workspace.path()) + " hello");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stdout_text.find("[model-request]") != std::string::npos);
+    CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
+    CHECK(result.stdout_text.find("[completed]") != std::string::npos);
+    require_no_session_filesystem_state(agent_dir, workspace.path());
+}
+
+TEST_CASE("CLI --no-session JSON mode propagates the in-memory target", "[cli][no-session][json]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace agent_root;
+    const auto agent_dir = agent_root.path() / "agent";
+
+    auto result = run_command_split(
+        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
+        " --fake --no-session --mode json --workspace " + q(workspace.path()) + " hello");
+
+    REQUIRE(result.exit_code == 0);
+    const auto records = parse_json_objects(result.stdout_text);
+    REQUIRE(records.size() > 1);
+    CHECK(json_string_at(records.front(), "type") == "session");
+    CHECK(has_json_event_type(non_empty_lines(result.stdout_text), "agent_end"));
+    require_no_session_filesystem_state(agent_dir, workspace.path());
+}
+
+TEST_CASE("CLI --no-session RPC mode propagates the in-memory target", "[cli][no-session][rpc]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace agent_root;
+    const auto agent_dir = agent_root.path() / "agent";
+
+    const std::string input =
+        "{\"id\":\"p1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
+        "{\"id\":\"s1\",\"type\":\"get_state\"}\n"
+        "{\"id\":\"q1\",\"type\":\"shutdown\"}\n";
+    auto result = run_command_split_with_input(
+        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
+        " --fake --no-session --mode rpc --workspace " + q(workspace.path()),
+        input);
+
+    REQUIRE(result.exit_code == 0);
+    const auto records = parse_json_objects(result.stdout_text);
+    REQUIRE(find_response(records, "prompt") != nullptr);
+    REQUIRE(find_response(records, "shutdown") != nullptr);
+    const auto* state = find_response(records, "get_state");
+    REQUIRE(state != nullptr);
+    const auto& data = as_object(state->at("data"));
+    // In-memory sessions keep a real Session ID but never report a file.
+    CHECK_FALSE(json_string_at(data, "sessionId").empty());
+    CHECK_FALSE(data.contains("sessionFile"));
+    CHECK(data.at("messageCount").get<double>() == 2);
+    require_no_session_filesystem_state(agent_dir, workspace.path());
+}
+
+TEST_CASE("CLI --no-session text REPL propagates the in-memory target", "[cli][no-session]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace agent_root;
+    const auto agent_dir = agent_root.path() / "agent";
+
+    auto result = run_command_split(
+        "printf 'hello\\n/session\\nexit\\n' | CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
+        " --fake --no-session --repl --workspace " + q(workspace.path()));
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
+    // /session names the in-memory state instead of an ambiguous empty path.
+    CHECK(result.stdout_text.find("File: In-memory") != std::string::npos);
+    require_no_session_filesystem_state(agent_dir, workspace.path());
+}
+
+TEST_CASE("CLI /session shows the persisted file for a default session", "[cli][no-session]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace agent_root;
+    const auto agent_dir = agent_root.path() / "agent";
+    const auto canonical_workspace = std::filesystem::canonical(workspace.path());
+
+    auto result = run_command_split(
+        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) + " /session");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
+    const auto created = require_single_automatic_session(agent_dir / "sessions", canonical_workspace);
+    CHECK(result.stdout_text.find("File: " + created.path.string()) != std::string::npos);
+    CHECK(result.stdout_text.find("In-memory") == std::string::npos);
+}
+
+TEST_CASE("CLI rejects --no-session combined with explicit create or resume before model work", "[cli][no-session]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace agent_root;
+    const auto agent_dir = agent_root.path() / "agent";
+    const auto explicit_session = workspace.path() / "explicit.jsonl";
+
+    auto created = run_command_split(
+        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
+        " --fake --no-session --session " + q(explicit_session) +
+        " --workspace " + q(workspace.path()) + " hello");
+    REQUIRE(created.exit_code != 0);
+    CHECK(created.stdout_text.empty());
+    CHECK(created.stderr_text.find("--no-session cannot be combined with --session") != std::string::npos);
+
+    auto resumed = run_command_split(
+        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
+        " --fake --no-session --resume " + q(explicit_session) +
+        " --workspace " + q(workspace.path()) + " hello");
+    REQUIRE(resumed.exit_code != 0);
+    CHECK(resumed.stdout_text.empty());
+    CHECK(resumed.stderr_text.find("--no-session cannot be combined with --resume") != std::string::npos);
+
+    require_no_session_filesystem_state(agent_dir, workspace.path());
+}
+
+TEST_CASE("CLI --no-session does not consult default storage", "[cli][no-session]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace blocker_root;
+    const auto blocker = blocker_root.path() / "not-a-directory";
+    {
+        std::ofstream output(blocker, std::ios::binary);
+        output << "regular file";
+    }
+
+    auto result = run_command_split(
+        "CCH_CODING_AGENT_DIR=" + q(blocker) + " " + bin() +
+        " --fake --no-session --workspace " + q(workspace.path()) + " hello");
+
+    // In-memory operation is explicit, so unusable default storage is never
+    // inspected and cannot fail or redirect the run.
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(workspace.path() / ".cpp-harness" / "sessions"));
+}
+
+TEST_CASE("CLI --no-session preserves tool execution and events", "[cli][no-session]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace agent_root;
+    const auto agent_dir = agent_root.path() / "agent";
+    std::ofstream(workspace.path() / "note.txt") << "in-memory tool text";
+
+    auto result = run_command_split(
+        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
+        " --fake --no-session --workspace " + q(workspace.path()) + " 'read note.txt'");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(count_occurrences(result.stdout_text, "[tool-call] read#fake-read-1") == 1);
+    CHECK(count_occurrences(result.stdout_text, "[tool-success] fake-read-1") == 1);
+    CHECK(result.stdout_text.find("[assistant] fake observed: in-memory tool text") != std::string::npos);
+    require_no_session_filesystem_state(agent_dir, workspace.path());
+}
+
+TEST_CASE("CLI --no-session publishes no filesystem state after a startup failure", "[cli][no-session][assembly]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace agent_root;
+    const auto agent_dir = agent_root.path() / "agent";
+
+    auto result = run_command_split(
+        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
+        " --fake --no-session --workspace " + q(workspace.path()) +
+        " --prompt-template missing.md hello");
+
+    REQUIRE(result.exit_code != 0);
+    CHECK(result.stdout_text.empty());
+    require_no_session_filesystem_state(agent_dir, workspace.path());
+}

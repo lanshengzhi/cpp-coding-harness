@@ -33,6 +33,11 @@ using util::JsonValue;
     data.emplace("sessionId", JsonValue{config.session.session_id()});
     data.emplace("workspace", JsonValue{config.workspace.string()});
     data.emplace("messageCount", JsonValue{static_cast<int>(config.session.message_count())});
+    // pi's RpcSessionState.sessionFile: present for persisted sessions, absent
+    // for in-memory operation rather than an empty-path sentinel.
+    if (const auto& session_path = config.session.session_path(); session_path.has_value()) {
+        data.emplace("sessionFile", JsonValue{session_path->string()});
+    }
     return data;
 }
 

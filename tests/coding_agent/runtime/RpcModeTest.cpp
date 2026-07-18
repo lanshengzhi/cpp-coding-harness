@@ -5,6 +5,7 @@
 #include "../../support/TempWorkspace.hpp"
 #include "util/Json.hpp"
 
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <sstream>
@@ -154,12 +155,17 @@ int count_responses(
 TranscriptResult run_transcript(
     std::string input,
     std::unique_ptr<ai::StreamingChatClient> chat_client = ai::providers::make_scripted_fake_chat_client(),
-    bool close_before_run = false) {
+    bool close_before_run = false,
+    bool in_memory = false) {
     cch::tests::TempWorkspace workspace;
 
     coding_agent::CreateAgentSessionOptions options;
-    options.session_target = coding_agent::ExplicitNewSessionTarget{
-        workspace.path() / "rpc-session.jsonl"};
+    if (in_memory) {
+        options.session_target = coding_agent::InMemorySessionTarget{};
+    } else {
+        options.session_target = coding_agent::ExplicitNewSessionTarget{
+            workspace.path() / "rpc-session.jsonl"};
+    }
     options.workspace = workspace.path();
     options.chat_client = std::move(chat_client);
     options.builtin_tools = coding_agent::SdkBuiltinTools{
@@ -209,16 +215,42 @@ TEST_CASE("RPC mode reports safe session state through its interface", "[coding-
     REQUIRE(state != nullptr);
     REQUIRE(state->at("success").get<bool>());
     const auto& data = state->at("data").get<JsonObject>();
-    REQUIRE(data.size() == 5);
+    REQUIRE(data.size() == 6);
     CHECK(string_at(data, "provider") == "test-provider");
     CHECK(string_at(data, "model") == "test-model");
     CHECK(string_at(data, "sessionId") == result.session_id);
     CHECK(string_at(data, "workspace") == result.workspace);
     CHECK(static_cast<int>(data.at("messageCount").get<double>()) == 0);
+    // Persisted sessions report their exact transcript path, matching pi's
+    // RpcSessionState.sessionFile.
+    CHECK(string_at(data, "sessionFile") ==
+          (std::filesystem::path(result.workspace) / "rpc-session.jsonl").string());
 
     const auto* shutdown = find_response(result.records, "shutdown", "stop-1");
     REQUIRE(shutdown != nullptr);
     CHECK(shutdown->at("success").get<bool>());
+}
+
+TEST_CASE("RPC mode omits sessionFile for an in-memory session", "[coding-agent][runtime][rpc]") {
+    const auto result = run_transcript(
+        "{\"id\":\"state-1\",\"type\":\"get_state\"}\n"
+        "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n",
+        ai::providers::make_scripted_fake_chat_client(),
+        false,
+        true);
+
+    REQUIRE(result.exit_code == 0);
+    REQUIRE(result.records.size() == 2);
+
+    const auto* state = find_response(result.records, "get_state", "state-1");
+    REQUIRE(state != nullptr);
+    REQUIRE(state->at("success").get<bool>());
+    const auto& data = state->at("data").get<JsonObject>();
+    // In-memory operation is identified by the absent key, never an empty path.
+    CHECK_FALSE(data.contains("sessionFile"));
+    REQUIRE(data.size() == 5);
+    CHECK(string_at(data, "sessionId") == result.session_id);
+    CHECK(string_at(data, "workspace") == result.workspace);
 }
 
 TEST_CASE("RPC mode acknowledges an accepted prompt before direct events", "[coding-agent][runtime][rpc]") {
