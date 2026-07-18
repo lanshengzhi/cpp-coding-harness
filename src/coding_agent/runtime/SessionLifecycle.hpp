@@ -4,6 +4,7 @@
 #include "../../../include/cch/harness/session/SessionStore.hpp"
 #include "../../../include/cch/harness/session/SessionResume.hpp"
 #include "../../../include/cch/util/Error.hpp"
+#include "../SessionPathPolicy.hpp"
 
 #include <filesystem>
 #include <memory>
@@ -59,6 +60,14 @@ struct PreparedResumeTarget {
     std::filesystem::path session_path,
     std::filesystem::path workspace,
     harness::session::SessionMetadata metadata);
+
+/// Publish an automatically named session under the Agent Config Directory.
+/// This is the only publication path that creates or tightens harness-owned
+/// default directories; all path derivation remains side-effect free.
+[[nodiscard]] util::Expected<OpenSession> publish_automatic_session(
+    const session_paths::AutomaticSessionTarget& target,
+    std::string provider,
+    std::string model);
 
 /// Open an existing session file for resumption after all fallible
 /// prerequisites have succeeded.

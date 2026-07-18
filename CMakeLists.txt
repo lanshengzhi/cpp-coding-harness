@@ -103,6 +103,7 @@ add_library(cch_coding_agent_runtime
     src/coding_agent/AgentConfigDir.cpp
     src/coding_agent/AuthLoader.cpp
     src/coding_agent/CommandRegistry.cpp
+    src/coding_agent/SessionPathPolicy.cpp
     src/coding_agent/SettingsLoader.cpp
     src/coding_agent/ProviderConfigResolution.cpp
     src/coding_agent/ProjectResourceLoader.cpp
@@ -177,6 +178,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/PromptTemplateProcessingTest.cpp
         tests/coding_agent/AuthLoaderTest.cpp
         tests/coding_agent/AgentConfigDirTest.cpp
+        tests/coding_agent/SessionPathPolicyTest.cpp
         tests/coding_agent/SettingsLoaderTest.cpp
         tests/coding_agent/ProviderConfigResolutionTest.cpp
         tests/coding_agent/ProjectResourcesTest.cpp

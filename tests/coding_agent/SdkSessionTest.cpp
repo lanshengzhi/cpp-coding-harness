@@ -21,6 +21,7 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <regex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -1435,8 +1436,12 @@ TEST_CASE("SDK new sessions receive fresh identity and resume preserves it", "[s
     REQUIRE(first.has_value());
     const auto first_id = first->metadata.session_id;
     const auto first_created_at = first->metadata.created_at;
-    CHECK_FALSE(first_id.empty());
-    CHECK_FALSE(first_created_at.empty());
+    CHECK(std::regex_match(
+        first_id,
+        std::regex{R"(^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$)"}));
+    CHECK(std::regex_match(
+        first_created_at,
+        std::regex{R"(^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$)"}));
     CHECK(first_id != first_created_at);
     CHECK(first->session->close().has_value());
 

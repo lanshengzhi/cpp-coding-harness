@@ -39,6 +39,10 @@ std::filesystem::path agent_config_dir() {
     return home.empty() ? std::filesystem::path{} : home / ".cpp-harness" / "agent";
 }
 
+std::filesystem::path sessions_root_path() {
+    return in_agent_config_dir("sessions");
+}
+
 std::filesystem::path auth_file_path() {
     return in_agent_config_dir("auth.json");
 }

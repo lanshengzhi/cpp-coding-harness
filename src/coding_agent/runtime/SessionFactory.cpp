@@ -5,6 +5,7 @@
 #include "SessionLifecycle.hpp"
 
 #include "coding_agent/ProjectResourceLoader.hpp"
+#include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/ProviderConfigResolution.hpp"
 #include "coding_agent/prompt/PromptProcessor.hpp"
 
@@ -22,15 +23,11 @@
 #include <boost/asio/io_context.hpp>
 
 #include <algorithm>
-#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <format>
-#include <iomanip>
 #include <optional>
-#include <random>
 #include <set>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -83,22 +80,6 @@ struct AssemblyPlan {
                                        std::string message,
                                        std::optional<std::string> path = std::nullopt) {
     return SdkDiagnostic{severity, std::move(code), std::move(message), std::move(path)};
-}
-
-[[nodiscard]] std::string generate_session_id() {
-    auto now = std::chrono::system_clock::now();
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-    std::random_device device;
-    std::uniform_int_distribution<unsigned int> distribution(0, 0xFFFFu);
-    return std::format("cch-{}-{:04x}", ms, distribution(device));
-}
-
-[[nodiscard]] std::string make_iso_timestamp() {
-    auto now = std::chrono::system_clock::now();
-    auto tt = std::chrono::system_clock::to_time_t(now);
-    std::ostringstream oss;
-    oss << std::put_time(std::gmtime(&tt), "%FT%TZ");
-    return oss.str();
 }
 
 [[nodiscard]] SdkDiagnostic::Severity to_sdk_severity(ResourceDiagnosticSeverity severity) {
@@ -678,9 +659,10 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
         open = std::move(*published);
     } else {
         const auto& target = std::get<NewSessionTarget>(plan.target);
+        const auto identity = session_paths::generate_automatic_session_identity();
         harness::session::SessionMetadata metadata{
-            generate_session_id(),
-            make_iso_timestamp(),
+            identity.session_id,
+            identity.created_at,
             workspace,
             resolved.provider,
             resolved.model,
