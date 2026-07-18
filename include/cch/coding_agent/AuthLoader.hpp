@@ -2,6 +2,7 @@
 
 #include "../util/Error.hpp"
 
+#include <filesystem>
 #include <map>
 #include <optional>
 #include <string>
@@ -13,14 +14,14 @@ struct AuthEntry {
     std::string key;
 };
 
-/// Loads user authentication entries from ~/.cpp-harness/agent/auth.json.
+/// Loads user authentication entries from the agent config directory's
+/// `auth.json` (pi: `~/.pi/agent/auth.json`).
 /// The file is expected to be a JSON object mapping provider names to objects
 /// with "type" and "key" fields. Missing or unreadable files yield an empty map
 /// rather than an error.
 class AuthLoader {
 public:
-    [[nodiscard]] static util::Expected<std::map<std::string, AuthEntry>> load(const std::string& path);
-    [[nodiscard]] static std::string default_path();
+    [[nodiscard]] static util::Expected<std::map<std::string, AuthEntry>> load(const std::filesystem::path& path);
 };
 
 } // namespace cch::coding_agent

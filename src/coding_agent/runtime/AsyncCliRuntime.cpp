@@ -1,6 +1,7 @@
 #include "coding_agent/runtime/AsyncCliRuntime.hpp"
 
-#include "../include/cch/coding_agent/Config.hpp"
+#include "../include/cch/coding_agent/AgentConfigDir.hpp"
+#include "../include/cch/coding_agent/Settings.hpp"
 #include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/CommandRegistry.hpp"
 #include "coding_agent/runtime/EventPrinter.hpp"
@@ -91,11 +92,11 @@ void present_text_command(std::string_view display_text) {
 
 int run_async_cli(const AsyncCliRuntimeConfig& config) {
     const auto json_mode = is_json_mode(config.output_mode);
-    const std::string config_path = coding_agent::ConfigLoader::default_config_path();
-    auto config_data = coding_agent::ConfigLoader::load(config_path);
-    if (!config_data) {
-        std::cerr << "warning: could not load config: " << config_data.error().message << '\n';
-        config_data = coding_agent::ConfigData{};
+    const auto settings_path = coding_agent::settings_file_path();
+    auto settings_data = coding_agent::SettingsLoader::load(settings_path);
+    if (!settings_data) {
+        std::cerr << "warning: could not load user settings: " << settings_data.error().message << '\n';
+        settings_data = coding_agent::UserSettings{};
     }
 
     coding_agent::CommandRegistry cli_command_registry;
@@ -117,7 +118,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
     request.session_path = config.session_path;
     request.resume_path = config.resume_path;
     request.provider_overrides = config.provider_overrides;
-    request.config = *config_data;
+    request.settings = *settings_data;
 
     auto created = coding_agent::create_agent_session(std::move(request));
     if (!created) {

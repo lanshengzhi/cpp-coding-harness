@@ -1,6 +1,7 @@
 #include "ProviderConfigResolution.hpp"
+#include "../../include/cch/coding_agent/AgentConfigDir.hpp"
 #include "../../include/cch/coding_agent/AuthLoader.hpp"
-#include "../../include/cch/coding_agent/Config.hpp"
+#include "../../include/cch/coding_agent/Settings.hpp"
 
 #include <cstdlib>
 #include <format>
@@ -30,27 +31,22 @@ namespace {
 
 [[nodiscard]] std::vector<std::string> resolve_api_key_env_chain(
     const ProviderRequest& explicit_request,
-    const ConfigData& config) {
+    const UserSettings& settings) {
     if (explicit_request.api_key_env && !explicit_request.api_key_env->empty()) {
         return *explicit_request.api_key_env;
     }
-    if (config.api_key_env && !config.api_key_env->empty()) {
-        return *config.api_key_env;
+    if (settings.api_key_env && !settings.api_key_env->empty()) {
+        return *settings.api_key_env;
     }
     return {"OPENAI_API_KEY"};
 }
 
 } // namespace
 
-std::string ConfigLoader::default_config_path() {
-    const char* home = std::getenv("HOME");
-    return home ? std::string(home) + "/.cpp-harness/config.json" : "";
-}
-
 ResolvedProviderSettings resolve_provider_settings(
     std::string_view provider_registry_name,
     const ProviderRequest& explicit_request,
-    const ConfigData& config,
+    const UserSettings& settings,
     const std::optional<std::string>& stored_provider,
     const std::optional<std::string>& stored_model) {
     const std::string registry_name{provider_registry_name};
@@ -60,8 +56,8 @@ ResolvedProviderSettings resolve_provider_settings(
         resolved_provider = *explicit_request.provider;
     } else if (stored_provider) {
         resolved_provider = *stored_provider;
-    } else if (config.provider) {
-        resolved_provider = *config.provider;
+    } else if (settings.provider) {
+        resolved_provider = *settings.provider;
     }
 
     std::string resolved_model;
@@ -69,8 +65,8 @@ ResolvedProviderSettings resolve_provider_settings(
         resolved_model = *explicit_request.model;
     } else if (stored_model) {
         resolved_model = *stored_model;
-    } else if (config.model) {
-        resolved_model = *config.model;
+    } else if (settings.model) {
+        resolved_model = *settings.model;
     } else {
         resolved_model = provider_default_model(registry_name);
     }
@@ -78,24 +74,24 @@ ResolvedProviderSettings resolve_provider_settings(
     std::string resolved_base_url;
     if (explicit_request.base_url) {
         resolved_base_url = *explicit_request.base_url;
-    } else if (config.base_url) {
-        resolved_base_url = *config.base_url;
+    } else if (settings.base_url) {
+        resolved_base_url = *settings.base_url;
     } else {
         resolved_base_url = "https://api.openai.com";
     }
 
-    const auto resolved_api_key_env_chain = resolve_api_key_env_chain(explicit_request, config);
+    const auto resolved_api_key_env_chain = resolve_api_key_env_chain(explicit_request, settings);
 
     std::string resolved_auth;
     if (explicit_request.auth) {
         resolved_auth = *explicit_request.auth;
-    } else if (config.auth) {
-        resolved_auth = *config.auth;
+    } else if (settings.auth) {
+        resolved_auth = *settings.auth;
     }
 
     std::string resolved_api_key;
     if (!resolved_auth.empty()) {
-        auto auth_entries = AuthLoader::load(AuthLoader::default_path());
+        auto auth_entries = AuthLoader::load(auth_file_path());
         if (auth_entries) {
             if (auto it = auth_entries->find(resolved_auth); it != auth_entries->end()) {
                 resolved_api_key = it->second.key;
@@ -120,7 +116,7 @@ ResolvedProviderSettings resolve_provider_settings(
     const std::string& provider_registry_name,
     const bool fake,
     const CliProviderOverrides& cli,
-    const ConfigData& config,
+    const UserSettings& settings,
     const std::optional<std::string>& stored_provider,
     const std::optional<std::string>& stored_model) {
     ProviderRequest explicit_request;
@@ -135,17 +131,17 @@ ResolvedProviderSettings resolve_provider_settings(
     if (fake) {
         registry = "fake";
     }
-    return resolve_provider_settings(registry, explicit_request, config, stored_provider, stored_model);
+    return resolve_provider_settings(registry, explicit_request, settings, stored_provider, stored_model);
 }
 
 std::vector<std::string> resolved_api_key_env_chain(
     const CliProviderOverrides& cli,
-    const ConfigData& config) {
+    const UserSettings& settings) {
     ProviderRequest explicit_request;
     if (cli.api_key_env) {
         explicit_request.api_key_env = std::vector<std::string>{*cli.api_key_env};
     }
-    return resolve_api_key_env_chain(explicit_request, config);
+    return resolve_api_key_env_chain(explicit_request, settings);
 }
 
 } // namespace cch::coding_agent

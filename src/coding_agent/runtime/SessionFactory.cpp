@@ -9,9 +9,10 @@
 #include "coding_agent/prompt/PromptProcessor.hpp"
 
 #include "../../../include/cch/ai/ProviderRegistry.hpp"
-#include "../../../include/cch/coding_agent/Config.hpp"
+#include "../../../include/cch/coding_agent/AgentConfigDir.hpp"
 #include "../../../include/cch/coding_agent/ProjectResources.hpp"
 #include "../../../include/cch/coding_agent/ProjectTrust.hpp"
+#include "../../../include/cch/coding_agent/Settings.hpp"
 #include "../../../include/cch/tools/ToolFactories.hpp"
 #include "../../../include/cch/util/Error.hpp"
 #include "../../harness/WorkspaceFileSystem.hpp"
@@ -98,12 +99,6 @@ struct AssemblyPlan {
     std::ostringstream oss;
     oss << std::put_time(std::gmtime(&tt), "%FT%TZ");
     return oss.str();
-}
-
-[[nodiscard]] std::filesystem::path default_trust_store_path() {
-    const char* home = std::getenv("HOME");
-    return home ? std::filesystem::path{home} / ".cpp-harness" / "trust.json"
-                : std::filesystem::path{};
 }
 
 [[nodiscard]] SdkDiagnostic::Severity to_sdk_severity(ResourceDiagnosticSeverity severity) {
@@ -340,8 +335,8 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
 
     plan.load_project_resources = true;
     plan.project_trust_override = request.project_trust_override;
-    plan.default_project_trust = request.config.default_project_trust.value_or(DefaultProjectTrust::Ask);
-    plan.project_skills_enablement = request.config.project_skills;
+    plan.default_project_trust = request.settings.default_project_trust.value_or(DefaultProjectTrust::Ask);
+    plan.project_skills_enablement = request.settings.project_skills;
     if (request.disable_project_skills) {
         plan.project_skills_enablement = ResourceEnablement::Off;
     }
@@ -377,7 +372,7 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
                 "no chat client or provider_config supplied",
                 "supply a chat_client or provider_config to create an agent session"));
         }
-        // Resume may reconstruct a client from stored metadata and user config.
+        // Resume may reconstruct a client from stored metadata and user settings.
     }
     if (has_provider_config && options.provider_config->api_key_env.has_value() &&
         options.provider_config->api_key_env->empty()) {
@@ -459,10 +454,10 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
         workspace = target.workspace;
     }
 
-    // 2. Load user configuration for defaults and API key chains.
-    auto config = coding_agent::ConfigLoader::load(coding_agent::ConfigLoader::default_config_path());
-    if (!config) {
-        config = coding_agent::ConfigData{};
+    // 2. Load user settings for defaults and API key chains.
+    auto settings = coding_agent::SettingsLoader::load(coding_agent::settings_file_path());
+    if (!settings) {
+        settings = coding_agent::UserSettings{};
     }
 
     // 3. Resolve provider/model metadata.
@@ -487,7 +482,7 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
     auto resolved = coding_agent::resolve_provider_settings(
         provider_registry_name,
         plan.provider_request,
-        *config,
+        *settings,
         stored_provider,
         stored_model);
 
@@ -617,7 +612,7 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
     std::vector<Skill> skills = std::move(plan.host_skills);
     std::vector<PromptTemplate> templates = std::move(plan.host_prompt_templates);
 
-    std::filesystem::path trust_store_path = plan.trust_store_path.value_or(default_trust_store_path());
+    std::filesystem::path trust_store_path = plan.trust_store_path.value_or(coding_agent::trust_store_file_path());
     if (plan.profile == CreationProfile::Sdk && plan.trust_store_path) {
         if (auto valid = validate_trust_store_path(*plan.trust_store_path, workspace); !valid) {
             cleanup_on_failure();

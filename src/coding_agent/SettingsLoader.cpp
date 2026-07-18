@@ -1,20 +1,21 @@
-#include "../../include/cch/coding_agent/Config.hpp"
+#include "../../include/cch/coding_agent/Settings.hpp"
 #include "util/Json.hpp"
 
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
 
 namespace cch::coding_agent {
 
-util::Expected<ConfigData> ConfigLoader::load(const std::string& config_path) {
-    ConfigData config;
+util::Expected<UserSettings> SettingsLoader::load(const std::filesystem::path& settings_path) {
+    UserSettings settings;
 
-    std::ifstream file(config_path);
+    std::ifstream file(settings_path);
     if (!file.is_open()) {
         // File does not exist or is unreadable — not an error; use defaults.
-        return config;
+        return settings;
     }
 
     std::stringstream buffer;
@@ -22,15 +23,15 @@ util::Expected<ConfigData> ConfigLoader::load(const std::string& config_path) {
     std::string content = buffer.str();
 
     if (content.empty()) {
-        return config;
+        return settings;
     }
 
     auto json = util::read_json<util::JsonValue>(content);
     if (!json) {
         return std::unexpected(util::make_error(
             util::ErrorCode::JsonParse,
-            "failed to parse config file",
-            "config file at '" + config_path + "' contains invalid JSON"));
+            "failed to parse settings file",
+            "settings file at '" + settings_path.string() + "' contains invalid JSON"));
     }
 
     // Read known fields; ignore unknown keys for forward compatibility.
@@ -38,17 +39,17 @@ util::Expected<ConfigData> ConfigLoader::load(const std::string& config_path) {
         auto& obj = json->get_object();
         if (auto it = obj.find("provider"); it != obj.end()) {
             if (auto* str = it->second.get_if<std::string>()) {
-                config.provider = *str;
+                settings.provider = *str;
             }
         }
         if (auto it = obj.find("model"); it != obj.end()) {
             if (auto* str = it->second.get_if<std::string>()) {
-                config.model = *str;
+                settings.model = *str;
             }
         }
         if (auto it = obj.find("base_url"); it != obj.end()) {
             if (auto* str = it->second.get_if<std::string>()) {
-                config.base_url = *str;
+                settings.base_url = *str;
             }
         }
         if (auto it = obj.find("api_key_env"); it != obj.end()) {
@@ -61,18 +62,18 @@ util::Expected<ConfigData> ConfigLoader::load(const std::string& config_path) {
                     }
                 }
                 if (!chain.empty()) {
-                    config.api_key_env = std::move(chain);
+                    settings.api_key_env = std::move(chain);
                 }
             } else if (auto* str = it->second.get_if<std::string>()) {
                 // Single string → single-element chain
                 std::vector<std::string> chain;
                 chain.push_back(*str);
-                config.api_key_env = std::move(chain);
+                settings.api_key_env = std::move(chain);
             }
         }
         if (auto it = obj.find("auth"); it != obj.end()) {
             if (auto* str = it->second.get_if<std::string>()) {
-                config.auth = *str;
+                settings.auth = *str;
             }
         }
         if (auto it = obj.find("default_project_trust"); it != obj.end()) {
@@ -84,7 +85,7 @@ util::Expected<ConfigData> ConfigLoader::load(const std::string& config_path) {
                         "invalid default_project_trust",
                         "default_project_trust must be one of: ask, always, never"));
                 }
-                config.default_project_trust = *parsed;
+                settings.default_project_trust = *parsed;
             } else {
                 return std::unexpected(util::make_error(
                     util::ErrorCode::Validation,
@@ -109,7 +110,7 @@ util::Expected<ConfigData> ConfigLoader::load(const std::string& config_path) {
                             "invalid project_resources.skills",
                             "project_resources.skills must be one of: auto, on, off"));
                     }
-                    config.project_skills = *parsed;
+                    settings.project_skills = *parsed;
                 } else {
                     return std::unexpected(util::make_error(
                         util::ErrorCode::Validation,
@@ -120,10 +121,10 @@ util::Expected<ConfigData> ConfigLoader::load(const std::string& config_path) {
         }
     }
 
-    return config;
+    return settings;
 }
 
-std::optional<std::string> ConfigLoader::resolve_api_key(
+std::optional<std::string> SettingsLoader::resolve_api_key(
     const std::vector<std::string>& env_chain) {
     for (const auto& env_name : env_chain) {
         const char* value = std::getenv(env_name.c_str());

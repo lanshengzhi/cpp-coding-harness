@@ -20,7 +20,7 @@ TEST_CASE("AuthLoader loads api_key entries from auth.json", "[coding_agent][aut
         })";
     }
 
-    auto loaded = cch::coding_agent::AuthLoader::load(path.string());
+    auto loaded = cch::coding_agent::AuthLoader::load(path);
     REQUIRE(loaded);
     CHECK(loaded->size() == 2);
     REQUIRE(loaded->find("kimi-coding") != loaded->end());
@@ -33,7 +33,7 @@ TEST_CASE("AuthLoader loads api_key entries from auth.json", "[coding_agent][aut
 
 TEST_CASE("AuthLoader returns empty map for missing file", "[coding_agent][auth]") {
     cch::tests::TempWorkspace workspace;
-    auto loaded = cch::coding_agent::AuthLoader::load((workspace.path() / "missing.json").string());
+    auto loaded = cch::coding_agent::AuthLoader::load(workspace.path() / "missing.json");
     REQUIRE(loaded);
     CHECK(loaded->empty());
 }
@@ -46,6 +46,6 @@ TEST_CASE("AuthLoader reports malformed JSON", "[coding_agent][auth]") {
         file << "not json";
     }
 
-    auto loaded = cch::coding_agent::AuthLoader::load(path.string());
+    auto loaded = cch::coding_agent::AuthLoader::load(path);
     REQUIRE_FALSE(loaded);
 }

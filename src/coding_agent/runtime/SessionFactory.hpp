@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../../../include/cch/coding_agent/Sdk.hpp"
-#include "../../../include/cch/coding_agent/Config.hpp"
+#include "../../../include/cch/coding_agent/Settings.hpp"
 #include "AgentSessionRuntime.hpp"
 #include "SessionLifecycle.hpp"
 
@@ -29,7 +29,7 @@ struct AgentSessionCreationRequest {
     std::filesystem::path session_path;
     std::filesystem::path resume_path;
     CliProviderOverrides provider_overrides;
-    ConfigData config;
+    UserSettings settings;
 };
 
 /// Internal result of SessionFactory::create(). The Sdk.cpp public

@@ -395,8 +395,8 @@ TEST_CASE("SDK resume uses config-derived api_key_env chain", "[sdk][u2][api-key
     first_key.unset();
     second_key.set("resume-secret");
 
-    std::filesystem::create_directories(home.path() / ".cpp-harness");
-    std::ofstream(home.path() / ".cpp-harness" / "config.json")
+    std::filesystem::create_directories(home.path() / ".cpp-harness" / "agent");
+    std::ofstream(home.path() / ".cpp-harness" / "agent" / "settings.json")
         << R"({"provider":"fake","model":"fake-model","api_key_env":["CCH_SDK_RESUME_FIRST","CCH_SDK_RESUME_SECOND"]})";
 
     {
@@ -1740,8 +1740,8 @@ TEST_CASE("SDK host client new session uses config provider but host model senti
     cch::tests::TempWorkspace home;
     EnvVarGuard home_guard{"HOME"};
     home_guard.set(home.path().string());
-    std::filesystem::create_directories(home.path() / ".cpp-harness");
-    std::ofstream(home.path() / ".cpp-harness" / "config.json") << R"({"provider":"kimi-coding"})";
+    std::filesystem::create_directories(home.path() / ".cpp-harness" / "agent");
+    std::ofstream(home.path() / ".cpp-harness" / "agent" / "settings.json") << R"({"provider":"kimi-coding"})";
 
     coding_agent::CreateAgentSessionOptions opts;
     opts.session_path = paths.session_file;

@@ -762,7 +762,7 @@ TEST_CASE("CLI project-controlled default trust store cannot authorize project s
                     "# Demo Skill\n\n"
                     "Do demo.\n");
     workspace.write(
-        ".cpp-harness/trust.json",
+        ".cpp-harness/agent/trust.json",
         "{\"" + std::filesystem::weakly_canonical(workspace.path()).string() + "\":true}\n");
     auto session = workspace.path() / "project-controlled-trust.jsonl";
 
@@ -1054,12 +1054,12 @@ TEST_CASE("CLI RPC resource diagnostics stay off command stream", "[cli][rpc][pr
     CHECK(result.stdout_text.find("[template:warn]") == std::string::npos);
 }
 
-TEST_CASE("CLI applies config.json model when CLI omits --model", "[cli][config]") {
+TEST_CASE("CLI applies settings.json model when CLI omits --model", "[cli][settings]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    std::filesystem::create_directories(home.path() / ".cpp-harness");
-    std::ofstream(home.path() / ".cpp-harness" / "config.json") << R"({"model":"config-model-name"})";
-    auto session = workspace.path() / "config-model-session.jsonl";
+    std::filesystem::create_directories(home.path() / ".cpp-harness" / "agent");
+    std::ofstream(home.path() / ".cpp-harness" / "agent" / "settings.json") << R"({"model":"config-model-name"})";
+    auto session = workspace.path() / "settings-model-session.jsonl";
 
     auto result = run_command(
         "HOME=" + q(home.path()) + " " + bin() +
@@ -1073,12 +1073,12 @@ TEST_CASE("CLI applies config.json model when CLI omits --model", "[cli][config]
     CHECK(json_string_at(object, "model") == "config-model-name");
 }
 
-TEST_CASE("CLI accepts config.json api_key_env chain without explicit --api-key-env", "[cli][config]") {
+TEST_CASE("CLI accepts settings.json api_key_env chain without explicit --api-key-env", "[cli][settings]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    std::filesystem::create_directories(home.path() / ".cpp-harness");
-    std::ofstream(home.path() / ".cpp-harness" / "config.json") << R"({"api_key_env":["CUSTOM_KEY"]})";
-    auto session = workspace.path() / "config-key-session.jsonl";
+    std::filesystem::create_directories(home.path() / ".cpp-harness" / "agent");
+    std::ofstream(home.path() / ".cpp-harness" / "agent" / "settings.json") << R"({"api_key_env":["CUSTOM_KEY"]})";
+    auto session = workspace.path() / "settings-key-session.jsonl";
 
     auto result = run_command(
         "env -u OPENAI_API_KEY CUSTOM_KEY=test HOME=" + q(home.path()) + " " + bin() +
@@ -1107,12 +1107,12 @@ TEST_CASE("CLI invalid explicit prompt template fails before session creation", 
     CHECK_FALSE(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI applies config.json provider identity when no explicit provider", "[cli][config][provider-resolution]") {
+TEST_CASE("CLI applies settings.json provider identity when no explicit provider", "[cli][settings][provider-resolution]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    std::filesystem::create_directories(home.path() / ".cpp-harness");
-    std::ofstream(home.path() / ".cpp-harness" / "config.json") << R"({"provider":"kimi-coding","model":"kimi-for-coding"})";
-    auto session = workspace.path() / "config-provider-rpc.jsonl";
+    std::filesystem::create_directories(home.path() / ".cpp-harness" / "agent");
+    std::ofstream(home.path() / ".cpp-harness" / "agent" / "settings.json") << R"({"provider":"kimi-coding","model":"kimi-for-coding"})";
+    auto session = workspace.path() / "settings-provider-rpc.jsonl";
 
     auto result = run_command_split_with_input(
         "env -u OPENAI_API_KEY CCH_CONFIG_PROVIDER_KEY=unused HOME=" + q(home.path()) + " " + bin() +

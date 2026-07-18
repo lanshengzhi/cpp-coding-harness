@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../include/cch/coding_agent/Config.hpp"
+#include "../../include/cch/coding_agent/Settings.hpp"
 
 #include <optional>
 #include <string>
@@ -19,12 +19,12 @@ struct ProviderRequest {
 };
 
 /// Resolve provider settings from explicit request, stored session metadata, and
-/// user configuration. The provider registry name is always explicit (e.g.
+/// user settings. The provider registry name is always explicit (e.g.
 /// "fake", "openai-compatible", or the host-client sentinel).
 [[nodiscard]] ResolvedProviderSettings resolve_provider_settings(
     std::string_view provider_registry_name,
     const ProviderRequest& explicit_request,
-    const ConfigData& config,
+    const UserSettings& settings,
     const std::optional<std::string>& stored_provider,
     const std::optional<std::string>& stored_model);
 

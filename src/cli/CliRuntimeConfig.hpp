@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../include/cch/coding_agent/Config.hpp"
+#include "../../include/cch/coding_agent/Settings.hpp"
 
 #include <filesystem>
 #include <optional>

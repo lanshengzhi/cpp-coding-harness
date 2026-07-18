@@ -4,6 +4,7 @@
 #include "../util/Json.hpp"
 
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -12,12 +13,7 @@
 
 namespace cch::coding_agent {
 
-std::string AuthLoader::default_path() {
-    const char* home = std::getenv("HOME");
-    return home ? std::string(home) + "/.cpp-harness/agent/auth.json" : "";
-}
-
-util::Expected<std::map<std::string, AuthEntry>> AuthLoader::load(const std::string& path) {
+util::Expected<std::map<std::string, AuthEntry>> AuthLoader::load(const std::filesystem::path& path) {
     std::map<std::string, AuthEntry> entries;
     if (path.empty()) {
         return entries;
@@ -40,7 +36,7 @@ util::Expected<std::map<std::string, AuthEntry>> AuthLoader::load(const std::str
         return std::unexpected(util::make_error(
             util::ErrorCode::JsonParse,
             "failed to parse auth file",
-            "auth file at '" + path + "' contains invalid JSON"));
+            "auth file at '" + path.string() + "' contains invalid JSON"));
     }
 
     const auto* object = json->get_if<util::JsonValue::object_t>();

@@ -17,6 +17,7 @@ Reach an explicit, maintainable boundary for an idiomatic C++ implementation of 
 - The implemented baseline uses passive public values, narrow capability seams, move-only event sinks, private serialization machinery, package-style CMake targets, workspace containment, and explicit non-sandbox security boundaries. Current details live in `README.md`, `docs/agents/module-routing.md`, code, tests, and accepted ADRs.
 - CLI and SDK session creation intentionally share one private assembly policy while retaining distinct product contracts; see [Centralize session assembly policy in SessionFactory](../../docs/adr/0001-centralize-session-assembly-policy.md).
 - Completed and superseded implementation plans are historical Git data, not current planning authority.
+- User-level state lives in a pi-mirrored agent config directory (`~/.cpp-harness/agent/`, override `CCH_CODING_AGENT_DIR`) with pi's `settings.json` vocabulary; see [ADR 0002](../../docs/adr/0002-root-user-state-in-agent-config-directory.md).
 
 ## Not yet specified
 

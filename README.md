@@ -90,9 +90,13 @@ Use `--base-url` for compatible gateways that preserve the `/v1/chat/completions
 
 OAuth, subscription-provider, and dynamic API-key resolution flows are intentionally deferred. The `--api-key-env` mechanism reads a static environment variable at provider construction time; there is no OAuth handshake, token refresh, or per-call key callback yet.
 
+### Agent config directory
+
+User-level state lives in the agent config directory `~/.cpp-harness/agent/`, mirroring pi's `~/.pi/agent/`: `auth.json` (static API keys), `settings.json` (provider defaults and resource policy), and `trust.json` (persisted project trust decisions). Set `CCH_CODING_AGENT_DIR` to override the location (pi: `PI_CODING_AGENT_DIR`). These paths are centralized in `include/cch/coding_agent/AgentConfigDir.hpp`.
+
 ### Auth file
 
-API keys can also be stored in `~/.cpp-harness/agent/auth.json` and selected by name with the `--auth` flag (or the `auth` field in `~/.cpp-harness/config.json`). This avoids exporting keys into the shell environment.
+API keys can also be stored in `~/.cpp-harness/agent/auth.json` and selected by name with the `--auth` flag (or the `auth` field in `~/.cpp-harness/agent/settings.json`). This avoids exporting keys into the shell environment.
 
 ```json
 {
@@ -132,7 +136,7 @@ Kimi's `ANTHROPIC_BASE_URL` / `ANTHROPIC_API_KEY` examples are for Anthropic-sha
 
 Live Kimi usage sends prompts, file contents read by tools, and tool outputs to the configured provider. JSONL session redaction is a persistence boundary, not a guarantee that terminal output, CI logs, provider diagnostics, or provider-bound tool results are redacted. Do not paste raw credentials into prompts, files, or tool-visible content.
 
-`--resume` reconstructs the redacted active session path, including persisted leaf and compaction context, and restores workspace metadata. When you omit `--model`, `--base-url`, `--api-key-env`, or `--auth`, the harness falls back to values stored in the resumed session, then to `~/.cpp-harness/config.json`, then to built-in defaults. Explicit CLI flags always win. For Kimi sessions, repeating the Kimi base URL, model, and key source on resume is still recommended so runtime context stays explicit.
+`--resume` reconstructs the redacted active session path, including persisted leaf and compaction context, and restores workspace metadata. When you omit `--model`, `--base-url`, `--api-key-env`, or `--auth`, the harness falls back to values stored in the resumed session, then to `~/.cpp-harness/agent/settings.json`, then to built-in defaults. Explicit CLI flags always win. For Kimi sessions, repeating the Kimi base URL, model, and key source on resume is still recommended so runtime context stays explicit.
 
 Troubleshooting:
 
@@ -168,7 +172,7 @@ Package targets and responsibilities:
 - `cch_agent` (`include/cch/agent`, `src/agent`): coroutine agent loop, observable state values, lifecycle event values, move-only event sinks, async tool registry, expected-style tool execution contracts, optional pre/post tool-call hooks (`beforeToolCall`/`afterToolCall`), context transform / LLM conversion hooks, steering/follow-up queues, prepare-next-turn updates, and a safe-default sequential/bounded-parallel tool execution policy.
 - `cch_harness` (`include/cch/harness`, `src/harness`): pi-shaped filesystem and shell execution capability contracts (`FileSystem`/`Shell`), local implementation with workspace containment, symlink safety, atomic writes, split-stream process execution, secret environment filtering, and JSONL session persistence.
 - `cch_tools` (`include/cch/tools`, `src/tools`): built-in read/write/edit/bash tool factories bridging agent tool contracts to harness capabilities.
-- `cch_coding_agent_runtime` (`src/cli/` for CLI11 parsing/preflight/`CliConfig`/`CliRuntimeConfig`, `src/coding_agent/runtime/AsyncCliRuntime.*`, `src/coding_agent/runtime/`, `include/cch/coding_agent/`, `src/coding_agent/`): CLI argument parsing and preflight (including `config.json` precedence), runtime orchestration, session lifecycle, provider/tool service assembly, semantic event printing, JSON/RPC output modes, private skill/template prompt interpretation (`prompt/PromptProcessor`), live-state-first event handling with incremental message persistence, project trust/resource controls (`ProjectTrust`, `ProjectResources`, `ProjectResourceLoader`), project-local skill discovery/loading and prompt formatting, `/skill:name` expansion from cached content, and prompt-template file loading with `--prompt-template`/`--no-prompt-templates` CLI flags.
+- `cch_coding_agent_runtime` (`src/cli/` for CLI11 parsing/preflight/`CliConfig`/`CliRuntimeConfig`, `src/coding_agent/runtime/AsyncCliRuntime.*`, `src/coding_agent/runtime/`, `include/cch/coding_agent/`, `src/coding_agent/`): CLI argument parsing and preflight (including `settings.json` precedence), agent config directory path resolution (`AgentConfigDir`), user settings and auth loading (`SettingsLoader`, `AuthLoader`), runtime orchestration, session lifecycle, provider/tool service assembly, semantic event printing, JSON/RPC output modes, private skill/template prompt interpretation (`prompt/PromptProcessor`), live-state-first event handling with incremental message persistence, project trust/resource controls (`ProjectTrust`, `ProjectResources`, `ProjectResourceLoader`), project-local skill discovery/loading and prompt formatting, `/skill:name` expansion from cached content, and prompt-template file loading with `--prompt-template`/`--no-prompt-templates` CLI flags.
 
 The build publishes `include` as the public surface and keeps `src` private. Legacy synchronous tools, Boost.JSON contracts, `util::Result`, and duplicate `src` contract headers have been removed.
 
@@ -297,15 +301,15 @@ One-shot text mode runs one prompt. When no positional prompt is given in text m
 
 At startup, the CLI scans project-local `.cpp-harness/skills` for nested `SKILL.md` files only when the project resource load plan allows project skills. A skill file uses flat YAML frontmatter (`name`, `description`, optional `disable-model-invocation`) followed by markdown instructions. Valid skills are loaded into the session, diagnostics for malformed or duplicate skills print to stderr, and visible skills are injected into model context through the pi-shaped `<available_skills>` block.
 
-Skills with `disable-model-invocation: true` are hidden from the model-visible list but can still be invoked explicitly with `/skill:<name> [additional instructions]` when the skill was loaded. Invocation uses the skill body cached at startup; edit/reload behavior during a running session, global `~/.cpp-harness/skills`, and config-driven skill directories are deferred.
+Skills with `disable-model-invocation: true` are hidden from the model-visible list but can still be invoked explicitly with `/skill:<name> [additional instructions]` when the skill was loaded. Invocation uses the skill body cached at startup; edit/reload behavior during a running session, global `~/.cpp-harness/agent/skills`, and config-driven skill directories are deferred.
 
 ## Project trust and resource controls
 
 Project trust controls whether project-authored `.cpp-harness` resources are loaded at startup. It is an input-loading guard, not a sandbox: it does not restrict built-in tools, model output, prompt injection from files you choose to read, shell commands enabled with `--enable-bash`, or transcript content already present in a resumed session.
 
-Protected project markers include `.cpp-harness/settings.json`, `.cpp-harness/skills`, `.cpp-harness/prompts`, `.cpp-harness/extensions`, `.cpp-harness/packages`, `.cpp-harness/SYSTEM.md`, and `.cpp-harness/APPEND_SYSTEM.md`. A bare `.cpp-harness` directory and `.cpp-harness/sessions` do not require trust. In non-interactive startup, the default `ask` policy acts as untrusted unless a saved trust decision or same-run override exists. Trust decisions are read from user-controlled `~/.cpp-harness/trust.json` with nearest-parent inheritance.
+Protected project markers include `.cpp-harness/settings.json`, `.cpp-harness/skills`, `.cpp-harness/prompts`, `.cpp-harness/extensions`, `.cpp-harness/packages`, `.cpp-harness/SYSTEM.md`, and `.cpp-harness/APPEND_SYSTEM.md`. A bare `.cpp-harness` directory and `.cpp-harness/sessions` do not require trust. In non-interactive startup, the default `ask` policy acts as untrusted unless a saved trust decision or same-run override exists. Trust decisions are read from user-controlled `~/.cpp-harness/agent/trust.json` with nearest-parent inheritance.
 
-User config in `~/.cpp-harness/config.json` can set provider defaults (`provider`, `model`, `base_url`, `api_key_env`, `auth`), `default_project_trust` to `ask`, `always`, or `never`, and `project_resources.skills` to `auto`, `on`, or `off`. `off` always skips project skills. `--approve` / `-a` and `--no-approve` are one-run trust overrides; they do not persist decisions. `--no-skills` disables project-local skills for the run even when the project is trusted.
+User settings in `~/.cpp-harness/agent/settings.json` can set provider defaults (`provider`, `model`, `base_url`, `api_key_env`, `auth`), `default_project_trust` to `ask`, `always`, or `never`, and `project_resources.skills` to `auto`, `on`, or `off`. `off` always skips project skills. `--approve` / `-a` and `--no-approve` are one-run trust overrides; they do not persist decisions. `--no-skills` disables project-local skills for the run even when the project is trusted.
 
 ## Tools
 

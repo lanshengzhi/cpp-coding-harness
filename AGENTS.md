@@ -51,7 +51,7 @@ Use the compact table for dispatch. Open `docs/agents/module-routing.md` for the
 | Providers, OpenAI-compatible transport, SSE, model registry | Provider rows |
 | Built-in tools, workspace/file/shell capabilities | Built-in tools and workspace/path/shell rows |
 | CLI, REPL, JSON/RPC modes, runtime services, prompt processing | CLI/runtime, JSON/RPC, and prompt rows |
-| Config, project trust, resources, skills, prompt templates | Config, project trust, and skills/resources rows |
+| Config, project trust, resources, skills, prompt templates | Agent config directory/user settings, project trust, and skills/resources rows |
 | Sessions, resume, tree navigation, compaction context | Session row |
 | Public headers, dependency direction, architecture guards | Public boundary/architecture row |
 | Documentation and tracker maintenance | Referenced spec/ticket plus affected `README.md`, `CONTEXT.md`, `docs/agents/`, or `docs/adr/` |

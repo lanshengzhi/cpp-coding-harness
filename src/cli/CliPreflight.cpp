@@ -1,6 +1,7 @@
 #include "CliPreflight.hpp"
 
-#include "../../include/cch/coding_agent/Config.hpp"
+#include "../../include/cch/coding_agent/AgentConfigDir.hpp"
+#include "../../include/cch/coding_agent/Settings.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -71,23 +72,23 @@ cch::util::ExpectedVoid preflight_cli_config(const CliConfig& config) {
         return {};
     }
 
-    auto config_data = coding_agent::ConfigLoader::load(coding_agent::ConfigLoader::default_config_path());
-    if (!config_data) {
-        config_data = coding_agent::ConfigData{};
+    auto settings_data = coding_agent::SettingsLoader::load(coding_agent::settings_file_path());
+    if (!settings_data) {
+        settings_data = coding_agent::UserSettings{};
     }
 
     const auto resolved = coding_agent::resolve_provider_settings(
         "openai-compatible",
         false,
         config.provider_overrides,
-        *config_data,
+        *settings_data,
         std::nullopt,
         std::nullopt);
     if (!resolved.api_key.empty()) {
         return {};
     }
-    const auto chain = coding_agent::resolved_api_key_env_chain(config.provider_overrides, *config_data);
-    if (!coding_agent::ConfigLoader::resolve_api_key(chain)) {
+    const auto chain = coding_agent::resolved_api_key_env_chain(config.provider_overrides, *settings_data);
+    if (!coding_agent::SettingsLoader::resolve_api_key(chain)) {
         return std::unexpected(cli_error(
             "missing API key; set " + resolved.api_key_env + " or configure --auth"));
     }

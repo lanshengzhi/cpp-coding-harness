@@ -4,22 +4,24 @@
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/util/Error.hpp>
 
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace cch::coding_agent {
 
-/// Configuration values loaded from ~/.cpp-harness/config.json.
-/// All fields are optional — CLI flags and built-in defaults fill any gaps.
-struct ConfigData {
+/// User settings loaded from the agent config directory's `settings.json`
+/// (pi: `~/.pi/agent/settings.json`). All fields are optional — CLI flags and
+/// built-in defaults fill any gaps.
+struct UserSettings {
     std::optional<std::string> provider;
     std::optional<std::string> model;
     std::optional<std::string> base_url;
     /// Env var chain: first found value is used as the resolved API key.
     std::optional<std::vector<std::string>> api_key_env;
-    /// Auth provider name in ~/.cpp-harness/agent/auth.json. If set, the corresponding
-    /// static API key is used before falling back to api_key_env.
+    /// Auth provider name in the agent config directory's `auth.json`. If set,
+    /// the corresponding static API key is used before falling back to api_key_env.
     std::optional<std::string> auth;
     /// User-controlled project trust default. Project-local settings cannot set this.
     std::optional<DefaultProjectTrust> default_project_trust;
@@ -27,25 +29,22 @@ struct ConfigData {
     std::optional<ResourceEnablement> project_skills;
 };
 
-/// Loads configuration from a JSON file and resolves API keys from environment.
-class ConfigLoader {
+/// Loads user settings from a JSON file and resolves API keys from environment.
+class SettingsLoader {
 public:
-    /// Load config from the given file path. Returns default-constructed ConfigData
+    /// Load settings from the given file path. Returns default-constructed UserSettings
     /// (all fields nullopt) if the file does not exist or is unreadable.
     /// Returns an error only if the file exists but is malformed JSON.
-    [[nodiscard]] static util::Expected<ConfigData> load(const std::string& config_path);
+    [[nodiscard]] static util::Expected<UserSettings> load(const std::filesystem::path& settings_path);
 
     /// Resolve an API key from an env var chain. Returns the value of the first
     /// environment variable that is set and non-empty. Returns nullopt if none are set.
     [[nodiscard]] static std::optional<std::string> resolve_api_key(
         const std::vector<std::string>& env_chain);
-
-    /// Default user config path: `$HOME/.cpp-harness/config.json`, or empty when HOME is unset.
-    [[nodiscard]] static std::string default_config_path();
 };
 
 /// Explicit CLI overrides for provider-facing settings. Unset fields fall through to
-/// session-stored values, config file, and built-in defaults.
+/// session-stored values, user settings, and built-in defaults.
 struct CliProviderOverrides {
     std::optional<std::string> model;
     std::optional<std::string> base_url;
@@ -62,7 +61,7 @@ struct ResolvedProviderSettings {
     std::string model;
     std::string base_url;
     std::string api_key_env;
-    /// Static API key loaded from ~/.cpp-harness/agent/auth.json, if any.
+    /// Static API key loaded from the agent config directory's `auth.json`, if any.
     std::string api_key;
     /// Name of the auth entry used to obtain api_key.
     std::string auth;
@@ -71,18 +70,18 @@ struct ResolvedProviderSettings {
     std::vector<std::string> api_key_env_chain;
 };
 
-/// Priority: CLI explicit > session stored provider/model > config file > provider default.
+/// Priority: CLI explicit > session stored provider/model > user settings > provider default.
 [[nodiscard]] ResolvedProviderSettings resolve_provider_settings(
     const std::string& provider_registry_name,
     bool fake,
     const CliProviderOverrides& cli,
-    const ConfigData& config,
+    const UserSettings& settings,
     const std::optional<std::string>& stored_provider,
     const std::optional<std::string>& stored_model);
 
-/// Env var chain used for API key lookup after resolution (CLI single env or config chain).
+/// Env var chain used for API key lookup after resolution (CLI single env or settings chain).
 [[nodiscard]] std::vector<std::string> resolved_api_key_env_chain(
     const CliProviderOverrides& cli,
-    const ConfigData& config);
+    const UserSettings& settings);
 
 } // namespace cch::coding_agent
