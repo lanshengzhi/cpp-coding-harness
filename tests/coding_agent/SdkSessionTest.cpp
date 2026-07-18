@@ -1885,7 +1885,7 @@ TEST_CASE("SDK default trust store inside the workspace cannot authorize project
     home_guard.set(paths.workspace.path().string());
     write_project_skill(paths, "workspace-authorized");
     paths.workspace.write(
-        ".cpp-harness/trust.json",
+        ".cpp-harness/agent/trust.json",
         "{\"" + std::filesystem::weakly_canonical(paths.workspace.path()).string() + "\":true}\n");
 
     coding_agent::CreateAgentSessionOptions opts;
@@ -1914,6 +1914,26 @@ TEST_CASE("SDK rejects trust_store_path through a symlinked parent into the work
     opts.workspace = paths.workspace.path();
     opts.chat_client = ai::providers::make_scripted_fake_chat_client();
     opts.trust_store_path = linked_workspace / ".cpp-harness" / "trust.json";
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().message.find("workspace") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(paths.session_file));
+}
+
+TEST_CASE("SDK rejects a symlinked trust_store_path into the workspace", "[sdk][assembly][trust]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace external;
+    const auto workspace_trust = paths.workspace.path() / ".cpp-harness" / "trust.json";
+    paths.workspace.write(".cpp-harness/trust.json", "{}\n");
+    const auto linked_trust = external.path() / "trust.json";
+    std::filesystem::create_symlink(workspace_trust, linked_trust);
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.trust_store_path = linked_trust;
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE_FALSE(result.has_value());
@@ -1953,6 +1973,28 @@ TEST_CASE("SDK rejects relative trust_store_path", "[sdk][assembly][trust]") {
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().message.find("absolute") != std::string::npos);
     CHECK_FALSE(std::filesystem::exists(paths.session_file));
+}
+
+TEST_CASE("SDK accepts an existing external trust store as project trust authority", "[sdk][assembly][trust]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace external;
+    write_project_skill(paths, "externally-authorized");
+    const auto external_trust = external.path() / "trust.json";
+    std::ofstream(external_trust)
+        << "{\"" << std::filesystem::weakly_canonical(paths.workspace.path()).string() << "\":true}\n";
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.trust_store_path = external_trust;
+    opts.load_project_resources = true;
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    REQUIRE(result->session->skills().size() == 1);
+    CHECK(result->session->skills()[0].name == "externally-authorized");
+    CHECK(result->session->close().has_value());
 }
 
 TEST_CASE("SDK accepts external not-yet-created trust_store_path", "[sdk][assembly][trust]") {
