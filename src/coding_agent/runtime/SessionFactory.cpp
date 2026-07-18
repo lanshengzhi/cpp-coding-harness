@@ -40,6 +40,10 @@ namespace {
 constexpr std::string_view kHostClientProvider = "sdk-host";
 constexpr std::string_view kHostClientModel = "host-client";
 
+struct AutomaticNewSessionTarget {
+    std::filesystem::path workspace;
+};
+
 struct NewSessionTarget {
     std::filesystem::path session_path;
     std::filesystem::path workspace;
@@ -51,7 +55,10 @@ struct ResumeSessionTarget {
     bool workspace_explicit{false};
 };
 
-using SessionTarget = std::variant<NewSessionTarget, ResumeSessionTarget>;
+using SessionTarget = std::variant<
+    AutomaticNewSessionTarget,
+    NewSessionTarget,
+    ResumeSessionTarget>;
 
 enum class CreationProfile { Cli, Sdk };
 
@@ -328,26 +335,40 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
     return plan;
 }
 
+[[nodiscard]] util::Expected<std::filesystem::path> resolve_sdk_workspace(
+    const std::filesystem::path& workspace) {
+    if (workspace.empty()) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "workspace is required for new sessions",
+            "supply a non-empty workspace path"));
+    }
+
+    std::error_code ec;
+    auto resolved = std::filesystem::canonical(workspace, ec);
+    if (ec) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "workspace cannot be resolved",
+            workspace.string() + ": " + ec.message()));
+    }
+    if (!std::filesystem::is_directory(resolved, ec) || ec) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "workspace is not a directory",
+            workspace.string() + (ec ? ": " + ec.message() : std::string{})));
+    }
+    return resolved;
+}
+
 [[nodiscard]] util::Expected<AssemblyPlan> normalize_sdk(CreateAgentSessionOptions options) {
-    const bool has_create = options.session_path.has_value();
-    const bool has_resume = options.resume_path.has_value();
+    const bool is_resume =
+        std::holds_alternative<ExplicitResumeSessionTarget>(options.session_target);
     const bool has_chat_client = options.chat_client != nullptr;
     const bool has_provider_config = options.provider_config.has_value();
 
-    if (has_create && has_resume) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "both session_path and resume_path are set",
-            "set exactly one of session_path (create new) or resume_path (resume existing)"));
-    }
-    if (!has_create && !has_resume) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "neither session_path nor resume_path is set",
-            "set exactly one of session_path (create new) or resume_path (resume existing)"));
-    }
     if (!has_chat_client && !has_provider_config) {
-        if (!has_resume) {
+        if (!is_resume) {
             return std::unexpected(util::make_error(
                 util::ErrorCode::Validation,
                 "no chat client or provider_config supplied",
@@ -365,10 +386,30 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
 
     AssemblyPlan plan;
     plan.profile = CreationProfile::Sdk;
-    if (has_create) {
-        plan.target = NewSessionTarget{*options.session_path, options.workspace};
+    if (std::holds_alternative<DefaultPersistedSessionTarget>(options.session_target)) {
+        auto workspace = resolve_sdk_workspace(options.workspace);
+        if (!workspace) {
+            return std::unexpected(workspace.error());
+        }
+        plan.target = AutomaticNewSessionTarget{std::move(*workspace)};
+    } else if (const auto* target =
+                   std::get_if<ExplicitNewSessionTarget>(&options.session_target)) {
+        auto workspace = resolve_sdk_workspace(options.workspace);
+        if (!workspace) {
+            return std::unexpected(workspace.error());
+        }
+        plan.target = NewSessionTarget{target->path, std::move(*workspace)};
     } else {
-        plan.target = ResumeSessionTarget{*options.resume_path, options.workspace, !options.workspace.empty()};
+        const auto& resume_target = std::get<ExplicitResumeSessionTarget>(options.session_target);
+        const bool workspace_explicit = !options.workspace.empty();
+        if (workspace_explicit) {
+            auto workspace = resolve_sdk_workspace(options.workspace);
+            if (!workspace) {
+                return std::unexpected(workspace.error());
+            }
+            options.workspace = std::move(*workspace);
+        }
+        plan.target = ResumeSessionTarget{resume_target.path, options.workspace, workspace_explicit};
     }
 
     coding_agent::ProviderRequest pr;
@@ -424,15 +465,17 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
         }
         workspace = prepared->workspace;
         prepared_resume = std::move(*prepared);
+    } else if (const auto* target = std::get_if<AutomaticNewSessionTarget>(&plan.target)) {
+        workspace = target->workspace;
     } else {
-        const auto& target = std::get<NewSessionTarget>(plan.target);
-        if (target.workspace.empty()) {
+        const auto& new_target = std::get<NewSessionTarget>(plan.target);
+        if (new_target.workspace.empty()) {
             return std::unexpected(util::make_error(
                 util::ErrorCode::Validation,
                 "workspace is required for new sessions",
                 "supply a non-empty workspace path"));
         }
-        workspace = target.workspace;
+        workspace = new_target.workspace;
     }
 
     // 2. Load user settings for defaults and API key chains.
@@ -652,6 +695,17 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
     OpenSession open;
     if (is_resume) {
         auto published = publish_resume_session(prepared_resume);
+        if (!published) {
+            cleanup_on_failure();
+            return std::unexpected(published.error());
+        }
+        open = std::move(*published);
+    } else if (std::holds_alternative<AutomaticNewSessionTarget>(plan.target)) {
+        const auto target = session_paths::make_automatic_session_target(
+            coding_agent::sessions_root_path(),
+            workspace,
+            session_paths::generate_automatic_session_identity());
+        auto published = publish_automatic_session(target, resolved.provider, resolved.model);
         if (!published) {
             cleanup_on_failure();
             return std::unexpected(published.error());

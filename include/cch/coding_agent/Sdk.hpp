@@ -16,6 +16,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 namespace cch::coding_agent {
@@ -74,22 +75,45 @@ struct SdkBuiltinTools {
 
 // ── CreateAgentSessionOptions ────────────────────────────────────────────────
 
+/// Create a persisted Agent Session beneath the workspace-keyed Agent Config
+/// Directory sessions root.
+struct DefaultPersistedSessionTarget {};
+
+/// Create a new persisted Agent Session at an exact caller-supplied path.
+struct ExplicitNewSessionTarget {
+    std::filesystem::path path;
+};
+
+/// Resume the persisted Agent Session at an exact caller-supplied path.
+struct ExplicitResumeSessionTarget {
+    std::filesystem::path path;
+};
+
+/// Mutually exclusive persisted session target. Default construction selects
+/// workspace-keyed persistence under the Agent Config Directory.
+using SessionTarget = std::variant<
+    DefaultPersistedSessionTarget,
+    ExplicitNewSessionTarget,
+    ExplicitResumeSessionTarget>;
+
 /// Options passed to create_agent_session().
 ///
-/// Session target: exactly one of `session_path` (create new) or
-/// `resume_path` (resume existing) must be set. Both-set and neither-set
-/// are validation errors.
+/// Session target: defaults to workspace-keyed persisted creation. Explicit
+/// create and resume alternatives retain their exact paths and may live outside
+/// the Agent Config Directory.
 ///
-/// Workspace: required for new sessions. For resumes, if `workspace` is
-/// explicit and differs from the stored session workspace, creation fails.
+/// Workspace: required for new sessions. It is resolved to one canonical
+/// physical directory used for execution, metadata, and default storage. For
+/// resumes, if `workspace` is explicit and differs from the stored session
+/// workspace, creation fails.
 ///
 /// Provider: if no `chat_client` is supplied, `provider_config` is used to
 /// construct a default OpenAI-compatible client via the provider registry.
-/// If neither is supplied, creation fails.
+/// New-session creation fails if neither is supplied; resume may reconstruct
+/// provider configuration from stored metadata and User Settings.
 struct CreateAgentSessionOptions {
     // ── Session target ───────────────────────────────────────────────────
-    std::optional<std::filesystem::path> session_path;
-    std::optional<std::filesystem::path> resume_path;
+    SessionTarget session_target{};
     std::filesystem::path workspace;
 
     // ── Provider configuration ───────────────────────────────────────────
@@ -160,7 +184,9 @@ struct CreateAgentSessionResult {
     std::string session_id;
     std::string provider;
     std::string model;
-    std::filesystem::path session_path;
+    /// Actual persisted session path. This remains optional so the contract
+    /// can represent session targets without a physical file.
+    std::optional<std::filesystem::path> session_path;
     std::filesystem::path workspace;
     /// Full session metadata captured at creation/resume time.
     harness::session::SessionMetadata metadata;
@@ -259,8 +285,8 @@ public:
     /// Session identifier.
     [[nodiscard]] const std::string& session_id() const;
 
-    /// Path to the session JSONL file.
-    [[nodiscard]] const std::filesystem::path& session_path() const;
+    /// Actual persisted session path, absent when a target has no physical file.
+    [[nodiscard]] const std::optional<std::filesystem::path>& session_path() const;
 
     /// Resolved provider name.
     [[nodiscard]] const std::string& provider() const;
@@ -306,9 +332,9 @@ private:
 
 /// Create or resume an agent session.
 ///
-/// Validates options, opens/creates the JSONL session, assembles the provider
-/// client, execution environment, tools, and resources, and returns a session
-/// handle with diagnostics.
+/// Validates options, resolves the workspace, opens or creates the selected
+/// persisted session, assembles the provider client, execution environment,
+/// tools, and resources, and returns a session handle with diagnostics.
 ///
 /// Does not write to stdout/stderr or read RPC stdin.
 [[nodiscard]] util::Expected<CreateAgentSessionResult> create_agent_session(

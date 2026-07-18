@@ -39,6 +39,7 @@ struct AgentSession::Impl {
     enum class State { Open, RunningPrompt, Closed };
 
     State state{State::Closed};
+    std::optional<std::filesystem::path> session_path;
     std::unique_ptr<runtime::AgentSessionRuntime> runtime;
 };
 
@@ -167,9 +168,9 @@ const std::string& AgentSession::session_id() const {
     return impl_ && impl_->runtime ? impl_->runtime->session_id() : empty;
 }
 
-const std::filesystem::path& AgentSession::session_path() const {
-    static const std::filesystem::path empty;
-    return impl_ && impl_->runtime ? impl_->runtime->session_path() : empty;
+const std::optional<std::filesystem::path>& AgentSession::session_path() const {
+    static const std::optional<std::filesystem::path> absent;
+    return impl_ ? impl_->session_path : absent;
 }
 
 const std::string& AgentSession::provider() const {
@@ -231,6 +232,7 @@ public:
         auto session = std::make_unique<AgentSession>();
         session->impl_ = std::make_unique<AgentSession::Impl>();
         session->impl_->state = AgentSession::Impl::State::Open;
+        session->impl_->session_path = factory_result->session_path;
         session->impl_->runtime = std::move(factory_result->runtime);
 
         CreateAgentSessionResult result;
@@ -239,7 +241,7 @@ public:
         result.session_id = factory_result->session_id;
         result.provider = factory_result->provider;
         result.model = factory_result->model;
-        result.session_path = factory_result->session_path;
+        result.session_path = std::move(factory_result->session_path);
         result.workspace = factory_result->workspace;
         result.metadata = factory_result->metadata;
         return result;

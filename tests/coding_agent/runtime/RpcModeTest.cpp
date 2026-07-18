@@ -158,7 +158,8 @@ TranscriptResult run_transcript(
     cch::tests::TempWorkspace workspace;
 
     coding_agent::CreateAgentSessionOptions options;
-    options.session_path = workspace.path() / "rpc-session.jsonl";
+    options.session_target = coding_agent::ExplicitNewSessionTarget{
+        workspace.path() / "rpc-session.jsonl"};
     options.workspace = workspace.path();
     options.chat_client = std::move(chat_client);
     options.builtin_tools = coding_agent::SdkBuiltinTools{
@@ -281,7 +282,8 @@ TEST_CASE("RPC mode flushes direct events while a prompt is running", "[coding-a
     auto* stream_probe = chat_client.get();
 
     coding_agent::CreateAgentSessionOptions options;
-    options.session_path = workspace.path() / "rpc-flush-session.jsonl";
+    options.session_target = coding_agent::ExplicitNewSessionTarget{
+        workspace.path() / "rpc-flush-session.jsonl"};
     options.workspace = workspace.path();
     options.chat_client = std::move(chat_client);
     options.builtin_tools = coding_agent::SdkBuiltinTools{
@@ -433,7 +435,8 @@ TEST_CASE("RPC mode reports accepted prompt failures only through events", "[cod
 TEST_CASE("RPC mode does not report rejection after accepted subscriber failure", "[coding-agent][runtime][rpc]") {
     cch::tests::TempWorkspace workspace;
     coding_agent::CreateAgentSessionOptions options;
-    options.session_path = workspace.path() / "rpc-subscriber-failure.jsonl";
+    options.session_target = coding_agent::ExplicitNewSessionTarget{
+        workspace.path() / "rpc-subscriber-failure.jsonl"};
     options.workspace = workspace.path();
     options.chat_client = ai::providers::make_scripted_fake_chat_client();
     options.builtin_tools = coding_agent::SdkBuiltinTools{
@@ -545,7 +548,8 @@ TEST_CASE("RPC mode returns a correlated error when a busy session rejects promp
     auto* busy_probe = chat_client.get();
 
     coding_agent::CreateAgentSessionOptions options;
-    options.session_path = workspace.path() / "rpc-busy-session.jsonl";
+    options.session_target = coding_agent::ExplicitNewSessionTarget{
+        workspace.path() / "rpc-busy-session.jsonl"};
     options.workspace = workspace.path();
     options.chat_client = std::move(chat_client);
     options.builtin_tools = coding_agent::SdkBuiltinTools{

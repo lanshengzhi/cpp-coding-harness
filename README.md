@@ -233,9 +233,9 @@ The project exposes an experimental same-process C++23 SDK surface for host appl
 
 using namespace cch;
 
-// Create a session with provider config (resolves API key from env)
+// Default: create a persisted session under the Agent Config Directory,
+// grouped by the canonical physical workspace.
 coding_agent::CreateAgentSessionOptions opts;
-opts.session_path = "/tmp/my-session.jsonl";
 opts.workspace = std::filesystem::current_path();
 opts.provider_config = coding_agent::SdkProviderConfig{
     .provider = "openai-compatible",
@@ -247,6 +247,12 @@ opts.provider_config = coding_agent::SdkProviderConfig{
 auto result = coding_agent::create_agent_session(std::move(opts));
 if (!result) {
     // handle creation error — check result.error().message
+}
+
+// Persisted creation and resume return the actual JSONL path through an
+// optional contract.
+if (result->session_path) {
+    // use *result->session_path
 }
 
 auto& session = result->session;
@@ -272,7 +278,9 @@ session->close();
 
 **Supported SDK v1 behavior:**
 
-- Explicit create/resume path: exactly one of `session_path` (create new) or `resume_path` (resume existing) must be set.
+- One passive `SessionTarget` variant: default persisted creation, `ExplicitNewSessionTarget`, or `ExplicitResumeSessionTarget`. Default construction stores a workspace-keyed session beneath the Agent Config Directory; explicit paths are used exactly and may live elsewhere.
+- `CreateAgentSessionResult::session_path` and `AgentSession::session_path()` use `std::optional<std::filesystem::path>`. Every currently supported persisted target returns the actual path.
+- The old experimental `session_path` / `resume_path` option fields were intentionally removed without aliases or compatibility adapters. Explicit targets now look like `opts.session_target = coding_agent::ExplicitNewSessionTarget{"/tmp/my-session.jsonl"};` or `ExplicitResumeSessionTarget{"/tmp/my-session.jsonl"}`.
 - Blocking `prompt()` — serial, single-prompt-at-a-time, returning only success or an explicit `util::Error`.
 - One persistent event-subscription path via move-only `agent::AgentEventSink`; prompt progress is not returned or delivered through per-prompt sinks.
 - Host-provided chat clients and execution environments. Chat clients and custom tools passed by `unique_ptr` transfer ownership to the session; `shared_ptr` execution environments remain host-owned and are not cleaned up by session close.
@@ -284,14 +292,14 @@ session->close();
 - Optional project resource discovery (`.cpp-harness/skills/`, `.cpp-harness/prompts/`) behind explicit trust/resource controls.
 - Optional absolute external `trust_store_path` for SDK project-resource trust decisions; workspace-local trust-store paths are rejected.
 - Diagnostics returned as `CreateAgentSessionResult::diagnostics` values — no stdout/stderr output from the SDK path.
-- Resolved session metadata on `CreateAgentSessionResult::metadata`, matching the created/resumed JSONL session header.
+- Resolved session metadata on `CreateAgentSessionResult::metadata`, matching the created/resumed JSONL session header. Default creation uses one canonical physical workspace for execution, metadata, and automatic path encoding, so filesystem aliases share a session directory.
 
 **Not supported in SDK v1:**
 
 - ABI-stable binary distribution, plugin ABI, or package-manager integration.
 - Full pi `AgentSessionRuntime` replacement APIs (`newSession`, `switchSession`, `fork`, `clone`, import/export).
 - Public branch/tree navigation or SDK append support for non-linear session topologies (SDK v1 returns `unsupported_session_topology` for branched/compacted sessions).
-- In-memory sessions, concurrent prompts, cancellation, `abort`, `steer`, `followUp`, or queueing.
+- In-memory sessions (reserved for a later `SessionTarget` alternative), concurrent prompts, cancellation, `abort`, `steer`, `followUp`, or queueing.
 - Dynamic TypeScript/JavaScript extensions, extension UI, hot reload, MCP, or package installation.
 - TUI run modes, themes, keybindings, widgets, OAuth/subscription providers, or model catalogs.
 
