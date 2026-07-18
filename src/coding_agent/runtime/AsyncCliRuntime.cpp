@@ -115,8 +115,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
     request.workspace_explicit = config.workspace_explicit;
     request.max_turns = config.max_turns;
     request.workspace = config.workspace;
-    request.session_path = config.session_path;
-    request.resume_path = config.resume_path;
+    request.session_target = config.session_target;
     request.provider_overrides = config.provider_overrides;
     request.settings = *settings_data;
 
@@ -124,7 +123,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
     if (!created) {
         if (created.error().message == "resume workspace does not match session metadata") {
             std::cerr << created.error().detail << '\n';
-        } else if (!config.resume_path.empty()) {
+        } else if (std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(config.session_target)) {
             std::cerr << "could not resume session: " << created.error().message << ": " << created.error().detail << '\n';
         } else {
             std::cerr << "could not create session: " << created.error().message << ": " << created.error().detail << '\n';

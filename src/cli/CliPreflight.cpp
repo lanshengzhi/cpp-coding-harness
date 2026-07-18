@@ -3,13 +3,8 @@
 #include "../../include/cch/coding_agent/AgentConfigDir.hpp"
 #include "../../include/cch/coding_agent/Settings.hpp"
 
-#include <chrono>
-#include <cstdlib>
 #include <filesystem>
-#include <iomanip>
 #include <iostream>
-#include <random>
-#include <sstream>
 #include <utility>
 
 namespace cch::cli {
@@ -17,34 +12,6 @@ namespace {
 
 cch::util::Error cli_error(std::string message) {
     return cch::util::make_error(cch::util::ErrorCode::Validation, message, message);
-}
-
-std::string timestamp_for_path() {
-    auto now = std::chrono::system_clock::now();
-    auto seconds = std::chrono::system_clock::to_time_t(now);
-    const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
-    std::tm tm{};
-#if defined(_WIN32)
-    localtime_s(&tm, &seconds);
-#else
-    localtime_r(&seconds, &tm);
-#endif
-    std::ostringstream out;
-    out << std::put_time(&tm, "%Y%m%d-%H%M%S") << '-' << std::setw(3) << std::setfill('0') << milliseconds.count();
-    return out.str();
-}
-
-std::string random_suffix() {
-    std::random_device device;
-    std::uniform_int_distribution<unsigned int> distribution(0, 0xFFFFu);
-    std::ostringstream out;
-    out << std::hex << std::setw(4) << std::setfill('0') << distribution(device);
-    return out.str();
-}
-
-std::filesystem::path default_session_path() {
-    return std::filesystem::current_path() / ".cpp-harness" / "sessions"
-        / (timestamp_for_path() + "-" + random_suffix() + ".jsonl");
 }
 
 } // namespace
@@ -65,7 +32,8 @@ std::filesystem::path canonical_workspace(const std::filesystem::path& workspace
 
 cch::util::ExpectedVoid preflight_cli_config(const CliConfig& config) {
     std::error_code ec;
-    if (!config.session_path.empty() && std::filesystem::exists(config.session_path, ec)) {
+    if (const auto* target = std::get_if<coding_agent::ExplicitNewSessionTarget>(&config.session_target);
+        target != nullptr && std::filesystem::exists(target->path, ec)) {
         return std::unexpected(cli_error("session file already exists; use --resume to append"));
     }
     if (config.fake) {
@@ -96,7 +64,6 @@ cch::util::ExpectedVoid preflight_cli_config(const CliConfig& config) {
 }
 
 AsyncCliRuntimeConfig to_runtime_config(CliConfig config) {
-    const auto run_timestamp = timestamp_for_path();
     return AsyncCliRuntimeConfig{
         .fake = config.fake,
         .repl = config.repl,
@@ -109,8 +76,7 @@ AsyncCliRuntimeConfig to_runtime_config(CliConfig config) {
         .max_turns = config.max_turns,
         .workspace_explicit = config.workspace_explicit,
         .workspace = std::move(config.workspace),
-        .session_path = config.session_path.empty() ? default_session_path() : std::move(config.session_path),
-        .resume_path = std::move(config.resume_path),
+        .session_target = std::move(config.session_target),
         .provider_overrides = std::move(config.provider_overrides),
         .prompt = std::move(config.prompt),
     };

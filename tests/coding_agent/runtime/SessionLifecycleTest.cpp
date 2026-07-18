@@ -153,7 +153,7 @@ TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point",
     request.disable_prompt_templates = true;
     request.workspace = workspace.path();
     request.workspace_explicit = true;
-    request.resume_path = path;
+    request.session_target = coding_agent::ExplicitResumeSessionTarget{path};
 
     auto session_result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(session_result);
@@ -198,7 +198,7 @@ TEST_CASE(
     request.disable_prompt_templates = true;
     request.workspace = workspace.path();
     request.workspace_explicit = true;
-    request.resume_path = path;
+    request.session_target = coding_agent::ExplicitResumeSessionTarget{path};
 
     auto session_result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(session_result);

@@ -22,8 +22,9 @@ struct CliConfig {
     bool workspace_explicit{false};
     int max_turns{8};
     std::filesystem::path workspace{std::filesystem::current_path()};
-    std::filesystem::path session_path;
-    std::filesystem::path resume_path;
+    /// Normalized session intent: default persisted creation when neither
+    /// --session nor --resume was supplied.
+    coding_agent::SessionTarget session_target{};
     coding_agent::CliProviderOverrides provider_overrides;
     std::string prompt;
     std::string help_text;

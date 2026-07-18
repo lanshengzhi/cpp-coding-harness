@@ -78,6 +78,9 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
 
     CLI::App app{"C++ coding-agent harness", "cpp-harness"};
     app.footer(
+        "Sessions: without --session/--resume, a new session persists under the agent config\n"
+        "directory's workspace-keyed sessions root (~/.cpp-harness/agent/sessions/<workspace-key>/,\n"
+        "root override: CCH_CODING_AGENT_DIR). Explicit paths may live anywhere.\n"
         "Safety: prompts, file contents, and command outputs may be sent to the configured provider.\n"
         "Sessions are local sensitive transcripts even after secret-looking text is redacted.");
     app.set_help_flag("-h,--help", "Print this help message and exit");
@@ -95,7 +98,7 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
         ->expected(1, -1)
         ->allow_extra_args(false);
     auto* workspace_option = app.add_option("--workspace", workspace_text, "Workspace boundary for tools (default: cwd)");
-    auto* session_option = app.add_option("--session", session_text, "Create a new JSONL session at path");
+    auto* session_option = app.add_option("--session", session_text, "Create a new JSONL session at an explicit path");
     auto* resume_option = app.add_option("--resume", resume_text, "Resume and append to an existing JSONL session");
     session_option->excludes(resume_option);
     resume_option->excludes(session_option);
@@ -129,10 +132,10 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
         config.workspace = workspace_text;
     }
     if (session_option->count() > 0) {
-        config.session_path = session_text;
+        config.session_target = coding_agent::ExplicitNewSessionTarget{session_text};
     }
     if (resume_option->count() > 0) {
-        config.resume_path = resume_text;
+        config.session_target = coding_agent::ExplicitResumeSessionTarget{resume_text};
     }
     if (app.count("--max-turns") > 0) {
         config.max_turns = max_turns_option;

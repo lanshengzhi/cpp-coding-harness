@@ -26,8 +26,10 @@ struct AgentSessionCreationRequest {
     bool workspace_explicit{false};
     int max_turns{30};
     std::filesystem::path workspace;
-    std::filesystem::path session_path;
-    std::filesystem::path resume_path;
+    /// Normalized CLI session intent. Default construction selects
+    /// workspace-keyed default persisted creation; explicit create and resume
+    /// alternatives keep their exact paths.
+    SessionTarget session_target{};
     CliProviderOverrides provider_overrides;
     UserSettings settings;
 };

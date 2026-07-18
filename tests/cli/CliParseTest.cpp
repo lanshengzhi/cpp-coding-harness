@@ -3,6 +3,7 @@
 #include "cli/CliParse.hpp"
 
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace {
@@ -129,6 +130,34 @@ TEST_CASE("parse_args defaults empty text-mode prompt to repl", "[cli][parse]") 
     REQUIRE(parsed);
     CHECK(parsed->repl);
     CHECK(parsed->prompt.empty());
+}
+
+TEST_CASE("parse_args represents an omitted session target as default persisted creation", "[cli][parse][session-target]") {
+    std::vector<std::string> args{"cpp-harness", "--fake", "hello"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    CHECK(std::holds_alternative<cch::coding_agent::DefaultPersistedSessionTarget>(parsed->session_target));
+}
+
+TEST_CASE("parse_args maps --session to an explicit new-session target", "[cli][parse][session-target]") {
+    std::vector<std::string> args{"cpp-harness", "--fake", "--session", "new.jsonl", "hello"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    const auto* target = std::get_if<cch::coding_agent::ExplicitNewSessionTarget>(&parsed->session_target);
+    REQUIRE(target != nullptr);
+    CHECK(target->path == "new.jsonl");
+}
+
+TEST_CASE("parse_args maps --resume to an explicit resume target", "[cli][parse][session-target]") {
+    std::vector<std::string> args{"cpp-harness", "--fake", "--resume", "old.jsonl", "hello"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    const auto* target = std::get_if<cch::coding_agent::ExplicitResumeSessionTarget>(&parsed->session_target);
+    REQUIRE(target != nullptr);
+    CHECK(target->path == "old.jsonl");
 }
 
 TEST_CASE("parse_args still requires prompt for json mode", "[cli][parse]") {

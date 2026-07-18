@@ -294,31 +294,63 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
 // Normalization
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Resolve one canonical physical workspace directory shared by execution,
+/// Session Metadata, and default storage so symbolic-link aliases collapse to
+/// a single identity.
+[[nodiscard]] util::Expected<std::filesystem::path> resolve_canonical_workspace(
+    const std::filesystem::path& workspace) {
+    if (workspace.empty()) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "workspace is required for new sessions",
+            "supply a non-empty workspace path"));
+    }
+
+    std::error_code ec;
+    auto resolved = std::filesystem::canonical(workspace, ec);
+    if (ec) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "workspace cannot be resolved",
+            workspace.string() + ": " + ec.message()));
+    }
+    if (!std::filesystem::is_directory(resolved, ec) || ec) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "workspace is not a directory",
+            workspace.string() + (ec ? ": " + ec.message() : std::string{})));
+    }
+    return resolved;
+}
+
 [[nodiscard]] util::Expected<AssemblyPlan> normalize_cli(AgentSessionCreationRequest request) {
-    // The CLI preflight fills in a default session_path even when resuming,
-    // so resume intent is determined by resume_path being non-empty.
-    const bool has_resume = !request.resume_path.empty();
-    const bool has_create = !has_resume && !request.session_path.empty();
-
-    if (has_create && has_resume) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "both session_path and resume_path are set",
-            "set exactly one of session_path (create new) or resume_path (resume existing)"));
-    }
-    if (!has_create && !has_resume) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "neither session_path nor resume_path is set",
-            "set exactly one of session_path (create new) or resume_path (resume existing)"));
-    }
-
     AssemblyPlan plan;
     plan.profile = CreationProfile::Cli;
-    if (has_create) {
-        plan.target = NewSessionTarget{request.session_path, request.workspace};
+    if (std::holds_alternative<DefaultPersistedSessionTarget>(request.session_target)) {
+        // An omitted --session/--resume is default persisted creation under
+        // the canonical workspace key, not a preflight-invented project path.
+        auto workspace = resolve_canonical_workspace(request.workspace);
+        if (!workspace) {
+            return std::unexpected(workspace.error());
+        }
+        plan.target = AutomaticNewSessionTarget{std::move(*workspace)};
+    } else if (const auto* target =
+                   std::get_if<ExplicitNewSessionTarget>(&request.session_target)) {
+        plan.target = NewSessionTarget{target->path, request.workspace};
+    } else if (const auto* target =
+                   std::get_if<ExplicitResumeSessionTarget>(&request.session_target)) {
+        plan.target = ResumeSessionTarget{
+            target->path, request.workspace, request.workspace_explicit};
+    } else if (std::holds_alternative<InMemorySessionTarget>(request.session_target)) {
+        auto workspace = resolve_canonical_workspace(request.workspace);
+        if (!workspace) {
+            return std::unexpected(workspace.error());
+        }
+        plan.target = InMemoryNewSessionTarget{std::move(*workspace)};
     } else {
-        plan.target = ResumeSessionTarget{request.resume_path, request.workspace, request.workspace_explicit};
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "unsupported CLI session target"));
     }
 
     coding_agent::ProviderRequest pr;
@@ -354,32 +386,6 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
     return plan;
 }
 
-[[nodiscard]] util::Expected<std::filesystem::path> resolve_sdk_workspace(
-    const std::filesystem::path& workspace) {
-    if (workspace.empty()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "workspace is required for new sessions",
-            "supply a non-empty workspace path"));
-    }
-
-    std::error_code ec;
-    auto resolved = std::filesystem::canonical(workspace, ec);
-    if (ec) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "workspace cannot be resolved",
-            workspace.string() + ": " + ec.message()));
-    }
-    if (!std::filesystem::is_directory(resolved, ec) || ec) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "workspace is not a directory",
-            workspace.string() + (ec ? ": " + ec.message() : std::string{})));
-    }
-    return resolved;
-}
-
 [[nodiscard]] util::Expected<AssemblyPlan> normalize_sdk(CreateAgentSessionOptions options) {
     const bool is_resume =
         std::holds_alternative<ExplicitResumeSessionTarget>(options.session_target);
@@ -406,14 +412,14 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
     AssemblyPlan plan;
     plan.profile = CreationProfile::Sdk;
     if (std::holds_alternative<DefaultPersistedSessionTarget>(options.session_target)) {
-        auto workspace = resolve_sdk_workspace(options.workspace);
+        auto workspace = resolve_canonical_workspace(options.workspace);
         if (!workspace) {
             return std::unexpected(workspace.error());
         }
         plan.target = AutomaticNewSessionTarget{std::move(*workspace)};
     } else if (const auto* target =
                    std::get_if<ExplicitNewSessionTarget>(&options.session_target)) {
-        auto workspace = resolve_sdk_workspace(options.workspace);
+        auto workspace = resolve_canonical_workspace(options.workspace);
         if (!workspace) {
             return std::unexpected(workspace.error());
         }
@@ -422,7 +428,7 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
                    std::get_if<ExplicitResumeSessionTarget>(&options.session_target)) {
         const bool workspace_explicit = !options.workspace.empty();
         if (workspace_explicit) {
-            auto workspace = resolve_sdk_workspace(options.workspace);
+            auto workspace = resolve_canonical_workspace(options.workspace);
             if (!workspace) {
                 return std::unexpected(workspace.error());
             }
@@ -431,7 +437,7 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
         plan.target = ResumeSessionTarget{
             resume_target->path, options.workspace, workspace_explicit};
     } else if (std::holds_alternative<InMemorySessionTarget>(options.session_target)) {
-        auto workspace = resolve_sdk_workspace(options.workspace);
+        auto workspace = resolve_canonical_workspace(options.workspace);
         if (!workspace) {
             return std::unexpected(workspace.error());
         }

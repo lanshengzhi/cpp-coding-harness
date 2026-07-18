@@ -67,14 +67,21 @@ cmake --build --preset system
 ctest --preset system
 ```
 
-Run the binary with the deterministic fake provider:
+Run the binary with the deterministic fake provider. With no `--session` or `--resume`, each run persists a new session under the workspace-keyed user-level default (see [Session storage](#session-storage)):
+
+```bash
+./build/cpp_harness --fake "hello"
+./build/cpp_harness --fake --workspace . "read README.md"
+./build/cpp_harness --fake --mode json "hello" | jq -c 'select(.type == "message_update")'
+printf '{"type":"get_state"}\n{"type":"shutdown"}\n' | ./build/cpp_harness --fake --mode rpc
+./build/cpp_harness --fake --repl
+```
+
+Explicit create and resume paths remain available and may live anywhere:
 
 ```bash
 ./build/cpp_harness --fake --session /tmp/cpp-session.jsonl "hello"
-./build/cpp_harness --fake --workspace . --session /tmp/cpp-read.jsonl "read README.md"
-./build/cpp_harness --fake --mode json --session /tmp/cpp-json.jsonl "hello" | jq -c 'select(.type == "message_update")'
-printf '{"type":"get_state"}\n{"type":"shutdown"}\n' | ./build/cpp_harness --fake --mode rpc --session /tmp/cpp-rpc.jsonl
-./build/cpp_harness --fake --repl --session /tmp/cpp-repl.jsonl
+./build/cpp_harness --fake --resume /tmp/cpp-session.jsonl "continue"
 ```
 
 The coroutine/Glaze/event stack is the only active stack. Legacy compatibility flags such as `--async` are intentionally absent.
@@ -83,7 +90,7 @@ Real-provider mode is OpenAI Chat Completions-compatible:
 
 ```bash
 export OPENAI_API_KEY=...
-./build/cpp_harness --model gpt-4.1-mini --session /tmp/cpp-real.jsonl "summarize README.md"
+./build/cpp_harness --model gpt-4.1-mini "summarize README.md"
 ```
 
 Use `--base-url` for compatible gateways that preserve the `/v1/chat/completions` contract.
@@ -92,7 +99,13 @@ OAuth, subscription-provider, and dynamic API-key resolution flows are intention
 
 ### Agent config directory
 
-User-level state lives in the agent config directory `~/.cpp-harness/agent/`, mirroring pi's `~/.pi/agent/`: `auth.json` (static API keys), `settings.json` (provider defaults and resource policy), and `trust.json` (persisted project trust decisions). Set `CCH_CODING_AGENT_DIR` to override the location (pi: `PI_CODING_AGENT_DIR`). These paths are centralized in `include/cch/coding_agent/AgentConfigDir.hpp`.
+User-level state lives in the agent config directory `~/.cpp-harness/agent/`, mirroring pi's `~/.pi/agent/`: `auth.json` (static API keys), `settings.json` (provider defaults and resource policy), `trust.json` (persisted project trust decisions), and `sessions/<encoded-workspace>/` (default persisted Agent Session histories). Set `CCH_CODING_AGENT_DIR` to override the location (pi: `PI_CODING_AGENT_DIR`). These paths are centralized in `include/cch/coding_agent/AgentConfigDir.hpp`.
+
+### Session storage
+
+Without `--session` or `--resume`, the CLI persists each new session under `<agent config directory>/sessions/<encoded workspace>/<UTC timestamp>_<session id>.jsonl`, mirroring pi's layout. The workspace key is pi's readable encoding of the canonical physical workspace path: an explicit `--workspace` — not the process working directory — selects the location, and symbolic-link aliases of one workspace share one session directory. The filename UUID matches the Session ID stored in the session header and reported by runtime state.
+
+`--session PATH` and `--resume PATH` keep their exact paths and may live outside the default root. Old project-local `.cpp-harness/sessions/` files are neither scanned nor migrated; pass such a file explicitly through `--resume` if it is still needed. A missing or unwritable default store fails before any model work with the attempted path and reason — the harness never falls back to a workspace-local or temporary transcript. On POSIX, harness-created session directories are owner-only (`0700`) and new session files are `0600`.
 
 ### Auth file
 
@@ -110,7 +123,6 @@ API keys can also be stored in `~/.cpp-harness/agent/auth.json` and selected by 
 ./build/cpp_harness --auth kimi-coding \
   --base-url https://api.kimi.com/coding/v1 \
   --model kimi-for-coding \
-  --session /tmp/cpp-kimi.jsonl \
   "summarize README.md"
 ```
 
@@ -126,7 +138,6 @@ export KIMI_API_KEY=...
   --base-url https://api.kimi.com/coding/v1 \
   --model kimi-for-coding \
   --api-key-env KIMI_API_KEY \
-  --session /tmp/cpp-kimi.jsonl \
   "summarize README.md"
 ```
 

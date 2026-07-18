@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../include/cch/coding_agent/Sdk.hpp"
 #include "../../include/cch/coding_agent/Settings.hpp"
 
 #include <filesystem>
@@ -27,8 +28,9 @@ struct AsyncCliRuntimeConfig {
     int max_turns{8};
     bool workspace_explicit{false};
     std::filesystem::path workspace;
-    std::filesystem::path session_path;
-    std::filesystem::path resume_path;
+    /// Normalized session intent. An omitted --session/--resume selects
+    /// workspace-keyed default persistence, never an empty-path sentinel.
+    coding_agent::SessionTarget session_target{};
     coding_agent::CliProviderOverrides provider_overrides;
     std::string prompt;
 };
