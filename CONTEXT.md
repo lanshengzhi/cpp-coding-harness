@@ -33,11 +33,11 @@ The user-controlled authorization decision governing whether project-authored re
 _Avoid_: Workspace configuration, project self-approval
 
 **Agent Config Directory**:
-The user-level state root (`~/.cpp-harness/agent/`, overridable via `CCH_CODING_AGENT_DIR`) holding auth entries, User Settings, persisted Project Trust decisions, and default Agent Session histories associated with workspaces, mirroring pi's `~/.pi/agent/`. It is the user-level counterpart of the project-level `.cpp-harness/` directory that hosts Project Resources.
+The user-level root for durable harness state shared across workspaces.
 _Avoid_: Config home, user profile directory
 
 **User Settings**:
-Provider defaults, project resource policy, and CLI session-storage preferences loaded from the Agent Config Directory's `settings.json`, taking precedence below explicit requests and above built-in defaults.
+User-level preferences for providers, Project Resources, and Agent Session storage.
 _Avoid_: User config, config file
 
 **User Bash**:

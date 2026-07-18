@@ -206,7 +206,7 @@ The build publishes `include` as the public surface and keeps `src` private. Leg
 
 ### pi parity direction
 
-The harness aims for idiomatic C++ parity with pi's module and contract semantics rather than mechanical TypeScript translation. The current implemented boundary is described by this README, the public headers, tests, and `docs/agents/module-routing.md`. Open product and scope decisions are indexed in `.scratch/pi-cpp-parity/map.md`; an approved feature leaves that map and becomes its own tracker spec and tickets.
+The harness aims for idiomatic C++ parity with pi's module and contract semantics rather than mechanical TypeScript translation. The current implemented boundary is described by this README, the public headers, and tests. Open product and scope decisions are indexed in the [pi C++ parity map](https://github.com/lanshengzhi/cpp-coding-harness/issues/2); approved work leaves that map and follows `/to-spec` → `/to-tickets` → `/implement`.
 
 ## CLI states
 

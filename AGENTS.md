@@ -1,24 +1,16 @@
 # AGENTS.md
 
-This file is the **RootRouter** for every agent run. Use it to reach the smallest authoritative context, preserve user work, select validation, and hand off clearly.
+Repository guidance for Matt's engineering skills and coding agents.
 
 ## Start Gate
 
-**Purpose:** protect user work and classify the task before reading broadly.
-
-1. Inspect the working tree:
-
-   ```bash
-   git status --short
-   ```
-
+1. Inspect the working tree with `git status --short`.
 2. Treat every pre-existing modified or untracked file as user-owned unless the task explicitly targets it. Do not overwrite, reformat, delete, or clean unrelated changes.
-3. Classify the task and read only its entry context:
-   - **Docs, tracker, or route maintenance:** read the referenced spec/ticket and affected docs.
-   - **Implementation or bug fix:** read `README.md`, `CMakeLists.txt`, and the matching row in `docs/agents/module-routing.md`.
-   - **Architecture or public contracts:** read `CONTEXT.md`, relevant accepted ADRs under `docs/adr/`, and the matching route row.
-   - **pi parity:** also read `.scratch/pi-cpp-parity/map.md` at low resolution and the relevant current `pi:` contract or documentation. Read individual map tickets only when selected.
-4. Stop initial exploration when the task family, authoritative seam, safety constraints, and validation slice are known. Do not scan implemented tracker records by default.
+3. Read only the context needed for the task:
+   - Fetch the referenced GitHub issue or PRD through `gh`.
+   - Read `CONTEXT.md` and relevant accepted ADRs when domain language or architecture is involved.
+   - Read `README.md`, `CMakeLists.txt`, and the related code and tests for implementation work.
+4. Stop exploring once the behavior, authoritative seam, constraints, and validation path are clear.
 
 ## Guardrails
 
@@ -30,72 +22,34 @@ This file is the **RootRouter** for every agent run. Use it to reach the smalles
 
 Do not reintroduce the legacy synchronous tool surface, `util::Result`, Boost.JSON domain contracts, `src` as a public include surface, or compatibility-only empty flags.
 
-## pi C++ Parity Direction
+## pi C++ Parity
 
-The long-term direction is an idiomatic C++ implementation of pi's module and contract architecture, not a mechanical TypeScript translation.
+- The [pi C++ parity map](https://github.com/lanshengzhi/cpp-coding-harness/issues/2) is the current planning authority for open parity decisions.
+- The local pi source checkout is `../pi`; a `pi:` reference resolves from that root.
+- Inspect the relevant current pi source or documentation before making parity decisions or changes. Matching supported pi semantics is the default; record intentional divergences in the map or an accepted ADR.
+- Preserve this repository's C++ idioms and guardrails rather than mechanically translating TypeScript.
+- Approved work leaves the map and follows `/to-spec` → `/to-tickets` → `/implement`.
+- Prefer the clean pi-aligned end state over migrations, fallback reads, deprecation shims, or compatibility-only flags unless a current contract explicitly requires them.
 
-- The current planning authority is `.scratch/pi-cpp-parity/map.md`.
-- Stable current behavior belongs in code, tests, `README.md`, and `docs/agents/module-routing.md`.
-- Hard-to-reverse decisions belong in accepted ADRs.
-- A decided feature leaves the map and follows `/to-spec` → `/to-tickets` → `/implement` as its own effort.
-- The local pi source checkout is `../pi`; a `pi:` reference resolves from that root, so `pi:packages/ai/src/types.ts` means `../pi/packages/ai/src/types.ts`.
-- For pi-parity decisions and implementation, inspect the relevant current source and documentation in `../pi` before proceeding. Matching pi's supported semantics is the default; any intentional divergence must be explicit and recorded in the parity map or an accepted ADR. Preserve this repository's C++ idioms and guardrails rather than mechanically translating TypeScript.
-- This is an experimental project: prefer the clean pi-aligned end state over migrations, fallback reads, deprecation shims, compatibility-only flags, or preserving obsolete behavior unless a current contract explicitly requires it.
-- Keep the code agent-navigable: give each policy one authoritative seam, use explicit names and data flow, keep modules narrow and tests focused, update routing when seams move, and avoid duplicated or implicit policy.
+## Validation
 
-## Route
-
-Use the compact table for dispatch. Open `docs/agents/module-routing.md` for the detailed entry points and validation slice.
-
-| Task family | Continue with |
-| --- | --- |
-| Agent loop, lifecycle events, tool-call orchestration | Agent loop row |
-| AI contracts, content, usage, provider-neutral messages | AI messages/contracts row |
-| Providers, OpenAI-compatible transport, SSE, model registry | Provider rows |
-| Built-in tools, workspace/file/shell capabilities | Built-in tools and workspace/path/shell rows |
-| CLI, REPL, JSON/RPC modes, runtime services, prompt processing | CLI/runtime, JSON/RPC, and prompt rows |
-| Config, project trust, resources, skills, prompt templates | Agent config directory/user settings, project trust, and skills/resources rows |
-| Sessions, resume, tree navigation, compaction context | Session row |
-| Public headers, dependency direction, architecture guards | Public boundary/architecture row |
-| Documentation and tracker maintenance | Referenced spec/ticket plus affected `README.md`, `CONTEXT.md`, `docs/agents/`, or `docs/adr/` |
-
-Build and test commands remain authoritative in `README.md`; target membership remains authoritative in `CMakeLists.txt`.
-
-## Verify Slice
-
-- **Docs-only changes:** check Markdown structure, relative links, headings, tracker-state consistency, clear agent-facing English, and no-information-loss for migrated current facts. No C++ build is required unless code or build files changed.
-- **Implementation changes:** run the focused test tag or executable slice listed in `README.md` and the relevant route row.
-- **Public-boundary or contract changes:** run architecture tests when public headers, include surfaces, dependency directions, provider/tool/session contracts, or CMake public/private boundaries change.
-- **Provider changes requiring real API keys or network:** use fake/provider unit tests unless the user explicitly asks for live validation.
-
-Use the cheapest check that can fail for the changed seam, then escalate only when needed.
-
-## Worktree Discipline
-
-- Edit the minimum task-related file set.
-- Prefer a feature branch for extended work, but do not commit, merge, push, delete branches, or force-push unless the user explicitly authorizes that operation.
-- Invoking `/implement` is explicit authorization for its native task-scoped review and commit on the current branch. It does not authorize creating or switching branches/worktrees, pushing, merging, deleting branches, or including unrelated changes.
-- Detailed branch and publishing conventions live in `docs/agents/worktree-discipline.md`; read them only when those operations are requested.
-- Re-check `git status --short` before handoff.
-
-## Handoff
-
-Final responses must state:
-
-- **Changed scope:** files or seams changed and why.
-- **Validation performed:** tests or documentation checks run.
-- **Skipped validation:** intentionally skipped checks and why.
+- Use the build and test commands in `README.md`.
+- During implementation, run the smallest focused test that can fail; run the full test suite once at the end as required by `/implement`.
+- Run architecture tests when public headers, include surfaces, dependency directions, provider/tool/session contracts, or CMake public/private boundaries change.
+- For documentation-only changes, check headings, links, tracker references, and clear agent-facing English; no C++ build is required.
+- Use fake-provider tests by default. Do not use live API keys or network validation unless the user explicitly requests it.
+- `/implement` includes review and a task-scoped commit on the current branch. Do not push, merge, switch branches, create worktrees, or delete branches unless the user explicitly asks.
 
 ## Agent skills
 
 ### Issue tracker
 
-Specs and tickets use the local Markdown tracker under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
+Issues and specs live in GitHub Issues. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-The tracker uses Matt's canonical triage roles and local lifecycle states. See `docs/agents/triage-labels.md`.
+The tracker uses Matt's canonical triage labels. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
-This is a single-context repo: use root `CONTEXT.md` and relevant accepted ADRs under `docs/adr/`. See `docs/agents/domain.md`.
+This is a single-context repo: use root `CONTEXT.md` and `docs/adr/`. See `docs/agents/domain.md`.
