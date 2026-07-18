@@ -4,8 +4,10 @@
 #include "coding_agent/SkillLoader.hpp"
 #include "../harness/WorkspaceFileSystem.hpp"
 
+#include <algorithm>
 #include <array>
 #include <format>
+#include <iterator>
 #include <set>
 #include <string>
 #include <utility>
@@ -13,6 +15,10 @@
 
 namespace cch::coding_agent {
 namespace {
+
+constexpr std::size_t kMaxResourceDiagnostics = 64;
+constexpr std::size_t kMaxResourceDiagnosticTextBytes = 1024;
+constexpr std::string_view kTruncationSuffix = "...[truncated]";
 
 struct LoadedResourceNames {
     std::set<std::string> skill_names;
@@ -71,6 +77,8 @@ struct ProjectResourceAdapter {
         return "parse_failed";
     case PromptTemplateDiagnosticCode::duplicate_name:
         return "duplicate_name";
+    case PromptTemplateDiagnosticCode::unsupported_type:
+        return "unsupported_type";
     }
     return "parse_failed";
 }
@@ -261,6 +269,43 @@ constexpr std::array<ProjectResourceAdapter, 2> kProjectResourceAdapters{{
     return policy;
 }
 
+void bound_text(std::string& text) {
+    if (text.size() <= kMaxResourceDiagnosticTextBytes) {
+        return;
+    }
+
+    auto keep = kMaxResourceDiagnosticTextBytes - kTruncationSuffix.size();
+    while (keep > 0 &&
+           (static_cast<unsigned char>(text[keep]) & 0xc0U) == 0x80U) {
+        --keep;
+    }
+    text.resize(keep);
+    text.append(kTruncationSuffix);
+}
+
+void bound_diagnostics(ProjectResourceLoadingResult& result) {
+    for (auto& diagnostic : result.diagnostics) {
+        bound_text(diagnostic.message);
+        if (diagnostic.path) {
+            bound_text(*diagnostic.path);
+        }
+    }
+
+    if (result.diagnostics.size() <= kMaxResourceDiagnostics) {
+        return;
+    }
+
+    result.diagnostics.resize(kMaxResourceDiagnostics - 1);
+    result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
+        .severity = ResourceDiagnosticSeverity::Warning,
+        .category = ProjectResourceLoadingDiagnosticCategory::LoadPlan,
+        .code = "diagnostics_truncated",
+        .message = "Additional project resource diagnostics were omitted",
+        .path = std::nullopt,
+        .kind = std::nullopt,
+    });
+}
+
 } // namespace
 
 ProjectResourceLoadingResult load_project_resources(
@@ -298,55 +343,78 @@ ProjectResourceLoadingResult load_project_resources(
     add_load_plan_diagnostics(result, result.load_plan);
 
     if (request.prompt_templates_enabled && !request.explicit_prompt_templates.empty()) {
-        std::vector<PromptTemplateDirSpec> specs;
-        specs.reserve(request.explicit_prompt_templates.size());
+        std::vector<PromptTemplate> explicit_templates;
         for (auto& input : request.explicit_prompt_templates) {
-            specs.push_back(PromptTemplateDirSpec{
-                .path = std::move(input.path),
-                .is_file = input.is_file,
-            });
-        }
+            auto input_path = std::move(input.path);
+            auto explicit_load = loadPromptTemplates(
+                fs,
+                {PromptTemplateDirSpec{
+                    .path = input_path,
+                    .is_file = input.is_file,
+                }});
 
-        auto explicit_load = loadPromptTemplates(fs, specs);
-        for (auto& diag : explicit_load.diagnostics) {
-            if (diag.code == PromptTemplateDiagnosticCode::duplicate_name) {
-                result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
-                    .severity = ResourceDiagnosticSeverity::Warning,
-                    .category = ProjectResourceLoadingDiagnosticCategory::Duplicate,
-                    .code = "duplicate_template_skipped",
-                    .message = diag.message,
-                    .path = diag.path.empty() ? std::nullopt : std::optional<std::string>{diag.path},
-                    .kind = std::nullopt,
-                });
-            } else {
+            if (explicit_load.templates.empty() && explicit_load.diagnostics.empty()) {
                 result.fatal_errors.push_back(ProjectResourceLoadingDiagnostic{
                     .severity = ResourceDiagnosticSeverity::Error,
                     .category = ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter,
-                    .code = to_code(diag.code),
-                    .message = diag.message,
-                    .path = diag.path.empty() ? std::nullopt : std::optional<std::string>{diag.path},
+                    .code = "no_templates_found",
+                    .message = "explicit prompt template input contains no loadable .md files",
+                    .path = input_path,
                     .kind = std::nullopt,
                 });
+            }
+
+            for (auto& diag : explicit_load.diagnostics) {
+                if (diag.code == PromptTemplateDiagnosticCode::duplicate_name) {
+                    result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
+                        .severity = ResourceDiagnosticSeverity::Warning,
+                        .category = ProjectResourceLoadingDiagnosticCategory::Duplicate,
+                        .code = "duplicate_template_skipped",
+                        .message = diag.message,
+                        .path = diag.path.empty() ? std::nullopt : std::optional<std::string>{diag.path},
+                        .kind = std::nullopt,
+                    });
+                } else {
+                    result.fatal_errors.push_back(ProjectResourceLoadingDiagnostic{
+                        .severity = ResourceDiagnosticSeverity::Error,
+                        .category = ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter,
+                        .code = to_code(diag.code),
+                        .message = diag.message,
+                        .path = diag.path.empty() ? std::nullopt : std::optional<std::string>{diag.path},
+                        .kind = std::nullopt,
+                    });
+                }
+            }
+
+            for (auto& tmpl : explicit_load.templates) {
+                if (names.prompt_template_names.contains(tmpl.name)) {
+                    result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
+                        .severity = ResourceDiagnosticSeverity::Info,
+                        .category = ProjectResourceLoadingDiagnosticCategory::Duplicate,
+                        .code = "duplicate_template_skipped",
+                        .message = std::format(
+                            "explicit prompt template '{}' skipped: earlier resource takes precedence",
+                            tmpl.name),
+                        .path = input_path,
+                        .kind = std::nullopt,
+                    });
+                    continue;
+                }
+                names.prompt_template_names.insert(tmpl.name);
+                explicit_templates.push_back(std::move(tmpl));
             }
         }
 
-        for (auto& tmpl : explicit_load.templates) {
-            if (names.prompt_template_names.contains(tmpl.name)) {
-                result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
-                    .severity = ResourceDiagnosticSeverity::Info,
-                    .category = ProjectResourceLoadingDiagnosticCategory::Duplicate,
-                    .code = "duplicate_template_skipped",
-                    .message = std::format(
-                        "explicit prompt template '{}' skipped: earlier resource takes precedence",
-                        tmpl.name),
-                    .path = std::nullopt,
-                    .kind = std::nullopt,
-                });
-                continue;
-            }
-            names.prompt_template_names.insert(tmpl.name);
-            result.resources.prompt_templates.push_back(std::move(tmpl));
-        }
+        std::sort(
+            explicit_templates.begin(),
+            explicit_templates.end(),
+            [](const PromptTemplate& left, const PromptTemplate& right) {
+                return left.name < right.name;
+            });
+        result.resources.prompt_templates.insert(
+            result.resources.prompt_templates.end(),
+            std::make_move_iterator(explicit_templates.begin()),
+            std::make_move_iterator(explicit_templates.end()));
     }
 
     for (const auto& adapter : kProjectResourceAdapters) {
@@ -355,6 +423,7 @@ ProjectResourceLoadingResult load_project_resources(
         }
     }
 
+    bound_diagnostics(result);
     return result;
 }
 

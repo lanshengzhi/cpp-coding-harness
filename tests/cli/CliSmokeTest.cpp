@@ -1107,6 +1107,43 @@ TEST_CASE("CLI invalid explicit prompt template fails before session creation", 
     CHECK_FALSE(std::filesystem::exists(session));
 }
 
+TEST_CASE("CLI rejects an explicit prompt template with an unsupported file type", "[cli][project-resources][assembly]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    workspace.write("not-a-template.txt", "plain text\n");
+    auto session = workspace.path() / "explicit-type-fail.jsonl";
+
+    auto result = run_command_split(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --session " + q(session) +
+        " --prompt-template not-a-template.txt hello");
+
+    REQUIRE(result.exit_code != 0);
+    CHECK(result.stdout_text.empty());
+    CHECK(result.stderr_text.find("template") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(session));
+}
+
+TEST_CASE("CLI rejects each explicit prompt template input that has no loadable templates", "[cli][project-resources][assembly]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    workspace.write("valid.md", "Valid template.\n");
+    workspace.write("empty-prompts/notes.txt", "not a template\n");
+    auto session = workspace.path() / "explicit-empty-dir-fail.jsonl";
+
+    auto result = run_command_split(
+        "HOME=" + q(home.path()) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --session " + q(session) +
+        " --prompt-template valid.md --prompt-template empty-prompts hello");
+
+    REQUIRE(result.exit_code != 0);
+    CHECK(result.stdout_text.empty());
+    CHECK(result.stderr_text.find("no loadable .md files") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(session));
+}
+
 TEST_CASE("CLI applies settings.json provider identity when no explicit provider", "[cli][settings][provider-resolution]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;

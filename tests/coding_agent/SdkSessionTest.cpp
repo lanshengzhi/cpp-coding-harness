@@ -1127,6 +1127,52 @@ TEST_CASE("SDK returns trust and adapter diagnostics as values", "[sdk][project-
     CHECK(trusted->session->close().has_value());
 }
 
+TEST_CASE("SDK bounds auto-discovered resource diagnostics", "[sdk][project-resources]") {
+    TestPaths paths;
+    const std::string long_skill_name(2048, 'x');
+    paths.workspace.write(
+        ".cpp-harness/skills/long-name/SKILL.md",
+        "---\n"
+        "name: " + long_skill_name + "\n"
+        "description: Long invalid skill name.\n"
+        "---\n"
+        "Body.\n");
+    for (int index = 0; index < 80; ++index) {
+        paths.workspace.write(
+            ".cpp-harness/prompts/bad-" + std::to_string(index) + ".md",
+            "---\n"
+            "invalid frontmatter line\n"
+            "---\n"
+            "Body.\n");
+    }
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.provider_config = coding_agent::SdkProviderConfig{
+        .provider = "fake",
+        .model = "fake-model",
+    };
+    opts.load_project_resources = true;
+    opts.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    CHECK(result->session->templates().empty());
+    CHECK(result->diagnostics.size() <= 64);
+    CHECK(has_sdk_diag(result->diagnostics, "resource:diagnostics_truncated"));
+    const auto truncated_message = std::find_if(
+        result->diagnostics.begin(),
+        result->diagnostics.end(),
+        [](const auto& diagnostic) {
+            return diagnostic.code == "skill:invalid_metadata" &&
+                   diagnostic.message.ends_with("...[truncated]");
+        });
+    REQUIRE(truncated_message != result->diagnostics.end());
+    CHECK(truncated_message->message.size() <= 1024);
+    CHECK(result->session->close().has_value());
+}
+
 TEST_CASE("SDK project resource diagnostics are not printed during creation", "[sdk][project-resources]") {
     TestPaths paths;
     paths.workspace.write(

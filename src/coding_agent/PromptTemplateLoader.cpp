@@ -11,6 +11,16 @@ namespace cch::coding_agent {
 
 namespace {
 
+[[nodiscard]] bool hasMarkdownExtension(std::string_view path) {
+    if (path.size() < 3) {
+        return false;
+    }
+    const auto suffix = path.substr(path.size() - 3);
+    return suffix[0] == '.' &&
+           (suffix[1] == 'm' || suffix[1] == 'M') &&
+           (suffix[2] == 'd' || suffix[2] == 'D');
+}
+
 /// Strip .md extension from a filename to derive the template name.
 [[nodiscard]] std::string templateNameFromPath(const std::string& path) {
     // Find the last path separator to extract the filename.
@@ -20,13 +30,8 @@ namespace {
         : std::string_view(path).substr(slash + 1);
 
     // Strip .md extension (case-insensitive).
-    if (filename.size() > 3) {
-        auto suffix = filename.substr(filename.size() - 3);
-        if ((suffix[0] == '.' || suffix[0] == '.') &&
-            (suffix[1] == 'm' || suffix[1] == 'M') &&
-            (suffix[2] == 'd' || suffix[2] == 'D')) {
-            filename = filename.substr(0, filename.size() - 3);
-        }
+    if (hasMarkdownExtension(filename)) {
+        filename = filename.substr(0, filename.size() - 3);
     }
     return std::string(filename);
 }
@@ -43,13 +48,16 @@ PromptTemplateLoadResult loadPromptTemplateFromFile(
     const std::string& filePath) {
     PromptTemplateLoadResult result;
 
-    // Only load .md files.
-    std::string_view pathView = filePath;
-    if (pathView.size() < 3) return result;
-    auto suffix = pathView.substr(pathView.size() - 3);
-    if (!((suffix[0] == '.' || suffix[0] == '.') &&
-          (suffix[1] == 'm' || suffix[1] == 'M') &&
-          (suffix[2] == 'd' || suffix[2] == 'D'))) {
+    // Only load .md files. Directory discovery filters other entries before
+    // calling this function; an explicit non-Markdown input must report why it
+    // could not be loaded so session assembly can fail consistently.
+    if (!hasMarkdownExtension(filePath)) {
+        result.diagnostics.push_back(PromptTemplateDiagnostic{
+            .type = "warning",
+            .code = PromptTemplateDiagnosticCode::unsupported_type,
+            .message = "prompt template file must use a .md extension",
+            .path = filePath,
+        });
         return result;
     }
 
@@ -160,14 +168,7 @@ PromptTemplateLoadResult loadPromptTemplates(
             if (isDotfile(entry.name)) continue;
             if (entry.kind != harness::FileKind::File) continue;
             // Only load .md files.
-            std::string_view name = entry.name;
-            if (name.size() < 3) continue;
-            auto suffix = name.substr(name.size() - 3);
-            if (!((suffix[0] == '.' || suffix[0] == '.') &&
-                  (suffix[1] == 'm' || suffix[1] == 'M') &&
-                  (suffix[2] == 'd' || suffix[2] == 'D'))) {
-                continue;
-            }
+            if (!hasMarkdownExtension(entry.name)) continue;
 
             // Build relative path from the entry's path. The entry.path is
             // an absolute path; we need a workspace-relative path for the loader.

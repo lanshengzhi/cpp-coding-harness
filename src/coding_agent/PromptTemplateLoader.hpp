@@ -19,6 +19,7 @@ enum class PromptTemplateDiagnosticCode {
     read_failed,
     parse_failed,
     duplicate_name,
+    unsupported_type,
 };
 
 /// Warning produced while loading prompt templates.
@@ -48,7 +49,8 @@ struct PromptTemplateDirSpec {
 /// Reads the file via the filesystem, parses YAML frontmatter using the
 /// existing SkillFrontmatterParser, and returns a PromptTemplate with
 /// name (from filename), optional description, optional argument_hint,
-/// and body content.
+/// and body content. A non-Markdown path returns an `unsupported_type`
+/// diagnostic instead of being silently ignored.
 [[nodiscard]] PromptTemplateLoadResult loadPromptTemplateFromFile(
     const harness::WorkspaceFileSystem& fs,
     const std::string& filePath);

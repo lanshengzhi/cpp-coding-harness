@@ -291,7 +291,7 @@ session->close();
 - Per-prompt `PromptOptions::expand_prompt_templates` (default `true`); `false` bypasses skill and prompt-template expansion and sends raw text to the agent loop. Resulting message count and last assistant text are queried through `AgentSession` state accessors.
 - Optional project resource discovery (`.cpp-harness/skills/`, `.cpp-harness/prompts/`) behind explicit trust/resource controls.
 - Optional absolute external `trust_store_path` for SDK project-resource trust decisions; workspace-local trust-store paths are rejected.
-- Diagnostics returned as `CreateAgentSessionResult::diagnostics` values — no stdout/stderr output from the SDK path.
+- Bounded resource diagnostics with stable codes returned as `CreateAgentSessionResult::diagnostics` values — no stdout/stderr output from the SDK path.
 - Resolved session metadata on `CreateAgentSessionResult::metadata`, matching the created/resumed JSONL session header. Default creation uses one canonical physical workspace for execution, metadata, and automatic path encoding, so filesystem aliases share a session directory.
 
 **Not supported in SDK v1:**
@@ -310,6 +310,8 @@ One-shot text mode runs one prompt. When no positional prompt is given in text m
 At startup, the CLI scans project-local `.cpp-harness/skills` for nested `SKILL.md` files only when the project resource load plan allows project skills. A skill file uses flat YAML frontmatter (`name`, `description`, optional `disable-model-invocation`) followed by markdown instructions. Valid skills are loaded into the session, diagnostics for malformed or duplicate skills print to stderr, and visible skills are injected into model context through the pi-shaped `<available_skills>` block.
 
 Skills with `disable-model-invocation: true` are hidden from the model-visible list but can still be invoked explicitly with `/skill:<name> [additional instructions]` when the skill was loaded. Invocation uses the skill body cached at startup; edit/reload behavior during a running session, global `~/.cpp-harness/agent/skills`, and config-driven skill directories are deferred.
+
+Explicit `--prompt-template` inputs may be `.md` files or directories containing loadable `.md` files. A missing, malformed, or unsupported explicit file—or an explicit directory with no loadable templates—aborts creation before the session is published. Malformed auto-discovered project templates are skipped instead and produce bounded diagnostics.
 
 ## Project trust and resource controls
 

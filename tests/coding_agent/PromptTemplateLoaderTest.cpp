@@ -124,14 +124,14 @@ TEST_CASE("loadPromptTemplateFromFile file not found", "[coding_agent][prompt][l
     CHECK(result.diagnostics[0].path == "nonexistent.md");
 }
 
-TEST_CASE("loadPromptTemplateFromFile non-md extension skipped", "[coding_agent][prompt][loader]") {
+TEST_CASE("loadPromptTemplateFromFile diagnoses non-md extension", "[coding_agent][prompt][loader]") {
     LoaderTestFixture fix;
     fix.writeFile("notes.txt", "Some text content\n");
     auto result = coding_agent::loadPromptTemplateFromFile(fix.fs, "notes.txt");
-    // Non-.md files from directory scans should be skipped by the directory loader,
-    // but explicit file loading should still attempt to load them.
-    // The current implementation loads any file path passed explicitly.
     CHECK(result.templates.empty());
+    REQUIRE(result.diagnostics.size() == 1);
+    CHECK(result.diagnostics[0].code ==
+          coding_agent::PromptTemplateDiagnosticCode::unsupported_type);
 }
 
 // ── loadPromptTemplates (directory) ──
