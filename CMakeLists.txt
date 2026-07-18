@@ -75,6 +75,7 @@ add_library(cch_harness
     src/harness/SyncLocalExecutionEnv.cpp
     src/harness/session/SessionJournal.cpp
     src/harness/session/EntrySerializer.cpp
+    src/harness/session/InMemorySessionStore.cpp
     src/harness/session/JsonlSessionStore.cpp
     src/harness/session/SessionResume.cpp
     src/harness/session/SessionTree.cpp
@@ -195,6 +196,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/runtime/RpcModeTest.cpp
         tests/coding_agent/runtime/SessionLifecycleTest.cpp
         tests/harness/AsyncLocalExecutionEnvTest.cpp
+        tests/harness/session/InMemorySessionStoreTest.cpp
         tests/harness/session/JsonlSessionStoreTest.cpp
         tests/harness/session/SessionTreeTest.cpp
         tests/tools/AsyncToolsTest.cpp

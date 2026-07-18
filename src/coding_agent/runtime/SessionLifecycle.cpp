@@ -1,6 +1,7 @@
 #include "SessionLifecycle.hpp"
 
 #include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
+#include "harness/session/InMemorySessionStore.hpp"
 
 #include <cerrno>
 #include <cstring>
@@ -322,6 +323,16 @@ util::Expected<OpenSession> publish_automatic_session(
         std::move(model),
     };
     return publish_new_session(target.session_path, target.workspace, std::move(metadata));
+}
+
+OpenSession publish_in_memory_session(
+    std::filesystem::path workspace,
+    harness::session::SessionMetadata metadata) {
+    OpenSession session;
+    session.workspace = std::move(workspace);
+    session.metadata = std::move(metadata);
+    session.store = std::make_unique<harness::session::InMemorySessionStore>();
+    return session;
 }
 
 util::Expected<OpenSession> publish_resume_session(

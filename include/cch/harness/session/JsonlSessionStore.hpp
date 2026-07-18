@@ -72,7 +72,7 @@ public:
     [[nodiscard]] util::ExpectedVoid append_leaf(std::optional<std::string> parent_id,
                                                   std::string target_id);
 
-    [[nodiscard]] const std::filesystem::path& path() const override;
+    [[nodiscard]] std::optional<std::filesystem::path> path() const override;
     [[nodiscard]] const SessionMetadata& metadata() const;
 
 private:

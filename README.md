@@ -170,7 +170,7 @@ Package targets and responsibilities:
 - `cch_util` (`include/cch/util`, `src/util`): project error/expected contracts, move-only callback vocabulary, passive `JsonValue`, the Glaze-backed JSON adapter in `src/util/Json.hpp`, and async process execution.
 - `cch_ai` (`include/cch/ai`, `src/ai`): passive message/content/tool/context contracts, provider-neutral stream events, provider registry, OpenAICompletionsCompat flags, OpenAI-compatible provider, scripted fake provider; SSE and Glaze provider mapping live under `src/ai/`.
 - `cch_agent` (`include/cch/agent`, `src/agent`): coroutine agent loop, observable state values, lifecycle event values, move-only event sinks, async tool registry, expected-style tool execution contracts, optional pre/post tool-call hooks (`beforeToolCall`/`afterToolCall`), context transform / LLM conversion hooks, steering/follow-up queues, prepare-next-turn updates, and a safe-default sequential/bounded-parallel tool execution policy.
-- `cch_harness` (`include/cch/harness`, `src/harness`): pi-shaped filesystem and shell execution capability contracts (`FileSystem`/`Shell`), local implementation with workspace containment, symlink safety, atomic writes, split-stream process execution, secret environment filtering, and JSONL session persistence.
+- `cch_harness` (`include/cch/harness`, `src/harness`): pi-shaped filesystem and shell execution capability contracts (`FileSystem`/`Shell`), local implementation with workspace containment, symlink safety, atomic writes, split-stream process execution, secret environment filtering, and JSONL/in-memory Session Store implementations.
 - `cch_tools` (`include/cch/tools`, `src/tools`): built-in read/write/edit/bash tool factories bridging agent tool contracts to harness capabilities.
 - `cch_coding_agent_runtime` (`src/cli/` for CLI11 parsing/preflight/`CliConfig`/`CliRuntimeConfig`, `src/coding_agent/runtime/AsyncCliRuntime.*`, `src/coding_agent/runtime/`, `include/cch/coding_agent/`, `src/coding_agent/`): CLI argument parsing and preflight (including `settings.json` precedence), agent config directory path resolution (`AgentConfigDir`), user settings and auth loading (`SettingsLoader`, `AuthLoader`), runtime orchestration, session lifecycle, provider/tool service assembly, semantic event printing, JSON/RPC output modes, private skill/template prompt interpretation (`prompt/PromptProcessor`), live-state-first event handling with incremental message persistence, project trust/resource controls (`ProjectTrust`, `ProjectResources`, `ProjectResourceLoader`), project-local skill discovery/loading and prompt formatting, `/skill:name` expansion from cached content, and prompt-template file loading with `--prompt-template`/`--no-prompt-templates` CLI flags.
 
@@ -276,10 +276,40 @@ auto message_count = session->message_count();
 session->close();
 ```
 
+Use the explicit in-memory target when the host needs normal Agent Session behavior without a transcript or session directory:
+
+```cpp
+coding_agent::CreateAgentSessionOptions opts;
+opts.session_target = coding_agent::InMemorySessionTarget{};
+opts.workspace = std::filesystem::current_path();
+opts.provider_config = coding_agent::SdkProviderConfig{
+    .provider = "openai-compatible",
+    .model = "gpt-4o-mini",
+    .base_url = "https://api.openai.com/v1",
+    .api_key_env = {{"OPENAI_API_KEY"}},
+};
+
+auto result = coding_agent::create_agent_session(std::move(opts));
+if (!result) {
+    // handle creation error
+}
+
+// UUID metadata, events, prompts, tools, and live state remain available.
+auto& session = result->session;
+session->prompt("inspect the workspace");
+auto count = session->message_count();
+
+// Both optional path accessors are absent; no JSONL file is created.
+if (result->session_path || session->session_path()) {
+    // unexpected for InMemorySessionTarget
+}
+session->close();
+```
+
 **Supported SDK v1 behavior:**
 
-- One passive `SessionTarget` variant: default persisted creation, `ExplicitNewSessionTarget`, or `ExplicitResumeSessionTarget`. Default construction stores a workspace-keyed session beneath the Agent Config Directory; explicit paths are used exactly and may live elsewhere.
-- `CreateAgentSessionResult::session_path` and `AgentSession::session_path()` use `std::optional<std::filesystem::path>`. Every currently supported persisted target returns the actual path.
+- One passive `SessionTarget` variant: default persisted creation, `ExplicitNewSessionTarget`, `ExplicitResumeSessionTarget`, or `InMemorySessionTarget`. Default construction stores a workspace-keyed session beneath the Agent Config Directory; explicit paths are used exactly and may live elsewhere; in-memory creation never publishes a session directory or JSONL file.
+- `CreateAgentSessionResult::session_path` and `AgentSession::session_path()` use `std::optional<std::filesystem::path>`. Persisted targets return the actual path; in-memory sessions return no value, never an empty-path sentinel.
 - The old experimental `session_path` / `resume_path` option fields were intentionally removed without aliases or compatibility adapters. Explicit targets now look like `opts.session_target = coding_agent::ExplicitNewSessionTarget{"/tmp/my-session.jsonl"};` or `ExplicitResumeSessionTarget{"/tmp/my-session.jsonl"}`.
 - Blocking `prompt()` — serial, single-prompt-at-a-time, returning only success or an explicit `util::Error`.
 - One persistent event-subscription path via move-only `agent::AgentEventSink`; prompt progress is not returned or delivered through per-prompt sinks.
@@ -299,7 +329,7 @@ session->close();
 - ABI-stable binary distribution, plugin ABI, or package-manager integration.
 - Full pi `AgentSessionRuntime` replacement APIs (`newSession`, `switchSession`, `fork`, `clone`, import/export).
 - Public branch/tree navigation or SDK append support for non-linear session topologies (SDK v1 returns `unsupported_session_topology` for branched/compacted sessions).
-- In-memory sessions (reserved for a later `SessionTarget` alternative), concurrent prompts, cancellation, `abort`, `steer`, `followUp`, or queueing.
+- Concurrent prompts, cancellation, `abort`, `steer`, `followUp`, or queueing.
 - Dynamic TypeScript/JavaScript extensions, extension UI, hot reload, MCP, or package installation.
 - TUI run modes, themes, keybindings, widgets, OAuth/subscription providers, or model catalogs.
 
@@ -378,4 +408,4 @@ These cover:
 
 Not included yet: rich TUI, extensions, packages, global/config-driven skill directories, live skill reload, OAuth, full pi RPC command parity, MCP integration, permission prompts, native Windows shell process-tree termination semantics, tool execution streaming updates, subagents, C++26 reflection-generated schema, `std::execution` senders/receivers, ABI-stable binary distribution, or OS-level sandboxing.
 
-An experimental same-process embeddable C++ SDK surface is available (see Embeddable C++ SDK section above). Full pi SDK parity (session replacement runtime, concurrent prompts, compaction, in-memory sessions, ABI stability) is deferred.
+An experimental same-process embeddable C++ SDK surface is available (see Embeddable C++ SDK section above). Full pi SDK parity (session replacement runtime, concurrent prompts, compaction, ABI stability) is deferred.

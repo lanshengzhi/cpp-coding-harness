@@ -49,6 +49,10 @@ struct NewSessionTarget {
     std::filesystem::path workspace;
 };
 
+struct InMemoryNewSessionTarget {
+    std::filesystem::path workspace;
+};
+
 struct ResumeSessionTarget {
     std::filesystem::path resume_path;
     std::filesystem::path workspace;
@@ -58,6 +62,7 @@ struct ResumeSessionTarget {
 using SessionTarget = std::variant<
     AutomaticNewSessionTarget,
     NewSessionTarget,
+    InMemoryNewSessionTarget,
     ResumeSessionTarget>;
 
 enum class CreationProfile { Cli, Sdk };
@@ -271,6 +276,20 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
     }
 }
 
+[[nodiscard]] harness::session::SessionMetadata make_new_session_metadata(
+    const std::filesystem::path& workspace,
+    std::string provider,
+    std::string model) {
+    const auto identity = session_paths::generate_automatic_session_identity();
+    return harness::session::SessionMetadata{
+        identity.session_id,
+        identity.created_at,
+        workspace,
+        std::move(provider),
+        std::move(model),
+    };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Normalization
 // ─────────────────────────────────────────────────────────────────────────────
@@ -399,8 +418,8 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
             return std::unexpected(workspace.error());
         }
         plan.target = NewSessionTarget{target->path, std::move(*workspace)};
-    } else {
-        const auto& resume_target = std::get<ExplicitResumeSessionTarget>(options.session_target);
+    } else if (const auto* resume_target =
+                   std::get_if<ExplicitResumeSessionTarget>(&options.session_target)) {
         const bool workspace_explicit = !options.workspace.empty();
         if (workspace_explicit) {
             auto workspace = resolve_sdk_workspace(options.workspace);
@@ -409,7 +428,18 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
             }
             options.workspace = std::move(*workspace);
         }
-        plan.target = ResumeSessionTarget{resume_target.path, options.workspace, workspace_explicit};
+        plan.target = ResumeSessionTarget{
+            resume_target->path, options.workspace, workspace_explicit};
+    } else if (std::holds_alternative<InMemorySessionTarget>(options.session_target)) {
+        auto workspace = resolve_sdk_workspace(options.workspace);
+        if (!workspace) {
+            return std::unexpected(workspace.error());
+        }
+        plan.target = InMemoryNewSessionTarget{std::move(*workspace)};
+    } else {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "unsupported SDK session target"));
     }
 
     coding_agent::ProviderRequest pr;
@@ -466,6 +496,8 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
         workspace = prepared->workspace;
         prepared_resume = std::move(*prepared);
     } else if (const auto* target = std::get_if<AutomaticNewSessionTarget>(&plan.target)) {
+        workspace = target->workspace;
+    } else if (const auto* target = std::get_if<InMemoryNewSessionTarget>(&plan.target)) {
         workspace = target->workspace;
     } else {
         const auto& new_target = std::get<NewSessionTarget>(plan.target);
@@ -711,17 +743,16 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
             return std::unexpected(published.error());
         }
         open = std::move(*published);
+    } else if (std::holds_alternative<InMemoryNewSessionTarget>(plan.target)) {
+        open = publish_in_memory_session(
+            workspace,
+            make_new_session_metadata(workspace, resolved.provider, resolved.model));
     } else {
         const auto& target = std::get<NewSessionTarget>(plan.target);
-        const auto identity = session_paths::generate_automatic_session_identity();
-        harness::session::SessionMetadata metadata{
-            identity.session_id,
-            identity.created_at,
+        auto published = publish_new_session(
+            target.session_path,
             workspace,
-            resolved.provider,
-            resolved.model,
-        };
-        auto published = publish_new_session(target.session_path, workspace, std::move(metadata));
+            make_new_session_metadata(workspace, resolved.provider, resolved.model));
         if (!published) {
             cleanup_on_failure();
             return std::unexpected(published.error());

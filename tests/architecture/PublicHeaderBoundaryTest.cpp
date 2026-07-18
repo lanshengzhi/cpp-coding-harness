@@ -63,6 +63,9 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_base_of_v<
                   harness::session::SessionStore,
                   harness::session::JsonlSessionStore>);
+    static_assert(std::is_same_v<
+                  decltype(std::declval<const harness::session::SessionStore&>().path()),
+                  std::optional<std::filesystem::path>>);
 
     ai::AssistantStreamEvent stream_event = ai::TextDeltaEvent{};
     agent::AgentLifecycleEvent agent_event = agent::TurnStartEvent{};
@@ -71,14 +74,18 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     CHECK(std::holds_alternative<agent::TurnStartEvent>(agent_event));
 }
 
-TEST_CASE("SDK persisted targets remain one passive variant with optional path results", "[architecture][session][sdk]") {
+TEST_CASE("SDK targets remain one passive variant with optional path results", "[architecture][session][sdk]") {
     static_assert(std::is_aggregate_v<coding_agent::DefaultPersistedSessionTarget>);
     static_assert(std::is_aggregate_v<coding_agent::ExplicitNewSessionTarget>);
     static_assert(std::is_aggregate_v<coding_agent::ExplicitResumeSessionTarget>);
-    static_assert(std::variant_size_v<coding_agent::SessionTarget> == 3);
+    static_assert(std::is_aggregate_v<coding_agent::InMemorySessionTarget>);
+    static_assert(std::variant_size_v<coding_agent::SessionTarget> == 4);
     static_assert(std::is_same_v<
                   std::variant_alternative_t<0, coding_agent::SessionTarget>,
                   coding_agent::DefaultPersistedSessionTarget>);
+    static_assert(std::is_same_v<
+                  std::variant_alternative_t<3, coding_agent::SessionTarget>,
+                  coding_agent::InMemorySessionTarget>);
     static_assert(std::is_same_v<
                   decltype(coding_agent::CreateAgentSessionResult::session_path),
                   std::optional<std::filesystem::path>>);

@@ -44,7 +44,7 @@ struct CreateAgentSessionResult {
     std::string session_id;
     std::string provider;
     std::string model;
-    std::filesystem::path session_path;
+    std::optional<std::filesystem::path> session_path;
     std::filesystem::path workspace;
     harness::session::SessionMetadata metadata;
 };

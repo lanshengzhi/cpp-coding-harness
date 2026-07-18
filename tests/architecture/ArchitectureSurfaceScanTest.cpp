@@ -272,15 +272,26 @@ TEST_CASE("Runtime session persistence stays behind the narrow SessionStore capa
         source_root / "src" / "coding_agent" / "runtime" / "SessionLifecycle.cpp");
     const auto store_header = read_text(
         source_root / "include" / "cch" / "harness" / "session" / "SessionStore.hpp");
+    const auto in_memory_store_header = read_text(
+        source_root / "src" / "harness" / "session" / "InMemorySessionStore.hpp");
 
     const auto concrete_store = std::string{"Jsonl"} + "SessionStore";
+    const auto in_memory_store = std::string{"InMemory"} + "SessionStore";
     CHECK(runtime_header.find(concrete_store) == std::string::npos);
+    CHECK(runtime_header.find(in_memory_store) == std::string::npos);
     CHECK(lifecycle_header.find(concrete_store) == std::string::npos);
+    CHECK(lifecycle_header.find(in_memory_store) == std::string::npos);
     CHECK(lifecycle_header.find("SessionStore") != std::string::npos);
     CHECK(lifecycle_source.find(concrete_store) != std::string::npos);
+    CHECK(lifecycle_source.find(in_memory_store) != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "include" / "cch" / "harness" / "session" /
+        "InMemorySessionStore.hpp"));
+    CHECK(in_memory_store_header.find("std::vector") == std::string::npos);
+    CHECK(in_memory_store_header.find("history") == std::string::npos);
 
     CHECK(store_header.find("append(const ai::MessageVariant&") != std::string::npos);
-    CHECK(store_header.find("path() const") != std::string::npos);
+    CHECK(store_header.find("optional<std::filesystem::path> path() const") != std::string::npos);
     CHECK(store_header.find("SessionMetadata") == std::string::npos);
     CHECK(store_header.find("SessionTree") == std::string::npos);
     CHECK(store_header.find("SessionJournal") == std::string::npos);

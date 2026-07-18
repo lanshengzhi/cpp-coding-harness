@@ -4,6 +4,7 @@
 #include "../../util/Error.hpp"
 
 #include <filesystem>
+#include <optional>
 
 namespace cch::harness::session {
 
@@ -16,7 +17,7 @@ public:
     virtual ~SessionStore() = default;
 
     [[nodiscard]] virtual util::ExpectedVoid append(const ai::MessageVariant& message) = 0;
-    [[nodiscard]] virtual const std::filesystem::path& path() const = 0;
+    [[nodiscard]] virtual std::optional<std::filesystem::path> path() const = 0;
 };
 
 } // namespace cch::harness::session

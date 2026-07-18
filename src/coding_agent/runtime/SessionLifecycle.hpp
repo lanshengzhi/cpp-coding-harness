@@ -69,6 +69,11 @@ struct PreparedResumeTarget {
     std::string provider,
     std::string model);
 
+/// Publish an in-memory session without creating any filesystem state.
+[[nodiscard]] OpenSession publish_in_memory_session(
+    std::filesystem::path workspace,
+    harness::session::SessionMetadata metadata);
+
 /// Open an existing session file for resumption after all fallible
 /// prerequisites have succeeded.
 [[nodiscard]] util::Expected<OpenSession> publish_resume_session(

@@ -240,6 +240,17 @@ public:
     }
 };
 
+class FailingChatClient final : public ai::StreamingChatClient {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& /*request*/,
+        ai::AssistantEventSink /*sink*/) override {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Provider,
+            "provider rejected in-memory prompt"));
+    }
+};
+
 } // namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -281,7 +292,8 @@ TEST_CASE("SDK session target is one passive variant with default persistence", 
     static_assert(std::is_aggregate_v<coding_agent::DefaultPersistedSessionTarget>);
     static_assert(std::is_aggregate_v<coding_agent::ExplicitNewSessionTarget>);
     static_assert(std::is_aggregate_v<coding_agent::ExplicitResumeSessionTarget>);
-    static_assert(std::variant_size_v<coding_agent::SessionTarget> == 3);
+    static_assert(std::is_aggregate_v<coding_agent::InMemorySessionTarget>);
+    static_assert(std::variant_size_v<coding_agent::SessionTarget> == 4);
     static_assert(std::is_same_v<
                   std::variant_alternative_t<0, coding_agent::SessionTarget>,
                   coding_agent::DefaultPersistedSessionTarget>);
@@ -291,6 +303,9 @@ TEST_CASE("SDK session target is one passive variant with default persistence", 
     static_assert(std::is_same_v<
                   std::variant_alternative_t<2, coding_agent::SessionTarget>,
                   coding_agent::ExplicitResumeSessionTarget>);
+    static_assert(std::is_same_v<
+                  std::variant_alternative_t<3, coding_agent::SessionTarget>,
+                  coding_agent::InMemorySessionTarget>);
 
     coding_agent::CreateAgentSessionOptions opts;
     CHECK(std::holds_alternative<coding_agent::DefaultPersistedSessionTarget>(opts.session_target));
@@ -299,6 +314,236 @@ TEST_CASE("SDK session target is one passive variant with default persistence", 
     using SessionPath = decltype(std::declval<const coding_agent::AgentSession&>().session_path());
     static_assert(std::is_same_v<ResultPath, std::optional<std::filesystem::path>>);
     static_assert(std::is_same_v<SessionPath, const std::optional<std::filesystem::path>&>);
+}
+
+TEST_CASE(
+    "SDK in-memory session preserves normal runtime contracts without filesystem state",
+    "[sdk][in-memory][live-state]") {
+    TestPaths paths;
+    paths.workspace.write("target.txt", "target content\n");
+    cch::tests::TempWorkspace isolated;
+    const auto agent_dir = isolated.path() / "agent-not-created";
+    EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    agent_dir_guard.set(agent_dir.string());
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::InMemorySessionTarget{};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    REQUIRE(result->session != nullptr);
+    CHECK_FALSE(result->session_path.has_value());
+    CHECK_FALSE(result->session->session_path().has_value());
+    CHECK(result->metadata.session_id == result->session_id);
+    CHECK(result->metadata.workspace == std::filesystem::canonical(paths.workspace.path()));
+    CHECK(std::regex_match(
+        result->session_id,
+        std::regex{R"(^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$)"}));
+    CHECK(result->session->message_count() == 0);
+    CHECK_FALSE(result->session->last_assistant_text().has_value());
+
+    std::size_t message_ends = 0;
+    std::size_t tool_results = 0;
+    auto subscription = result->session->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+                ++message_ends;
+                CHECK(result->session->message_count() == message_ends);
+                if (std::holds_alternative<ai::ToolResultMessage>(end->message)) {
+                    ++tool_results;
+                }
+            }
+            return {};
+        });
+    REQUIRE(subscription.has_value());
+
+    auto prompted = result->session->prompt("read target.txt");
+    REQUIRE(prompted.has_value());
+    CHECK(message_ends == 4);
+    CHECK(tool_results == 1);
+    CHECK(result->session->message_count() == 4);
+    REQUIRE(result->session->last_assistant_text().has_value());
+    CHECK(result->session->last_assistant_text()->find("observed") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
+    CHECK_FALSE(std::filesystem::exists(paths.workspace.path() / ".cpp-harness" / "sessions"));
+    CHECK_FALSE(std::filesystem::exists(paths.session_file));
+
+    coding_agent::AgentSession moved{std::move(*result->session)};
+    CHECK(moved.is_open());
+    CHECK_FALSE(moved.session_path().has_value());
+    CHECK(moved.message_count() == 4);
+    CHECK(moved.close().has_value());
+    CHECK(moved.close().has_value());
+    CHECK_FALSE(moved.is_open());
+    CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
+}
+
+TEST_CASE(
+    "SDK in-memory subscriptions remain safe across session move assignment and destruction",
+    "[sdk][in-memory][move]") {
+    TestPaths paths;
+    auto create_in_memory = [&]() {
+        coding_agent::CreateAgentSessionOptions opts;
+        opts.session_target = coding_agent::InMemorySessionTarget{};
+        opts.workspace = paths.workspace.path();
+        opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+        return coding_agent::create_agent_session(std::move(opts));
+    };
+
+    auto first = create_in_memory();
+    REQUIRE(first.has_value());
+    auto first_subscription = first->session->subscribe(
+        [](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid { return {}; });
+    REQUIRE(first_subscription.has_value());
+
+    auto second = create_in_memory();
+    REQUIRE(second.has_value());
+    auto second_subscription = second->session->subscribe(
+        [](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid { return {}; });
+    REQUIRE(second_subscription.has_value());
+
+    {
+        coding_agent::AgentSession assigned{std::move(*first->session)};
+        CHECK(static_cast<bool>(*first_subscription));
+        assigned = std::move(*second->session);
+        CHECK_FALSE(static_cast<bool>(*first_subscription));
+        CHECK(static_cast<bool>(*second_subscription));
+        CHECK(assigned.close().has_value());
+        CHECK_FALSE(static_cast<bool>(*second_subscription));
+    }
+
+    CHECK_FALSE(static_cast<bool>(*first_subscription));
+    CHECK_FALSE(static_cast<bool>(*second_subscription));
+    first_subscription->unsubscribe();
+    second_subscription->unsubscribe();
+}
+
+TEST_CASE(
+    "SDK in-memory subscriber failure retains live state without persistence fallback",
+    "[sdk][in-memory][subscriber-failure]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace isolated;
+    const auto agent_dir = isolated.path() / "agent-not-created";
+    EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    agent_dir_guard.set(agent_dir.string());
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::InMemorySessionTarget{};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    auto failed_subscription = result->session->subscribe(
+        [](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            if (const auto* end = std::get_if<agent::MessageEndEvent>(&event);
+                end != nullptr && std::holds_alternative<ai::UserMessage>(end->message)) {
+                return std::unexpected(util::make_error(
+                    util::ErrorCode::Tool,
+                    "subscriber rejected in-memory user message"));
+            }
+            return {};
+        });
+    REQUIRE(failed_subscription.has_value());
+
+    auto failed = result->session->prompt("hello");
+    REQUIRE_FALSE(failed.has_value());
+    CHECK(failed.error().code == util::ErrorCode::Tool);
+    CHECK(failed.error().message == "subscriber rejected in-memory user message");
+    CHECK(result->session->is_open());
+    CHECK(result->session->message_count() == 1);
+    CHECK_FALSE(result->session->last_assistant_text().has_value());
+    CHECK_FALSE(result->session->session_path().has_value());
+    CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
+    CHECK_FALSE(std::filesystem::exists(paths.workspace.path() / ".cpp-harness" / "sessions"));
+
+    failed_subscription->unsubscribe();
+    auto recovered = result->session->prompt("again");
+    REQUIRE(recovered.has_value());
+    CHECK(result->session->message_count() == 3);
+    CHECK(result->session->last_assistant_text().has_value());
+    CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
+    CHECK(result->session->close().has_value());
+}
+
+TEST_CASE(
+    "SDK in-memory creation uses shared resource trust and prompt processing",
+    "[sdk][in-memory][project-resources]") {
+    TestPaths paths;
+    write_project_skill(paths, "project-skill", "Use in-memory project instructions.");
+    write_project_prompt(paths, "project-review", "Review in memory: $1.");
+    cch::tests::TempWorkspace isolated;
+    const auto agent_dir = isolated.path() / "agent-not-created";
+    EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    agent_dir_guard.set(agent_dir.string());
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::InMemorySessionTarget{};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.load_project_resources = true;
+    opts.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    REQUIRE(result->session->skills().size() == 1);
+    CHECK(result->session->skills()[0].name == "project-skill");
+    REQUIRE(result->session->templates().size() == 1);
+    CHECK(result->session->templates()[0].name == "project-review");
+
+    auto prompted = result->session->prompt("/project-review target.cpp");
+    REQUIRE(prompted.has_value());
+    REQUIRE(result->session->last_assistant_text().has_value());
+    CHECK(result->session->last_assistant_text()->find("Review in memory: target.cpp.") !=
+          std::string::npos);
+    CHECK_FALSE(result->session_path.has_value());
+    CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
+    CHECK_FALSE(std::filesystem::exists(paths.workspace.path() / ".cpp-harness" / "sessions"));
+    CHECK(result->session->close().has_value());
+}
+
+TEST_CASE(
+    "SDK in-memory provider failure retains completed user state without persistence fallback",
+    "[sdk][in-memory][provider-failure]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace isolated;
+    const auto agent_dir = isolated.path() / "agent-not-created";
+    EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    agent_dir_guard.set(agent_dir.string());
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::InMemorySessionTarget{};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::make_unique<FailingChatClient>();
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    std::size_t delivered_user_messages = 0;
+    auto subscription = result->session->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            if (const auto* end = std::get_if<agent::MessageEndEvent>(&event);
+                end != nullptr && std::holds_alternative<ai::UserMessage>(end->message)) {
+                ++delivered_user_messages;
+            }
+            return {};
+        });
+    REQUIRE(subscription.has_value());
+
+    auto failed = result->session->prompt("hello");
+    REQUIRE_FALSE(failed.has_value());
+    CHECK(failed.error().code == util::ErrorCode::Provider);
+    CHECK(failed.error().message == "provider rejected in-memory prompt");
+    CHECK(delivered_user_messages == 1);
+    CHECK(result->session->is_open());
+    CHECK(result->session->message_count() == 1);
+    CHECK_FALSE(result->session->last_assistant_text().has_value());
+    CHECK_FALSE(result->session_path.has_value());
+    CHECK_FALSE(result->session->session_path().has_value());
+    CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
+    CHECK_FALSE(std::filesystem::exists(paths.workspace.path() / ".cpp-harness" / "sessions"));
+    CHECK(result->session->close().has_value());
 }
 
 TEST_CASE("SDK default target persists under the canonical workspace key", "[sdk][u2][default-persistence]") {

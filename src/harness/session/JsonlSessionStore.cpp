@@ -23,7 +23,7 @@ JsonlSessionStore::~JsonlSessionStore() = default;
 JsonlSessionStore::JsonlSessionStore(JsonlSessionStore&&) = default;
 JsonlSessionStore& JsonlSessionStore::operator=(JsonlSessionStore&&) = default;
 
-const std::filesystem::path& JsonlSessionStore::path() const { return impl_->path; }
+std::optional<std::filesystem::path> JsonlSessionStore::path() const { return impl_->path; }
 const SessionMetadata& JsonlSessionStore::metadata() const { return impl_->metadata; }
 
 util::Expected<JsonlSessionStore> JsonlSessionStore::create_new(

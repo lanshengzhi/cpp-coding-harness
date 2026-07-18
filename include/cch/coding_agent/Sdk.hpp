@@ -89,18 +89,22 @@ struct ExplicitResumeSessionTarget {
     std::filesystem::path path;
 };
 
-/// Mutually exclusive persisted session target. Default construction selects
+/// Create an Agent Session without a session directory or transcript file.
+struct InMemorySessionTarget {};
+
+/// Mutually exclusive session target. Default construction selects
 /// workspace-keyed persistence under the Agent Config Directory.
 using SessionTarget = std::variant<
     DefaultPersistedSessionTarget,
     ExplicitNewSessionTarget,
-    ExplicitResumeSessionTarget>;
+    ExplicitResumeSessionTarget,
+    InMemorySessionTarget>;
 
 /// Options passed to create_agent_session().
 ///
 /// Session target: defaults to workspace-keyed persisted creation. Explicit
 /// create and resume alternatives retain their exact paths and may live outside
-/// the Agent Config Directory.
+/// the Agent Config Directory. In-memory creation has no physical session path.
 ///
 /// Workspace: required for new sessions. It is resolved to one canonical
 /// physical directory used for execution, metadata, and default storage. For

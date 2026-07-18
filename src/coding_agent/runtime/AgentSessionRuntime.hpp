@@ -60,7 +60,7 @@ public:
     [[nodiscard]] std::size_t message_count() const { return session_.history.size(); }
     [[nodiscard]] std::optional<std::string> last_assistant_text() const;
     [[nodiscard]] const std::string& session_id() const { return session_.metadata.session_id; }
-    [[nodiscard]] const std::filesystem::path& session_path() const { return session_.store->path(); }
+    [[nodiscard]] std::optional<std::filesystem::path> session_path() const { return session_.store->path(); }
     [[nodiscard]] const std::string& provider() const { return session_.metadata.provider; }
     [[nodiscard]] const std::string& model() const { return session_.metadata.model; }
     [[nodiscard]] const std::filesystem::path& workspace() const { return session_.workspace; }

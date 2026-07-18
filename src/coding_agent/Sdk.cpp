@@ -30,9 +30,13 @@ private:
 // Pimpl definitions
 // ─────────────────────────────────────────────────────────────────────────────
 
+struct EventSubscriptionAnchor {
+    runtime::AgentSessionRuntime* runtime{nullptr};
+};
+
 struct EventSubscription::Impl {
     int subscriber_index{-1};
-    AgentSession::Impl* session{nullptr};
+    std::weak_ptr<EventSubscriptionAnchor> anchor;
 };
 
 struct AgentSession::Impl {
@@ -41,6 +45,7 @@ struct AgentSession::Impl {
     State state{State::Closed};
     std::optional<std::filesystem::path> session_path;
     std::unique_ptr<runtime::AgentSessionRuntime> runtime;
+    std::shared_ptr<EventSubscriptionAnchor> subscription_anchor;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -64,18 +69,18 @@ EventSubscription::~EventSubscription() {
 
 void EventSubscription::unsubscribe() {
     if (!impl_) return;
-    if (impl_->session && impl_->session->runtime && impl_->subscriber_index >= 0) {
-        impl_->session->runtime->unsubscribe(impl_->subscriber_index);
+    if (auto anchor = impl_->anchor.lock();
+        anchor && anchor->runtime && impl_->subscriber_index >= 0) {
+        anchor->runtime->unsubscribe(impl_->subscriber_index);
     }
     impl_.reset();
 }
 
 EventSubscription::operator bool() const {
-    if (!impl_) return false;
-    if (!impl_->session) return false;
-    if (!impl_->session->runtime) return false;
-    if (impl_->subscriber_index < 0) return false;
-    return impl_->session->runtime->is_subscribed(impl_->subscriber_index);
+    if (!impl_ || impl_->subscriber_index < 0) return false;
+    const auto anchor = impl_->anchor.lock();
+    return anchor && anchor->runtime &&
+           anchor->runtime->is_subscribed(impl_->subscriber_index);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,7 +89,16 @@ EventSubscription::operator bool() const {
 
 AgentSession::AgentSession() = default;
 AgentSession::AgentSession(AgentSession&&) noexcept = default;
-AgentSession& AgentSession::operator=(AgentSession&&) noexcept = default;
+
+AgentSession& AgentSession::operator=(AgentSession&& other) noexcept {
+    if (this != &other) {
+        if (impl_) {
+            (void)close();
+        }
+        impl_ = std::move(other.impl_);
+    }
+    return *this;
+}
 
 AgentSession::~AgentSession() {
     if (impl_) {
@@ -148,7 +162,7 @@ util::Expected<EventSubscription> AgentSession::subscribe(agent::AgentEventSink 
 
     auto sub_impl = std::make_unique<EventSubscription::Impl>();
     sub_impl->subscriber_index = id;
-    sub_impl->session = impl_.get();
+    sub_impl->anchor = impl_->subscription_anchor;
 
     EventSubscription sub;
     sub.impl_ = std::move(sub_impl);
@@ -193,6 +207,9 @@ util::ExpectedVoid AgentSession::close() {
     if (impl_->state == AgentSession::Impl::State::Closed) return {};
 
     impl_->state = AgentSession::Impl::State::Closed;
+    if (impl_->subscription_anchor) {
+        impl_->subscription_anchor->runtime = nullptr;
+    }
     impl_->runtime->close();
     return {};
 }
@@ -234,6 +251,8 @@ public:
         session->impl_->state = AgentSession::Impl::State::Open;
         session->impl_->session_path = factory_result->session_path;
         session->impl_->runtime = std::move(factory_result->runtime);
+        session->impl_->subscription_anchor = std::make_shared<EventSubscriptionAnchor>(
+            session->impl_->runtime.get());
 
         CreateAgentSessionResult result;
         result.session = std::move(session);
