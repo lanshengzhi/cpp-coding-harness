@@ -38,7 +38,10 @@ The long-term direction is an idiomatic C++ implementation of pi's module and co
 - Stable current behavior belongs in code, tests, `README.md`, and `docs/agents/module-routing.md`.
 - Hard-to-reverse decisions belong in accepted ADRs.
 - A decided feature leaves the map and follows `/to-spec` → `/to-tickets` → `/implement` as its own effort.
-- Reference paths from pi use the `pi:` prefix, for example `pi:packages/ai/src/types.ts`.
+- The local pi source checkout is `../pi`; a `pi:` reference resolves from that root, so `pi:packages/ai/src/types.ts` means `../pi/packages/ai/src/types.ts`.
+- For pi-parity decisions and implementation, inspect the relevant current source and documentation in `../pi` before proceeding. Matching pi's supported semantics is the default; any intentional divergence must be explicit and recorded in the parity map or an accepted ADR. Preserve this repository's C++ idioms and guardrails rather than mechanically translating TypeScript.
+- This is an experimental project: prefer the clean pi-aligned end state over migrations, fallback reads, deprecation shims, compatibility-only flags, or preserving obsolete behavior unless a current contract explicitly requires it.
+- Keep the code agent-navigable: give each policy one authoritative seam, use explicit names and data flow, keep modules narrow and tests focused, update routing when seams move, and avoid duplicated or implicit policy.
 
 ## Route
 

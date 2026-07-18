@@ -18,11 +18,13 @@ Reach an explicit, maintainable boundary for an idiomatic C++ implementation of 
 - CLI and SDK session creation intentionally share one private assembly policy while retaining distinct product contracts; see [Centralize session assembly policy in SessionFactory](../../docs/adr/0001-centralize-session-assembly-policy.md).
 - Completed and superseded implementation plans are historical Git data, not current planning authority.
 - User-level state lives in a pi-mirrored agent config directory (`~/.cpp-harness/agent/`, override `CCH_CODING_AGENT_DIR`) with pi's `settings.json` vocabulary; see [ADR 0002](../../docs/adr/0002-root-user-state-in-agent-config-directory.md).
+- Default persisted sessions are user-level state under the agent config directory, keyed by canonical workspace for both CLI and SDK; explicit and in-memory targets remain available, with no legacy-location migration or fallback. See [decision 02](issues/02-decide-session-storage-location.md) and [ADR 0003](../../docs/adr/0003-store-default-sessions-in-agent-config-directory.md).
 
 ## Not yet specified
 
 - Which extension and package capabilities belong in this C++ product, and which should remain permanently out of scope.
 - Which public runtime controls are justified by real consumers: queueing, cancellation, steering, follow-up, retry, compaction, or session replacement.
+- Which session discovery controls are worthwhile beyond explicit paths: workspace/all-session listing, lookup by ID, interactive selection, and deletion.
 - How much additional RPC and SDK parity is valuable beyond the currently supported narrow surfaces.
 - Whether platform packaging, binary distribution, terminal integration, and self-update belong to this repository.
 - Which additional provider/model capabilities have concrete consumers rather than parity value alone.

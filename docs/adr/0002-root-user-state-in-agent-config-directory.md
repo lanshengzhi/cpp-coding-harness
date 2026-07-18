@@ -19,4 +19,4 @@ User-level state files (auth entries, user settings, persisted project trust dec
 - The user settings file is `settings.json`; the domain vocabulary follows: `UserSettings` and `SettingsLoader` replace `ConfigData` and `ConfigLoader`, and "user settings" is the canonical term (see `CONTEXT.md`).
 - Old locations are ignored without fallback reads; users move their files once.
 - Future user-level features (global skills, prompt directories) land under the agent config directory through the same path module rather than inventing new roots.
-- Session files remain project-local under `.cpp-harness/sessions/` until the parity map's session-location decision resolves otherwise.
+- Default session storage was deferred to a separate product decision and has since been resolved by [ADR 0003](0003-store-default-sessions-in-agent-config-directory.md): default persisted sessions belong under the workspace-keyed agent config directory.
