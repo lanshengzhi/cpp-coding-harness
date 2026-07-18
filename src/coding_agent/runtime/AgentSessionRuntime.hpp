@@ -3,7 +3,6 @@
 #include "../../../include/cch/agent/AgentLoop.hpp"
 #include "../../../include/cch/coding_agent/PromptTemplate.hpp"
 #include "../../../include/cch/coding_agent/Skill.hpp"
-#include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
 #include "coding_agent/prompt/PromptProcessor.hpp"
 #include "../../../include/cch/util/Error.hpp"
 #include "RuntimeServices.hpp"
@@ -66,7 +65,6 @@ public:
     [[nodiscard]] const std::string& model() const { return session_.metadata.model; }
     [[nodiscard]] const std::filesystem::path& workspace() const { return session_.workspace; }
     [[nodiscard]] const std::vector<ai::MessageVariant>& history() const { return session_.history; }
-    [[nodiscard]] const harness::session::JsonlSessionStore& store() const { return *session_.store; }
     [[nodiscard]] const std::vector<Skill>& skills() const { return prompt_processor_.skills(); }
     [[nodiscard]] const std::vector<PromptTemplate>& templates() const { return prompt_processor_.templates(); }
 

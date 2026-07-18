@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../../../include/cch/ai/Message.hpp"
-#include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
+#include "../../../include/cch/harness/session/SessionStore.hpp"
 #include "../../../include/cch/harness/session/SessionResume.hpp"
 #include "../../../include/cch/util/Error.hpp"
 
@@ -28,7 +28,7 @@ struct OpenSession {
     std::filesystem::path workspace;
     harness::session::SessionMetadata metadata;
     std::vector<ai::MessageVariant> history;
-    std::unique_ptr<harness::session::JsonlSessionStore> store;
+    std::unique_ptr<harness::session::SessionStore> store;
     /// Provider stored in session metadata (populated on resume).
     std::optional<std::string> stored_provider;
     /// Model stored in session metadata (populated on resume).

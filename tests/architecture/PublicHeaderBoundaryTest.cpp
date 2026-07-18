@@ -22,6 +22,7 @@
 #include "../../include/cch/harness/LocalExecutionEnv.hpp"
 #include "../../include/cch/harness/session/JsonlSessionStore.hpp"
 #include "../../include/cch/harness/session/SessionEntry.hpp"
+#include "../../include/cch/harness/session/SessionStore.hpp"
 #include "../../include/cch/tools/ToolFactories.hpp"
 #include "../../include/cch/util/Error.hpp"
 
@@ -56,6 +57,10 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_abstract_v<ai::providers::StreamTransport>);
     static_assert(std::is_abstract_v<harness::AsyncExecutionEnv>);
     static_assert(std::is_abstract_v<agent::AsyncAgentTool>);
+    static_assert(std::is_abstract_v<harness::session::SessionStore>);
+    static_assert(std::is_base_of_v<
+                  harness::session::SessionStore,
+                  harness::session::JsonlSessionStore>);
 
     ai::AssistantStreamEvent stream_event = ai::TextDeltaEvent{};
     agent::AgentLifecycleEvent agent_event = agent::TurnStartEvent{};

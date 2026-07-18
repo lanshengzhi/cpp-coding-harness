@@ -262,6 +262,32 @@ TEST_CASE("removed event and command contracts stay out of session ownership", "
     CHECK(sdk_header.find(command_handler) == std::string::npos);
 }
 
+TEST_CASE("Runtime session persistence stays behind the narrow SessionStore capability", "[architecture][session]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto runtime_header = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "AgentSessionRuntime.hpp");
+    const auto lifecycle_header = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "SessionLifecycle.hpp");
+    const auto lifecycle_source = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "SessionLifecycle.cpp");
+    const auto store_header = read_text(
+        source_root / "include" / "cch" / "harness" / "session" / "SessionStore.hpp");
+
+    const auto concrete_store = std::string{"Jsonl"} + "SessionStore";
+    CHECK(runtime_header.find(concrete_store) == std::string::npos);
+    CHECK(lifecycle_header.find(concrete_store) == std::string::npos);
+    CHECK(lifecycle_header.find("SessionStore") != std::string::npos);
+    CHECK(lifecycle_source.find(concrete_store) != std::string::npos);
+
+    CHECK(store_header.find("append(const ai::MessageVariant&") != std::string::npos);
+    CHECK(store_header.find("path() const") != std::string::npos);
+    CHECK(store_header.find("SessionMetadata") == std::string::npos);
+    CHECK(store_header.find("SessionTree") == std::string::npos);
+    CHECK(store_header.find("SessionJournal") == std::string::npos);
+    CHECK(store_header.find("open_as_tree") == std::string::npos);
+    CHECK(store_header.find("append_model_change") == std::string::npos);
+}
+
 TEST_CASE("AgentSessionRuntime is constructed only by the session factory", "[architecture][session]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
     const auto files = files_under({"src", "tests"});

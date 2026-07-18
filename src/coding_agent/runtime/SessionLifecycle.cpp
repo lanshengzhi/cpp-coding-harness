@@ -1,5 +1,7 @@
 #include "SessionLifecycle.hpp"
 
+#include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
+
 #include <memory>
 #include <utility>
 
