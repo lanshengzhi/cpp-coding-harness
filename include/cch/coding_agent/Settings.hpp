@@ -27,6 +27,10 @@ struct UserSettings {
     std::optional<DefaultProjectTrust> default_project_trust;
     /// User-controlled project skill resource enablement.
     std::optional<ResourceEnablement> project_skills;
+    /// CLI session-storage preference (pi: `sessionDir`, same format as the
+    /// `--session-dir` flag). Consumed only by CLI automatic-directory
+    /// resolution; SDK default persistence never reads it.
+    std::optional<std::string> session_dir;
 };
 
 /// Loads user settings from a JSON file and resolves API keys from environment.

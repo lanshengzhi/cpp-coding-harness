@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cch/util/Error.hpp>
+
 #include <filesystem>
 #include <string>
 
@@ -22,6 +24,10 @@ struct AutomaticSessionTarget {
     std::filesystem::path workspace_directory;
     std::filesystem::path session_path;
     AutomaticSessionIdentity identity;
+    /// True when a CLI override supplied the automatic directory directly:
+    /// sessions_root and workspace_directory are the override directory and
+    /// no workspace-key component is added.
+    bool custom_directory{false};
 };
 
 /// Encode an already-resolved workspace using pi's readable framing: remove
@@ -43,5 +49,24 @@ struct AutomaticSessionTarget {
     std::filesystem::path sessions_root,
     std::filesystem::path resolved_workspace,
     AutomaticSessionIdentity identity);
+
+/// Compose a CLI-override automatic target: the session file lands directly
+/// in the override directory without a workspace-key component (pi:
+/// --session-dir). Derived paths remain empty when the directory is relative.
+[[nodiscard]] AutomaticSessionTarget make_custom_automatic_session_target(
+    std::filesystem::path session_directory,
+    std::filesystem::path resolved_workspace,
+    AutomaticSessionIdentity identity);
+
+/// Resolve a CLI automatic-directory override value to an absolute directory:
+/// a leading `~` or `~/` expands against home_dir (pi: normalizePath), a
+/// relative value resolves against the final canonical workspace rather than
+/// the process working directory, and an absolute value stays absolute.
+/// Empty values are rejected; callers treat absent values as no override.
+/// Pure: no filesystem or environment access.
+[[nodiscard]] util::Expected<std::filesystem::path> resolve_session_dir_value(
+    const std::string& value,
+    const std::filesystem::path& canonical_workspace,
+    const std::filesystem::path& home_dir);
 
 } // namespace cch::coding_agent::session_paths

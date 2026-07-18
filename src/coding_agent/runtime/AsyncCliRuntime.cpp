@@ -116,6 +116,7 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
     request.max_turns = config.max_turns;
     request.workspace = config.workspace;
     request.session_target = config.session_target;
+    request.session_dir = config.session_dir;
     request.provider_overrides = config.provider_overrides;
     request.settings = *settings_data;
 

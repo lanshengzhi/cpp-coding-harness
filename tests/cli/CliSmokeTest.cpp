@@ -205,27 +205,22 @@ struct AutomaticSessionFile {
     cch::util::JsonValue::object_t header;
 };
 
-/// Require exactly one automatic session below the sessions root, placed in the
-/// workspace-keyed directory, with a pi-shaped filename whose UTC timestamp and
-/// UUID match the durable header identity.
-AutomaticSessionFile require_single_automatic_session(
-    const std::filesystem::path& sessions_root,
+/// Verify one automatic session file at path: pi-shaped filename whose UTC
+/// timestamp and UUID match the durable header identity and the canonical
+/// workspace metadata.
+AutomaticSessionFile verify_automatic_session_file(
+    const std::filesystem::path& path,
     const std::filesystem::path& canonical_workspace) {
-    const auto files = jsonl_files_under(sessions_root);
-    REQUIRE(files.size() == 1);
-    const auto expected_directory = sessions_root / expected_workspace_key(canonical_workspace);
-    CHECK(files.front().parent_path() == expected_directory);
-
     std::smatch match;
-    const auto filename = files.front().filename().string();
+    const auto filename = path.filename().string();
     REQUIRE(std::regex_match(filename, match, kAutomaticFilename));
 
-    std::ifstream input(files.front(), std::ios::binary);
+    std::ifstream input(path, std::ios::binary);
     std::string first_line;
     REQUIRE(static_cast<bool>(std::getline(input, first_line)));
 
     AutomaticSessionFile created;
-    created.path = files.front();
+    created.path = path;
     created.file_timestamp = match[1].str();
     created.file_session_id = match[2].str();
     created.header = as_object(parse_json_line(first_line));
@@ -244,6 +239,30 @@ AutomaticSessionFile require_single_automatic_session(
     }
     CHECK(normalized_timestamp == created.file_timestamp);
     return created;
+}
+
+/// Require exactly one automatic session below the sessions root, placed in the
+/// workspace-keyed directory, with a pi-shaped filename whose UTC timestamp and
+/// UUID match the durable header identity.
+AutomaticSessionFile require_single_automatic_session(
+    const std::filesystem::path& sessions_root,
+    const std::filesystem::path& canonical_workspace) {
+    const auto files = jsonl_files_under(sessions_root);
+    REQUIRE(files.size() == 1);
+    const auto expected_directory = sessions_root / expected_workspace_key(canonical_workspace);
+    CHECK(files.front().parent_path() == expected_directory);
+    return verify_automatic_session_file(files.front(), canonical_workspace);
+}
+
+/// Require exactly one automatic session directly inside a CLI directory
+/// override: no workspace-key component is added (pi: --session-dir).
+AutomaticSessionFile require_single_session_in_directory(
+    const std::filesystem::path& directory,
+    const std::filesystem::path& canonical_workspace) {
+    const auto files = jsonl_files_under(directory);
+    REQUIRE(files.size() == 1);
+    CHECK(files.front().parent_path() == directory);
+    return verify_automatic_session_file(files.front(), canonical_workspace);
 }
 
 }
@@ -1757,4 +1776,226 @@ TEST_CASE("CLI --no-session publishes no filesystem state after a startup failur
     REQUIRE(result.exit_code != 0);
     CHECK(result.stdout_text.empty());
     require_no_session_filesystem_state(agent_dir, workspace.path());
+}
+
+TEST_CASE("CLI --session-dir redirects automatic storage for one run", "[cli][session-dir]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace agent_root;
+    cch::tests::TempWorkspace override_root;
+    const auto agent_dir = agent_root.path() / "agent";
+    const auto override_dir = override_root.path() / "sessions";
+    const auto canonical_workspace = std::filesystem::canonical(workspace.path());
+
+    auto result = run_command_split(
+        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --session-dir " + q(override_dir) + " hello");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
+
+    const auto created = require_single_session_in_directory(override_dir, canonical_workspace);
+    CHECK(json_string_at(created.header, "provider") == "fake");
+    CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
+    CHECK_FALSE(std::filesystem::exists(workspace.path() / ".cpp-harness" / "sessions"));
+}
+
+TEST_CASE("CLI session directory precedence is flag over environment over settings", "[cli][session-dir]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace agent_root;
+    cch::tests::TempWorkspace flag_root;
+    cch::tests::TempWorkspace env_root;
+    cch::tests::TempWorkspace settings_root;
+    const auto agent_dir = agent_root.path() / "agent";
+    std::filesystem::create_directories(agent_dir);
+    const auto flag_dir = flag_root.path() / "flag-sessions";
+    const auto env_dir = env_root.path() / "env-sessions";
+    const auto settings_dir = settings_root.path() / "settings-sessions";
+    {
+        std::ofstream settings(agent_dir / "settings.json");
+        settings << "{\"sessionDir\":\"" << settings_dir.string() << "\"}";
+    }
+
+    auto flagged = run_command_split(
+        "CCH_CODING_AGENT_DIR=" + q(agent_dir) +
+        " CCH_CODING_AGENT_SESSION_DIR=" + q(env_dir) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --session-dir " + q(flag_dir) + " first");
+    REQUIRE(flagged.exit_code == 0);
+    CHECK(jsonl_files_under(flag_dir).size() == 1);
+    CHECK_FALSE(std::filesystem::exists(env_dir));
+    CHECK_FALSE(std::filesystem::exists(settings_dir));
+
+    auto from_env = run_command_split(
+        "CCH_CODING_AGENT_DIR=" + q(agent_dir) +
+        " CCH_CODING_AGENT_SESSION_DIR=" + q(env_dir) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) + " second");
+    REQUIRE(from_env.exit_code == 0);
+    CHECK(jsonl_files_under(env_dir).size() == 1);
+    CHECK_FALSE(std::filesystem::exists(settings_dir));
+
+    auto from_settings = run_command_split(
+        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) + " third");
+    REQUIRE(from_settings.exit_code == 0);
+    CHECK(jsonl_files_under(settings_dir).size() == 1);
+    CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
+}
+
+TEST_CASE("CLI relative --session-dir resolves against the final workspace", "[cli][session-dir]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace launch_dir;
+    cch::tests::TempWorkspace agent_root;
+    const auto agent_dir = agent_root.path() / "agent";
+    const auto canonical_workspace = std::filesystem::canonical(workspace.path());
+
+    auto result = run_command_split(
+        "cd " + q(launch_dir.path()) + " && CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --session-dir my-sessions hello");
+
+    REQUIRE(result.exit_code == 0);
+    require_single_session_in_directory(canonical_workspace / "my-sessions", canonical_workspace);
+    CHECK_FALSE(std::filesystem::exists(launch_dir.path() / "my-sessions"));
+    CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
+
+    // The workspace itself determines resolution: the same relative value from
+    // another launch directory lands in the same workspace-relative place.
+    auto again = run_command_split(
+        "cd " + q(agent_root.path()) + " && CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --session-dir my-sessions again");
+    REQUIRE(again.exit_code == 0);
+    CHECK(jsonl_files_under(canonical_workspace / "my-sessions").size() == 2);
+    CHECK_FALSE(std::filesystem::exists(agent_root.path() / "my-sessions"));
+}
+
+TEST_CASE("CLI session directory override expands a leading home marker", "[cli][session-dir]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace agent_root;
+    cch::tests::TempWorkspace home_root;
+    const auto agent_dir = agent_root.path() / "agent";
+    const auto canonical_workspace = std::filesystem::canonical(workspace.path());
+
+    auto result = run_command_split(
+        "HOME=" + q(home_root.path()) +
+        " CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --session-dir '~/tilde-sessions' hello");
+
+    REQUIRE(result.exit_code == 0);
+    require_single_session_in_directory(home_root.path() / "tilde-sessions", canonical_workspace);
+    CHECK_FALSE(std::filesystem::exists(canonical_workspace / "~" / "tilde-sessions"));
+    CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
+}
+
+TEST_CASE("CLI explicit create and resume targets ignore session directory overrides", "[cli][session-dir]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace agent_root;
+    cch::tests::TempWorkspace override_root;
+    const auto agent_dir = agent_root.path() / "agent";
+    const auto override_dir = override_root.path() / "sessions";
+    const auto explicit_session = workspace.path() / "explicit.jsonl";
+
+    auto created = run_command_split(
+        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --session-dir " + q(override_dir) +
+        " --session " + q(explicit_session) + " first");
+    REQUIRE(created.exit_code == 0);
+    CHECK(std::filesystem::exists(explicit_session));
+    CHECK_FALSE(std::filesystem::exists(override_dir));
+
+    auto resumed = run_command_split(
+        "CCH_CODING_AGENT_DIR=" + q(agent_dir) +
+        " CCH_CODING_AGENT_SESSION_DIR=" + q(override_dir) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --resume " + q(explicit_session) + " second");
+    REQUIRE(resumed.exit_code == 0);
+    CHECK(resumed.stdout_text.find("fake: second") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(override_dir));
+    CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
+}
+
+TEST_CASE("CLI --no-session ignores session directory overrides and publishes nothing", "[cli][session-dir]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace agent_root;
+    cch::tests::TempWorkspace override_root;
+    const auto agent_dir = agent_root.path() / "agent";
+    const auto override_dir = override_root.path() / "sessions";
+
+    auto result = run_command_split(
+        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
+        " --fake --no-session --workspace " + q(workspace.path()) +
+        " --session-dir " + q(override_dir) + " hello");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(override_dir));
+    CHECK(jsonl_files_under(agent_dir).empty());
+    CHECK(jsonl_files_under(workspace.path()).empty());
+}
+
+TEST_CASE("CLI ignores a non-string settings sessionDir and uses the default root", "[cli][session-dir]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace agent_root;
+    const auto agent_dir = agent_root.path() / "agent";
+    std::filesystem::create_directories(agent_dir);
+    const auto canonical_workspace = std::filesystem::canonical(workspace.path());
+    {
+        std::ofstream settings(agent_dir / "settings.json");
+        settings << "{\"sessionDir\":42}";
+    }
+
+    auto result = run_command_split(
+        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) + " hello");
+
+    REQUIRE(result.exit_code == 0);
+    require_single_automatic_session(agent_dir / "sessions", canonical_workspace);
+}
+
+TEST_CASE("CLI malformed settings keep default session storage with a warning", "[cli][session-dir]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace agent_root;
+    const auto agent_dir = agent_root.path() / "agent";
+    std::filesystem::create_directories(agent_dir);
+    const auto canonical_workspace = std::filesystem::canonical(workspace.path());
+    {
+        std::ofstream settings(agent_dir / "settings.json");
+        settings << "{not valid json";
+    }
+
+    auto result = run_command_split(
+        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) + " hello");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.find("could not load user settings") != std::string::npos);
+    require_single_automatic_session(agent_dir / "sessions", canonical_workspace);
+}
+
+TEST_CASE("CLI unavailable session directory override fails explicitly without fallback", "[cli][session-dir]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace agent_root;
+    cch::tests::TempWorkspace blocker_root;
+    const auto agent_dir = agent_root.path() / "agent";
+    const auto blocker = blocker_root.path() / "not-a-directory";
+    {
+        std::ofstream output(blocker, std::ios::binary);
+        output << "regular file";
+    }
+
+    auto result = run_command_split(
+        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
+        " --fake --workspace " + q(workspace.path()) +
+        " --session-dir " + q(blocker) + " hello");
+
+    REQUIRE(result.exit_code != 0);
+    CHECK(result.stdout_text.empty());
+    CHECK(result.stderr_text.find("could not") != std::string::npos);
+    CHECK(result.stderr_text.find(blocker.string()) != std::string::npos);
+    // No fallback: neither the default root nor the workspace gains a transcript.
+    CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
+    CHECK_FALSE(std::filesystem::exists(workspace.path() / ".cpp-harness" / "sessions"));
 }

@@ -66,6 +66,7 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     std::string workspace_text = config.workspace.string();
     std::string session_text;
     std::string resume_text;
+    std::string session_dir_text;
     int max_turns_option = config.max_turns;
     std::vector<std::string> prompt_parts;
     bool approve_project = false;
@@ -81,8 +82,10 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
         "Sessions: without --session/--resume/--no-session, a new session persists\n"
         "under the agent config directory's workspace-keyed sessions root\n"
         "(~/.cpp-harness/agent/sessions/<workspace-key>/, root override:\n"
-        "CCH_CODING_AGENT_DIR). Explicit paths may live anywhere; --no-session runs\n"
-        "in memory without a transcript.\n"
+        "CCH_CODING_AGENT_DIR). Automatic-directory overrides (highest first):\n"
+        "--session-dir, CCH_CODING_AGENT_SESSION_DIR, settings.json sessionDir;\n"
+        "relative values resolve against the final workspace. Explicit paths may\n"
+        "live anywhere; --no-session runs in memory without a transcript.\n"
         "Safety: prompts, file contents, and command outputs may be sent to the configured provider.\n"
         "Sessions are local sensitive transcripts even after secret-looking text is redacted.");
     app.set_help_flag("-h,--help", "Print this help message and exit");
@@ -105,6 +108,8 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     session_option->excludes(resume_option);
     resume_option->excludes(session_option);
     auto* no_session_option = app.add_flag("--no-session", "Run the session in memory without persisting a transcript");
+    auto* session_dir_option = app.add_option("--session-dir", session_dir_text,
+        "Directory for automatic session storage (overrides CCH_CODING_AGENT_SESSION_DIR and settings.json sessionDir)");
     app.add_option("--max-turns", max_turns_option, "Maximum model turns per prompt")
         ->check(CLI::Range(1, 64));
     auto* model_option = app.add_option("--model", model_text, "Provider model name")->default_str("gpt-4.1-mini");
@@ -148,6 +153,9 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     }
     if (no_session_option->count() > 0) {
         config.session_target = coding_agent::InMemorySessionTarget{};
+    }
+    if (session_dir_option->count() > 0) {
+        config.session_dir = session_dir_text;
     }
     if (app.count("--max-turns") > 0) {
         config.max_turns = max_turns_option;

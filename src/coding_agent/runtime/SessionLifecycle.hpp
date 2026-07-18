@@ -61,9 +61,12 @@ struct PreparedResumeTarget {
     std::filesystem::path workspace,
     harness::session::SessionMetadata metadata);
 
-/// Publish an automatically named session under the Agent Config Directory.
-/// This is the only publication path that creates or tightens harness-owned
-/// default directories; all path derivation remains side-effect free.
+/// Publish an automatically named session under the Agent Config Directory,
+/// or directly inside a CLI-supplied custom directory. This is the only
+/// publication path that creates or tightens harness-owned default
+/// directories; a custom directory is created privately when missing but an
+/// existing one's mode is never changed. All path derivation remains
+/// side-effect free.
 [[nodiscard]] util::Expected<OpenSession> publish_automatic_session(
     const session_paths::AutomaticSessionTarget& target,
     std::string provider,

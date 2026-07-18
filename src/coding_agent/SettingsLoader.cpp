@@ -76,6 +76,11 @@ util::Expected<UserSettings> SettingsLoader::load(const std::filesystem::path& s
                 settings.auth = *str;
             }
         }
+        if (auto it = obj.find("sessionDir"); it != obj.end()) {
+            if (auto* str = it->second.get_if<std::string>()) {
+                settings.session_dir = *str;
+            }
+        }
         if (auto it = obj.find("default_project_trust"); it != obj.end()) {
             if (auto* str = it->second.get_if<std::string>()) {
                 auto parsed = parse_default_project_trust(*str);

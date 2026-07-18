@@ -32,6 +32,9 @@ struct AsyncCliRuntimeConfig {
     /// selects workspace-keyed default persistence, never an empty-path
     /// sentinel.
     coding_agent::SessionTarget session_target{};
+    /// Raw --session-dir value: the highest-priority automatic-directory
+    /// override, consulted only for default persisted creation.
+    std::optional<std::string> session_dir;
     coding_agent::CliProviderOverrides provider_overrides;
     std::string prompt;
 };

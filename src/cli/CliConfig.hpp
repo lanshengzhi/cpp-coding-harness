@@ -25,6 +25,10 @@ struct CliConfig {
     /// Normalized session intent: default persisted creation when no explicit
     /// target flag (--session/--resume/--no-session) was supplied.
     coding_agent::SessionTarget session_target{};
+    /// Raw --session-dir value: the highest-priority automatic-directory
+    /// override. Applies only to default persisted creation; explicit create
+    /// and resume targets keep their exact paths.
+    std::optional<std::string> session_dir;
     coding_agent::CliProviderOverrides provider_overrides;
     std::string prompt;
     std::string help_text;

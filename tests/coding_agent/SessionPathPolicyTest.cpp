@@ -36,6 +36,41 @@ mode_t permission_bits(const std::filesystem::path& path) {
 
 } // namespace
 
+TEST_CASE("session directory override values resolve against the final workspace", "[coding_agent][session-path-policy]") {
+    tests::TempWorkspace temp;
+    const auto workspace = temp.path() / "workspace";
+    const auto home = temp.path() / "home";
+
+    // Absolute values remain absolute and normalize interior separators.
+    CHECK(session_paths::resolve_session_dir_value("/data/sessions", workspace, home) ==
+          std::filesystem::path{"/data/sessions"});
+    CHECK(session_paths::resolve_session_dir_value("/data/./sessions/", workspace, home) ==
+          std::filesystem::path{"/data/sessions"});
+
+    // Relative values resolve against the final workspace, not the process cwd.
+    CHECK(session_paths::resolve_session_dir_value("sessions", workspace, home) == workspace / "sessions");
+    CHECK(session_paths::resolve_session_dir_value("nested/dir", workspace, home) == workspace / "nested" / "dir");
+    CHECK(session_paths::resolve_session_dir_value("./sessions", workspace, home) == workspace / "sessions");
+    CHECK(session_paths::resolve_session_dir_value("../shared", workspace, home) ==
+          workspace.parent_path() / "shared");
+
+    // A leading home marker expands against the supplied home directory.
+    CHECK(session_paths::resolve_session_dir_value("~", workspace, home) == home);
+    CHECK(session_paths::resolve_session_dir_value("~/sessions", workspace, home) == home / "sessions");
+
+    // pi expands only "~" and "~/"; other tilde forms stay literal relative values.
+    CHECK(session_paths::resolve_session_dir_value("~other/sessions", workspace, home) ==
+          workspace / "~other" / "sessions");
+
+    // Home expansion without a resolvable home fails explicitly.
+    CHECK_FALSE(session_paths::resolve_session_dir_value("~", workspace, {}).has_value());
+    CHECK_FALSE(session_paths::resolve_session_dir_value("~/sessions", workspace, {}).has_value());
+
+    // Resolution is pure: it never creates filesystem state.
+    CHECK_FALSE(std::filesystem::exists(workspace));
+    CHECK_FALSE(std::filesystem::exists(home));
+}
+
 TEST_CASE("workspace session keys use pi readable encoding", "[coding_agent][session-path-policy]") {
     struct Example {
         const char* input;
@@ -147,6 +182,129 @@ TEST_CASE("automatic publication makes default directories and file private", "[
 #else
     SUCCEED("POSIX permission assertions are not available on this platform");
 #endif
+}
+
+TEST_CASE("custom automatic session target calculation is side effect free", "[coding_agent][session-path-policy]") {
+    tests::TempWorkspace temp;
+    const auto directory = temp.path() / "not-created" / "custom-sessions";
+    const auto workspace = std::filesystem::path{"/resolved/workspace"};
+    const session_paths::AutomaticSessionIdentity identity{
+        "123e4567-e89b-42d3-a456-426614174000",
+        "2026-07-18T01:02:03.456Z",
+    };
+
+    const auto target = session_paths::make_custom_automatic_session_target(directory, workspace, identity);
+
+    CHECK_FALSE(std::filesystem::exists(temp.path() / "not-created"));
+    CHECK(target.custom_directory);
+    CHECK(target.sessions_root == directory);
+    CHECK(target.workspace == workspace);
+    // A CLI directory override replaces the whole automatic directory: the
+    // file lands directly inside it without a workspace-key component.
+    CHECK(target.workspace_directory == directory);
+    CHECK(target.session_path == directory /
+          "2026-07-18T01-02-03-456Z_123e4567-e89b-42d3-a456-426614174000.jsonl");
+    CHECK(target.identity.session_id == identity.session_id);
+    CHECK(target.identity.created_at == identity.created_at);
+}
+
+TEST_CASE("custom automatic publication creates a missing override directory privately", "[coding_agent][session-path-policy][publication]") {
+#if defined(__unix__) || defined(__APPLE__)
+    tests::TempWorkspace temp;
+    const auto directory = temp.path() / "missing" / "custom-sessions";
+    const auto workspace = temp.path() / "workspace";
+    std::filesystem::create_directory(workspace);
+
+    const auto target = session_paths::make_custom_automatic_session_target(
+        directory, workspace, session_paths::generate_automatic_session_identity());
+    auto published = runtime::publish_automatic_session(target, "fake", "fake-model");
+
+    REQUIRE(published);
+    CHECK(published->store->path() == target.session_path);
+    CHECK(published->metadata.workspace == workspace);
+    CHECK(permission_bits(directory) == 0700);
+    CHECK(permission_bits(target.session_path) == 0600);
+    CHECK(target.session_path.parent_path() == directory);
+    auto loaded = harness::session::JsonlSessionStore::load(target.session_path);
+    REQUIRE(loaded);
+    CHECK(loaded->metadata.session_id == target.identity.session_id);
+#else
+    SUCCEED("POSIX permission assertions are not available on this platform");
+#endif
+}
+
+TEST_CASE("custom automatic publication preserves an existing override directory mode", "[coding_agent][session-path-policy][publication]") {
+#if defined(__unix__) || defined(__APPLE__)
+    tests::TempWorkspace temp;
+    const auto directory = temp.path() / "custom-sessions";
+    const auto workspace = temp.path() / "workspace";
+    std::filesystem::create_directory(directory);
+    std::filesystem::create_directory(workspace);
+    ::chmod(directory.c_str(), 0755);
+
+    const auto target = session_paths::make_custom_automatic_session_target(
+        directory, workspace, session_paths::generate_automatic_session_identity());
+    auto published = runtime::publish_automatic_session(target, "fake", "fake-model");
+
+    REQUIRE(published);
+    CHECK(permission_bits(directory) == 0755);
+    CHECK(permission_bits(target.session_path) == 0600);
+#else
+    SUCCEED("POSIX permission assertions are not available on this platform");
+#endif
+}
+
+TEST_CASE("custom automatic publication rejects symbolic link override directories", "[coding_agent][session-path-policy][publication]") {
+#if defined(__unix__) || defined(__APPLE__)
+    tests::TempWorkspace temp;
+    const auto real_directory = temp.path() / "real-sessions";
+    const auto linked_directory = temp.path() / "linked-sessions";
+    const auto workspace = temp.path() / "workspace";
+    std::filesystem::create_directory(real_directory);
+    std::filesystem::create_directory(workspace);
+    REQUIRE(::symlink(real_directory.c_str(), linked_directory.c_str()) == 0);
+
+    const auto target = session_paths::make_custom_automatic_session_target(
+        linked_directory, workspace, session_paths::generate_automatic_session_identity());
+    auto published = runtime::publish_automatic_session(target, "fake", "fake-model");
+
+    REQUIRE_FALSE(published);
+    CHECK(published.error().detail.find(target.session_path.string()) != std::string::npos);
+    CHECK(published.error().detail.find("symlink") != std::string::npos);
+    CHECK(std::filesystem::is_empty(real_directory));
+#else
+    SUCCEED("symbolic-link publication assertion is not available on this platform");
+#endif
+}
+
+TEST_CASE("custom automatic publication failures include attempted target and reason", "[coding_agent][session-path-policy][publication]") {
+    tests::TempWorkspace temp;
+    const auto directory = temp.path() / "custom-sessions";
+    const auto workspace = temp.path() / "workspace";
+    std::filesystem::create_directory(workspace);
+    {
+        std::ofstream blocker(directory);
+        blocker << "not a directory";
+    }
+    const auto target = session_paths::make_custom_automatic_session_target(
+        directory, workspace, session_paths::generate_automatic_session_identity());
+
+    auto published = runtime::publish_automatic_session(target, "fake", "fake-model");
+
+    REQUIRE_FALSE(published);
+    CHECK(published.error().detail.find(target.session_path.string()) != std::string::npos);
+    CHECK(published.error().detail.find("directory") != std::string::npos);
+}
+
+TEST_CASE("custom automatic publication rejects a relative override directory", "[coding_agent][session-path-policy][publication]") {
+    const auto target = session_paths::make_custom_automatic_session_target(
+        "relative-sessions", "/resolved/workspace", session_paths::generate_automatic_session_identity());
+
+    auto published = runtime::publish_automatic_session(target, "fake", "fake-model");
+
+    REQUIRE_FALSE(published);
+    CHECK(published.error().detail.find("absolute") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists("relative-sessions"));
 }
 
 TEST_CASE("explicit publication preserves custom directory mode while making file private", "[coding_agent][session-path-policy][publication]") {

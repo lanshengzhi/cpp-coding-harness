@@ -31,6 +31,10 @@ struct AgentSessionCreationRequest {
     /// alternatives keep their exact paths; in-memory creation publishes no
     /// filesystem state.
     SessionTarget session_target{};
+    /// Raw --session-dir value: the highest-priority CLI automatic-directory
+    /// override, ahead of CCH_CODING_AGENT_SESSION_DIR and settings
+    /// sessionDir. Consulted only for default persisted creation.
+    std::optional<std::string> session_dir;
     CliProviderOverrides provider_overrides;
     UserSettings settings;
 };

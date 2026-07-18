@@ -193,6 +193,63 @@ TEST_CASE("parse_args help text advertises --no-session", "[cli][parse][session-
     CHECK(parsed->help_text.find("--no-session") != std::string::npos);
 }
 
+TEST_CASE("parse_args captures --session-dir as the automatic-directory override", "[cli][parse][session-dir]") {
+    std::vector<std::string> args{"cpp-harness", "--fake", "--session-dir", "/data/sessions", "hello"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    REQUIRE(parsed->session_dir.has_value());
+    CHECK(*parsed->session_dir == "/data/sessions");
+    // The automatic-directory override leaves the normalized default target alone.
+    CHECK(std::holds_alternative<cch::coding_agent::DefaultPersistedSessionTarget>(parsed->session_target));
+}
+
+TEST_CASE("parse_args defaults --session-dir to absent", "[cli][parse][session-dir]") {
+    std::vector<std::string> args{"cpp-harness", "--fake", "hello"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    CHECK_FALSE(parsed->session_dir.has_value());
+}
+
+TEST_CASE("parse_args accepts --session-dir alongside explicit and in-memory targets", "[cli][parse][session-dir]") {
+    {
+        std::vector<std::string> args{"cpp-harness", "--fake", "--session-dir", "/data", "--session", "explicit.jsonl", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        REQUIRE(parsed->session_dir.has_value());
+        const auto* target = std::get_if<cch::coding_agent::ExplicitNewSessionTarget>(&parsed->session_target);
+        REQUIRE(target != nullptr);
+        CHECK(target->path == "explicit.jsonl");
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "--fake", "--session-dir", "/data", "--resume", "explicit.jsonl", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        CHECK(std::holds_alternative<cch::coding_agent::ExplicitResumeSessionTarget>(parsed->session_target));
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "--fake", "--session-dir", "/data", "--no-session", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        CHECK(std::holds_alternative<cch::coding_agent::InMemorySessionTarget>(parsed->session_target));
+    }
+}
+
+TEST_CASE("parse_args help text advertises the session-directory override precedence", "[cli][parse][session-dir]") {
+    std::vector<std::string> args{"cpp-harness", "--help"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    REQUIRE(parsed->help);
+    CHECK(parsed->help_text.find("--session-dir") != std::string::npos);
+    CHECK(parsed->help_text.find("CCH_CODING_AGENT_SESSION_DIR") != std::string::npos);
+    CHECK(parsed->help_text.find("sessionDir") != std::string::npos);
+}
+
 TEST_CASE("parse_args still requires prompt for json mode", "[cli][parse]") {
     std::vector<std::string> args{"cpp-harness", "--fake", "--mode", "json"};
     auto argv = argv_from_strings(args);

@@ -42,6 +42,11 @@ constexpr std::string_view kHostClientModel = "host-client";
 
 struct AutomaticNewSessionTarget {
     std::filesystem::path workspace;
+    /// Resolved CLI automatic-directory override (--session-dir, then
+    /// CCH_CODING_AGENT_SESSION_DIR, then settings sessionDir). The SDK never
+    /// supplies one; when absent the workspace-keyed Agent Config Directory
+    /// default applies.
+    std::optional<std::filesystem::path> directory_override;
 };
 
 struct NewSessionTarget {
@@ -323,6 +328,39 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
     return resolved;
 }
 
+/// CLI automatic-directory override precedence (pi: --session-dir, then
+/// PI_CODING_AGENT_SESSION_DIR, then settings sessionDir, then the
+/// workspace-keyed default). The first non-empty value wins and resolves
+/// against the final canonical workspace. SDK normalization never consults
+/// these inputs.
+[[nodiscard]] util::Expected<std::optional<std::filesystem::path>> resolve_cli_session_dir_override(
+    const std::optional<std::string>& flag_value,
+    const std::optional<std::string>& settings_value,
+    const std::filesystem::path& canonical_workspace) {
+    std::optional<std::string> value;
+    if (flag_value && !flag_value->empty()) {
+        value = flag_value;
+    }
+    if (!value) {
+        if (const char* env_value = std::getenv("CCH_CODING_AGENT_SESSION_DIR");
+            env_value != nullptr && env_value[0] != '\0') {
+            value = std::string{env_value};
+        }
+    }
+    if (!value && settings_value && !settings_value->empty()) {
+        value = settings_value;
+    }
+    if (!value) {
+        return std::optional<std::filesystem::path>{};
+    }
+    auto resolved = session_paths::resolve_session_dir_value(
+        *value, canonical_workspace, coding_agent::home_directory());
+    if (!resolved) {
+        return std::unexpected(resolved.error());
+    }
+    return std::optional<std::filesystem::path>{std::move(*resolved)};
+}
+
 [[nodiscard]] util::Expected<AssemblyPlan> normalize_cli(AgentSessionCreationRequest request) {
     AssemblyPlan plan;
     plan.profile = CreationProfile::Cli;
@@ -333,7 +371,12 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
         if (!workspace) {
             return std::unexpected(workspace.error());
         }
-        plan.target = AutomaticNewSessionTarget{std::move(*workspace)};
+        auto directory_override = resolve_cli_session_dir_override(
+            request.session_dir, request.settings.session_dir, *workspace);
+        if (!directory_override) {
+            return std::unexpected(directory_override.error());
+        }
+        plan.target = AutomaticNewSessionTarget{std::move(*workspace), std::move(*directory_override)};
     } else if (const auto* target =
                    std::get_if<ExplicitNewSessionTarget>(&request.session_target)) {
         plan.target = NewSessionTarget{target->path, request.workspace};
@@ -416,7 +459,8 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
         if (!workspace) {
             return std::unexpected(workspace.error());
         }
-        plan.target = AutomaticNewSessionTarget{std::move(*workspace)};
+        // SDK default persistence never consumes CLI session-directory inputs.
+        plan.target = AutomaticNewSessionTarget{std::move(*workspace), std::nullopt};
     } else if (const auto* target =
                    std::get_if<ExplicitNewSessionTarget>(&options.session_target)) {
         auto workspace = resolve_canonical_workspace(options.workspace);
@@ -738,11 +782,16 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
             return std::unexpected(published.error());
         }
         open = std::move(*published);
-    } else if (std::holds_alternative<AutomaticNewSessionTarget>(plan.target)) {
-        const auto target = session_paths::make_automatic_session_target(
-            coding_agent::sessions_root_path(),
-            workspace,
-            session_paths::generate_automatic_session_identity());
+    } else if (const auto* automatic = std::get_if<AutomaticNewSessionTarget>(&plan.target)) {
+        const auto target = automatic->directory_override
+            ? session_paths::make_custom_automatic_session_target(
+                  *automatic->directory_override,
+                  workspace,
+                  session_paths::generate_automatic_session_identity())
+            : session_paths::make_automatic_session_target(
+                  coding_agent::sessions_root_path(),
+                  workspace,
+                  session_paths::generate_automatic_session_identity());
         auto published = publish_automatic_session(target, resolved.provider, resolved.model);
         if (!published) {
             cleanup_on_failure();

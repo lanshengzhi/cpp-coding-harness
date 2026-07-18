@@ -90,6 +90,13 @@ Explicit create and resume paths remain available and may live anywhere:
 ./build/cpp_harness --fake --resume /tmp/cpp-session.jsonl "continue"
 ```
 
+Redirect automatic storage for one run or for all runs (highest precedence first: `--session-dir`, `CCH_CODING_AGENT_SESSION_DIR`, `sessionDir` in `~/.cpp-harness/agent/settings.json`):
+
+```bash
+./build/cpp_harness --fake --session-dir /data/sessions "hello"
+CCH_CODING_AGENT_SESSION_DIR=/data/sessions ./build/cpp_harness --fake "hello"
+```
+
 The coroutine/Glaze/event stack is the only active stack. Legacy compatibility flags such as `--async` are intentionally absent.
 
 Real-provider mode is OpenAI Chat Completions-compatible:
@@ -111,7 +118,9 @@ User-level state lives in the agent config directory `~/.cpp-harness/agent/`, mi
 
 Without `--session` or `--resume`, the CLI persists each new session under `<agent config directory>/sessions/<encoded workspace>/<UTC timestamp>_<session id>.jsonl`, mirroring pi's layout. The workspace key is pi's readable encoding of the canonical physical workspace path: an explicit `--workspace` — not the process working directory — selects the location, and symbolic-link aliases of one workspace share one session directory. The filename UUID matches the Session ID stored in the session header and reported by runtime state.
 
-`--session PATH` and `--resume PATH` keep their exact paths and may live outside the default root. Old project-local `.cpp-harness/sessions/` files are neither scanned nor migrated; pass such a file explicitly through `--resume` if it is still needed. A missing or unwritable default store fails before any model work with the attempted path and reason — the harness never falls back to a workspace-local or temporary transcript. On POSIX, harness-created session directories are owner-only (`0700`) and new session files are `0600`.
+`--session PATH` and `--resume PATH` keep their exact paths and may live outside the default root; automatic-directory overrides never rewrite them. Old project-local `.cpp-harness/sessions/` files are neither scanned nor migrated; pass such a file explicitly through `--resume` if it is still needed. A missing or unwritable default store fails before any model work with the attempted path and reason — the harness never falls back to a workspace-local or temporary transcript. On POSIX, harness-created session directories are owner-only (`0700`) and new session files are `0600`.
+
+Automatic-directory overrides replace the whole automatic directory for default creation: the session file lands directly in the override directory without a workspace-key component (pi: `--session-dir`). The precedence is exactly `--session-dir`, then `CCH_CODING_AGENT_SESSION_DIR`, then `sessionDir` in `~/.cpp-harness/agent/settings.json`, then the workspace-keyed default. Absolute values stay absolute, a leading `~` expands to the home directory, and relative values resolve against the final canonical workspace rather than the launch directory. An override directory that does not exist is created owner-only; an existing override directory keeps its mode while files inside remain `0600`. These CLI-only inputs never affect SDK default persistence.
 
 `--no-session` selects an explicit in-memory Agent Session in every frontend (text one-shot, REPL, JSON, and RPC): provider, tools, events, live state, errors, and shutdown behave normally, but no sessions root, workspace-local session directory, or transcript file is created — including after failures. It cannot be combined with `--session` or `--resume`. In-memory operation happens only when explicitly requested; storage unavailability is never silently treated as `--no-session`. `/session` prints the persisted file path, or `File: In-memory` for these runs.
 
@@ -368,7 +377,7 @@ Project trust controls whether project-authored `.cpp-harness` resources are loa
 
 Protected project markers include `.cpp-harness/settings.json`, `.cpp-harness/skills`, `.cpp-harness/prompts`, `.cpp-harness/extensions`, `.cpp-harness/packages`, `.cpp-harness/SYSTEM.md`, and `.cpp-harness/APPEND_SYSTEM.md`. A bare `.cpp-harness` directory and `.cpp-harness/sessions` do not require trust. In non-interactive startup, the default `ask` policy acts as untrusted unless a saved trust decision or same-run override exists. Trust decisions are read from user-controlled `~/.cpp-harness/agent/trust.json` with nearest-parent inheritance.
 
-User settings in `~/.cpp-harness/agent/settings.json` can set provider defaults (`provider`, `model`, `base_url`, `api_key_env`, `auth`), `default_project_trust` to `ask`, `always`, or `never`, and `project_resources.skills` to `auto`, `on`, or `off`. `off` always skips project skills. `--approve` / `-a` and `--no-approve` are one-run trust overrides; they do not persist decisions. `--no-skills` disables project-local skills for the run even when the project is trusted.
+User settings in `~/.cpp-harness/agent/settings.json` can set provider defaults (`provider`, `model`, `base_url`, `api_key_env`, `auth`), `default_project_trust` to `ask`, `always`, or `never`, and `project_resources.skills` to `auto`, `on`, or `off`. The optional `sessionDir` string (pi vocabulary) is a CLI session-storage preference below `--session-dir` and `CCH_CODING_AGENT_SESSION_DIR`; it is not a provider setting and SDK default persistence never reads it. `off` always skips project skills. `--approve` / `-a` and `--no-approve` are one-run trust overrides; they do not persist decisions. `--no-skills` disables project-local skills for the run even when the project is trusted.
 
 ## Tools
 

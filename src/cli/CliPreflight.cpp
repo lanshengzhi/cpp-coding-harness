@@ -77,6 +77,7 @@ AsyncCliRuntimeConfig to_runtime_config(CliConfig config) {
         .workspace_explicit = config.workspace_explicit,
         .workspace = std::move(config.workspace),
         .session_target = std::move(config.session_target),
+        .session_dir = std::move(config.session_dir),
         .provider_overrides = std::move(config.provider_overrides),
         .prompt = std::move(config.prompt),
     };

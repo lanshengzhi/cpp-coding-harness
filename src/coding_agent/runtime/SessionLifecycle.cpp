@@ -68,8 +68,8 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
         }
         if (component == "..") {
             return std::unexpected(session_error(
-                "default session directory contains parent traversal",
-                "refusing to create a default session directory through '..'"));
+                "session directory contains parent traversal",
+                "refusing to create a session directory through '..'"));
         }
         cursor /= component;
         const DWORD attributes = ::GetFileAttributesW(cursor.c_str());
@@ -79,12 +79,12 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
                 continue;
             }
             return std::unexpected(session_error(
-                "could not inspect default session directory",
+                "could not inspect session directory",
                 cursor.string() + ": Windows error " + std::to_string(code)));
         }
         if ((attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
             return std::unexpected(session_error(
-                "default session directory contains a symlink or junction",
+                "session directory contains a symlink or junction",
                 "refusing to publish through reparse point: " + cursor.string()));
         }
     }
@@ -92,8 +92,14 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
 }
 #endif
 
-[[nodiscard]] util::ExpectedVoid prepare_default_directory(
-    const std::filesystem::path& path) {
+/// Prepare one session directory chain. When tighten_existing is true the
+/// final directory is always made owner-only (harness-owned default roots);
+/// when false an existing final directory keeps its mode (custom override
+/// directories are never chmodded) and only a newly created one is made
+/// private.
+[[nodiscard]] util::ExpectedVoid prepare_session_directory(
+    const std::filesystem::path& path,
+    bool tighten_existing) {
 #if defined(__unix__) || defined(__APPLE__)
     int open_flags = O_RDONLY | O_DIRECTORY;
 #ifdef O_CLOEXEC
@@ -107,10 +113,11 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
     int current = ::open(start.c_str(), open_flags);
     if (current == -1) {
         return std::unexpected(session_error(
-            "could not open default session directory root",
+            "could not open session directory root",
             start.string() + ": " + std::strerror(errno)));
     }
 
+    bool final_created = false;
     const auto relative = path.is_absolute() ? path.relative_path() : path;
     auto component = relative.begin();
     while (component != relative.end()) {
@@ -121,19 +128,23 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
         if (*component == "..") {
             ::close(current);
             return std::unexpected(session_error(
-                "default session directory contains parent traversal",
-                "refusing to create a default session directory through '..'"));
+                "session directory contains parent traversal",
+                "refusing to create a session directory through '..'"));
         }
 
         const auto next_component = std::next(component);
         const bool final_component = next_component == relative.end();
         const mode_t create_mode = final_component ? S_IRWXU : (S_IRWXU | S_IRWXG | S_IRWXO);
-        if (::mkdirat(current, component->c_str(), create_mode) != 0 && errno != EEXIST) {
-            const auto reason = std::string{std::strerror(errno)};
-            ::close(current);
-            return std::unexpected(session_error(
-                "could not create default session directory",
-                path.string() + ": " + reason));
+        if (::mkdirat(current, component->c_str(), create_mode) != 0) {
+            if (errno != EEXIST) {
+                const auto reason = std::string{std::strerror(errno)};
+                ::close(current);
+                return std::unexpected(session_error(
+                    "could not create session directory",
+                    path.string() + ": " + reason));
+            }
+        } else if (final_component) {
+            final_created = true;
         }
 
         const int next = ::openat(current, component->c_str(), open_flags);
@@ -141,7 +152,7 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
             const auto reason = std::string{std::strerror(errno)};
             ::close(current);
             return std::unexpected(session_error(
-                "default session path contains a symlink or non-directory",
+                "session directory path contains a symlink or non-directory",
                 component->string() + ": " + reason));
         }
         ::close(current);
@@ -149,82 +160,106 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
         component = next_component;
     }
 
-    if (::fchmod(current, S_IRWXU) != 0) {
-        const auto reason = std::string{std::strerror(errno)};
-        ::close(current);
-        return std::unexpected(session_error(
-            "could not make default session directory private",
-            path.string() + ": " + reason));
+    if (tighten_existing || final_created) {
+        if (::fchmod(current, S_IRWXU) != 0) {
+            const auto reason = std::string{std::strerror(errno)};
+            ::close(current);
+            return std::unexpected(session_error(
+                "could not make session directory private",
+                path.string() + ": " + reason));
+        }
     }
     if (::close(current) != 0) {
         return std::unexpected(session_error(
-            "could not close default session directory",
+            "could not close session directory",
             path.string() + ": " + std::strerror(errno)));
     }
 #elif defined(_WIN32)
     if (auto safe = reject_windows_reparse_components(path); !safe) {
         return safe;
     }
+    std::error_code pre_ec;
+    const bool existed_before = std::filesystem::exists(path, pre_ec);
     std::error_code ec;
     std::filesystem::create_directories(path, ec);
     if (ec) {
         return std::unexpected(session_error(
-            "could not create default session directory",
+            "could not create session directory",
             path.string() + ": " + ec.message()));
     }
     if (auto safe = reject_windows_reparse_components(path); !safe) {
         return safe;
     }
-    std::filesystem::permissions(
-        path,
-        std::filesystem::perms::owner_all,
-        std::filesystem::perm_options::replace,
-        ec);
-    if (ec) {
-        return std::unexpected(session_error(
-            "could not make default session directory private",
-            path.string() + ": " + ec.message()));
+    if (tighten_existing || !existed_before) {
+        std::filesystem::permissions(
+            path,
+            std::filesystem::perms::owner_all,
+            std::filesystem::perm_options::replace,
+            ec);
+        if (ec) {
+            return std::unexpected(session_error(
+                "could not make session directory private",
+                path.string() + ": " + ec.message()));
+        }
     }
 #else
     std::filesystem::path cursor = path.root_path();
+    bool existed_before = true;
     for (const auto& component : path.relative_path()) {
         if (component.empty() || component == ".") {
             continue;
         }
         if (component == "..") {
             return std::unexpected(session_error(
-                "default session directory contains parent traversal",
-                "refusing to create a default session directory through '..'"));
+                "session directory contains parent traversal",
+                "refusing to create a session directory through '..'"));
         }
         cursor /= component;
         std::error_code inspect_ec;
         const auto status = std::filesystem::symlink_status(cursor, inspect_ec);
         if (!inspect_ec && std::filesystem::is_symlink(status)) {
             return std::unexpected(session_error(
-                "default session directory contains a symlink",
+                "session directory contains a symlink",
                 "refusing to publish through symlink: " + cursor.string()));
         }
+        existed_before = existed_before && !inspect_ec && std::filesystem::exists(status);
     }
 
     std::error_code ec;
     std::filesystem::create_directories(path, ec);
     if (ec) {
         return std::unexpected(session_error(
-            "could not create default session directory",
+            "could not create session directory",
             path.string() + ": " + ec.message()));
     }
-    std::filesystem::permissions(
-        path,
-        std::filesystem::perms::owner_all,
-        std::filesystem::perm_options::replace,
-        ec);
-    if (ec) {
-        return std::unexpected(session_error(
-            "could not make default session directory private",
-            path.string() + ": " + ec.message()));
+    if (tighten_existing || !existed_before) {
+        std::filesystem::permissions(
+            path,
+            std::filesystem::perms::owner_all,
+            std::filesystem::perm_options::replace,
+            ec);
+        if (ec) {
+            return std::unexpected(session_error(
+                "could not make session directory private",
+                path.string() + ": " + ec.message()));
+        }
     }
 #endif
     return {};
+}
+
+/// Harness-owned default sessions roots and workspace-keyed directories are
+/// always created or tightened to owner-only.
+[[nodiscard]] util::ExpectedVoid prepare_default_directory(
+    const std::filesystem::path& path) {
+    return prepare_session_directory(path, true);
+}
+
+/// Custom override directories are created privately when missing; an
+/// existing custom directory's mode is left untouched.
+[[nodiscard]] util::ExpectedVoid prepare_custom_directory(
+    const std::filesystem::path& path) {
+    return prepare_session_directory(path, false);
 }
 
 [[nodiscard]] util::ExpectedVoid validate_automatic_target(
@@ -238,17 +273,21 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
     if (!target.sessions_root.is_absolute()) {
         return std::unexpected(session_error(
             "automatic session storage root must be absolute",
-            "refusing relative Agent Config Directory sessions root: " +
-                target.sessions_root.string()));
+            target.custom_directory
+                ? "refusing relative session directory override: " + target.sessions_root.string()
+                : "refusing relative Agent Config Directory sessions root: " +
+                      target.sessions_root.string()));
     }
-    const auto expected_directory =
-        target.sessions_root / session_paths::encode_workspace_key(target.workspace);
+    const auto expected_directory = target.custom_directory
+        ? target.sessions_root
+        : target.sessions_root / session_paths::encode_workspace_key(target.workspace);
     const auto expected_path =
         expected_directory / session_paths::automatic_session_filename(target.identity);
     if (target.workspace_directory != expected_directory || target.session_path != expected_path) {
         return std::unexpected(session_error(
             "automatic session target does not match path policy",
-            "derive the target through make_automatic_session_target"));
+            "derive the target through make_automatic_session_target or "
+            "make_custom_automatic_session_target"));
     }
     return {};
 }
@@ -308,11 +347,20 @@ util::Expected<OpenSession> publish_automatic_session(
     if (auto valid = validate_automatic_target(target); !valid) {
         return std::unexpected(publication_error(target.session_path, valid.error()));
     }
-    if (auto prepared = prepare_default_directory(target.sessions_root); !prepared) {
-        return std::unexpected(publication_error(target.session_path, prepared.error()));
-    }
-    if (auto prepared = prepare_default_directory(target.workspace_directory); !prepared) {
-        return std::unexpected(publication_error(target.session_path, prepared.error()));
+    if (target.custom_directory) {
+        // A CLI directory override replaces the whole automatic directory;
+        // existing custom directories are created when missing but never
+        // chmodded, matching the explicit-path ownership rule.
+        if (auto prepared = prepare_custom_directory(target.workspace_directory); !prepared) {
+            return std::unexpected(publication_error(target.session_path, prepared.error()));
+        }
+    } else {
+        if (auto prepared = prepare_default_directory(target.sessions_root); !prepared) {
+            return std::unexpected(publication_error(target.session_path, prepared.error()));
+        }
+        if (auto prepared = prepare_default_directory(target.workspace_directory); !prepared) {
+            return std::unexpected(publication_error(target.session_path, prepared.error()));
+        }
     }
 
     harness::session::SessionMetadata metadata{

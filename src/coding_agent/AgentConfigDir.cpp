@@ -3,12 +3,8 @@
 #include <cstdlib>
 
 namespace cch::coding_agent {
-namespace {
 
-/// pi resolves the home directory through `os.homedir()`; the C++ equivalent
-/// reads platform conventions directly. Environment access stays at this edge
-/// so path composition in the public functions remains trivially auditable.
-[[nodiscard]] std::filesystem::path home_dir() {
+std::filesystem::path home_directory() {
 #if defined(_WIN32)
     if (const char* profile = std::getenv("USERPROFILE"); profile != nullptr && profile[0] != '\0') {
         return profile;
@@ -20,6 +16,8 @@ namespace {
 #endif
     return {};
 }
+
+namespace {
 
 [[nodiscard]] std::filesystem::path in_agent_config_dir(const char* file_name) {
     const auto dir = agent_config_dir();
@@ -35,7 +33,7 @@ std::filesystem::path agent_config_dir() {
         override_dir != nullptr && override_dir[0] != '\0') {
         return override_dir;
     }
-    const auto home = home_dir();
+    const auto home = home_directory();
     return home.empty() ? std::filesystem::path{} : home / ".cpp-harness" / "agent";
 }
 

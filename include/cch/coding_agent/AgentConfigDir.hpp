@@ -17,6 +17,11 @@ namespace cch::coding_agent {
 /// file paths are then empty as well, and loaders treat them as missing.
 [[nodiscard]] std::filesystem::path agent_config_dir();
 
+/// Home directory backing the user-level root (pi: `os.homedir()`), also used
+/// to expand a leading home marker in CLI session-directory overrides.
+/// Returns an empty path when no home can be determined.
+[[nodiscard]] std::filesystem::path home_directory();
+
 /// `agent_config_dir()/sessions` — default persisted Agent Session histories.
 /// Returns an empty path when no user-level root can be resolved and never
 /// creates the directory.

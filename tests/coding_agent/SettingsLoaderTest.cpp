@@ -123,3 +123,37 @@ TEST_CASE("SettingsLoader rejects invalid project resource values", "[settings][
     auto settings = coding_agent::SettingsLoader::load(settings_path);
     CHECK_FALSE(settings.has_value());
 }
+
+TEST_CASE("SettingsLoader loads the pi sessionDir preference", "[settings][session-dir]") {
+    tests::TempWorkspace workspace;
+    auto settings_path = workspace.path() / "settings.json";
+    std::ofstream(settings_path) << R"({"provider":"openai-compatible","sessionDir":"/data/sessions"})";
+
+    auto settings = coding_agent::SettingsLoader::load(settings_path);
+    REQUIRE(settings);
+    REQUIRE(settings->session_dir.has_value());
+    CHECK(*settings->session_dir == "/data/sessions");
+    // Existing provider parsing is unaffected by the new key.
+    CHECK(settings->provider == "openai-compatible");
+}
+
+TEST_CASE("SettingsLoader treats a non-string sessionDir as absent", "[settings][session-dir]") {
+    tests::TempWorkspace workspace;
+    auto settings_path = workspace.path() / "settings.json";
+    std::ofstream(settings_path) << R"({"sessionDir":42,"model":"gpt-4"})";
+
+    auto settings = coding_agent::SettingsLoader::load(settings_path);
+    REQUIRE(settings);
+    CHECK_FALSE(settings->session_dir.has_value());
+    CHECK(settings->model == "gpt-4");
+}
+
+TEST_CASE("SettingsLoader defaults sessionDir to absent", "[settings][session-dir]") {
+    tests::TempWorkspace workspace;
+    auto settings_path = workspace.path() / "settings.json";
+    std::ofstream(settings_path) << R"({"provider":"openai-compatible"})";
+
+    auto settings = coding_agent::SettingsLoader::load(settings_path);
+    REQUIRE(settings);
+    CHECK_FALSE(settings->session_dir.has_value());
+}

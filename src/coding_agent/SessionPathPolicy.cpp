@@ -109,4 +109,68 @@ AutomaticSessionTarget make_automatic_session_target(
     return target;
 }
 
+AutomaticSessionTarget make_custom_automatic_session_target(
+    std::filesystem::path session_directory,
+    std::filesystem::path resolved_workspace,
+    AutomaticSessionIdentity identity) {
+    AutomaticSessionTarget target{
+        .sessions_root = std::move(session_directory),
+        .workspace = std::move(resolved_workspace),
+        .workspace_directory = {},
+        .session_path = {},
+        .identity = std::move(identity),
+        .custom_directory = true,
+    };
+    if (target.sessions_root.empty() || !target.sessions_root.is_absolute()) {
+        return target;
+    }
+    target.workspace_directory = target.sessions_root;
+    target.session_path = target.workspace_directory / automatic_session_filename(target.identity);
+    return target;
+}
+
+util::Expected<std::filesystem::path> resolve_session_dir_value(
+    const std::string& value,
+    const std::filesystem::path& canonical_workspace,
+    const std::filesystem::path& home_dir) {
+    if (value.empty()) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session directory override is empty",
+            "supply a non-empty --session-dir, CCH_CODING_AGENT_SESSION_DIR, or settings sessionDir value"));
+    }
+
+    std::filesystem::path resolved;
+    // pi's normalizePath expands only a leading "~" or "~/" ("~\\" on Windows).
+    const bool needs_home = value == "~" || value.rfind("~/", 0) == 0
+#if defined(_WIN32)
+                            || value.rfind("~\\", 0) == 0
+#endif
+        ;
+    if (needs_home && home_dir.empty()) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "cannot expand leading '~' in session directory override",
+            "no home directory is available to expand " + value));
+    }
+    if (value == "~") {
+        resolved = home_dir;
+    } else if (needs_home) {
+        resolved = home_dir / value.substr(2);
+    } else {
+        resolved = value;
+    }
+
+    if (resolved.is_relative()) {
+        resolved = canonical_workspace / resolved;
+    }
+    resolved = resolved.lexically_normal();
+    // Drop a trailing separator so "/data/sessions/" and "/data/sessions"
+    // identify the same directory (pi: path.resolve strips it).
+    if (!resolved.has_filename() && resolved.has_relative_path()) {
+        resolved = resolved.parent_path();
+    }
+    return resolved;
+}
+
 } // namespace cch::coding_agent::session_paths
