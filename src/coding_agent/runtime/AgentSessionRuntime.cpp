@@ -36,12 +36,6 @@ private:
     return std::nullopt;
 }
 
-[[nodiscard]] bool is_incrementally_persisted_message(const ai::MessageVariant& message) {
-    return std::holds_alternative<ai::UserMessage>(message) ||
-           std::holds_alternative<ai::AssistantMessage>(message) ||
-           std::holds_alternative<ai::ToolResultMessage>(message);
-}
-
 } // namespace
 
 AgentSessionRuntime::AgentSessionRuntime(
@@ -122,77 +116,20 @@ util::ExpectedVoid AgentSessionRuntime::run_prompt(
 util::ExpectedVoid AgentSessionRuntime::run_agent_loop(std::string prompt) {
     boost::asio::io_context io;
     std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
-    std::optional<util::Error> subscriber_error;
-    std::optional<util::Error> persistence_error;
 
-    auto event_sink = make_event_sink(subscriber_error, persistence_error);
+    SessionEventCommitment commitment{session_.history, subscribers_, *session_.store};
 
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
             result = co_await loop_->continue_with(
-                session_.history, std::move(prompt), std::move(event_sink));
+                session_.history, std::move(prompt), commitment.sink());
             co_return;
         },
         boost::asio::detached);
     io.run();
 
-    if (persistence_error) {
-        return std::unexpected(std::move(*persistence_error));
-    }
-    if (subscriber_error) {
-        return std::unexpected(std::move(*subscriber_error));
-    }
-    if (!result) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
-            "async loop did not finish"));
-    }
-    if (!*result) {
-        return std::unexpected((*result).error());
-    }
-    return {};
-}
-
-agent::AgentEventSink AgentSessionRuntime::make_event_sink(
-    std::optional<util::Error>& subscriber_error,
-    std::optional<util::Error>& persistence_error) {
-    auto persistent = std::make_shared<std::vector<agent::AgentEventSink*>>();
-    for (auto& sub : subscribers_) {
-        if (sub.active && sub.sink) {
-            persistent->push_back(&sub.sink);
-        }
-    }
-
-    return [this,
-            &subscriber_error,
-            &persistence_error,
-            persistent = std::move(persistent)](
-               const agent::AgentLifecycleEvent& event) mutable -> util::ExpectedVoid {
-        // Update live session history before any subscriber observes the
-        // completed message. This matches pi's state-first event ordering.
-        if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
-            session_.history.push_back(end->message);
-        }
-        for (auto* sink : *persistent) {
-            if (*sink) {
-                auto r = (*sink)(event);
-                if (!r) {
-                    subscriber_error = r.error();
-                    return r;
-                }
-            }
-        }
-        if (const auto* end = std::get_if<agent::MessageEndEvent>(&event);
-            end != nullptr && is_incrementally_persisted_message(end->message)) {
-            auto appended = session_.store->append(end->message);
-            if (!appended) {
-                persistence_error = appended.error();
-                return std::unexpected(appended.error());
-            }
-        }
-        return {};
-    };
+    return commitment.conclude(std::move(result));
 }
 
 int AgentSessionRuntime::subscribe(agent::AgentEventSink sink) {

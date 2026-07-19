@@ -6,8 +6,10 @@
 #include "coding_agent/prompt/PromptProcessor.hpp"
 #include "../../../include/cch/util/Error.hpp"
 #include "RuntimeServices.hpp"
+#include "SessionEventCommitment.hpp"
 #include "SessionLifecycle.hpp"
 
+#include <deque>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -76,15 +78,6 @@ public:
 private:
     enum class State { Open, RunningPrompt, Closed };
 
-    struct SubscriberEntry {
-        int id{-1};
-        agent::AgentEventSink sink;
-        bool active{true};
-    };
-
-    [[nodiscard]] agent::AgentEventSink make_event_sink(
-        std::optional<util::Error>& subscriber_error,
-        std::optional<util::Error>& persistence_error);
     [[nodiscard]] util::ExpectedVoid run_agent_loop(std::string prompt);
 
     RuntimeServices services_;
@@ -92,7 +85,10 @@ private:
     prompt::PromptProcessor prompt_processor_;
     std::optional<agent::AsyncAgentLoop> loop_;
 
-    std::vector<SubscriberEntry> subscribers_;
+    // std::deque keeps SubscriberEntry references stable so a subscriber
+    // that subscribes from inside an event callback cannot invalidate the
+    // run-start snapshot held by SessionEventCommitment.
+    std::deque<SubscriberEntry> subscribers_;
     int next_subscriber_id_{0};
 
     AgentSessionRuntimeConfig config_;

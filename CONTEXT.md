@@ -16,6 +16,10 @@ _Avoid_: Persisted state, session file
 One durable record in an Agent Session history.
 _Avoid_: Wire payload, JSON line
 
+**Session Event Commitment**:
+The ordered policy that commits one agent lifecycle event to an Agent Session — advancing Live Session State, delivering to subscribers, and appending Session Entries — with explicit failure precedence.
+_Avoid_: Event handler, callback chain
+
 **Session Resume**:
 Reopening an Agent Session from its durable history at the selected active point.
 _Avoid_: Reload, replay
