@@ -112,36 +112,4 @@ ResolvedProviderSettings resolve_provider_settings(
     };
 }
 
-ResolvedProviderSettings resolve_provider_settings(
-    const std::string& provider_registry_name,
-    const bool fake,
-    const CliProviderOverrides& cli,
-    const UserSettings& settings,
-    const std::optional<std::string>& stored_provider,
-    const std::optional<std::string>& stored_model) {
-    ProviderRequest explicit_request;
-    explicit_request.model = cli.model;
-    explicit_request.base_url = cli.base_url;
-    if (cli.api_key_env) {
-        explicit_request.api_key_env = std::vector<std::string>{*cli.api_key_env};
-    }
-    explicit_request.auth = cli.auth;
-
-    std::string registry = provider_registry_name;
-    if (fake) {
-        registry = "fake";
-    }
-    return resolve_provider_settings(registry, explicit_request, settings, stored_provider, stored_model);
-}
-
-std::vector<std::string> resolved_api_key_env_chain(
-    const CliProviderOverrides& cli,
-    const UserSettings& settings) {
-    ProviderRequest explicit_request;
-    if (cli.api_key_env) {
-        explicit_request.api_key_env = std::vector<std::string>{*cli.api_key_env};
-    }
-    return resolve_api_key_env_chain(explicit_request, settings);
-}
-
 } // namespace cch::coding_agent

@@ -629,7 +629,7 @@ TEST_CASE("CLI RPC wires stdin and JSONL stdout to a session", "[cli][rpc]") {
     CHECK(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI JSON preflight errors do not write stdout", "[cli][json]") {
+TEST_CASE("CLI JSON creation validation errors do not write stdout", "[cli][json]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "json-real.jsonl";
@@ -639,9 +639,48 @@ TEST_CASE("CLI JSON preflight errors do not write stdout", "[cli][json]") {
         " --session " + q(session) +
         " --api-key-env CCH_TEST_MISSING_KEY hello");
 
-    REQUIRE(result.exit_code != 0);
+    REQUIRE(result.exit_code == 2);
+    CHECK(result.stdout_text.empty());
+    CHECK(result.stderr_text.find("could not create session") != std::string::npos);
+    CHECK(result.stderr_text.find("missing API key") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(session));
+}
+
+TEST_CASE("CLI creation failure after malformed settings keeps the settings warning visible", "[cli][settings]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace agent_root;
+    const auto agent_dir = agent_root.path() / "agent";
+    std::filesystem::create_directories(agent_dir);
+    {
+        std::ofstream settings(agent_dir / "settings.json");
+        settings << "{not valid json";
+    }
+    auto session = workspace.path() / "settings-fallback-failure.jsonl";
+    auto result = run_command_split(
+        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " env -u CCH_TEST_MISSING_KEY " + bin() +
+        " --workspace " + q(workspace.path()) +
+        " --session " + q(session) +
+        " --api-key-env CCH_TEST_MISSING_KEY hello");
+
+    REQUIRE(result.exit_code == 2);
     CHECK(result.stdout_text.empty());
     CHECK(result.stderr_text.find("missing API key") != std::string::npos);
+    CHECK(result.stderr_text.find("could not load user settings") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(session));
+}
+
+TEST_CASE("CLI rejects an unresolvable workspace before model request", "[cli][assembly]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "workspace-invalid.jsonl";
+    auto result = run_command_split(
+        bin() + " --fake --workspace " + q(workspace.path() / "missing-workspace") +
+        " --session " + q(session) + " hello");
+
+    REQUIRE(result.exit_code == 2);
+    CHECK(result.stdout_text.empty());
+    CHECK(result.stderr_text.find("could not create session") != std::string::npos);
+    CHECK(result.stderr_text.find("workspace") != std::string::npos);
+    CHECK(result.stderr_text.find("[model-request]") == std::string::npos);
     CHECK_FALSE(std::filesystem::exists(session));
 }
 
@@ -691,7 +730,8 @@ TEST_CASE("CLI resume rejects explicit workspace mismatch", "[cli][u6]") {
 
     auto resumed = run_command(bin() + " --fake --workspace " + q(other.path()) + " --resume " + q(session) + " second");
 
-    REQUIRE(resumed.exit_code != 0);
+    REQUIRE(resumed.exit_code == 2);
+    CHECK(resumed.output.find("could not resume session") != std::string::npos);
     CHECK(resumed.output.find("resume workspace does not match session metadata") != std::string::npos);
     CHECK(resumed.output.find("[model-request]") == std::string::npos);
 }
@@ -727,8 +767,9 @@ TEST_CASE("CLI RPC resume workspace mismatch fails before loop activation", "[cl
         bin() + " --fake --mode rpc --workspace " + q(other.path()) + " --resume " + q(session),
         "{\"type\":\"get_state\"}\n");
 
-    REQUIRE(resumed.exit_code != 0);
+    REQUIRE(resumed.exit_code == 2);
     CHECK(resumed.stdout_text.empty());
+    CHECK(resumed.stderr_text.find("could not resume session") != std::string::npos);
     CHECK(resumed.stderr_text.find("resume workspace does not match session metadata") != std::string::npos);
 }
 
@@ -758,7 +799,8 @@ TEST_CASE("CLI blocks existing session path without resume before model request"
     std::ofstream(session) << "already here";
     auto result = run_command(bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " hello");
 
-    REQUIRE(result.exit_code != 0);
+    REQUIRE(result.exit_code == 2);
+    CHECK(result.output.find("could not create session") != std::string::npos);
     CHECK(result.output.find("already exists") != std::string::npos);
     CHECK(result.output.find("[model-request]") == std::string::npos);
 }
@@ -810,7 +852,7 @@ TEST_CASE("CLI real-provider mode reports missing API key before model request",
         " --session " + q(session) +
         " --api-key-env CCH_TEST_MISSING_KEY hello");
 
-    REQUIRE(result.exit_code != 0);
+    REQUIRE(result.exit_code == 2);
     CHECK(result.output.find("missing API key") != std::string::npos);
     CHECK(result.output.find("[model-request]") == std::string::npos);
 }
@@ -827,7 +869,7 @@ TEST_CASE("CLI Kimi path validates KIMI_API_KEY before model request and session
         " --model kimi-for-coding"
         " --api-key-env KIMI_API_KEY hello");
 
-    REQUIRE(result.exit_code != 0);
+    REQUIRE(result.exit_code == 2);
     CHECK(result.output.find("missing API key") != std::string::npos);
     CHECK(result.output.find("KIMI_API_KEY") != std::string::npos);
     CHECK(result.output.find("[model-request]") == std::string::npos);

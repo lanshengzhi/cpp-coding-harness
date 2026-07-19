@@ -309,8 +309,8 @@ util::Expected<PreparedResumeTarget> prepare_resume_target(
             return std::unexpected(util::make_error(
                 util::ErrorCode::Session,
                 "resume workspace does not match session metadata",
-                "resume workspace does not match session metadata; omit --workspace to use " +
-                    resumed->metadata.workspace.string() + " or start a new session"));
+                "omit --workspace to use " + resumed->metadata.workspace.string() +
+                    " or start a new session"));
         }
         if (!workspace_explicit) {
             workspace = resumed->metadata.workspace;

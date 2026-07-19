@@ -74,18 +74,4 @@ struct ResolvedProviderSettings {
     std::vector<std::string> api_key_env_chain;
 };
 
-/// Priority: CLI explicit > session stored provider/model > user settings > provider default.
-[[nodiscard]] ResolvedProviderSettings resolve_provider_settings(
-    const std::string& provider_registry_name,
-    bool fake,
-    const CliProviderOverrides& cli,
-    const UserSettings& settings,
-    const std::optional<std::string>& stored_provider,
-    const std::optional<std::string>& stored_model);
-
-/// Env var chain used for API key lookup after resolution (CLI single env or settings chain).
-[[nodiscard]] std::vector<std::string> resolved_api_key_env_chain(
-    const CliProviderOverrides& cli,
-    const UserSettings& settings);
-
 } // namespace cch::coding_agent

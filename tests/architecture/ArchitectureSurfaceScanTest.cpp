@@ -325,6 +325,24 @@ TEST_CASE("AgentSessionRuntime is constructed only by the session factory", "[ar
 }
 
 
+TEST_CASE("the deleted CLI preflight module and its build registrations stay gone", "[architecture][cli]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    // Build the needle dynamically so this test file does not match itself.
+    const auto module_needle = std::string{"Cli"} + "Preflight";
+
+    CHECK_FALSE(std::filesystem::exists(source_root / "src" / "cli" / (module_needle + ".hpp")));
+    CHECK_FALSE(std::filesystem::exists(source_root / "src" / "cli" / (module_needle + ".cpp")));
+
+    const auto cmake = read_text(source_root / "CMakeLists.txt");
+    CHECK(cmake.find(module_needle) == std::string::npos);
+
+    const auto files = files_under({"src", "tests"});
+    REQUIRE_FALSE(files.empty());
+    for (const auto& file : files) {
+        CHECK(read_text(file).find(module_needle) == std::string::npos);
+    }
+}
+
 TEST_CASE("active source tree does not retain legacy sync contracts", "[architecture][u2]") {
     const auto files = files_under({"include", "src", "tests"});
     REQUIRE_FALSE(files.empty());

@@ -113,12 +113,20 @@ int run_async_cli(const CliConfig& config) {
 
     auto created = coding_agent::create_agent_session(std::move(request));
     if (!created) {
-        if (created.error().message == "resume workspace does not match session metadata") {
-            std::cerr << created.error().detail << '\n';
-        } else if (std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(config.session_target)) {
-            std::cerr << "could not resume session: " << created.error().message << ": " << created.error().detail << '\n';
-        } else {
-            std::cerr << "could not create session: " << created.error().message << ": " << created.error().detail << '\n';
+        // The adapter adds create/resume presentation context from the
+        // original CLI intent only; failure semantics stay in the factory's
+        // error value and are never classified by message text.
+        const auto& error = created.error();
+        std::cerr << (std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(config.session_target)
+                          ? "could not resume session: "
+                          : "could not create session: ")
+                  << error.message;
+        if (!error.detail.empty() && error.detail != error.message) {
+            std::cerr << ": " << error.detail;
+        }
+        std::cerr << '\n';
+        if (error.context && !error.context->empty()) {
+            std::cerr << "note: " << *error.context << '\n';
         }
         return 2;
     }

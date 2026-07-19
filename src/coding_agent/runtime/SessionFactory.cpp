@@ -237,8 +237,11 @@ void add_project_resource_loading_diagnostics(
             }
             return std::unexpected(util::make_error(
                 util::ErrorCode::Validation,
-                std::format("none of the API key env vars [{}] are set or non-empty", chain_str),
-                "set one of the environment variables or supply a host-provided chat client"));
+                "missing API key",
+                std::format(
+                    "none of the API key environment variables [{}] are set or non-empty; "
+                    "set one of them, configure an auth entry, or supply a host-provided chat client",
+                    chain_str)));
         }
     }
 
@@ -417,11 +420,21 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
         plan.target = AutomaticNewSessionTarget{std::move(*workspace), std::move(*directory_override)};
     } else if (const auto* target =
                    std::get_if<ExplicitNewSessionTarget>(&request.session_target)) {
-        plan.target = NewSessionTarget{target->path, request.workspace};
+        auto workspace = resolve_canonical_workspace(request.workspace);
+        if (!workspace) {
+            return std::unexpected(workspace.error());
+        }
+        plan.target = NewSessionTarget{target->path, std::move(*workspace)};
     } else if (const auto* target =
                    std::get_if<ExplicitResumeSessionTarget>(&request.session_target)) {
+        // Resume keeps one resolved workspace: an explicit --workspace must
+        // name a real directory, while the process-cwd fallback always does.
+        auto workspace = resolve_canonical_workspace(request.workspace);
+        if (!workspace) {
+            return std::unexpected(workspace.error());
+        }
         plan.target = ResumeSessionTarget{
-            target->path, request.workspace, request.workspace_explicit};
+            target->path, std::move(*workspace), request.workspace_explicit};
     } else if (std::holds_alternative<InMemorySessionTarget>(request.session_target)) {
         auto workspace = resolve_canonical_workspace(request.workspace);
         if (!workspace) {

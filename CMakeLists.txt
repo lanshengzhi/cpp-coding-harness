@@ -148,7 +148,6 @@ target_link_libraries(cpp_harness_lib INTERFACE cch_coding_agent_runtime)
 add_executable(cpp_harness
     src/main.cpp
     src/cli/CliParse.cpp
-    src/cli/CliPreflight.cpp
 )
 target_link_libraries(cpp_harness PRIVATE cpp_harness_lib CLI11::CLI11)
 target_include_directories(cpp_harness PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -212,7 +211,6 @@ if(CCH_BUILD_TESTS)
     target_link_libraries(cpp_harness_tests PRIVATE cpp_harness_lib CLI11::CLI11)
     target_sources(cpp_harness_tests PRIVATE
         src/cli/CliParse.cpp
-        src/cli/CliPreflight.cpp
     )
     target_compile_definitions(cpp_harness_tests PRIVATE
         CCH_BINARY="$<TARGET_FILE:cpp_harness>"

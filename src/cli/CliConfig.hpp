@@ -16,8 +16,10 @@ enum class OutputMode {
     Rpc,
 };
 
-/// The one passive CLI intent value: produced by argument parsing, checked by
-/// preflight, and consumed by the CLI runtime directly after help handling.
+/// The one passive CLI intent value: produced by argument parsing and consumed
+/// by the CLI runtime directly after help handling. SessionFactory owns every
+/// creation semantic for it (workspace, provider readiness, Agent Session
+/// targets, Session Resume compatibility).
 struct CliConfig {
     bool fake{false};
     bool repl{false};

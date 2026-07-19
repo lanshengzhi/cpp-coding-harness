@@ -744,6 +744,103 @@ TEST_CASE("SessionFactory CLI creation failure after User Settings fallback keep
     CHECK(result.error().context->find("could not load user settings") != std::string::npos);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CLI request assembly policy: SessionFactory owns workspace validity, Agent
+// Session target validity, existing-file rejection, Session Resume
+// compatibility, and provider readiness for the CLI creation request shape.
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST_CASE("SessionFactory CLI creation without credentials fails with missing API key before publishing", "[sdk][assembly][cli]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace agent_dir;
+    EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    agent_dir_guard.set(agent_dir.path().string());
+    EnvVarGuard key_guard{"CCH_FACTORY_MISSING_KEY"};
+    key_guard.unset();
+
+    coding_agent::runtime::AgentSessionCreationRequest request;
+    request.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    request.workspace = paths.workspace.path();
+    request.provider_overrides.api_key_env = "CCH_FACTORY_MISSING_KEY";
+
+    auto result = coding_agent::create_agent_session(std::move(request));
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().code == util::ErrorCode::Validation);
+    CHECK(result.error().message.find("missing API key") != std::string::npos);
+    CHECK(result.error().detail.find("CCH_FACTORY_MISSING_KEY") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(paths.session_file));
+}
+
+TEST_CASE("SessionFactory CLI explicit new target rejects an unresolvable workspace", "[sdk][assembly][cli]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace agent_dir;
+    EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    agent_dir_guard.set(agent_dir.path().string());
+
+    coding_agent::runtime::AgentSessionCreationRequest request;
+    request.fake = true;
+    request.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    request.workspace = paths.workspace.path() / "missing-workspace";
+
+    auto result = coding_agent::create_agent_session(std::move(request));
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().code == util::ErrorCode::Validation);
+    CHECK(result.error().message.find("workspace") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(paths.session_file));
+}
+
+TEST_CASE("SessionFactory CLI resume rejects an unresolvable explicit workspace", "[sdk][assembly][cli]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace agent_dir;
+    EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    agent_dir_guard.set(agent_dir.path().string());
+
+    coding_agent::runtime::AgentSessionCreationRequest create_request;
+    create_request.fake = true;
+    create_request.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    create_request.workspace = paths.workspace.path();
+    auto created = coding_agent::create_agent_session(std::move(create_request));
+    REQUIRE(created.has_value());
+    REQUIRE(created->session->close().has_value());
+
+    coding_agent::runtime::AgentSessionCreationRequest resume_request;
+    resume_request.fake = true;
+    resume_request.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
+    resume_request.workspace = paths.workspace.path() / "missing-workspace";
+    resume_request.workspace_explicit = true;
+
+    auto result = coding_agent::create_agent_session(std::move(resume_request));
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().code == util::ErrorCode::Validation);
+    CHECK(result.error().message == "workspace cannot be resolved");
+}
+
+TEST_CASE("SessionFactory CLI explicit new target rejects an existing session file without modifying it", "[sdk][assembly][cli]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace agent_dir;
+    EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    agent_dir_guard.set(agent_dir.path().string());
+    {
+        std::ofstream existing(paths.session_file, std::ios::binary);
+        existing << "already here";
+    }
+
+    coding_agent::runtime::AgentSessionCreationRequest request;
+    request.fake = true;
+    request.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    request.workspace = paths.workspace.path();
+
+    auto result = coding_agent::create_agent_session(std::move(request));
+    REQUIRE_FALSE(result.has_value());
+    const auto presented = result.error().message + " " + result.error().detail;
+    CHECK(presented.find("already exists") != std::string::npos);
+    std::ifstream in(paths.session_file, std::ios::binary);
+    const std::string content(
+        (std::istreambuf_iterator<char>(in)),
+        std::istreambuf_iterator<char>());
+    CHECK(content == "already here");
+}
+
 #if defined(__unix__) || defined(__APPLE__)
 TEST_CASE("SDK default target gives workspace symlink aliases one directory", "[sdk][default-persistence][symlink]") {
     TestPaths paths;
@@ -982,8 +1079,10 @@ TEST_CASE("SDK provider_config api_key_env chain rejects unset variables", "[sdk
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().code == util::ErrorCode::Validation);
-    CHECK(result.error().message.find("CCH_SDK_CHAIN_UNSET_FIRST") != std::string::npos);
-    CHECK(result.error().message.find("CCH_SDK_CHAIN_UNSET_SECOND") != std::string::npos);
+    CHECK(result.error().message.find("missing API key") != std::string::npos);
+    const auto presented = result.error().message + " " + result.error().detail;
+    CHECK(presented.find("CCH_SDK_CHAIN_UNSET_FIRST") != std::string::npos);
+    CHECK(presented.find("CCH_SDK_CHAIN_UNSET_SECOND") != std::string::npos);
 }
 
 TEST_CASE("SDK provider_config api_key_env chain rejects empty chain", "[sdk][u2][api-key-env]") {
