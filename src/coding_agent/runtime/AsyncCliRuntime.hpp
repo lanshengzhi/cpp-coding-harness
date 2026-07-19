@@ -1,9 +1,9 @@
 #pragma once
 
-#include "../../cli/CliRuntimeConfig.hpp"
+#include "../../cli/CliConfig.hpp"
 
 namespace cch::cli {
 
-int run_async_cli(const AsyncCliRuntimeConfig& config);
+int run_async_cli(const CliConfig& config);
 
 } // namespace cch::cli

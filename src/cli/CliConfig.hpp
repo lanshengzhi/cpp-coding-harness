@@ -1,6 +1,7 @@
 #pragma once
 
-#include "CliRuntimeConfig.hpp"
+#include "../../include/cch/coding_agent/Sdk.hpp"
+#include "../../include/cch/coding_agent/Settings.hpp"
 
 #include <filesystem>
 #include <optional>
@@ -9,6 +10,14 @@
 
 namespace cch::cli {
 
+enum class OutputMode {
+    Text,
+    Json,
+    Rpc,
+};
+
+/// The one passive CLI intent value: produced by argument parsing, checked by
+/// preflight, and consumed by the CLI runtime directly after help handling.
 struct CliConfig {
     bool fake{false};
     bool repl{false};

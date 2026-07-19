@@ -90,7 +90,7 @@ void present_text_command(std::string_view display_text) {
 
 } // namespace
 
-int run_async_cli(const AsyncCliRuntimeConfig& config) {
+int run_async_cli(const CliConfig& config) {
     const auto json_mode = is_json_mode(config.output_mode);
     const auto settings_path = coding_agent::settings_file_path();
     auto settings_data = coding_agent::SettingsLoader::load(settings_path);
@@ -109,8 +109,8 @@ int run_async_cli(const AsyncCliRuntimeConfig& config) {
     request.fake = config.fake;
     request.enable_bash = config.enable_bash;
     request.project_trust_override = config.project_trust_override;
-    request.disable_project_skills = config.disable_project_skills;
-    request.disable_prompt_templates = config.disable_prompt_templates;
+    request.disable_project_skills = config.no_skills;
+    request.disable_prompt_templates = config.no_prompt_templates;
     request.prompt_template_paths = config.prompt_template_paths;
     request.workspace_explicit = config.workspace_explicit;
     request.max_turns = config.max_turns;

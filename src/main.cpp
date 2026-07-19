@@ -28,5 +28,5 @@ int main(int argc, char** argv) {
     }
     config.workspace = cch::cli::canonical_workspace(config.workspace);
 
-    return cch::cli::run_async_cli(cch::cli::to_runtime_config(std::move(config)));
+    return cch::cli::run_async_cli(config);
 }
