@@ -36,7 +36,6 @@ struct AgentSessionCreationRequest {
     /// sessionDir. Consulted only for default persisted creation.
     std::optional<std::string> session_dir;
     CliProviderOverrides provider_overrides;
-    UserSettings settings;
 };
 
 /// Internal result of SessionFactory::create(). The Sdk.cpp public
@@ -57,7 +56,9 @@ struct CreateAgentSessionResult {
 };
 
 /// Assembles an AgentSessionRuntime (and its supporting services) from public
-/// SDK creation options.
+/// SDK creation options. Each creation attempt loads User Settings at most
+/// once and assembles the session from that single snapshot; adapters never
+/// supply a settings snapshot.
 class SessionFactory {
 public:
     [[nodiscard]] static util::Expected<CreateAgentSessionResult> create(

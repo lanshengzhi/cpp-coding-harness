@@ -99,6 +99,42 @@ struct AssemblyPlan {
     return SdkDiagnostic{severity, std::move(code), std::move(message), std::move(path)};
 }
 
+/// One User Settings load per creation attempt. Missing or unreadable settings
+/// stay silent (the loader contract); settings that exist but cannot be used
+/// fall back to safe defaults with a warning that identifies the problem.
+struct UserSettingsSnapshot {
+    coding_agent::UserSettings settings;
+    std::optional<std::string> fallback_warning;
+};
+
+[[nodiscard]] UserSettingsSnapshot load_user_settings_snapshot() {
+    auto loaded = coding_agent::SettingsLoader::load(coding_agent::settings_file_path());
+    if (loaded) {
+        return {std::move(*loaded), std::nullopt};
+    }
+    std::string warning = "could not load user settings: " + loaded.error().message;
+    if (!loaded.error().detail.empty()) {
+        warning += ": " + loaded.error().detail;
+    }
+    warning += "; using safe defaults";
+    return {coding_agent::UserSettings{}, std::move(warning)};
+}
+
+/// Failed creation after a User Settings fallback keeps the primary error and
+/// carries the settings warning through the error context field.
+[[nodiscard]] util::Error with_settings_fallback_context(
+    util::Error error,
+    const UserSettingsSnapshot& snapshot) {
+    if (snapshot.fallback_warning) {
+        if (error.context && !error.context->empty()) {
+            error.context = *error.context + "; " + *snapshot.fallback_warning;
+        } else {
+            error.context = *snapshot.fallback_warning;
+        }
+    }
+    return error;
+}
+
 [[nodiscard]] SdkDiagnostic::Severity to_sdk_severity(ResourceDiagnosticSeverity severity) {
     switch (severity) {
     case ResourceDiagnosticSeverity::Info:
@@ -361,7 +397,9 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
     return std::optional<std::filesystem::path>{std::move(*resolved)};
 }
 
-[[nodiscard]] util::Expected<AssemblyPlan> normalize_cli(AgentSessionCreationRequest request) {
+[[nodiscard]] util::Expected<AssemblyPlan> normalize_cli(
+    AgentSessionCreationRequest request,
+    const coding_agent::UserSettings& settings) {
     AssemblyPlan plan;
     plan.profile = CreationProfile::Cli;
     if (std::holds_alternative<DefaultPersistedSessionTarget>(request.session_target)) {
@@ -372,7 +410,7 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
             return std::unexpected(workspace.error());
         }
         auto directory_override = resolve_cli_session_dir_override(
-            request.session_dir, request.settings.session_dir, *workspace);
+            request.session_dir, settings.session_dir, *workspace);
         if (!directory_override) {
             return std::unexpected(directory_override.error());
         }
@@ -417,8 +455,8 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
 
     plan.load_project_resources = true;
     plan.project_trust_override = request.project_trust_override;
-    plan.default_project_trust = request.settings.default_project_trust.value_or(DefaultProjectTrust::Ask);
-    plan.project_skills_enablement = request.settings.project_skills;
+    plan.default_project_trust = settings.default_project_trust.value_or(DefaultProjectTrust::Ask);
+    plan.project_skills_enablement = settings.project_skills;
     if (request.disable_project_skills) {
         plan.project_skills_enablement = ResourceEnablement::Off;
     }
@@ -520,7 +558,9 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
 // Assembly
 // ─────────────────────────────────────────────────────────────────────────────
 
-[[nodiscard]] util::Expected<CreateAgentSessionResult> run_assembly(AssemblyPlan plan) {
+[[nodiscard]] util::Expected<CreateAgentSessionResult> run_assembly(
+    AssemblyPlan plan,
+    const UserSettingsSnapshot& snapshot) {
     std::vector<SdkDiagnostic> diagnostics;
 
     // 1. Resolve workspace and validate target shape.
@@ -560,11 +600,17 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
         workspace = new_target.workspace;
     }
 
-    // 2. Load user settings for defaults and API key chains.
-    auto settings = coding_agent::SettingsLoader::load(coding_agent::settings_file_path());
-    if (!settings) {
-        settings = coding_agent::UserSettings{};
+    // 2. The creation attempt's User Settings snapshot supplies defaults and
+    // API key chains. A fallback stays observable as a warning diagnostic on
+    // the success path and as error context on the failure path.
+    if (snapshot.fallback_warning) {
+        diagnostics.push_back(make_diag(
+            SdkDiagnostic::Severity::Warning,
+            "settings:fallback",
+            *snapshot.fallback_warning,
+            coding_agent::settings_file_path().string()));
     }
+    const auto& settings = snapshot.settings;
 
     // 3. Resolve provider/model metadata.
     std::optional<std::string> stored_provider;
@@ -588,7 +634,7 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
     auto resolved = coding_agent::resolve_provider_settings(
         provider_registry_name,
         plan.provider_request,
-        *settings,
+        settings,
         stored_provider,
         stored_model);
 
@@ -848,24 +894,34 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
     return result;
 }
 
+/// Shared creation tail: normalize produced a plan (or the attempt's first
+/// error), assembly runs against the same snapshot, and any failure carries
+/// the settings fallback warning through the error context field.
+[[nodiscard]] util::Expected<CreateAgentSessionResult> finish_creation(
+    util::Expected<AssemblyPlan> plan,
+    const UserSettingsSnapshot& snapshot) {
+    if (!plan) {
+        return std::unexpected(with_settings_fallback_context(plan.error(), snapshot));
+    }
+    auto result = run_assembly(std::move(*plan), snapshot);
+    if (!result) {
+        return std::unexpected(with_settings_fallback_context(result.error(), snapshot));
+    }
+    return result;
+}
+
 } // namespace
 
 util::Expected<CreateAgentSessionResult> SessionFactory::create(
     AgentSessionCreationRequest request) {
-    auto plan = normalize_cli(std::move(request));
-    if (!plan) {
-        return std::unexpected(plan.error());
-    }
-    return run_assembly(std::move(*plan));
+    const auto snapshot = load_user_settings_snapshot();
+    return finish_creation(normalize_cli(std::move(request), snapshot.settings), snapshot);
 }
 
 util::Expected<CreateAgentSessionResult> SessionFactory::create(
     CreateAgentSessionOptions options) {
-    auto plan = normalize_sdk(std::move(options));
-    if (!plan) {
-        return std::unexpected(plan.error());
-    }
-    return run_assembly(std::move(*plan));
+    const auto snapshot = load_user_settings_snapshot();
+    return finish_creation(normalize_sdk(std::move(options)), snapshot);
 }
 
 } // namespace cch::coding_agent::runtime

@@ -11,6 +11,7 @@
 #include "../../include/cch/harness/session/JsonlSessionStore.hpp"
 #include "../../include/cch/util/Error.hpp"
 #include "ai/providers/FakeChatClient.hpp"
+#include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "harness/session/SessionJournalTestHooks.hpp"
 #include "../support/TempWorkspace.hpp"
@@ -138,6 +139,15 @@ bool has_sdk_diag(
     const std::vector<coding_agent::SdkDiagnostic>& diagnostics,
     std::string_view code) {
     return std::any_of(
+        diagnostics.begin(),
+        diagnostics.end(),
+        [code](const auto& diag) { return diag.code == code; });
+}
+
+std::vector<coding_agent::SdkDiagnostic>::const_iterator find_sdk_diag(
+    const std::vector<coding_agent::SdkDiagnostic>& diagnostics,
+    std::string_view code) {
+    return std::find_if(
         diagnostics.begin(),
         diagnostics.end(),
         [code](const auto& diag) { return diag.code == code; });
@@ -602,6 +612,136 @@ TEST_CASE("SDK default persistence ignores CLI-only session directory inputs", "
     CHECK(result->session_path->parent_path().parent_path() == agent_dir.path() / "sessions");
     CHECK(std::filesystem::is_empty(cli_directory.path()));
     CHECK(result->session->close().has_value());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// User Settings snapshot: SessionFactory loads settings once per creation
+// attempt, falls back to safe defaults with an observable warning, and uses
+// the same snapshot for every assembly decision.
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST_CASE("SessionFactory applies one User Settings snapshot across provider and storage decisions", "[sdk][settings-snapshot]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace agent_dir;
+    cch::tests::TempWorkspace settings_sessions;
+    EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    agent_dir_guard.set(agent_dir.path().string());
+    agent_dir.write("settings.json",
+        "{\"model\":\"settings-model\",\"sessionDir\":\"" + settings_sessions.path().string() + "\"}");
+
+    coding_agent::runtime::AgentSessionCreationRequest request;
+    request.fake = true;
+    request.disable_project_skills = true;
+    request.disable_prompt_templates = true;
+    request.workspace = paths.workspace.path();
+
+    auto result = coding_agent::create_agent_session(std::move(request));
+    REQUIRE(result.has_value());
+    // The same snapshot feeds provider resolution and CLI automatic
+    // session-directory selection.
+    CHECK(result->model == "settings-model");
+    REQUIRE(result->session_path.has_value());
+    CHECK(result->session_path->parent_path() == settings_sessions.path());
+    CHECK(result->session->close().has_value());
+}
+
+TEST_CASE("SessionFactory creation without User Settings applies defaults silently", "[sdk][settings-snapshot]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace agent_dir;
+    EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    agent_dir_guard.set(agent_dir.path().string());
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    CHECK_FALSE(has_sdk_diag(result->diagnostics, "settings:fallback"));
+    CHECK(result->session->close().has_value());
+}
+
+TEST_CASE("SessionFactory creation with malformed User Settings succeeds with safe defaults and a warning", "[sdk][settings-snapshot]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace agent_dir;
+    EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    agent_dir_guard.set(agent_dir.path().string());
+    agent_dir.write("settings.json", "{not valid json");
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    const auto warning = find_sdk_diag(result->diagnostics, "settings:fallback");
+    REQUIRE(warning != result->diagnostics.end());
+    CHECK(warning->severity == coding_agent::SdkDiagnostic::Severity::Warning);
+    CHECK(warning->message.find("could not load user settings") != std::string::npos);
+    CHECK(warning->message.find("invalid JSON") != std::string::npos);
+    CHECK(result->session->close().has_value());
+}
+
+TEST_CASE("SessionFactory creation with invalid User Settings values falls back with a warning", "[sdk][settings-snapshot]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace agent_dir;
+    EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    agent_dir_guard.set(agent_dir.path().string());
+    agent_dir.write("settings.json", "{\"default_project_trust\":\"bogus\"}");
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    const auto warning = find_sdk_diag(result->diagnostics, "settings:fallback");
+    REQUIRE(warning != result->diagnostics.end());
+    CHECK(warning->severity == coding_agent::SdkDiagnostic::Severity::Warning);
+    CHECK(warning->message.find("default_project_trust") != std::string::npos);
+    CHECK(result->session->close().has_value());
+}
+
+TEST_CASE("SessionFactory SDK creation failure after User Settings fallback keeps the primary error and carries the warning", "[sdk][settings-snapshot]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace agent_dir;
+    EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    agent_dir_guard.set(agent_dir.path().string());
+    agent_dir.write("settings.json", "{not valid json");
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    // No chat_client, no provider_config: normalization fails.
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().code == util::ErrorCode::Validation);
+    CHECK(result.error().message == "no chat client or provider_config supplied");
+    REQUIRE(result.error().context.has_value());
+    CHECK(result.error().context->find("could not load user settings") != std::string::npos);
+}
+
+TEST_CASE("SessionFactory CLI creation failure after User Settings fallback keeps the primary error and carries the warning", "[sdk][settings-snapshot]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace agent_dir;
+    EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    agent_dir_guard.set(agent_dir.path().string());
+    agent_dir.write("settings.json", "{not valid json");
+
+    coding_agent::runtime::AgentSessionCreationRequest request;
+    request.fake = true;
+    request.workspace = paths.workspace.path() / "missing-workspace";
+
+    auto result = coding_agent::create_agent_session(std::move(request));
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().code == util::ErrorCode::Validation);
+    CHECK(result.error().message == "workspace cannot be resolved");
+    REQUIRE(result.error().context.has_value());
+    CHECK(result.error().context->find("could not load user settings") != std::string::npos);
 }
 
 #if defined(__unix__) || defined(__APPLE__)

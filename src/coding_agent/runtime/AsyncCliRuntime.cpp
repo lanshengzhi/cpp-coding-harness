@@ -1,7 +1,5 @@
 #include "coding_agent/runtime/AsyncCliRuntime.hpp"
 
-#include "../include/cch/coding_agent/AgentConfigDir.hpp"
-#include "../include/cch/coding_agent/Settings.hpp"
 #include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/CommandRegistry.hpp"
 #include "coding_agent/runtime/EventPrinter.hpp"
@@ -92,12 +90,6 @@ void present_text_command(std::string_view display_text) {
 
 int run_async_cli(const CliConfig& config) {
     const auto json_mode = is_json_mode(config.output_mode);
-    const auto settings_path = coding_agent::settings_file_path();
-    auto settings_data = coding_agent::SettingsLoader::load(settings_path);
-    if (!settings_data) {
-        std::cerr << "warning: could not load user settings: " << settings_data.error().message << '\n';
-        settings_data = coding_agent::UserSettings{};
-    }
 
     coding_agent::CommandRegistry cli_command_registry;
     if (auto registered = register_builtin_commands(cli_command_registry); !registered) {
@@ -118,7 +110,6 @@ int run_async_cli(const CliConfig& config) {
     request.session_target = config.session_target;
     request.session_dir = config.session_dir;
     request.provider_overrides = config.provider_overrides;
-    request.settings = *settings_data;
 
     auto created = coding_agent::create_agent_session(std::move(request));
     if (!created) {
