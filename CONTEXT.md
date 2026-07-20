@@ -24,6 +24,10 @@ _Avoid_: Event handler, callback chain
 Reopening an Agent Session from its durable history at the selected active point.
 _Avoid_: Reload, replay
 
+**Session Publication**:
+The single mutation point that makes an assembled Agent Session's storage real — creating required directories under their privacy policy and writing the session header after all fallible prerequisites have succeeded.
+_Avoid_: Save, file write, flush
+
 **Session Topology**:
 The shape of an Agent Session history, such as linear, branched, or compacted.
 _Avoid_: Completion state

@@ -303,6 +303,38 @@ TEST_CASE("Glaze JSONL session rejects symlink and public readable files", "[har
 #endif
 }
 
+TEST_CASE("Glaze JSONL session create_new retains exclusive file creation", "[harness][session][u7]") {
+    tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "session.jsonl";
+
+    auto first = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(first);
+    auto second = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+
+    REQUIRE_FALSE(second);
+    CHECK(second.error().message.find("already exists") != std::string::npos);
+}
+
+TEST_CASE("Glaze JSONL session create_new rejects a symbolic link final target", "[harness][session][u7]") {
+#if defined(__unix__) || defined(__APPLE__)
+    tests::TempWorkspace workspace;
+    const auto outside = workspace.path() / "outside.jsonl";
+    {
+        std::ofstream file(outside);
+        file << "outside";
+    }
+    const auto link = workspace.path() / "link.jsonl";
+    REQUIRE(::symlink(outside.c_str(), link.c_str()) == 0);
+
+    auto store = harness::session::JsonlSessionStore::create_new(link, metadata_for(workspace));
+
+    REQUIRE_FALSE(store);
+    CHECK(store.error().message == "refusing to follow symlink session path");
+#else
+    SUCCEED("symbolic-link assertion is not available on this platform");
+#endif
+}
+
 // --- U5: v3 typed entry load/write tests ---
 
 namespace {

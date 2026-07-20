@@ -42,18 +42,19 @@ std::string assistant_text_at(const std::vector<ai::MessageVariant>& messages, s
     return ai::text_from_assistant_content(assistant->content);
 }
 
-runtime::SessionOpenRequest resume_request(const std::filesystem::path& path,
-                                           const tests::TempWorkspace& workspace) {
-    runtime::SessionOpenRequest request;
-    request.resume_path = path;
-    request.workspace = workspace.path();
-    request.workspace_explicit = true;
-    return request;
+util::Expected<runtime::OpenSession> open_resumed_session(
+    const std::filesystem::path& path,
+    const tests::TempWorkspace& workspace) {
+    auto prepared = runtime::prepare_resume_target(path, workspace.path(), true);
+    if (!prepared) {
+        return std::unexpected(prepared.error());
+    }
+    return runtime::publish_resume_session(*prepared);
 }
 
 } // namespace
 
-TEST_CASE("open_session resume uses tree context for linear sessions", "[coding-agent][runtime][session]") {
+TEST_CASE("resumed session uses tree context for linear sessions", "[coding-agent][runtime][session]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "linear.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -61,7 +62,7 @@ TEST_CASE("open_session resume uses tree context for linear sessions", "[coding-
     REQUIRE(store->append(user_msg("first")));
     REQUIRE(store->append(user_msg("second")));
 
-    auto opened = runtime::open_session(resume_request(path, workspace));
+    auto opened = open_resumed_session(path, workspace);
     REQUIRE(opened);
     CHECK(opened->topology == harness::session::SessionTopology::Linear);
     CHECK(opened->metadata.session_id == "session-lifecycle-test");
@@ -75,7 +76,7 @@ TEST_CASE("open_session resume uses tree context for linear sessions", "[coding-
     CHECK_FALSE(opened->context_thinking_level.has_value());
 }
 
-TEST_CASE("open_session resume uses compaction tree context", "[coding-agent][runtime][session]") {
+TEST_CASE("resumed session uses compaction tree context", "[coding-agent][runtime][session]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "compact.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -94,7 +95,7 @@ TEST_CASE("open_session resume uses compaction tree context", "[coding-agent][ru
     REQUIRE(resumed->append_compaction(std::nullopt, "summary of msg1-2", msg3_id, 1000, std::nullopt, std::nullopt));
     REQUIRE(resumed->append(user_msg("msg4")));
 
-    auto opened = runtime::open_session(resume_request(path, workspace));
+    auto opened = open_resumed_session(path, workspace);
     REQUIRE(opened);
     CHECK(opened->topology == harness::session::SessionTopology::Compacted);
     REQUIRE(opened->history.size() == 3);
@@ -104,7 +105,7 @@ TEST_CASE("open_session resume uses compaction tree context", "[coding-agent][ru
     CHECK(user_text_at(opened->history, 2) == "msg4");
 }
 
-TEST_CASE("open_session resume uses active leaf path", "[coding-agent][runtime][session]") {
+TEST_CASE("resumed session uses active leaf path", "[coding-agent][runtime][session]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "active-leaf.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -122,7 +123,7 @@ TEST_CASE("open_session resume uses active leaf path", "[coding-agent][runtime][
     REQUIRE(resumed);
     REQUIRE(resumed->append_leaf(std::nullopt, first_id));
 
-    auto opened = runtime::open_session(resume_request(path, workspace));
+    auto opened = open_resumed_session(path, workspace);
     REQUIRE(opened);
     CHECK(opened->topology == harness::session::SessionTopology::Branched);
     REQUIRE(opened->history.size() == 1);
@@ -161,7 +162,7 @@ TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point",
     REQUIRE(prompt_result);
     CHECK(session_result->session->close().has_value());
 
-    auto reopened = runtime::open_session(resume_request(path, workspace));
+    auto reopened = open_resumed_session(path, workspace);
     REQUIRE(reopened);
     CHECK(reopened->topology == harness::session::SessionTopology::Branched);
     REQUIRE(reopened->history.size() == 3);
@@ -216,7 +217,7 @@ TEST_CASE(
 
     // Reopening immediately follows the durable message even though its leaf
     // marker was the failed physical write.
-    auto after_failure = runtime::open_session(resume_request(path, workspace));
+    auto after_failure = open_resumed_session(path, workspace);
     REQUIRE(after_failure);
     REQUIRE(after_failure->history.size() == 2);
     CHECK(user_text_at(after_failure->history, 0) == "first");
@@ -229,7 +230,7 @@ TEST_CASE(
     CHECK(session->message_count() == 4);
     CHECK(session->close().has_value());
 
-    auto reopened = runtime::open_session(resume_request(path, workspace));
+    auto reopened = open_resumed_session(path, workspace);
     REQUIRE(reopened);
     REQUIRE(reopened->history.size() == 4);
     CHECK(user_text_at(reopened->history, 0) == "first");
@@ -238,7 +239,7 @@ TEST_CASE(
     CHECK(assistant_text_at(reopened->history, 3) == "fake: recover branch");
 }
 
-TEST_CASE("open_session resume ignores invalid leaf target", "[coding-agent][runtime][session]") {
+TEST_CASE("resumed session ignores invalid leaf target", "[coding-agent][runtime][session]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "invalid-leaf.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -250,7 +251,7 @@ TEST_CASE("open_session resume ignores invalid leaf target", "[coding-agent][run
     REQUIRE(resumed);
     REQUIRE(resumed->append_leaf(std::nullopt, "missing-entry"));
 
-    auto opened = runtime::open_session(resume_request(path, workspace));
+    auto opened = open_resumed_session(path, workspace);
     REQUIRE(opened);
     CHECK(opened->topology == harness::session::SessionTopology::Linear);
     REQUIRE(opened->history.size() == 2);
@@ -258,7 +259,7 @@ TEST_CASE("open_session resume ignores invalid leaf target", "[coding-agent][run
     CHECK(user_text_at(opened->history, 1) == "second");
 }
 
-TEST_CASE("open_session topology follows active path only", "[coding-agent][runtime][session]") {
+TEST_CASE("resumed session topology follows active path only", "[coding-agent][runtime][session]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "inactive-tree-data.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -279,7 +280,7 @@ TEST_CASE("open_session topology follows active path only", "[coding-agent][runt
     REQUIRE(resumed->append_compaction(first_id, "inactive compaction", third_id, 1000, std::nullopt, std::nullopt));
     REQUIRE(resumed->append_leaf(std::nullopt, third_id));
 
-    auto opened = runtime::open_session(resume_request(path, workspace));
+    auto opened = open_resumed_session(path, workspace);
     REQUIRE(opened);
     CHECK(opened->topology == harness::session::SessionTopology::Linear);
     REQUIRE(opened->history.size() == 3);
@@ -288,7 +289,7 @@ TEST_CASE("open_session topology follows active path only", "[coding-agent][runt
     CHECK(user_text_at(opened->history, 2) == "third");
 }
 
-TEST_CASE("open_session resume carries effective model and thinking level", "[coding-agent][runtime][session]") {
+TEST_CASE("resumed session carries effective model and thinking level", "[coding-agent][runtime][session]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "context-state.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -297,7 +298,7 @@ TEST_CASE("open_session resume carries effective model and thinking level", "[co
     REQUIRE(store->append_thinking_level_change(std::nullopt, "high"));
     REQUIRE(store->append(user_msg("hello")));
 
-    auto opened = runtime::open_session(resume_request(path, workspace));
+    auto opened = open_resumed_session(path, workspace);
     REQUIRE(opened);
     CHECK(opened->topology == harness::session::SessionTopology::Linear);
     CHECK(opened->context_model == "gpt-4o");

@@ -4,10 +4,13 @@
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 
 #include "../../include/cch/harness/session/JsonlSessionStore.hpp"
+#include "../support/EnvVarGuard.hpp"
 #include "../support/TempWorkspace.hpp"
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <regex>
 #include <string>
 
@@ -21,10 +24,6 @@ namespace session_paths = cch::coding_agent::session_paths;
 namespace runtime = cch::coding_agent::runtime;
 
 namespace {
-
-harness::session::SessionMetadata metadata_for(const std::filesystem::path& workspace) {
-    return {"explicit-session-id", "2026-07-18T00:00:00.000Z", workspace, "fake", "fake-model"};
-}
 
 #if defined(__unix__) || defined(__APPLE__)
 mode_t permission_bits(const std::filesystem::path& path) {
@@ -134,51 +133,63 @@ TEST_CASE("automatic session target calculation is side effect free", "[coding_a
 
 TEST_CASE("automatic session publication correlates path header and identity", "[coding_agent][session-path-policy][publication]") {
     tests::TempWorkspace temp;
+    tests::EnvVarGuard config_dir{"CCH_CODING_AGENT_DIR"};
+    config_dir.set((temp.path() / "agent").string());
     const auto sessions_root = temp.path() / "agent" / "sessions";
     const auto workspace = temp.path() / "workspace";
     std::filesystem::create_directory(workspace);
-    const auto identity = session_paths::generate_automatic_session_identity();
-    const auto target = session_paths::make_automatic_session_target(sessions_root, workspace, identity);
 
     CHECK_FALSE(std::filesystem::exists(sessions_root));
-    auto published = runtime::publish_automatic_session(target, "fake", "fake-model");
+    auto published = runtime::publish_session(
+        runtime::AutomaticPublication{workspace, std::nullopt},
+        "fake",
+        "fake-model");
     REQUIRE(published);
-    CHECK(published->metadata.session_id == identity.session_id);
-    CHECK(published->metadata.created_at == identity.created_at);
-    CHECK(published->metadata.workspace == workspace);
-    CHECK(published->store->path() == target.session_path);
 
-    auto loaded = harness::session::JsonlSessionStore::load(target.session_path);
+    // The published header identity recomposes the exact persisted path.
+    const auto workspace_directory = sessions_root / session_paths::encode_workspace_key(workspace);
+    const session_paths::AutomaticSessionIdentity identity{
+        published->metadata.session_id,
+        published->metadata.created_at,
+    };
+    const auto session_path = workspace_directory / session_paths::automatic_session_filename(identity);
+    CHECK(published->metadata.workspace == workspace);
+    CHECK(published->store->path() == session_path);
+
+    auto loaded = harness::session::JsonlSessionStore::load(session_path);
     REQUIRE(loaded);
-    CHECK(loaded->metadata.session_id == identity.session_id);
-    CHECK(loaded->metadata.created_at == identity.created_at);
-    CHECK(target.session_path.filename() == session_paths::automatic_session_filename(identity));
+    CHECK(loaded->metadata.session_id == published->metadata.session_id);
+    CHECK(loaded->metadata.created_at == published->metadata.created_at);
 #if defined(__unix__) || defined(__APPLE__)
     CHECK(permission_bits(sessions_root) == 0700);
-    CHECK(permission_bits(target.workspace_directory) == 0700);
-    CHECK(permission_bits(target.session_path) == 0600);
+    CHECK(permission_bits(workspace_directory) == 0700);
+    CHECK(permission_bits(session_path) == 0600);
 #endif
 }
 
 TEST_CASE("automatic publication makes default directories and file private", "[coding_agent][session-path-policy][publication]") {
 #if defined(__unix__) || defined(__APPLE__)
     tests::TempWorkspace temp;
-    const auto sessions_root = temp.path() / "sessions";
+    tests::EnvVarGuard config_dir{"CCH_CODING_AGENT_DIR"};
+    config_dir.set((temp.path() / "agent").string());
+    const auto sessions_root = temp.path() / "agent" / "sessions";
     const auto workspace = temp.path() / "workspace";
     std::filesystem::create_directory(workspace);
-    std::filesystem::create_directory(sessions_root);
+    const auto workspace_directory = sessions_root / session_paths::encode_workspace_key(workspace);
+    std::filesystem::create_directories(workspace_directory);
     ::chmod(sessions_root.c_str(), 0755);
+    ::chmod(workspace_directory.c_str(), 0755);
 
-    const auto target = session_paths::make_automatic_session_target(
-        sessions_root, workspace, session_paths::generate_automatic_session_identity());
-    std::filesystem::create_directory(target.workspace_directory);
-    ::chmod(target.workspace_directory.c_str(), 0755);
+    auto published = runtime::publish_session(
+        runtime::AutomaticPublication{workspace, std::nullopt},
+        "fake",
+        "fake-model");
 
-    auto published = runtime::publish_automatic_session(target, "fake", "fake-model");
     REQUIRE(published);
+    REQUIRE(published->store->path());
     CHECK(permission_bits(sessions_root) == 0700);
-    CHECK(permission_bits(target.workspace_directory) == 0700);
-    CHECK(permission_bits(target.session_path) == 0600);
+    CHECK(permission_bits(workspace_directory) == 0700);
+    CHECK(permission_bits(*published->store->path()) == 0600);
 #else
     SUCCEED("POSIX permission assertions are not available on this platform");
 #endif
@@ -215,19 +226,20 @@ TEST_CASE("custom automatic publication creates a missing override directory pri
     const auto workspace = temp.path() / "workspace";
     std::filesystem::create_directory(workspace);
 
-    const auto target = session_paths::make_custom_automatic_session_target(
-        directory, workspace, session_paths::generate_automatic_session_identity());
-    auto published = runtime::publish_automatic_session(target, "fake", "fake-model");
+    auto published = runtime::publish_session(
+        runtime::AutomaticPublication{workspace, directory},
+        "fake",
+        "fake-model");
 
     REQUIRE(published);
-    CHECK(published->store->path() == target.session_path);
+    REQUIRE(published->store->path());
+    CHECK(published->store->path()->parent_path() == directory);
     CHECK(published->metadata.workspace == workspace);
     CHECK(permission_bits(directory) == 0700);
-    CHECK(permission_bits(target.session_path) == 0600);
-    CHECK(target.session_path.parent_path() == directory);
-    auto loaded = harness::session::JsonlSessionStore::load(target.session_path);
+    CHECK(permission_bits(*published->store->path()) == 0600);
+    auto loaded = harness::session::JsonlSessionStore::load(*published->store->path());
     REQUIRE(loaded);
-    CHECK(loaded->metadata.session_id == target.identity.session_id);
+    CHECK(loaded->metadata.session_id == published->metadata.session_id);
 #else
     SUCCEED("POSIX permission assertions are not available on this platform");
 #endif
@@ -242,13 +254,15 @@ TEST_CASE("custom automatic publication preserves an existing override directory
     std::filesystem::create_directory(workspace);
     ::chmod(directory.c_str(), 0755);
 
-    const auto target = session_paths::make_custom_automatic_session_target(
-        directory, workspace, session_paths::generate_automatic_session_identity());
-    auto published = runtime::publish_automatic_session(target, "fake", "fake-model");
+    auto published = runtime::publish_session(
+        runtime::AutomaticPublication{workspace, directory},
+        "fake",
+        "fake-model");
 
     REQUIRE(published);
+    REQUIRE(published->store->path());
     CHECK(permission_bits(directory) == 0755);
-    CHECK(permission_bits(target.session_path) == 0600);
+    CHECK(permission_bits(*published->store->path()) == 0600);
 #else
     SUCCEED("POSIX permission assertions are not available on this platform");
 #endif
@@ -264,12 +278,13 @@ TEST_CASE("custom automatic publication rejects symbolic link override directori
     std::filesystem::create_directory(workspace);
     REQUIRE(::symlink(real_directory.c_str(), linked_directory.c_str()) == 0);
 
-    const auto target = session_paths::make_custom_automatic_session_target(
-        linked_directory, workspace, session_paths::generate_automatic_session_identity());
-    auto published = runtime::publish_automatic_session(target, "fake", "fake-model");
+    auto published = runtime::publish_session(
+        runtime::AutomaticPublication{workspace, linked_directory},
+        "fake",
+        "fake-model");
 
     REQUIRE_FALSE(published);
-    CHECK(published.error().detail.find(target.session_path.string()) != std::string::npos);
+    CHECK(published.error().detail.find(linked_directory.string()) != std::string::npos);
     CHECK(published.error().detail.find("symlink") != std::string::npos);
     CHECK(std::filesystem::is_empty(real_directory));
 #else
@@ -286,21 +301,24 @@ TEST_CASE("custom automatic publication failures include attempted target and re
         std::ofstream blocker(directory);
         blocker << "not a directory";
     }
-    const auto target = session_paths::make_custom_automatic_session_target(
-        directory, workspace, session_paths::generate_automatic_session_identity());
 
-    auto published = runtime::publish_automatic_session(target, "fake", "fake-model");
+    auto published = runtime::publish_session(
+        runtime::AutomaticPublication{workspace, directory},
+        "fake",
+        "fake-model");
 
     REQUIRE_FALSE(published);
-    CHECK(published.error().detail.find(target.session_path.string()) != std::string::npos);
+    CHECK(published.error().detail.find(directory.string()) != std::string::npos);
     CHECK(published.error().detail.find("directory") != std::string::npos);
 }
 
 TEST_CASE("custom automatic publication rejects a relative override directory", "[coding_agent][session-path-policy][publication]") {
-    const auto target = session_paths::make_custom_automatic_session_target(
-        "relative-sessions", "/resolved/workspace", session_paths::generate_automatic_session_identity());
-
-    auto published = runtime::publish_automatic_session(target, "fake", "fake-model");
+    auto published = runtime::publish_session(
+        runtime::AutomaticPublication{
+            std::filesystem::path{"/resolved/workspace"},
+            std::filesystem::path{"relative-sessions"}},
+        "fake",
+        "fake-model");
 
     REQUIRE_FALSE(published);
     CHECK(published.error().detail.find("absolute") != std::string::npos);
@@ -315,7 +333,11 @@ TEST_CASE("explicit publication preserves custom directory mode while making fil
     ::chmod(custom_directory.c_str(), 0755);
     const auto path = custom_directory / "explicit.jsonl";
 
-    auto published = runtime::publish_new_session(path, temp.path(), metadata_for(temp.path()));
+    auto published = runtime::publish_session(
+        runtime::ExplicitNewPublication{path, temp.path()},
+        "fake",
+        "fake-model");
+
     REQUIRE(published);
     CHECK(permission_bits(custom_directory) == 0755);
     CHECK(permission_bits(path) == 0600);
@@ -327,19 +349,24 @@ TEST_CASE("explicit publication preserves custom directory mode while making fil
 TEST_CASE("automatic publication rejects symbolic link directories", "[coding_agent][session-path-policy][publication]") {
 #if defined(__unix__) || defined(__APPLE__)
     tests::TempWorkspace temp;
+    tests::EnvVarGuard config_dir{"CCH_CODING_AGENT_DIR"};
+    const auto config_root = temp.path() / "cfg";
+    std::filesystem::create_directory(config_root);
+    config_dir.set(config_root.string());
+    const auto sessions_root = config_root / "sessions";
     const auto real_root = temp.path() / "real-sessions";
-    const auto linked_root = temp.path() / "linked-sessions";
     const auto workspace = temp.path() / "workspace";
     std::filesystem::create_directory(real_root);
     std::filesystem::create_directory(workspace);
-    REQUIRE(::symlink(real_root.c_str(), linked_root.c_str()) == 0);
+    REQUIRE(::symlink(real_root.c_str(), sessions_root.c_str()) == 0);
 
-    const auto target = session_paths::make_automatic_session_target(
-        linked_root, workspace, session_paths::generate_automatic_session_identity());
-    auto published = runtime::publish_automatic_session(target, "fake", "fake-model");
+    auto published = runtime::publish_session(
+        runtime::AutomaticPublication{workspace, std::nullopt},
+        "fake",
+        "fake-model");
 
     REQUIRE_FALSE(published);
-    CHECK(published.error().detail.find(target.session_path.string()) != std::string::npos);
+    CHECK(published.error().detail.find(sessions_root.string()) != std::string::npos);
     CHECK(published.error().detail.find("symlink") != std::string::npos);
     CHECK_FALSE(std::filesystem::exists(real_root / session_paths::encode_workspace_key(workspace)));
 #else
@@ -347,89 +374,60 @@ TEST_CASE("automatic publication rejects symbolic link directories", "[coding_ag
 #endif
 }
 
-TEST_CASE("automatic publication retains exclusive file creation", "[coding_agent][session-path-policy][publication]") {
-    tests::TempWorkspace temp;
-    const auto workspace = temp.path() / "workspace";
-    std::filesystem::create_directory(workspace);
-    const auto target = session_paths::make_automatic_session_target(
-        temp.path() / "sessions", workspace, session_paths::generate_automatic_session_identity());
-
-    auto first = runtime::publish_automatic_session(target, "fake", "fake-model");
-    REQUIRE(first);
-    auto second = runtime::publish_automatic_session(target, "fake", "fake-model");
-
-    REQUIRE_FALSE(second);
-    CHECK(second.error().detail.find(target.session_path.string()) != std::string::npos);
-    CHECK(second.error().detail.find("already exists") != std::string::npos);
-}
-
-TEST_CASE("automatic publication rejects a symbolic link final target", "[coding_agent][session-path-policy][publication]") {
-#if defined(__unix__) || defined(__APPLE__)
-    tests::TempWorkspace temp;
-    const auto workspace = temp.path() / "workspace";
-    std::filesystem::create_directory(workspace);
-    const auto target = session_paths::make_automatic_session_target(
-        temp.path() / "sessions", workspace, session_paths::generate_automatic_session_identity());
-    std::filesystem::create_directories(target.workspace_directory);
-    const auto outside = temp.path() / "outside.jsonl";
-    {
-        std::ofstream file(outside);
-        file << "outside";
-    }
-    REQUIRE(::symlink(outside.c_str(), target.session_path.c_str()) == 0);
-
-    auto published = runtime::publish_automatic_session(target, "fake", "fake-model");
-
-    REQUIRE_FALSE(published);
-    CHECK(published.error().detail.find(target.session_path.string()) != std::string::npos);
-    CHECK(published.error().detail.find("symlink") != std::string::npos);
-#else
-    SUCCEED("symbolic-link publication assertion is not available on this platform");
-#endif
-}
-
 TEST_CASE("automatic publication failures include attempted target and reason", "[coding_agent][session-path-policy][publication]") {
     tests::TempWorkspace temp;
-    const auto sessions_root = temp.path() / "sessions";
+    tests::EnvVarGuard config_dir{"CCH_CODING_AGENT_DIR"};
+    const auto config_root = temp.path() / "cfg";
+    std::filesystem::create_directory(config_root);
+    config_dir.set(config_root.string());
+    const auto sessions_root = config_root / "sessions";
     const auto workspace = temp.path() / "workspace";
     std::filesystem::create_directory(workspace);
     {
         std::ofstream blocker(sessions_root);
         blocker << "not a directory";
     }
-    const auto target = session_paths::make_automatic_session_target(
-        sessions_root, workspace, session_paths::generate_automatic_session_identity());
 
-    auto published = runtime::publish_automatic_session(target, "fake", "fake-model");
+    auto published = runtime::publish_session(
+        runtime::AutomaticPublication{workspace, std::nullopt},
+        "fake",
+        "fake-model");
 
     REQUIRE_FALSE(published);
-    CHECK(published.error().detail.find(target.session_path.string()) != std::string::npos);
+    CHECK(published.error().detail.find(sessions_root.string()) != std::string::npos);
     CHECK(published.error().detail.find("directory") != std::string::npos);
 }
 
 TEST_CASE("automatic publication rejects a relative sessions root", "[coding_agent][session-path-policy][publication]") {
     tests::TempWorkspace temp;
-    const auto target = session_paths::make_automatic_session_target(
-        "relative-agent/sessions",
-        temp.path(),
-        session_paths::generate_automatic_session_identity());
+    tests::EnvVarGuard config_dir{"CCH_CODING_AGENT_DIR"};
+    config_dir.set("relative-agent");
 
-    CHECK(target.workspace_directory.empty());
-    CHECK(target.session_path.empty());
-    auto published = runtime::publish_automatic_session(target, "fake", "fake-model");
+    auto published = runtime::publish_session(
+        runtime::AutomaticPublication{temp.path(), std::nullopt},
+        "fake",
+        "fake-model");
 
     REQUIRE_FALSE(published);
-    CHECK(published.error().detail.find("relative-agent/sessions") != std::string::npos);
+    const auto expected_root = (std::filesystem::path{"relative-agent"} / "sessions").string();
+    CHECK(published.error().detail.find(expected_root) != std::string::npos);
     CHECK(published.error().detail.find("must be absolute") != std::string::npos);
     CHECK_FALSE(std::filesystem::exists("relative-agent"));
 }
 
 TEST_CASE("automatic publication fails when the user sessions root is unresolved", "[coding_agent][session-path-policy][publication]") {
     tests::TempWorkspace temp;
-    const auto identity = session_paths::generate_automatic_session_identity();
-    const auto target = session_paths::make_automatic_session_target({}, temp.path(), identity);
+    tests::EnvVarGuard config_dir{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard home{"HOME"};
+    tests::EnvVarGuard user_profile{"USERPROFILE"};
+    config_dir.set("");
+    home.set("");
+    user_profile.set("");
 
-    auto published = runtime::publish_automatic_session(target, "fake", "fake-model");
+    auto published = runtime::publish_session(
+        runtime::AutomaticPublication{temp.path(), std::nullopt},
+        "fake",
+        "fake-model");
 
     REQUIRE_FALSE(published);
     CHECK_FALSE(std::filesystem::exists(temp.path() / "sessions"));

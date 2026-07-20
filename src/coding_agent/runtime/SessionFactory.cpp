@@ -320,20 +320,6 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
     }
 }
 
-[[nodiscard]] harness::session::SessionMetadata make_new_session_metadata(
-    const std::filesystem::path& workspace,
-    std::string provider,
-    std::string model) {
-    const auto identity = session_paths::generate_automatic_session_identity();
-    return harness::session::SessionMetadata{
-        identity.session_id,
-        identity.created_at,
-        workspace,
-        std::move(provider),
-        std::move(model),
-    };
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Normalization
 // ─────────────────────────────────────────────────────────────────────────────
@@ -841,32 +827,26 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
             return std::unexpected(published.error());
         }
         open = std::move(*published);
-    } else if (const auto* automatic = std::get_if<AutomaticNewSessionTarget>(&plan.target)) {
-        const auto target = automatic->directory_override
-            ? session_paths::make_custom_automatic_session_target(
-                  *automatic->directory_override,
-                  workspace,
-                  session_paths::generate_automatic_session_identity())
-            : session_paths::make_automatic_session_target(
-                  coding_agent::sessions_root_path(),
-                  workspace,
-                  session_paths::generate_automatic_session_identity());
-        auto published = publish_automatic_session(target, resolved.provider, resolved.model);
-        if (!published) {
-            cleanup_on_failure();
-            return std::unexpected(published.error());
-        }
-        open = std::move(*published);
-    } else if (std::holds_alternative<InMemoryNewSessionTarget>(plan.target)) {
-        open = publish_in_memory_session(
-            workspace,
-            make_new_session_metadata(workspace, resolved.provider, resolved.model));
     } else {
-        const auto& target = std::get<NewSessionTarget>(plan.target);
-        auto published = publish_new_session(
-            target.session_path,
-            workspace,
-            make_new_session_metadata(workspace, resolved.provider, resolved.model));
+        NewSessionPublication publication;
+        if (const auto* automatic = std::get_if<AutomaticNewSessionTarget>(&plan.target)) {
+            publication = AutomaticPublication{
+                automatic->workspace,
+                automatic->directory_override,
+            };
+        } else if (const auto* in_memory = std::get_if<InMemoryNewSessionTarget>(&plan.target)) {
+            publication = InMemoryPublication{in_memory->workspace};
+        } else {
+            const auto& explicit_new = std::get<NewSessionTarget>(plan.target);
+            publication = ExplicitNewPublication{
+                explicit_new.session_path,
+                explicit_new.workspace,
+            };
+        }
+        auto published = publish_session(
+            std::move(publication),
+            resolved.provider,
+            resolved.model);
         if (!published) {
             cleanup_on_failure();
             return std::unexpected(published.error());

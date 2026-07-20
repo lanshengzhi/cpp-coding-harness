@@ -1,6 +1,8 @@
 #include "SessionLifecycle.hpp"
 
+#include "../../../include/cch/coding_agent/AgentConfigDir.hpp"
 #include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
+#include "../SessionPathPolicy.hpp"
 #include "harness/session/InMemorySessionStore.hpp"
 
 #include <cerrno>
@@ -262,37 +264,117 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
     return prepare_session_directory(path, false);
 }
 
-[[nodiscard]] util::ExpectedVoid validate_automatic_target(
-    const session_paths::AutomaticSessionTarget& target) {
-    if (target.sessions_root.empty()) {
-        return std::unexpected(session_error(
-            "automatic session storage is unavailable",
-            "Agent Config Directory sessions root could not be resolved for workspace " +
-                target.workspace.string()));
+[[nodiscard]] util::Expected<OpenSession> publish_new_jsonl_session(
+    std::filesystem::path session_path,
+    std::filesystem::path workspace,
+    harness::session::SessionMetadata metadata) {
+    OpenSession session;
+    session.workspace = std::move(workspace);
+    session.metadata = std::move(metadata);
+
+    auto created = harness::session::JsonlSessionStore::create_new(session_path, session.metadata);
+    if (!created) {
+        return std::unexpected(publication_error(session_path, created.error()));
     }
-    if (!target.sessions_root.is_absolute()) {
-        return std::unexpected(session_error(
-            "automatic session storage root must be absolute",
-            target.custom_directory
-                ? "refusing relative session directory override: " + target.sessions_root.string()
-                : "refusing relative Agent Config Directory sessions root: " +
-                      target.sessions_root.string()));
-    }
-    const auto expected_directory = target.custom_directory
-        ? target.sessions_root
-        : target.sessions_root / session_paths::encode_workspace_key(target.workspace);
-    const auto expected_path =
-        expected_directory / session_paths::automatic_session_filename(target.identity);
-    if (target.workspace_directory != expected_directory || target.session_path != expected_path) {
-        return std::unexpected(session_error(
-            "automatic session target does not match path policy",
-            "derive the target through make_automatic_session_target or "
-            "make_custom_automatic_session_target"));
-    }
-    return {};
+    session.store = std::make_unique<harness::session::JsonlSessionStore>(std::move(*created));
+    return session;
+}
+
+[[nodiscard]] harness::session::SessionMetadata new_session_metadata(
+    const std::filesystem::path& workspace,
+    const session_paths::AutomaticSessionIdentity& identity,
+    std::string provider,
+    std::string model) {
+    return harness::session::SessionMetadata{
+        identity.session_id,
+        identity.created_at,
+        workspace,
+        std::move(provider),
+        std::move(model),
+    };
 }
 
 } // namespace
+
+util::Expected<OpenSession> publish_session(
+    NewSessionPublication target,
+    std::string provider,
+    std::string model) {
+    if (const auto* in_memory = std::get_if<InMemoryPublication>(&target)) {
+        OpenSession session;
+        session.workspace = in_memory->workspace;
+        session.metadata = new_session_metadata(
+            in_memory->workspace,
+            session_paths::generate_automatic_session_identity(),
+            std::move(provider),
+            std::move(model));
+        session.store = std::make_unique<harness::session::InMemorySessionStore>();
+        return session;
+    }
+
+    const auto identity = session_paths::generate_automatic_session_identity();
+    std::filesystem::path session_path;
+    std::filesystem::path workspace;
+
+    if (const auto* automatic = std::get_if<AutomaticPublication>(&target)) {
+        workspace = automatic->workspace;
+        const auto composed = automatic->directory_override
+            ? session_paths::make_custom_automatic_session_target(
+                  *automatic->directory_override,
+                  automatic->workspace,
+                  identity)
+            : session_paths::make_automatic_session_target(
+                  coding_agent::sessions_root_path(),
+                  automatic->workspace,
+                  identity);
+
+        if (composed.sessions_root.empty()) {
+            return std::unexpected(publication_error(
+                composed.session_path,
+                session_error(
+                    "automatic session storage is unavailable",
+                    "Agent Config Directory sessions root could not be resolved for workspace " +
+                        composed.workspace.string())));
+        }
+        if (!composed.sessions_root.is_absolute()) {
+            return std::unexpected(publication_error(
+                composed.session_path,
+                session_error(
+                    "automatic session storage root must be absolute",
+                    composed.custom_directory
+                        ? "refusing relative session directory override: " +
+                              composed.sessions_root.string()
+                        : "refusing relative Agent Config Directory sessions root: " +
+                              composed.sessions_root.string())));
+        }
+
+        if (composed.custom_directory) {
+            // A CLI directory override replaces the whole automatic directory;
+            // existing custom directories are created when missing but never
+            // chmodded, matching the explicit-path ownership rule.
+            if (auto prepared = prepare_custom_directory(composed.workspace_directory); !prepared) {
+                return std::unexpected(publication_error(composed.session_path, prepared.error()));
+            }
+        } else {
+            if (auto prepared = prepare_default_directory(composed.sessions_root); !prepared) {
+                return std::unexpected(publication_error(composed.session_path, prepared.error()));
+            }
+            if (auto prepared = prepare_default_directory(composed.workspace_directory); !prepared) {
+                return std::unexpected(publication_error(composed.session_path, prepared.error()));
+            }
+        }
+        session_path = composed.session_path;
+    } else {
+        const auto& explicit_new = std::get<ExplicitNewPublication>(target);
+        session_path = explicit_new.session_path;
+        workspace = explicit_new.workspace;
+    }
+
+    return publish_new_jsonl_session(
+        std::move(session_path),
+        std::move(workspace),
+        new_session_metadata(workspace, identity, std::move(provider), std::move(model)));
+}
 
 util::Expected<PreparedResumeTarget> prepare_resume_target(
     std::filesystem::path resume_path,
@@ -324,65 +406,6 @@ util::Expected<PreparedResumeTarget> prepare_resume_target(
     };
 }
 
-util::Expected<OpenSession> publish_new_session(
-    std::filesystem::path session_path,
-    std::filesystem::path workspace,
-    harness::session::SessionMetadata metadata) {
-    OpenSession session;
-    session.workspace = std::move(workspace);
-    session.metadata = std::move(metadata);
-
-    auto created = harness::session::JsonlSessionStore::create_new(session_path, session.metadata);
-    if (!created) {
-        return std::unexpected(publication_error(session_path, created.error()));
-    }
-    session.store = std::make_unique<harness::session::JsonlSessionStore>(std::move(*created));
-    return session;
-}
-
-util::Expected<OpenSession> publish_automatic_session(
-    const session_paths::AutomaticSessionTarget& target,
-    std::string provider,
-    std::string model) {
-    if (auto valid = validate_automatic_target(target); !valid) {
-        return std::unexpected(publication_error(target.session_path, valid.error()));
-    }
-    if (target.custom_directory) {
-        // A CLI directory override replaces the whole automatic directory;
-        // existing custom directories are created when missing but never
-        // chmodded, matching the explicit-path ownership rule.
-        if (auto prepared = prepare_custom_directory(target.workspace_directory); !prepared) {
-            return std::unexpected(publication_error(target.session_path, prepared.error()));
-        }
-    } else {
-        if (auto prepared = prepare_default_directory(target.sessions_root); !prepared) {
-            return std::unexpected(publication_error(target.session_path, prepared.error()));
-        }
-        if (auto prepared = prepare_default_directory(target.workspace_directory); !prepared) {
-            return std::unexpected(publication_error(target.session_path, prepared.error()));
-        }
-    }
-
-    harness::session::SessionMetadata metadata{
-        target.identity.session_id,
-        target.identity.created_at,
-        target.workspace,
-        std::move(provider),
-        std::move(model),
-    };
-    return publish_new_session(target.session_path, target.workspace, std::move(metadata));
-}
-
-OpenSession publish_in_memory_session(
-    std::filesystem::path workspace,
-    harness::session::SessionMetadata metadata) {
-    OpenSession session;
-    session.workspace = std::move(workspace);
-    session.metadata = std::move(metadata);
-    session.store = std::make_unique<harness::session::InMemorySessionStore>();
-    return session;
-}
-
 util::Expected<OpenSession> publish_resume_session(
     const PreparedResumeTarget& target) {
     OpenSession session;
@@ -401,31 +424,6 @@ util::Expected<OpenSession> publish_resume_session(
     }
     session.store = std::make_unique<harness::session::JsonlSessionStore>(std::move(*opened));
     return session;
-}
-
-util::Expected<OpenSession> open_session(SessionOpenRequest request) {
-    if (!request.resume_path.empty()) {
-        auto prepared = prepare_resume_target(
-            std::move(request.resume_path),
-            std::move(request.workspace),
-            request.workspace_explicit);
-        if (!prepared) {
-            return std::unexpected(prepared.error());
-        }
-        return publish_resume_session(*prepared);
-    }
-
-    harness::session::SessionMetadata metadata{
-        std::move(request.session_id),
-        std::move(request.created_at),
-        request.workspace,
-        std::move(request.provider),
-        std::move(request.model),
-    };
-    return publish_new_session(
-        std::move(request.session_path),
-        std::move(request.workspace),
-        std::move(metadata));
 }
 
 } // namespace cch::coding_agent::runtime
