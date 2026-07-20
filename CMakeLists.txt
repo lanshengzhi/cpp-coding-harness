@@ -121,6 +121,9 @@ add_library(cch_coding_agent_runtime
     src/coding_agent/runtime/AgentSessionRuntime.cpp
     src/coding_agent/runtime/EventPrinter.cpp
     src/coding_agent/runtime/SessionEventCommitment.cpp
+    src/cli/InteractiveCliFrontend.cpp
+    src/cli/JsonCliRenderer.cpp
+    src/cli/TextCliRenderer.cpp
     src/coding_agent/runtime/SessionFactory.cpp
     src/coding_agent/runtime/JsonEventPrinter.cpp
     src/coding_agent/runtime/RpcJsonl.cpp
@@ -173,6 +176,7 @@ if(CCH_BUILD_TESTS)
         tests/ai/providers/SseParserTest.cpp
         tests/cli/CliSmokeTest.cpp
         tests/cli/CliParseTest.cpp
+        tests/cli/InteractiveCliFrontendTest.cpp
         tests/coding_agent/BuiltinCommandsTest.cpp
         tests/coding_agent/CommandRegistryTest.cpp
         tests/coding_agent/PromptProcessorTest.cpp

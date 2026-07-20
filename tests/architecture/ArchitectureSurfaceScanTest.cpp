@@ -236,7 +236,7 @@ TEST_CASE("removed event and command contracts stay out of session ownership", "
     const auto factory_source = read_text(
         source_root / "src" / "coding_agent" / "runtime" / "SessionFactory.cpp");
     const auto cli_source = read_text(
-        source_root / "src" / "coding_agent" / "runtime" / "AsyncCliRuntime.cpp");
+        source_root / "src" / "cli" / "InteractiveCliFrontend.cpp");
 
     const std::vector<std::string> removed_event_types{
         std::string{"QueuedMessage"} + "StartEvent",
