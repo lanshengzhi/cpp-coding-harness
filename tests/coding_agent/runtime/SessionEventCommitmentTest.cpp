@@ -230,6 +230,40 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Session Event Commitment keeps the first failure when a later event also fails",
+    "[coding-agent][runtime][commitment]") {
+    std::vector<ai::MessageVariant> history;
+    std::deque<runtime::SubscriberEntry> subscribers;
+    FakeStore store;
+
+    int calls{0};
+    runtime::SubscriberEntry failing;
+    failing.id = 0;
+    failing.sink = [&calls](const agent::AgentLifecycleEvent& event) mutable -> util::ExpectedVoid {
+        if (std::holds_alternative<agent::MessageEndEvent>(event)) {
+            ++calls;
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Unknown,
+                "failure " + std::to_string(calls)));
+        }
+        return {};
+    };
+    subscribers.push_back(std::move(failing));
+
+    runtime::SessionEventCommitment commitment{history, subscribers, store};
+    auto sink = commitment.sink();
+
+    REQUIRE_FALSE(sink(agent::MessageEndEvent{user_msg("one")}).has_value());
+    // The agent loop normally aborts on the first failure; a defensive second
+    // delivery must not replace the recorded failure.
+    REQUIRE_FALSE(sink(agent::MessageEndEvent{user_msg("two")}).has_value());
+
+    const auto verdict = commitment.conclude(ok_run_result());
+    REQUIRE_FALSE(verdict.has_value());
+    CHECK(verdict.error().message == "failure 1");
+}
+
+TEST_CASE(
     "Session Event Commitment conclude reports an unfinished loop",
     "[coding-agent][runtime][commitment]") {
     std::vector<ai::MessageVariant> history;

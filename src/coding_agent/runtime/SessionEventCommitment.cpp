@@ -39,7 +39,11 @@ agent::AgentEventSink SessionEventCommitment::sink() {
             if (*subscriber) {
                 auto delivered = (*subscriber)(event);
                 if (!delivered) {
-                    failure_ = delivered.error();
+                    // First failure wins; the loop normally aborts here, so a
+                    // later failure must not replace the recorded one.
+                    if (!failure_) {
+                        failure_ = delivered.error();
+                    }
                     return delivered;
                 }
             }
@@ -47,7 +51,9 @@ agent::AgentEventSink SessionEventCommitment::sink() {
         if (end != nullptr && is_incrementally_persisted_message(end->message)) {
             auto appended = store_.append(end->message);
             if (!appended) {
-                failure_ = appended.error();
+                if (!failure_) {
+                    failure_ = appended.error();
+                }
                 return std::unexpected(appended.error());
             }
         }
