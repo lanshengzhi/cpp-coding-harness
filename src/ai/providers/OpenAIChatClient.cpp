@@ -162,11 +162,129 @@ void append_plain_text_part(std::string& text, std::string_view part, std::strin
         message);
 }
 
+[[nodiscard]] bool is_valid_utf8(std::string_view value) {
+    return value.empty() || glz::validate_utf8(value.data(), value.size());
+}
+
+[[nodiscard]] bool optional_has_valid_utf8(const std::optional<std::string>& value) {
+    return !value || is_valid_utf8(*value);
+}
+
+[[nodiscard]] bool generic_has_valid_utf8(const glz::generic& value) {
+    if (value.is_string()) {
+        return is_valid_utf8(value.get_string());
+    }
+    if (value.is_array()) {
+        for (const auto& entry : value.get_array()) {
+            if (!generic_has_valid_utf8(entry)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    if (value.is_object()) {
+        for (const auto& [key, entry] : value.get_object()) {
+            if (!is_valid_utf8(key) || !generic_has_valid_utf8(entry)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] bool parameters_have_valid_utf8(const ai::glaze::ToolParametersDto& parameters) {
+    if (!is_valid_utf8(parameters.type) || !optional_has_valid_utf8(parameters.description)) {
+        return false;
+    }
+    if (parameters.properties) {
+        for (const auto& [name, property] : *parameters.properties) {
+            if (!is_valid_utf8(name) || !parameters_have_valid_utf8(property)) {
+                return false;
+            }
+        }
+    }
+    if (parameters.required) {
+        for (const auto& name : *parameters.required) {
+            if (!is_valid_utf8(name)) {
+                return false;
+            }
+        }
+    }
+    return !parameters.items || generic_has_valid_utf8(*parameters.items);
+}
+
+[[nodiscard]] bool tool_call_has_valid_utf8(const ai::glaze::ProviderToolCallDto& tool_call) {
+    return is_valid_utf8(tool_call.id) &&
+           is_valid_utf8(tool_call.type) &&
+           is_valid_utf8(tool_call.function.name) &&
+           is_valid_utf8(tool_call.function.arguments);
+}
+
+[[nodiscard]] bool message_has_valid_utf8(const ai::glaze::OpenAIChatMessageDto& message) {
+    if (!is_valid_utf8(message.role) ||
+        !is_valid_utf8(message.content) ||
+        !optional_has_valid_utf8(message.name) ||
+        !optional_has_valid_utf8(message.tool_call_id)) {
+        return false;
+    }
+    if (message.tool_calls) {
+        for (const auto& tool_call : *message.tool_calls) {
+            if (!tool_call_has_valid_utf8(tool_call)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] bool tool_has_valid_utf8(const ai::glaze::ProviderToolDto& tool) {
+    return is_valid_utf8(tool.type) &&
+           is_valid_utf8(tool.function.name) &&
+           is_valid_utf8(tool.function.description) &&
+           parameters_have_valid_utf8(tool.function.parameters);
+}
+
+[[nodiscard]] bool request_has_valid_utf8(const ai::glaze::OpenAIChatRequestDto& request) {
+    if (!is_valid_utf8(request.model) ||
+        !optional_has_valid_utf8(request.reasoning_effort) ||
+        !optional_has_valid_utf8(request.reasoning) ||
+        !optional_has_valid_utf8(request.thinking) ||
+        !optional_has_valid_utf8(request.max_completion_tokens) ||
+        !optional_has_valid_utf8(request.max_tokens)) {
+        return false;
+    }
+    for (const auto& message : request.messages) {
+        if (!message_has_valid_utf8(message)) {
+            return false;
+        }
+    }
+    if (request.tools) {
+        for (const auto& tool : *request.tools) {
+            if (!tool_has_valid_utf8(tool)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] util::Expected<std::string> serialize_openai_request(
+    const ai::glaze::OpenAIChatRequestDto& request) {
+    if (!request_has_valid_utf8(request)) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::JsonSerialize,
+            "failed to serialize OpenAI request",
+            "OpenAI request contains invalid UTF-8"));
+    }
+    return util::write_json(request);
+}
+
 [[nodiscard]] ai::glaze::OpenAIChatRequestDto request_to_openai(
     const ai::StreamChatRequest& request,
-    const OpenAIStreamConfig& config) {
+    const OpenAIStreamConfig& config,
+    std::string_view model) {
     ai::glaze::OpenAIChatRequestDto dto;
-    dto.model = !request.model.empty() ? request.model : (!request.context.model.empty() ? request.context.model : config.model);
+    dto.model = model;
     std::string last_emitted_role;
     if (request.context.system_prompt) {
         const auto role = system_role(config.compat);
@@ -286,12 +404,28 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
     CCH_TRY(api_key, resolve_api_key());
     if (!transport_) {
         co_return std::unexpected(util::make_error(
-            util::ErrorCode::Network,
+            util::ErrorCode::Validation,
             "missing stream transport",
             "OpenAI streaming client requires a transport"));
     }
 
-    CCH_TRY(body, util::write_json(request_to_openai(request, config_)));
+    const std::string& model = !request.model.empty()
+        ? request.model
+        : (!request.context.model.empty() ? request.context.model : config_.model);
+    if (model.empty()) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "model is required",
+            "OpenAI request model must not be empty"));
+    }
+    if (config_.timeout <= std::chrono::milliseconds::zero()) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "request timeout must be positive",
+            "OpenAI request timeout must be greater than zero"));
+    }
+
+    CCH_TRY(body, serialize_openai_request(request_to_openai(request, config_, model)));
 
     StreamRequest http;
     http.method = "POST";
@@ -311,7 +445,7 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
     ai::AssistantMessage assistant;
     assistant.api = config_.api;
     assistant.provider = config_.provider;
-    assistant.model = request.model.empty() ? (request.context.model.empty() ? config_.model : request.context.model) : request.model;
+    assistant.model = model;
     assistant.usage = ai::Usage{};
     assistant.stop_reason = ai::AssistantStopReason::Unknown;
     assistant.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(

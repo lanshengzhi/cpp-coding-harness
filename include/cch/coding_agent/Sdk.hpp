@@ -262,8 +262,11 @@ public:
 
     /// Run a blocking prompt to completion. Progress is delivered through
     /// persistent subscriptions, and resulting state is queried separately.
-    /// Returns an error if the session is closed, busy, event delivery or
-    /// persistence fails, or agent execution otherwise fails.
+    /// Provider rejection before runtime transport and infrastructure failures
+    /// such as a provider event sink or persistence return explicit errors. An accepted
+    /// provider error or aborted outcome completes normally; its final Assistant
+    /// Message is delivered through the ordinary lifecycle and retained in state.
+    /// Closed, busy, or other agent-execution failures also return errors.
     [[nodiscard]] util::ExpectedVoid prompt(
         std::string text,
         PromptOptions options = {});

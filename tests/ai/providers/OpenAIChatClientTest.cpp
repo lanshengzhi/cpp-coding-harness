@@ -11,6 +11,7 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
 
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <string>
@@ -623,8 +624,150 @@ TEST_CASE("streaming OpenAI client keeps malformed streamed tool arguments as in
 }
 
 TEST_CASE(
+    "streaming OpenAI client rejects missing credentials before provider-call acceptance",
+    "[ai][provider][stream][issue14]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key.clear();
+    config.api_key_env.clear();
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE_FALSE(run.result.has_value());
+    CHECK(run.result.error().code == util::ErrorCode::Provider);
+    CHECK(run.result.error().message == "missing API key");
+    CHECK(transport->requests.empty());
+    CHECK(run.events.empty());
+}
+
+TEST_CASE(
+    "streaming OpenAI client rejects a missing transport capability before provider-call acceptance",
+    "[ai][provider][stream][issue14]") {
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    ai::providers::StreamingOpenAIChatClient client({}, config);
+
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE_FALSE(run.result.has_value());
+    CHECK(run.result.error().code == util::ErrorCode::Validation);
+    CHECK(run.result.error().message == "missing stream transport");
+    CHECK(run.events.empty());
+}
+
+TEST_CASE(
+    "streaming OpenAI client rejects an empty effective model before provider-call acceptance",
+    "[ai][provider][stream][issue14]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    config.model.clear();
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::StreamChatRequest request;
+    request.model.clear();
+    request.context.model.clear();
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE_FALSE(run.result.has_value());
+    CHECK(run.result.error().code == util::ErrorCode::Validation);
+    CHECK(run.result.error().message == "model is required");
+    CHECK(transport->requests.empty());
+    CHECK(run.events.empty());
+}
+
+TEST_CASE(
+    "streaming OpenAI client rejects a non-positive timeout before provider-call acceptance",
+    "[ai][provider][stream][issue14]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    config.timeout = std::chrono::milliseconds{0};
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE_FALSE(run.result.has_value());
+    CHECK(run.result.error().code == util::ErrorCode::Validation);
+    CHECK(run.result.error().message == "request timeout must be positive");
+    CHECK(transport->requests.empty());
+    CHECK(run.events.empty());
+}
+
+TEST_CASE(
+    "streaming OpenAI client rejects request serialization failure before provider-call acceptance",
+    "[ai][provider][stream][issue14]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    std::string invalid_text = "invalid UTF-8: ";
+    invalid_text.push_back(static_cast<char>(0xFF));
+
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+    request.context.messages.push_back(ai::MessageVariant{
+        ai::user_text_message(std::move(invalid_text))});
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE_FALSE(run.result.has_value());
+    CHECK(run.result.error().code == util::ErrorCode::JsonSerialize);
+    CHECK(run.result.error().message == "failed to serialize OpenAI request");
+    CHECK(transport->requests.empty());
+    CHECK(run.events.empty());
+}
+
+TEST_CASE(
+    "streaming OpenAI client serializes valid Unicode before provider-call acceptance",
+    "[ai][provider][stream][issue14]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {
+        sse(R"json({"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]})json"),
+        sse("[DONE]"),
+    };
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+    request.context.messages.push_back(ai::MessageVariant{
+        ai::user_text_message("こんにちは 🌍")});
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result.has_value());
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
+    CHECK(transport->requests.size() == 1);
+    CHECK(transport->requests[0].body.find("こんにちは 🌍") != std::string::npos);
+    CHECK(count_events<ai::AssistantDoneEvent>(run.events) == 1);
+}
+
+TEST_CASE(
     "streaming OpenAI client completes an accepted network failure as one error message",
-    "[ai][provider][stream][issue11]") {
+    "[ai][provider][stream][issue11][issue14]") {
     auto transport = std::make_shared<FakeStreamTransport>();
     transport->failure = util::make_error(
         util::ErrorCode::Network,
@@ -705,7 +848,7 @@ TEST_CASE(
 
 TEST_CASE(
     "streaming OpenAI client keeps consumer sink failures outside the assistant outcome",
-    "[ai][provider][stream][issue11]") {
+    "[ai][provider][stream][issue11][issue14]") {
     auto transport = std::make_shared<FakeStreamTransport>();
     transport->chunks = {
         sse(R"json({"choices":[{"index":0,"delta":{"content":"hello"},"finish_reason":"stop"}]})json"),
@@ -720,16 +863,18 @@ TEST_CASE(
     request.model = "gpt-test";
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
     const auto sink_failure = util::make_error(
-        util::ErrorCode::Network,
+        util::ErrorCode::Session,
         "consumer event sink failed",
-        "synthetic subscriber network error");
+        "synthetic subscriber infrastructure error");
 
     auto run = run_client(client, std::move(request), sink_failure);
 
     REQUIRE_FALSE(run.result.has_value());
-    CHECK(run.result.error().code == util::ErrorCode::Network);
+    CHECK(run.result.error().code == util::ErrorCode::Session);
     CHECK(run.result.error().message == "consumer event sink failed");
+    CHECK(run.result.error().detail == "synthetic subscriber infrastructure error");
     CHECK(count_events<ai::AssistantErrorEvent>(run.events) == 0);
+    CHECK(count_events<ai::AssistantDoneEvent>(run.events) == 0);
     CHECK(transport->requests.size() == 1);
 }
 

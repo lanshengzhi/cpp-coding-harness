@@ -24,6 +24,24 @@ class StreamingChatClient {
 public:
     virtual ~StreamingChatClient() = default;
 
+    /// Provider-call acceptance boundary:
+    ///
+    /// Configuration, required-capability, static-request validation, and
+    /// request-serialization failures detected before runtime transport begins
+    /// reject the call through the error alternative. A rejected call must not
+    /// start transport work or emit an AssistantStreamEvent.
+    ///
+    /// The call is accepted after those checks, immediately before runtime
+    /// transport begins. After that point, provider, transport, protocol,
+    /// malformed-response, premature-end, and cancellation failures are completed
+    /// assistant outcomes: emit exactly one terminal
+    /// event and return its final AssistantMessage through the value alternative.
+    /// Successful outcomes use AssistantDoneEvent. Error and aborted outcomes
+    /// use AssistantErrorEvent, whose message and stop reason must agree with the
+    /// returned value.
+    ///
+    /// A failure reported by the consumer-owned sink remains an explicit
+    /// infrastructure error. It is not normalized into an assistant outcome.
     [[nodiscard]] virtual boost::asio::awaitable<util::Expected<AssistantMessage>> stream(
         const StreamChatRequest& request,
         AssistantEventSink sink) = 0;

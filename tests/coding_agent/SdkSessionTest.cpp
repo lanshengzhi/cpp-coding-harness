@@ -640,6 +640,68 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "SDK persists only the prompt when provider preflight rejects before transport",
+    "[sdk][incremental-persistence][provider-preflight-rejection][issue14]") {
+    TestPaths paths;
+    auto transport = std::make_shared<RecoveringFailureTransport>(util::make_error(
+        util::ErrorCode::Network,
+        "transport must not run"));
+
+    ai::providers::OpenAIStreamConfig provider;
+    provider.api_key.clear();
+    provider.api_key_env.clear();
+    provider.model = "gpt-test";
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::make_unique<ai::providers::StreamingOpenAIChatClient>(
+        transport,
+        std::move(provider));
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    auto& session = result->session;
+
+    std::vector<agent::AgentLifecycleEvent> events;
+    auto subscription = session->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            events.push_back(event);
+            return {};
+        });
+    REQUIRE(subscription.has_value());
+
+    auto failed = session->prompt("hello");
+    REQUIRE_FALSE(failed.has_value());
+    CHECK(failed.error().code == util::ErrorCode::Provider);
+    CHECK(failed.error().message == "missing API key");
+    CHECK(transport->requests.empty());
+    CHECK(session->is_open());
+    CHECK(session->message_count() == 1);
+    CHECK_FALSE(session->last_assistant_text().has_value());
+
+    REQUIRE(events.size() == 5);
+    std::size_t index = 0;
+    CHECK(std::holds_alternative<agent::AgentStartEvent>(events[index++]));
+    CHECK(std::holds_alternative<agent::TurnStartEvent>(events[index++]));
+    const auto* user_start = std::get_if<agent::MessageStartEvent>(&events[index++]);
+    REQUIRE(user_start != nullptr);
+    CHECK(std::holds_alternative<ai::UserMessage>(user_start->message));
+    const auto* user_end = std::get_if<agent::MessageEndEvent>(&events[index++]);
+    REQUIRE(user_end != nullptr);
+    CHECK(std::holds_alternative<ai::UserMessage>(user_end->message));
+    CHECK(std::holds_alternative<agent::AgentEndEvent>(events[index++]));
+
+    auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable.has_value());
+    REQUIRE(durable->messages.size() == 1);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(durable->messages[0]));
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(durable->messages[0]).content) == "hello");
+
+    CHECK(session->close().has_value());
+}
+
+TEST_CASE(
     "SDK completes an accepted network failure as a durable error turn and remains reusable",
     "[sdk][live-state][incremental-persistence][issue11]") {
     TestPaths paths;
@@ -2576,7 +2638,7 @@ TEST_CASE(
 
 TEST_CASE(
     "SDK persistence failure retains live history and permits later durable appends",
-    "[sdk][live-state][persistence-failure]") {
+    "[sdk][live-state][persistence-failure][issue14]") {
     TestPaths paths;
     auto capture = std::make_unique<CaptureChatClient>();
     auto* capture_ptr = capture.get();
@@ -2590,6 +2652,19 @@ TEST_CASE(
     REQUIRE(result.has_value());
     auto& session = result->session;
 
+    std::optional<ai::AssistantMessage> completed_assistant;
+    auto subscription = session->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            const auto* end = std::get_if<agent::MessageEndEvent>(&event);
+            if (end != nullptr) {
+                if (const auto* assistant = std::get_if<ai::AssistantMessage>(&end->message)) {
+                    completed_assistant = *assistant;
+                }
+            }
+            return {};
+        });
+    REQUIRE(subscription.has_value());
+
     // The user message reaches storage, then the assistant append fails. The
     // one-shot private hook leaves the next prompt free to persist normally.
     harness::session::testing::fail_nth_append_for_test(paths.session_file, 2);
@@ -2600,6 +2675,9 @@ TEST_CASE(
     CHECK(session->is_open());
     CHECK(session->message_count() == 2);
     CHECK(session->last_assistant_text() == "captured");
+    REQUIRE(completed_assistant.has_value());
+    CHECK(completed_assistant->stop_reason == ai::AssistantStopReason::Stop);
+    CHECK_FALSE(completed_assistant->error_message.has_value());
 
     auto durable_after_failure = harness::session::JsonlSessionStore::load(paths.session_file);
     REQUIRE(durable_after_failure.has_value());
