@@ -361,10 +361,15 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             request.context = std::move(request_context);
         }
 
+        // Tracks whether the provider emitted an assistant start event for
+        // this response, so a terminal-before-start sequence can be recovered
+        // with one synthesized start (matching pi's addedPartial rule).
+        bool assistant_start_emitted = false;
         auto assistant = co_await client_.stream(
             request,
             [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
                 if (const auto* start = std::get_if<ai::AssistantStartEvent>(&event)) {
+                    assistant_start_emitted = true;
                     state.streaming_message = start->partial;
                     return emit(sink, MessageStartEvent{ai::MessageVariant{start->partial}});
                 }
@@ -430,6 +435,13 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         context.messages.push_back(ai::MessageVariant{*assistant});
         state.streaming_message = *assistant;
         sync_state(state, context);
+        if (!assistant_start_emitted) {
+            // A conforming host provider may reach its terminal event before
+            // any assistant start event. Synthesize the missing start from the
+            // authoritative final message so consumers observe exactly one
+            // complete assistant lifecycle.
+            CCH_TRY_VOID(emit(sink, MessageStartEvent{context.messages.back()}));
+        }
         CCH_TRY_VOID(emit(sink, MessageEndEvent{context.messages.back()}));
 
         if (assistant->stop_reason == ai::AssistantStopReason::Error ||

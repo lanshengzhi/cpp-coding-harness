@@ -86,6 +86,33 @@ public:
     std::vector<ai::StreamChatRequest> requests;
 };
 
+/// A conforming host-provided client whose accepted call reaches a terminal
+/// event before any assistant start event and returns the same final
+/// AssistantMessage through the value alternative.
+class TerminalBeforeStartClient final : public ai::StreamingChatClient {
+public:
+    explicit TerminalBeforeStartClient(ai::AssistantMessage terminal)
+        : terminal_(std::move(terminal)) {}
+
+    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        requests.push_back(request);
+        ++terminal_events;
+        if (terminal_.stop_reason == ai::AssistantStopReason::Error ||
+            terminal_.stop_reason == ai::AssistantStopReason::Aborted) {
+            CCH_TRY_VOID(sink(ai::AssistantErrorEvent{terminal_.stop_reason, terminal_}));
+        } else {
+            CCH_TRY_VOID(sink(ai::AssistantDoneEvent{terminal_.stop_reason, terminal_}));
+        }
+        co_return terminal_;
+    }
+
+    ai::AssistantMessage terminal_;
+    int terminal_events{0};
+    std::vector<ai::StreamChatRequest> requests;
+};
+
 class FakeTool final : public agent::AsyncAgentTool {
 public:
     explicit FakeTool(ai::Tool definition) : definition_(std::move(definition)) {}
@@ -374,6 +401,265 @@ TEST_CASE(
     REQUIRE(std::holds_alternative<ai::AssistantMessage>(agent_end->messages[1]));
     CHECK(std::get<ai::AssistantMessage>(agent_end->messages[1]).stop_reason ==
           ai::AssistantStopReason::Aborted);
+}
+
+TEST_CASE(
+    "async agent loop recovers an error terminal emitted before any assistant start",
+    "[agent][async][issue15]") {
+    ai::AssistantMessage terminal;
+    terminal.api = "host-api";
+    terminal.provider = "host-provider";
+    terminal.model = "gpt-test";
+    terminal.stop_reason = ai::AssistantStopReason::Error;
+    terminal.error_message = "host transport lost before response start";
+    terminal.content.emplace_back(ai::TextContent{"partial host output", std::nullopt});
+    TerminalBeforeStartClient client(std::move(terminal));
+
+    auto tool = std::make_unique<FakeTool>(
+        ai::Tool{"read_file", "Read a file", ai::JsonSchema::object()});
+    auto* tool_ptr = tool.get();
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::move(tool)).has_value());
+
+    int steering_decisions = 0;
+    int follow_up_decisions = 0;
+    int prepare_decisions = 0;
+    agent::AsyncAgentOptions options{3, "gpt-test"};
+    options.get_steering_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        ++steering_decisions;
+        return std::vector<ai::MessageVariant>{};
+    };
+    options.get_follow_up_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        ++follow_up_decisions;
+        return std::vector<ai::MessageVariant>{ai::user_text_message("must not be consumed")};
+    };
+    options.prepare_next_turn = [&](const agent::PrepareNextTurnContext&)
+        -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+        ++prepare_decisions;
+        return std::nullopt;
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "hello");
+
+    REQUIRE(run.result.has_value());
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    CHECK(run.result->turns == 1);
+    REQUIRE(run.result->context.messages.size() == 2);
+    const auto* final = std::get_if<ai::AssistantMessage>(&run.result->context.messages.back());
+    REQUIRE(final != nullptr);
+    CHECK(final->stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(final->error_message.has_value());
+    CHECK(*final->error_message == "host transport lost before response start");
+    CHECK(ai::text_from_assistant_content(final->content) == "partial host output");
+
+    // Steering is polled once before the provider request; tools, post-turn
+    // steering, follow-up, prepare-next-turn, and further provider requests
+    // are all bypassed after the terminal message.
+    CHECK(client.requests.size() == 1);
+    CHECK(client.terminal_events == 1);
+    CHECK(tool_ptr->invocations.empty());
+    CHECK(steering_decisions == 1);
+    CHECK(follow_up_decisions == 0);
+    CHECK(prepare_decisions == 0);
+    CHECK(count_events<agent::ToolExecutionStartEvent>(run.events) == 0);
+    CHECK(count_events<agent::ToolExecutionEndEvent>(run.events) == 0);
+
+    // Exactly one assistant message_start (synthesized from the authoritative
+    // final message) and exactly one message_end.
+    REQUIRE(run.events.size() == 8);
+    std::size_t index = 0;
+    CHECK(std::holds_alternative<agent::AgentStartEvent>(run.events[index++]));
+    CHECK(std::holds_alternative<agent::TurnStartEvent>(run.events[index++]));
+    CHECK(std::holds_alternative<agent::MessageStartEvent>(run.events[index++]));
+    CHECK(std::holds_alternative<agent::MessageEndEvent>(run.events[index++]));
+    const auto* assistant_start = std::get_if<agent::MessageStartEvent>(&run.events[index++]);
+    REQUIRE(assistant_start != nullptr);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(assistant_start->message));
+    const auto& started = std::get<ai::AssistantMessage>(assistant_start->message);
+    CHECK(started.stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(started.error_message.has_value());
+    CHECK(*started.error_message == "host transport lost before response start");
+    CHECK(ai::text_from_assistant_content(started.content) == "partial host output");
+    const auto* assistant_end = std::get_if<agent::MessageEndEvent>(&run.events[index++]);
+    REQUIRE(assistant_end != nullptr);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(assistant_end->message));
+    CHECK(std::get<ai::AssistantMessage>(assistant_end->message).stop_reason ==
+          ai::AssistantStopReason::Error);
+    const auto* turn_end = std::get_if<agent::TurnEndEvent>(&run.events[index++]);
+    REQUIRE(turn_end != nullptr);
+    CHECK(turn_end->tool_results.empty());
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(turn_end->message));
+    CHECK(std::get<ai::AssistantMessage>(turn_end->message).stop_reason ==
+          ai::AssistantStopReason::Error);
+    const auto* agent_end = std::get_if<agent::AgentEndEvent>(&run.events[index++]);
+    REQUIRE(agent_end != nullptr);
+    REQUIRE(agent_end->messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(agent_end->messages[0]));
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(agent_end->messages[1]));
+    CHECK(std::get<ai::AssistantMessage>(agent_end->messages[1]).stop_reason ==
+          ai::AssistantStopReason::Error);
+}
+
+TEST_CASE(
+    "async agent loop recovers an aborted terminal emitted before any assistant start",
+    "[agent][async][issue15]") {
+    ai::AssistantMessage terminal;
+    terminal.api = "host-api";
+    terminal.provider = "host-provider";
+    terminal.model = "gpt-test";
+    terminal.stop_reason = ai::AssistantStopReason::Aborted;
+    terminal.error_message = "host cancelled before response start";
+    TerminalBeforeStartClient client(std::move(terminal));
+
+    auto tool = std::make_unique<FakeTool>(
+        ai::Tool{"read_file", "Read a file", ai::JsonSchema::object()});
+    auto* tool_ptr = tool.get();
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::move(tool)).has_value());
+
+    int follow_up_decisions = 0;
+    int prepare_decisions = 0;
+    agent::AsyncAgentOptions options{3, "gpt-test"};
+    options.get_follow_up_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        ++follow_up_decisions;
+        return std::vector<ai::MessageVariant>{ai::user_text_message("must not be consumed")};
+    };
+    options.prepare_next_turn = [&](const agent::PrepareNextTurnContext&)
+        -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+        ++prepare_decisions;
+        return std::nullopt;
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "hello");
+
+    REQUIRE(run.result.has_value());
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Aborted);
+    CHECK(run.result->turns == 1);
+    REQUIRE(run.result->context.messages.size() == 2);
+    const auto* final = std::get_if<ai::AssistantMessage>(&run.result->context.messages.back());
+    REQUIRE(final != nullptr);
+    CHECK(final->stop_reason == ai::AssistantStopReason::Aborted);
+    REQUIRE(final->error_message.has_value());
+    CHECK(*final->error_message == "host cancelled before response start");
+
+    CHECK(client.requests.size() == 1);
+    CHECK(client.terminal_events == 1);
+    CHECK(tool_ptr->invocations.empty());
+    CHECK(follow_up_decisions == 0);
+    CHECK(prepare_decisions == 0);
+    CHECK(count_events<agent::ToolExecutionStartEvent>(run.events) == 0);
+    CHECK(count_events<agent::ToolExecutionEndEvent>(run.events) == 0);
+
+    REQUIRE(run.events.size() == 8);
+    std::size_t index = 0;
+    CHECK(std::holds_alternative<agent::AgentStartEvent>(run.events[index++]));
+    CHECK(std::holds_alternative<agent::TurnStartEvent>(run.events[index++]));
+    CHECK(std::holds_alternative<agent::MessageStartEvent>(run.events[index++]));
+    CHECK(std::holds_alternative<agent::MessageEndEvent>(run.events[index++]));
+    const auto* assistant_start = std::get_if<agent::MessageStartEvent>(&run.events[index++]);
+    REQUIRE(assistant_start != nullptr);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(assistant_start->message));
+    CHECK(std::get<ai::AssistantMessage>(assistant_start->message).stop_reason ==
+          ai::AssistantStopReason::Aborted);
+    const auto* assistant_end = std::get_if<agent::MessageEndEvent>(&run.events[index++]);
+    REQUIRE(assistant_end != nullptr);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(assistant_end->message));
+    const auto& ended = std::get<ai::AssistantMessage>(assistant_end->message);
+    CHECK(ended.stop_reason == ai::AssistantStopReason::Aborted);
+    REQUIRE(ended.error_message.has_value());
+    CHECK(*ended.error_message == "host cancelled before response start");
+    const auto* turn_end = std::get_if<agent::TurnEndEvent>(&run.events[index++]);
+    REQUIRE(turn_end != nullptr);
+    CHECK(turn_end->tool_results.empty());
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(turn_end->message));
+    CHECK(std::get<ai::AssistantMessage>(turn_end->message).stop_reason ==
+          ai::AssistantStopReason::Aborted);
+    const auto* agent_end = std::get_if<agent::AgentEndEvent>(&run.events[index++]);
+    REQUIRE(agent_end != nullptr);
+    REQUIRE(agent_end->messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(agent_end->messages[1]));
+    CHECK(std::get<ai::AssistantMessage>(agent_end->messages[1]).stop_reason ==
+          ai::AssistantStopReason::Aborted);
+}
+
+TEST_CASE(
+    "async agent loop synthesizes the assistant start for a done terminal before any start",
+    "[agent][async][issue15]") {
+    auto terminal = ai::assistant_text_message("host reply without a streamed start");
+    terminal.api = "host-api";
+    terminal.provider = "host-provider";
+    terminal.model = "gpt-test";
+    TerminalBeforeStartClient client(std::move(terminal));
+
+    agent::AsyncToolRegistry registry;
+    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{3, "gpt-test"});
+    auto run = run_loop(loop, "hello");
+
+    REQUIRE(run.result.has_value());
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
+    CHECK(run.result->turns == 1);
+    REQUIRE(run.result->context.messages.size() == 2);
+    const auto* final = std::get_if<ai::AssistantMessage>(&run.result->context.messages.back());
+    REQUIRE(final != nullptr);
+    CHECK(ai::text_from_assistant_content(final->content) == "host reply without a streamed start");
+
+    CHECK(client.requests.size() == 1);
+    CHECK(client.terminal_events == 1);
+
+    REQUIRE(run.events.size() == 8);
+    std::size_t index = 0;
+    CHECK(std::holds_alternative<agent::AgentStartEvent>(run.events[index++]));
+    CHECK(std::holds_alternative<agent::TurnStartEvent>(run.events[index++]));
+    CHECK(std::holds_alternative<agent::MessageStartEvent>(run.events[index++]));
+    CHECK(std::holds_alternative<agent::MessageEndEvent>(run.events[index++]));
+    const auto* assistant_start = std::get_if<agent::MessageStartEvent>(&run.events[index++]);
+    REQUIRE(assistant_start != nullptr);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(assistant_start->message));
+    CHECK(std::get<ai::AssistantMessage>(assistant_start->message).stop_reason ==
+          ai::AssistantStopReason::Stop);
+    CHECK(std::holds_alternative<agent::MessageEndEvent>(run.events[index++]));
+    const auto* turn_end = std::get_if<agent::TurnEndEvent>(&run.events[index++]);
+    REQUIRE(turn_end != nullptr);
+    CHECK(turn_end->tool_results.empty());
+    CHECK(std::holds_alternative<agent::AgentEndEvent>(run.events[index++]));
+}
+
+TEST_CASE(
+    "async agent loop never duplicates a start already emitted by a streaming provider",
+    "[agent][async][issue15]") {
+    ai::AssistantMessage terminal;
+    terminal.api = "host-api";
+    terminal.provider = "host-provider";
+    terminal.model = "gpt-test";
+    terminal.stop_reason = ai::AssistantStopReason::Error;
+    terminal.error_message = "host transport lost after response start";
+    TerminalOutcomeClient client(std::move(terminal));
+
+    agent::AsyncToolRegistry registry;
+    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{3, "gpt-test"});
+    auto run = run_loop(loop, "hello");
+
+    REQUIRE(run.result.has_value());
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+
+    std::size_t assistant_starts = 0;
+    std::size_t assistant_ends = 0;
+    for (const auto& event : run.events) {
+        if (const auto* start = std::get_if<agent::MessageStartEvent>(&event)) {
+            if (std::holds_alternative<ai::AssistantMessage>(start->message)) {
+                ++assistant_starts;
+            }
+        }
+        if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+            if (std::holds_alternative<ai::AssistantMessage>(end->message)) {
+                ++assistant_ends;
+            }
+        }
+    }
+    CHECK(assistant_starts == 1);
+    CHECK(assistant_ends == 1);
 }
 
 TEST_CASE("async agent loop emits user message lifecycle before assistant response", "[agent][async]") {

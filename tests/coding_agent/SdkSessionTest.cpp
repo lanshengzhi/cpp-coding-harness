@@ -239,6 +239,40 @@ public:
     }
 };
 
+/// A conforming host-provided client whose accepted call emits one terminal
+/// error event before any assistant start event and returns the same final
+/// AssistantMessage through the value alternative.
+class TerminalBeforeStartChatClient final : public ai::StreamingChatClient {
+public:
+    TerminalBeforeStartChatClient(ai::AssistantStopReason reason, std::string diagnostic)
+        : reason_(reason), diagnostic_(std::move(diagnostic)) {}
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        ++request_count;
+        ai::AssistantMessage terminal;
+        terminal.provider = "host";
+        terminal.api = "host";
+        terminal.model = request.model;
+        terminal.stop_reason = reason_;
+        terminal.error_message = diagnostic_;
+        if (sink) {
+            auto delivered = sink(ai::AssistantErrorEvent{reason_, terminal});
+            if (!delivered) {
+                co_return std::unexpected(delivered.error());
+            }
+        }
+        co_return terminal;
+    }
+
+    int request_count{0};
+
+private:
+    ai::AssistantStopReason reason_;
+    std::string diagnostic_;
+};
+
 class PartialProtocolFailureTransport final : public ai::providers::StreamTransport {
 public:
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::providers::StreamResponse>> async_stream(
@@ -966,6 +1000,179 @@ TEST_CASE(
     check_aborted_terminal(std::get<ai::AssistantMessage>(
         capture_ptr->captured_request->context.messages[1]));
     CHECK(reopened->session->close().has_value());
+}
+
+TEST_CASE(
+    "SDK recovers a host provider error terminal emitted before any assistant start",
+    "[sdk][live-state][incremental-persistence][issue15]") {
+    TestPaths paths;
+    auto client = std::make_unique<TerminalBeforeStartChatClient>(
+        ai::AssistantStopReason::Error,
+        "host transport lost before response start");
+    auto* client_ptr = client.get();
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::move(client);
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    auto& session = result->session;
+
+    std::vector<agent::AgentLifecycleEvent> events;
+    bool terminal_was_live_before_message_end = false;
+    auto subscription = session->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            events.push_back(event);
+            const auto* end = std::get_if<agent::MessageEndEvent>(&event);
+            if (end == nullptr) {
+                return {};
+            }
+            const auto* assistant = std::get_if<ai::AssistantMessage>(&end->message);
+            if (assistant != nullptr && assistant->stop_reason == ai::AssistantStopReason::Error) {
+                terminal_was_live_before_message_end = session->message_count() == 2;
+            }
+            return {};
+        });
+    REQUIRE(subscription.has_value());
+
+    auto completed = session->prompt("hello");
+    REQUIRE(completed.has_value());
+    CHECK(client_ptr->request_count == 1);
+    CHECK(terminal_was_live_before_message_end);
+    CHECK(session->is_open());
+    CHECK(session->message_count() == 2);
+
+    // Exactly one assistant message_start, synthesized from the authoritative
+    // final message, and exactly one message_end.
+    REQUIRE(events.size() == 8);
+    std::size_t index = 0;
+    CHECK(std::holds_alternative<agent::AgentStartEvent>(events[index++]));
+    CHECK(std::holds_alternative<agent::TurnStartEvent>(events[index++]));
+    const auto* user_start = std::get_if<agent::MessageStartEvent>(&events[index++]);
+    REQUIRE(user_start != nullptr);
+    CHECK(std::holds_alternative<ai::UserMessage>(user_start->message));
+    const auto* user_end = std::get_if<agent::MessageEndEvent>(&events[index++]);
+    REQUIRE(user_end != nullptr);
+    CHECK(std::holds_alternative<ai::UserMessage>(user_end->message));
+    const auto* assistant_start = std::get_if<agent::MessageStartEvent>(&events[index++]);
+    REQUIRE(assistant_start != nullptr);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(assistant_start->message));
+    const auto& started = std::get<ai::AssistantMessage>(assistant_start->message);
+    CHECK(started.stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(started.error_message.has_value());
+    CHECK(*started.error_message == "host transport lost before response start");
+    const auto* assistant_end = std::get_if<agent::MessageEndEvent>(&events[index++]);
+    REQUIRE(assistant_end != nullptr);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(assistant_end->message));
+    const auto& ended = std::get<ai::AssistantMessage>(assistant_end->message);
+    CHECK(ended.stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(ended.error_message.has_value());
+    CHECK(*ended.error_message == "host transport lost before response start");
+    const auto* turn_end = std::get_if<agent::TurnEndEvent>(&events[index++]);
+    REQUIRE(turn_end != nullptr);
+    CHECK(turn_end->tool_results.empty());
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(turn_end->message));
+    CHECK(std::get<ai::AssistantMessage>(turn_end->message).stop_reason ==
+          ai::AssistantStopReason::Error);
+    CHECK(std::holds_alternative<agent::AgentEndEvent>(events[index++]));
+    CHECK(std::none_of(
+        events.begin(),
+        events.end(),
+        [](const auto& event) {
+            return std::holds_alternative<agent::ToolExecutionStartEvent>(event) ||
+                   std::holds_alternative<agent::ToolExecutionEndEvent>(event);
+        }));
+
+    auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable.has_value());
+    REQUIRE(durable->messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(durable->messages[1]));
+    const auto& durable_terminal = std::get<ai::AssistantMessage>(durable->messages[1]);
+    CHECK(durable_terminal.stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(durable_terminal.error_message.has_value());
+    CHECK(*durable_terminal.error_message == "host transport lost before response start");
+
+    // The session remains usable for another prompt.
+    events.clear();
+    auto second = session->prompt("again");
+    REQUIRE(second.has_value());
+    CHECK(client_ptr->request_count == 2);
+    CHECK(session->message_count() == 4);
+    CHECK(session->close().has_value());
+}
+
+TEST_CASE(
+    "SDK recovers a host provider aborted terminal emitted before any assistant start",
+    "[sdk][live-state][incremental-persistence][issue15]") {
+    TestPaths paths;
+    auto client = std::make_unique<TerminalBeforeStartChatClient>(
+        ai::AssistantStopReason::Aborted,
+        "host cancelled before response start");
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::move(client);
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    auto& session = result->session;
+
+    std::vector<agent::AgentLifecycleEvent> events;
+    auto subscription = session->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            events.push_back(event);
+            return {};
+        });
+    REQUIRE(subscription.has_value());
+
+    auto completed = session->prompt("hello");
+    REQUIRE(completed.has_value());
+    CHECK(session->is_open());
+    CHECK(session->message_count() == 2);
+
+    std::size_t assistant_starts = 0;
+    std::size_t assistant_ends = 0;
+    std::optional<std::size_t> assistant_end_index;
+    for (std::size_t i = 0; i < events.size(); ++i) {
+        if (const auto* start = std::get_if<agent::MessageStartEvent>(&events[i])) {
+            if (const auto* assistant = std::get_if<ai::AssistantMessage>(&start->message)) {
+                ++assistant_starts;
+                CHECK(assistant->stop_reason == ai::AssistantStopReason::Aborted);
+            }
+        } else if (const auto* end = std::get_if<agent::MessageEndEvent>(&events[i])) {
+            if (const auto* assistant = std::get_if<ai::AssistantMessage>(&end->message)) {
+                ++assistant_ends;
+                assistant_end_index = i;
+                CHECK(assistant->stop_reason == ai::AssistantStopReason::Aborted);
+                REQUIRE(assistant->error_message.has_value());
+                CHECK(*assistant->error_message == "host cancelled before response start");
+            }
+        }
+    }
+    CHECK(assistant_starts == 1);
+    CHECK(assistant_ends == 1);
+    REQUIRE(assistant_end_index.has_value());
+    REQUIRE(*assistant_end_index + 2 < events.size());
+    const auto* turn_end = std::get_if<agent::TurnEndEvent>(&events[*assistant_end_index + 1]);
+    REQUIRE(turn_end != nullptr);
+    CHECK(turn_end->tool_results.empty());
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(turn_end->message));
+    CHECK(std::get<ai::AssistantMessage>(turn_end->message).stop_reason ==
+          ai::AssistantStopReason::Aborted);
+    CHECK(std::holds_alternative<agent::AgentEndEvent>(events[*assistant_end_index + 2]));
+
+    auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable.has_value());
+    REQUIRE(durable->messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(durable->messages[1]));
+    const auto& durable_terminal = std::get<ai::AssistantMessage>(durable->messages[1]);
+    CHECK(durable_terminal.stop_reason == ai::AssistantStopReason::Aborted);
+    REQUIRE(durable_terminal.error_message.has_value());
+    CHECK(*durable_terminal.error_message == "host cancelled before response start");
+    CHECK(session->close().has_value());
 }
 
 TEST_CASE(
