@@ -7,6 +7,7 @@
 #include "ai/providers/SseParser.hpp"
 #include "util/Json.hpp"
 
+#include <chrono>
 #include <cstdlib>
 #include <map>
 #include <optional>
@@ -242,6 +243,22 @@ void append_plain_text_part(std::string& text, std::string_view part, std::strin
     return util::read_json<util::JsonValue>(raw_arguments);
 }
 
+void finalize_tool_arguments(ai::ToolCallContent& block) {
+    auto parsed = parse_tool_arguments(block.raw_arguments);
+    if (parsed) {
+        block.arguments = std::move(*parsed);
+        block.arguments_valid = true;
+        block.argument_error = std::nullopt;
+        return;
+    }
+
+    block.arguments = std::nullopt;
+    block.arguments_valid = false;
+    block.argument_error = parsed.error().detail.empty()
+        ? parsed.error().message
+        : parsed.error().detail;
+}
+
 [[nodiscard]] util::Expected<ai::glaze::OpenAIStreamChunkDto> read_openai_stream_chunk(std::string_view json) {
     ai::glaze::OpenAIStreamChunkDto chunk;
     auto error = glz::read<glz::opts{.error_on_unknown_keys = false}>(chunk, json);
@@ -292,16 +309,21 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
     assistant.api = config_.api;
     assistant.provider = config_.provider;
     assistant.model = request.model.empty() ? (request.context.model.empty() ? config_.model : request.context.model) : request.model;
+    assistant.usage = ai::Usage{};
     assistant.stop_reason = ai::AssistantStopReason::Unknown;
+    assistant.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
 
     CCH_TRY_VOID(emit(sink, ai::AssistantStartEvent{assistant}));
 
     SseParser parser;
     bool text_started = false;
+    bool thinking_started = false;
     bool saw_done = false;
     bool saw_terminal_choice = false;
     bool saw_assistant_payload = false;
     std::optional<std::size_t> text_index;
+    std::optional<std::size_t> thinking_index;
     std::map<std::int64_t, ToolCallAccumulator> tool_calls;
     std::optional<util::Error> stream_sink_failure;
 
@@ -379,6 +401,41 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
                     }
                 }
 
+                const std::optional<std::string>* reasoning_delta = nullptr;
+                std::string_view reasoning_signature;
+                if (choice.delta->reasoning_content && !choice.delta->reasoning_content->empty()) {
+                    reasoning_delta = &choice.delta->reasoning_content;
+                    reasoning_signature = "reasoning_content";
+                } else if (choice.delta->reasoning && !choice.delta->reasoning->empty()) {
+                    reasoning_delta = &choice.delta->reasoning;
+                    reasoning_signature = config_.provider == "opencode-go"
+                        ? "reasoning_content"
+                        : "reasoning";
+                } else if (choice.delta->reasoning_text && !choice.delta->reasoning_text->empty()) {
+                    reasoning_delta = &choice.delta->reasoning_text;
+                    reasoning_signature = "reasoning_text";
+                }
+                if (reasoning_delta != nullptr) {
+                    saw_assistant_payload = true;
+                    if (!thinking_started) {
+                        thinking_started = true;
+                        thinking_index = assistant.content.size();
+                        assistant.content.emplace_back(ai::ThinkingContent{
+                            "", std::string{reasoning_signature}, false});
+                        auto emitted = emit_stream_event(ai::ThinkingStartEvent{*thinking_index, assistant});
+                        if (!emitted) {
+                            return std::unexpected(emitted.error());
+                        }
+                    }
+                    auto& thinking = std::get<ai::ThinkingContent>(assistant.content[*thinking_index]);
+                    thinking.thinking += **reasoning_delta;
+                    auto emitted = emit_stream_event(ai::ThinkingDeltaEvent{
+                        *thinking_index, **reasoning_delta, assistant});
+                    if (!emitted) {
+                        return std::unexpected(emitted.error());
+                    }
+                }
+
                 if (choice.delta->tool_calls) {
                     if (!choice.delta->tool_calls->empty()) {
                         saw_assistant_payload = true;
@@ -426,22 +483,30 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
         return {};
     };
 
+    auto complete_accepted_failure = [&](const util::Error& error)
+        -> util::Expected<ai::AssistantMessage> {
+        for (auto& [_, call] : tool_calls) {
+            auto& block = std::get<ai::ToolCallContent>(assistant.content[call.content_index]);
+            finalize_tool_arguments(block);
+        }
+        auto emitted = emit_error(sink, error, assistant);
+        if (!emitted) {
+            return std::unexpected(emitted.error());
+        }
+        return assistant;
+    };
+
     auto response = co_await transport_->async_stream(http, handle_chunk);
     if (!response) {
         if (stream_sink_failure) {
             co_return std::unexpected(*stream_sink_failure);
         }
-        CCH_TRY_VOID(emit_error(sink, response.error(), assistant));
-        if (response.error().code == util::ErrorCode::Network) {
-            co_return assistant;
-        }
-        co_return std::unexpected(response.error());
+        co_return complete_accepted_failure(response.error());
     }
 
     auto final_event = parser.finish();
     if (!final_event) {
-        CCH_TRY_VOID(emit_error(sink, final_event.error(), assistant));
-        co_return std::unexpected(final_event.error());
+        co_return complete_accepted_failure(final_event.error());
     }
     if (*final_event) {
         if ((*final_event)->done) {
@@ -449,10 +514,37 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
         } else if (!(*final_event)->data.empty()) {
             auto handled = handle_chunk(std::string{"data: " + (*final_event)->data + "\n\n"});
             if (!handled) {
-                CCH_TRY_VOID(emit_error(sink, handled.error(), assistant));
-                co_return std::unexpected(handled.error());
+                if (stream_sink_failure) {
+                    co_return std::unexpected(*stream_sink_failure);
+                }
+                co_return complete_accepted_failure(handled.error());
             }
         }
+    }
+
+    for (std::size_t content_index = 0; content_index < assistant.content.size(); ++content_index) {
+        auto& block = assistant.content[content_index];
+        if (const auto* text = std::get_if<ai::TextContent>(&block)) {
+            CCH_TRY_VOID(emit(sink, ai::TextEndEvent{content_index, text->text, assistant}));
+            continue;
+        }
+        if (const auto* thinking = std::get_if<ai::ThinkingContent>(&block)) {
+            CCH_TRY_VOID(emit(sink, ai::ThinkingEndEvent{
+                content_index, thinking->thinking, assistant}));
+            continue;
+        }
+
+        auto& tool_call = std::get<ai::ToolCallContent>(block);
+        if (tool_call.id.empty() || tool_call.name.empty()) {
+            auto error = util::make_error(
+                util::ErrorCode::JsonParse,
+                "malformed provider tool call",
+                "streamed tool call is missing id or function name");
+            co_return complete_accepted_failure(error);
+        }
+        finalize_tool_arguments(tool_call);
+        CCH_TRY_VOID(emit(sink, ai::ToolCallEndEvent{
+            content_index, tool_call, assistant}));
     }
 
     if (!saw_done && !saw_terminal_choice) {
@@ -460,46 +552,14 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
             util::ErrorCode::Provider,
             "provider stream ended before terminal event",
             "SSE stream ended without [DONE] or a finish_reason");
-        CCH_TRY_VOID(emit_error(sink, error, assistant));
-        co_return std::unexpected(error);
+        co_return complete_accepted_failure(error);
     }
     if (!saw_assistant_payload) {
         auto error = util::make_error(
             util::ErrorCode::Provider,
             "provider stream contained no assistant payload",
             "SSE stream ended without content, tool calls, or a finish_reason");
-        CCH_TRY_VOID(emit_error(sink, error, assistant));
-        co_return std::unexpected(error);
-    }
-
-    if (text_started && text_index) {
-        const auto& text = std::get<ai::TextContent>(assistant.content[*text_index]);
-        CCH_TRY_VOID(emit(sink, ai::TextEndEvent{*text_index, text.text, assistant}));
-    }
-
-    for (auto& [_, call] : tool_calls) {
-        auto& block = std::get<ai::ToolCallContent>(assistant.content[call.content_index]);
-        if (block.id.empty() || block.name.empty()) {
-            auto error = util::make_error(
-                util::ErrorCode::JsonParse,
-                "malformed provider tool call",
-                "streamed tool call is missing id or function name");
-            CCH_TRY_VOID(emit_error(sink, error, assistant));
-            co_return std::unexpected(error);
-        }
-        static_cast<void>(parse_tool_arguments(block.raw_arguments)
-            .transform([&](util::JsonValue&& parsed) {
-                block.arguments = std::move(parsed);
-                block.arguments_valid = true;
-                block.argument_error = std::nullopt;
-            })
-            .or_else([&](const util::Error& err) -> util::ExpectedVoid {
-                block.arguments = std::nullopt;
-                block.arguments_valid = false;
-                block.argument_error = err.detail.empty() ? err.message : err.detail;
-                return {};
-            }));
-        CCH_TRY_VOID(emit(sink, ai::ToolCallEndEvent{call.content_index, block, assistant}));
+        co_return complete_accepted_failure(error);
     }
 
     if (assistant.stop_reason == ai::AssistantStopReason::Unknown) {

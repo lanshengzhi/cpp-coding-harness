@@ -105,6 +105,26 @@ std::vector<const T*> events_of(const std::vector<ai::AssistantStreamEvent>& eve
     return matches;
 }
 
+const ai::AssistantErrorEvent& matching_terminal_error(const RunResult& run) {
+    REQUIRE(run.result.has_value());
+    const auto errors = events_of<ai::AssistantErrorEvent>(run.events);
+    REQUIRE(errors.size() == 1);
+    const auto& terminal = *errors[0];
+    CHECK(terminal.reason == run.result->stop_reason);
+    CHECK(terminal.error.stop_reason == run.result->stop_reason);
+    CHECK(terminal.error.error_message == run.result->error_message);
+    CHECK(terminal.error.api == run.result->api);
+    CHECK(terminal.error.provider == run.result->provider);
+    CHECK(terminal.error.model == run.result->model);
+    CHECK(terminal.error.response_model == run.result->response_model);
+    CHECK(terminal.error.response_id == run.result->response_id);
+    CHECK(terminal.error.timestamp == run.result->timestamp);
+    CHECK(terminal.error.usage.has_value() == run.result->usage.has_value());
+    CHECK(terminal.error.diagnostics.has_value() == run.result->diagnostics.has_value());
+    REQUIRE(terminal.error.content.size() == run.result->content.size());
+    return terminal;
+}
+
 util::JsonValue captured_body_json(const FakeStreamTransport& transport) {
     REQUIRE(transport.requests.size() == 1);
     auto parsed = util::read_json<util::JsonValue>(transport.requests[0].body);
@@ -637,15 +657,9 @@ TEST_CASE(
     CHECK(count_events<ai::AssistantErrorEvent>(run.events) == 1);
     CHECK(count_events<ai::AssistantDoneEvent>(run.events) == 0);
 
-    const auto errors = events_of<ai::AssistantErrorEvent>(run.events);
-    REQUIRE(errors.size() == 1);
-    CHECK(errors[0]->reason == ai::AssistantStopReason::Error);
-    CHECK(errors[0]->error.stop_reason == run.result->stop_reason);
-    CHECK(errors[0]->error.error_message == run.result->error_message);
-    CHECK(errors[0]->error.api == run.result->api);
-    CHECK(errors[0]->error.provider == run.result->provider);
-    CHECK(errors[0]->error.model == run.result->model);
-    CHECK(errors[0]->error.content.empty());
+    const auto& terminal_event = matching_terminal_error(run);
+    CHECK(terminal_event.reason == ai::AssistantStopReason::Error);
+    CHECK(terminal_event.error.content.empty());
 }
 
 TEST_CASE(
@@ -678,20 +692,136 @@ TEST_CASE(
     CHECK(transport->requests.size() == 1);
 }
 
-TEST_CASE("streaming OpenAI client reports malformed provider JSON as typed failure", "[ai][provider][stream][u4][ae3]") {
+TEST_CASE(
+    "streaming OpenAI client preserves partial content when the stream ends before a terminal marker",
+    "[ai][provider][stream][issue12]") {
     auto transport = std::make_shared<FakeStreamTransport>();
-    transport->chunks = {"data: {\"choices\":[}\n\n"};
+    transport->chunks = {
+        sse(R"json({"choices":[{"index":0,"delta":{"reasoning":"considering"}}]})json"),
+        sse(R"json({"choices":[{"index":0,"delta":{"content":"useful text"}}]})json"),
+        sse(R"json({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_partial","type":"function","function":{"name":"echo","arguments":"{\"value\":\"par"}}]}}]})json"),
+    };
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    config.provider = "opencode-go";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result.has_value());
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(run.result->error_message.has_value());
+    CHECK(run.result->error_message->find("without [DONE] or a finish_reason") != std::string::npos);
+    REQUIRE(run.result->usage.has_value());
+    CHECK(run.result->usage->total_tokens == 0);
+    CHECK(run.result->timestamp > 0);
+    REQUIRE(run.result->content.size() == 3);
+
+    REQUIRE(std::holds_alternative<ai::ThinkingContent>(run.result->content[0]));
+    const auto& thinking = std::get<ai::ThinkingContent>(run.result->content[0]);
+    CHECK(thinking.thinking == "considering");
+    REQUIRE(thinking.thinking_signature.has_value());
+    CHECK(*thinking.thinking_signature == "reasoning_content");
+
+    REQUIRE(std::holds_alternative<ai::TextContent>(run.result->content[1]));
+    CHECK(std::get<ai::TextContent>(run.result->content[1]).text == "useful text");
+
+    REQUIRE(std::holds_alternative<ai::ToolCallContent>(run.result->content[2]));
+    const auto& tool_call = std::get<ai::ToolCallContent>(run.result->content[2]);
+    CHECK(tool_call.id == "call_partial");
+    CHECK(tool_call.name == "echo");
+    CHECK(tool_call.raw_arguments == R"({"value":"par)");
+    CHECK_FALSE(tool_call.arguments.has_value());
+    CHECK_FALSE(tool_call.arguments_valid);
+    REQUIRE(tool_call.argument_error.has_value());
+
+    CHECK(count_events<ai::ThinkingStartEvent>(run.events) == 1);
+    CHECK(count_events<ai::ThinkingDeltaEvent>(run.events) == 1);
+    CHECK(count_events<ai::ThinkingEndEvent>(run.events) == 1);
+    CHECK(count_events<ai::TextStartEvent>(run.events) == 1);
+    CHECK(count_events<ai::TextDeltaEvent>(run.events) == 1);
+    CHECK(count_events<ai::TextEndEvent>(run.events) == 1);
+    CHECK(count_events<ai::ToolCallStartEvent>(run.events) == 1);
+    CHECK(count_events<ai::ToolCallDeltaEvent>(run.events) == 1);
+    CHECK(count_events<ai::ToolCallEndEvent>(run.events) == 1);
+    CHECK(count_events<ai::AssistantErrorEvent>(run.events) == 1);
+    CHECK(count_events<ai::AssistantDoneEvent>(run.events) == 0);
+
+    const auto& terminal_event = matching_terminal_error(run);
+    CHECK(std::get<ai::ThinkingContent>(terminal_event.error.content[0]).thinking == thinking.thinking);
+    CHECK(std::get<ai::TextContent>(terminal_event.error.content[1]).text == "useful text");
+    const auto& event_tool_call = std::get<ai::ToolCallContent>(terminal_event.error.content[2]);
+    CHECK(event_tool_call.id == tool_call.id);
+    CHECK(event_tool_call.name == tool_call.name);
+    CHECK(event_tool_call.raw_arguments == tool_call.raw_arguments);
+    CHECK(event_tool_call.arguments_valid == tool_call.arguments_valid);
+    CHECK(event_tool_call.argument_error == tool_call.argument_error);
+}
+
+TEST_CASE(
+    "streaming OpenAI client preserves partial text after malformed SSE",
+    "[ai][provider][stream][issue12]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {
+        sse(R"json({"choices":[{"index":0,"delta":{"content":"kept"}}]})json"),
+        std::string((8 * 1024 * 1024) + 1, 'x'),
+    };
 
     ai::providers::OpenAIStreamConfig config;
     config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
+    request.model = "gpt-test";
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
     auto run = run_client(client, std::move(request));
 
-    REQUIRE_FALSE(run.result);
-    CHECK(run.result.error().code == util::ErrorCode::JsonParse);
+    REQUIRE(run.result.has_value());
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(run.result->error_message.has_value());
+    CHECK(run.result->error_message->find("unbounded SSE line") != std::string::npos);
+    REQUIRE(run.result->content.size() == 1);
+    REQUIRE(std::holds_alternative<ai::TextContent>(run.result->content[0]));
+    CHECK(std::get<ai::TextContent>(run.result->content[0]).text == "kept");
     CHECK(count_events<ai::AssistantErrorEvent>(run.events) == 1);
+    CHECK(count_events<ai::AssistantDoneEvent>(run.events) == 0);
+
+    const auto& terminal_event = matching_terminal_error(run);
+    CHECK(std::get<ai::TextContent>(terminal_event.error.content[0]).text == "kept");
+}
+
+TEST_CASE(
+    "streaming OpenAI client completes malformed provider JSON before content as an error message",
+    "[ai][provider][stream][issue12]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {"data: {\"choices\":[}\n\n"};
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    config.api = "openai-completions";
+    config.provider = "openai-compatible";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result.has_value());
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(run.result->error_message.has_value());
+    CHECK_FALSE(run.result->error_message->empty());
+    CHECK(run.result->content.empty());
+    CHECK(count_events<ai::AssistantErrorEvent>(run.events) == 1);
+    CHECK(count_events<ai::AssistantDoneEvent>(run.events) == 0);
+
+    const auto& terminal_event = matching_terminal_error(run);
+    CHECK(terminal_event.error.content.empty());
 }

@@ -71,6 +71,9 @@ struct OpenAIStreamToolCallDeltaDto {
 struct OpenAIStreamDeltaDto {
     std::optional<std::string> role;
     std::optional<std::string> content;
+    std::optional<std::string> reasoning_content;
+    std::optional<std::string> reasoning;
+    std::optional<std::string> reasoning_text;
     std::optional<std::vector<OpenAIStreamToolCallDeltaDto>> tool_calls;
 };
 
