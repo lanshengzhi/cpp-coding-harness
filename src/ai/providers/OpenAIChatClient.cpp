@@ -229,10 +229,10 @@ void append_plain_text_part(std::string& text, std::string_view part, std::strin
 [[nodiscard]] util::ExpectedVoid emit_error(
     ai::AssistantEventSink& sink,
     const util::Error& error,
-    ai::AssistantMessage partial) {
+    ai::AssistantMessage& partial) {
     partial.stop_reason = ai::AssistantStopReason::Error;
     partial.error_message = error.detail.empty() ? error.message : error.detail;
-    return emit(sink, ai::AssistantErrorEvent{ai::AssistantStopReason::Error, std::move(partial)});
+    return emit(sink, ai::AssistantErrorEvent{ai::AssistantStopReason::Error, partial});
 }
 
 [[nodiscard]] util::Expected<util::JsonValue> parse_tool_arguments(const std::string& raw_arguments) {
@@ -303,6 +303,15 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
     bool saw_assistant_payload = false;
     std::optional<std::size_t> text_index;
     std::map<std::int64_t, ToolCallAccumulator> tool_calls;
+    std::optional<util::Error> stream_sink_failure;
+
+    auto emit_stream_event = [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+        auto emitted = emit(sink, event);
+        if (!emitted && !stream_sink_failure) {
+            stream_sink_failure = emitted.error();
+        }
+        return emitted;
+    };
 
     auto handle_chunk = [&](std::string_view bytes) -> util::ExpectedVoid {
         auto events = parser.append(bytes);
@@ -357,14 +366,14 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
                         text_started = true;
                         text_index = assistant.content.size();
                         assistant.content.emplace_back(ai::TextContent{"", std::nullopt});
-                        auto emitted = emit(sink, ai::TextStartEvent{*text_index, assistant});
+                        auto emitted = emit_stream_event(ai::TextStartEvent{*text_index, assistant});
                         if (!emitted) {
                             return std::unexpected(emitted.error());
                         }
                     }
                     auto& text = std::get<ai::TextContent>(assistant.content[*text_index]);
                     text.text += *choice.delta->content;
-                    auto emitted = emit(sink, ai::TextDeltaEvent{*text_index, *choice.delta->content, assistant});
+                    auto emitted = emit_stream_event(ai::TextDeltaEvent{*text_index, *choice.delta->content, assistant});
                     if (!emitted) {
                         return std::unexpected(emitted.error());
                     }
@@ -381,7 +390,7 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
                         auto& call = it->second;
                         if (inserted) {
                             assistant.content.emplace_back(ai::ToolCallContent{});
-                            auto emitted = emit(sink, ai::ToolCallStartEvent{call.content_index, assistant});
+                            auto emitted = emit_stream_event(ai::ToolCallStartEvent{call.content_index, assistant});
                             if (!emitted) {
                                 return std::unexpected(emitted.error());
                             }
@@ -405,7 +414,7 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
                         block.name = call.name;
                         block.raw_arguments = call.raw_arguments;
                         if (argument_delta) {
-                            auto emitted = emit(sink, ai::ToolCallDeltaEvent{call.content_index, *argument_delta, assistant});
+                            auto emitted = emit_stream_event(ai::ToolCallDeltaEvent{call.content_index, *argument_delta, assistant});
                             if (!emitted) {
                                 return std::unexpected(emitted.error());
                             }
@@ -419,7 +428,13 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
 
     auto response = co_await transport_->async_stream(http, handle_chunk);
     if (!response) {
+        if (stream_sink_failure) {
+            co_return std::unexpected(*stream_sink_failure);
+        }
         CCH_TRY_VOID(emit_error(sink, response.error(), assistant));
+        if (response.error().code == util::ErrorCode::Network) {
+            co_return assistant;
+        }
         co_return std::unexpected(response.error());
     }
 

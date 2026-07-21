@@ -6,6 +6,8 @@
 #include "../../include/cch/ai/Content.hpp"
 #include "../../include/cch/ai/Context.hpp"
 #include "../../include/cch/ai/Message.hpp"
+#include "../../include/cch/ai/providers/OpenAIChatClient.hpp"
+#include "../../include/cch/ai/providers/StreamTransport.hpp"
 #include "../../include/cch/coding_agent/Skill.hpp"
 #include "../../include/cch/harness/ExecutionEnv.hpp"
 #include "../../include/cch/harness/session/JsonlSessionStore.hpp"
@@ -221,7 +223,7 @@ public:
     }
 };
 
-class FailingChatClient final : public ai::StreamingChatClient {
+class PreflightRejectingChatClient final : public ai::StreamingChatClient {
 public:
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
         const ai::StreamChatRequest& /*request*/,
@@ -230,6 +232,36 @@ public:
             util::ErrorCode::Provider,
             "provider rejected in-memory prompt"));
     }
+};
+
+class RecoveringNetworkTransport final : public ai::providers::StreamTransport {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::providers::StreamResponse>> async_stream(
+        const ai::providers::StreamRequest& request,
+        ai::providers::BodyChunkHandler on_body_chunk) override {
+        requests.push_back(request);
+        if (requests.size() == 1) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Network,
+                "provider connection failed",
+                "could not resolve api.example: Name or service not known"));
+        }
+
+        const std::string response_body =
+            "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"recovered\"},"
+            "\"finish_reason\":\"stop\"}]}\n\n"
+            "data: [DONE]\n\n";
+        if (auto delivered = on_body_chunk(response_body); !delivered) {
+            co_return std::unexpected(delivered.error());
+        }
+
+        ai::providers::StreamResponse response;
+        response.head.status_code = 200;
+        response.body = response_body;
+        co_return response;
+    }
+
+    std::vector<ai::providers::StreamRequest> requests;
 };
 
 } // namespace
@@ -486,8 +518,8 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "SDK in-memory provider failure retains completed user state without persistence fallback",
-    "[sdk][in-memory][provider-failure]") {
+    "SDK in-memory provider preflight rejection retains only completed user state",
+    "[sdk][in-memory][provider-preflight-rejection]") {
     TestPaths paths;
     cch::tests::TempWorkspace isolated;
     const auto agent_dir = isolated.path() / "agent-not-created";
@@ -497,7 +529,7 @@ TEST_CASE(
     coding_agent::CreateAgentSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::make_unique<FailingChatClient>();
+    opts.chat_client = std::make_unique<PreflightRejectingChatClient>();
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -525,6 +557,131 @@ TEST_CASE(
     CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
     CHECK_FALSE(std::filesystem::exists(paths.workspace.path() / ".cpp-harness" / "sessions"));
     CHECK(result->session->close().has_value());
+}
+
+TEST_CASE(
+    "SDK completes an accepted network failure as a durable error turn and remains reusable",
+    "[sdk][live-state][incremental-persistence][issue11]") {
+    TestPaths paths;
+    auto transport = std::make_shared<RecoveringNetworkTransport>();
+
+    ai::providers::OpenAIStreamConfig provider;
+    provider.api_key = "sk-test-api-key";
+    provider.api = "openai-completions";
+    provider.provider = "openai-compatible";
+    provider.model = "gpt-test";
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::make_unique<ai::providers::StreamingOpenAIChatClient>(
+        transport,
+        std::move(provider));
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    auto& session = result->session;
+
+    std::vector<agent::AgentLifecycleEvent> events;
+    bool terminal_was_live_before_message_end = false;
+    auto subscription = session->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            events.push_back(event);
+            const auto* end = std::get_if<agent::MessageEndEvent>(&event);
+            if (end == nullptr) {
+                return {};
+            }
+            const auto* assistant = std::get_if<ai::AssistantMessage>(&end->message);
+            if (assistant != nullptr && assistant->stop_reason == ai::AssistantStopReason::Error) {
+                terminal_was_live_before_message_end =
+                    session->message_count() == 2 &&
+                    session->last_assistant_text().has_value() &&
+                    session->last_assistant_text()->empty();
+            }
+            return {};
+        });
+    REQUIRE(subscription.has_value());
+
+    auto error_turn = session->prompt("hello");
+    REQUIRE(error_turn.has_value());
+    CHECK(transport->requests.size() == 1);
+    CHECK(terminal_was_live_before_message_end);
+    CHECK(session->is_open());
+    CHECK(session->message_count() == 2);
+
+    REQUIRE(events.size() == 8);
+    std::size_t event_index = 0;
+    CHECK(std::holds_alternative<agent::AgentStartEvent>(events[event_index++]));
+    CHECK(std::holds_alternative<agent::TurnStartEvent>(events[event_index++]));
+    const auto* user_start = std::get_if<agent::MessageStartEvent>(&events[event_index++]);
+    REQUIRE(user_start != nullptr);
+    CHECK(std::holds_alternative<ai::UserMessage>(user_start->message));
+    const auto* user_end = std::get_if<agent::MessageEndEvent>(&events[event_index++]);
+    REQUIRE(user_end != nullptr);
+    CHECK(std::holds_alternative<ai::UserMessage>(user_end->message));
+    const auto* assistant_start = std::get_if<agent::MessageStartEvent>(&events[event_index++]);
+    REQUIRE(assistant_start != nullptr);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(assistant_start->message));
+    const auto* assistant_end = std::get_if<agent::MessageEndEvent>(&events[event_index++]);
+    REQUIRE(assistant_end != nullptr);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(assistant_end->message));
+    const auto& terminal = std::get<ai::AssistantMessage>(assistant_end->message);
+    CHECK(terminal.stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(terminal.error_message.has_value());
+    CHECK(*terminal.error_message == "could not resolve api.example: Name or service not known");
+    const auto terminal_error_message = terminal.error_message;
+    const auto* turn_end = std::get_if<agent::TurnEndEvent>(&events[event_index++]);
+    REQUIRE(turn_end != nullptr);
+    CHECK(turn_end->tool_results.empty());
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(turn_end->message));
+    CHECK(std::get<ai::AssistantMessage>(turn_end->message).stop_reason == ai::AssistantStopReason::Error);
+    CHECK(std::holds_alternative<agent::AgentEndEvent>(events[event_index++]));
+    CHECK(std::none_of(
+        events.begin(),
+        events.end(),
+        [](const auto& event) {
+            return std::holds_alternative<agent::ToolExecutionStartEvent>(event) ||
+                   std::holds_alternative<agent::ToolExecutionEndEvent>(event);
+        }));
+
+    auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable.has_value());
+    REQUIRE(durable->messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(durable->messages[1]));
+    const auto& durable_terminal = std::get<ai::AssistantMessage>(durable->messages[1]);
+    CHECK(durable_terminal.stop_reason == ai::AssistantStopReason::Error);
+    CHECK(durable_terminal.error_message == terminal_error_message);
+
+    events.clear();
+    auto recovered_turn = session->prompt("try again");
+    REQUIRE(recovered_turn.has_value());
+    CHECK(transport->requests.size() == 2);
+    CHECK(session->message_count() == 4);
+    REQUIRE(session->last_assistant_text().has_value());
+    CHECK(*session->last_assistant_text() == "recovered");
+    CHECK(session->close().has_value());
+
+    auto capture = std::make_unique<CaptureChatClient>();
+    auto* capture_ptr = capture.get();
+    coding_agent::CreateAgentSessionOptions resume;
+    resume.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
+    resume.workspace = paths.workspace.path();
+    resume.chat_client = std::move(capture);
+
+    auto reopened = coding_agent::create_agent_session(std::move(resume));
+    REQUIRE(reopened.has_value());
+    CHECK(reopened->session->message_count() == 4);
+    auto after_resume = reopened->session->prompt("after resume");
+    REQUIRE(after_resume.has_value());
+    REQUIRE(capture_ptr->captured_request.has_value());
+    REQUIRE(capture_ptr->captured_request->context.messages.size() == 5);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(
+        capture_ptr->captured_request->context.messages[1]));
+    const auto& resumed_terminal = std::get<ai::AssistantMessage>(
+        capture_ptr->captured_request->context.messages[1]);
+    CHECK(resumed_terminal.stop_reason == ai::AssistantStopReason::Error);
+    CHECK(resumed_terminal.error_message == terminal_error_message);
+    CHECK(reopened->session->close().has_value());
 }
 
 TEST_CASE("SDK default target persists under the canonical workspace key", "[sdk][u2][default-persistence]") {

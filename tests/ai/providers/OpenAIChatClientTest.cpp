@@ -54,7 +54,10 @@ struct RunResult {
     std::vector<ai::AssistantStreamEvent> events;
 };
 
-RunResult run_client(ai::providers::StreamingOpenAIChatClient& client, ai::StreamChatRequest request) {
+RunResult run_client(
+    ai::providers::StreamingOpenAIChatClient& client,
+    ai::StreamChatRequest request,
+    std::optional<util::Error> text_delta_failure = std::nullopt) {
     boost::asio::io_context io;
     std::optional<util::Expected<ai::AssistantMessage>> result;
     std::vector<ai::AssistantStreamEvent> events;
@@ -66,6 +69,9 @@ RunResult run_client(ai::providers::StreamingOpenAIChatClient& client, ai::Strea
                 request,
                 [&](const ai::AssistantStreamEvent& event) {
                     events.push_back(event);
+                    if (text_delta_failure && std::holds_alternative<ai::TextDeltaEvent>(event)) {
+                        return util::ExpectedVoid{std::unexpected(*text_delta_failure)};
+                    }
                     return util::ExpectedVoid{};
                 });
             co_return;
@@ -594,6 +600,82 @@ TEST_CASE("streaming OpenAI client keeps malformed streamed tool arguments as in
     CHECK_FALSE(ends[0]->tool_call.arguments_valid);
     REQUIRE(ends[0]->tool_call.argument_error);
     CHECK_FALSE(ends[0]->tool_call.argument_error->empty());
+}
+
+TEST_CASE(
+    "streaming OpenAI client completes an accepted network failure as one error message",
+    "[ai][provider][stream][issue11]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->failure = util::make_error(
+        util::ErrorCode::Network,
+        "provider connection failed",
+        "could not resolve api.example: Name or service not known");
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    config.api = "openai-completions";
+    config.provider = "openai-compatible";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result.has_value());
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(run.result->error_message.has_value());
+    CHECK(*run.result->error_message == "could not resolve api.example: Name or service not known");
+    CHECK(run.result->api == "openai-completions");
+    CHECK(run.result->provider == "openai-compatible");
+    CHECK(run.result->model == "gpt-test");
+    CHECK(run.result->content.empty());
+
+    CHECK(transport->requests.size() == 1);
+    CHECK(count_events<ai::AssistantStartEvent>(run.events) == 1);
+    CHECK(count_events<ai::AssistantErrorEvent>(run.events) == 1);
+    CHECK(count_events<ai::AssistantDoneEvent>(run.events) == 0);
+
+    const auto errors = events_of<ai::AssistantErrorEvent>(run.events);
+    REQUIRE(errors.size() == 1);
+    CHECK(errors[0]->reason == ai::AssistantStopReason::Error);
+    CHECK(errors[0]->error.stop_reason == run.result->stop_reason);
+    CHECK(errors[0]->error.error_message == run.result->error_message);
+    CHECK(errors[0]->error.api == run.result->api);
+    CHECK(errors[0]->error.provider == run.result->provider);
+    CHECK(errors[0]->error.model == run.result->model);
+    CHECK(errors[0]->error.content.empty());
+}
+
+TEST_CASE(
+    "streaming OpenAI client keeps consumer sink failures outside the assistant outcome",
+    "[ai][provider][stream][issue11]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {
+        sse(R"json({"choices":[{"index":0,"delta":{"content":"hello"},"finish_reason":"stop"}]})json"),
+        sse("[DONE]"),
+    };
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+    const auto sink_failure = util::make_error(
+        util::ErrorCode::Network,
+        "consumer event sink failed",
+        "synthetic subscriber network error");
+
+    auto run = run_client(client, std::move(request), sink_failure);
+
+    REQUIRE_FALSE(run.result.has_value());
+    CHECK(run.result.error().code == util::ErrorCode::Network);
+    CHECK(run.result.error().message == "consumer event sink failed");
+    CHECK(count_events<ai::AssistantErrorEvent>(run.events) == 0);
+    CHECK(transport->requests.size() == 1);
 }
 
 TEST_CASE("streaming OpenAI client reports malformed provider JSON as typed failure", "[ai][provider][stream][u4][ae3]") {

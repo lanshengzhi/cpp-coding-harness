@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -288,6 +289,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
     context.model = options_.model;
     context.tools = registry_.definitions();
     context.messages = std::move(history);
+    const std::size_t prior_message_count = context.messages.size();
 
     AgentState state;
     state.model = options_.model;
@@ -425,9 +427,22 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             co_return std::unexpected(assistant.error());
         }
 
-        CCH_TRY_VOID(emit(sink, MessageEndEvent{ai::MessageVariant{*assistant}}));
         context.messages.push_back(ai::MessageVariant{*assistant});
         state.streaming_message = *assistant;
+        sync_state(state, context);
+        CCH_TRY_VOID(emit(sink, MessageEndEvent{context.messages.back()}));
+
+        if (assistant->stop_reason == ai::AssistantStopReason::Error) {
+            state.pending_tool_call_ids.clear();
+            CCH_TRY_VOID(emit(sink, TurnEndEvent{ai::MessageVariant{*assistant}, {}}));
+            state.streaming_message.reset();
+            std::vector<ai::MessageVariant> invocation_messages{
+                context.messages.begin() + static_cast<std::ptrdiff_t>(prior_message_count),
+                context.messages.end()};
+            CCH_TRY_VOID(emit(sink, AgentEndEvent{std::move(invocation_messages)}));
+            co_return AsyncAgentRunResult{
+                std::move(context), assistant->stop_reason, turn, std::move(state)};
+        }
 
         auto calls = tool_calls(*assistant);
         state.pending_tool_call_ids.clear();
