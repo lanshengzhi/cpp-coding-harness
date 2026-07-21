@@ -269,6 +269,49 @@ TEST_CASE("JSON event printer keeps bounded text valid UTF-8", "[coding-agent][j
     CHECK(bounded_text.size() <= 8192);
 }
 
+TEST_CASE("JSON event printer redacts and bounds terminal diagnostics and partial content", "[coding-agent][json-events][issue16]") {
+    std::ostringstream output;
+    cch::coding_agent::runtime::JsonEventPrinter printer{output};
+
+    const std::string secret = "sk-terminal-secret-123456";
+    auto terminal = assistant_message("partial draft " + secret);
+    terminal.stop_reason = cch::ai::AssistantStopReason::Error;
+    terminal.error_message = "provider failed with " + secret + " " + std::string(9000, 'x');
+
+    REQUIRE(printer.print_agent_event(cch::agent::MessageEndEvent{
+        cch::ai::MessageVariant{terminal}}).has_value());
+    REQUIRE(printer.print_agent_event(cch::agent::TurnEndEvent{
+        cch::ai::MessageVariant{terminal}, {}}).has_value());
+    REQUIRE(printer.print_agent_event(cch::agent::AgentEndEvent{
+        {cch::ai::MessageVariant{terminal}}}).has_value());
+
+    const auto emitted = lines(output.str());
+    REQUIRE(emitted.size() == 3);
+    for (const auto& line : emitted) {
+        CHECK(line.find(secret) == std::string::npos);
+        CHECK(line.find("runtime_terminal") == std::string::npos);
+    }
+
+    const auto& message_end = object(parse_line(emitted[0]));
+    const auto& ended = object_at(message_end, "message");
+    CHECK(string_at(ended, "stopReason") == "error");
+    const auto diagnostic = string_at(ended, "errorMessage");
+    CHECK(diagnostic.find("[REDACTED]") != std::string::npos);
+    CHECK(diagnostic.size() <= 8192);
+    const auto partial_text = string_at(object(array_at(ended, "content").front()), "text");
+    CHECK(partial_text == "partial draft [REDACTED]");
+
+    const auto& turn_end = object(parse_line(emitted[1]));
+    CHECK(string_at(object_at(turn_end, "message"), "stopReason") == "error");
+    CHECK(array_at(turn_end, "toolResults").empty());
+
+    const auto& agent_end = object(parse_line(emitted[2]));
+    REQUIRE(array_at(agent_end, "messages").size() == 1);
+    const auto& final_message = object(array_at(agent_end, "messages").front());
+    CHECK(string_at(final_message, "stopReason") == "error");
+    CHECK(string_at(final_message, "errorMessage").find("[REDACTED]") != std::string::npos);
+}
+
 TEST_CASE("JSON event printer enforces an aggregate record budget", "[coding-agent][json-events]") {
     std::ostringstream output;
     cch::coding_agent::runtime::JsonEventPrinter printer{output};

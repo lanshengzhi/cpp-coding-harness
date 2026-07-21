@@ -51,6 +51,89 @@ public:
     }
 };
 
+/// A host client whose first accepted call terminates with an error/aborted
+/// outcome (partial content preserved) while later calls answer normally.
+class TerminalThenRecoverChatClient final : public ai::StreamingChatClient {
+public:
+    explicit TerminalThenRecoverChatClient(ai::AssistantStopReason reason)
+        : reason_(reason) {}
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        ++request_count;
+        ai::AssistantMessage message;
+        message.provider = "host";
+        message.api = "host";
+        message.model = request.model;
+        if (request_count == 1) {
+            message.stop_reason = reason_;
+            message.error_message = "host transport lost";
+            message.content.emplace_back(ai::text_content("partial draft"));
+            if (sink) {
+                if (auto started = sink(ai::AssistantStartEvent{message}); !started) {
+                    co_return std::unexpected(started.error());
+                }
+                if (auto delta = sink(ai::TextDeltaEvent{0, "partial draft", message}); !delta) {
+                    co_return std::unexpected(delta.error());
+                }
+                if (auto ended = sink(ai::AssistantErrorEvent{reason_, message}); !ended) {
+                    co_return std::unexpected(ended.error());
+                }
+            }
+            co_return message;
+        }
+        message.stop_reason = ai::AssistantStopReason::Stop;
+        message.content.emplace_back(ai::text_content("recovered answer"));
+        if (sink) {
+            if (auto started = sink(ai::AssistantStartEvent{message}); !started) {
+                co_return std::unexpected(started.error());
+            }
+            if (auto delta = sink(ai::TextDeltaEvent{0, "recovered answer", message}); !delta) {
+                co_return std::unexpected(delta.error());
+            }
+            if (auto done = sink(ai::AssistantDoneEvent{message.stop_reason, message}); !done) {
+                co_return std::unexpected(done.error());
+            }
+        }
+        co_return message;
+    }
+
+    int request_count{0};
+
+private:
+    ai::AssistantStopReason reason_;
+};
+
+/// A host client whose accepted call terminates with an error outcome
+/// carrying a caller-chosen diagnostic, emitted before any start event.
+class SecretDiagnosticChatClient final : public ai::StreamingChatClient {
+public:
+    explicit SecretDiagnosticChatClient(std::string terminal_diagnostic)
+        : diagnostic_(std::move(terminal_diagnostic)) {}
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        ai::AssistantMessage terminal;
+        terminal.provider = "host";
+        terminal.api = "host";
+        terminal.model = request.model;
+        terminal.stop_reason = ai::AssistantStopReason::Error;
+        terminal.error_message = diagnostic_;
+        if (sink) {
+            if (auto ended = sink(ai::AssistantErrorEvent{terminal.stop_reason, terminal});
+                !ended) {
+                co_return std::unexpected(ended.error());
+            }
+        }
+        co_return terminal;
+    }
+
+private:
+    std::string diagnostic_;
+};
+
 class SyncCountingBuffer final : public std::stringbuf {
 public:
     int sync_count{0};
@@ -131,6 +214,36 @@ std::size_t find_response_index(
 std::size_t find_first_event_index(const std::vector<JsonObject>& records) {
     for (std::size_t index = 0; index < records.size(); ++index) {
         if (records[index].contains("type") && string_at(records[index], "type") != "response") {
+            return index;
+        }
+    }
+    return records.size();
+}
+
+std::size_t find_assistant_message_end_index(const std::vector<JsonObject>& records) {
+    for (std::size_t index = 0; index < records.size(); ++index) {
+        const auto type = records[index].find("type");
+        if (type == records[index].end()) {
+            continue;
+        }
+        const auto* type_value = type->second.get_if<std::string>();
+        if (type_value == nullptr || *type_value != "message_end") {
+            continue;
+        }
+        const auto message = records[index].find("message");
+        if (message == records[index].end()) {
+            continue;
+        }
+        const auto* message_object = message->second.get_if<JsonObject>();
+        if (message_object == nullptr) {
+            continue;
+        }
+        const auto role = message_object->find("role");
+        if (role == message_object->end()) {
+            continue;
+        }
+        if (const auto* role_value = role->second.get_if<std::string>();
+            role_value && *role_value == "assistant") {
             return index;
         }
     }
@@ -537,6 +650,104 @@ TEST_CASE("RPC mode treats slash-shaped input as an ordinary prompt", "[coding-a
     REQUIRE(state != nullptr);
     CHECK(state->at("success").get<bool>());
     CHECK(static_cast<int>(state->at("data").get<JsonObject>().at("messageCount").get<double>()) == 2);
+}
+
+TEST_CASE("RPC mode reports an accepted error terminal outcome only through events", "[coding-agent][runtime][rpc][issue16]") {
+    const auto result = run_transcript(
+        "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
+        "{\"id\":\"state-1\",\"type\":\"get_state\"}\n"
+        "{\"id\":\"prompt-2\",\"type\":\"prompt\",\"message\":\"again\"}\n"
+        "{\"id\":\"last-1\",\"type\":\"get_last_assistant_text\"}\n"
+        "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n",
+        std::make_unique<TerminalThenRecoverChatClient>(ai::AssistantStopReason::Error));
+
+    REQUIRE(result.exit_code == 0);
+
+    // Exactly one successful acknowledgement, emitted before the prompt's events.
+    const auto response_index = find_response_index(result.records, "prompt", "prompt-1");
+    const auto first_event_index = find_first_event_index(result.records);
+    REQUIRE(response_index < result.records.size());
+    REQUIRE(first_event_index < result.records.size());
+    CHECK(result.records[response_index].at("success").get<bool>());
+    CHECK(response_index < first_event_index);
+    CHECK(count_responses(result.records, "prompt", "prompt-1") == 1);
+    CHECK(find_record_index(result.records, "runtime_terminal") == result.records.size());
+
+    // The terminal outcome rides the ordinary lifecycle records in order.
+    const auto message_end_index = find_assistant_message_end_index(result.records);
+    const auto turn_end_index = find_record_index(result.records, "turn_end");
+    const auto agent_end_index = find_record_index(result.records, "agent_end");
+    REQUIRE(message_end_index < result.records.size());
+    REQUIRE(turn_end_index < result.records.size());
+    REQUIRE(agent_end_index < result.records.size());
+    CHECK(message_end_index < turn_end_index);
+    CHECK(turn_end_index < agent_end_index);
+
+    const auto& ended = result.records[message_end_index].at("message").get<JsonObject>();
+    CHECK(string_at(ended, "stopReason") == "error");
+    CHECK(string_at(ended, "errorMessage") == "host transport lost");
+    const auto& turn_message = result.records[turn_end_index].at("message").get<JsonObject>();
+    CHECK(string_at(turn_message, "stopReason") == "error");
+    CHECK(result.records[turn_end_index].at("toolResults").get<util::JsonValue::array_t>().empty());
+
+    // Later commands keep working after the terminal outcome.
+    const auto* state = find_response(result.records, "get_state", "state-1");
+    REQUIRE(state != nullptr);
+    CHECK(state->at("success").get<bool>());
+    CHECK(static_cast<int>(state->at("data").get<JsonObject>().at("messageCount").get<double>()) == 2);
+    const auto* second = find_response(result.records, "prompt", "prompt-2");
+    REQUIRE(second != nullptr);
+    CHECK(second->at("success").get<bool>());
+    CHECK(count_responses(result.records, "prompt", "prompt-2") == 1);
+    const auto* last = find_response(result.records, "get_last_assistant_text", "last-1");
+    REQUIRE(last != nullptr);
+    CHECK(string_at(last->at("data").get<JsonObject>(), "text") == "recovered answer");
+    CHECK(find_response(result.records, "shutdown", "stop-1") != nullptr);
+}
+
+TEST_CASE("RPC mode reports an accepted aborted terminal outcome only through events", "[coding-agent][runtime][rpc][issue16]") {
+    const auto result = run_transcript(
+        "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
+        "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n",
+        std::make_unique<TerminalThenRecoverChatClient>(ai::AssistantStopReason::Aborted));
+
+    REQUIRE(result.exit_code == 0);
+    const auto response_index = find_response_index(result.records, "prompt", "prompt-1");
+    const auto first_event_index = find_first_event_index(result.records);
+    REQUIRE(response_index < result.records.size());
+    REQUIRE(first_event_index < result.records.size());
+    CHECK(result.records[response_index].at("success").get<bool>());
+    CHECK(response_index < first_event_index);
+    CHECK(count_responses(result.records, "prompt", "prompt-1") == 1);
+    CHECK(find_record_index(result.records, "runtime_terminal") == result.records.size());
+
+    const auto message_end_index = find_assistant_message_end_index(result.records);
+    REQUIRE(message_end_index < result.records.size());
+    const auto& ended = result.records[message_end_index].at("message").get<JsonObject>();
+    CHECK(string_at(ended, "stopReason") == "aborted");
+    CHECK(string_at(ended, "errorMessage") == "host transport lost");
+    CHECK(find_response(result.records, "shutdown", "stop-1") != nullptr);
+}
+
+TEST_CASE("RPC mode redacts and bounds terminal diagnostics in event records", "[coding-agent][runtime][rpc][issue16]") {
+    const std::string secret = "sk-rpc-terminal-secret-123456";
+    std::string diagnostic = "provider rejected " + secret + " ";
+    diagnostic += std::string(9000, 'x');
+
+    const auto result = run_transcript(
+        "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
+        "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n",
+        std::make_unique<SecretDiagnosticChatClient>(diagnostic));
+
+    REQUIRE(result.exit_code == 0);
+    const auto message_end_index = find_assistant_message_end_index(result.records);
+    REQUIRE(message_end_index < result.records.size());
+    const auto& ended = result.records[message_end_index].at("message").get<JsonObject>();
+    const auto& presented = string_at(ended, "errorMessage");
+    CHECK(presented.find(secret) == std::string::npos);
+    CHECK(presented.find("[REDACTED]") != std::string::npos);
+    CHECK(presented.size() <= 8192);
+    CHECK(find_response(result.records, "shutdown", "stop-1") != nullptr);
 }
 
 TEST_CASE("RPC mode stops after the shutdown response", "[coding-agent][runtime][rpc]") {

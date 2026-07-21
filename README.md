@@ -217,9 +217,11 @@ The default text CLI prints stable semantic event lines:
 - `[tool-call] <name>#<id>`
 - `[tool-success] <id>`
 - `[tool-error] <id>`
+- `[error] <diagnostic>` — the final Assistant Message of the turn ended with stop reason `error`
+- `[aborted] <diagnostic>` — the final Assistant Message of the turn ended with stop reason `aborted`
 - `[completed]`
 
-Prompt completion failures are reported on stderr as `loop failed: <message>` and return a non-zero exit status; they do not introduce a second text-event status model.
+An accepted provider `error` or `aborted` outcome is presented exactly once through those lines (with secret redaction and bounded output applied to the diagnostic) and the prompt still completes successfully: one-shot runs exit 0 and a REPL stays usable for the next prompt. Prompt rejections before acceptance are reported on stderr as `loop failed: <message>` and return a non-zero exit status; they do not introduce a second text-event status model.
 
 `--mode json` emits one compact JSON object per stdout line. The first record is the pi v3 session header; every later record is a directly serialized supported AgentSession event such as `agent_start`, `turn_start`, `message_start`, `message_update`, `tool_execution_start`, `tool_execution_end`, `turn_end`, and `agent_end`. Event payloads retain their message/tool structure after secret redaction and bounded-output transformation. JSON mode has no C++ schema/version envelope, sequence counter, content-status substitution, or `runtime_terminal` record. Prompt failures are reported on stderr with a non-zero exit. Frontend-only slash commands produce no post-header JSON record because they do not enter AgentSession.
 
