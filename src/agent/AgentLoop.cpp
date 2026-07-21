@@ -432,7 +432,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         sync_state(state, context);
         CCH_TRY_VOID(emit(sink, MessageEndEvent{context.messages.back()}));
 
-        if (assistant->stop_reason == ai::AssistantStopReason::Error) {
+        if (assistant->stop_reason == ai::AssistantStopReason::Error ||
+            assistant->stop_reason == ai::AssistantStopReason::Aborted) {
             state.pending_tool_call_ids.clear();
             CCH_TRY_VOID(emit(sink, TurnEndEvent{ai::MessageVariant{*assistant}, {}}));
             state.streaming_message.reset();

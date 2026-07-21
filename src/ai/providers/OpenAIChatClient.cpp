@@ -231,9 +231,12 @@ void append_plain_text_part(std::string& text, std::string_view part, std::strin
     ai::AssistantEventSink& sink,
     const util::Error& error,
     ai::AssistantMessage& partial) {
-    partial.stop_reason = ai::AssistantStopReason::Error;
+    const auto reason = error.code == util::ErrorCode::Cancelled
+        ? ai::AssistantStopReason::Aborted
+        : ai::AssistantStopReason::Error;
+    partial.stop_reason = reason;
     partial.error_message = error.detail.empty() ? error.message : error.detail;
-    return emit(sink, ai::AssistantErrorEvent{ai::AssistantStopReason::Error, partial});
+    return emit(sink, ai::AssistantErrorEvent{reason, partial});
 }
 
 [[nodiscard]] util::Expected<util::JsonValue> parse_tool_arguments(const std::string& raw_arguments) {

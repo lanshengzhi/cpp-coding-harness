@@ -663,6 +663,47 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "streaming OpenAI client completes a cancellation-class transport failure as one aborted message",
+    "[ai][provider][stream][issue13]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->failure = util::make_error(
+        util::ErrorCode::Cancelled,
+        "provider request cancelled",
+        "transport operation was cancelled");
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    config.api = "openai-completions";
+    config.provider = "openai-compatible";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result.has_value());
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Aborted);
+    REQUIRE(run.result->error_message.has_value());
+    CHECK(*run.result->error_message == "transport operation was cancelled");
+    CHECK(run.result->api == "openai-completions");
+    CHECK(run.result->provider == "openai-compatible");
+    CHECK(run.result->model == "gpt-test");
+    CHECK(run.result->content.empty());
+
+    CHECK(transport->requests.size() == 1);
+    CHECK(count_events<ai::AssistantStartEvent>(run.events) == 1);
+    CHECK(count_events<ai::AssistantErrorEvent>(run.events) == 1);
+    CHECK(count_events<ai::AssistantDoneEvent>(run.events) == 0);
+
+    const auto& terminal_event = matching_terminal_error(run);
+    CHECK(terminal_event.reason == ai::AssistantStopReason::Aborted);
+    CHECK(terminal_event.error.stop_reason == ai::AssistantStopReason::Aborted);
+    CHECK(terminal_event.error.content.empty());
+}
+
+TEST_CASE(
     "streaming OpenAI client keeps consumer sink failures outside the assistant outcome",
     "[ai][provider][stream][issue11]") {
     auto transport = std::make_shared<FakeStreamTransport>();

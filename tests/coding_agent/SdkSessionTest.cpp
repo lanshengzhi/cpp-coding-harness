@@ -265,17 +265,22 @@ public:
     std::vector<ai::providers::StreamRequest> requests;
 };
 
-class RecoveringNetworkTransport final : public ai::providers::StreamTransport {
+class RecoveringFailureTransport final : public ai::providers::StreamTransport {
 public:
+    explicit RecoveringFailureTransport(util::Error first_failure, std::string partial_body = {})
+        : first_failure_(std::move(first_failure)), partial_body_(std::move(partial_body)) {}
+
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::providers::StreamResponse>> async_stream(
         const ai::providers::StreamRequest& request,
         ai::providers::BodyChunkHandler on_body_chunk) override {
         requests.push_back(request);
         if (requests.size() == 1) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Network,
-                "provider connection failed",
-                "could not resolve api.example: Name or service not known"));
+            if (!partial_body_.empty()) {
+                if (auto delivered = on_body_chunk(partial_body_); !delivered) {
+                    co_return std::unexpected(delivered.error());
+                }
+            }
+            co_return std::unexpected(first_failure_);
         }
 
         const std::string response_body =
@@ -293,7 +298,25 @@ public:
     }
 
     std::vector<ai::providers::StreamRequest> requests;
+
+private:
+    util::Error first_failure_;
+    std::string partial_body_;
 };
+
+void check_aborted_terminal(const ai::AssistantMessage& terminal) {
+    CHECK(terminal.stop_reason == ai::AssistantStopReason::Aborted);
+    REQUIRE(terminal.error_message.has_value());
+    CHECK(*terminal.error_message == "transport operation was cancelled");
+    REQUIRE(terminal.content.size() == 1);
+    REQUIRE(std::holds_alternative<ai::ToolCallContent>(terminal.content[0]));
+    const auto& tool_call = std::get<ai::ToolCallContent>(terminal.content[0]);
+    CHECK(tool_call.id == "call_cancelled");
+    CHECK(tool_call.name == "echo");
+    CHECK(tool_call.raw_arguments == R"({"value":"queued"})");
+    REQUIRE(tool_call.arguments.has_value());
+    CHECK(tool_call.arguments_valid);
+}
 
 void check_partial_protocol_terminal(const ai::AssistantMessage& terminal) {
     CHECK(terminal.stop_reason == ai::AssistantStopReason::Error);
@@ -620,7 +643,10 @@ TEST_CASE(
     "SDK completes an accepted network failure as a durable error turn and remains reusable",
     "[sdk][live-state][incremental-persistence][issue11]") {
     TestPaths paths;
-    auto transport = std::make_shared<RecoveringNetworkTransport>();
+    auto transport = std::make_shared<RecoveringFailureTransport>(util::make_error(
+        util::ErrorCode::Network,
+        "provider connection failed",
+        "could not resolve api.example: Name or service not known"));
 
     ai::providers::OpenAIStreamConfig provider;
     provider.api_key = "sk-test-api-key";
@@ -738,6 +764,145 @@ TEST_CASE(
         capture_ptr->captured_request->context.messages[1]);
     CHECK(resumed_terminal.stop_reason == ai::AssistantStopReason::Error);
     CHECK(resumed_terminal.error_message == terminal_error_message);
+    CHECK(reopened->session->close().has_value());
+}
+
+TEST_CASE(
+    "SDK completes a cancellation-class failure as a durable aborted turn and remains reusable",
+    "[sdk][live-state][incremental-persistence][issue13]") {
+    TestPaths paths;
+    const std::string partial_tool_call =
+        "data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,"
+        "\"id\":\"call_cancelled\",\"type\":\"function\",\"function\":{\"name\":\"echo\","
+        "\"arguments\":\"{\\\"value\\\":\\\"queued\\\"}\"}}]}}]}\n\n";
+    auto transport = std::make_shared<RecoveringFailureTransport>(
+        util::make_error(
+            util::ErrorCode::Cancelled,
+            "provider request cancelled",
+            "transport operation was cancelled"),
+        partial_tool_call);
+    auto tool_execution_count = std::make_shared<std::size_t>(0);
+
+    ai::providers::OpenAIStreamConfig provider;
+    provider.api_key = "sk-test-api-key";
+    provider.api = "openai-completions";
+    provider.provider = "openai-compatible";
+    provider.model = "gpt-test";
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::make_unique<ai::providers::StreamingOpenAIChatClient>(
+        transport,
+        std::move(provider));
+    opts.custom_tools.push_back(std::make_unique<FakeEchoTool>(tool_execution_count));
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    auto& session = result->session;
+
+    std::vector<agent::AgentLifecycleEvent> events;
+    bool terminal_was_live_before_message_end = false;
+    auto subscription = session->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            events.push_back(event);
+            const auto* end = std::get_if<agent::MessageEndEvent>(&event);
+            if (end == nullptr) {
+                return {};
+            }
+            const auto* assistant = std::get_if<ai::AssistantMessage>(&end->message);
+            if (assistant != nullptr && assistant->stop_reason == ai::AssistantStopReason::Aborted) {
+                terminal_was_live_before_message_end =
+                    session->message_count() == 2 &&
+                    session->last_assistant_text().has_value() &&
+                    session->last_assistant_text()->empty();
+            }
+            return {};
+        });
+    REQUIRE(subscription.has_value());
+
+    auto aborted_turn = session->prompt("hello");
+    REQUIRE(aborted_turn.has_value());
+    CHECK(transport->requests.size() == 1);
+    CHECK(*tool_execution_count == 0);
+    CHECK(terminal_was_live_before_message_end);
+    CHECK(session->is_open());
+    CHECK(session->message_count() == 2);
+
+    std::size_t assistant_starts = 0;
+    std::size_t assistant_ends = 0;
+    std::size_t tool_execution_events = 0;
+    std::optional<std::size_t> assistant_end_index;
+    for (std::size_t index = 0; index < events.size(); ++index) {
+        const auto& event = events[index];
+        if (const auto* start = std::get_if<agent::MessageStartEvent>(&event)) {
+            if (std::holds_alternative<ai::AssistantMessage>(start->message)) {
+                ++assistant_starts;
+            }
+        } else if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+            if (const auto* assistant = std::get_if<ai::AssistantMessage>(&end->message)) {
+                ++assistant_ends;
+                assistant_end_index = index;
+                check_aborted_terminal(*assistant);
+            }
+        } else if (std::holds_alternative<agent::ToolExecutionStartEvent>(event) ||
+                   std::holds_alternative<agent::ToolExecutionEndEvent>(event)) {
+            ++tool_execution_events;
+        }
+    }
+    CHECK(assistant_starts == 1);
+    CHECK(assistant_ends == 1);
+    CHECK(tool_execution_events == 0);
+    REQUIRE(assistant_end_index.has_value());
+    REQUIRE(*assistant_end_index + 2 < events.size());
+
+    const auto* turn_end = std::get_if<agent::TurnEndEvent>(&events[*assistant_end_index + 1]);
+    REQUIRE(turn_end != nullptr);
+    CHECK(turn_end->tool_results.empty());
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(turn_end->message));
+    check_aborted_terminal(std::get<ai::AssistantMessage>(turn_end->message));
+
+    const auto* agent_end = std::get_if<agent::AgentEndEvent>(&events[*assistant_end_index + 2]);
+    REQUIRE(agent_end != nullptr);
+    REQUIRE(agent_end->messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(agent_end->messages[1]));
+    check_aborted_terminal(std::get<ai::AssistantMessage>(agent_end->messages[1]));
+    CHECK(*assistant_end_index + 3 == events.size());
+
+    auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable.has_value());
+    REQUIRE(durable->messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(durable->messages[1]));
+    check_aborted_terminal(std::get<ai::AssistantMessage>(durable->messages[1]));
+
+    events.clear();
+    auto recovered_turn = session->prompt("try again");
+    REQUIRE(recovered_turn.has_value());
+    CHECK(transport->requests.size() == 2);
+    CHECK(*tool_execution_count == 0);
+    CHECK(session->message_count() == 4);
+    REQUIRE(session->last_assistant_text().has_value());
+    CHECK(*session->last_assistant_text() == "recovered");
+    CHECK(session->close().has_value());
+
+    auto capture = std::make_unique<CaptureChatClient>();
+    auto* capture_ptr = capture.get();
+    coding_agent::CreateAgentSessionOptions resume;
+    resume.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
+    resume.workspace = paths.workspace.path();
+    resume.chat_client = std::move(capture);
+
+    auto reopened = coding_agent::create_agent_session(std::move(resume));
+    REQUIRE(reopened.has_value());
+    CHECK(reopened->session->message_count() == 4);
+    auto after_resume = reopened->session->prompt("after resume");
+    REQUIRE(after_resume.has_value());
+    REQUIRE(capture_ptr->captured_request.has_value());
+    REQUIRE(capture_ptr->captured_request->context.messages.size() == 5);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(
+        capture_ptr->captured_request->context.messages[1]));
+    check_aborted_terminal(std::get<ai::AssistantMessage>(
+        capture_ptr->captured_request->context.messages[1]));
     CHECK(reopened->session->close().has_value());
 }
 
