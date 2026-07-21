@@ -21,6 +21,7 @@ CLI and SDK session creation must keep their distinct product contracts while sh
 - Factory-created execution environments are session-owned, while host-injected environments remain host-owned and are not cleaned up when one session closes. Clients and custom tools transferred by `unique_ptr` are session-owned.
 - Only enabled built-in tools are registered; execution-environment checks remain defense in depth.
 - Explicit resource failures abort creation, while invalid auto-discovered resources are skipped with diagnostics.
+- Public project-resource contracts are passive policy, option, result, and diagnostic values. Filesystem probing, load-plan construction, and resource assembly remain private factory/loader responsibilities rather than a second public assembly seam.
 - The factory and runtime return diagnostics as values and never decide how an adapter presents them.
 - `RuntimeServices` is a private passive bundle rather than a second assembly seam.
 - SDK v1 remains linear-resume-only, and this decision does not add deferred pi runtime features.
