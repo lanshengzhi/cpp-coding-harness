@@ -411,25 +411,33 @@ TEST_CASE("branch_summary_to_user_message wraps with prefix and suffix", "[ai][e
     CHECK(text.text.find(std::string{ai::BRANCH_SUMMARY_PREFIX} + "Branch work completed" + std::string{ai::BRANCH_SUMMARY_SUFFIX}) != std::string::npos);
 }
 
-TEST_CASE("custom_message_to_user_message concatenates text content blocks", "[ai][extended][convert]") {
+TEST_CASE(
+    "custom_message_to_user_message preserves ordered text and image blocks",
+    "[ai][extended][convert][issue22]") {
     ai::CustomMessage custom;
     custom.custom_type = "ext";
     custom.content.emplace_back(ai::TextContent{"part1", std::nullopt});
+    custom.content.emplace_back(ai::ImageContent{"aW1hZ2U=", "image/png"});
     custom.content.emplace_back(ai::TextContent{"part2", std::nullopt});
     custom.timestamp = 1718000000005;
 
     auto msg = ai::custom_message_to_user_message(custom);
+
     CHECK(msg.timestamp == 1718000000005);
-    const auto& text = std::get<ai::TextContent>(msg.content[0]);
-    CHECK(text.text.find("part1\npart2") != std::string::npos);
+    REQUIRE(msg.content.size() == 3);
+    CHECK(std::get<ai::TextContent>(msg.content[0]).text == "part1");
+    CHECK(std::get<ai::ImageContent>(msg.content[1]).data == "aW1hZ2U=");
+    CHECK(std::get<ai::ImageContent>(msg.content[1]).mime_type == "image/png");
+    CHECK(std::get<ai::TextContent>(msg.content[2]).text == "part2");
 }
 
-TEST_CASE("custom_message_to_user_message handles empty content", "[ai][extended][convert]") {
+TEST_CASE("custom_message_to_user_message preserves empty content", "[ai][extended][convert][issue22]") {
     ai::CustomMessage custom;
     custom.custom_type = "ext";
     custom.timestamp = 1718000000006;
 
     auto msg = ai::custom_message_to_user_message(custom);
-    const auto& text = std::get<ai::TextContent>(msg.content[0]);
-    CHECK(text.text.empty());
+
+    CHECK(msg.content.empty());
+    CHECK(msg.timestamp == 1718000000006);
 }

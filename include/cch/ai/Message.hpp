@@ -189,19 +189,7 @@ inline constexpr std::string_view BRANCH_SUMMARY_SUFFIX = "\n</summary>";
 }
 
 [[nodiscard]] inline UserMessage custom_message_to_user_message(const CustomMessage& msg) {
-    if (msg.content.empty()) {
-        return user_text_message("", msg.timestamp);
-    }
-    // Build text from content blocks
-    std::string text;
-    for (const auto& block : msg.content) {
-        auto* tc = std::get_if<TextContent>(&block);
-        if (tc) {
-            if (!text.empty()) text += "\n";
-            text += tc->text;
-        }
-    }
-    return user_text_message(std::move(text), msg.timestamp);
+    return UserMessage{msg.content, msg.timestamp};
 }
 
 } // namespace cch::ai

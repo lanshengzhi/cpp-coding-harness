@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <iterator>
 #include <map>
 #include <optional>
 #include <sstream>
@@ -54,11 +55,76 @@ void append_plain_text_part(std::string& text, std::string_view part, std::strin
                 [&text](const ai::ThinkingContent&) {
                     append_plain_text_part(text, "[thinking content omitted]", "\n");
                 },
-                [&text](const ai::ImageContent& image) {
-                    append_plain_text_part(text, "[image content omitted: " + image.mime_type + "]", "\n");
+                [](const ai::ImageContent&) {},
+            },
+            block);
+    }
+    return text;
+}
+
+[[nodiscard]] bool has_image_content(const std::vector<ai::Content>& content) {
+    return std::ranges::any_of(content, [](const ai::Content& block) {
+        return std::holds_alternative<ai::ImageContent>(block);
+    });
+}
+
+[[nodiscard]] ai::glaze::OpenAIContentPartDto text_part(std::string text) {
+    return ai::glaze::OpenAIContentPartDto{
+        .type = "text",
+        .text = std::move(text),
+        .image_url = std::nullopt,
+    };
+}
+
+[[nodiscard]] ai::glaze::OpenAIContentPartDto image_part(const ai::ImageContent& image) {
+    return ai::glaze::OpenAIContentPartDto{
+        .type = "image_url",
+        .text = std::nullopt,
+        .image_url = ai::glaze::OpenAIImageUrlDto{
+            .url = "data:" + image.mime_type + ";base64," + image.data,
+        },
+    };
+}
+
+[[nodiscard]] ai::glaze::OpenAIMessageContentDto user_content(
+    const std::vector<ai::Content>& content) {
+    if (!has_image_content(content)) {
+        return content_text(content);
+    }
+
+    std::vector<ai::glaze::OpenAIContentPartDto> parts;
+    parts.reserve(content.size());
+    for (const auto& block : content) {
+        std::visit(
+            Overloaded{
+                [&parts](const ai::TextContent& text) {
+                    parts.push_back(text_part(text.text));
+                },
+                [&parts](const ai::ThinkingContent&) {
+                    parts.push_back(text_part("[thinking content omitted]"));
+                },
+                [&parts](const ai::ImageContent& image) {
+                    parts.push_back(image_part(image));
                 },
             },
             block);
+    }
+    return parts;
+}
+
+[[nodiscard]] std::string tool_result_text(const std::vector<ai::Content>& content) {
+    std::string text;
+    bool saw_text_block = false;
+    for (const auto& block : content) {
+        const auto* text_block = std::get_if<ai::TextContent>(&block);
+        if (text_block == nullptr) {
+            continue;
+        }
+        if (saw_text_block) {
+            text += '\n';
+        }
+        text += text_block->text;
+        saw_text_block = true;
     }
     return text;
 }
@@ -105,6 +171,39 @@ void append_plain_text_part(std::string& text, std::string_view part, std::strin
     return calls;
 }
 
+void append_tool_result_assistant_bridge(
+    std::vector<ai::glaze::OpenAIChatMessageDto>& messages) {
+    messages.push_back(ai::glaze::OpenAIChatMessageDto{
+        "assistant",
+        "I have processed the tool results.",
+        std::nullopt,
+        std::nullopt,
+        std::nullopt,
+    });
+}
+
+[[nodiscard]] ai::glaze::OpenAIChatMessageDto tool_result_to_openai(
+    const ai::ToolResultMessage& tool,
+    const OpenAICompletionsCompat& compat) {
+    auto text = tool_result_text(tool.content);
+    if (text.empty()) {
+        text = has_image_content(tool.content)
+            ? "(see attached image)"
+            : "(no tool output)";
+    }
+    auto dto = ai::glaze::OpenAIChatMessageDto{
+        "tool",
+        std::move(text),
+        std::nullopt,
+        tool.tool_call_id,
+        std::nullopt,
+    };
+    if (compat.requires_tool_result_name.value_or(false)) {
+        dto.name = tool.tool_name;
+    }
+    return dto;
+}
+
 [[nodiscard]] ai::glaze::OpenAIChatMessageDto message_to_openai(
     const ai::MessageVariant& message,
     const OpenAICompletionsCompat& compat = {}) {
@@ -114,7 +213,7 @@ void append_plain_text_part(std::string& text, std::string_view part, std::strin
                 return ai::glaze::OpenAIChatMessageDto{system_role(compat), system.content, std::nullopt, std::nullopt, std::nullopt};
             },
             [](const ai::UserMessage& user) {
-                return ai::glaze::OpenAIChatMessageDto{"user", content_text(user.content), std::nullopt, std::nullopt, std::nullopt};
+                return ai::glaze::OpenAIChatMessageDto{"user", user_content(user.content), std::nullopt, std::nullopt, std::nullopt};
             },
             [&compat](const ai::AssistantMessage& assistant) {
                 auto calls = tool_calls_from_assistant_content(assistant.content);
@@ -131,17 +230,7 @@ void append_plain_text_part(std::string& text, std::string_view part, std::strin
                 };
             },
             [&compat](const ai::ToolResultMessage& tool) {
-                auto dto = ai::glaze::OpenAIChatMessageDto{
-                    "tool",
-                    content_text(tool.content),
-                    std::nullopt,
-                    tool.tool_call_id,
-                    std::nullopt,
-                };
-                if (compat.requires_tool_result_name.value_or(false)) {
-                    dto.name = tool.tool_name;
-                }
-                return dto;
+                return tool_result_to_openai(tool, compat);
             },
             [](const ai::BashExecutionMessage& bash) {
                 auto msg = bash_execution_to_user_message(bash);
@@ -149,7 +238,7 @@ void append_plain_text_part(std::string& text, std::string_view part, std::strin
             },
             [](const ai::CustomMessage& custom) {
                 auto msg = custom_message_to_user_message(custom);
-                return ai::glaze::OpenAIChatMessageDto{"user", content_text(msg.content), std::nullopt, std::nullopt, std::nullopt};
+                return ai::glaze::OpenAIChatMessageDto{"user", user_content(msg.content), std::nullopt, std::nullopt, std::nullopt};
             },
             [](const ai::BranchSummaryMessage& branch) {
                 auto msg = branch_summary_to_user_message(branch);
@@ -221,9 +310,24 @@ void append_plain_text_part(std::string& text, std::string_view part, std::strin
            is_valid_utf8(tool_call.function.arguments);
 }
 
+[[nodiscard]] bool content_has_valid_utf8(
+    const ai::glaze::OpenAIMessageContentDto& content) {
+    if (const auto* text = std::get_if<std::string>(&content)) {
+        return is_valid_utf8(*text);
+    }
+    for (const auto& part : std::get<std::vector<ai::glaze::OpenAIContentPartDto>>(content)) {
+        if (!is_valid_utf8(part.type) ||
+            !optional_has_valid_utf8(part.text) ||
+            (part.image_url && !is_valid_utf8(part.image_url->url))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 [[nodiscard]] bool message_has_valid_utf8(const ai::glaze::OpenAIChatMessageDto& message) {
     if (!is_valid_utf8(message.role) ||
-        !is_valid_utf8(message.content) ||
+        !content_has_valid_utf8(message.content) ||
         !optional_has_valid_utf8(message.name) ||
         !optional_has_valid_utf8(message.tool_call_id)) {
         return false;
@@ -292,21 +396,63 @@ void append_plain_text_part(std::string& text, std::string_view part, std::strin
         dto.messages.push_back(ai::glaze::OpenAIChatMessageDto{role, *request.context.system_prompt, std::nullopt, std::nullopt, std::nullopt});
         last_emitted_role = role;
     }
-    for (const auto& message : request.context.messages) {
-        if (const auto* bash = std::get_if<ai::BashExecutionMessage>(&message); bash && bash->exclude_from_context) {
+    for (std::size_t index = 0; index < request.context.messages.size(); ++index) {
+        const auto& message = request.context.messages[index];
+        if (const auto* bash = std::get_if<ai::BashExecutionMessage>(&message);
+            bash && bash->exclude_from_context) {
             continue;
         }
-        auto converted = message_to_openai(message, config.compat);
-        if (converted.role == "user"
-            && config.compat.requires_assistant_after_tool_result.value_or(false)
-            && last_emitted_role == "tool") {
+
+        if (std::holds_alternative<ai::ToolResultMessage>(message)) {
+            std::vector<ai::glaze::OpenAIContentPartDto> image_parts;
+            std::size_t group_end = index;
+            for (;
+                 group_end < request.context.messages.size() &&
+                 std::holds_alternative<ai::ToolResultMessage>(request.context.messages[group_end]);
+                 ++group_end) {
+                const auto& tool = std::get<ai::ToolResultMessage>(
+                    request.context.messages[group_end]);
+                dto.messages.push_back(tool_result_to_openai(tool, config.compat));
+                for (const auto& block : tool.content) {
+                    if (const auto* image = std::get_if<ai::ImageContent>(&block)) {
+                        image_parts.push_back(image_part(*image));
+                    }
+                }
+            }
+            index = group_end - 1;
+
+            if (image_parts.empty()) {
+                last_emitted_role = "tool";
+                continue;
+            }
+
+            if (config.compat.requires_assistant_after_tool_result.value_or(false)) {
+                append_tool_result_assistant_bridge(dto.messages);
+            }
+
+            std::vector<ai::glaze::OpenAIContentPartDto> attachment_parts;
+            attachment_parts.reserve(image_parts.size() + 1);
+            attachment_parts.push_back(text_part("Attached image(s) from tool result:"));
+            attachment_parts.insert(
+                attachment_parts.end(),
+                std::make_move_iterator(image_parts.begin()),
+                std::make_move_iterator(image_parts.end()));
             dto.messages.push_back(ai::glaze::OpenAIChatMessageDto{
-                "assistant",
-                "I have processed the tool results.",
+                "user",
+                std::move(attachment_parts),
                 std::nullopt,
                 std::nullopt,
                 std::nullopt,
             });
+            last_emitted_role = "user";
+            continue;
+        }
+
+        auto converted = message_to_openai(message, config.compat);
+        if (converted.role == "user"
+            && config.compat.requires_assistant_after_tool_result.value_or(false)
+            && last_emitted_role == "tool") {
+            append_tool_result_assistant_bridge(dto.messages);
             last_emitted_role = "assistant";
         }
         last_emitted_role = converted.role;

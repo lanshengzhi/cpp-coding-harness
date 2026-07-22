@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace cch::ai::glaze {
@@ -29,9 +30,21 @@ struct ProviderToolCallDto {
     return ProviderToolDto{"function", to_function_tool_dto(tool)};
 }
 
+struct OpenAIImageUrlDto {
+    std::string url;
+};
+
+struct OpenAIContentPartDto {
+    std::string type;
+    std::optional<std::string> text;
+    std::optional<OpenAIImageUrlDto> image_url;
+};
+
+using OpenAIMessageContentDto = std::variant<std::string, std::vector<OpenAIContentPartDto>>;
+
 struct OpenAIChatMessageDto {
     std::string role;
-    std::string content;
+    OpenAIMessageContentDto content;
     std::optional<std::string> name;
     std::optional<std::string> tool_call_id;
     std::optional<std::vector<ProviderToolCallDto>> tool_calls;
