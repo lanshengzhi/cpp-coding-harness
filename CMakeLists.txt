@@ -172,6 +172,7 @@ if(CCH_BUILD_TESTS)
         tests/ai/ProviderRegistryTest.cpp
         tests/ai/ToolContractTest.cpp
         tests/ai/providers/BoostBeastStreamTransportTest.cpp
+        tests/ai/providers/FakeChatClientTest.cpp
         tests/ai/providers/OpenAIChatClientTest.cpp
         tests/ai/providers/SseParserTest.cpp
         tests/cli/CliSmokeTest.cpp
