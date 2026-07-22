@@ -100,6 +100,19 @@ TEST_CASE("core public contracts do not expose Glaze generic machinery", "[archi
     }
 }
 
+TEST_CASE("tool argument contracts stay passive and dependency-free", "[architecture][ai][issue24]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto tool_header = read_text(source_root / "include" / "cch" / "ai" / "Tool.hpp");
+    const auto tool_factories = read_text(source_root / "src" / "tools" / "AsyncToolFactories.cpp");
+    const auto removed_recursive_type = std::string{"Json"} + "Schema";
+
+    CHECK(tool_header.find("util::JsonValue parameters") != std::string::npos);
+    CHECK(tool_header.find(removed_recursive_type) == std::string::npos);
+    CHECK(tool_header.find("glaze/glaze.hpp") == std::string::npos);
+    CHECK(tool_header.find("glz::") == std::string::npos);
+    CHECK(tool_factories.find("ai/glaze") == std::string::npos);
+}
+
 TEST_CASE("tool scheduling vocabulary stays in the agent package", "[architecture][agent]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
     const auto ai_tool = read_text(source_root / "include" / "cch" / "ai" / "Tool.hpp");

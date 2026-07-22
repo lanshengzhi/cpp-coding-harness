@@ -1,86 +1,65 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include "ai/glaze/ToolSchemaDtos.hpp"
-#include "../../include/cch/util/Error.hpp"
+#include "ComplexToolSchemaFixture.hpp"
+#include "ai/glaze/ToolDtos.hpp"
+#include "../../include/cch/ai/Tool.hpp"
+#include "../../include/cch/util/JsonValue.hpp"
 #include "util/Json.hpp"
 
-#include <memory>
 #include <string>
 #include <type_traits>
 
 using namespace cch;
 
-TEST_CASE("tool definitions serialize function schema DTOs without Boost JSON", "[ai][u2][tool]") {
-    ai::Tool read_file;
-    read_file.name = "read_file";
-    read_file.description = "Read a workspace file";
-    read_file.parameters = ai::JsonSchema::object(
-        {
-            {"path", ai::JsonSchema::string("file path")},
-            {"limit", ai::JsonSchema::integer("line limit")},
-        },
-        {"path"},
-        std::nullopt,
-        false);
+namespace {
 
-    auto json = ai::glaze::write_function_tool_json(read_file);
+util::JsonValue complex_contract() {
+    auto parsed = util::read_json<util::JsonValue>(test::kComplexToolArgumentContract);
+    REQUIRE(parsed);
+    return std::move(*parsed);
+}
+
+std::string canonical_json(const util::JsonValue& value) {
+    auto serialized = util::write_json(value);
+    REQUIRE(serialized);
+    return std::move(*serialized);
+}
+
+} // namespace
+
+TEST_CASE("tool parameters are the passive project JSON value", "[ai][u2][tool][issue24]") {
+    static_assert(std::is_same_v<decltype(ai::Tool::parameters), util::JsonValue>);
+
+    ai::Tool object_tool{"object_contract", "Object contract", complex_contract()};
+    ai::Tool boolean_tool{"boolean_contract", "Boolean contract", util::JsonValue{false}};
+
+    CHECK(object_tool.parameters.holds<util::JsonValue::object_t>());
+    CHECK(boolean_tool.parameters.holds<bool>());
+    CHECK_FALSE(boolean_tool.parameters.get_boolean());
+}
+
+TEST_CASE("function tool serialization preserves arbitrary JSON Schema values", "[ai][u2][tool][issue24]") {
+    const auto expected = complex_contract();
+    const ai::Tool tool{"complete_contract", "Complete contract", expected};
+
+    auto json = ai::glaze::write_function_tool_json(tool);
     REQUIRE(json);
-    CHECK(json->find(R"("name":"read_file")") != std::string::npos);
-    CHECK(json->find(R"("parameters")") != std::string::npos);
-    CHECK(json->find(R"("additionalProperties":false)") != std::string::npos);
-
     auto parsed = util::read_json<util::JsonValue>(*json);
     REQUIRE(parsed);
-    const auto& function = parsed->get<util::JsonValue::object_t>();
-    CHECK(function.at("name").get_string() == "read_file");
-    CHECK(function.at("description").get_string() == "Read a workspace file");
 
-    const auto& parameters = function.at("parameters").get<util::JsonValue::object_t>();
-    CHECK(parameters.at("type").get_string() == "object");
-    CHECK(parameters.at("additionalProperties").get<bool>() == false);
-
-    const auto& properties = parameters.at("properties").get<util::JsonValue::object_t>();
-    CHECK(properties.at("path").get<util::JsonValue::object_t>().at("type").get_string() == "string");
-    CHECK(properties.at("path").get<util::JsonValue::object_t>().at("description").get_string() == "file path");
-    CHECK(properties.at("limit").get<util::JsonValue::object_t>().at("type").get_string() == "integer");
-
-    const auto& required = parameters.at("required").get<util::JsonValue::array_t>();
-    REQUIRE(required.size() == 1);
-    CHECK(required[0].get_string() == "path");
+    CHECK(parsed->at("name").get_string() == "complete_contract");
+    CHECK(parsed->at("description").get_string() == "Complete contract");
+    CHECK(canonical_json(parsed->at("parameters")) == canonical_json(expected));
 }
 
-TEST_CASE("tool schema DTOs round-trip into typed schema contracts", "[ai][u2][tool]") {
-    ai::Tool original;
-    original.name = "write_file";
-    original.description = "Write a workspace file";
-    original.parameters = ai::JsonSchema::object(
-        {{"path", ai::JsonSchema::string("file path")}, {"content", ai::JsonSchema::string("new content")}},
-        {"path", "content"});
+TEST_CASE("function tool serialization preserves boolean JSON Schemas", "[ai][u2][tool][issue24]") {
+    const ai::Tool tool{"disabled_contract", "Reject every argument", util::JsonValue{false}};
 
-    auto dto = ai::glaze::to_function_tool_dto(original);
-    auto converted = ai::glaze::schema_from_tool_parameters_dto(dto.parameters);
-    REQUIRE(converted);
+    auto json = ai::glaze::write_function_tool_json(tool);
+    REQUIRE(json);
+    auto parsed = util::read_json<util::JsonValue>(*json);
+    REQUIRE(parsed);
 
-    CHECK(converted->type == ai::JsonSchemaType::Object);
-    CHECK(converted->properties.at("path").type == ai::JsonSchemaType::String);
-    CHECK(converted->properties.at("content").type == ai::JsonSchemaType::String);
-    REQUIRE(converted->properties.at("content").description);
-    CHECK(*converted->properties.at("content").description == "new content");
-    REQUIRE(converted->required.size() == 2);
-    CHECK(converted->required[0] == "path");
-    CHECK(converted->required[1] == "content");
-}
-
-TEST_CASE("array schemas clone immutable item schemas", "[ai][u2][tool]") {
-    auto item = std::make_shared<ai::JsonSchema>(ai::JsonSchema::string("item"));
-    auto array = ai::JsonSchema::array(item);
-    static_assert(std::is_same_v<decltype(array.items), std::shared_ptr<const ai::JsonSchema>>);
-
-    item->type = ai::JsonSchemaType::Integer;
-
-    REQUIRE(array.items);
-    CHECK(array.items->type == ai::JsonSchemaType::String);
-    auto copied = array;
-    REQUIRE(copied.items);
-    CHECK(copied.items->type == ai::JsonSchemaType::String);
+    REQUIRE(parsed->at("parameters").holds<bool>());
+    CHECK_FALSE(parsed->at("parameters").get_boolean());
 }

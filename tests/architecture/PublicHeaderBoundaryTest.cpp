@@ -36,7 +36,12 @@ using namespace cch;
 TEST_CASE("public headers compile from the include contract surface", "[architecture][u1]") {
     ai::AiContext context;
     context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
-    context.tools.push_back(ai::Tool{"read_file", "Read", ai::JsonSchema::object()});
+    context.tools.push_back(ai::Tool{
+        "read_file",
+        "Read",
+        util::JsonValue::object_t{{"type", "object"}, {"additionalProperties", false}},
+    });
+    static_assert(std::is_same_v<decltype(ai::Tool::parameters), util::JsonValue>);
 
     agent::AsyncAgentOptions options;
     options.max_turns = 2;

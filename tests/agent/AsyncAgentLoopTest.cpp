@@ -2,6 +2,7 @@
 
 #include "util/ExpectedMacros.hpp"
 
+#include "../support/ToolArgumentContracts.hpp"
 #include "../../include/cch/agent/AgentLoop.hpp"
 #include "../../include/cch/ai/Content.hpp"
 #include "../../include/cch/util/Error.hpp"
@@ -217,8 +218,8 @@ TEST_CASE("async tool registry owns tools and returns deterministic definitions"
     static_assert(!std::is_copy_constructible_v<agent::AsyncToolRegistry>);
     static_assert(std::is_move_constructible_v<agent::AsyncToolRegistry>);
 
-    auto zed = std::make_unique<FakeTool>(ai::Tool{"zed", "Zed tool", ai::JsonSchema::object()});
-    auto alpha = std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha tool", ai::JsonSchema::object()});
+    auto zed = std::make_unique<FakeTool>(ai::Tool{"zed", "Zed tool", test::empty_object_tool_argument_contract()});
+    auto alpha = std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha tool", test::empty_object_tool_argument_contract()});
     auto* zed_ptr = zed.get();
     auto* alpha_ptr = alpha.get();
 
@@ -269,7 +270,7 @@ TEST_CASE(
     TerminalOutcomeClient client(std::move(terminal));
 
     auto tool = std::make_unique<FakeTool>(
-        ai::Tool{"read_file", "Read a file", ai::JsonSchema::object()});
+        ai::Tool{"read_file", "Read a file", test::empty_object_tool_argument_contract()});
     auto* tool_ptr = tool.get();
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::move(tool)).has_value());
@@ -356,7 +357,7 @@ TEST_CASE(
     TerminalOutcomeClient client(std::move(terminal));
 
     auto tool = std::make_unique<FakeTool>(
-        ai::Tool{"read_file", "Read a file", ai::JsonSchema::object()});
+        ai::Tool{"read_file", "Read a file", test::empty_object_tool_argument_contract()});
     auto* tool_ptr = tool.get();
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::move(tool)).has_value());
@@ -437,7 +438,7 @@ TEST_CASE(
     TerminalBeforeStartClient client(std::move(terminal));
 
     auto tool = std::make_unique<FakeTool>(
-        ai::Tool{"read_file", "Read a file", ai::JsonSchema::object()});
+        ai::Tool{"read_file", "Read a file", test::empty_object_tool_argument_contract()});
     auto* tool_ptr = tool.get();
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::move(tool)).has_value());
@@ -534,7 +535,7 @@ TEST_CASE(
     TerminalBeforeStartClient client(std::move(terminal));
 
     auto tool = std::make_unique<FakeTool>(
-        ai::Tool{"read_file", "Read a file", ai::JsonSchema::object()});
+        ai::Tool{"read_file", "Read a file", test::empty_object_tool_argument_contract()});
     auto* tool_ptr = tool.get();
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::move(tool)).has_value());
@@ -830,7 +831,7 @@ TEST_CASE("async agent loop forwards thinking and tool-call stream lifecycle eve
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{
         "read_file",
         "Read a workspace file",
-        ai::JsonSchema::object({{"path", ai::JsonSchema::string("file path")}}, {"path"}),
+        test::path_tool_argument_contract(),
     })));
     agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{4, "gpt-test"});
 
@@ -854,7 +855,7 @@ TEST_CASE("async agent loop executes tool calls and continues with tool result c
     auto tool = std::make_unique<FakeTool>(ai::Tool{
         "read_file",
         "Read a workspace file",
-        ai::JsonSchema::object({{"path", ai::JsonSchema::string("file path")}}, {"path"}),
+        test::path_tool_argument_contract(),
     });
     auto* tool_ptr = tool.get();
     agent::AsyncToolRegistry registry;
@@ -886,7 +887,7 @@ TEST_CASE("async agent loop turns malformed tool arguments into error tool resul
     client.responses.push_back(tool_call_response("not-json"));
     client.responses.push_back(ai::assistant_text_message("saw error"));
     agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()})));
     agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{4, "gpt-test"});
 
     auto run = run_loop(loop, "read");
@@ -905,7 +906,7 @@ TEST_CASE("async agent loop reports max turn exhaustion", "[agent][async][u5]") 
     FakeStreamingClient client;
     client.responses.push_back(tool_call_response());
     agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()})));
     agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{1, "gpt-test"});
 
     auto run = run_loop(loop, "read");
@@ -920,7 +921,7 @@ TEST_CASE("beforeToolCall hook can block a tool call", "[agent][async][u7]") {
     client.responses.push_back(tool_call_response());
     client.responses.push_back(ai::assistant_text_message("done"));
 
-    auto tool = std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()});
+    auto tool = std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()});
     auto* tool_ptr = tool.get();
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::move(tool)));
@@ -961,7 +962,7 @@ TEST_CASE("beforeToolCall hook passes context and skips execution on block", "[a
     client.responses.push_back(tool_call_response());
     client.responses.push_back(ai::assistant_text_message("done"));
 
-    auto tool = std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()});
+    auto tool = std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()});
     auto* tool_ptr = tool.get();
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::move(tool)));
@@ -988,7 +989,7 @@ TEST_CASE("beforeToolCall hook failure aborts the run", "[agent][async][u7]") {
     FakeStreamingClient client;
     client.responses.push_back(tool_call_response());
     agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()})));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
     options.before_tool_call = [](const agent::BeforeToolCallContext&) -> util::Expected<agent::BeforeToolCallResult> {
@@ -1012,7 +1013,7 @@ TEST_CASE("beforeToolCall hook exception becomes a tool error", "[agent][async][
     FakeStreamingClient client;
     client.responses.push_back(tool_call_response());
     agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()})));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
     options.before_tool_call = [](const agent::BeforeToolCallContext&) -> util::Expected<agent::BeforeToolCallResult> {
@@ -1034,7 +1035,7 @@ TEST_CASE("afterToolCall hook overrides tool result content", "[agent][async][u7
     client.responses.push_back(tool_call_response());
     client.responses.push_back(ai::assistant_text_message("done"));
     agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()})));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
     options.after_tool_call = [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
@@ -1059,7 +1060,7 @@ TEST_CASE("afterToolCall hook overrides error flag", "[agent][async][u7]") {
     client.responses.push_back(tool_call_response());
     client.responses.push_back(ai::assistant_text_message("done"));
     agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()})));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
     options.after_tool_call = [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
@@ -1235,7 +1236,7 @@ TEST_CASE("afterToolCall terminate hint stops the run when all calls agree", "[a
     FakeStreamingClient client;
     client.responses.push_back(tool_call_response());
     agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()})));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
     options.after_tool_call = [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
@@ -1261,8 +1262,8 @@ TEST_CASE("terminate batch continues when one call declines", "[agent][async][u7
     client.responses.push_back(ai::assistant_text_message("done"));
 
     agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()})));
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"beta", "Beta", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()})));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
     options.after_tool_call = [](const agent::AfterToolCallContext& ctx) -> util::Expected<agent::AfterToolCallResult> {
@@ -1288,8 +1289,8 @@ TEST_CASE("blocked call prevents terminate batch", "[agent][async][u7]") {
     client.responses.push_back(ai::assistant_text_message("done"));
 
     agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()})));
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"beta", "Beta", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()})));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
     options.before_tool_call = [](const agent::BeforeToolCallContext& ctx) -> util::Expected<agent::BeforeToolCallResult> {
@@ -1317,8 +1318,8 @@ TEST_CASE("tool execution error prevents terminate batch", "[agent][async][u7]")
     client.responses.push_back(ai::assistant_text_message("done"));
 
     agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()})));
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"beta", "Beta", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()})));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
     options.after_tool_call = [](const agent::AfterToolCallContext& ctx) -> util::Expected<agent::AfterToolCallResult> {
@@ -1341,7 +1342,7 @@ TEST_CASE("afterToolCall hook failure aborts the run", "[agent][async][u7]") {
     FakeStreamingClient client;
     client.responses.push_back(tool_call_response());
     agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()})));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
     options.after_tool_call = [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
@@ -1362,7 +1363,7 @@ TEST_CASE("afterToolCall hook exception becomes a tool error", "[agent][async][u
     FakeStreamingClient client;
     client.responses.push_back(tool_call_response());
     agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()})));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
     options.after_tool_call = [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
@@ -1540,7 +1541,7 @@ TEST_CASE("steering message is injected before next LLM request", "[agent][async
     client.responses.push_back(ai::assistant_text_message("done"));
 
     agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()})));
 
     bool steering_returned = false;
     agent::AsyncAgentOptions options{4, "gpt-test"};
@@ -1809,7 +1810,7 @@ TEST_CASE("prepareNextTurn model swap changes next request model", "[agent][asyn
     client.responses.push_back(ai::assistant_text_message("second"));
 
     agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()})));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
     options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
@@ -1837,7 +1838,7 @@ TEST_CASE("prepareNextTurn model update without validator is rejected", "[agent]
     client.responses.push_back(tool_call_response());
 
     agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()})));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
     options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
@@ -1878,7 +1879,7 @@ TEST_CASE("prepareNextTurn rejected update does not persist partial model change
     client.responses.push_back(ai::assistant_text_message("second run"));
 
     agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()})));
 
     int prepare_calls = 0;
     agent::AsyncAgentOptions options{4, "gpt-test"};
@@ -2027,7 +2028,7 @@ TEST_CASE("prepareNextTurn model validation hook can reject unknown models", "[a
     client.responses.push_back(ai::assistant_text_message("second"));
 
     agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", ai::JsonSchema::object()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()})));
 
     agent::AsyncAgentOptions options{4, "gpt-test"};
     options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
@@ -2105,11 +2106,11 @@ TEST_CASE("an exclusive tool forces a bounded batch to execute sequentially", "[
     ConcurrencyProbe probe;
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
-        ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
+        ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         probe)));
     REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
-        ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
+        ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::Exclusive,
         probe)));
 
@@ -2131,11 +2132,11 @@ TEST_CASE("bounded parallel execution preserves source order in the transcript",
 
     agent::AsyncToolRegistry registry;
     auto alpha = std::make_unique<ConfigurableFakeTool>(
-        ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
+        ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "alpha result");
     auto beta = std::make_unique<ConfigurableFakeTool>(
-        ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
+        ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "beta result");
     auto* alpha_ptr = alpha.get();
@@ -2184,11 +2185,11 @@ TEST_CASE("bounded parallel limit one executes sequentially", "[agent][async][u8
     ConcurrencyProbe probe;
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
-        ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
+        ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         probe)));
     REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
-        ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
+        ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         probe)));
 
@@ -2211,11 +2212,11 @@ TEST_CASE("bounded parallel policy rejects zero before tools start", "[agent][as
     ConcurrencyProbe probe;
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
-        ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
+        ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         probe)));
     REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
-        ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
+        ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         probe)));
 
@@ -2238,11 +2239,11 @@ TEST_CASE("bounded parallel execution keeps blocked calls out of tool adapters",
 
     agent::AsyncToolRegistry registry;
     auto alpha = std::make_unique<ConfigurableFakeTool>(
-        ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
+        ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "alpha result");
     auto beta = std::make_unique<ConfigurableFakeTool>(
-        ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
+        ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "beta result");
     auto* alpha_ptr = alpha.get();
@@ -2283,11 +2284,11 @@ TEST_CASE("bounded parallel before-hook failure starts no workers", "[agent][asy
     ConcurrencyProbe probe;
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
-        ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
+        ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         probe)));
     REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
-        ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
+        ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         probe)));
 
@@ -2316,9 +2317,9 @@ TEST_CASE("bounded parallel execution preserves peer success after a tool error"
 
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FailingFakeTool>(
-        ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()})));
+        ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()})));
     REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
-        ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
+        ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "beta result")));
 
@@ -2344,11 +2345,11 @@ TEST_CASE("bounded parallel event-sink failure drains workers and emits one agen
 
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
-        ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
+        ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "alpha result")));
     REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
-        ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
+        ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "beta result")));
 
@@ -2398,11 +2399,11 @@ TEST_CASE("bounded parallel execution keeps hook failures as agent errors", "[ag
 
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
-        ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
+        ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "alpha result")));
     REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
-        ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
+        ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "beta result")));
 
@@ -2434,11 +2435,11 @@ TEST_CASE("bounded parallel execution emits end events in completion order", "[a
 
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<DelayedFakeTool>(
-        ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
+        ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
         std::chrono::milliseconds{100},
         "alpha result")));
     REQUIRE(registry.add(std::make_unique<DelayedFakeTool>(
-        ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
+        ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
         std::chrono::milliseconds{10},
         "beta result")));
 
@@ -2484,11 +2485,11 @@ TEST_CASE("length-truncated tool calls emit errors without crossing the executor
 
     agent::AsyncToolRegistry registry;
     auto alpha = std::make_unique<ConfigurableFakeTool>(
-        ai::Tool{"alpha", "Alpha", ai::JsonSchema::object()},
+        ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "alpha result");
     auto beta = std::make_unique<ConfigurableFakeTool>(
-        ai::Tool{"beta", "Beta", ai::JsonSchema::object()},
+        ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "beta result");
     auto* alpha_ptr = alpha.get();

@@ -3,7 +3,7 @@
 #include "../../../include/cch/ai/Context.hpp"
 #include "../../../include/cch/ai/Message.hpp"
 #include "../../../include/cch/ai/Usage.hpp"
-#include "ToolSchemaDtos.hpp"
+#include "ToolDtos.hpp"
 #include "../../util/Json.hpp"
 
 #include <glaze/glaze.hpp>
@@ -830,18 +830,6 @@ template <typename T>
         context));
 }
 
-[[nodiscard]] inline FunctionToolDto to_context_tool_dto(const Tool& tool) {
-    return to_function_tool_dto(tool);
-}
-
-[[nodiscard]] inline util::Expected<Tool> tool_from_context_tool_dto(const FunctionToolDto& dto) {
-    auto parameters = schema_from_tool_parameters_dto(dto.parameters);
-    if (!parameters) {
-        return std::unexpected(parameters.error());
-    }
-    return Tool{dto.name, dto.description, std::move(*parameters)};
-}
-
 [[nodiscard]] inline ContextDto to_dto(const AiContext& context) {
     ContextDto dto;
     dto.systemPrompt = context.system_prompt;
@@ -854,7 +842,7 @@ template <typename T>
     if (!context.tools.empty()) {
         std::vector<FunctionToolDto> tools;
         for (const auto& tool : context.tools) {
-            tools.push_back(to_context_tool_dto(tool));
+            tools.push_back(to_function_tool_dto(tool));
         }
         dto.tools = std::move(tools);
     }
@@ -874,11 +862,7 @@ template <typename T>
     }
     if (dto.tools) {
         for (const auto& tool_dto : *dto.tools) {
-            auto tool = tool_from_context_tool_dto(tool_dto);
-            if (!tool) {
-                return std::unexpected(tool.error());
-            }
-            context.tools.push_back(std::move(*tool));
+            context.tools.push_back(tool_from_function_tool_dto(tool_dto));
         }
     }
     return context;

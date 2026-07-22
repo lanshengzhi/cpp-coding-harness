@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ToolSchemaDtos.hpp"
+#include "ToolDtos.hpp"
 
 #include <cstdint>
 #include <optional>

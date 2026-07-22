@@ -1,6 +1,5 @@
 #include "../../include/cch/tools/ToolFactories.hpp"
 
-#include "ai/glaze/ToolSchemaDtos.hpp"
 #include "util/Json.hpp"
 
 #include <chrono>
@@ -44,6 +43,40 @@ struct BashArgs {
     std::optional<int> timeout;  // seconds, optional (no default = no timeout)
 };
 
+[[nodiscard]] util::JsonValue typed_schema(
+    std::string type,
+    std::optional<std::string> description = std::nullopt) {
+    util::JsonValue::object_t schema{{"type", std::move(type)}};
+    if (description) {
+        schema.emplace("description", std::move(*description));
+    }
+    return schema;
+}
+
+[[nodiscard]] util::JsonValue object_schema(
+    util::JsonValue::object_t properties,
+    std::vector<std::string> required) {
+    util::JsonValue::array_t required_values;
+    required_values.reserve(required.size());
+    for (auto& name : required) {
+        required_values.emplace_back(std::move(name));
+    }
+    return util::JsonValue::object_t{
+        {"type", "object"},
+        {"properties", std::move(properties)},
+        {"required", std::move(required_values)},
+        {"additionalProperties", false},
+    };
+}
+
+[[nodiscard]] util::JsonValue array_schema(
+    util::JsonValue items,
+    std::optional<std::string> description = std::nullopt) {
+    auto schema = typed_schema("array", std::move(description)).get_object();
+    schema.emplace("items", std::move(items));
+    return schema;
+}
+
 [[nodiscard]] agent::AsyncToolExecutionResult error_result(std::string content) {
     return agent::AsyncToolExecutionResult{std::vector<ai::Content>{ai::text_content(std::move(content))}, std::nullopt, true};
 }
@@ -80,11 +113,11 @@ public:
         static const ai::Tool tool{
             "read",
             "Read a text file inside the workspace",
-            ai::JsonSchema::object(
+            object_schema(
                 {
-                    {"path", ai::JsonSchema::string("Workspace-relative file path")},
-                    {"offset", ai::JsonSchema::integer("1-based line offset")},
-                    {"limit", ai::JsonSchema::integer("Maximum number of lines to read")},
+                    {"path", typed_schema("string", "Workspace-relative file path")},
+                    {"offset", typed_schema("integer", "1-based line offset")},
+                    {"limit", typed_schema("integer", "Maximum number of lines to read")},
                 },
                 {"path"}),
         };
@@ -123,10 +156,10 @@ public:
         static const ai::Tool tool{
             "write",
             "Create or overwrite a text file inside the workspace. Parent directories are created automatically.",
-            ai::JsonSchema::object(
+            object_schema(
                 {
-                    {"path", ai::JsonSchema::string("Workspace-relative file path")},
-                    {"content", ai::JsonSchema::string("File content")},
+                    {"path", typed_schema("string", "Workspace-relative file path")},
+                    {"content", typed_schema("string", "File content")},
                 },
                 {"path", "content"}),
         };
@@ -156,28 +189,23 @@ public:
     using AsyncToolBase::AsyncToolBase;
 
     const ai::Tool& definition() const override {
-        static const auto edit_entry_schema = std::make_shared<ai::JsonSchema>(
-            ai::JsonSchema::object(
-                {
-                    {"oldText", ai::JsonSchema::string("Exact text for one targeted replacement.")},
-                    {"newText", ai::JsonSchema::string("Replacement text for this targeted edit.")},
-                },
-                {"oldText", "newText"},
-                std::nullopt,
-                false));
+        static const auto edit_entry_schema = object_schema(
+            {
+                {"oldText", typed_schema("string", "Exact text for one targeted replacement.")},
+                {"newText", typed_schema("string", "Replacement text for this targeted edit.")},
+            },
+            {"oldText", "newText"});
         static const ai::Tool tool{
             "edit_file",
             "Replace exact text regions inside a workspace file with one or more edits. "
             "Each edit is matched against the original file, not incrementally. "
             "Overlapping edits are rejected.",
-            ai::JsonSchema::object(
+            object_schema(
                 {
-                    {"path", ai::JsonSchema::string("Workspace-relative file path")},
-                    {"edits", ai::JsonSchema::array(
-                        std::make_shared<ai::JsonSchema>(*edit_entry_schema),
-                        "One or more targeted replacements")},
-                    {"old_text", ai::JsonSchema::string("Legacy: exact text to replace (single edit)")},
-                    {"new_text", ai::JsonSchema::string("Legacy: replacement text (single edit)")},
+                    {"path", typed_schema("string", "Workspace-relative file path")},
+                    {"edits", array_schema(edit_entry_schema, "One or more targeted replacements")},
+                    {"old_text", typed_schema("string", "Legacy: exact text to replace (single edit)")},
+                    {"new_text", typed_schema("string", "Legacy: replacement text (single edit)")},
                 },
                 {"path", "edits"}),
         };
@@ -295,10 +323,10 @@ public:
         static const ai::Tool tool{
             "bash",
             "Run a shell command in the workspace when explicitly enabled",
-            ai::JsonSchema::object(
+            object_schema(
                 {
-                    {"command", ai::JsonSchema::string("Shell command")},
-                    {"timeout", ai::JsonSchema::integer("Timeout in seconds (optional)")},
+                    {"command", typed_schema("string", "Shell command")},
+                    {"timeout", typed_schema("integer", "Timeout in seconds (optional)")},
                 },
                 {"command"}),
         };

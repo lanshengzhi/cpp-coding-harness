@@ -1,5 +1,6 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
+#include "ComplexToolSchemaFixture.hpp"
 #include "ai/glaze/AiJson.hpp"
 #include "../../include/cch/util/Error.hpp"
 #include "util/Json.hpp"
@@ -124,7 +125,10 @@ TEST_CASE("assistant message round-trips diagnostics and cacheWrite1h", "[ai][u2
     CHECK(round_trip.usage.reasoning == 12);
 }
 
-TEST_CASE("context JSON round-trips prompt model messages and tools", "[ai][u2][glaze]") {
+TEST_CASE("context JSON preserves a complete Tool Argument Contract unchanged", "[ai][u2][glaze][issue24]") {
+    auto expected_contract = util::read_json<util::JsonValue>(test::kComplexToolArgumentContract);
+    REQUIRE(expected_contract);
+
     ai::AiContext context;
     context.system_prompt = "sys";
     context.model = "gpt-test";
@@ -132,7 +136,7 @@ TEST_CASE("context JSON round-trips prompt model messages and tools", "[ai][u2][
     context.tools.push_back(ai::Tool{
         "read_file",
         "Read a workspace file",
-        ai::JsonSchema::object({{"path", ai::JsonSchema::string("file path")}}, {"path"}),
+        *expected_contract,
     });
 
     auto json = ai::glaze::write_context_json(context);
@@ -149,9 +153,12 @@ TEST_CASE("context JSON round-trips prompt model messages and tools", "[ai][u2][
     CHECK(ai::text_from_content(user.content) == "hello");
     REQUIRE(parsed->tools.size() == 1);
     CHECK(parsed->tools[0].name == "read_file");
-    REQUIRE(parsed->tools[0].parameters.required.size() == 1);
-    CHECK(parsed->tools[0].parameters.required[0] == "path");
-    CHECK(parsed->tools[0].parameters.properties.at("path").type == ai::JsonSchemaType::String);
+
+    auto expected_json = util::write_json(*expected_contract);
+    auto restored_json = util::write_json(parsed->tools[0].parameters);
+    REQUIRE(expected_json);
+    REQUIRE(restored_json);
+    CHECK(*restored_json == *expected_json);
 }
 
 TEST_CASE("ContentDto rejects toolCall for non-assistant context", "[ai][u2][glaze]") {

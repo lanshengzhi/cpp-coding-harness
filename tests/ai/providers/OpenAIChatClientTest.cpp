@@ -1,5 +1,7 @@
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
+#include "../ComplexToolSchemaFixture.hpp"
+#include "ai/glaze/AiJson.hpp"
 #include "util/ExpectedMacros.hpp"
 
 #include "../../../include/cch/ai/providers/OpenAIChatClient.hpp"
@@ -9,6 +11,7 @@
 #include "util/Json.hpp"
 #include "../../../include/cch/util/JsonValue.hpp"
 #include "../../support/TempWorkspace.hpp"
+#include "../../support/ToolArgumentContracts.hpp"
 #include "../../support/UsageAssertions.hpp"
 
 #include <boost/asio/co_spawn.hpp>
@@ -165,11 +168,18 @@ TEST_CASE("streaming OpenAI client serializes typed context and emits text delta
     request.model = "gpt-test";
     request.context.system_prompt = "You are concise";
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+    auto expected_contract = util::read_json<util::JsonValue>(test::kComplexToolArgumentContract);
+    REQUIRE(expected_contract);
     request.context.tools.push_back(ai::Tool{
         "read_file",
         "Read a workspace file",
-        ai::JsonSchema::object({{"path", ai::JsonSchema::string("file path")}}, {"path"}),
+        *expected_contract,
     });
+    auto context_json = ai::glaze::write_context_json(request.context);
+    REQUIRE(context_json);
+    auto restored_context = ai::glaze::read_context_json(*context_json);
+    REQUIRE(restored_context);
+    request.context = std::move(*restored_context);
 
     auto run = run_client(client, std::move(request));
 
@@ -232,6 +242,12 @@ TEST_CASE("streaming OpenAI client serializes typed context and emits text delta
     REQUIRE(tools.size() == 1);
     const auto& tool = tools[0].get_object();
     CHECK(tool.at("type").get_string() == "function");
+    const auto& function = tool.at("function").get_object();
+    auto expected_contract_json = util::write_json(*expected_contract);
+    auto outgoing_contract_json = util::write_json(function.at("parameters"));
+    REQUIRE(expected_contract_json);
+    REQUIRE(outgoing_contract_json);
+    CHECK(*outgoing_contract_json == *expected_contract_json);
     const auto& stream_options = root.at("stream_options").get_object();
     CHECK(stream_options.at("include_usage").get_boolean());
 }
@@ -524,7 +540,7 @@ TEST_CASE("streaming OpenAI client builds Kimi-compatible tool requests offline"
     request.context.tools.push_back(ai::Tool{
         "read_file",
         "Read a workspace file",
-        ai::JsonSchema::object({{"path", ai::JsonSchema::string("file path")}}, {"path"}),
+        test::path_tool_argument_contract(),
     });
 
     auto run = run_client(client, std::move(request));

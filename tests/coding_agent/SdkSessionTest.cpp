@@ -49,7 +49,7 @@ public:
         : execution_count_(std::move(execution_count)) {
         def_.name = "echo";
         def_.description = "Echo back the input";
-        def_.parameters = ai::JsonSchema::object();
+        def_.parameters = util::JsonValue::object_t{{"type", "object"}, {"additionalProperties", false}};
     }
 
     [[nodiscard]] const ai::Tool& definition() const override { return def_; }

@@ -282,27 +282,6 @@ void append_tool_result_assistant_bridge(
     return true;
 }
 
-[[nodiscard]] bool parameters_have_valid_utf8(const ai::glaze::ToolParametersDto& parameters) {
-    if (!is_valid_utf8(parameters.type) || !optional_has_valid_utf8(parameters.description)) {
-        return false;
-    }
-    if (parameters.properties) {
-        for (const auto& [name, property] : *parameters.properties) {
-            if (!is_valid_utf8(name) || !parameters_have_valid_utf8(property)) {
-                return false;
-            }
-        }
-    }
-    if (parameters.required) {
-        for (const auto& name : *parameters.required) {
-            if (!is_valid_utf8(name)) {
-                return false;
-            }
-        }
-    }
-    return !parameters.items || generic_has_valid_utf8(*parameters.items);
-}
-
 [[nodiscard]] bool tool_call_has_valid_utf8(const ai::glaze::ProviderToolCallDto& tool_call) {
     return is_valid_utf8(tool_call.id) &&
            is_valid_utf8(tool_call.type) &&
@@ -346,7 +325,7 @@ void append_tool_result_assistant_bridge(
     return is_valid_utf8(tool.type) &&
            is_valid_utf8(tool.function.name) &&
            is_valid_utf8(tool.function.description) &&
-           parameters_have_valid_utf8(tool.function.parameters);
+           generic_has_valid_utf8(tool.function.parameters);
 }
 
 [[nodiscard]] bool request_has_valid_utf8(const ai::glaze::OpenAIChatRequestDto& request) {
