@@ -252,12 +252,6 @@ void normalize_message_wire(util::JsonValue& message) {
 
 [[nodiscard]] util::Expected<util::JsonValue> message_value(const ai::MessageVariant& message) {
     auto safe = safe_message(message);
-    if (auto* assistant = std::get_if<ai::AssistantMessage>(&safe)) {
-        if (assistant->stop_reason == ai::AssistantStopReason::Unknown) {
-            assistant->stop_reason = ai::AssistantStopReason::Stop;
-        }
-    }
-
     auto serialized = ai::glaze::write_message_json(safe);
     if (!serialized) {
         return std::unexpected(serialized.error());

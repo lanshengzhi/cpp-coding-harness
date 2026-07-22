@@ -286,6 +286,30 @@ TEST_CASE(
     }
 }
 
+TEST_CASE(
+    "Session Resume propagates missing and unsupported assistant stop reasons",
+    "[harness][session][resume][issue18]") {
+    tests::TempWorkspace workspace;
+    int fixture_index = 0;
+    const auto rejected = [&](util::JsonValue message, std::string expected_detail) {
+        const auto path = workspace.path() /
+            ("invalid-stop-reason-" + std::to_string(fixture_index++) + ".jsonl");
+        write_resume_fixture(path, std::move(message));
+        auto resumed = harness::session::resume_session(path);
+        REQUIRE_FALSE(resumed);
+        CHECK(resumed.error().code == util::ErrorCode::JsonParse);
+        CHECK(resumed.error().detail.find(expected_detail) != std::string::npos);
+    };
+
+    auto missing = complete_assistant_value();
+    missing.get_object().erase("stopReason");
+    rejected(std::move(missing), "stopReason");
+
+    auto unsupported = complete_assistant_value();
+    unsupported.at("stopReason") = util::JsonValue{"future_reason"};
+    rejected(std::move(unsupported), "future_reason");
+}
+
 TEST_CASE("Glaze JSONL session keeps unknown future entries", "[harness][session][u7]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "future.jsonl";

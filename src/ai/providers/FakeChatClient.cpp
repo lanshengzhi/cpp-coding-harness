@@ -20,9 +20,6 @@ void set_fake_metadata(ai::AssistantMessage& assistant, const std::string& model
     assistant.provider = "fake";
     assistant.api = "scripted-fake";
     assistant.usage = ai::Usage{};
-    if (assistant.stop_reason == ai::AssistantStopReason::Unknown) {
-        assistant.stop_reason = ai::AssistantStopReason::Stop;
-    }
 }
 
 [[nodiscard]] util::Expected<std::string> make_tool_arguments(std::string key, std::string value) {

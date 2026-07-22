@@ -165,6 +165,20 @@ TEST_CASE("assistant text and tool-call content round-trip in order with metadat
     CHECK(round_trip.timestamp == 1718000000123);
 }
 
+TEST_CASE("assistant JSON requires a supported stop reason", "[ai][u2][glaze][issue18]") {
+    const auto missing = ai::glaze::read_message_json(
+        R"({"role":"assistant","content":[{"type":"text","text":"answer"}],"usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"timestamp":1718000000000})");
+    REQUIRE_FALSE(missing);
+    CHECK(missing.error().code == util::ErrorCode::JsonParse);
+    CHECK(missing.error().detail.find("stopReason") != std::string::npos);
+
+    const auto unsupported = ai::glaze::read_message_json(
+        R"({"role":"assistant","content":[{"type":"text","text":"answer"}],"usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"future_reason","timestamp":1718000000000})");
+    REQUIRE_FALSE(unsupported);
+    CHECK(unsupported.error().code == util::ErrorCode::JsonParse);
+    CHECK(unsupported.error().detail.find("future_reason") != std::string::npos);
+}
+
 TEST_CASE("unknown content discriminator returns a typed JSON error", "[ai][u2][glaze]") {
     auto parsed = ai::glaze::read_message_json(
         R"({"role":"user","content":[{"type":"audio","data":"AAAA"}],"timestamp":1718000000000})");

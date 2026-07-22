@@ -92,7 +92,7 @@ struct AgentState {
 
 struct AsyncAgentRunResult {
     ai::AiContext context;
-    ai::AssistantStopReason stop_reason{ai::AssistantStopReason::Unknown};
+    ai::AssistantStopReason stop_reason{ai::AssistantStopReason::Stop};
     int turns{0};
     AgentState state;
 };

@@ -805,6 +805,98 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "streaming OpenAI client normalizes supported finish reason aliases",
+    "[ai][provider][stream][issue18]") {
+    const std::vector<std::pair<std::string, ai::AssistantStopReason>> cases{
+        {"stop", ai::AssistantStopReason::Stop},
+        {"end", ai::AssistantStopReason::Stop},
+        {"length", ai::AssistantStopReason::Length},
+        {"function_call", ai::AssistantStopReason::ToolUse},
+        {"tool_calls", ai::AssistantStopReason::ToolUse},
+    };
+
+    for (const auto& [finish_reason, expected] : cases) {
+        auto transport = std::make_shared<FakeStreamTransport>();
+        transport->chunks = {
+            sse("{\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"" +
+                finish_reason + "\"}]}"),
+            sse("[DONE]"),
+        };
+        ai::providers::OpenAIStreamConfig config;
+        config.api_key = "sk-test-api-key";
+        ai::providers::StreamingOpenAIChatClient client(transport, config);
+        ai::StreamChatRequest request;
+        request.model = "gpt-test";
+        request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+
+        auto run = run_client(client, std::move(request));
+
+        REQUIRE(run.result.has_value());
+        CHECK(run.result->stop_reason == expected);
+        CHECK(count_events<ai::AssistantDoneEvent>(run.events) == 1);
+        CHECK(count_events<ai::AssistantErrorEvent>(run.events) == 0);
+    }
+}
+
+TEST_CASE(
+    "streaming OpenAI client fails closed on unsupported finish reasons",
+    "[ai][provider][stream][issue18]") {
+    const std::vector<std::string> finish_reasons{
+        "content_filter", "network_error", "safety_policy", "future_reason"};
+
+    for (const auto& finish_reason : finish_reasons) {
+        auto transport = std::make_shared<FakeStreamTransport>();
+        transport->chunks = {
+            sse("{\"choices\":[{\"index\":0,\"delta\":{\"content\":\"partial\",\"tool_calls\":[{\"index\":0,\"id\":\"call-1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"" +
+                finish_reason + "\"}]}"),
+            sse("[DONE]"),
+        };
+        ai::providers::OpenAIStreamConfig config;
+        config.api_key = "sk-test-api-key";
+        ai::providers::StreamingOpenAIChatClient client(transport, config);
+        ai::StreamChatRequest request;
+        request.model = "gpt-test";
+        request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+
+        auto run = run_client(client, std::move(request));
+
+        REQUIRE(run.result.has_value());
+        CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+        REQUIRE(run.result->error_message.has_value());
+        CHECK(*run.result->error_message == "Provider finish_reason: " + finish_reason);
+        CHECK(count_events<ai::AssistantDoneEvent>(run.events) == 0);
+        CHECK(count_events<ai::AssistantErrorEvent>(run.events) == 1);
+        const auto& terminal = matching_terminal_error(run);
+        CHECK(terminal.error.error_message == run.result->error_message);
+    }
+}
+
+TEST_CASE(
+    "streaming OpenAI client does not infer success without a non-null finish reason",
+    "[ai][provider][stream][issue18]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {
+        sse(R"json({"choices":[{"index":0,"delta":{"content":"partial"},"finish_reason":null}]})json"),
+        sse("[DONE]"),
+    };
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result.has_value());
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(run.result->error_message.has_value());
+    CHECK(run.result->error_message->find("non-null finish_reason") != std::string::npos);
+    CHECK(count_events<ai::AssistantDoneEvent>(run.events) == 0);
+    CHECK(count_events<ai::AssistantErrorEvent>(run.events) == 1);
+}
+
+TEST_CASE(
     "streaming OpenAI client completes an accepted network failure as one error message",
     "[ai][provider][stream][issue11][issue14]") {
     auto transport = std::make_shared<FakeStreamTransport>();
@@ -941,7 +1033,7 @@ TEST_CASE(
     REQUIRE(run.result.has_value());
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
     REQUIRE(run.result->error_message.has_value());
-    CHECK(run.result->error_message->find("without [DONE] or a finish_reason") != std::string::npos);
+    CHECK(run.result->error_message->find("without a non-null finish_reason") != std::string::npos);
     REQUIRE(run.result->content.size() == 3);
 
     REQUIRE(std::holds_alternative<ai::ThinkingContent>(run.result->content[0]));

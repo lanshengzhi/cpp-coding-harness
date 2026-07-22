@@ -109,40 +109,26 @@ struct ContextDto {
 };
 
 [[nodiscard]] inline std::string stop_reason_to_json(AssistantStopReason reason) {
-    switch (reason) {
-    case AssistantStopReason::Stop:
-        return "stop";
-    case AssistantStopReason::Length:
-        return "length";
-    case AssistantStopReason::ToolUse:
-        return "toolUse";
-    case AssistantStopReason::Error:
-        return "error";
-    case AssistantStopReason::Aborted:
-        return "aborted";
-    case AssistantStopReason::Unknown:
-        return "unknown";
-    }
-    return "unknown";
+    return stop_reason_to_string(reason);
 }
 
-[[nodiscard]] inline AssistantStopReason stop_reason_from_json(const std::string& reason) {
+[[nodiscard]] inline std::optional<AssistantStopReason> stop_reason_from_json(std::string_view reason) {
     if (reason == "stop") {
         return AssistantStopReason::Stop;
     }
     if (reason == "length") {
         return AssistantStopReason::Length;
     }
-    if (reason == "toolUse" || reason == "tool_use" || reason == "tool_calls") {
+    if (reason == "toolUse") {
         return AssistantStopReason::ToolUse;
     }
-    if (reason == "error" || reason == "provider_error" || reason == "max_turns_exceeded") {
+    if (reason == "error") {
         return AssistantStopReason::Error;
     }
-    if (reason == "aborted" || reason == "abort") {
+    if (reason == "aborted") {
         return AssistantStopReason::Aborted;
     }
-    return AssistantStopReason::Unknown;
+    return std::nullopt;
 }
 
 namespace detail {
@@ -703,7 +689,17 @@ template <typename T>
             return std::unexpected(usage.error());
         }
         message.usage = std::move(*usage);
-        message.stop_reason = dto.stopReason ? stop_reason_from_json(*dto.stopReason) : AssistantStopReason::Unknown;
+        if (auto required = require_field(dto.stopReason, "assistant message", "stopReason", context); !required) {
+            return std::unexpected(required.error());
+        }
+        const auto stop_reason = stop_reason_from_json(*dto.stopReason);
+        if (!stop_reason) {
+            return std::unexpected(detail::json_contract_error(
+                "unsupported assistant stop reason",
+                "unsupported stopReason '" + *dto.stopReason + "' for assistant message",
+                context));
+        }
+        message.stop_reason = *stop_reason;
         message.error_message = dto.errorMessage;
         if (dto.diagnostics.has_value()) {
             auto diags = required_diagnostic_entries_from_dto(dto.diagnostics, context);

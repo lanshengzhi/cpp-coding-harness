@@ -31,7 +31,6 @@ enum class AssistantStopReason {
     Length,
     Error,
     Aborted,
-    Unknown,
 };
 
 [[nodiscard]] inline std::string stop_reason_to_string(AssistantStopReason reason) {
@@ -46,10 +45,8 @@ enum class AssistantStopReason {
         return "error";
     case AssistantStopReason::Aborted:
         return "aborted";
-    case AssistantStopReason::Unknown:
-        return "unknown";
     }
-    return "unknown";
+    return "error";
 }
 
 } // namespace cch::ai

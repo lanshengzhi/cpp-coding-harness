@@ -331,11 +331,18 @@ void append_plain_text_part(std::string& text, std::string_view part, std::strin
     return dto;
 }
 
-[[nodiscard]] ai::AssistantStopReason stop_reason_from_provider(const std::optional<std::string>& finish_reason) {
-    if (!finish_reason) {
-        return ai::AssistantStopReason::Unknown;
+[[nodiscard]] std::optional<ai::AssistantStopReason> supported_stop_reason_from_provider(
+    std::string_view finish_reason) {
+    if (finish_reason == "stop" || finish_reason == "end") {
+        return ai::AssistantStopReason::Stop;
     }
-    return ai::glaze::stop_reason_from_json(*finish_reason);
+    if (finish_reason == "length") {
+        return ai::AssistantStopReason::Length;
+    }
+    if (finish_reason == "function_call" || finish_reason == "tool_calls") {
+        return ai::AssistantStopReason::ToolUse;
+    }
+    return std::nullopt;
 }
 
 [[nodiscard]] util::ExpectedVoid emit(ai::AssistantEventSink& sink, const ai::AssistantStreamEvent& event) {
@@ -446,16 +453,16 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
     assistant.api = config_.api;
     assistant.provider = config_.provider;
     assistant.model = model;
-    assistant.stop_reason = ai::AssistantStopReason::Unknown;
 
     CCH_TRY_VOID(emit(sink, ai::AssistantStartEvent{assistant}));
 
     SseParser parser;
     bool text_started = false;
     bool thinking_started = false;
-    bool saw_done = false;
     bool saw_terminal_choice = false;
     bool saw_assistant_payload = false;
+    std::optional<ai::AssistantStopReason> provider_stop_reason;
+    std::optional<std::string> unsupported_finish_reason;
     std::optional<std::size_t> text_index;
     std::optional<std::size_t> thinking_index;
     std::map<std::int64_t, ToolCallAccumulator> tool_calls;
@@ -477,7 +484,6 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
 
         for (const auto& sse_event : *events) {
             if (sse_event.done) {
-                saw_done = true;
                 continue;
             }
             if (sse_event.data.empty()) {
@@ -512,7 +518,14 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
                 if (choice.finish_reason) {
                     saw_terminal_choice = true;
                     saw_assistant_payload = true;
-                    assistant.stop_reason = stop_reason_from_provider(choice.finish_reason);
+                    const auto supported = supported_stop_reason_from_provider(*choice.finish_reason);
+                    if (!supported) {
+                        if (!unsupported_finish_reason) {
+                            unsupported_finish_reason = *choice.finish_reason;
+                        }
+                    } else if (!unsupported_finish_reason) {
+                        provider_stop_reason = *supported;
+                    }
                 }
                 if (!choice.delta) {
                     continue;
@@ -632,30 +645,48 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
         return assistant;
     };
 
+    auto complete_unsupported_finish = [&]() -> util::Expected<ai::AssistantMessage> {
+        const auto diagnostic = "Provider finish_reason: " + *unsupported_finish_reason;
+        auto error = util::make_error(
+            util::ErrorCode::Provider,
+            "unsupported provider finish_reason",
+            diagnostic);
+        return complete_accepted_failure(error);
+    };
+
     auto response = co_await transport_->async_stream(http, handle_chunk);
     if (!response) {
         if (stream_sink_failure) {
             co_return std::unexpected(*stream_sink_failure);
+        }
+        if (unsupported_finish_reason) {
+            co_return complete_unsupported_finish();
         }
         co_return complete_accepted_failure(response.error());
     }
 
     auto final_event = parser.finish();
     if (!final_event) {
+        if (unsupported_finish_reason) {
+            co_return complete_unsupported_finish();
+        }
         co_return complete_accepted_failure(final_event.error());
     }
-    if (*final_event) {
-        if ((*final_event)->done) {
-            saw_done = true;
-        } else if (!(*final_event)->data.empty()) {
-            auto handled = handle_chunk(std::string{"data: " + (*final_event)->data + "\n\n"});
-            if (!handled) {
-                if (stream_sink_failure) {
-                    co_return std::unexpected(*stream_sink_failure);
-                }
-                co_return complete_accepted_failure(handled.error());
+    if (*final_event && !(*final_event)->done && !(*final_event)->data.empty()) {
+        auto handled = handle_chunk(std::string{"data: " + (*final_event)->data + "\n\n"});
+        if (!handled) {
+            if (stream_sink_failure) {
+                co_return std::unexpected(*stream_sink_failure);
             }
+            if (unsupported_finish_reason) {
+                co_return complete_unsupported_finish();
+            }
+            co_return complete_accepted_failure(handled.error());
         }
+    }
+
+    if (unsupported_finish_reason) {
+        co_return complete_unsupported_finish();
     }
 
     for (std::size_t content_index = 0; content_index < assistant.content.size(); ++content_index) {
@@ -683,11 +714,11 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
             content_index, tool_call, assistant}));
     }
 
-    if (!saw_done && !saw_terminal_choice) {
+    if (!saw_terminal_choice || !provider_stop_reason) {
         auto error = util::make_error(
             util::ErrorCode::Provider,
-            "provider stream ended before terminal event",
-            "SSE stream ended without [DONE] or a finish_reason");
+            "provider stream ended without a finish reason",
+            "SSE stream ended without a non-null finish_reason");
         co_return complete_accepted_failure(error);
     }
     if (!saw_assistant_payload) {
@@ -698,10 +729,7 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
         co_return complete_accepted_failure(error);
     }
 
-    if (assistant.stop_reason == ai::AssistantStopReason::Unknown) {
-        assistant.stop_reason = tool_calls.empty() ? ai::AssistantStopReason::Stop : ai::AssistantStopReason::ToolUse;
-    }
-
+    assistant.stop_reason = *provider_stop_reason;
     CCH_TRY_VOID(emit(sink, ai::AssistantDoneEvent{assistant.stop_reason, assistant}));
 
     co_return assistant;
