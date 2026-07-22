@@ -45,7 +45,7 @@ struct AssistantMessage {
     std::string model;
     std::optional<std::string> response_model;
     std::optional<std::string> response_id;
-    std::optional<Usage> usage;
+    Usage usage{};
     AssistantStopReason stop_reason{AssistantStopReason::Unknown};
     std::optional<std::string> error_message;
     std::optional<std::vector<DiagnosticEntry>> diagnostics;

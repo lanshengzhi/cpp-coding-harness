@@ -366,7 +366,9 @@ TEST_CASE("RPC mode omits sessionFile for an in-memory session", "[coding-agent]
     CHECK(string_at(data, "workspace") == result.workspace);
 }
 
-TEST_CASE("RPC mode acknowledges an accepted prompt before direct events", "[coding-agent][runtime][rpc]") {
+TEST_CASE(
+    "RPC mode acknowledges an accepted prompt before direct events",
+    "[coding-agent][runtime][rpc][issue17]") {
     const auto result = run_transcript(
         "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
         "{\"id\":\"last-1\",\"type\":\"get_last_assistant_text\"}\n"
@@ -387,6 +389,23 @@ TEST_CASE("RPC mode acknowledges an accepted prompt before direct events", "[cod
     CHECK(agent_start_index < agent_end_index);
     CHECK(count_responses(result.records, "prompt", "prompt-1") == 1);
     CHECK(find_record_index(result.records, "runtime_terminal") == result.records.size());
+
+    const auto message_update_index = find_record_index(result.records, "message_update");
+    REQUIRE(message_update_index < result.records.size());
+    const auto& assistant = result.records[message_update_index].at("message").get<JsonObject>();
+    const auto& usage = assistant.at("usage").get<JsonObject>();
+    CHECK(usage.at("input").get<double>() == 0.0);
+    CHECK(usage.at("output").get<double>() == 0.0);
+    CHECK(usage.at("cacheRead").get<double>() == 0.0);
+    CHECK(usage.at("cacheWrite").get<double>() == 0.0);
+    CHECK(usage.at("totalTokens").get<double>() == 0.0);
+    CHECK_FALSE(usage.contains("reasoning"));
+    const auto& cost = usage.at("cost").get<JsonObject>();
+    CHECK(cost.at("input").get<double>() == 0.0);
+    CHECK(cost.at("output").get<double>() == 0.0);
+    CHECK(cost.at("cacheRead").get<double>() == 0.0);
+    CHECK(cost.at("cacheWrite").get<double>() == 0.0);
+    CHECK(cost.at("total").get<double>() == 0.0);
 
     for (std::size_t index = first_event_index; index <= agent_end_index; ++index) {
         CHECK_FALSE(result.records[index].contains("schemaVersion"));

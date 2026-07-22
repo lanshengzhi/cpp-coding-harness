@@ -1,6 +1,7 @@
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
 #include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
+#include "../../../include/cch/harness/session/SessionResume.hpp"
 #include "util/Json.hpp"
 #include "../../support/TempWorkspace.hpp"
 
@@ -49,6 +50,66 @@ void make_private(const std::filesystem::path& path) {
 #else
     (void)path;
 #endif
+}
+
+util::JsonValue complete_assistant_value() {
+    return util::JsonValue{util::JsonValue::object_t{
+        {"role", util::JsonValue{"assistant"}},
+        {"content", util::JsonValue{util::JsonValue::array_t{
+            util::JsonValue{util::JsonValue::object_t{
+                {"type", util::JsonValue{"text"}},
+                {"text", util::JsonValue{"persisted answer"}},
+            }},
+        }}},
+        {"api", util::JsonValue{"openai-completions"}},
+        {"provider", util::JsonValue{"openai-compatible"}},
+        {"model", util::JsonValue{"gpt-test"}},
+        {"usage", util::JsonValue{util::JsonValue::object_t{
+            {"input", util::JsonValue{11}},
+            {"output", util::JsonValue{7}},
+            {"cacheRead", util::JsonValue{3}},
+            {"cacheWrite", util::JsonValue{2}},
+            {"reasoning", util::JsonValue{5}},
+            {"totalTokens", util::JsonValue{23}},
+            {"cost", util::JsonValue{util::JsonValue::object_t{
+                {"input", util::JsonValue{0.11}},
+                {"output", util::JsonValue{0.07}},
+                {"cacheRead", util::JsonValue{0.03}},
+                {"cacheWrite", util::JsonValue{0.02}},
+                {"total", util::JsonValue{0.23}},
+            }}},
+        }}},
+        {"stopReason", util::JsonValue{"stop"}},
+        {"timestamp", util::JsonValue{1718000000123.0}},
+    }};
+}
+
+void write_resume_fixture(
+    const std::filesystem::path& path,
+    util::JsonValue assistant) {
+    util::JsonValue header{util::JsonValue::object_t{
+        {"type", util::JsonValue{"session"}},
+        {"version", util::JsonValue{3}},
+        {"id", util::JsonValue{"session-usage"}},
+        {"timestamp", util::JsonValue{"2026-06-10T00:00:00.000Z"}},
+        {"cwd", util::JsonValue{path.parent_path().string()}},
+        {"provider", util::JsonValue{"openai-compatible"}},
+        {"model", util::JsonValue{"gpt-test"}},
+    }};
+    util::JsonValue entry{util::JsonValue::object_t{
+        {"type", util::JsonValue{"message"}},
+        {"entryId", util::JsonValue{"msg00001"}},
+        {"message", std::move(assistant)},
+    }};
+    auto header_json = util::write_json(header);
+    auto entry_json = util::write_json(entry);
+    REQUIRE(header_json);
+    REQUIRE(entry_json);
+
+    std::ofstream output(path);
+    output << *header_json << '\n' << *entry_json << '\n';
+    output.close();
+    make_private(path);
 }
 } // namespace
 
@@ -125,6 +186,104 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
     REQUIRE(loaded);
     REQUIRE(loaded->messages.size() == 4);
     CHECK(text_from_message(loaded->messages[1]).find("[REDACTED]") != std::string::npos);
+}
+
+TEST_CASE(
+    "Session Resume restores complete assistant usage including reasoning",
+    "[harness][session][resume][issue17]") {
+    tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "complete-usage.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+
+    ai::AssistantMessage assistant;
+    assistant.content.emplace_back(ai::TextContent{"persisted answer", std::nullopt});
+    assistant.api = "openai-completions";
+    assistant.provider = "openai-compatible";
+    assistant.model = "gpt-test";
+    assistant.usage = ai::Usage{
+        .input = 11,
+        .output = 7,
+        .cache_read = 3,
+        .cache_write = 2,
+        .cache_write_1h = 1,
+        .reasoning = 5,
+        .total_tokens = 23,
+        .cost = ai::UsageCost{
+            .input = 0.11,
+            .output = 0.07,
+            .cache_read = 0.03,
+            .cache_write = 0.02,
+            .total = 0.23,
+        },
+    };
+    assistant.stop_reason = ai::AssistantStopReason::Stop;
+    assistant.timestamp = 1718000000123;
+    REQUIRE(store->append(ai::MessageVariant{assistant}));
+
+    const auto persisted = read_all(path);
+    CHECK(persisted.find(R"("usage":)") != std::string::npos);
+    CHECK(persisted.find(R"("input":11)") != std::string::npos);
+    CHECK(persisted.find(R"("output":7)") != std::string::npos);
+    CHECK(persisted.find(R"("cacheRead":3)") != std::string::npos);
+    CHECK(persisted.find(R"("cacheWrite":2)") != std::string::npos);
+    CHECK(persisted.find(R"("reasoning":5)") != std::string::npos);
+    CHECK(persisted.find(R"("totalTokens":23)") != std::string::npos);
+    CHECK(persisted.find(R"("cost":)") != std::string::npos);
+
+    auto resumed = harness::session::resume_session(path);
+    REQUIRE(resumed);
+    REQUIRE(resumed->history.size() == 1);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(resumed->history[0]));
+    const auto& restored = std::get<ai::AssistantMessage>(resumed->history[0]);
+    CHECK(restored.usage.input == 11);
+    CHECK(restored.usage.output == 7);
+    CHECK(restored.usage.cache_read == 3);
+    CHECK(restored.usage.cache_write == 2);
+    CHECK(restored.usage.cache_write_1h == 1);
+    CHECK(restored.usage.reasoning == 5);
+    CHECK(restored.usage.total_tokens == 23);
+    CHECK(restored.usage.cost.input == 0.11);
+    CHECK(restored.usage.cost.output == 0.07);
+    CHECK(restored.usage.cost.cache_read == 0.03);
+    CHECK(restored.usage.cost.cache_write == 0.02);
+    CHECK(restored.usage.cost.total == 0.23);
+}
+
+TEST_CASE(
+    "Session Resume rejects missing required assistant usage fields",
+    "[harness][session][resume][issue17]") {
+    tests::TempWorkspace workspace;
+    int fixture_index = 0;
+    const auto rejected = [&](util::JsonValue message, std::string expected_field) {
+        const auto path = workspace.path() /
+            ("incomplete-usage-" + std::to_string(fixture_index++) + ".jsonl");
+        write_resume_fixture(path, std::move(message));
+        auto resumed = harness::session::resume_session(path);
+        REQUIRE_FALSE(resumed);
+        CHECK(resumed.error().code == util::ErrorCode::JsonParse);
+        CHECK(resumed.error().detail.find(expected_field) != std::string::npos);
+    };
+
+    auto missing_usage = complete_assistant_value();
+    missing_usage.get_object().erase("usage");
+    rejected(std::move(missing_usage), "usage");
+
+    for (const auto& field : {"input", "output", "cacheRead", "cacheWrite", "totalTokens"}) {
+        auto message = complete_assistant_value();
+        message.at("usage").get_object().erase(field);
+        rejected(std::move(message), field);
+    }
+
+    auto missing_cost = complete_assistant_value();
+    missing_cost.at("usage").get_object().erase("cost");
+    rejected(std::move(missing_cost), "cost");
+
+    for (const auto& field : {"input", "output", "cacheRead", "cacheWrite", "total"}) {
+        auto message = complete_assistant_value();
+        message.at("usage").at("cost").get_object().erase(field);
+        rejected(std::move(message), field);
+    }
 }
 
 TEST_CASE("Glaze JSONL session keeps unknown future entries", "[harness][session][u7]") {

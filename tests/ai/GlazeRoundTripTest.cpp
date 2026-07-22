@@ -96,6 +96,7 @@ TEST_CASE("assistant message round-trips diagnostics and cacheWrite1h", "[ai][u2
     usage.cache_read = 10;
     usage.cache_write = 20;
     usage.cache_write_1h = 15;
+    usage.reasoning = 12;
     usage.total_tokens = 150;
     msg.usage = std::move(usage);
 
@@ -114,8 +115,8 @@ TEST_CASE("assistant message round-trips diagnostics and cacheWrite1h", "[ai][u2
     CHECK((*round_trip.diagnostics)[0].type == "provider_error");
     REQUIRE((*round_trip.diagnostics)[0].error.has_value());
     CHECK((*round_trip.diagnostics)[0].error->name == "NetworkError");
-    REQUIRE(round_trip.usage.has_value());
-    CHECK(round_trip.usage->cache_write_1h == 15);
+    CHECK(round_trip.usage.cache_write_1h == 15);
+    CHECK(round_trip.usage.reasoning == 12);
 }
 
 TEST_CASE("context JSON round-trips prompt model messages and tools", "[ai][u2][glaze]") {

@@ -13,7 +13,11 @@ using namespace cch;
 TEST_CASE("AI contracts are aggregate-friendly passive value types", "[ai][u3][contract]") {
     static_assert(std::is_aggregate_v<ai::TextContent>);
     static_assert(std::is_aggregate_v<ai::ToolCallContent>);
+    static_assert(std::is_aggregate_v<ai::UsageCost>);
+    static_assert(std::is_aggregate_v<ai::Usage>);
     static_assert(std::is_aggregate_v<ai::AssistantMessage>);
+    static_assert(std::is_same_v<decltype(ai::AssistantMessage::usage), ai::Usage>);
+    static_assert(std::is_same_v<decltype(ai::Usage::reasoning), std::optional<std::int64_t>>);
     static_assert(std::is_aggregate_v<ai::ToolResultMessage>);
     static_assert(std::is_aggregate_v<ai::BashExecutionMessage>);
     static_assert(std::is_aggregate_v<ai::CustomMessage>);
@@ -37,7 +41,7 @@ TEST_CASE("AI contracts are aggregate-friendly passive value types", "[ai][u3][c
         .model = "gpt-test",
         .response_model = std::nullopt,
         .response_id = std::nullopt,
-        .usage = std::nullopt,
+        .usage = {},
         .stop_reason = ai::AssistantStopReason::ToolUse,
         .error_message = std::nullopt,
         .diagnostics = std::nullopt,
@@ -100,7 +104,22 @@ TEST_CASE("assistant text and tool-call content round-trip in order with metadat
     assistant.model = "gpt-test";
     assistant.response_model = "gpt-test-2026-06";
     assistant.response_id = "resp-1";
-    assistant.usage = ai::Usage{10, 5, 2, 1, std::nullopt, 18, ai::UsageCost{0.1, 0.2, 0.03, 0.04, 0.37}};
+    assistant.usage = ai::Usage{
+        .input = 10,
+        .output = 5,
+        .cache_read = 2,
+        .cache_write = 1,
+        .cache_write_1h = std::nullopt,
+        .reasoning = 3,
+        .total_tokens = 18,
+        .cost = ai::UsageCost{
+            .input = 0.1,
+            .output = 0.2,
+            .cache_read = 0.03,
+            .cache_write = 0.04,
+            .total = 0.37,
+        },
+    };
     assistant.stop_reason = ai::AssistantStopReason::ToolUse;
     assistant.timestamp = 1718000000123;
 
@@ -135,13 +154,13 @@ TEST_CASE("assistant text and tool-call content round-trip in order with metadat
     CHECK(*round_trip.response_model == "gpt-test-2026-06");
     REQUIRE(round_trip.response_id);
     CHECK(*round_trip.response_id == "resp-1");
-    REQUIRE(round_trip.usage);
-    CHECK(round_trip.usage->input == 10);
-    CHECK(round_trip.usage->output == 5);
-    CHECK(round_trip.usage->cache_read == 2);
-    CHECK(round_trip.usage->cache_write == 1);
-    CHECK(round_trip.usage->total_tokens == 18);
-    CHECK(round_trip.usage->cost.total == 0.37);
+    CHECK(round_trip.usage.input == 10);
+    CHECK(round_trip.usage.output == 5);
+    CHECK(round_trip.usage.cache_read == 2);
+    CHECK(round_trip.usage.cache_write == 1);
+    CHECK(round_trip.usage.reasoning == 3);
+    CHECK(round_trip.usage.total_tokens == 18);
+    CHECK(round_trip.usage.cost.total == 0.37);
     CHECK(round_trip.stop_reason == ai::AssistantStopReason::ToolUse);
     CHECK(round_trip.timestamp == 1718000000123);
 }

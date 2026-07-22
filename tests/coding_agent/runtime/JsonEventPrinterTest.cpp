@@ -61,7 +61,22 @@ cch::ai::AssistantMessage assistant_message(std::string text) {
     message.api = "openai-completions";
     message.provider = "fake";
     message.model = "fake-model";
-    message.usage = cch::ai::Usage{1, 2, 0, 0, std::nullopt, 3, {0.1, 0.2, 0.0, 0.0, 0.3}};
+    message.usage = cch::ai::Usage{
+        .input = 1,
+        .output = 2,
+        .cache_read = 0,
+        .cache_write = 0,
+        .cache_write_1h = std::nullopt,
+        .reasoning = 1,
+        .total_tokens = 3,
+        .cost = cch::ai::UsageCost{
+            .input = 0.1,
+            .output = 0.2,
+            .cache_read = 0.0,
+            .cache_write = 0.0,
+            .total = 0.3,
+        },
+    };
     message.stop_reason = cch::ai::AssistantStopReason::Stop;
     message.timestamp = 1234;
     return message;
@@ -93,7 +108,9 @@ TEST_CASE("JSON event printer emits the exact v3 session header", "[coding-agent
     check_no_cpp_envelope_fields(record);
 }
 
-TEST_CASE("JSON event printer emits direct semantically complete agent events", "[coding-agent][json-events]") {
+TEST_CASE(
+    "JSON event printer emits direct semantically complete agent events",
+    "[coding-agent][json-events][issue17]") {
     std::ostringstream output;
     cch::coding_agent::runtime::JsonEventPrinter printer{output};
 
@@ -150,7 +167,17 @@ TEST_CASE("JSON event printer emits direct semantically complete agent events", 
     CHECK(string_at(update_message, "role") == "assistant");
     CHECK(string_at(update_message, "model") == "fake-model");
     CHECK(update_message.contains("usage"));
-    CHECK(int_at(object_at(update_message, "usage"), "totalTokens") == 3);
+    const auto& update_usage = object_at(update_message, "usage");
+    CHECK(int_at(update_usage, "input") == 1);
+    CHECK(int_at(update_usage, "output") == 2);
+    CHECK(int_at(update_usage, "reasoning") == 1);
+    CHECK(int_at(update_usage, "totalTokens") == 3);
+    const auto& update_cost = object_at(update_usage, "cost");
+    CHECK(update_cost.at("input").get<double>() == 0.1);
+    CHECK(update_cost.at("output").get<double>() == 0.2);
+    CHECK(update_cost.at("cacheRead").get<double>() == 0.0);
+    CHECK(update_cost.at("cacheWrite").get<double>() == 0.0);
+    CHECK(update_cost.at("total").get<double>() == 0.3);
     CHECK(string_at(update_message, "stopReason") == "stop");
     const auto update_content = array_at(update_message, "content");
     REQUIRE(update_content.size() == 2);
@@ -164,7 +191,9 @@ TEST_CASE("JSON event printer emits direct semantically complete agent events", 
     CHECK(string_at(assistant_event, "type") == "text_delta");
     CHECK(int_at(assistant_event, "contentIndex") == 0);
     CHECK(string_at(assistant_event, "delta") == "answer");
-    CHECK(string_at(object_at(assistant_event, "partial"), "role") == "assistant");
+    const auto& partial = object_at(assistant_event, "partial");
+    CHECK(string_at(partial, "role") == "assistant");
+    CHECK(int_at(object_at(partial, "usage"), "reasoning") == 1);
 
     const auto& tool_start = object(parse_line(emitted[4]));
     CHECK(string_at(tool_start, "type") == "tool_execution_start");

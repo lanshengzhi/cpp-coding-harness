@@ -19,9 +19,7 @@ void set_fake_metadata(ai::AssistantMessage& assistant, const std::string& model
     assistant.model = model;
     assistant.provider = "fake";
     assistant.api = "scripted-fake";
-    if (!assistant.usage) {
-        assistant.usage = ai::Usage{};
-    }
+    assistant.usage = ai::Usage{};
     if (assistant.stop_reason == ai::AssistantStopReason::Unknown) {
         assistant.stop_reason = ai::AssistantStopReason::Stop;
     }

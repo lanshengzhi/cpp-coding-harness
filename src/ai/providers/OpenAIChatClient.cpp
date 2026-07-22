@@ -497,12 +497,14 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
             }
             if (chunk->usage) {
                 assistant.usage = ai::Usage{
-                    chunk->usage->prompt_tokens,
-                    chunk->usage->completion_tokens,
-                    0,
-                    0,
-                    chunk->usage->total_tokens,
-                    {},
+                    .input = chunk->usage->prompt_tokens,
+                    .output = chunk->usage->completion_tokens,
+                    .cache_read = 0,
+                    .cache_write = 0,
+                    .cache_write_1h = std::nullopt,
+                    .reasoning = std::nullopt,
+                    .total_tokens = chunk->usage->total_tokens,
+                    .cost = {},
                 };
             }
 

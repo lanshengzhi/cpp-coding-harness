@@ -6,6 +6,7 @@
 #include "../../../include/cch/util/Error.hpp"
 #include "util/Json.hpp"
 #include "../../../include/cch/util/JsonValue.hpp"
+#include "../../support/UsageAssertions.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -120,7 +121,14 @@ const ai::AssistantErrorEvent& matching_terminal_error(const RunResult& run) {
     CHECK(terminal.error.response_model == run.result->response_model);
     CHECK(terminal.error.response_id == run.result->response_id);
     CHECK(terminal.error.timestamp == run.result->timestamp);
-    CHECK(terminal.error.usage.has_value() == run.result->usage.has_value());
+    CHECK(terminal.error.usage.input == run.result->usage.input);
+    CHECK(terminal.error.usage.output == run.result->usage.output);
+    CHECK(terminal.error.usage.cache_read == run.result->usage.cache_read);
+    CHECK(terminal.error.usage.cache_write == run.result->usage.cache_write);
+    CHECK(terminal.error.usage.cache_write_1h == run.result->usage.cache_write_1h);
+    CHECK(terminal.error.usage.reasoning == run.result->usage.reasoning);
+    CHECK(terminal.error.usage.total_tokens == run.result->usage.total_tokens);
+    CHECK(terminal.error.usage.cost.total == run.result->usage.cost.total);
     CHECK(terminal.error.diagnostics.has_value() == run.result->diagnostics.has_value());
     REQUIRE(terminal.error.content.size() == run.result->content.size());
     return terminal;
@@ -197,6 +205,37 @@ TEST_CASE("streaming OpenAI client serializes typed context and emits text delta
     CHECK(tool.at("type").get_string() == "function");
     const auto& stream_options = root.at("stream_options").get_object();
     CHECK(stream_options.at("include_usage").get_boolean());
+}
+
+TEST_CASE(
+    "streaming OpenAI client preserves zero usage when the provider omits usage",
+    "[ai][provider][stream][issue17]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {
+        sse(R"json({"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]})json"),
+        sse("[DONE]"),
+    };
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result);
+    tests::check_zero_usage(run.result->usage);
+
+    const auto starts = events_of<ai::AssistantStartEvent>(run.events);
+    REQUIRE(starts.size() == 1);
+    tests::check_zero_usage(starts[0]->partial.usage);
+
+    const auto done = events_of<ai::AssistantDoneEvent>(run.events);
+    REQUIRE(done.size() == 1);
+    tests::check_zero_usage(done[0]->message.usage);
 }
 
 TEST_CASE("streaming OpenAI client uses configured assistant identity", "[ai][provider][stream][u4]") {

@@ -19,21 +19,22 @@
 namespace cch::ai::glaze {
 
 struct UsageCostDto {
-    double input{};
-    double output{};
-    double cacheRead{};
-    double cacheWrite{};
-    double total{};
+    std::optional<double> input;
+    std::optional<double> output;
+    std::optional<double> cacheRead;
+    std::optional<double> cacheWrite;
+    std::optional<double> total;
 };
 
 struct UsageDto {
-    std::int64_t input{};
-    std::int64_t output{};
-    std::int64_t cacheRead{};
-    std::int64_t cacheWrite{};
+    std::optional<std::int64_t> input;
+    std::optional<std::int64_t> output;
+    std::optional<std::int64_t> cacheRead;
+    std::optional<std::int64_t> cacheWrite;
     std::optional<std::int64_t> cacheWrite1h;
-    std::int64_t totalTokens{};
-    UsageCostDto cost{};
+    std::optional<std::int64_t> reasoning;
+    std::optional<std::int64_t> totalTokens;
+    std::optional<UsageCostDto> cost;
 };
 
 struct DiagnosticErrorInfoDto {
@@ -195,36 +196,76 @@ template <typename T>
 
 [[nodiscard]] inline UsageDto to_dto(const Usage& usage) {
     return UsageDto{
-        usage.input,
-        usage.output,
-        usage.cache_read,
-        usage.cache_write,
-        usage.cache_write_1h,
-        usage.total_tokens,
-        UsageCostDto{
-            usage.cost.input,
-            usage.cost.output,
-            usage.cost.cache_read,
-            usage.cost.cache_write,
-            usage.cost.total,
+        .input = usage.input,
+        .output = usage.output,
+        .cacheRead = usage.cache_read,
+        .cacheWrite = usage.cache_write,
+        .cacheWrite1h = usage.cache_write_1h,
+        .reasoning = usage.reasoning,
+        .totalTokens = usage.total_tokens,
+        .cost = UsageCostDto{
+            .input = usage.cost.input,
+            .output = usage.cost.output,
+            .cacheRead = usage.cost.cache_read,
+            .cacheWrite = usage.cost.cache_write,
+            .total = usage.cost.total,
         },
     };
 }
 
-[[nodiscard]] inline Usage usage_from_dto(const UsageDto& dto) {
+[[nodiscard]] inline util::Expected<Usage> usage_from_dto(
+    const UsageDto& dto,
+    std::string_view context) {
+    if (auto required = require_field(dto.input, "assistant usage", "usage.input", context); !required) {
+        return std::unexpected(required.error());
+    }
+    if (auto required = require_field(dto.output, "assistant usage", "usage.output", context); !required) {
+        return std::unexpected(required.error());
+    }
+    if (auto required = require_field(dto.cacheRead, "assistant usage", "usage.cacheRead", context); !required) {
+        return std::unexpected(required.error());
+    }
+    if (auto required = require_field(dto.cacheWrite, "assistant usage", "usage.cacheWrite", context); !required) {
+        return std::unexpected(required.error());
+    }
+    if (auto required = require_field(dto.totalTokens, "assistant usage", "usage.totalTokens", context); !required) {
+        return std::unexpected(required.error());
+    }
+    if (auto required = require_field(dto.cost, "assistant usage", "usage.cost", context); !required) {
+        return std::unexpected(required.error());
+    }
+
+    const auto& cost = *dto.cost;
+    if (auto required = require_field(cost.input, "assistant usage cost", "usage.cost.input", context); !required) {
+        return std::unexpected(required.error());
+    }
+    if (auto required = require_field(cost.output, "assistant usage cost", "usage.cost.output", context); !required) {
+        return std::unexpected(required.error());
+    }
+    if (auto required = require_field(cost.cacheRead, "assistant usage cost", "usage.cost.cacheRead", context); !required) {
+        return std::unexpected(required.error());
+    }
+    if (auto required = require_field(cost.cacheWrite, "assistant usage cost", "usage.cost.cacheWrite", context); !required) {
+        return std::unexpected(required.error());
+    }
+    if (auto required = require_field(cost.total, "assistant usage cost", "usage.cost.total", context); !required) {
+        return std::unexpected(required.error());
+    }
+
     return Usage{
-        dto.input,
-        dto.output,
-        dto.cacheRead,
-        dto.cacheWrite,
-        dto.cacheWrite1h,
-        dto.totalTokens,
-        UsageCost{
-            dto.cost.input,
-            dto.cost.output,
-            dto.cost.cacheRead,
-            dto.cost.cacheWrite,
-            dto.cost.total,
+        .input = *dto.input,
+        .output = *dto.output,
+        .cache_read = *dto.cacheRead,
+        .cache_write = *dto.cacheWrite,
+        .cache_write_1h = dto.cacheWrite1h,
+        .reasoning = dto.reasoning,
+        .total_tokens = *dto.totalTokens,
+        .cost = UsageCost{
+            .input = *cost.input,
+            .output = *cost.output,
+            .cache_read = *cost.cacheRead,
+            .cache_write = *cost.cacheWrite,
+            .total = *cost.total,
         },
     };
 }
@@ -544,9 +585,7 @@ template <typename T>
     }
     dto.responseModel = message.response_model;
     dto.responseId = message.response_id;
-    if (message.usage) {
-        dto.usage = to_dto(*message.usage);
-    }
+    dto.usage = to_dto(message.usage);
     dto.stopReason = stop_reason_to_json(message.stop_reason);
     dto.errorMessage = message.error_message;
     if (message.diagnostics.has_value()) {
@@ -656,9 +695,14 @@ template <typename T>
         message.model = dto.model.value_or("");
         message.response_model = dto.responseModel;
         message.response_id = dto.responseId;
-        if (dto.usage) {
-            message.usage = usage_from_dto(*dto.usage);
+        if (auto required = require_field(dto.usage, "assistant message", "usage", context); !required) {
+            return std::unexpected(required.error());
         }
+        auto usage = usage_from_dto(*dto.usage, context);
+        if (!usage) {
+            return std::unexpected(usage.error());
+        }
+        message.usage = std::move(*usage);
         message.stop_reason = dto.stopReason ? stop_reason_from_json(*dto.stopReason) : AssistantStopReason::Unknown;
         message.error_message = dto.errorMessage;
         if (dto.diagnostics.has_value()) {

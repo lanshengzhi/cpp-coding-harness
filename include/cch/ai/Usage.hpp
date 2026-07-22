@@ -20,6 +20,7 @@ struct Usage {
     std::int64_t cache_read{};
     std::int64_t cache_write{};
     std::optional<std::int64_t> cache_write_1h;
+    std::optional<std::int64_t> reasoning;
     std::int64_t total_tokens{};
     UsageCost cost{};
 };

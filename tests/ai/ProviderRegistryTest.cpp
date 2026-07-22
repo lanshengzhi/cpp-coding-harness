@@ -3,6 +3,7 @@
 #include "../../include/cch/ai/Content.hpp"
 #include "../../include/cch/ai/ProviderRegistry.hpp"
 #include "../../include/cch/util/Error.hpp"
+#include "../support/UsageAssertions.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -135,6 +136,34 @@ TEST_CASE("default provider registry includes fake and OpenAI-compatible provide
 
     auto openai = registry->create("openai-compatible", context);
     REQUIRE(openai);
+}
+
+TEST_CASE(
+    "scripted fake provider emits and returns complete zero usage",
+    "[ai][provider][registry][issue17]") {
+    auto registry = ai::make_default_provider_registry();
+    REQUIRE(registry);
+
+    ai::ProviderFactoryContext context;
+    context.model = "fake-model";
+    auto fake = registry->create("fake", context);
+    REQUIRE(fake);
+
+    ai::StreamChatRequest request;
+    request.model = context.model;
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+    auto run = run_client(**fake, std::move(request));
+
+    REQUIRE(run.result);
+    tests::check_zero_usage(run.result->usage);
+
+    const auto starts = events_of<ai::AssistantStartEvent>(run.events);
+    REQUIRE(starts.size() == 1);
+    tests::check_zero_usage(starts[0]->partial.usage);
+
+    const auto done = events_of<ai::AssistantDoneEvent>(run.events);
+    REQUIRE(done.size() == 1);
+    tests::check_zero_usage(done[0]->message.usage);
 }
 
 TEST_CASE("fake provider emits read tool calls from prompts", "[ai][provider][registry]") {
