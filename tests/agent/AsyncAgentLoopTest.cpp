@@ -86,6 +86,27 @@ public:
     std::vector<ai::StreamChatRequest> requests;
 };
 
+/// A malformed host-provided client used to prove that the Agent presents one
+/// assistant lifecycle even if a provider repeats its start event.
+class DuplicateStartClient final : public ai::StreamingChatClient {
+public:
+    explicit DuplicateStartClient(ai::AssistantMessage terminal)
+        : terminal_(std::move(terminal)) {}
+
+    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        requests.push_back(request);
+        CCH_TRY_VOID(sink(ai::AssistantStartEvent{terminal_}));
+        CCH_TRY_VOID(sink(ai::AssistantStartEvent{terminal_}));
+        CCH_TRY_VOID(sink(ai::AssistantErrorEvent{terminal_.stop_reason, terminal_}));
+        co_return terminal_;
+    }
+
+    ai::AssistantMessage terminal_;
+    std::vector<ai::StreamChatRequest> requests;
+};
+
 /// A conforming host-provided client whose accepted call reaches a terminal
 /// event before any assistant start event and returns the same final
 /// AssistantMessage through the value alternative.
@@ -627,7 +648,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "async agent loop never duplicates a start already emitted by a streaming provider",
+    "async agent loop does not synthesize a duplicate after a streamed assistant start",
     "[agent][async][issue15]") {
     ai::AssistantMessage terminal;
     terminal.api = "host-api";
@@ -656,6 +677,41 @@ TEST_CASE(
             if (std::holds_alternative<ai::AssistantMessage>(end->message)) {
                 ++assistant_ends;
             }
+        }
+    }
+    CHECK(assistant_starts == 1);
+    CHECK(assistant_ends == 1);
+}
+
+TEST_CASE(
+    "async agent loop suppresses duplicate assistant starts from a host provider",
+    "[agent][async][issue15]") {
+    ai::AssistantMessage terminal;
+    terminal.api = "host-api";
+    terminal.provider = "host-provider";
+    terminal.model = "gpt-test";
+    terminal.stop_reason = ai::AssistantStopReason::Error;
+    terminal.error_message = "host transport lost after duplicate starts";
+    DuplicateStartClient client(std::move(terminal));
+
+    agent::AsyncToolRegistry registry;
+    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{3, "gpt-test"});
+    auto run = run_loop(loop, "hello");
+
+    REQUIRE(run.result.has_value());
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    CHECK(client.requests.size() == 1);
+
+    std::size_t assistant_starts = 0;
+    std::size_t assistant_ends = 0;
+    for (const auto& event : run.events) {
+        if (const auto* start = std::get_if<agent::MessageStartEvent>(&event);
+            start && std::holds_alternative<ai::AssistantMessage>(start->message)) {
+            ++assistant_starts;
+        }
+        if (const auto* end = std::get_if<agent::MessageEndEvent>(&event);
+            end && std::holds_alternative<ai::AssistantMessage>(end->message)) {
+            ++assistant_ends;
         }
     }
     CHECK(assistant_starts == 1);

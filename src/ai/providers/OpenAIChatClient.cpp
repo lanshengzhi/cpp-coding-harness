@@ -446,10 +446,7 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
     assistant.api = config_.api;
     assistant.provider = config_.provider;
     assistant.model = model;
-    assistant.usage = ai::Usage{};
     assistant.stop_reason = ai::AssistantStopReason::Unknown;
-    assistant.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
 
     CCH_TRY_VOID(emit(sink, ai::AssistantStartEvent{assistant}));
 

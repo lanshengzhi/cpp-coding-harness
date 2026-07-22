@@ -369,6 +369,9 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             request,
             [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
                 if (const auto* start = std::get_if<ai::AssistantStartEvent>(&event)) {
+                    if (assistant_start_emitted) {
+                        return {};
+                    }
                     assistant_start_emitted = true;
                     state.streaming_message = start->partial;
                     return emit(sink, MessageStartEvent{ai::MessageVariant{start->partial}});

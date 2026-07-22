@@ -28,8 +28,11 @@ protected:
 /// returns that same message as a successful C++ value.
 class TerminalOutcomeChatClient final : public ai::StreamingChatClient {
 public:
-    TerminalOutcomeChatClient(ai::AssistantStopReason reason, std::string diagnostic)
-        : reason_(reason), diagnostic_(std::move(diagnostic)) {}
+    TerminalOutcomeChatClient(
+        ai::AssistantStopReason reason,
+        std::string diagnostic,
+        std::string partial = "partial draft")
+        : reason_(reason), diagnostic_(std::move(diagnostic)), partial_(std::move(partial)) {}
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
         const ai::StreamChatRequest& request,
@@ -41,12 +44,12 @@ public:
         terminal.model = request.model;
         terminal.stop_reason = reason_;
         terminal.error_message = diagnostic_;
-        terminal.content.emplace_back(ai::text_content("partial draft"));
+        terminal.content.emplace_back(ai::text_content(partial_));
         if (sink) {
             if (auto started = sink(ai::AssistantStartEvent{terminal}); !started) {
                 co_return std::unexpected(started.error());
             }
-            if (auto delta = sink(ai::TextDeltaEvent{0, "partial draft", terminal}); !delta) {
+            if (auto delta = sink(ai::TextDeltaEvent{0, partial_, terminal}); !delta) {
                 co_return std::unexpected(delta.error());
             }
             if (auto ended = sink(ai::AssistantErrorEvent{reason_, terminal}); !ended) {
@@ -61,6 +64,7 @@ public:
 private:
     ai::AssistantStopReason reason_;
     std::string diagnostic_;
+    std::string partial_;
 };
 
 /// A host client whose first accepted call terminates with an error outcome
@@ -395,6 +399,40 @@ TEST_CASE(
     // The presented diagnostic stays inside the bounded-output budget even
     // though the raw provider diagnostic far exceeds it.
     CHECK(output.str().size() < diagnostic.size());
+    CHECK(error.str().empty());
+}
+
+TEST_CASE(
+    "interactive text frontend redacts and bounds partial terminal output",
+    "[cli][frontend][issue16]") {
+    tests::TempWorkspace workspace;
+    const std::string secret = "sk-partialsecret123456789";
+    std::string partial = "draft contains " + secret + " ";
+    partial += std::string(9000, 'x');
+    auto session = make_session(
+        workspace,
+        std::make_unique<TerminalOutcomeChatClient>(
+            ai::AssistantStopReason::Error,
+            "transport failed",
+            partial));
+
+    std::istringstream input;
+    std::ostringstream output;
+    std::ostringstream error;
+    cli::TextCliRenderer renderer{output, error};
+    cli::InteractiveCliFrontend frontend{
+        *session.created.session,
+        renderer,
+        session.created.metadata,
+        cli::InteractiveCliFrontendConfig{
+            .input = input, .output = output, .error = error,
+            .repl = false, .prompt = "hello"}};
+
+    CHECK(frontend.run() == 0);
+    CHECK(output.str().find(secret) == std::string::npos);
+    CHECK(output.str().find("[assistant] draft contains [REDACTED]") != std::string::npos);
+    CHECK(output.str().size() < partial.size());
+    CHECK(count_occurrences(output.str(), "[error] transport failed") == 1);
     CHECK(error.str().empty());
 }
 

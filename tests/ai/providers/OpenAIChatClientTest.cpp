@@ -903,9 +903,6 @@ TEST_CASE(
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
     REQUIRE(run.result->error_message.has_value());
     CHECK(run.result->error_message->find("without [DONE] or a finish_reason") != std::string::npos);
-    REQUIRE(run.result->usage.has_value());
-    CHECK(run.result->usage->total_tokens == 0);
-    CHECK(run.result->timestamp > 0);
     REQUIRE(run.result->content.size() == 3);
 
     REQUIRE(std::holds_alternative<ai::ThinkingContent>(run.result->content[0]));

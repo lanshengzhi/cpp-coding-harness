@@ -30,7 +30,7 @@ void print_agent_event(const agent::AgentLifecycleEvent& event, std::ostream& ou
         out << "[model-request]\n";
     } else if (const auto* update = std::get_if<agent::MessageUpdateEvent>(&event)) {
         if (const auto* delta = std::get_if<ai::TextDeltaEvent>(&update->assistant_event)) {
-            out << "[assistant] " << delta->delta << '\n';
+            out << "[assistant] " << bounded_redacted(delta->delta) << '\n';
         }
     } else if (const auto* start = std::get_if<agent::ToolExecutionStartEvent>(&event)) {
         out << "[tool-call] " << start->tool_name << '#' << start->tool_call_id << '\n';
