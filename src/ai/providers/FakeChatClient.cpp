@@ -5,6 +5,7 @@
 #include "../../../include/cch/ai/Content.hpp"
 #include "util/Json.hpp"
 
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <string>
@@ -33,16 +34,25 @@ public:
     boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
         const ai::StreamChatRequest& request,
         ai::AssistantEventSink sink) override {
+        if (request.model.empty()) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Validation,
+                "model is required",
+                "scripted fake request model must not be empty"));
+        }
+
         ai::AssistantMessage assistant;
         set_fake_metadata(assistant, request.model);
+        assistant.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
         if (sink) {
             CCH_TRY_VOID(sink(ai::AssistantStartEvent{assistant}));
         }
 
         if (!request.context.messages.empty()) {
             if (const auto* last_tool = std::get_if<ai::ToolResultMessage>(&request.context.messages.back())) {
-                assistant = ai::assistant_text_message("fake observed: " + ai::text_from_content(last_tool->content));
-                set_fake_metadata(assistant, request.model);
+                assistant.content.emplace_back(ai::text_content(
+                    "fake observed: " + ai::text_from_content(last_tool->content)));
                 co_return co_await emit_text(std::move(assistant), sink);
             }
         }
@@ -102,8 +112,7 @@ public:
             co_return assistant;
         }
 
-        assistant = ai::assistant_text_message("fake: " + prompt);
-        set_fake_metadata(assistant, request.model);
+        assistant.content.emplace_back(ai::text_content("fake: " + prompt));
         co_return co_await emit_text(std::move(assistant), sink);
     }
 

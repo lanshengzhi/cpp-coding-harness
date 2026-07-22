@@ -368,7 +368,7 @@ TEST_CASE("RPC mode omits sessionFile for an in-memory session", "[coding-agent]
 
 TEST_CASE(
     "RPC mode acknowledges an accepted prompt before direct events",
-    "[coding-agent][runtime][rpc][issue17]") {
+    "[coding-agent][runtime][rpc][issue17][issue19]") {
     const auto result = run_transcript(
         "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
         "{\"id\":\"last-1\",\"type\":\"get_last_assistant_text\"}\n"
@@ -393,6 +393,10 @@ TEST_CASE(
     const auto message_update_index = find_record_index(result.records, "message_update");
     REQUIRE(message_update_index < result.records.size());
     const auto& assistant = result.records[message_update_index].at("message").get<JsonObject>();
+    CHECK(string_at(assistant, "api") == "scripted-fake");
+    CHECK(string_at(assistant, "provider") == "fake");
+    CHECK(string_at(assistant, "model") == "host-client");
+    CHECK(assistant.at("timestamp").get<double>() > 0.0);
     const auto& usage = assistant.at("usage").get<JsonObject>();
     CHECK(usage.at("input").get<double>() == 0.0);
     CHECK(usage.at("output").get<double>() == 0.0);

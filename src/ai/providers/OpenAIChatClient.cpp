@@ -425,6 +425,18 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
             "model is required",
             "OpenAI request model must not be empty"));
     }
+    if (config_.api.empty()) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "API identity is required",
+            "OpenAI request API identity must not be empty"));
+    }
+    if (config_.provider.empty()) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "provider identity is required",
+            "OpenAI request provider identity must not be empty"));
+    }
     if (config_.timeout <= std::chrono::milliseconds::zero()) {
         co_return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
@@ -453,6 +465,8 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
     assistant.api = config_.api;
     assistant.provider = config_.provider;
     assistant.model = model;
+    assistant.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
 
     CCH_TRY_VOID(emit(sink, ai::AssistantStartEvent{assistant}));
 
@@ -495,11 +509,11 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
                 return std::unexpected(chunk.error());
             }
 
-            if (chunk->id) {
-                assistant.response_id = chunk->id;
+            if (!assistant.response_id && chunk->id && !chunk->id->empty()) {
+                assistant.response_id = *chunk->id;
             }
-            if (chunk->model) {
-                assistant.response_model = chunk->model;
+            if (!assistant.response_model && chunk->model && !chunk->model->empty() && *chunk->model != model) {
+                assistant.response_model = *chunk->model;
             }
             if (chunk->usage) {
                 assistant.usage = ai::Usage{

@@ -139,8 +139,8 @@ TEST_CASE("default provider registry includes fake and OpenAI-compatible provide
 }
 
 TEST_CASE(
-    "scripted fake provider emits and returns complete zero usage",
-    "[ai][provider][registry][issue17]") {
+    "scripted fake provider emits and returns complete stable identity",
+    "[ai][provider][registry][issue17][issue19]") {
     auto registry = ai::make_default_provider_registry();
     REQUIRE(registry);
 
@@ -156,14 +156,42 @@ TEST_CASE(
 
     REQUIRE(run.result);
     tests::check_zero_usage(run.result->usage);
+    CHECK(run.result->api == "scripted-fake");
+    CHECK(run.result->provider == "fake");
+    CHECK(run.result->model == "fake-model");
+    CHECK(run.result->timestamp > 0);
 
     const auto starts = events_of<ai::AssistantStartEvent>(run.events);
     REQUIRE(starts.size() == 1);
     tests::check_zero_usage(starts[0]->partial.usage);
+    CHECK(starts[0]->partial.api == run.result->api);
+    CHECK(starts[0]->partial.provider == run.result->provider);
+    CHECK(starts[0]->partial.model == run.result->model);
+    CHECK(starts[0]->partial.timestamp == run.result->timestamp);
 
     const auto done = events_of<ai::AssistantDoneEvent>(run.events);
     REQUIRE(done.size() == 1);
     tests::check_zero_usage(done[0]->message.usage);
+    CHECK(done[0]->message.api == run.result->api);
+    CHECK(done[0]->message.provider == run.result->provider);
+    CHECK(done[0]->message.model == run.result->model);
+    CHECK(done[0]->message.timestamp == run.result->timestamp);
+}
+
+TEST_CASE(
+    "scripted fake provider rejects an empty requested model before events",
+    "[ai][provider][registry][issue19]") {
+    auto registry = ai::make_default_provider_registry();
+    REQUIRE(registry);
+    auto fake = registry->create("fake", ai::ProviderFactoryContext{});
+    REQUIRE(fake);
+    ai::StreamChatRequest request;
+
+    auto run = run_client(**fake, std::move(request));
+
+    REQUIRE_FALSE(run.result);
+    CHECK(run.result.error().code == util::ErrorCode::Validation);
+    CHECK(run.events.empty());
 }
 
 TEST_CASE("fake provider emits read tool calls from prompts", "[ai][provider][registry]") {

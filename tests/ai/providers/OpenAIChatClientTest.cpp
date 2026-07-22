@@ -175,12 +175,37 @@ TEST_CASE("streaming OpenAI client serializes typed context and emits text delta
     CHECK(*run.result->response_model == "gpt-test-response");
     CHECK(run.result->api == "openai-completions");
     CHECK(run.result->provider == "openai-compatible");
+    CHECK(run.result->model == "gpt-test");
+    CHECK(run.result->timestamp > 0);
+    CHECK(run.result->timestamp != 1718000000);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
     REQUIRE(run.result->content.size() == 1);
     REQUIRE(std::holds_alternative<ai::TextContent>(run.result->content[0]));
     CHECK(std::get<ai::TextContent>(run.result->content[0]).text == "hello");
 
     CHECK(count_events<ai::AssistantStartEvent>(run.events) == 1);
+    const auto starts = events_of<ai::AssistantStartEvent>(run.events);
+    REQUIRE(starts.size() == 1);
+    CHECK(starts[0]->partial.api == run.result->api);
+    CHECK(starts[0]->partial.provider == run.result->provider);
+    CHECK(starts[0]->partial.model == run.result->model);
+    CHECK(starts[0]->partial.timestamp == run.result->timestamp);
+    const auto deltas = events_of<ai::TextDeltaEvent>(run.events);
+    REQUIRE(deltas.size() == 2);
+    for (const auto* delta : deltas) {
+        CHECK(delta->partial.api == run.result->api);
+        CHECK(delta->partial.provider == run.result->provider);
+        CHECK(delta->partial.model == run.result->model);
+        CHECK(delta->partial.timestamp == run.result->timestamp);
+    }
+    const auto done = events_of<ai::AssistantDoneEvent>(run.events);
+    REQUIRE(done.size() == 1);
+    CHECK(done[0]->message.api == run.result->api);
+    CHECK(done[0]->message.provider == run.result->provider);
+    CHECK(done[0]->message.model == run.result->model);
+    CHECK(done[0]->message.response_id == run.result->response_id);
+    CHECK(done[0]->message.response_model == run.result->response_model);
+    CHECK(done[0]->message.timestamp == run.result->timestamp);
     CHECK(count_events<ai::TextStartEvent>(run.events) == 1);
     CHECK(count_events<ai::TextDeltaEvent>(run.events) == 2);
     CHECK(count_events<ai::TextEndEvent>(run.events) == 1);
@@ -205,6 +230,59 @@ TEST_CASE("streaming OpenAI client serializes typed context and emits text delta
     CHECK(tool.at("type").get_string() == "function");
     const auto& stream_options = root.at("stream_options").get_object();
     CHECK(stream_options.at("include_usage").get_boolean());
+}
+
+TEST_CASE(
+    "streaming OpenAI client rejects incomplete requested identity before events",
+    "[ai][provider][stream][issue19]") {
+    const auto rejected = [](std::string api, std::string provider, std::string model) {
+        auto transport = std::make_shared<FakeStreamTransport>();
+        ai::providers::OpenAIStreamConfig config;
+        config.api_key = "sk-test-api-key";
+        config.api = std::move(api);
+        config.provider = std::move(provider);
+        config.model = model;
+        ai::providers::StreamingOpenAIChatClient client(transport, std::move(config));
+
+        ai::StreamChatRequest request;
+        request.model = std::move(model);
+        auto run = run_client(client, std::move(request));
+
+        REQUIRE_FALSE(run.result);
+        CHECK(run.result.error().code == util::ErrorCode::Validation);
+        CHECK(run.events.empty());
+        CHECK(transport->requests.empty());
+    };
+
+    rejected("", "openai-compatible", "gpt-test");
+    rejected("openai-completions", "", "gpt-test");
+    rejected("openai-completions", "openai-compatible", "");
+}
+
+TEST_CASE(
+    "streaming OpenAI client keeps first meaningful optional response identity",
+    "[ai][provider][stream][issue19]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {
+        sse(R"json({"id":"","model":"","choices":[]})json"),
+        sse(R"json({"id":"resp-first","model":"gpt-test","choices":[]})json"),
+        sse(R"json({"id":"resp-later","model":"routed-first","choices":[]})json"),
+        sse(R"json({"id":"resp-last","model":"routed-later","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]})json"),
+        sse("[DONE]"),
+    };
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result);
+    CHECK(run.result->model == "gpt-test");
+    CHECK(run.result->response_id == "resp-first");
+    CHECK(run.result->response_model == "routed-first");
 }
 
 TEST_CASE(
@@ -541,6 +619,8 @@ TEST_CASE("streaming OpenAI client accepts standard streaming chunk fields", "[a
 
     REQUIRE(run.result);
     CHECK(ai::text_from_assistant_content(run.result->content) == "ok");
+    CHECK(run.result->timestamp > 0);
+    CHECK(run.result->timestamp != 1718000000);
     REQUIRE(run.result->response_model);
     CHECK(*run.result->response_model == "gpt-test-response");
 }

@@ -133,6 +133,8 @@ struct ContextDto {
 
 namespace detail {
 
+inline constexpr std::int64_t kMinimumRealUnixEpochMilliseconds = 1'000'000'000'000;
+
 template <class... Ts>
 struct Overloaded : Ts... {
     using Ts::operator()...;
@@ -164,6 +166,24 @@ template <typename T>
     return std::unexpected(json_contract_error(
         "missing required JSON field",
         std::string{"missing required field '"} + std::string(field_name) + "' for " + std::string(discriminator),
+        context));
+}
+
+[[nodiscard]] inline util::ExpectedVoid require_non_empty_string(
+    const std::optional<std::string>& field,
+    std::string_view discriminator,
+    std::string_view field_name,
+    std::string_view context) {
+    if (auto required = require_field(field, discriminator, field_name, context); !required) {
+        return required;
+    }
+    if (!field->empty()) {
+        return {};
+    }
+    return std::unexpected(json_contract_error(
+        "empty required JSON field",
+        std::string{"required field '"} + std::string(field_name) + "' for " +
+            std::string(discriminator) + " must not be empty",
         context));
 }
 
@@ -560,15 +580,9 @@ template <typename T>
     MessageDto dto;
     dto.role = "assistant";
     dto.content = to_assistant_content_dtos(message.content);
-    if (!message.api.empty()) {
-        dto.api = message.api;
-    }
-    if (!message.provider.empty()) {
-        dto.provider = message.provider;
-    }
-    if (!message.model.empty()) {
-        dto.model = message.model;
-    }
+    dto.api = message.api;
+    dto.provider = message.provider;
+    dto.model = message.model;
     dto.responseModel = message.response_model;
     dto.responseId = message.response_id;
     dto.usage = to_dto(message.usage);
@@ -670,15 +684,30 @@ template <typename T>
     }
 
     if (dto.role == "assistant") {
+        for (const auto& identity : {
+                 std::pair{&dto.api, std::string_view{"api"}},
+                 std::pair{&dto.provider, std::string_view{"provider"}},
+                 std::pair{&dto.model, std::string_view{"model"}}}) {
+            if (auto required = require_non_empty_string(
+                    *identity.first, "assistant message", identity.second, context); !required) {
+                return std::unexpected(required.error());
+            }
+        }
+        if (dto.timestamp < kMinimumRealUnixEpochMilliseconds) {
+            return std::unexpected(detail::json_contract_error(
+                "invalid assistant timestamp",
+                "required field 'timestamp' for assistant message must be a real Unix epoch millisecond value",
+                context));
+        }
         auto content = required_assistant_content_from_dto(dto.content, dto.role, context);
         if (!content) {
             return std::unexpected(content.error());
         }
         AssistantMessage message;
         message.content = std::move(*content);
-        message.api = dto.api.value_or("");
-        message.provider = dto.provider.value_or("");
-        message.model = dto.model.value_or("");
+        message.api = *dto.api;
+        message.provider = *dto.provider;
+        message.model = *dto.model;
         message.response_model = dto.responseModel;
         message.response_id = dto.responseId;
         if (auto required = require_field(dto.usage, "assistant message", "usage", context); !required) {

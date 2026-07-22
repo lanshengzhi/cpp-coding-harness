@@ -56,6 +56,7 @@ TEST_CASE("assistant content round-trips text, thinking, and tool-call variants"
     msg.provider = "openai";
     msg.model = "gpt-test";
     msg.stop_reason = ai::AssistantStopReason::ToolUse;
+    msg.timestamp = 1718000000123;
 
     auto json = ai::glaze::write_message_json(ai::MessageVariant{msg});
     REQUIRE(json);
@@ -76,7 +77,11 @@ TEST_CASE("assistant content round-trips text, thinking, and tool-call variants"
 TEST_CASE("assistant message round-trips diagnostics and cacheWrite1h", "[ai][u2][glaze]") {
     ai::AssistantMessage msg;
     msg.content.emplace_back(ai::TextContent{"test", std::nullopt});
+    msg.api = "openai-completions";
+    msg.provider = "openai";
+    msg.model = "gpt-test";
     msg.stop_reason = ai::AssistantStopReason::Stop;
+    msg.timestamp = 1718000000123;
 
     // Add diagnostics
     ai::DiagnosticErrorInfo err_info;

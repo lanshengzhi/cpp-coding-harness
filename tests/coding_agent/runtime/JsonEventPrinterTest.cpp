@@ -110,7 +110,7 @@ TEST_CASE("JSON event printer emits the exact v3 session header", "[coding-agent
 
 TEST_CASE(
     "JSON event printer emits direct semantically complete agent events",
-    "[coding-agent][json-events][issue17]") {
+    "[coding-agent][json-events][issue17][issue19]") {
     std::ostringstream output;
     cch::coding_agent::runtime::JsonEventPrinter printer{output};
 
@@ -165,7 +165,10 @@ TEST_CASE(
     CHECK(string_at(message_update, "type") == "message_update");
     const auto& update_message = object_at(message_update, "message");
     CHECK(string_at(update_message, "role") == "assistant");
+    CHECK(string_at(update_message, "api") == "openai-completions");
+    CHECK(string_at(update_message, "provider") == "fake");
     CHECK(string_at(update_message, "model") == "fake-model");
+    CHECK(int_at(update_message, "timestamp") == 1234);
     CHECK(update_message.contains("usage"));
     const auto& update_usage = object_at(update_message, "usage");
     CHECK(int_at(update_usage, "input") == 1);
@@ -193,6 +196,10 @@ TEST_CASE(
     CHECK(string_at(assistant_event, "delta") == "answer");
     const auto& partial = object_at(assistant_event, "partial");
     CHECK(string_at(partial, "role") == "assistant");
+    CHECK(string_at(partial, "api") == "openai-completions");
+    CHECK(string_at(partial, "provider") == "fake");
+    CHECK(string_at(partial, "model") == "fake-model");
+    CHECK(int_at(partial, "timestamp") == 1234);
     CHECK(int_at(object_at(partial, "usage"), "reasoning") == 1);
 
     const auto& tool_start = object(parse_line(emitted[4]));

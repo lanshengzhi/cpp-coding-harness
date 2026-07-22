@@ -154,7 +154,11 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
         true,
         std::nullopt,
     });
+    assistant.api = "openai-completions";
+    assistant.provider = "openai-compatible";
+    assistant.model = "gpt-test";
     assistant.error_message = "provider error kimi_api_key=kimi-error-secret";
+    assistant.timestamp = 1718000000123;
     REQUIRE(store->append(ai::MessageVariant{assistant}));
 
     auto details = util::read_json<util::JsonValue>(
@@ -189,8 +193,8 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
 }
 
 TEST_CASE(
-    "Session Resume restores complete assistant usage including reasoning",
-    "[harness][session][resume][issue17]") {
+    "Session Resume restores complete assistant identity and usage",
+    "[harness][session][resume][issue17][issue19]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "complete-usage.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -201,6 +205,8 @@ TEST_CASE(
     assistant.api = "openai-completions";
     assistant.provider = "openai-compatible";
     assistant.model = "gpt-test";
+    assistant.response_model = "routed-model";
+    assistant.response_id = "response-123";
     assistant.usage = ai::Usage{
         .input = 11,
         .output = 7,
@@ -222,6 +228,12 @@ TEST_CASE(
     REQUIRE(store->append(ai::MessageVariant{assistant}));
 
     const auto persisted = read_all(path);
+    CHECK(persisted.find(R"("api":"openai-completions")") != std::string::npos);
+    CHECK(persisted.find(R"("provider":"openai-compatible")") != std::string::npos);
+    CHECK(persisted.find(R"("model":"gpt-test")") != std::string::npos);
+    CHECK(persisted.find(R"("responseModel":"routed-model")") != std::string::npos);
+    CHECK(persisted.find(R"("responseId":"response-123")") != std::string::npos);
+    CHECK(persisted.find(R"("timestamp":1718000000123)") != std::string::npos);
     CHECK(persisted.find(R"("usage":)") != std::string::npos);
     CHECK(persisted.find(R"("input":11)") != std::string::npos);
     CHECK(persisted.find(R"("output":7)") != std::string::npos);
@@ -236,6 +248,12 @@ TEST_CASE(
     REQUIRE(resumed->history.size() == 1);
     REQUIRE(std::holds_alternative<ai::AssistantMessage>(resumed->history[0]));
     const auto& restored = std::get<ai::AssistantMessage>(resumed->history[0]);
+    CHECK(restored.api == "openai-completions");
+    CHECK(restored.provider == "openai-compatible");
+    CHECK(restored.model == "gpt-test");
+    CHECK(restored.response_model == "routed-model");
+    CHECK(restored.response_id == "response-123");
+    CHECK(restored.timestamp == 1718000000123);
     CHECK(restored.usage.input == 11);
     CHECK(restored.usage.output == 7);
     CHECK(restored.usage.cache_read == 3);
@@ -248,6 +266,42 @@ TEST_CASE(
     CHECK(restored.usage.cost.cache_read == 0.03);
     CHECK(restored.usage.cost.cache_write == 0.02);
     CHECK(restored.usage.cost.total == 0.23);
+}
+
+TEST_CASE(
+    "Session Resume rejects incomplete assistant identity and non-real timestamps",
+    "[harness][session][resume][issue19]") {
+    tests::TempWorkspace workspace;
+    int fixture_index = 0;
+    const auto rejected = [&](util::JsonValue message, std::string expected_detail) {
+        const auto path = workspace.path() /
+            ("incomplete-identity-" + std::to_string(fixture_index++) + ".jsonl");
+        write_resume_fixture(path, std::move(message));
+        auto resumed = harness::session::resume_session(path);
+        REQUIRE_FALSE(resumed);
+        CHECK(resumed.error().code == util::ErrorCode::JsonParse);
+        CHECK(resumed.error().detail.find(expected_detail) != std::string::npos);
+    };
+
+    for (const auto& field : {"api", "provider", "model"}) {
+        auto missing = complete_assistant_value();
+        missing.get_object().erase(field);
+        rejected(std::move(missing), field);
+
+        auto empty = complete_assistant_value();
+        empty.at(field) = util::JsonValue{""};
+        rejected(std::move(empty), field);
+    }
+
+    auto missing_timestamp = complete_assistant_value();
+    missing_timestamp.get_object().erase("timestamp");
+    rejected(std::move(missing_timestamp), "timestamp");
+
+    for (const auto timestamp : {0, -1, 1718000000}) {
+        auto invalid = complete_assistant_value();
+        invalid.at("timestamp") = util::JsonValue{timestamp};
+        rejected(std::move(invalid), "timestamp");
+    }
 }
 
 TEST_CASE(
@@ -831,8 +885,10 @@ TEST_CASE("mixed tree entries and messages round-trip in order", "[harness][sess
     REQUIRE(store->append(user_message("hello")));
     ai::AssistantMessage assistant;
     assistant.content.emplace_back(ai::TextContent{"hi there", std::nullopt});
+    assistant.api = "openai-completions";
     assistant.provider = "openai";
     assistant.model = "gpt-4o";
+    assistant.timestamp = 1718000000123;
     REQUIRE(store->append(ai::MessageVariant{assistant}));
 
     auto loaded = harness::session::JsonlSessionStore::load(path);

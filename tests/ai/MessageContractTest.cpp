@@ -167,13 +167,13 @@ TEST_CASE("assistant text and tool-call content round-trip in order with metadat
 
 TEST_CASE("assistant JSON requires a supported stop reason", "[ai][u2][glaze][issue18]") {
     const auto missing = ai::glaze::read_message_json(
-        R"({"role":"assistant","content":[{"type":"text","text":"answer"}],"usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"timestamp":1718000000000})");
+        R"({"role":"assistant","content":[{"type":"text","text":"answer"}],"api":"openai-completions","provider":"openai","model":"gpt-test","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"timestamp":1718000000000})");
     REQUIRE_FALSE(missing);
     CHECK(missing.error().code == util::ErrorCode::JsonParse);
     CHECK(missing.error().detail.find("stopReason") != std::string::npos);
 
     const auto unsupported = ai::glaze::read_message_json(
-        R"({"role":"assistant","content":[{"type":"text","text":"answer"}],"usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"future_reason","timestamp":1718000000000})");
+        R"({"role":"assistant","content":[{"type":"text","text":"answer"}],"api":"openai-completions","provider":"openai","model":"gpt-test","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"future_reason","timestamp":1718000000000})");
     REQUIRE_FALSE(unsupported);
     CHECK(unsupported.error().code == util::ErrorCode::JsonParse);
     CHECK(unsupported.error().detail.find("future_reason") != std::string::npos);
@@ -197,7 +197,7 @@ TEST_CASE("missing required content payload fields return typed JSON errors", "[
     CHECK(missing_text.error().detail.find("text") != std::string::npos);
 
     auto missing_tool_id = ai::glaze::read_message_json(
-        R"({"role":"assistant","content":[{"type":"toolCall","name":"read_file","rawArguments":"{}"}],"timestamp":1718000000000})");
+        R"({"role":"assistant","content":[{"type":"toolCall","name":"read_file","rawArguments":"{}"}],"api":"openai-completions","provider":"openai","model":"gpt-test","timestamp":1718000000000})");
     REQUIRE_FALSE(missing_tool_id);
     CHECK(missing_tool_id.error().code == util::ErrorCode::JsonParse);
     CHECK(missing_tool_id.error().detail.find("id") != std::string::npos);

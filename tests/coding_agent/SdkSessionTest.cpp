@@ -224,6 +224,7 @@ public:
         msg.model = request.model;
         msg.stop_reason = ai::AssistantStopReason::Stop;
         msg.content.emplace_back(ai::TextContent{"captured", std::nullopt});
+        msg.timestamp = 1718000000123;
         co_return msg;
     }
 };
@@ -257,6 +258,7 @@ public:
         terminal.model = request.model;
         terminal.stop_reason = reason_;
         terminal.error_message = diagnostic_;
+        terminal.timestamp = 1718000000123;
         if (sink) {
             auto delivered = sink(ai::AssistantErrorEvent{reason_, terminal});
             if (!delivered) {
