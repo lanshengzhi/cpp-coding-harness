@@ -77,16 +77,29 @@ struct OpenAIStreamDeltaDto {
     std::optional<std::vector<OpenAIStreamToolCallDeltaDto>> tool_calls;
 };
 
-struct OpenAIStreamChoiceDto {
-    std::int64_t index{};
-    std::optional<OpenAIStreamDeltaDto> delta;
-    std::optional<std::string> finish_reason;
+struct OpenAIPromptTokensDetailsDto {
+    std::optional<std::int64_t> cached_tokens;
+    std::optional<std::int64_t> cache_write_tokens;
+};
+
+struct OpenAICompletionTokensDetailsDto {
+    std::optional<std::int64_t> reasoning_tokens;
 };
 
 struct OpenAIUsageDto {
     std::int64_t prompt_tokens{};
     std::int64_t completion_tokens{};
     std::int64_t total_tokens{};
+    std::optional<std::int64_t> prompt_cache_hit_tokens;
+    std::optional<OpenAIPromptTokensDetailsDto> prompt_tokens_details;
+    std::optional<OpenAICompletionTokensDetailsDto> completion_tokens_details;
+};
+
+struct OpenAIStreamChoiceDto {
+    std::int64_t index{};
+    std::optional<OpenAIStreamDeltaDto> delta;
+    std::optional<std::string> finish_reason;
+    std::optional<OpenAIUsageDto> usage;
 };
 
 struct OpenAIStreamChunkDto {

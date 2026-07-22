@@ -5,19 +5,23 @@
 
 namespace cch::tests {
 
+inline void check_usage(const ai::Usage& actual, const ai::Usage& expected) {
+    CHECK(actual.input == expected.input);
+    CHECK(actual.output == expected.output);
+    CHECK(actual.cache_read == expected.cache_read);
+    CHECK(actual.cache_write == expected.cache_write);
+    CHECK(actual.cache_write_1h == expected.cache_write_1h);
+    CHECK(actual.reasoning == expected.reasoning);
+    CHECK(actual.total_tokens == expected.total_tokens);
+    CHECK(actual.cost.input == expected.cost.input);
+    CHECK(actual.cost.output == expected.cost.output);
+    CHECK(actual.cost.cache_read == expected.cost.cache_read);
+    CHECK(actual.cost.cache_write == expected.cost.cache_write);
+    CHECK(actual.cost.total == expected.cost.total);
+}
+
 inline void check_zero_usage(const ai::Usage& usage) {
-    CHECK(usage.input == 0);
-    CHECK(usage.output == 0);
-    CHECK(usage.cache_read == 0);
-    CHECK(usage.cache_write == 0);
-    CHECK_FALSE(usage.cache_write_1h.has_value());
-    CHECK_FALSE(usage.reasoning.has_value());
-    CHECK(usage.total_tokens == 0);
-    CHECK(usage.cost.input == 0.0);
-    CHECK(usage.cost.output == 0.0);
-    CHECK(usage.cost.cache_read == 0.0);
-    CHECK(usage.cost.cache_write == 0.0);
-    CHECK(usage.cost.total == 0.0);
+    check_usage(usage, ai::Usage{});
 }
 
 } // namespace cch::tests

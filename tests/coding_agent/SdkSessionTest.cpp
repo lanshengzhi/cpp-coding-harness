@@ -18,6 +18,7 @@
 #include "harness/session/SessionJournalTestHooks.hpp"
 #include "../support/EnvVarGuard.hpp"
 #include "../support/TempWorkspace.hpp"
+#include "../support/UsageAssertions.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -288,6 +289,34 @@ public:
             "\"id\":\"call_partial\",\"type\":\"function\",\"function\":{\"name\":\"echo\","
             "\"arguments\":\"{\\\"value\\\":\\\"par\"}}]}}]}\n\n"
             "data: {\"choices\":[}\n\n";
+        if (auto delivered = on_body_chunk(response_body); !delivered) {
+            co_return std::unexpected(delivered.error());
+        }
+
+        ai::providers::StreamResponse response;
+        response.head.status_code = 200;
+        response.body = response_body;
+        co_return response;
+    }
+
+    std::vector<ai::providers::StreamRequest> requests;
+};
+
+class UsageSnapshotsTransport final : public ai::providers::StreamTransport {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::providers::StreamResponse>> async_stream(
+        const ai::providers::StreamRequest& request,
+        ai::providers::BodyChunkHandler on_body_chunk) override {
+        requests.push_back(request);
+        const std::string response_body =
+            "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"a\"},"
+            "\"usage\":{\"prompt_tokens\":20,\"completion_tokens\":5,"
+            "\"prompt_cache_hit_tokens\":7}}]}\n\n"
+            "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"b\"},"
+            "\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":40,"
+            "\"completion_tokens\":6,\"prompt_tokens_details\":{\"cached_tokens\":10,"
+            "\"cache_write_tokens\":4}}}\n\n"
+            "data: [DONE]\n\n";
         if (auto delivered = on_body_chunk(response_body); !delivered) {
             co_return std::unexpected(delivered.error());
         }
@@ -733,6 +762,97 @@ TEST_CASE(
     REQUIRE(durable->messages.size() == 1);
     REQUIRE(std::holds_alternative<ai::UserMessage>(durable->messages[0]));
     CHECK(ai::text_from_content(std::get<ai::UserMessage>(durable->messages[0]).content) == "hello");
+
+    CHECK(session->close().has_value());
+}
+
+TEST_CASE(
+    "SDK persists the latest normalized OpenAI usage snapshot",
+    "[sdk][live-state][incremental-persistence][issue20]") {
+    TestPaths paths;
+    auto transport = std::make_shared<UsageSnapshotsTransport>();
+
+    ai::providers::OpenAIStreamConfig provider;
+    provider.api_key = "sk-test-api-key";
+    provider.api = "openai-completions";
+    provider.provider = "openai-compatible";
+    provider.model = "gpt-test";
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::make_unique<ai::providers::StreamingOpenAIChatClient>(
+        transport,
+        std::move(provider));
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    auto& session = result->session;
+
+    std::optional<ai::Usage> start_usage;
+    std::vector<ai::Usage> delta_usages;
+    std::optional<ai::Usage> terminal_usage;
+    auto subscription = session->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            if (const auto* start = std::get_if<agent::MessageStartEvent>(&event)) {
+                if (const auto* assistant = std::get_if<ai::AssistantMessage>(&start->message)) {
+                    start_usage = assistant->usage;
+                }
+            }
+            if (const auto* update = std::get_if<agent::MessageUpdateEvent>(&event);
+                update != nullptr && std::holds_alternative<ai::TextDeltaEvent>(update->assistant_event)) {
+                delta_usages.push_back(std::get<ai::AssistantMessage>(update->message).usage);
+            }
+            if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+                if (const auto* assistant = std::get_if<ai::AssistantMessage>(&end->message)) {
+                    terminal_usage = assistant->usage;
+                }
+            }
+            return {};
+        });
+    REQUIRE(subscription.has_value());
+
+    auto prompted = session->prompt("hello");
+    REQUIRE(prompted.has_value());
+    REQUIRE(transport->requests.size() == 1);
+
+    const ai::Usage first_snapshot{
+        .input = 13,
+        .output = 5,
+        .cache_read = 7,
+        .cache_write = 0,
+        .cache_write_1h = std::nullopt,
+        .reasoning = std::nullopt,
+        .total_tokens = 25,
+        .cost = {},
+    };
+    const ai::Usage latest_snapshot{
+        .input = 26,
+        .output = 6,
+        .cache_read = 10,
+        .cache_write = 4,
+        .cache_write_1h = std::nullopt,
+        .reasoning = std::nullopt,
+        .total_tokens = 46,
+        .cost = {},
+    };
+
+    REQUIRE(start_usage.has_value());
+    tests::check_zero_usage(*start_usage);
+
+    REQUIRE(delta_usages.size() == 2);
+    tests::check_usage(delta_usages[0], first_snapshot);
+    tests::check_usage(delta_usages[1], latest_snapshot);
+
+    REQUIRE(terminal_usage.has_value());
+    tests::check_usage(*terminal_usage, latest_snapshot);
+
+    auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable.has_value());
+    REQUIRE(durable->messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(durable->messages[1]));
+    const auto& persisted = std::get<ai::AssistantMessage>(durable->messages[1]);
+    tests::check_usage(persisted.usage, *terminal_usage);
 
     CHECK(session->close().has_value());
 }

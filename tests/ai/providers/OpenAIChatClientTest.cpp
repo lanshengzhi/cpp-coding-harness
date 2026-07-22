@@ -316,6 +316,167 @@ TEST_CASE(
     tests::check_zero_usage(done[0]->message.usage);
 }
 
+TEST_CASE(
+    "streaming OpenAI client normalizes standard usage details without double counting reasoning",
+    "[ai][provider][stream][issue20]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {
+        sse(R"json({"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":100,"completion_tokens":30,"total_tokens":999,"prompt_cache_hit_tokens":70,"prompt_tokens_details":{"cached_tokens":40,"cache_write_tokens":10},"completion_tokens_details":{"reasoning_tokens":12}}})json"),
+        sse("[DONE]"),
+    };
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result);
+    const ai::Usage expected{
+        .input = 50,
+        .output = 30,
+        .cache_read = 40,
+        .cache_write = 10,
+        .cache_write_1h = std::nullopt,
+        .reasoning = 12,
+        .total_tokens = 130,
+        .cost = {},
+    };
+    tests::check_usage(run.result->usage, expected);
+
+    const auto starts = events_of<ai::AssistantStartEvent>(run.events);
+    REQUIRE(starts.size() == 1);
+    tests::check_zero_usage(starts[0]->partial.usage);
+
+    const auto deltas = events_of<ai::TextDeltaEvent>(run.events);
+    REQUIRE(deltas.size() == 1);
+    tests::check_usage(deltas[0]->partial.usage, expected);
+
+    const auto done = events_of<ai::AssistantDoneEvent>(run.events);
+    REQUIRE(done.size() == 1);
+    tests::check_usage(done[0]->message.usage, expected);
+}
+
+TEST_CASE(
+    "streaming OpenAI client falls back to compatible choice usage",
+    "[ai][provider][stream][issue20]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {
+        sse(R"json({"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop","usage":{"prompt_tokens":20,"completion_tokens":5,"total_tokens":999,"prompt_cache_hit_tokens":7}}]})json"),
+        sse("[DONE]"),
+    };
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result);
+    const ai::Usage expected{
+        .input = 13,
+        .output = 5,
+        .cache_read = 7,
+        .cache_write = 0,
+        .cache_write_1h = std::nullopt,
+        .reasoning = std::nullopt,
+        .total_tokens = 25,
+        .cost = {},
+    };
+    tests::check_usage(run.result->usage, expected);
+
+    const auto done = events_of<ai::AssistantDoneEvent>(run.events);
+    REQUIRE(done.size() == 1);
+    tests::check_usage(done[0]->message.usage, expected);
+}
+
+TEST_CASE(
+    "streaming OpenAI client normalizes missing usage counters and clamps uncached input",
+    "[ai][provider][stream][issue20]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {
+        sse(R"json({"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"prompt_tokens_details":{"cached_tokens":5,"cache_write_tokens":4}}})json"),
+        sse("[DONE]"),
+    };
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result);
+    tests::check_usage(
+        run.result->usage,
+        ai::Usage{
+            .input = 0,
+            .output = 0,
+            .cache_read = 5,
+            .cache_write = 4,
+            .cache_write_1h = std::nullopt,
+            .reasoning = std::nullopt,
+            .total_tokens = 9,
+            .cost = {},
+        });
+}
+
+TEST_CASE(
+    "streaming OpenAI client keeps the latest usage snapshot with standard placement precedence",
+    "[ai][provider][stream][issue20]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {
+        sse(R"json({"choices":[{"index":0,"delta":{"content":"a"},"usage":{"prompt_tokens":20,"completion_tokens":5,"prompt_cache_hit_tokens":7}}]})json"),
+        sse(R"json({"choices":[{"index":0,"delta":{"content":"b"},"finish_reason":"stop","usage":{"prompt_tokens":900,"completion_tokens":90}}],"usage":{"prompt_tokens":40,"completion_tokens":6,"prompt_tokens_details":{"cached_tokens":10,"cache_write_tokens":4}}})json"),
+        sse("[DONE]"),
+    };
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result);
+    const ai::Usage first_snapshot{
+        .input = 13,
+        .output = 5,
+        .cache_read = 7,
+        .cache_write = 0,
+        .cache_write_1h = std::nullopt,
+        .reasoning = std::nullopt,
+        .total_tokens = 25,
+        .cost = {},
+    };
+    const ai::Usage latest_snapshot{
+        .input = 26,
+        .output = 6,
+        .cache_read = 10,
+        .cache_write = 4,
+        .cache_write_1h = std::nullopt,
+        .reasoning = std::nullopt,
+        .total_tokens = 46,
+        .cost = {},
+    };
+
+    const auto deltas = events_of<ai::TextDeltaEvent>(run.events);
+    REQUIRE(deltas.size() == 2);
+    tests::check_usage(deltas[0]->partial.usage, first_snapshot);
+    tests::check_usage(deltas[1]->partial.usage, latest_snapshot);
+    tests::check_usage(run.result->usage, latest_snapshot);
+
+    const auto done = events_of<ai::AssistantDoneEvent>(run.events);
+    REQUIRE(done.size() == 1);
+    tests::check_usage(done[0]->message.usage, latest_snapshot);
+}
+
 TEST_CASE("streaming OpenAI client uses configured assistant identity", "[ai][provider][stream][u4]") {
     auto transport = std::make_shared<FakeStreamTransport>();
     transport->chunks = {

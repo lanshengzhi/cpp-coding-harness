@@ -7,6 +7,7 @@
 #include "ai/providers/SseParser.hpp"
 #include "util/Json.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <map>
@@ -331,6 +332,41 @@ void append_plain_text_part(std::string& text, std::string_view part, std::strin
     return dto;
 }
 
+[[nodiscard]] ai::Usage normalize_openai_usage(const ai::glaze::OpenAIUsageDto& raw_usage) {
+    const auto cache_read = raw_usage.prompt_tokens_details
+            && raw_usage.prompt_tokens_details->cached_tokens
+        ? *raw_usage.prompt_tokens_details->cached_tokens
+        : raw_usage.prompt_cache_hit_tokens.value_or(0);
+    const auto cache_write = raw_usage.prompt_tokens_details
+        ? raw_usage.prompt_tokens_details->cache_write_tokens.value_or(0)
+        : 0;
+    const auto input = std::max<std::int64_t>(
+        0,
+        raw_usage.prompt_tokens - cache_read - cache_write);
+
+    std::optional<std::int64_t> reasoning;
+    if (raw_usage.completion_tokens_details) {
+        reasoning = raw_usage.completion_tokens_details->reasoning_tokens;
+    }
+
+    return ai::Usage{
+        .input = input,
+        .output = raw_usage.completion_tokens,
+        .cache_read = cache_read,
+        .cache_write = cache_write,
+        .cache_write_1h = std::nullopt,
+        .reasoning = reasoning,
+        .total_tokens = input + raw_usage.completion_tokens + cache_read + cache_write,
+        .cost = ai::UsageCost{
+            .input = 0.0,
+            .output = 0.0,
+            .cache_read = 0.0,
+            .cache_write = 0.0,
+            .total = 0.0,
+        },
+    };
+}
+
 [[nodiscard]] std::optional<ai::AssistantStopReason> supported_stop_reason_from_provider(
     std::string_view finish_reason) {
     if (finish_reason == "stop" || finish_reason == "end") {
@@ -516,16 +552,9 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
                 assistant.response_model = *chunk->model;
             }
             if (chunk->usage) {
-                assistant.usage = ai::Usage{
-                    .input = chunk->usage->prompt_tokens,
-                    .output = chunk->usage->completion_tokens,
-                    .cache_read = 0,
-                    .cache_write = 0,
-                    .cache_write_1h = std::nullopt,
-                    .reasoning = std::nullopt,
-                    .total_tokens = chunk->usage->total_tokens,
-                    .cost = {},
-                };
+                assistant.usage = normalize_openai_usage(*chunk->usage);
+            } else if (!chunk->choices.empty() && chunk->choices.front().usage) {
+                assistant.usage = normalize_openai_usage(*chunk->choices.front().usage);
             }
 
             for (const auto& choice : chunk->choices) {
