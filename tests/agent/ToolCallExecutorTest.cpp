@@ -260,6 +260,31 @@ void check_format_fixture(
     CHECK(tool_ptr->invocation_count() == (valid ? 1 : 0));
 }
 
+void check_json_format_fixture(const test::JsonFormatFixture& fixture) {
+    agent::AsyncToolRegistry registry;
+    auto tool = std::make_unique<RecordingTool>(ai::Tool{
+        "json-format-fixture",
+        "JSON format fixture",
+        util::JsonValue::object_t{
+            {"type", "string"},
+            {"format", std::string(fixture.format)},
+        }});
+    auto* tool_ptr = tool.get();
+    REQUIRE(registry.add(std::move(tool)));
+
+    agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
+    auto assistant = assistant_with_calls({make_call(
+        "call-format",
+        "json-format-fixture",
+        std::string(fixture.raw_json))});
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
+    CHECK(run.result->results[0].is_error == !fixture.accepted);
+    CHECK(tool_ptr->invocation_count() == (fixture.accepted ? 1 : 0));
+}
+
 } // namespace
 
 TEST_CASE("ToolCallExecutor is a move-only private adapter", "[agent][tool-executor]") {
@@ -519,6 +544,57 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "recorded TypeBox Unicode string-bound fast paths remain executable",
+    "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
+    agent::AsyncToolRegistry registry;
+    auto max_one_tool = std::make_unique<RecordingTool>(ai::Tool{
+        "max-one",
+        "Maximum one TypeBox string unit",
+        util::JsonValue::object_t{{"type", "string"}, {"maxLength", 1}}});
+    auto min_two_tool = std::make_unique<RecordingTool>(ai::Tool{
+        "min-two",
+        "Minimum two TypeBox string units",
+        util::JsonValue::object_t{{"type", "string"}, {"minLength", 2}}});
+    auto* max_one_ptr = max_one_tool.get();
+    auto* min_two_ptr = min_two_tool.get();
+    REQUIRE(registry.add(std::move(max_one_tool)));
+    REQUIRE(registry.add(std::move(min_two_tool)));
+
+    std::vector<ai::ToolCallContent> calls;
+    for (std::size_t index = 0; index < test::kStringBoundFixtures.size(); ++index) {
+        const auto& fixture = test::kStringBoundFixtures[index];
+        calls.push_back(make_call(
+            "call-max-" + std::to_string(index),
+            "max-one",
+            std::string(fixture.raw_json)));
+        calls.push_back(make_call(
+            "call-min-" + std::to_string(index),
+            "min-two",
+            std::string(fixture.raw_json)));
+    }
+
+    agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
+    auto assistant = assistant_with_calls(std::move(calls));
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == test::kStringBoundFixtures.size() * 2);
+    std::size_t expected_max_invocations = 0;
+    std::size_t expected_min_invocations = 0;
+    for (std::size_t index = 0; index < test::kStringBoundFixtures.size(); ++index) {
+        const auto& fixture = test::kStringBoundFixtures[index];
+        CHECK(run.result->results[index * 2].is_error ==
+              !fixture.accepted_by_max_length_one);
+        CHECK(run.result->results[index * 2 + 1].is_error ==
+              !fixture.accepted_by_min_length_two);
+        expected_max_invocations += fixture.accepted_by_max_length_one ? 1 : 0;
+        expected_min_invocations += fixture.accepted_by_min_length_two ? 1 : 0;
+    }
+    CHECK(max_one_ptr->invocation_count() == expected_max_invocations);
+    CHECK(min_two_ptr->invocation_count() == expected_min_invocations);
+}
+
+TEST_CASE(
     "array item fixtures enforce boolean schemas additional items and patterns",
     "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
     agent::AsyncToolRegistry registry;
@@ -673,6 +749,14 @@ TEST_CASE(
     REQUIRE(run.result);
     CHECK_FALSE(run.result->results[0].is_error);
     CHECK(annotation_ptr->invocation_count() == 1);
+}
+
+TEST_CASE(
+    "recorded TypeBox IDN separator behavior remains executable",
+    "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
+    for (const auto& fixture : test::kIdnSeparatorFixtures) {
+        check_json_format_fixture(fixture);
+    }
 }
 
 TEST_CASE(

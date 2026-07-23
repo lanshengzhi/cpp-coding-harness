@@ -1219,22 +1219,68 @@ struct ValidationFailure {
     return true;
 }
 
+[[nodiscard]] bool is_unicode_hostname_separator_at(
+    std::string_view value,
+    std::size_t index) {
+    constexpr std::array<std::string_view, 3> separators{
+        "\xE3\x80\x82", // U+3002 IDEOGRAPHIC FULL STOP
+        "\xEF\xBC\x8E", // U+FF0E FULLWIDTH FULL STOP
+        "\xEF\xBD\xA1", // U+FF61 HALFWIDTH IDEOGRAPHIC FULL STOP
+    };
+    return std::any_of(separators.begin(), separators.end(), [&](std::string_view separator) {
+        return value.substr(index).starts_with(separator);
+    });
+}
+
+[[nodiscard]] bool contains_unicode_hostname_separator(std::string_view value) {
+    for (std::size_t index = 0; index < value.size(); ++index) {
+        if (is_unicode_hostname_separator_at(value, index)) return true;
+    }
+    return false;
+}
+
+[[nodiscard]] std::string canonicalize_hostname_separators(std::string_view value) {
+    std::string canonical;
+    canonical.reserve(value.size());
+    for (std::size_t index = 0; index < value.size();) {
+        if (is_unicode_hostname_separator_at(value, index)) {
+            canonical.push_back('.');
+            index += 3;
+        } else {
+            canonical.push_back(value[index]);
+            ++index;
+        }
+    }
+    return canonical;
+}
+
+[[nodiscard]] std::size_t utf16_code_unit_count(std::string_view value) {
+    std::size_t count = 0;
+    for (const auto point : decode_utf8(value)) {
+        count += point > 0xffff ? 2 : 1;
+    }
+    return count;
+}
+
 [[nodiscard]] bool is_idn_hostname_format(std::string_view value) {
-    if (value.empty() || value.size() > 253 || value.find(' ') != std::string_view::npos) {
+    const auto canonical = canonicalize_hostname_separators(value);
+    if (canonical.empty() || utf16_code_unit_count(canonical) > 253 ||
+        canonical.find(' ') != std::string::npos) {
         return false;
     }
-    bool all_ascii = std::all_of(value.begin(), value.end(), [](unsigned char character) {
-        return character < 0x80;
-    });
-    if (all_ascii) return is_hostname_format(value);
+    const bool all_ascii = std::all_of(
+        canonical.begin(), canonical.end(),
+        [](unsigned char character) { return character < 0x80; });
+    if (all_ascii) return is_hostname_format(canonical);
 
     std::size_t start = 0;
-    while (start <= value.size()) {
-        const auto end = value.find('.', start);
-        const auto label = value.substr(
+    while (start <= canonical.size()) {
+        const auto end = canonical.find('.', start);
+        const auto label = std::string_view(canonical).substr(
             start,
-            end == std::string_view::npos ? value.size() - start : end - start);
-        if (label.empty() || label.size() > 252 || label.front() == '-' || label.back() == '-') {
+            end == std::string_view::npos ? canonical.size() - start : end - start);
+        if (label.empty() || utf16_code_unit_count(label) > 63 ||
+            label.front() == '-' || label.back() == '-') {
             return false;
         }
         for (const unsigned char character : label) {
@@ -1287,8 +1333,12 @@ struct ValidationFailure {
         }
         if (!international || !is_unicode_letter_or_number(point)) return false;
     }
-    return international ? is_idn_hostname_format(value.substr(separator + 1))
-                         : is_hostname_format(value.substr(separator + 1));
+    const auto domain = value.substr(separator + 1);
+    if (international && contains_unicode_hostname_separator(domain)) {
+        return false;
+    }
+    return international ? is_idn_hostname_format(domain)
+                         : is_hostname_format(domain);
 }
 
 [[nodiscard]] bool has_valid_scheme(std::string_view value) {
@@ -1755,6 +1805,41 @@ struct ValidationFailure {
     return count;
 }
 
+[[nodiscard]] bool triggers_typebox_grapheme_fallback(std::uint32_t point) {
+    return point > 0xffff ||
+           (point >= 0x0300 && point <= 0x036f) ||
+           point == 0x200d;
+}
+
+[[nodiscard]] bool typebox_min_length_matches(
+    std::string_view value,
+    std::size_t min_length) {
+    if (min_length == 0) return true;
+    std::size_t fast_length = 0;
+    for (const auto point : utf8_code_points(value)) {
+        if (triggers_typebox_grapheme_fallback(point)) {
+            return grapheme_count(value) >= min_length;
+        }
+        ++fast_length;
+        if (fast_length >= min_length) return true;
+    }
+    return false;
+}
+
+[[nodiscard]] bool typebox_max_length_matches(
+    std::string_view value,
+    std::size_t max_length) {
+    std::size_t fast_length = 0;
+    for (const auto point : utf8_code_points(value)) {
+        if (triggers_typebox_grapheme_fallback(point)) {
+            return grapheme_count(value) <= max_length;
+        }
+        ++fast_length;
+        if (fast_length > max_length) return false;
+    }
+    return true;
+}
+
 [[nodiscard]] bool includes_type(const CompiledSchema& schema, JsonType type) {
     return std::find(schema.types.begin(), schema.types.end(), type) != schema.types.end();
 }
@@ -1903,11 +1988,10 @@ void validate_value(
     }
 
     if (const auto* text = value.get_if<std::string>()) {
-        const auto length = grapheme_count(*text);
-        if (schema.min_length && length < *schema.min_length) {
+        if (schema.min_length && !typebox_min_length_matches(*text, *schema.min_length)) {
             add_failure(failures, location, "string is shorter than minLength");
         }
-        if (schema.max_length && length > *schema.max_length) {
+        if (schema.max_length && !typebox_max_length_matches(*text, *schema.max_length)) {
             add_failure(failures, location, "string is longer than maxLength");
         }
         if (schema.pattern) {

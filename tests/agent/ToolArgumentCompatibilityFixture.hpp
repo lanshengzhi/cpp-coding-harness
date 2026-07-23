@@ -85,6 +85,30 @@ inline constexpr std::string_view kTypeBoxBoundaryContract = R"json({
 inline constexpr std::string_view kTypeBoxBoundaryArguments =
     R"json({"label":"e\u0301","tiny":5e-13})json";
 
+struct StringBoundFixture {
+    std::string_view raw_json;
+    bool accepted_by_max_length_one;
+    bool accepted_by_min_length_two;
+};
+
+// TypeBox's fast string-bound checks fall back to grapheme counting only for
+// astral code points, basic combining marks, and ZWJ code points. Extended
+// combining marks and variation selectors remain separate UTF-16 units.
+inline constexpr std::array<StringBoundFixture, 12> kStringBoundFixtures{{
+    {R"json("a")json", true, false},
+    {R"json("a\u0301")json", true, false},
+    {R"json("a\u1AB0")json", false, true},
+    {R"json("a\u1DC0")json", false, true},
+    {R"json("a\uFE20")json", false, true},
+    {R"json("a\uFE0E")json", false, true},
+    {R"json("a\uFE0F")json", false, true},
+    {R"json("\u1AB0")json", true, false},
+    {R"json("\uD83D\uDE00")json", true, false},
+    {R"json("\uD83C\uDDFA\uD83C\uDDF8")json", true, false},
+    {R"json("\uD83D\uDC69\u200D\uD83D\uDCBB")json", true, false},
+    {R"json("ab")json", false, true},
+}};
+
 inline constexpr std::string_view kCompositionContract = R"json({
   "type": "object",
   "properties": {
@@ -161,6 +185,35 @@ inline constexpr std::array<RejectedFormatFixture, 6> kRejectedFormatRegressionF
     {"iri", "http:"},
     {"uri-template", "{foo!}"},
     {"idn-email", "😀@example.com"},
+}};
+
+struct JsonFormatFixture {
+    std::string_view format;
+    std::string_view raw_json;
+    bool accepted;
+};
+
+// TypeBox canonicalizes Unicode hostname separators, but its IDN-email regex
+// accepts only ASCII dots. Both formats reject every resulting empty label.
+inline constexpr std::array<JsonFormatFixture, 18> kIdnSeparatorFixtures{{
+    {"idn-hostname", R"json("\u4F8B\u3048.\u30C6\u30B9\u30C8")json", true},
+    {"idn-hostname", R"json("\u4F8B\u3048\u3002\u30C6\u30B9\u30C8")json", true},
+    {"idn-hostname", R"json("\u4F8B\u3048\uFF0E\u30C6\u30B9\u30C8")json", true},
+    {"idn-hostname", R"json("\u4F8B\u3048\uFF61\u30C6\u30B9\u30C8")json", true},
+    {"idn-hostname", R"json("\u4F8B\u3048..\u30C6\u30B9\u30C8")json", false},
+    {"idn-hostname", R"json("\u4F8B\u3048\u3002\u3002\u30C6\u30B9\u30C8")json", false},
+    {"idn-hostname", R"json("\u4F8B\u3048\u3002\uFF0E\u30C6\u30B9\u30C8")json", false},
+    {"idn-hostname", R"json("\uFF61\u4F8B\u3048")json", false},
+    {"idn-hostname", R"json("\u4F8B\u3048\u3002")json", false},
+    {"idn-email", R"json("\u7528\u6237@\u4F8B\u3048.\u30C6\u30B9\u30C8")json", true},
+    {"idn-email", R"json("\u7528\u6237@\u4F8B\u3048\u3002\u30C6\u30B9\u30C8")json", false},
+    {"idn-email", R"json("\u7528\u6237@\u4F8B\u3048\uFF0E\u30C6\u30B9\u30C8")json", false},
+    {"idn-email", R"json("\u7528\u6237@\u4F8B\u3048\uFF61\u30C6\u30B9\u30C8")json", false},
+    {"idn-email", R"json("\u7528\u6237@\u4F8B\u3048..\u30C6\u30B9\u30C8")json", false},
+    {"idn-email", R"json("\u7528\u6237@\u4F8B\u3048\u3002\u3002\u30C6\u30B9\u30C8")json", false},
+    {"idn-email", R"json("\u7528\u6237@\u4F8B\u3048\u3002.\u30C6\u30B9\u30C8")json", false},
+    {"idn-email", R"json("\u7528\u6237@\uFF61\u4F8B\u3048")json", false},
+    {"idn-email", R"json("\u7528\u6237@\u4F8B\u3048\u3002")json", false},
 }};
 
 } // namespace cch::test
