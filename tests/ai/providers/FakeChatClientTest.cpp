@@ -166,6 +166,7 @@ void check_tool_lifecycle(
     const std::string& expected_text,
     const std::string& expected_id,
     const std::string& expected_name,
+    const std::string& expected_raw_arguments,
     const std::string& expected_argument_name,
     const std::string& expected_argument_value) {
     REQUIRE(run.result.has_value());
@@ -178,7 +179,10 @@ void check_tool_lifecycle(
     CHECK(final_call.name == expected_name);
     REQUIRE(final_call.arguments.has_value());
     CHECK(final_call.arguments->at(expected_argument_name).get_string() == expected_argument_value);
-    REQUIRE_FALSE(final_call.raw_arguments.empty());
+    CHECK(final_call.raw_arguments == expected_raw_arguments);
+    CHECK_FALSE(final_call.thought_signature.has_value());
+    CHECK(final_call.arguments_valid);
+    CHECK_FALSE(final_call.argument_error.has_value());
     REQUIRE(run.events.size() == 8);
 
     const auto& assistant_start = require_event<ai::AssistantStartEvent>(run.events, 0);
@@ -197,35 +201,56 @@ void check_tool_lifecycle(
     check_same_metadata(call_start.partial, final_message);
     REQUIRE(call_start.partial.content.size() == 2);
     CHECK(require_text(call_start.partial, 0).text == expected_text);
-    const auto& empty_call = require_tool_call(call_start.partial, 1);
-    CHECK(empty_call.id.empty());
-    CHECK(empty_call.name.empty());
-    CHECK_FALSE(empty_call.arguments.has_value());
-    CHECK(empty_call.raw_arguments.empty());
+    const auto& started_call = require_tool_call(call_start.partial, 1);
+    CHECK(started_call.id == expected_id);
+    CHECK(started_call.name == expected_name);
+    REQUIRE(started_call.arguments.has_value());
+    REQUIRE(started_call.arguments->holds<util::JsonValue::object_t>());
+    CHECK(started_call.arguments->get_object().empty());
+    CHECK(started_call.raw_arguments.empty());
+    CHECK_FALSE(started_call.thought_signature.has_value());
+    CHECK(started_call.arguments_valid);
+    CHECK_FALSE(started_call.argument_error.has_value());
 
     const auto& call_delta = require_event<ai::ToolCallDeltaEvent>(run.events, 5);
     CHECK(call_delta.content_index == 1);
-    CHECK(call_delta.delta == final_call.raw_arguments);
+    CHECK(call_delta.delta == expected_raw_arguments);
     check_same_metadata(call_delta.partial, final_message);
+    REQUIRE(call_delta.partial.content.size() == 2);
+    CHECK(require_text(call_delta.partial, 0).text == expected_text);
     const auto& partial_call = require_tool_call(call_delta.partial, 1);
     CHECK(partial_call.id == expected_id);
     CHECK(partial_call.name == expected_name);
-    CHECK_FALSE(partial_call.arguments.has_value());
+    REQUIRE(partial_call.arguments.has_value());
+    REQUIRE(partial_call.arguments->holds<util::JsonValue::object_t>());
+    CHECK(partial_call.arguments->get_object().empty());
     CHECK(partial_call.raw_arguments == call_delta.delta);
+    CHECK_FALSE(partial_call.thought_signature.has_value());
+    CHECK(partial_call.arguments_valid);
+    CHECK_FALSE(partial_call.argument_error.has_value());
 
     const auto& call_end = require_event<ai::ToolCallEndEvent>(run.events, 6);
     CHECK(call_end.content_index == 1);
+    check_same_metadata(call_end.partial, final_message);
+    REQUIRE(call_end.partial.content.size() == 2);
+    CHECK(require_text(call_end.partial, 0).text == expected_text);
     CHECK(call_end.tool_call.id == final_call.id);
     CHECK(call_end.tool_call.name == final_call.name);
     CHECK(call_end.tool_call.raw_arguments == final_call.raw_arguments);
     REQUIRE(call_end.tool_call.arguments.has_value());
     CHECK(call_end.tool_call.arguments->at(expected_argument_name).get_string() == expected_argument_value);
+    CHECK_FALSE(call_end.tool_call.thought_signature.has_value());
+    CHECK(call_end.tool_call.arguments_valid);
+    CHECK_FALSE(call_end.tool_call.argument_error.has_value());
     const auto& ended_call = require_tool_call(call_end.partial, 1);
     CHECK(ended_call.id == final_call.id);
     CHECK(ended_call.name == final_call.name);
     CHECK(ended_call.raw_arguments == final_call.raw_arguments);
     REQUIRE(ended_call.arguments.has_value());
     CHECK(ended_call.arguments->at(expected_argument_name).get_string() == expected_argument_value);
+    CHECK_FALSE(ended_call.thought_signature.has_value());
+    CHECK(ended_call.arguments_valid);
+    CHECK_FALSE(ended_call.argument_error.has_value());
 
     const auto& done = require_event<ai::AssistantDoneEvent>(run.events, 7);
     CHECK(done.reason == final_message.stop_reason);
@@ -255,13 +280,14 @@ TEST_CASE(
 
 TEST_CASE(
     "scripted fake emits complete ordered read and bash tool lifecycles",
-    "[ai][provider][fake][issue23]") {
+    "[ai][provider][fake][issue23][issue30]") {
     auto read_run = run_fake(request_with(ai::user_text_message("read README.md")));
     check_tool_lifecycle(
         read_run,
         "reading README.md",
         "fake-read-1",
         "read",
+        R"({"path":"README.md"})",
         "path",
         "README.md");
 
@@ -271,6 +297,7 @@ TEST_CASE(
         "running bash",
         "fake-bash-1",
         "bash",
+        R"({"command":"echo hi"})",
         "command",
         "echo hi");
 }

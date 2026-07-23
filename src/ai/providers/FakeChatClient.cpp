@@ -81,7 +81,15 @@ void set_fake_metadata(ai::AssistantMessage& assistant, const std::string& model
         }
 
         const auto& tool_call = std::get<ai::ToolCallContent>(completed);
-        partial.content.emplace_back(ai::ToolCallContent{});
+        partial.content.emplace_back(ai::ToolCallContent{
+            .id = tool_call.id,
+            .name = tool_call.name,
+            .arguments = util::JsonValue{util::JsonValue::object_t{}},
+            .raw_arguments = {},
+            .thought_signature = std::nullopt,
+            .arguments_valid = true,
+            .argument_error = std::nullopt,
+        });
         if (auto emitted = emit(
                 sink,
                 ai::ToolCallStartEvent{content_index, partial});
@@ -89,11 +97,9 @@ void set_fake_metadata(ai::AssistantMessage& assistant, const std::string& model
             return std::unexpected(emitted.error());
         }
         if (!tool_call.raw_arguments.empty()) {
-            auto& partial_call =
+            auto& streaming_call =
                 std::get<ai::ToolCallContent>(partial.content[content_index]);
-            partial_call.id = tool_call.id;
-            partial_call.name = tool_call.name;
-            partial_call.raw_arguments = tool_call.raw_arguments;
+            streaming_call.raw_arguments += tool_call.raw_arguments;
             if (auto emitted = emit(
                     sink,
                     ai::ToolCallDeltaEvent{
