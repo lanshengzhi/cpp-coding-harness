@@ -3,6 +3,7 @@
 #include "agent/ToolCallExecutor.hpp"
 
 #include "../support/ToolArgumentContracts.hpp"
+#include "ToolArgumentCompatibilityFixture.hpp"
 #include "../../include/cch/agent/AgentContext.hpp"
 #include "../../include/cch/agent/ToolRegistry.hpp"
 #include "../../include/cch/ai/Content.hpp"
@@ -211,6 +212,48 @@ ai::AssistantMessage assistant_with_calls(
     return message;
 }
 
+util::JsonValue fixture_json(std::string_view json) {
+    auto parsed = util::read_json<util::JsonValue>(json);
+    REQUIRE(parsed);
+    return std::move(*parsed);
+}
+
+void check_format_fixture(
+    std::string_view format,
+    std::optional<std::string_view> valid,
+    std::string_view invalid) {
+    agent::AsyncToolRegistry registry;
+    auto tool = std::make_unique<RecordingTool>(ai::Tool{
+        "format-fixture",
+        "Format fixture",
+        util::JsonValue::object_t{
+            {"type", "string"},
+            {"format", std::string(format)},
+        }});
+    auto* tool_ptr = tool.get();
+    REQUIRE(registry.add(std::move(tool)));
+
+    std::vector<ai::ToolCallContent> calls;
+    if (valid) {
+        auto valid_json = util::write_json(util::JsonValue{std::string(*valid)});
+        REQUIRE(valid_json);
+        calls.push_back(make_call("call-valid", "format-fixture", *valid_json));
+    }
+    auto invalid_json = util::write_json(util::JsonValue{std::string(invalid)});
+    REQUIRE(invalid_json);
+    calls.push_back(make_call("call-invalid", "format-fixture", *invalid_json));
+
+    agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
+    auto assistant = assistant_with_calls(std::move(calls));
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == (valid ? 2 : 1));
+    if (valid) CHECK_FALSE(run.result->results[0].is_error);
+    CHECK(run.result->results.back().is_error);
+    CHECK(tool_ptr->invocation_count() == (valid ? 1 : 0));
+}
+
 } // namespace
 
 TEST_CASE("ToolCallExecutor is a move-only private adapter", "[agent][tool-executor]") {
@@ -377,6 +420,330 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "sequential execution recursively prepares schema and tuple array items",
+    "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
+    agent::AsyncToolRegistry registry;
+    auto tool = std::make_unique<RecordingTool>(ai::Tool{
+        "collections",
+        "Collections",
+        fixture_json(test::kRecursiveCollectionContract)});
+    auto* tool_ptr = tool.get();
+    REQUIRE(registry.add(std::move(tool)));
+
+    agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
+    auto assistant = assistant_with_calls({make_call(
+        "call-1",
+        "collections",
+        std::string(test::kRecursiveCollectionArguments))});
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE_FALSE(run.result->results[0].is_error);
+    const auto invocation = tool_ptr->first_invocation();
+    REQUIRE(invocation);
+    auto prepared = util::write_json(invocation->arguments);
+    REQUIRE(prepared);
+    CHECK(*prepared == test::kRecursiveCollectionExpected);
+}
+
+TEST_CASE(
+    "sequential execution enforces numeric string object and array constraints",
+    "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
+    agent::AsyncToolRegistry registry;
+    auto tool = std::make_unique<RecordingTool>(ai::Tool{
+        "bounded",
+        "Bounded",
+        fixture_json(test::kBoundedContract)});
+    auto* tool_ptr = tool.get();
+    REQUIRE(registry.add(std::move(tool)));
+
+    agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
+    auto assistant = assistant_with_calls({
+        make_call("call-valid", "bounded", std::string(test::kBoundedValidArguments)),
+        make_call("call-invalid", "bounded", std::string(test::kBoundedInvalidArguments)),
+        make_call("call-upper", "bounded", std::string(test::kBoundedUpperInvalidArguments)),
+        make_call("call-lower", "bounded", std::string(test::kBoundedLowerInvalidArguments)),
+    });
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 4);
+    CHECK_FALSE(run.result->results[0].is_error);
+    CHECK(run.result->results[1].is_error);
+    CHECK(run.result->results[2].is_error);
+    CHECK(run.result->results[3].is_error);
+    CHECK(tool_ptr->invocation_count() == 1);
+    const auto diagnostic = ai::text_from_content(run.result->results[1].content);
+    CHECK(diagnostic.find("/quantity") != std::string::npos);
+    CHECK(diagnostic.find("/label") != std::string::npos);
+    CHECK(diagnostic.find("/metadata") != std::string::npos);
+    CHECK(diagnostic.find("/values") != std::string::npos);
+    const auto upper_diagnostic = ai::text_from_content(run.result->results[2].content);
+    CHECK(upper_diagnostic.find("/quantity") != std::string::npos);
+    CHECK(upper_diagnostic.find("/label") != std::string::npos);
+    CHECK(upper_diagnostic.find("/metadata") != std::string::npos);
+    CHECK(upper_diagnostic.find("/values") != std::string::npos);
+    CHECK(ai::text_from_content(run.result->results[3].content).find("/quantity") != std::string::npos);
+}
+
+TEST_CASE(
+    "recorded TypeBox boundary behavior remains executable",
+    "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
+    agent::AsyncToolRegistry registry;
+    auto tool = std::make_unique<RecordingTool>(ai::Tool{
+        "baseline-boundaries",
+        "Baseline boundaries",
+        fixture_json(test::kTypeBoxBoundaryContract)});
+    auto* tool_ptr = tool.get();
+    REQUIRE(registry.add(std::move(tool)));
+
+    agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
+    auto assistant = assistant_with_calls({make_call(
+        "call-boundaries",
+        "baseline-boundaries",
+        std::string(test::kTypeBoxBoundaryArguments))});
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    CHECK_FALSE(run.result->results[0].is_error);
+    CHECK(tool_ptr->invocation_count() == 1);
+}
+
+TEST_CASE(
+    "array item fixtures enforce boolean schemas additional items and patterns",
+    "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
+    agent::AsyncToolRegistry registry;
+    auto denied_items = std::make_unique<RecordingTool>(ai::Tool{
+        "denied-items",
+        "Denied items",
+        util::JsonValue::object_t{{"type", "array"}, {"items", false}}});
+    auto tuple_items = std::make_unique<RecordingTool>(ai::Tool{
+        "tuple-items",
+        "Tuple items",
+        util::JsonValue::object_t{
+            {"type", "array"},
+            {"items", util::JsonValue::array_t{
+                util::JsonValue::object_t{{"type", "string"}, {"pattern", "^[a-z]+$"}},
+            }},
+            {"additionalItems", util::JsonValue::object_t{{"type", "integer"}}},
+        }});
+    auto code_point_pattern = std::make_unique<RecordingTool>(ai::Tool{
+        "code-point-pattern",
+        "Code point pattern",
+        util::JsonValue::object_t{{"type", "string"}, {"pattern", "^.$"}}});
+    auto four_point_pattern = std::make_unique<RecordingTool>(ai::Tool{
+        "four-point-pattern",
+        "Four point pattern",
+        util::JsonValue::object_t{{"type", "string"}, {"pattern", "^....$"}}});
+    auto unsupported_pattern = std::make_unique<RecordingTool>(ai::Tool{
+        "unsupported-pattern",
+        "Unsupported pattern",
+        util::JsonValue::object_t{{"type", "string"}, {"pattern", R"(^\p{Emoji}$)"}}});
+    auto* denied_ptr = denied_items.get();
+    auto* tuple_ptr = tuple_items.get();
+    auto* code_point_ptr = code_point_pattern.get();
+    auto* four_point_ptr = four_point_pattern.get();
+    auto* unsupported_ptr = unsupported_pattern.get();
+    REQUIRE(registry.add(std::move(denied_items)));
+    REQUIRE(registry.add(std::move(tuple_items)));
+    REQUIRE(registry.add(std::move(code_point_pattern)));
+    REQUIRE(registry.add(std::move(four_point_pattern)));
+    REQUIRE(registry.add(std::move(unsupported_pattern)));
+
+    agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
+    auto assistant = assistant_with_calls({
+        make_call("call-denied", "denied-items", R"([1])"),
+        make_call("call-valid", "tuple-items", R"(["name",2])"),
+        make_call("call-pattern", "tuple-items", R"(["NAME",2])"),
+        make_call("call-additional", "tuple-items", R"(["name","2"])"),
+        make_call("call-code-point", "code-point-pattern", R"("😀")"),
+        make_call("call-byte-regression", "four-point-pattern", R"("😀")"),
+        make_call("call-four-points", "four-point-pattern", R"("abcd")"),
+        make_call("call-unsupported-pattern", "unsupported-pattern", R"("😀")"),
+    });
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 8);
+    CHECK(run.result->results[0].is_error);
+    CHECK_FALSE(run.result->results[1].is_error);
+    CHECK(run.result->results[2].is_error);
+    CHECK(run.result->results[3].is_error);
+    CHECK_FALSE(run.result->results[4].is_error);
+    CHECK(run.result->results[5].is_error);
+    CHECK_FALSE(run.result->results[6].is_error);
+    CHECK(run.result->results[7].is_error);
+    CHECK(denied_ptr->invocation_count() == 0);
+    CHECK(tuple_ptr->invocation_count() == 1);
+    CHECK(code_point_ptr->invocation_count() == 1);
+    CHECK(four_point_ptr->invocation_count() == 1);
+    CHECK(unsupported_ptr->invocation_count() == 0);
+}
+
+TEST_CASE(
+    "composition coercion selects only satisfying branches and validates the final contract",
+    "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
+    agent::AsyncToolRegistry registry;
+    auto composed_tool = std::make_unique<RecordingTool>(ai::Tool{
+        "composed",
+        "Composed",
+        fixture_json(test::kCompositionContract)});
+    auto branch_tool = std::make_unique<RecordingTool>(ai::Tool{
+        "branch",
+        "Branch",
+        util::JsonValue::object_t{{"anyOf", util::JsonValue::array_t{
+            util::JsonValue::object_t{{"type", "integer"}, {"minimum", 2}},
+            util::JsonValue::object_t{{"type", "string"}, {"const", "fallback"}},
+        }}}});
+    auto ambiguous_tool = std::make_unique<RecordingTool>(ai::Tool{
+        "ambiguous",
+        "Ambiguous",
+        util::JsonValue::object_t{{"oneOf", util::JsonValue::array_t{
+            util::JsonValue::object_t{{"type", "number"}},
+            util::JsonValue::object_t{{"type", "integer"}},
+        }}}});
+    auto* composed_ptr = composed_tool.get();
+    auto* branch_ptr = branch_tool.get();
+    auto* ambiguous_ptr = ambiguous_tool.get();
+    REQUIRE(registry.add(std::move(composed_tool)));
+    REQUIRE(registry.add(std::move(branch_tool)));
+    REQUIRE(registry.add(std::move(ambiguous_tool)));
+
+    agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
+    auto assistant = assistant_with_calls({
+        make_call("call-valid", "composed", std::string(test::kCompositionArguments)),
+        make_call("call-no-branch", "branch", R"("1")"),
+        make_call("call-ambiguous", "ambiguous", "3"),
+    });
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 3);
+    CHECK_FALSE(run.result->results[0].is_error);
+    CHECK(run.result->results[1].is_error);
+    CHECK(run.result->results[2].is_error);
+    const auto invocation = composed_ptr->first_invocation();
+    REQUIRE(invocation);
+    auto prepared = util::write_json(invocation->arguments);
+    REQUIRE(prepared);
+    CHECK(*prepared == test::kCompositionExpected);
+    CHECK(branch_ptr->invocation_count() == 0);
+    CHECK(ambiguous_ptr->invocation_count() == 0);
+}
+
+TEST_CASE(
+    "recorded baseline formats reject invalid strings while unknown formats remain annotations",
+    "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
+    for (const auto& fixture : test::kRecognizedFormatFixtures) {
+        check_format_fixture(fixture.format, fixture.valid, fixture.invalid);
+    }
+    for (const auto& fixture : test::kRejectedFormatRegressionFixtures) {
+        check_format_fixture(fixture.format, std::nullopt, fixture.value);
+    }
+
+    agent::AsyncToolRegistry registry;
+    auto annotation_tool = std::make_unique<RecordingTool>(ai::Tool{
+        "annotation-format",
+        "Annotation format",
+        util::JsonValue::object_t{
+            {"type", "string"},
+            {"format", "project-local-identifier"},
+        }});
+    auto* annotation_ptr = annotation_tool.get();
+    REQUIRE(registry.add(std::move(annotation_tool)));
+    agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
+    auto assistant = assistant_with_calls({make_call(
+        "call-annotation",
+        "annotation-format",
+        R"("not-project-shaped")")});
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    CHECK_FALSE(run.result->results[0].is_error);
+    CHECK(annotation_ptr->invocation_count() == 1);
+}
+
+TEST_CASE(
+    "unsupported dialect vocabulary reference and executable constructs fail closed",
+    "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
+    agent::AsyncToolRegistry registry;
+    std::vector<RecordingTool*> rejected_tools;
+    auto add_rejected = [&](std::string name, util::JsonValue contract) {
+        auto tool = std::make_unique<RecordingTool>(
+            ai::Tool{name, "Rejected fixture", std::move(contract)});
+        rejected_tools.push_back(tool.get());
+        REQUIRE(registry.add(std::move(tool)));
+    };
+    add_rejected("dialect", util::JsonValue::object_t{
+        {"$schema", "https://example.test/unsupported-schema"},
+        {"type", "object"},
+    });
+    add_rejected("vocabulary", util::JsonValue::object_t{
+        {"$vocabulary", util::JsonValue::object_t{{"https://example.test/vocab", true}}},
+        {"type", "object"},
+    });
+    add_rejected("reference", util::JsonValue::object_t{{"$ref", "#/$defs/missing"}});
+    add_rejected("contains", util::JsonValue::object_t{
+        {"type", "array"},
+        {"contains", util::JsonValue::object_t{{"type", "string"}}},
+    });
+    add_rejected("dialect-items", util::JsonValue::object_t{
+        {"$schema", "https://json-schema.org/draft/2020-12/schema"},
+        {"type", "array"},
+        {"items", util::JsonValue::array_t{util::JsonValue::object_t{{"type", "string"}}}},
+    });
+    add_rejected("mandatory-format", util::JsonValue::object_t{
+        {"$vocabulary", util::JsonValue::object_t{
+            {"https://json-schema.org/draft/2020-12/vocab/format-assertion", true},
+        }},
+        {"type", "string"},
+        {"format", "project-local-identifier"},
+    });
+
+    auto annotation_tool = std::make_unique<RecordingTool>(ai::Tool{
+        "annotations",
+        "Annotations",
+        util::JsonValue::object_t{
+            {"$schema", "http://json-schema.org/draft-07/schema#"},
+            {"$vocabulary", util::JsonValue::object_t{{"https://example.test/optional", false}}},
+            {"type", "number"},
+            {"minimum", 2},
+            {"format", "number-format-is-annotation"},
+            {"x-contract", util::JsonValue::object_t{{"minimum", 100}}},
+        }});
+    auto* annotation_ptr = annotation_tool.get();
+    REQUIRE(registry.add(std::move(annotation_tool)));
+
+    agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
+    auto assistant = assistant_with_calls({
+        make_call("call-dialect", "dialect", R"({})"),
+        make_call("call-vocabulary", "vocabulary", R"({})"),
+        make_call("call-reference", "reference", R"({})"),
+        make_call("call-contains", "contains", R"([])"),
+        make_call("call-dialect-items", "dialect-items", R"([])"),
+        make_call("call-format", "mandatory-format", R"("value")"),
+        make_call("call-annotations", "annotations", "2"),
+    });
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 7);
+    for (std::size_t index = 0; index < rejected_tools.size(); ++index) {
+        CHECK(run.result->results[index].is_error);
+        CHECK(rejected_tools[index]->invocation_count() == 0);
+    }
+    CHECK_FALSE(run.result->results[6].is_error);
+    CHECK(annotation_ptr->invocation_count() == 1);
+}
+
+TEST_CASE(
     "sequential schema-invalid arguments are isolated before hooks and tools",
     "[agent][tool-executor][tool-arguments]") {
     const util::JsonValue contract = util::JsonValue::object_t{
@@ -460,7 +827,7 @@ TEST_CASE(
     };
     const auto unsupported_contract = util::JsonValue::object_t{
         {"type", "array"},
-        {"items", util::JsonValue::object_t{{"type", "string"}}},
+        {"contains", util::JsonValue::object_t{{"type", "string"}}},
     };
     const auto compile_invalid_contract = util::JsonValue::object_t{
         {"type", "object"},
@@ -529,7 +896,7 @@ TEST_CASE(
     CHECK_FALSE(run.result->results[6].is_error);
     CHECK(ai::text_from_content(run.result->results[2].content).find("invalid") != std::string::npos);
     CHECK(ai::text_from_content(run.result->results[2].content).find("xxxxxxxx") != std::string::npos);
-    CHECK(ai::text_from_content(run.result->results[4].content).find("items") != std::string::npos);
+    CHECK(ai::text_from_content(run.result->results[4].content).find("contains") != std::string::npos);
     CHECK(ai::text_from_content(run.result->results[5].content).find("properties") != std::string::npos);
     CHECK(before_calls == 1);
     CHECK(malformed_ptr->invocation_count() == 0);
