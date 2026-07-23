@@ -1200,6 +1200,138 @@ TEST_CASE(
     CHECK(parallel.max_active == 2);
 }
 
+TEST_CASE(
+    "bounded parallel preparation completes immediate failures before the next source call",
+    "[agent][tool-executor][tool-arguments][issue32]") {
+    ConcurrencyProbe probe;
+    agent::AsyncToolRegistry registry;
+
+    auto add_tool = [&](std::string name,
+                        util::JsonValue contract,
+                        agent::ToolConcurrency concurrency = agent::ToolConcurrency::Exclusive,
+                        std::string result = "ok",
+                        std::chrono::milliseconds delay = std::chrono::milliseconds{}) {
+        auto tool = std::make_unique<RecordingTool>(
+            ai::Tool{name, name, std::move(contract)},
+            concurrency,
+            std::move(result),
+            delay,
+            &probe);
+        auto* tool_ptr = tool.get();
+        REQUIRE(registry.add(std::move(tool)));
+        return tool_ptr;
+    };
+
+    auto* malformed = add_tool(
+        "malformed", test::empty_object_tool_argument_contract());
+    auto* invalid = add_tool(
+        "invalid", test::integer_value_tool_argument_contract());
+    auto* unsupported = add_tool(
+        "unsupported",
+        util::JsonValue::object_t{
+            {"type", "array"},
+            {"contains", util::JsonValue::object_t{{"type", "string"}}},
+        });
+    auto* blocked = add_tool(
+        "blocked", test::empty_object_tool_argument_contract());
+    auto* slow = add_tool(
+        "slow",
+        test::empty_object_tool_argument_contract(),
+        agent::ToolConcurrency::ParallelSafe,
+        "slow result",
+        std::chrono::milliseconds{80});
+    auto* fast = add_tool(
+        "fast",
+        test::empty_object_tool_argument_contract(),
+        agent::ToolConcurrency::ParallelSafe,
+        "fast result",
+        std::chrono::milliseconds{10});
+
+    std::vector<std::string> hook_ids;
+    agent::ToolCallExecutorOptions options;
+    options.execution = agent::BoundedParallelToolExecution{2};
+    options.before_tool_call = [&](const agent::BeforeToolCallContext& context)
+        -> util::Expected<agent::BeforeToolCallResult> {
+        hook_ids.push_back(context.tool_call.id);
+        if (context.tool_call.id == "call-blocked") {
+            return agent::BeforeToolCallResult{true, "blocked by policy"};
+        }
+        return agent::BeforeToolCallResult{};
+    };
+    agent::ToolCallExecutor executor{registry, std::move(options)};
+    auto assistant = assistant_with_calls({
+        make_call("call-unknown", "missing"),
+        make_call("call-malformed", "malformed", "not-json"),
+        make_call("call-invalid", "invalid", R"({"value":"no"})"),
+        make_call("call-unsupported", "unsupported", R"([])"),
+        make_call("call-blocked", "blocked"),
+        make_call("call-slow", "slow"),
+        make_call("call-fast", "fast"),
+    });
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 7);
+    REQUIRE((hook_ids ==
+             std::vector<std::string>{"call-blocked", "call-slow", "call-fast"}));
+    CHECK(malformed->invocation_count() == 0);
+    CHECK(invalid->invocation_count() == 0);
+    CHECK(unsupported->invocation_count() == 0);
+    CHECK(blocked->invocation_count() == 0);
+    CHECK(slow->invocation_count() == 1);
+    CHECK(fast->invocation_count() == 1);
+    CHECK(probe.max_active.load() == 2);
+
+    std::vector<std::string> sequence;
+    for (const auto& event : run.events) {
+        if (const auto* start = std::get_if<agent::ToolExecutionStartEvent>(&event)) {
+            sequence.push_back("start:" + start->tool_call_id);
+        } else if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
+            sequence.push_back("end:" + end->tool_call_id);
+        } else if (const auto* start = std::get_if<agent::MessageStartEvent>(&event)) {
+            const auto* result = std::get_if<ai::ToolResultMessage>(&start->message);
+            REQUIRE(result != nullptr);
+            sequence.push_back("message-start:" + result->tool_call_id);
+        } else if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+            const auto* result = std::get_if<ai::ToolResultMessage>(&end->message);
+            REQUIRE(result != nullptr);
+            sequence.push_back("message-end:" + result->tool_call_id);
+        }
+    }
+
+    REQUIRE((sequence == std::vector<std::string>{
+        "start:call-unknown",
+        "end:call-unknown",
+        "start:call-malformed",
+        "end:call-malformed",
+        "start:call-invalid",
+        "end:call-invalid",
+        "start:call-unsupported",
+        "end:call-unsupported",
+        "start:call-blocked",
+        "end:call-blocked",
+        "start:call-slow",
+        "start:call-fast",
+        "end:call-fast",
+        "end:call-slow",
+        "message-start:call-unknown",
+        "message-end:call-unknown",
+        "message-start:call-malformed",
+        "message-end:call-malformed",
+        "message-start:call-invalid",
+        "message-end:call-invalid",
+        "message-start:call-unsupported",
+        "message-end:call-unsupported",
+        "message-start:call-blocked",
+        "message-end:call-blocked",
+        "message-start:call-slow",
+        "message-end:call-slow",
+        "message-start:call-fast",
+        "message-end:call-fast",
+    }));
+}
+
 TEST_CASE("bounded parallel execution accepts a limit of one", "[agent][tool-executor]") {
     ConcurrencyProbe probe;
     agent::AsyncToolRegistry registry;
