@@ -2177,6 +2177,96 @@ TEST_CASE("bounded parallel execution preserves source order in the transcript",
     CHECK(message_order[1] == "beta");
 }
 
+TEST_CASE(
+    "agent loop recovers after a schema-invalid call in a bounded parallel batch",
+    "[agent][async][tool-arguments][issue27]") {
+    FakeStreamingClient client;
+
+    ai::AssistantMessage mixed_calls;
+    mixed_calls.stop_reason = ai::AssistantStopReason::ToolUse;
+    mixed_calls.content.emplace_back(ai::tool_call_content(
+        "call-invalid", "alpha", R"({"value":"not-an-integer"})"));
+    mixed_calls.content.emplace_back(ai::tool_call_content(
+        "call-valid", "beta", R"({"value":"2"})"));
+    client.responses.push_back(std::move(mixed_calls));
+
+    ai::AssistantMessage corrected_call;
+    corrected_call.stop_reason = ai::AssistantStopReason::ToolUse;
+    corrected_call.content.emplace_back(ai::tool_call_content(
+        "call-corrected", "alpha", R"({"value":"3"})"));
+    client.responses.push_back(std::move(corrected_call));
+    client.responses.push_back(ai::assistant_text_message("recovered"));
+
+    const auto strict_contract = test::integer_value_tool_argument_contract();
+
+    agent::AsyncToolRegistry registry;
+    auto alpha = std::make_unique<ConfigurableFakeTool>(
+        ai::Tool{"alpha", "Alpha", strict_contract},
+        agent::ToolConcurrency::ParallelSafe,
+        "alpha result");
+    auto beta = std::make_unique<ConfigurableFakeTool>(
+        ai::Tool{"beta", "Beta", strict_contract},
+        agent::ToolConcurrency::ParallelSafe,
+        "beta result");
+    auto* alpha_ptr = alpha.get();
+    auto* beta_ptr = beta.get();
+    REQUIRE(registry.add(std::move(alpha)));
+    REQUIRE(registry.add(std::move(beta)));
+
+    std::vector<std::string> before_hook_names;
+    std::vector<util::JsonValue> before_hook_arguments;
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.tool_execution = agent::BoundedParallelToolExecution{2};
+    options.before_tool_call = [&](const agent::BeforeToolCallContext& context)
+        -> util::Expected<agent::BeforeToolCallResult> {
+        before_hook_names.push_back(context.tool_call.name);
+        before_hook_arguments.push_back(context.args);
+        return agent::BeforeToolCallResult{};
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop_on_pool(loop, "run both calls and recover");
+
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 3);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
+    REQUIRE(alpha_ptr->invocations.size() == 1);
+    REQUIRE(beta_ptr->invocations.size() == 1);
+    CHECK(alpha_ptr->invocations[0].call_id == "call-corrected");
+    CHECK(beta_ptr->invocations[0].call_id == "call-valid");
+    CHECK(alpha_ptr->invocations[0].arguments.at("value").get_number() == 3);
+    CHECK(beta_ptr->invocations[0].arguments.at("value").get_number() == 2);
+
+    REQUIRE((before_hook_names == std::vector<std::string>{"beta", "alpha"}));
+    REQUIRE(before_hook_arguments.size() == 2);
+    CHECK(before_hook_arguments[0].at("value").get_number() == 2);
+    CHECK(before_hook_arguments[1].at("value").get_number() == 3);
+
+    REQUIRE(client.requests.size() == 3);
+    const auto& recovery_context = client.requests[1].context.messages;
+    REQUIRE(recovery_context.size() == 4);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(recovery_context[2]));
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(recovery_context[3]));
+    const auto& invalid_result = std::get<ai::ToolResultMessage>(recovery_context[2]);
+    const auto& valid_result = std::get<ai::ToolResultMessage>(recovery_context[3]);
+    CHECK(invalid_result.tool_call_id == "call-invalid");
+    CHECK(invalid_result.tool_name == "alpha");
+    CHECK(invalid_result.is_error);
+    CHECK(valid_result.tool_call_id == "call-valid");
+    CHECK(valid_result.tool_name == "beta");
+    CHECK_FALSE(valid_result.is_error);
+
+    const auto& completion_context = client.requests[2].context.messages;
+    REQUIRE(completion_context.size() == 6);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(completion_context[5]));
+    const auto& corrected_result = std::get<ai::ToolResultMessage>(completion_context[5]);
+    CHECK(corrected_result.tool_call_id == "call-corrected");
+    CHECK_FALSE(corrected_result.is_error);
+
+    CHECK(count_events<agent::ToolExecutionStartEvent>(run.events) == 3);
+    CHECK(count_events<agent::ToolExecutionEndEvent>(run.events) == 3);
+}
+
 TEST_CASE("bounded parallel limit one executes sequentially", "[agent][async][u8]") {
     FakeStreamingClient client;
     client.responses.push_back(two_tool_call_response());

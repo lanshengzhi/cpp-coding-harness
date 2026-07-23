@@ -15,6 +15,17 @@ namespace cch::test {
     return util::JsonValue::object_t{{"type", "object"}};
 }
 
+[[nodiscard]] inline util::JsonValue integer_value_tool_argument_contract() {
+    return util::JsonValue::object_t{
+        {"type", "object"},
+        {"properties", util::JsonValue::object_t{
+            {"value", util::JsonValue::object_t{{"type", "integer"}}},
+        }},
+        {"required", util::JsonValue::array_t{"value"}},
+        {"additionalProperties", false},
+    };
+}
+
 [[nodiscard]] inline util::JsonValue path_tool_argument_contract() {
     return util::JsonValue::object_t{
         {"type", "object"},

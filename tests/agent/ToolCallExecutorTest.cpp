@@ -19,6 +19,7 @@
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <memory>
@@ -102,6 +103,11 @@ public:
             return std::nullopt;
         }
         return invocations_.front();
+    }
+
+    [[nodiscard]] std::vector<agent::ToolInvocation> invocations() const {
+        std::lock_guard lock(invocations_mutex_);
+        return invocations_;
     }
 
 private:
@@ -1005,6 +1011,109 @@ TEST_CASE("bounded parallel execution enforces max_in_flight", "[agent][tool-exe
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 4);
     CHECK(probe.max_active.load() == 2);
+}
+
+TEST_CASE(
+    "sequential and bounded parallel batches share argument preparation semantics",
+    "[agent][tool-executor][tool-arguments][issue27]") {
+    const auto strict_contract = test::integer_value_tool_argument_contract();
+    auto assistant = assistant_with_calls({
+        make_call("call-invalid", "work", R"({"value":"not-an-integer"})"),
+        make_call("call-1", "work", R"({"value":"1"})"),
+        make_call("call-2", "work", R"({"value":"2"})"),
+        make_call("call-3", "work", R"({"value":"3"})"),
+    });
+
+    struct ExecutionSnapshot {
+        std::vector<bool> result_errors;
+        std::vector<std::string> result_text;
+        std::vector<std::string> before_hook_ids;
+        std::vector<std::string> before_hook_arguments;
+        std::vector<std::string> result_message_ids;
+        std::vector<double> invocation_values;
+        std::size_t execution_starts{};
+        std::size_t execution_ends{};
+        std::size_t message_starts{};
+        std::size_t message_ends{};
+        int max_active{};
+    };
+
+    auto execute_policy = [&](agent::ToolExecutionPolicy policy) {
+        ConcurrencyProbe probe;
+        agent::AsyncToolRegistry registry;
+        auto tool = std::make_unique<RecordingTool>(
+            ai::Tool{"work", "Work", strict_contract},
+            agent::ToolConcurrency::ParallelSafe,
+            "work result",
+            std::chrono::milliseconds{30},
+            &probe);
+        auto* tool_ptr = tool.get();
+        REQUIRE(registry.add(std::move(tool)));
+
+        ExecutionSnapshot snapshot;
+        agent::ToolCallExecutorOptions options;
+        options.execution = std::move(policy);
+        options.before_tool_call = [&](const agent::BeforeToolCallContext& context)
+            -> util::Expected<agent::BeforeToolCallResult> {
+            snapshot.before_hook_ids.push_back(context.tool_call.id);
+            auto encoded = util::write_json(context.args);
+            REQUIRE(encoded);
+            snapshot.before_hook_arguments.push_back(std::move(*encoded));
+            return agent::BeforeToolCallResult{};
+        };
+        agent::ToolCallExecutor executor{registry, std::move(options)};
+        auto run = run_executor(executor, assistant);
+
+        REQUIRE(run.result);
+        for (const auto& result : run.result->results) {
+            snapshot.result_errors.push_back(result.is_error);
+            snapshot.result_text.push_back(ai::text_from_content(result.content));
+        }
+        for (const auto& event : run.events) {
+            if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+                if (const auto* result = std::get_if<ai::ToolResultMessage>(&end->message)) {
+                    snapshot.result_message_ids.push_back(result->tool_call_id);
+                }
+            }
+        }
+        for (const auto& invocation : tool_ptr->invocations()) {
+            snapshot.invocation_values.push_back(invocation.arguments.at("value").get_number());
+        }
+        std::sort(snapshot.invocation_values.begin(), snapshot.invocation_values.end());
+        snapshot.execution_starts = count_events<agent::ToolExecutionStartEvent>(run.events);
+        snapshot.execution_ends = count_events<agent::ToolExecutionEndEvent>(run.events);
+        snapshot.message_starts = count_events<agent::MessageStartEvent>(run.events);
+        snapshot.message_ends = count_events<agent::MessageEndEvent>(run.events);
+        snapshot.max_active = probe.max_active.load();
+        return snapshot;
+    };
+
+    const auto sequential = execute_policy(agent::SequentialToolExecution{});
+    const auto parallel = execute_policy(agent::BoundedParallelToolExecution{2});
+
+    CHECK(parallel.result_errors == sequential.result_errors);
+    CHECK(parallel.result_text == sequential.result_text);
+    CHECK(parallel.before_hook_ids == sequential.before_hook_ids);
+    CHECK(parallel.before_hook_arguments == sequential.before_hook_arguments);
+    REQUIRE((parallel.before_hook_ids ==
+             std::vector<std::string>{"call-1", "call-2", "call-3"}));
+    REQUIRE((parallel.before_hook_arguments ==
+             std::vector<std::string>{R"({"value":1})", R"({"value":2})", R"({"value":3})"}));
+    REQUIRE((parallel.result_message_ids ==
+             std::vector<std::string>{"call-invalid", "call-1", "call-2", "call-3"}));
+    CHECK(parallel.result_message_ids == sequential.result_message_ids);
+    REQUIRE((parallel.invocation_values == std::vector<double>{1, 2, 3}));
+    CHECK(parallel.invocation_values == sequential.invocation_values);
+    CHECK(parallel.execution_starts == 4);
+    CHECK(parallel.execution_ends == 4);
+    CHECK(parallel.message_starts == 4);
+    CHECK(parallel.message_ends == 4);
+    CHECK(sequential.execution_starts == 4);
+    CHECK(sequential.execution_ends == 4);
+    CHECK(sequential.message_starts == 4);
+    CHECK(sequential.message_ends == 4);
+    CHECK(sequential.max_active == 1);
+    CHECK(parallel.max_active == 2);
 }
 
 TEST_CASE("bounded parallel execution accepts a limit of one", "[agent][tool-executor]") {

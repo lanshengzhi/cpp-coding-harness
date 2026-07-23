@@ -4,7 +4,6 @@
 #include "../../include/cch/ai/Content.hpp"
 #include "../../include/cch/util/Error.hpp"
 #include "util/ExpectedMacros.hpp"
-#include "util/Json.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/deferred.hpp>
@@ -46,23 +45,6 @@ namespace {
     result.content.emplace_back(ai::TextContent{std::move(message), std::nullopt});
     result.is_error = true;
     return result;
-}
-
-[[nodiscard]] util::Expected<util::JsonValue> arguments_for_call(
-    const ai::ToolCallContent& call) {
-    if (!call.arguments_valid) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::JsonParse,
-            "invalid tool arguments",
-            call.argument_error.value_or("tool arguments were malformed")));
-    }
-    if (call.arguments) {
-        return *call.arguments;
-    }
-    if (call.raw_arguments.empty()) {
-        return util::read_json<util::JsonValue>("{}");
-    }
-    return util::read_json<util::JsonValue>(call.raw_arguments);
 }
 
 [[nodiscard]] util::Expected<BeforeToolCallResult> invoke_before_hook(
@@ -330,7 +312,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
             continue;
         }
 
-        auto arguments = arguments_for_call(call);
+        auto arguments = prepare_tool_arguments(tool->definition(), call);
         if (!arguments) {
             prepared.push_back({call, nullptr, {}, true, error_tool_result(call, arguments.error().detail)});
             continue;
