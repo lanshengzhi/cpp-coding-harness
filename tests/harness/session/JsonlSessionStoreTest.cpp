@@ -171,6 +171,16 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
     tool.details = *details;
     REQUIRE(store->append(ai::MessageVariant{tool}));
 
+    std::vector<harness::session::CustomMessageEntryContentBlock> custom_content;
+    custom_content.emplace_back(ai::text_content("custom token=custom-secret"));
+    custom_content.emplace_back(ai::ImageContent{"aW1hZ2UtYnl0ZXM=", "image/png"});
+    REQUIRE(store->append_custom_message_entry(
+        std::nullopt,
+        "redaction-test",
+        std::move(custom_content),
+        true,
+        std::nullopt));
+
     const auto raw = read_all(path);
     CHECK(raw.find("sk-secret12345") == std::string::npos);
     CHECK(raw.find("sk-toolsecret123") == std::string::npos);
@@ -184,6 +194,8 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
     CHECK(raw.find("kimi-detail-secret") == std::string::npos);
     CHECK(raw.find("kimi-array-secret") == std::string::npos);
     CHECK(raw.find("kimi-tool-content") == std::string::npos);
+    CHECK(raw.find("custom-secret") == std::string::npos);
+    CHECK(raw.find("aW1hZ2UtYnl0ZXM=") != std::string::npos);
     CHECK(raw.find("[REDACTED]") != std::string::npos);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
@@ -758,12 +770,64 @@ TEST_CASE("custom_message entry round-trips", "[harness][session][u9]") {
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::CustomMessage);
     const auto& value = require_entry_value<harness::session::CustomMessageEntryValue>(loaded->entries[1]);
     CHECK(value.custom_type == "my-ext");
-    CHECK(value.content == "injected content");
+    REQUIRE(std::holds_alternative<std::string>(value.content));
+    CHECK(std::get<std::string>(value.content) == "injected content");
     CHECK(value.display == true);
     REQUIRE(value.details.has_value());
     CHECK(value.details->get<util::JsonValue::object_t>().at("key").get<std::string>() == "val");
     REQUIRE(loaded->entries[1].parent_id.has_value());
     CHECK(*loaded->entries[1].parent_id == "parent99");
+    CHECK(read_all(path).find("\"content\":\"injected content\"") != std::string::npos);
+}
+
+TEST_CASE(
+    "Session Resume preserves ordered custom_message text and image content",
+    "[harness][session][wire][issue28]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "custom-msg-images.jsonl";
+    {
+        std::ofstream output(path);
+        output << "{\"type\":\"session\",\"version\":3,\"id\":\"sess-v3\",\"timestamp\":\"2026-07-22T00:00:00.000Z\",\"cwd\":\""
+               << workspace.path().string() << "\"}\n";
+        output << R"json({"type":"custom_message","id":"custom01","parentId":null,"timestamp":"2026-07-22T00:00:01.234Z","customType":"extension-image","content":[{"type":"text","text":"before"},{"type":"image","data":"cG5nLWJ5dGVz","mimeType":"image/png"},{"type":"text","text":"after"},{"type":"image","data":"d2VicC1ieXRlcw==","mimeType":"image/webp"}],"display":true})json"
+               << '\n';
+    }
+    make_private(path);
+
+    auto resumed = harness::session::resume_session(path);
+
+    REQUIRE(resumed);
+    REQUIRE(resumed->history.size() == 1);
+    REQUIRE(std::holds_alternative<ai::CustomMessage>(resumed->history[0]));
+    const auto& custom = std::get<ai::CustomMessage>(resumed->history[0]);
+    CHECK(custom.custom_type == "extension-image");
+    CHECK(custom.timestamp == 1784678401234);
+    REQUIRE(custom.content.size() == 4);
+    CHECK(std::get<ai::TextContent>(custom.content[0]).text == "before");
+    CHECK(std::get<ai::ImageContent>(custom.content[1]).mime_type == "image/png");
+    CHECK(std::get<ai::ImageContent>(custom.content[1]).data == "cG5nLWJ5dGVz");
+    CHECK(std::get<ai::TextContent>(custom.content[2]).text == "after");
+    CHECK(std::get<ai::ImageContent>(custom.content[3]).mime_type == "image/webp");
+    CHECK(std::get<ai::ImageContent>(custom.content[3]).data == "d2VicC1ieXRlcw==");
+}
+
+TEST_CASE(
+    "pi v3 custom_message rejects content blocks outside text and image",
+    "[harness][session][wire][issue28]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "custom-msg-thinking.jsonl";
+    {
+        std::ofstream output(path);
+        output << "{\"type\":\"session\",\"version\":3,\"id\":\"sess-v3\",\"timestamp\":\"2026-07-22T00:00:00.000Z\",\"cwd\":\""
+               << workspace.path().string() << "\"}\n";
+        output << R"json({"type":"custom_message","id":"custom01","parentId":null,"timestamp":"2026-07-22T00:00:01.234Z","customType":"extension-thinking","content":[{"type":"thinking","thinking":"not valid custom content"}],"display":true})json"
+               << '\n';
+    }
+    make_private(path);
+
+    auto resumed = harness::session::resume_session(path);
+
+    CHECK_FALSE(resumed.has_value());
 }
 
 TEST_CASE("label entry round-trips with set and clear", "[harness][session][u9]") {

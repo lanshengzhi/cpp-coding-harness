@@ -81,13 +81,16 @@ struct CustomDto {
     glz::raw_json data{"null"};
 };
 
+using CustomMessageContentDto =
+    std::variant<std::string, std::vector<ai::glaze::ContentDto>>;
+
 struct CustomMessageDto {
     std::string type{"custom_message"};
     std::string id;
     std::optional<std::string> parentId;
     std::string timestamp;
     std::string customType;
-    std::string content;
+    CustomMessageContentDto content;
     bool display{true};
     std::optional<glz::raw_json> details;
 };
@@ -391,6 +394,52 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
     return {};
 }
 
+[[nodiscard]] util::Expected<CustomMessageEntryContent> custom_message_content_from_dto(
+    const CustomMessageContentDto& content,
+    std::string_view context) {
+    if (const auto* text = std::get_if<std::string>(&content)) {
+        return CustomMessageEntryContent{*text};
+    }
+
+    const auto& content_dtos = std::get<std::vector<ai::glaze::ContentDto>>(content);
+    std::vector<CustomMessageEntryContentBlock> converted;
+    converted.reserve(content_dtos.size());
+    for (const auto& dto : content_dtos) {
+        auto block = ai::glaze::detail::content_from_dto(dto, context);
+        if (!block) {
+            return std::unexpected(block.error());
+        }
+        if (auto* text = std::get_if<ai::TextContent>(&*block)) {
+            converted.emplace_back(std::move(*text));
+        } else if (auto* image = std::get_if<ai::ImageContent>(&*block)) {
+            converted.emplace_back(std::move(*image));
+        } else {
+            return std::unexpected(ai::glaze::detail::json_contract_error(
+                "unsupported custom_message content block",
+                "custom_message content accepts only text and image blocks",
+                context));
+        }
+    }
+    return CustomMessageEntryContent{std::move(converted)};
+}
+
+[[nodiscard]] CustomMessageContentDto custom_message_content_to_dto(
+    CustomMessageEntryContent content) {
+    if (auto* text = std::get_if<std::string>(&content)) {
+        return CustomMessageContentDto{std::move(*text)};
+    }
+
+    const auto& blocks = std::get<std::vector<CustomMessageEntryContentBlock>>(content);
+    std::vector<ai::glaze::ContentDto> dtos;
+    dtos.reserve(blocks.size());
+    for (const auto& block : blocks) {
+        dtos.push_back(std::visit(
+            [](const auto& concrete) { return ai::glaze::detail::to_dto(concrete); },
+            block));
+    }
+    return CustomMessageContentDto{std::move(dtos)};
+}
+
 [[nodiscard]] util::JsonValue redact_json_value(const util::JsonValue& value) {
     if (const auto* text = value.get_if<std::string>()) {
         return util::JsonValue{util::redact_text(*text)};
@@ -428,6 +477,19 @@ void redact_content(ai::Content& content) {
             }
         },
         content);
+}
+
+void redact_custom_message_entry_content(CustomMessageEntryContent& content) {
+    if (auto* text = std::get_if<std::string>(&content)) {
+        *text = util::redact_text(std::move(*text));
+        return;
+    }
+
+    for (auto& block : std::get<std::vector<CustomMessageEntryContentBlock>>(content)) {
+        if (auto* text = std::get_if<ai::TextContent>(&block)) {
+            text->text = util::redact_text(std::move(text->text));
+        }
+    }
 }
 
 void redact_assistant_content(ai::AssistantContent& content) {
@@ -620,10 +682,14 @@ util::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<std
                 if (!dto) {
                     return std::unexpected(dto.error());
                 }
+                auto content = custom_message_content_from_dto(dto->content, stored_line);
+                if (!content) {
+                    return std::unexpected(content.error());
+                }
                 populate_tree_fields_from_dto(entry, *dto);
                 entry.value = CustomMessageEntryValue{
                     .custom_type = std::move(dto->customType),
-                    .content = std::move(dto->content),
+                    .content = std::move(*content),
                     .display = dto->display,
                     .details = optional_json_field(entry.payload, "details"),
                 };
@@ -807,15 +873,20 @@ util::Expected<std::string> EntrySerializer::serialize_custom_entry(
 util::Expected<std::string> EntrySerializer::serialize_custom_message_entry(
     std::optional<std::string> parent_id,
     std::string custom_type,
-    std::string content,
+    CustomMessageEntryContent content,
     bool display,
     std::optional<util::JsonValue> details) const {
+    redact_custom_message_entry_content(content);
+    if (details) {
+        details = redact_json_value(*details);
+    }
+
     CustomMessageDto dto;
     dto.id = generate_entry_id();
     dto.parentId = std::move(parent_id);
     dto.timestamp = generate_iso_timestamp();
     dto.customType = std::move(custom_type);
-    dto.content = std::move(content);
+    dto.content = custom_message_content_to_dto(std::move(content));
     dto.display = display;
     if (details) {
         auto details_json = util::write_json(*details);

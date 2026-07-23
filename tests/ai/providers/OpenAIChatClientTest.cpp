@@ -936,7 +936,7 @@ TEST_CASE(
 
 TEST_CASE(
     "resumed image messages produce the same OpenAI request as fresh content",
-    "[ai][provider][stream][session][issue22]") {
+    "[ai][provider][stream][session][issue22][issue28]") {
     ai::UserMessage user;
     user.content.emplace_back(ai::text_content("compare"));
     user.content.emplace_back(ai::ImageContent{"dXNlci1pbWFnZQ==", "image/png"});
@@ -985,9 +985,25 @@ TEST_CASE(
             .model = "gpt-test",
         });
     REQUIRE(store);
-    for (const auto& message : fresh_messages) {
-        REQUIRE(store->append(message));
+    REQUIRE(store->append(fresh_messages[0]));
+    const auto& persisted_custom = std::get<ai::CustomMessage>(fresh_messages[1]);
+    std::vector<harness::session::CustomMessageEntryContentBlock> persisted_custom_content;
+    persisted_custom_content.emplace_back(ai::ImageContent{"Y3VzdG9tLWltYWdl", "image/webp"});
+    persisted_custom_content.emplace_back(ai::text_content("custom context"));
+    REQUIRE(store->append_custom_message_entry(
+        std::nullopt,
+        persisted_custom.custom_type,
+        std::move(persisted_custom_content),
+        persisted_custom.display,
+        persisted_custom.details));
+    for (std::size_t i = 2; i < fresh_messages.size(); ++i) {
+        REQUIRE(store->append(fresh_messages[i]));
     }
+
+    auto persisted = harness::session::JsonlSessionStore::load(session_path);
+    REQUIRE(persisted);
+    REQUIRE(persisted->entries.size() == fresh_messages.size() + 1);
+    CHECK(persisted->entries[2].kind == harness::session::SessionEntryKind::CustomMessage);
 
     auto resumed = harness::session::resume_session(session_path);
     REQUIRE(resumed);

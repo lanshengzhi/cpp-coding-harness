@@ -54,9 +54,13 @@ struct CustomEntryValue {
     util::JsonValue data;
 };
 
+using CustomMessageEntryContentBlock = std::variant<ai::TextContent, ai::ImageContent>;
+using CustomMessageEntryContent =
+    std::variant<std::string, std::vector<CustomMessageEntryContentBlock>>;
+
 struct CustomMessageEntryValue {
     std::string custom_type;
-    std::string content;
+    CustomMessageEntryContent content;
     bool display{true};
     std::optional<util::JsonValue> details;
 };

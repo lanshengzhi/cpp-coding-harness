@@ -47,7 +47,7 @@ public:
                                                           util::JsonValue data);
     [[nodiscard]] util::ExpectedVoid append_custom_message_entry(std::optional<std::string> parent_id,
                                                                   std::string custom_type,
-                                                                  std::string content,
+                                                                  CustomMessageEntryContent content,
                                                                   bool display,
                                                                   std::optional<util::JsonValue> details);
     [[nodiscard]] util::ExpectedVoid append_label_change(std::optional<std::string> parent_id,

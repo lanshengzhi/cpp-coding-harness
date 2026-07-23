@@ -52,7 +52,7 @@ public:
     [[nodiscard]] util::Expected<std::string> serialize_custom_message_entry(
         std::optional<std::string> parent_id,
         std::string custom_type,
-        std::string content,
+        CustomMessageEntryContent content,
         bool display,
         std::optional<util::JsonValue> details) const;
 

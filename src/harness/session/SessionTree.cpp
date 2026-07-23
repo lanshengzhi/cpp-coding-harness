@@ -261,7 +261,18 @@ void SessionTree::emitEntryMessage(SessionContext& ctx, const SessionEntry* entr
         ai::CustomMessage cm;
         if (const auto* value = std::get_if<CustomMessageEntryValue>(&entry->value)) {
             cm.custom_type = value->custom_type;
-            cm.content = {ai::TextContent{value->content, std::nullopt}};
+            if (const auto* text = std::get_if<std::string>(&value->content)) {
+                cm.content = {ai::TextContent{*text, std::nullopt}};
+            } else {
+                const auto& blocks =
+                    std::get<std::vector<CustomMessageEntryContentBlock>>(value->content);
+                cm.content.reserve(blocks.size());
+                for (const auto& block : blocks) {
+                    cm.content.push_back(std::visit(
+                        [](const auto& concrete) -> ai::Content { return concrete; },
+                        block));
+                }
+            }
             cm.display = value->display;
             cm.details = value->details;
         }

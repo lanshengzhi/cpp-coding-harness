@@ -200,7 +200,7 @@ util::ExpectedVoid JsonlSessionStore::append_custom_entry(
 util::ExpectedVoid JsonlSessionStore::append_custom_message_entry(
     std::optional<std::string> parent_id,
     std::string custom_type,
-    std::string content,
+    CustomMessageEntryContent content,
     bool display,
     std::optional<util::JsonValue> details) {
     EntrySerializer serializer;
