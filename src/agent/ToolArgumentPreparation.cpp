@@ -139,6 +139,25 @@ struct ValidationFailure {
             bounded_tool_argument_component(std::move(reason), 3500)));
 }
 
+[[nodiscard]] util::Error malformed_arguments_error(
+    const std::string& tool_name,
+    std::string parser_detail) {
+    std::string diagnostic =
+        "Tool Argument Contract preparation failed at root for tool \"" +
+        bounded_tool_argument_component(tool_name, 256) +
+        "\": arguments are malformed JSON";
+    if (!parser_detail.empty()) {
+        diagnostic += " (parser detail: " + std::move(parser_detail) + ")";
+    }
+    return util::make_error(
+        util::ErrorCode::JsonParse,
+        "tool argument preparation failed",
+        util::bounded_redacted_text(
+            std::move(diagnostic),
+            4096,
+            " [diagnostic truncated]"));
+}
+
 [[nodiscard]] std::string child_path(std::string_view base, std::string_view key) {
     if (base == "root") {
         return std::string(key);
@@ -2146,21 +2165,16 @@ void validate_value(
     const ai::Tool& tool,
     const ai::ToolCallContent& call) {
     if (!call.arguments_valid) {
-        return std::unexpected(preparation_error(
+        return std::unexpected(malformed_arguments_error(
             tool.name,
-            "arguments are malformed JSON" +
-                (call.argument_error && !call.argument_error->empty()
-                     ? std::string(" (parser detail: ") + *call.argument_error + ")"
-                     : std::string{}),
-            util::ErrorCode::JsonParse));
+            call.argument_error.value_or(std::string{})));
     }
     if (!call.raw_arguments.empty()) {
         auto parsed = util::read_json<util::JsonValue>(call.raw_arguments);
         if (!parsed) {
-            return std::unexpected(preparation_error(
+            return std::unexpected(malformed_arguments_error(
                 tool.name,
-                "arguments are malformed JSON (parser detail: " + parsed.error().detail + ")",
-                util::ErrorCode::JsonParse));
+                parsed.error().detail));
         }
         return *parsed;
     }

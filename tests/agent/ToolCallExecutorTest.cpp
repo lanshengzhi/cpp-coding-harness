@@ -26,6 +26,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <type_traits>
 #include <utility>
@@ -1007,6 +1008,127 @@ TEST_CASE(
         CHECK(std::holds_alternative<agent::MessageStartEvent>(run.events[event_index + 2]));
         CHECK(std::holds_alternative<agent::MessageEndEvent>(run.events[event_index + 3]));
     }
+}
+
+TEST_CASE(
+    "malformed argument diagnostics redact before truncation and preserve peer calls",
+    "[agent][tool-executor][tool-arguments][issue33]") {
+    const std::string secret = "sk-FAKEBOUNDARYCREDENTIAL123456789";
+    std::string parser_prefix = "1:4060: syntax_error\n   ";
+    parser_prefix.push_back(static_cast<char>(0xff));
+    parser_prefix += " invalid-byte ";
+    constexpr std::string_view truncation_suffix = " [diagnostic truncated]";
+    constexpr std::size_t diagnostic_keep = 4096 - truncation_suffix.size();
+    const std::string diagnostic_prefix =
+        "Tool Argument Contract preparation failed at root for tool \"malformed\": "
+        "arguments are malformed JSON (parser detail: " + parser_prefix;
+    REQUIRE(diagnostic_prefix.size() + 5 < diagnostic_keep);
+    const std::string parser_detail =
+        parser_prefix +
+        std::string(diagnostic_keep - diagnostic_prefix.size() - 5, 'x') +
+        secret + " BROKEN\n   ^";
+
+    agent::AsyncToolRegistry registry;
+    auto malformed_tool = std::make_unique<RecordingTool>(
+        ai::Tool{"malformed", "Malformed", test::empty_object_tool_argument_contract()});
+    auto valid_tool = std::make_unique<RecordingTool>(
+        ai::Tool{"valid", "Valid", util::JsonValue{true}});
+    auto* malformed_ptr = malformed_tool.get();
+    auto* valid_ptr = valid_tool.get();
+    REQUIRE(registry.add(std::move(malformed_tool)));
+    REQUIRE(registry.add(std::move(valid_tool)));
+
+    int before_calls = 0;
+    agent::ToolCallExecutorOptions options;
+    options.before_tool_call = [&](const agent::BeforeToolCallContext& context)
+        -> util::Expected<agent::BeforeToolCallResult> {
+        ++before_calls;
+        CHECK(context.tool_call.name == "valid");
+        return agent::BeforeToolCallResult{};
+    };
+    agent::ToolCallExecutor executor{registry, std::move(options)};
+
+    auto malformed = make_call("call-malformed", "malformed", "not-json");
+    malformed.argument_error = parser_detail;
+    auto assistant = assistant_with_calls({
+        std::move(malformed),
+        make_call("call-valid", "valid", "false"),
+    });
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 2);
+    CHECK(run.result->results[0].is_error);
+    CHECK_FALSE(run.result->results[1].is_error);
+    const auto diagnostic = ai::text_from_content(run.result->results[0].content);
+    CHECK(diagnostic.size() <= 4096);
+    CHECK(diagnostic.find("malformed") != std::string::npos);
+    CHECK(diagnostic.find("arguments are malformed JSON") != std::string::npos);
+    CHECK(diagnostic.find("[REDACTED]") != std::string::npos);
+    CHECK(diagnostic.find("\xef\xbf\xbd") != std::string::npos);
+    CHECK(diagnostic.find(secret) == std::string::npos);
+    CHECK(diagnostic.find("sk-") == std::string::npos);
+
+    std::optional<std::string> end_diagnostic;
+    std::optional<std::string> message_diagnostic;
+    for (const auto& event : run.events) {
+        if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event);
+            end != nullptr && end->tool_call_id == "call-malformed") {
+            end_diagnostic = ai::text_from_content(end->result.content);
+        }
+        if (const auto* end = std::get_if<agent::MessageEndEvent>(&event);
+            end != nullptr && std::holds_alternative<ai::ToolResultMessage>(end->message)) {
+            const auto& result = std::get<ai::ToolResultMessage>(end->message);
+            if (result.tool_call_id == "call-malformed") {
+                message_diagnostic = ai::text_from_content(result.content);
+            }
+        }
+    }
+    REQUIRE(end_diagnostic.has_value());
+    REQUIRE(message_diagnostic.has_value());
+    CHECK(*end_diagnostic == diagnostic);
+    CHECK(*message_diagnostic == diagnostic);
+
+    auto encoded = util::write_json(util::JsonValue{diagnostic});
+    REQUIRE(encoded);
+    auto decoded = util::read_json<util::JsonValue>(*encoded);
+    REQUIRE(decoded);
+    CHECK(decoded->get_string() == diagnostic);
+
+    CHECK(before_calls == 1);
+    CHECK(malformed_ptr->invocation_count() == 0);
+    CHECK(valid_ptr->invocation_count() == 1);
+}
+
+TEST_CASE(
+    "schema validation diagnostics keep credential-like locations actionable",
+    "[agent][tool-executor][tool-arguments][issue33]") {
+    const auto contract = util::JsonValue::object_t{
+        {"type", "object"},
+        {"properties", util::JsonValue::object_t{
+            {"api_key", util::JsonValue::object_t{{"type", "string"}}},
+        }},
+        {"required", util::JsonValue::array_t{"api_key"}},
+        {"additionalProperties", false},
+    };
+
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+        ai::Tool{"configure", "Configure", contract})));
+    agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
+    auto assistant = assistant_with_calls({
+        make_call("call-invalid", "configure", R"({"api_key":{}})"),
+    });
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
+    const auto diagnostic = ai::text_from_content(run.result->results[0].content);
+    CHECK(diagnostic.find(
+        "/api_key: value does not match an allowed JSON type") != std::string::npos);
+    CHECK(diagnostic.find("[REDACTED]") == std::string::npos);
 }
 
 TEST_CASE(

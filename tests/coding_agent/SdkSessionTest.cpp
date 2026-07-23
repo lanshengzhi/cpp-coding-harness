@@ -16,6 +16,7 @@
 #include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "harness/session/SessionJournalTestHooks.hpp"
+#include "util/Json.hpp"
 #include "../support/EnvVarGuard.hpp"
 #include "../support/TempWorkspace.hpp"
 #include "../support/UsageAssertions.hpp"
@@ -228,6 +229,59 @@ public:
         msg.timestamp = 1718000000123;
         co_return msg;
     }
+};
+
+class MalformedArgumentsChatClient final : public ai::StreamingChatClient {
+public:
+    explicit MalformedArgumentsChatClient(std::string secret)
+        : secret_(std::move(secret)) {}
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink /*sink*/) override {
+        requests.push_back(request);
+
+        ai::AssistantMessage response;
+        response.provider = "fake";
+        response.api = "issue33-fake";
+        response.model = request.model;
+        response.timestamp = 1718000000123;
+        if (requests.size() > 1) {
+            response.content.emplace_back(ai::text_content("recovered after malformed call"));
+            co_return response;
+        }
+
+        const std::string malformed_raw =
+            "{\"api_key\":\"" + secret_ + "\" BROKEN";
+        auto malformed_parse = util::read_json<util::JsonValue>(malformed_raw);
+        if (malformed_parse) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Unknown,
+                "fake malformed arguments unexpectedly parsed"));
+        }
+
+        ai::ToolCallContent malformed;
+        malformed.id = "call-malformed";
+        malformed.name = "echo";
+        malformed.raw_arguments = malformed_raw;
+        malformed.arguments_valid = false;
+        malformed.argument_error = malformed_parse.error().detail;
+        response.content.emplace_back(std::move(malformed));
+
+        ai::ToolCallContent valid;
+        valid.id = "call-valid";
+        valid.name = "echo";
+        valid.arguments = util::JsonValue::object_t{};
+        valid.raw_arguments = "{}";
+        response.content.emplace_back(std::move(valid));
+        response.stop_reason = ai::AssistantStopReason::ToolUse;
+        co_return response;
+    }
+
+    std::vector<ai::StreamChatRequest> requests;
+
+private:
+    std::string secret_;
 };
 
 class PreflightRejectingChatClient final : public ai::StreamingChatClient {
@@ -983,6 +1037,91 @@ TEST_CASE(
     CHECK(resumed_terminal.stop_reason == ai::AssistantStopReason::Error);
     CHECK(resumed_terminal.error_message == terminal_error_message);
     CHECK(reopened->session->close().has_value());
+}
+
+TEST_CASE(
+    "SDK commits one redacted malformed-argument diagnostic to events context and history",
+    "[sdk][live-state][incremental-persistence][issue33]") {
+    TestPaths paths;
+    const std::string secret = "sk-FAKEPARSEREXCERPTCREDENTIAL123456";
+    auto client = std::make_unique<MalformedArgumentsChatClient>(secret);
+    auto* client_ptr = client.get();
+    auto tool_execution_count = std::make_shared<std::size_t>(0);
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::move(client);
+    opts.builtin_tools = coding_agent::SdkBuiltinTools{
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    opts.custom_tools.push_back(std::make_unique<FakeEchoTool>(tool_execution_count));
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+
+    std::optional<std::string> execution_end_diagnostic;
+    std::optional<std::string> message_end_diagnostic;
+    auto subscription = created->session->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event);
+                end != nullptr && end->tool_call_id == "call-malformed") {
+                execution_end_diagnostic = ai::text_from_content(end->result.content);
+            }
+            if (const auto* end = std::get_if<agent::MessageEndEvent>(&event);
+                end != nullptr && std::holds_alternative<ai::ToolResultMessage>(end->message)) {
+                const auto& result = std::get<ai::ToolResultMessage>(end->message);
+                if (result.tool_call_id == "call-malformed") {
+                    message_end_diagnostic = ai::text_from_content(result.content);
+                }
+            }
+            return {};
+        });
+    REQUIRE(subscription.has_value());
+
+    REQUIRE(created->session->prompt("exercise malformed and valid calls").has_value());
+    CHECK(*tool_execution_count == 1);
+    REQUIRE(execution_end_diagnostic.has_value());
+    REQUIRE(message_end_diagnostic.has_value());
+    CHECK(*message_end_diagnostic == *execution_end_diagnostic);
+    CHECK(execution_end_diagnostic->size() <= 4096);
+    CHECK(execution_end_diagnostic->find("echo") != std::string::npos);
+    CHECK(execution_end_diagnostic->find("arguments are malformed JSON") != std::string::npos);
+    CHECK(execution_end_diagnostic->find("[REDACTED]") != std::string::npos);
+    CHECK(execution_end_diagnostic->find(secret) == std::string::npos);
+
+    REQUIRE(client_ptr->requests.size() == 2);
+    std::optional<std::string> context_diagnostic;
+    for (const auto& message : client_ptr->requests[1].context.messages) {
+        if (const auto* result = std::get_if<ai::ToolResultMessage>(&message);
+            result != nullptr && result->tool_call_id == "call-malformed") {
+            context_diagnostic = ai::text_from_content(result->content);
+        }
+    }
+    REQUIRE(context_diagnostic.has_value());
+    CHECK(*context_diagnostic == *execution_end_diagnostic);
+
+    auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable.has_value());
+    std::optional<std::string> durable_diagnostic;
+    for (const auto& message : durable->messages) {
+        if (const auto* result = std::get_if<ai::ToolResultMessage>(&message);
+            result != nullptr && result->tool_call_id == "call-malformed") {
+            durable_diagnostic = ai::text_from_content(result->content);
+        }
+    }
+    REQUIRE(durable_diagnostic.has_value());
+    CHECK(*durable_diagnostic == *execution_end_diagnostic);
+
+    std::ifstream transcript(paths.session_file, std::ios::binary);
+    const std::string persisted(
+        (std::istreambuf_iterator<char>(transcript)),
+        std::istreambuf_iterator<char>());
+    CHECK(persisted.find(secret) == std::string::npos);
+    CHECK(created->session->close().has_value());
 }
 
 TEST_CASE(
