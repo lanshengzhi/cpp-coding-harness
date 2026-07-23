@@ -11,6 +11,10 @@ namespace cch::test {
     };
 }
 
+[[nodiscard]] inline util::JsonValue permissive_object_tool_argument_contract() {
+    return util::JsonValue::object_t{{"type", "object"}};
+}
+
 [[nodiscard]] inline util::JsonValue path_tool_argument_contract() {
     return util::JsonValue::object_t{
         {"type", "object"},

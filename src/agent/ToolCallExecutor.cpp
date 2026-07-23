@@ -1,5 +1,6 @@
 #include "ToolCallExecutor.hpp"
 
+#include "ToolArgumentPreparation.hpp"
 #include "../../include/cch/ai/Content.hpp"
 #include "../../include/cch/util/Error.hpp"
 #include "util/ExpectedMacros.hpp"
@@ -208,9 +209,14 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
         bool call_terminate = false;
         auto* tool = registry_.find(call.name);
         if (tool == nullptr) {
-            tool_result = error_tool_result(call, "unknown tool: " + call.name);
+            tool_result = error_tool_result(
+                call,
+                bounded_tool_argument_diagnostic(
+                    "unknown tool: " +
+                    bounded_tool_argument_component(call.name, 512) +
+                    " (argument location: root)"));
         } else {
-            auto arguments = arguments_for_call(call);
+            auto arguments = prepare_tool_arguments(tool->definition(), call);
             if (!arguments) {
                 tool_result = error_tool_result(call, arguments.error().detail);
             } else {
