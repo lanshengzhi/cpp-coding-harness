@@ -935,6 +935,128 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "streaming OpenAI client groups tool images after excluding model-hidden messages",
+    "[ai][provider][stream][u4][issue29]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {
+        sse(R"json({"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]})json"),
+        sse("[DONE]"),
+    };
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    config.compat.requires_assistant_after_tool_result = true;
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::ToolResultMessage first_tool;
+    first_tool.tool_call_id = "call-first";
+    first_tool.tool_name = "capture";
+    first_tool.content.emplace_back(ai::text_content("first capture"));
+    first_tool.content.emplace_back(ai::ImageContent{"Zmlyc3Q=", "image/png"});
+
+    ai::BashExecutionMessage excluded_bash;
+    excluded_bash.command = "cat hidden-command";
+    excluded_bash.output = "HIDDEN_OUTPUT";
+    excluded_bash.exclude_from_context = true;
+
+    ai::ToolResultMessage second_tool;
+    second_tool.tool_call_id = "call-second";
+    second_tool.tool_name = "capture";
+    second_tool.content.emplace_back(ai::ImageContent{"c2Vjb25k", "image/webp"});
+
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+    request.context.messages.emplace_back(std::move(first_tool));
+    request.context.messages.emplace_back(std::move(excluded_bash));
+    request.context.messages.emplace_back(std::move(second_tool));
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result);
+    auto body = captured_body_json(*transport);
+    const auto& messages = body.at("messages").get_array();
+    REQUIRE(messages.size() == 4);
+    CHECK(messages[0].at("role").get_string() == "tool");
+    CHECK(messages[0].at("tool_call_id").get_string() == "call-first");
+    CHECK(messages[0].at("content").get_string() == "first capture");
+    CHECK(messages[1].at("role").get_string() == "tool");
+    CHECK(messages[1].at("tool_call_id").get_string() == "call-second");
+    CHECK(messages[1].at("content").get_string() == "(see attached image)");
+    CHECK(messages[2].at("role").get_string() == "assistant");
+    CHECK(messages[2].at("content").get_string() ==
+          "I have processed the tool results.");
+    CHECK(messages[3].at("role").get_string() == "user");
+
+    const auto& attachment_parts = messages[3].at("content").get_array();
+    REQUIRE(attachment_parts.size() == 3);
+    CHECK(attachment_parts[1].at("image_url").at("url").get_string() ==
+          "data:image/png;base64,Zmlyc3Q=");
+    CHECK(attachment_parts[2].at("image_url").at("url").get_string() ==
+          "data:image/webp;base64,c2Vjb25k");
+
+    const auto& request_body = transport->requests[0].body;
+    CHECK(request_body.find("hidden-command") == std::string::npos);
+    CHECK(request_body.find("HIDDEN_OUTPUT") == std::string::npos);
+}
+
+TEST_CASE(
+    "streaming OpenAI client lets model-facing messages split tool image groups",
+    "[ai][provider][stream][u4][issue29]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {
+        sse(R"json({"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]})json"),
+        sse("[DONE]"),
+    };
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::ToolResultMessage first_tool;
+    first_tool.tool_call_id = "call-first";
+    first_tool.tool_name = "capture";
+    first_tool.content.emplace_back(ai::ImageContent{"Zmlyc3Q=", "image/png"});
+
+    ai::BashExecutionMessage visible_bash;
+    visible_bash.command = "printf visible";
+    visible_bash.output = "visible output";
+
+    ai::ToolResultMessage second_tool;
+    second_tool.tool_call_id = "call-second";
+    second_tool.tool_name = "capture";
+    second_tool.content.emplace_back(ai::ImageContent{"c2Vjb25k", "image/webp"});
+
+    ai::StreamChatRequest request;
+    request.model = "gpt-test";
+    request.context.messages.emplace_back(std::move(first_tool));
+    request.context.messages.emplace_back(std::move(visible_bash));
+    request.context.messages.emplace_back(std::move(second_tool));
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result);
+    auto body = captured_body_json(*transport);
+    const auto& messages = body.at("messages").get_array();
+    REQUIRE(messages.size() == 5);
+    CHECK(messages[0].at("role").get_string() == "tool");
+    CHECK(messages[1].at("role").get_string() == "user");
+    CHECK(messages[2].at("role").get_string() == "user");
+    CHECK(messages[2].at("content").get_string().find("printf visible") !=
+          std::string::npos);
+    CHECK(messages[3].at("role").get_string() == "tool");
+    CHECK(messages[4].at("role").get_string() == "user");
+
+    const auto& first_attachment = messages[1].at("content").get_array();
+    REQUIRE(first_attachment.size() == 2);
+    CHECK(first_attachment[1].at("image_url").at("url").get_string() ==
+          "data:image/png;base64,Zmlyc3Q=");
+    const auto& second_attachment = messages[4].at("content").get_array();
+    REQUIRE(second_attachment.size() == 2);
+    CHECK(second_attachment[1].at("image_url").at("url").get_string() ==
+          "data:image/webp;base64,c2Vjb25k");
+}
+
+TEST_CASE(
     "resumed image messages produce the same OpenAI request as fresh content",
     "[ai][provider][stream][session][issue22][issue28]") {
     ai::UserMessage user;

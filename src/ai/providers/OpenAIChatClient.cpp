@@ -375,22 +375,27 @@ void append_tool_result_assistant_bridge(
         dto.messages.push_back(ai::glaze::OpenAIChatMessageDto{role, *request.context.system_prompt, std::nullopt, std::nullopt, std::nullopt});
         last_emitted_role = role;
     }
-    for (std::size_t index = 0; index < request.context.messages.size(); ++index) {
-        const auto& message = request.context.messages[index];
+    std::vector<const ai::MessageVariant*> model_context_messages;
+    model_context_messages.reserve(request.context.messages.size());
+    for (const auto& message : request.context.messages) {
         if (const auto* bash = std::get_if<ai::BashExecutionMessage>(&message);
             bash && bash->exclude_from_context) {
             continue;
         }
+        model_context_messages.push_back(&message);
+    }
 
+    for (std::size_t index = 0; index < model_context_messages.size(); ++index) {
+        const auto& message = *model_context_messages[index];
         if (std::holds_alternative<ai::ToolResultMessage>(message)) {
             std::vector<ai::glaze::OpenAIContentPartDto> image_parts;
             std::size_t group_end = index;
             for (;
-                 group_end < request.context.messages.size() &&
-                 std::holds_alternative<ai::ToolResultMessage>(request.context.messages[group_end]);
+                 group_end < model_context_messages.size() &&
+                 std::holds_alternative<ai::ToolResultMessage>(*model_context_messages[group_end]);
                  ++group_end) {
                 const auto& tool = std::get<ai::ToolResultMessage>(
-                    request.context.messages[group_end]);
+                    *model_context_messages[group_end]);
                 dto.messages.push_back(tool_result_to_openai(tool, config.compat));
                 for (const auto& block : tool.content) {
                     if (const auto* image = std::get_if<ai::ImageContent>(&block)) {
