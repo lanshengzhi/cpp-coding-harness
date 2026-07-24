@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../include/cch/util/Error.hpp"
+#include "UniqueFd.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -69,7 +70,7 @@ inline util::ExpectedVoid write_atomic_file(const std::filesystem::path& target,
     if (dir_fd == -1) {
         return std::unexpected(write_error("could not open target parent directory: " + std::string(std::strerror(errno))));
     }
-    auto dir_guard = std::unique_ptr<int, void (*)(int*)>(new int(dir_fd), [](int* p) { if (p && *p != -1) ::close(*p); delete p; });
+    const UniqueFd dir_guard(dir_fd);
 
     auto temp_filename = temp.filename().string();
     int flags = O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC;

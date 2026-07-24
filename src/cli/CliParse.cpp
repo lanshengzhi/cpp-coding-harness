@@ -34,8 +34,8 @@ std::string normalize_parse_error(const CLI::ParseError& error) {
 
     const std::string singular = "The following argument was not expected: ";
     const std::string plural = "The following arguments were not expected: ";
-    const std::size_t prefix_size = message.rfind(singular, 0) == 0 ? singular.size()
-        : (message.rfind(plural, 0) == 0 ? plural.size() : std::string::npos);
+    const std::size_t prefix_size = message.starts_with(singular) ? singular.size()
+        : (message.starts_with(plural) ? plural.size() : std::string::npos);
     if (prefix_size != std::string::npos) {
         const auto unexpected = message.substr(prefix_size);
         if (!unexpected.empty() && unexpected.front() == '-') {

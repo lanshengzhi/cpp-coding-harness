@@ -27,27 +27,27 @@ struct JsonValue {
     JsonValue(array_t value) : data(std::move(value)) {}
     JsonValue(object_t value) : data(std::move(value)) {}
 
-    template <class T>
+    template <typename T>
     [[nodiscard]] T& get() {
         return std::get<T>(data);
     }
 
-    template <class T>
+    template <typename T>
     [[nodiscard]] const T& get() const {
         return std::get<T>(data);
     }
 
-    template <class T>
+    template <typename T>
     [[nodiscard]] T* get_if() noexcept {
         return std::get_if<T>(&data);
     }
 
-    template <class T>
+    template <typename T>
     [[nodiscard]] const T* get_if() const noexcept {
         return std::get_if<T>(&data);
     }
 
-    template <class T>
+    template <typename T>
     [[nodiscard]] bool holds() const noexcept {
         return std::holds_alternative<T>(data);
     }

@@ -142,9 +142,9 @@ util::Expected<std::filesystem::path> resolve_session_dir_value(
 
     std::filesystem::path resolved;
     // pi's normalizePath expands only a leading "~" or "~/" ("~\\" on Windows).
-    const bool needs_home = value == "~" || value.rfind("~/", 0) == 0
+    const bool needs_home = value == "~" || value.starts_with("~/")
 #if defined(_WIN32)
-                            || value.rfind("~\\", 0) == 0
+                            || value.starts_with("~\\")
 #endif
         ;
     if (needs_home && home_dir.empty()) {

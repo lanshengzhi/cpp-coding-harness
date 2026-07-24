@@ -158,7 +158,7 @@ public:
             }
         }
 
-        if (prompt.rfind("read ", 0) == 0) {
+        if (prompt.starts_with("read ")) {
             const auto path = prompt.substr(5);
             auto raw = make_tool_arguments("path", path);
             if (!raw) {
@@ -178,7 +178,7 @@ public:
             CCH_TRY_VOID(emit_complete_lifecycle(assistant, sink));
             co_return assistant;
         }
-        if (prompt.rfind("bash ", 0) == 0) {
+        if (prompt.starts_with("bash ")) {
             const auto command = prompt.substr(5);
             auto raw = make_tool_arguments("command", command);
             if (!raw) {

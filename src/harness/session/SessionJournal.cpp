@@ -1,6 +1,8 @@
 #include "SessionJournal.hpp"
 #include "SessionJournalTestHooks.hpp"
 
+#include "../UniqueFd.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cerrno>
@@ -362,8 +364,7 @@ util::ExpectedVoid SessionJournal::append_line(std::string_view line) const {
             opened.error().message + ": " + opened.error().detail));
     }
     const int fd = *opened;
-    auto fd_guard = std::unique_ptr<int, void (*)(int*)>(
-        new int(fd), [](int* p) { if (p && *p != -1) ::close(*p); delete p; });
+    UniqueFd fd_guard(fd);
 
     const char* data = line.data();
     std::size_t remaining = line.size();
@@ -445,8 +446,7 @@ util::Expected<std::vector<std::string>> SessionJournal::read_lines() const {
         return std::unexpected(opened.error());
     }
     const int fd = *opened;
-    auto fd_guard = std::unique_ptr<int, void (*)(int*)>(
-        new int(fd), [](int* p) { if (p && *p != -1) ::close(*p); delete p; });
+    const UniqueFd fd_guard(fd);
 
     auto read_contents = read_file_contents(fd);
     if (!read_contents) {
@@ -535,8 +535,7 @@ util::ExpectedVoid SessionJournal::ensure_private_permissions(
             opened.error().message + ": " + opened.error().detail));
     }
     const int fd = *opened;
-    auto fd_guard = std::unique_ptr<int, void (*)(int*)>(
-        new int(fd), [](int* p) { if (p && *p != -1) ::close(*p); delete p; });
+    const UniqueFd fd_guard(fd);
 
     if (auto perms = set_fd_private_permissions(fd); !perms) {
         if (!existing) {

@@ -181,7 +181,7 @@ PromptTemplateLoadResult loadPromptTemplates(
             // We can compute it from the workspace root.
             std::string relative_path;
             const auto& root = fs.root().string();
-            if (entry.path.compare(0, root.size(), root) == 0) {
+            if (entry.path.starts_with(root)) {
                 relative_path = entry.path.substr(root.size());
                 // Strip leading slash.
                 if (!relative_path.empty() && relative_path.front() == '/') {

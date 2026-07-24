@@ -20,11 +20,11 @@
 namespace cch::ai::providers {
 namespace {
 
-template <class... Ts>
+template <typename... Ts>
 struct Overloaded : Ts... {
     using Ts::operator()...;
 };
-template <class... Ts>
+template <typename... Ts>
 Overloaded(Ts...) -> Overloaded<Ts...>;
 
 struct ToolCallAccumulator {

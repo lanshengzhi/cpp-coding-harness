@@ -135,11 +135,11 @@ namespace detail {
 
 inline constexpr std::int64_t kMinimumRealUnixEpochMilliseconds = 1'000'000'000'000;
 
-template <class... Ts>
+template <typename... Ts>
 struct Overloaded : Ts... {
     using Ts::operator()...;
 };
-template <class... Ts>
+template <typename... Ts>
 Overloaded(Ts...) -> Overloaded<Ts...>;
 
 [[nodiscard]] inline util::Error json_contract_error(std::string message, std::string detail, std::string_view context) {

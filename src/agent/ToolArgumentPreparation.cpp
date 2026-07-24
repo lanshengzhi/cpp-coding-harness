@@ -955,7 +955,7 @@ struct ValidationFailure {
     const std::size_t digits_before_decimal =
         (decimal_point == std::string::npos ? exponent_marker : decimal_point) - mantissa_start;
     std::string digits = shortest.substr(mantissa_start, exponent_marker - mantissa_start);
-    digits.erase(std::remove(digits.begin(), digits.end(), '.'), digits.end());
+    std::erase(digits, '.');
 
     // ECMAScript Number::toString uses fixed notation for this exponent range,
     // while std::to_chars(general) is permitted to choose scientific notation.
@@ -1099,6 +1099,16 @@ struct ValidationFailure {
     return false;
 }
 
+// The regexes below constrain every matched group to digits, so parsing
+// a matched group cannot fail and the from_chars result needs no check.
+template <typename T>
+[[nodiscard]] T parse_matched_number(const std::ssub_match& match) {
+    const char* const first = &*match.first;
+    T value{};
+    std::from_chars(first, first + match.length(), value);
+    return value;
+}
+
 [[nodiscard]] bool is_leap_year(int year) {
     return year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
 }
@@ -1108,9 +1118,9 @@ struct ValidationFailure {
     std::smatch match;
     const std::string text(value);
     if (!std::regex_match(text, match, expression)) return false;
-    const int year = std::stoi(match[1].str());
-    const int month = std::stoi(match[2].str());
-    const int day = std::stoi(match[3].str());
+    const int year = parse_matched_number<int>(match[1]);
+    const int month = parse_matched_number<int>(match[2]);
+    const int day = parse_matched_number<int>(match[3]);
     constexpr std::array<int, 13> days{0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
     if (month < 1 || month > 12 || day < 1) return false;
     const int maximum = month == 2 && is_leap_year(year) ? 29 : days[month];
@@ -1123,12 +1133,12 @@ struct ValidationFailure {
     std::smatch match;
     const std::string text(value);
     if (!std::regex_match(text, match, expression)) return false;
-    const int hour = std::stoi(match[1].str());
-    const int minute = std::stoi(match[2].str());
-    const double second = std::stod(match[3].str());
+    const int hour = parse_matched_number<int>(match[1]);
+    const int minute = parse_matched_number<int>(match[2]);
+    const double second = parse_matched_number<double>(match[3]);
     const int zone_sign = match[4].str() == "-" ? -1 : 1;
-    const int zone_hour = match[5].matched ? std::stoi(match[5].str()) : 0;
-    const int zone_minute = match[6].matched ? std::stoi(match[6].str()) : 0;
+    const int zone_hour = match[5].matched ? parse_matched_number<int>(match[5]) : 0;
+    const int zone_minute = match[6].matched ? parse_matched_number<int>(match[6]) : 0;
     if (zone_hour > 23 || zone_minute > 59) return false;
     if (hour <= 23 && minute <= 59 && second < 60) return true;
     const int utc_minute = minute - zone_minute * zone_sign;
@@ -1647,9 +1657,8 @@ struct ValidationFailure {
     std::size_t start = 0;
     for (std::size_t index = 0; index < octets.size(); ++index) {
         const auto end = host.find('.', start);
-        octets[index] = std::stoi(std::string(host.substr(
-            start,
-            end == std::string_view::npos ? host.size() - start : end - start)));
+        const auto length = end == std::string_view::npos ? host.size() - start : end - start;
+        std::from_chars(host.data() + start, host.data() + start + length, octets[index]);
         start = end == std::string_view::npos ? host.size() : end + 1;
     }
     if (octets[0] == 10 || octets[0] == 127 ||

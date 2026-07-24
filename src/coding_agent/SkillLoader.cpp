@@ -301,7 +301,7 @@ void loadSkillsFromDir(
         } else if (kind == harness::FileKind::File &&
                    includeRootFiles &&
                    entryName.size() > 3 &&
-                   entryName.compare(entryName.size() - 3, 3, ".md") == 0) {
+                   entryName.ends_with(".md")) {
             // Root-level .md file treated as a skill (global dir behavior).
             auto fileResult = loadSkillFromFile(fs, childPath);
             for (auto& skill : fileResult.skills) {

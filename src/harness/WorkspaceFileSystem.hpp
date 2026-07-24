@@ -3,6 +3,7 @@
 #include "../../include/cch/harness/ExecutionEnv.hpp"
 #include "../../include/cch/util/Error.hpp"
 #include "AtomicWrite.hpp"
+#include "UniqueFd.hpp"
 
 #include <filesystem>
 #include <memory>
@@ -82,7 +83,7 @@ public:
         if (!parent_fd) {
             return std::unexpected(parent_fd.error());
         }
-        auto parent_guard = make_fd_guard(*parent_fd);
+        UniqueFd parent_guard(*parent_fd);
 
         auto filename = target->filename().string();
         int fd = ::openat(*parent_fd, filename.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
@@ -92,7 +93,7 @@ public:
             }
             return std::unexpected(workspace_error("could not open file for reading: " + requested));
         }
-        auto fd_guard = make_fd_guard(fd);
+        UniqueFd fd_guard(fd);
 
         struct stat st {};
         if (::fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
@@ -158,7 +159,7 @@ public:
         if (!parent_fd) {
             return std::unexpected(parent_fd.error());
         }
-        auto parent_guard = make_fd_guard(*parent_fd);
+        UniqueFd parent_guard(*parent_fd);
         (void)parent_guard;
         auto target_status = std::filesystem::symlink_status(*target);
         if (std::filesystem::is_symlink(target_status)) {
@@ -637,15 +638,6 @@ private:
     }
 
 #if defined(__unix__) || defined(__APPLE__)
-    [[nodiscard]] static std::unique_ptr<int, void (*)(int*)> make_fd_guard(int fd) {
-        return std::unique_ptr<int, void (*)(int*)>(new int(fd), [](int* p) {
-            if (p && *p != -1) {
-                ::close(*p);
-            }
-            delete p;
-        });
-    }
-
     [[nodiscard]] util::Expected<int> open_workspace_root() const {
         int fd = ::open(root_.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
         if (fd == -1) {
@@ -661,6 +653,7 @@ private:
         if (!root_fd) {
             return std::unexpected(root_fd.error());
         }
+        UniqueFd root_guard(*root_fd);
 
         auto parent = target.parent_path();
         if (parent.empty() || std::filesystem::weakly_canonical(parent) == root_) {
@@ -680,8 +673,8 @@ private:
             return dup_fd;
         }
 
-        int current_fd = *root_fd;
-        auto current_guard = make_fd_guard(current_fd);
+        int current_fd = root_guard.release();
+        UniqueFd current_guard(current_fd);
         for (const auto& part : rel) {
             if (part == "." || part.empty()) {
                 continue;
@@ -703,14 +696,11 @@ private:
                     return std::unexpected(workspace_error("could not open parent directory: " + std::string(std::strerror(errno))));
                 }
             }
-            if (current_fd != *root_fd) {
-                ::close(current_fd);
-            }
+            current_guard.reset(next_fd);
             current_fd = next_fd;
-            current_guard = make_fd_guard(current_fd);
         }
 
-        return *current_guard.release();
+        return current_guard.release();
     }
 
     [[nodiscard]] util::Expected<void> create_parent_directories(const std::filesystem::path& target) const {
@@ -718,7 +708,7 @@ private:
         if (!parent_fd) {
             return std::unexpected(parent_fd.error());
         }
-        auto guard = make_fd_guard(*parent_fd);
+        const UniqueFd guard(*parent_fd);
         (void)guard;
         return {};
     }
