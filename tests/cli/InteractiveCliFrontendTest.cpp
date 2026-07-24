@@ -509,8 +509,8 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "interactive text frontend reports a prompt failure on the error stream",
-    "[cli][frontend]") {
+    "interactive text frontend continues after a weak subscriber failure",
+    "[cli][frontend][issue36]") {
     tests::TempWorkspace workspace;
     auto session = make_session(workspace);
 
@@ -537,8 +537,12 @@ TEST_CASE(
             .input = input, .output = output, .error = error,
             .repl = false, .prompt = "hello"}};
 
-    CHECK(frontend.run() == 1);
-    CHECK(error.str().find("loop failed: synthetic subscriber failure") != std::string::npos);
+    CHECK(frontend.run() == 0);
+    CHECK(error.str().empty());
+    CHECK(output.str().find("[model-request]") != std::string::npos);
+    CHECK(output.str().find("[assistant]") != std::string::npos);
+    CHECK(output.str().find("[completed]") != std::string::npos);
+    CHECK_FALSE(static_cast<bool>(*rejecting));
 }
 
 TEST_CASE(

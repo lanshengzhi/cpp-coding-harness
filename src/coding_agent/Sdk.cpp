@@ -30,22 +30,19 @@ private:
 // Pimpl definitions
 // ─────────────────────────────────────────────────────────────────────────────
 
-struct EventSubscriptionAnchor {
-    runtime::AgentSessionRuntime* runtime{nullptr};
-};
-
 struct EventSubscription::Impl {
-    int subscriber_index{-1};
-    std::weak_ptr<EventSubscriptionAnchor> anchor;
+    explicit Impl(agent::AgentEventSubscription subscription_value)
+        : subscription(std::move(subscription_value)) {}
+
+    agent::AgentEventSubscription subscription;
 };
 
 struct AgentSession::Impl {
-    enum class State { Open, RunningPrompt, Closed };
+    enum class State { Open, RunningPrompt, Closing, Closed };
 
     State state{State::Closed};
     std::optional<std::filesystem::path> session_path;
     std::unique_ptr<runtime::AgentSessionRuntime> runtime;
-    std::shared_ptr<EventSubscriptionAnchor> subscription_anchor;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -69,18 +66,12 @@ EventSubscription::~EventSubscription() {
 
 void EventSubscription::unsubscribe() {
     if (!impl_) return;
-    if (auto anchor = impl_->anchor.lock();
-        anchor && anchor->runtime && impl_->subscriber_index >= 0) {
-        anchor->runtime->unsubscribe(impl_->subscriber_index);
-    }
+    impl_->subscription.unsubscribe();
     impl_.reset();
 }
 
 EventSubscription::operator bool() const {
-    if (!impl_ || impl_->subscriber_index < 0) return false;
-    const auto anchor = impl_->anchor.lock();
-    return anchor && anchor->runtime &&
-           anchor->runtime->is_subscribed(impl_->subscriber_index);
+    return impl_ && static_cast<bool>(impl_->subscription);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -119,26 +110,32 @@ util::ExpectedVoid detail::AgentSessionPromptAccess::prompt(
     std::string text,
     bool expand_prompt_templates,
     std::move_only_function<util::ExpectedVoid()> on_preflight_accepted) {
-    if (!session.impl_) {
+    // Retain the implementation independently of the public handle so close or
+    // destruction from an observer cannot invalidate the active callback stack.
+    auto impl = session.impl_;
+    if (!impl) {
         return std::unexpected(util::make_error(util::ErrorCode::Validation, "session is not initialized"));
     }
-    if (session.impl_->state == AgentSession::Impl::State::Closed) {
+    if (impl->state == AgentSession::Impl::State::Closing ||
+        impl->state == AgentSession::Impl::State::Closed) {
         return std::unexpected(util::make_error(util::ErrorCode::Validation, "session is closed"));
     }
-    if (session.impl_->state == AgentSession::Impl::State::RunningPrompt) {
+    if (impl->state == AgentSession::Impl::State::RunningPrompt) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "session is busy (prompt already in flight)"));
     }
 
-    session.impl_->state = AgentSession::Impl::State::RunningPrompt;
-    ScopeExit restore_state{[&session] {
-        if (session.impl_ && session.impl_->state != AgentSession::Impl::State::Closed) {
-            session.impl_->state = AgentSession::Impl::State::Open;
+    impl->state = AgentSession::Impl::State::RunningPrompt;
+    ScopeExit restore_state{[impl] {
+        if (impl->state == AgentSession::Impl::State::Closing) {
+            impl->state = AgentSession::Impl::State::Closed;
+        } else if (impl->state == AgentSession::Impl::State::RunningPrompt) {
+            impl->state = AgentSession::Impl::State::Open;
         }
     }};
 
-    return session.impl_->runtime->run_prompt(
+    return impl->runtime->run_prompt(
         std::move(text),
         expand_prompt_templates,
         std::move(on_preflight_accepted));
@@ -148,21 +145,21 @@ util::Expected<EventSubscription> AgentSession::subscribe(agent::AgentEventSink 
     if (!impl_) {
         return std::unexpected(util::make_error(util::ErrorCode::Validation, "session is not initialized"));
     }
-    if (impl_->state == AgentSession::Impl::State::Closed) {
+    if (impl_->state == AgentSession::Impl::State::Closing ||
+        impl_->state == AgentSession::Impl::State::Closed) {
         return std::unexpected(util::make_error(util::ErrorCode::Validation, "session is closed"));
     }
     if (!sink) {
         return std::unexpected(util::make_error(util::ErrorCode::Validation, "event sink is empty"));
     }
 
-    int id = impl_->runtime->subscribe(std::move(sink));
-    if (id < 0) {
-        return std::unexpected(util::make_error(util::ErrorCode::Validation, "failed to subscribe"));
+    auto subscribed = impl_->runtime->subscribe(std::move(sink));
+    if (!subscribed) {
+        return std::unexpected(subscribed.error());
     }
 
-    auto sub_impl = std::make_unique<EventSubscription::Impl>();
-    sub_impl->subscriber_index = id;
-    sub_impl->anchor = impl_->subscription_anchor;
+    auto sub_impl = std::make_unique<EventSubscription::Impl>(
+        std::move(*subscribed));
 
     EventSubscription sub;
     sub.impl_ = std::move(sub_impl);
@@ -203,14 +200,19 @@ const std::filesystem::path& AgentSession::workspace() const {
 }
 
 util::ExpectedVoid AgentSession::close() {
-    if (!impl_) return {};
-    if (impl_->state == AgentSession::Impl::State::Closed) return {};
-
-    impl_->state = AgentSession::Impl::State::Closed;
-    if (impl_->subscription_anchor) {
-        impl_->subscription_anchor->runtime = nullptr;
+    auto impl = impl_;
+    if (!impl) return {};
+    if (impl->state == AgentSession::Impl::State::Closing ||
+        impl->state == AgentSession::Impl::State::Closed) {
+        return {};
     }
-    impl_->runtime->close();
+
+    if (impl->state == AgentSession::Impl::State::RunningPrompt) {
+        impl->state = AgentSession::Impl::State::Closing;
+    } else {
+        impl->state = AgentSession::Impl::State::Closed;
+    }
+    impl->runtime->close();
     return {};
 }
 
@@ -219,7 +221,9 @@ bool AgentSession::is_open() const {
 }
 
 bool AgentSession::is_busy() const {
-    return impl_ && impl_->state == AgentSession::Impl::State::RunningPrompt;
+    return impl_ &&
+           (impl_->state == AgentSession::Impl::State::RunningPrompt ||
+            impl_->state == AgentSession::Impl::State::Closing);
 }
 
 const std::vector<Skill>& AgentSession::skills() const {
@@ -247,12 +251,10 @@ public:
         }
 
         auto session = std::make_unique<AgentSession>();
-        session->impl_ = std::make_unique<AgentSession::Impl>();
+        session->impl_ = std::make_shared<AgentSession::Impl>();
         session->impl_->state = AgentSession::Impl::State::Open;
         session->impl_->session_path = factory_result->session_path;
         session->impl_->runtime = std::move(factory_result->runtime);
-        session->impl_->subscription_anchor = std::make_shared<EventSubscriptionAnchor>(
-            session->impl_->runtime.get());
 
         CreateAgentSessionResult result;
         result.session = std::move(session);

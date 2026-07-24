@@ -66,6 +66,14 @@ public:
     [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> prompt(
         std::string user_prompt);
 
+    /// Execute one prompt with a named strong event commitment capability.
+    /// For each event, Agent state advances first, weak observers run second,
+    /// and the commitment runs last. A commitment failure stops the run without
+    /// rolling back live state and is returned unwrapped to the caller.
+    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> prompt(
+        std::string user_prompt,
+        AgentEventCommitter commitment);
+
     /// Return an independent passive snapshot of current live Agent state.
     [[nodiscard]] AgentState state() const;
 
@@ -74,6 +82,11 @@ public:
     /// vetoing Agent progress.
     [[nodiscard]] util::Expected<AgentEventSubscription> subscribe(
         AgentEventSink sink);
+
+    /// Deactivate all weak observers. Idempotent. A run-start observer
+    /// snapshot remains alive for callback-stack safety but receives no later
+    /// events after this call.
+    void clear_subscriptions();
 
     struct Impl;
 

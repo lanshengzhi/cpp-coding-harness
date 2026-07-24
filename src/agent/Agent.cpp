@@ -40,7 +40,8 @@ struct Agent::Impl {
     struct Subscriber {
         std::size_t id{};
         AgentEventSink sink;
-        bool active{true};
+        bool registered{true};
+        bool delivery_enabled{true};
     };
 
     Impl(
@@ -57,17 +58,34 @@ struct Agent::Impl {
     }
 
     [[nodiscard]] util::ExpectedVoid process_event(
-        const AgentLifecycleEvent& event) {
+        const AgentLifecycleEvent& event,
+        const std::vector<std::shared_ptr<Subscriber>>& run_subscribers,
+        AgentEventCommitter& commitment,
+        std::optional<util::Error>& commitment_failure) {
         reduce_state(event);
 
+        std::optional<AgentLifecycleEvent> invocation_event;
+        const AgentLifecycleEvent* delivered_event = &event;
         if (std::holds_alternative<AgentEndEvent>(event)) {
             AgentEndEvent invocation_end;
             invocation_end.messages.assign(
                 state.messages.begin() + static_cast<std::ptrdiff_t>(invocation_message_offset),
                 state.messages.end());
-            return notify(AgentLifecycleEvent{std::move(invocation_end)});
+            invocation_event.emplace(std::move(invocation_end));
+            delivered_event = &*invocation_event;
         }
-        return notify(event);
+
+        // Weak observers cannot veto progress. The separately named strong
+        // commitment runs only after state and every observer saw the event.
+        (void)notify(*delivered_event, run_subscribers);
+        if (!commitment) {
+            return {};
+        }
+        auto committed = commitment(*delivered_event);
+        if (!committed && !commitment_failure) {
+            commitment_failure = committed.error();
+        }
+        return committed;
     }
 
     void reduce_state(const AgentLifecycleEvent& event) {
@@ -130,56 +148,75 @@ struct Agent::Impl {
     }
 
     [[nodiscard]] util::ExpectedVoid notify(
-        const AgentLifecycleEvent& event) {
-        const auto current_subscribers = subscribers;
-        for (const auto& subscriber : current_subscribers) {
-            if (!subscriber->active || !subscriber->sink) {
+        const AgentLifecycleEvent& event,
+        const std::vector<std::shared_ptr<Subscriber>>& run_subscribers) {
+        for (const auto& subscriber : run_subscribers) {
+            if (!subscriber->delivery_enabled || !subscriber->sink) {
                 continue;
             }
             try {
                 if (auto observed = subscriber->sink(event); !observed) {
                     record_observer_diagnostic(observed.error());
-                    subscriber->active = false;
+                    subscriber->registered = false;
+                    subscriber->delivery_enabled = false;
                 }
             } catch (const std::exception& exception) {
                 record_observer_diagnostic(util::make_error(
                     util::ErrorCode::Unknown,
                     exception.what()));
-                subscriber->active = false;
+                subscriber->registered = false;
+                subscriber->delivery_enabled = false;
             } catch (...) {
                 record_observer_diagnostic(util::make_error(
                     util::ErrorCode::Unknown,
                     "unknown exception"));
-                subscriber->active = false;
+                subscriber->registered = false;
+                subscriber->delivery_enabled = false;
             }
         }
+        if (!active_run) {
+            remove_unregistered_subscribers();
+        }
+        return {};
+    }
+
+    void remove_unregistered_subscribers() {
         std::erase_if(
             subscribers,
             [](const std::shared_ptr<Subscriber>& subscriber) {
-                return !subscriber->active;
+                return !subscriber->registered;
             });
-        return {};
     }
 
     void unsubscribe(std::size_t id) {
         for (const auto& subscriber : subscribers) {
             if (subscriber->id == id) {
-                subscriber->active = false;
+                // Run-start snapshots retain this observer through the current
+                // run. Removing registration affects the next run.
+                subscriber->registered = false;
                 break;
             }
         }
-        std::erase_if(
-            subscribers,
-            [](const std::shared_ptr<Subscriber>& subscriber) {
-                return !subscriber->active;
-            });
+        // Keep unregistered entries reachable while a run snapshot may still
+        // own them so a reentrant close can disable later delivery.
+        if (!active_run) {
+            remove_unregistered_subscribers();
+        }
+    }
+
+    void clear_subscriptions() {
+        for (const auto& subscriber : subscribers) {
+            subscriber->registered = false;
+            subscriber->delivery_enabled = false;
+        }
+        subscribers.clear();
     }
 
     [[nodiscard]] bool is_subscribed(std::size_t id) const {
         return std::ranges::any_of(
             subscribers,
             [id](const std::shared_ptr<Subscriber>& subscriber) {
-                return subscriber->id == id && subscriber->active;
+                return subscriber->id == id && subscriber->registered;
             });
     }
 
@@ -264,6 +301,12 @@ Agent::~Agent() {
 
 boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
     std::string user_prompt) {
+    co_return co_await prompt(std::move(user_prompt), {});
+}
+
+boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
+    std::string user_prompt,
+    AgentEventCommitter commitment) {
     auto impl = impl_;
     if (!impl) {
         co_return std::unexpected(util::make_error(
@@ -281,6 +324,9 @@ boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
     impl->state.streaming_message.reset();
     impl->state.pending_tool_call_ids.clear();
     impl->invocation_message_offset = impl->state.messages.size();
+    // Subscription changes made from callbacks take effect on the next run.
+    // Shared entries keep this run's move-only sinks alive without copying.
+    const auto run_subscribers = impl->subscribers;
 
     const auto finish_run = [impl] {
         impl->state.model = impl->loop.current_model();
@@ -289,15 +335,19 @@ boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
         impl->state.pending_tool_call_ids.clear();
         impl->state.is_running = false;
         impl->active_run = false;
+        impl->remove_unregistered_subscribers();
     };
 
+    std::optional<util::Error> commitment_failure;
     std::optional<util::Expected<AsyncAgentRunResult>> result;
     try {
         result = co_await impl->loop.continue_with(
             impl->state.messages,
             std::move(user_prompt),
-            [impl](const AgentLifecycleEvent& event) {
-                return impl->process_event(event);
+            [impl, run_subscribers, &commitment, &commitment_failure](
+                const AgentLifecycleEvent& event) {
+                return impl->process_event(
+                    event, run_subscribers, commitment, commitment_failure);
             });
     } catch (const std::exception& exception) {
         finish_run();
@@ -321,6 +371,9 @@ boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
     }
     finish_run();
 
+    if (commitment_failure) {
+        co_return std::unexpected(std::move(*commitment_failure));
+    }
     if (!*result) {
         co_return std::unexpected(result->error());
     }
@@ -346,7 +399,7 @@ util::Expected<AgentEventSubscription> Agent::subscribe(
 
     const auto id = impl_->next_subscriber_id++;
     impl_->subscribers.push_back(std::make_shared<Impl::Subscriber>(
-        Impl::Subscriber{id, std::move(sink), true}));
+        Impl::Subscriber{id, std::move(sink), true, true}));
 
     auto subscription_impl = std::make_unique<AgentEventSubscription::Impl>();
     subscription_impl->id = id;
@@ -355,6 +408,12 @@ util::Expected<AgentEventSubscription> Agent::subscribe(
     AgentEventSubscription subscription;
     subscription.impl_ = std::move(subscription_impl);
     return subscription;
+}
+
+void Agent::clear_subscriptions() {
+    if (impl_) {
+        impl_->clear_subscriptions();
+    }
 }
 
 } // namespace cch::agent

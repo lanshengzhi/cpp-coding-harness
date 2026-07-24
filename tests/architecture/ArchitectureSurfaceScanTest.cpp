@@ -141,6 +141,28 @@ TEST_CASE("stateful Agent stays independent of coding-agent product concerns", "
     CHECK(combined.find("CliConfig") == std::string::npos);
 }
 
+TEST_CASE(
+    "AgentSessionRuntime composes the stateful Agent without a second loop or live history",
+    "[architecture][agent][session][issue36]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto runtime_header = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "AgentSessionRuntime.hpp");
+    const auto runtime_source = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "AgentSessionRuntime.cpp");
+
+    const auto direct_loop_call = std::string{"continue_"} + "with(";
+    const auto duplicate_registry = std::string{"subscribers"} + "_";
+
+    CHECK(runtime_header.find("agent::Agent") != std::string::npos);
+    CHECK(runtime_source.find("agent_->prompt(") != std::string::npos);
+    CHECK(runtime_header.find("AsyncAgentLoop") == std::string::npos);
+    CHECK(runtime_source.find(direct_loop_call) == std::string::npos);
+    CHECK(runtime_header.find(duplicate_registry) == std::string::npos);
+    // OpenSession history is resume input only and is moved exactly once into
+    // AgentInitialState; prompt execution never advances or copies it back.
+    CHECK(count_occurrences(runtime_source, "session_.history") == 1);
+}
+
 TEST_CASE("provider DTOs stay out of the public contract surface", "[architecture][u4]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
     CHECK_FALSE(std::filesystem::exists(source_root / "include" / "cch" / "ai" / "glaze" / "ProviderDtos.hpp"));

@@ -332,7 +332,9 @@ private:
     friend class detail::AgentSessionPromptAccess;
     friend class detail::AgentSessionRuntimeAccess;
 
-    std::unique_ptr<Impl> impl_;
+    // Shared only with an active prompt frame so reentrant close/destruction
+    // cannot invalidate runtime capabilities before callbacks quiesce.
+    std::shared_ptr<Impl> impl_;
 };
 
 // ── Factory ──────────────────────────────────────────────────────────────────

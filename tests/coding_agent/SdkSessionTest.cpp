@@ -633,8 +633,8 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "SDK in-memory subscriber failure retains live state without persistence fallback",
-    "[sdk][in-memory][subscriber-failure]") {
+    "SDK in-memory subscriber failure is weak and deactivates the observer",
+    "[sdk][in-memory][subscriber-failure][issue36]") {
     TestPaths paths;
     cch::tests::TempWorkspace isolated;
     const auto agent_dir = isolated.path() / "agent-not-created";
@@ -649,34 +649,32 @@ TEST_CASE(
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
     auto failed_subscription = result->session->subscribe(
-        [](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
-            if (const auto* end = std::get_if<agent::MessageEndEvent>(&event);
-                end != nullptr && std::holds_alternative<ai::UserMessage>(end->message)) {
-                return std::unexpected(util::make_error(
-                    util::ErrorCode::Tool,
-                    "subscriber rejected in-memory user message"));
-            }
-            return {};
+        [](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Tool,
+                "subscriber rejected in-memory event"));
         });
     REQUIRE(failed_subscription.has_value());
 
-    auto failed = result->session->prompt("hello");
-    REQUIRE_FALSE(failed.has_value());
-    CHECK(failed.error().code == util::ErrorCode::Tool);
-    CHECK(failed.error().message == "subscriber rejected in-memory user message");
+    std::size_t healthy_events = 0;
+    auto healthy_subscription = result->session->subscribe(
+        [&](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+            ++healthy_events;
+            return {};
+        });
+    REQUIRE(healthy_subscription.has_value());
+
+    auto prompted = result->session->prompt("hello");
+    REQUIRE(prompted.has_value());
+    CHECK_FALSE(static_cast<bool>(*failed_subscription));
+    CHECK(static_cast<bool>(*healthy_subscription));
+    CHECK(healthy_events == 11);
     CHECK(result->session->is_open());
-    CHECK(result->session->message_count() == 1);
-    CHECK_FALSE(result->session->last_assistant_text().has_value());
+    CHECK(result->session->message_count() == 2);
+    CHECK(result->session->last_assistant_text().has_value());
     CHECK_FALSE(result->session->session_path().has_value());
     CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
     CHECK_FALSE(std::filesystem::exists(paths.workspace.path() / ".cpp-harness" / "sessions"));
-
-    failed_subscription->unsubscribe();
-    auto recovered = result->session->prompt("again");
-    REQUIRE(recovered.has_value());
-    CHECK(result->session->message_count() == 3);
-    CHECK(result->session->last_assistant_text().has_value());
-    CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
     CHECK(result->session->close().has_value());
 }
 
@@ -2775,10 +2773,25 @@ TEST_CASE("SDK can resume a linear session", "[sdk][u3]") {
         REQUIRE(result.has_value());
         auto& session = result->session;
         CHECK(session->is_open());
-        CHECK(session->message_count() > 0);
+        CHECK(session->message_count() == 2);
+
+        std::size_t resumed_run_events = 0;
+        auto subscription = session->subscribe(
+            [&](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+                ++resumed_run_events;
+                return {};
+            });
+        REQUIRE(subscription.has_value());
+        CHECK(resumed_run_events == 0);
 
         auto pr = session->prompt("continue");
         REQUIRE(pr.has_value());
+        CHECK(resumed_run_events == 11);
+        CHECK(session->message_count() == 4);
+
+        auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
+        REQUIRE(durable.has_value());
+        CHECK(durable->messages.size() == 4);
         CHECK(session->close().has_value());
     }
 }
@@ -3007,8 +3020,8 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "SDK subscriber failure stops delivery and persistence without closing the session",
-    "[sdk][live-state][subscriber-failure]") {
+    "SDK subscriber failure does not stop delivery or persistence",
+    "[sdk][live-state][subscriber-failure][issue36]") {
     TestPaths paths;
 
     coding_agent::CreateAgentSessionOptions opts;
@@ -3020,88 +3033,163 @@ TEST_CASE(
     REQUIRE(result.has_value());
     auto& session = result->session;
 
-    std::vector<std::string> delivery_order;
-    auto first = session->subscribe(
-        [state = std::make_unique<std::size_t>(0), &delivery_order](
-            const agent::AgentLifecycleEvent& event) mutable -> util::ExpectedVoid {
-            const auto* end = std::get_if<agent::MessageEndEvent>(&event);
-            if (end == nullptr) {
-                return {};
-            }
-
-            ++*state;
-            if (std::holds_alternative<ai::UserMessage>(end->message)) {
-                delivery_order.emplace_back("first:user:" + std::to_string(*state));
-                return {};
-            }
-            if (std::holds_alternative<ai::AssistantMessage>(end->message)) {
-                delivery_order.emplace_back("first:assistant:" + std::to_string(*state));
-                return std::unexpected(util::make_error(
-                    util::ErrorCode::Tool,
-                    "subscriber rejects assistant message_end"));
-            }
-            return {};
+    int rejecting_calls = 0;
+    auto rejecting = session->subscribe(
+        [&](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+            ++rejecting_calls;
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Tool,
+                "subscriber rejects event"));
         });
-    REQUIRE(first.has_value());
+    REQUIRE(rejecting.has_value());
 
-    std::size_t second_message_ends = 0;
-    auto second = session->subscribe(
+    std::size_t healthy_message_ends = 0;
+    auto healthy = session->subscribe(
         [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
-            const auto* end = std::get_if<agent::MessageEndEvent>(&event);
-            if (end == nullptr) {
-                return {};
-            }
-
-            ++second_message_ends;
-            if (std::holds_alternative<ai::UserMessage>(end->message)) {
-                delivery_order.emplace_back("second:user");
-            } else if (std::holds_alternative<ai::AssistantMessage>(end->message)) {
-                delivery_order.emplace_back("second:assistant");
+            if (std::holds_alternative<agent::MessageEndEvent>(event)) {
+                ++healthy_message_ends;
             }
             return {};
         });
-    REQUIRE(second.has_value());
+    REQUIRE(healthy.has_value());
 
-    auto failed = session->prompt("hello");
-    REQUIRE_FALSE(failed.has_value());
-    CHECK(failed.error().code == util::ErrorCode::Tool);
-    CHECK(failed.error().message == "subscriber rejects assistant message_end");
-
-    CHECK(second_message_ends == 1);
-    const std::vector<std::string> expected_delivery_order{
-        "first:user:1",
-        "second:user",
-        "first:assistant:2",
-    };
-    CHECK(delivery_order == expected_delivery_order);
-
-    // The rejected assistant message is live, but subscriber short-circuiting
-    // prevented it from becoming durable.
+    auto prompted = session->prompt("hello");
+    REQUIRE(prompted.has_value());
+    CHECK(rejecting_calls == 1);
+    CHECK_FALSE(static_cast<bool>(*rejecting));
+    CHECK(static_cast<bool>(*healthy));
+    CHECK(healthy_message_ends == 2);
     CHECK(session->message_count() == 2);
     REQUIRE(session->last_assistant_text().has_value());
     CHECK(session->last_assistant_text()->find("fake: hello") != std::string::npos);
-    auto durable_after_failure = harness::session::JsonlSessionStore::load(paths.session_file);
-    REQUIRE(durable_after_failure.has_value());
-    REQUIRE(durable_after_failure->messages.size() == 1);
-    CHECK(std::holds_alternative<ai::UserMessage>(durable_after_failure->messages[0]));
+
+    auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable.has_value());
+    REQUIRE(durable->messages.size() == 2);
+    CHECK(std::holds_alternative<ai::UserMessage>(durable->messages[0]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(durable->messages[1]));
     CHECK(session->is_open());
-
-    // Remove only the rejecting subscriber. The same session accepts another
-    // prompt, and later completed messages continue to persist.
-    first->unsubscribe();
-    auto recovered = session->prompt("again");
-    REQUIRE(recovered.has_value());
-    CHECK(session->message_count() == 4);
-    CHECK(second_message_ends == 3);
-
-    auto durable_after_recovery = harness::session::JsonlSessionStore::load(paths.session_file);
-    REQUIRE(durable_after_recovery.has_value());
-    REQUIRE(durable_after_recovery->messages.size() == 3);
-    CHECK(std::holds_alternative<ai::UserMessage>(durable_after_recovery->messages[0]));
-    CHECK(std::holds_alternative<ai::UserMessage>(durable_after_recovery->messages[1]));
-    CHECK(std::holds_alternative<ai::AssistantMessage>(durable_after_recovery->messages[2]));
-
     CHECK(session->close().has_value());
+}
+
+TEST_CASE(
+    "SDK subscriptions use one run-start snapshot across callback changes",
+    "[sdk][live-state][subscriptions][issue36]") {
+    TestPaths paths;
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::InMemorySessionTarget{};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+    auto& session = created->session;
+
+    std::size_t self_events = 0;
+    std::size_t late_events = 0;
+    std::optional<coding_agent::EventSubscription> late;
+    std::optional<coding_agent::EventSubscription> self;
+    auto subscribed = session->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            ++self_events;
+            if (std::holds_alternative<agent::AgentStartEvent>(event) && !late) {
+                self->unsubscribe();
+                auto added = session->subscribe(
+                    [&](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+                        ++late_events;
+                        return {};
+                    });
+                REQUIRE(added.has_value());
+                late.emplace(std::move(*added));
+            }
+            return {};
+        });
+    REQUIRE(subscribed.has_value());
+    self.emplace(std::move(*subscribed));
+
+    REQUIRE(session->prompt("first").has_value());
+    CHECK(self_events == 11);
+    CHECK(late_events == 0);
+    CHECK_FALSE(static_cast<bool>(*self));
+    CHECK(static_cast<bool>(*late));
+
+    REQUIRE(session->prompt("second").has_value());
+    CHECK(self_events == 11);
+    CHECK(late_events == 11);
+    CHECK(session->close().has_value());
+}
+
+TEST_CASE(
+    "SDK defers close requested by an observer until the active prompt quiesces",
+    "[sdk][lifecycle][issue36]") {
+    TestPaths paths;
+    auto env = std::make_shared<CountingFakeEnv>(paths.workspace.path());
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.execution_env = env;
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+    auto& session = created->session;
+    std::size_t closing_events = 0;
+    std::optional<coding_agent::EventSubscription> closing;
+    auto subscribed = session->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            ++closing_events;
+            if (std::holds_alternative<agent::AgentStartEvent>(event)) {
+                closing->unsubscribe();
+                REQUIRE(session->close().has_value());
+                CHECK_FALSE(session->is_open());
+                CHECK(session->is_busy());
+            }
+            return {};
+        });
+    REQUIRE(subscribed.has_value());
+    closing.emplace(std::move(*subscribed));
+
+    REQUIRE(session->prompt("hello").has_value());
+    CHECK_FALSE(session->is_open());
+    CHECK_FALSE(session->is_busy());
+    CHECK(closing_events == 1);
+    CHECK_FALSE(static_cast<bool>(*closing));
+    CHECK(env->cleanup_count == 0);
+
+    auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable.has_value());
+    CHECK(durable->messages.size() == 2);
+}
+
+TEST_CASE(
+    "SDK destruction from an observer retains the active runtime until quiescence",
+    "[sdk][lifecycle][issue36]") {
+    TestPaths paths;
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+    auto session = std::move(created->session);
+    auto* active = session.get();
+    auto destroying = active->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            if (std::holds_alternative<agent::AgentStartEvent>(event)) {
+                session.reset();
+            }
+            return {};
+        });
+    REQUIRE(destroying.has_value());
+
+    REQUIRE(active->prompt("hello").has_value());
+    CHECK_FALSE(session);
+    CHECK_FALSE(static_cast<bool>(*destroying));
+
+    auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable.has_value());
+    CHECK(durable->messages.size() == 2);
 }
 
 TEST_CASE(

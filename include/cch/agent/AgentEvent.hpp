@@ -63,6 +63,14 @@ using AgentLifecycleEvent = std::variant<
     ToolExecutionStartEvent,
     ToolExecutionEndEvent>;
 
+/// Weak lifecycle observer used by Agent subscriptions. Reported failures and
+/// exceptions are diagnostic observations and cannot veto Agent progress.
 using AgentEventSink = std::move_only_function<util::ExpectedVoid(const AgentLifecycleEvent&)>;
+
+/// Strong per-run lifecycle participant. Unlike an AgentEventSink subscription,
+/// a failure vetoes further execution after live state and weak observers have
+/// already observed the event. This seam is intended for named commitment
+/// capabilities such as durable persistence, not ordinary presentation.
+using AgentEventCommitter = std::move_only_function<util::ExpectedVoid(const AgentLifecycleEvent&)>;
 
 } // namespace cch::agent

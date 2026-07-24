@@ -1,10 +1,8 @@
 #include "SessionEventCommitment.hpp"
 
-#include <utility>
 #include <variant>
 
 namespace cch::coding_agent::runtime {
-
 namespace {
 
 [[nodiscard]] bool is_incrementally_persisted_message(const ai::MessageVariant& message) {
@@ -16,65 +14,35 @@ namespace {
 } // namespace
 
 SessionEventCommitment::SessionEventCommitment(
-    std::vector<ai::MessageVariant>& live_history,
-    std::deque<SubscriberEntry>& subscribers,
     harness::session::SessionStore& store)
-    : live_history_(live_history), store_(store) {
-    for (auto& sub : subscribers) {
-        if (sub.active && sub.sink) {
-            snapshot_.push_back(&sub.sink);
-        }
-    }
-}
+    : store_(store) {}
 
-agent::AgentEventSink SessionEventCommitment::sink() {
+agent::AgentEventCommitter SessionEventCommitment::sink() {
     return [this](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
-        // Advance Live Session State before any subscriber observes the
-        // completed message. This matches pi's state-first event ordering.
         const auto* end = std::get_if<agent::MessageEndEvent>(&event);
-        if (end != nullptr) {
-            live_history_.push_back(end->message);
+        if (end == nullptr || !is_incrementally_persisted_message(end->message)) {
+            return {};
         }
-        for (auto* subscriber : snapshot_) {
-            if (*subscriber) {
-                auto delivered = (*subscriber)(event);
-                if (!delivered) {
-                    // First failure wins; the loop normally aborts here, so a
-                    // later failure must not replace the recorded one.
-                    if (!failure_) {
-                        failure_ = delivered.error();
-                    }
-                    return delivered;
-                }
-            }
+
+        auto appended = store_.append(end->message);
+        if (!appended && !failure_) {
+            failure_ = appended.error();
         }
-        if (end != nullptr && is_incrementally_persisted_message(end->message)) {
-            auto appended = store_.append(end->message);
-            if (!appended) {
-                if (!failure_) {
-                    failure_ = appended.error();
-                }
-                return std::unexpected(appended.error());
-            }
-        }
-        return {};
+        return appended;
     };
 }
 
 util::ExpectedVoid SessionEventCommitment::conclude(
-    std::optional<util::Expected<agent::AsyncAgentRunResult>> loop_result) const {
+    std::optional<util::ExpectedVoid> agent_result) const {
     if (failure_) {
         return std::unexpected(*failure_);
     }
-    if (!loop_result) {
+    if (!agent_result) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Unknown,
-            "async loop did not finish"));
+            "stateful Agent prompt did not finish"));
     }
-    if (!*loop_result) {
-        return std::unexpected((*loop_result).error());
-    }
-    return {};
+    return *agent_result;
 }
 
 } // namespace cch::coding_agent::runtime

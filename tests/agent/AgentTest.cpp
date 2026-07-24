@@ -65,6 +65,29 @@ util::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
     return std::move(*result);
 }
 
+util::ExpectedVoid run_prompt(
+    agent::Agent& subject,
+    std::string prompt,
+    agent::AgentEventCommitter commitment) {
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> result;
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            result = co_await subject.prompt(
+                std::move(prompt), std::move(commitment));
+            co_return;
+        },
+        boost::asio::detached);
+    io.run();
+    if (!result) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Unknown,
+            "agent prompt coroutine did not complete"));
+    }
+    return std::move(*result);
+}
+
 class ReadTool final : public agent::AsyncAgentTool {
 public:
     ReadTool()
@@ -268,6 +291,123 @@ TEST_CASE("stateful Agent reduces lifecycle state before ordered move-only obser
     CHECK(assistant_was_committed_before_delivery);
     CHECK(agent_end_observed_active_run);
     CHECK(subscription);
+}
+
+TEST_CASE(
+    "stateful Agent commits after live state and weak observers",
+    "[agent][stateful][commitment][issue36]") {
+    auto client = ai::providers::make_scripted_fake_chat_client();
+    agent::AsyncToolRegistry tools;
+    agent::Agent subject(
+        *client,
+        std::move(tools),
+        agent::AsyncAgentOptions{3, "fake-model"});
+
+    std::vector<std::string> ordering;
+    auto subscribed = subject.subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+                ordering.push_back("observer");
+                const auto snapshot = subject.state();
+                REQUIRE_FALSE(snapshot.messages.empty());
+                CHECK(snapshot.messages.back().index() == end->message.index());
+            }
+            return {};
+        });
+    REQUIRE(subscribed);
+    auto subscription = std::move(*subscribed);
+
+    auto prompted = run_prompt(
+        subject,
+        "hello",
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            if (std::holds_alternative<agent::MessageEndEvent>(event)) {
+                ordering.push_back("commitment");
+            }
+            return {};
+        });
+    REQUIRE(prompted);
+    const std::vector<std::string> expected{
+        "observer", "commitment", "observer", "commitment"};
+    CHECK(ordering == expected);
+    CHECK(subscription);
+}
+
+TEST_CASE(
+    "stateful Agent weak observer failure cannot veto strong commitment",
+    "[agent][stateful][commitment][issue36]") {
+    auto client = ai::providers::make_scripted_fake_chat_client();
+    agent::AsyncToolRegistry tools;
+    agent::Agent subject(
+        *client,
+        std::move(tools),
+        agent::AsyncAgentOptions{3, "fake-model"});
+
+    int failing_calls = 0;
+    auto failing_result = subject.subscribe(
+        [&](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+            ++failing_calls;
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Unknown, "observer failed"));
+        });
+    REQUIRE(failing_result);
+    auto failing = std::move(*failing_result);
+
+    int healthy_calls = 0;
+    auto healthy_result = subject.subscribe(
+        [&](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+            ++healthy_calls;
+            return {};
+        });
+    REQUIRE(healthy_result);
+    auto healthy = std::move(*healthy_result);
+
+    int committed_events = 0;
+    REQUIRE(run_prompt(
+        subject,
+        "hello",
+        [&](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+            ++committed_events;
+            return {};
+        }));
+
+    CHECK(failing_calls == 1);
+    CHECK_FALSE(failing);
+    CHECK(healthy);
+    CHECK(healthy_calls == 11);
+    CHECK(committed_events == 11);
+}
+
+TEST_CASE(
+    "stateful Agent returns strong commitment failure with retained live state and recovers",
+    "[agent][stateful][commitment][issue36]") {
+    auto client = ai::providers::make_scripted_fake_chat_client();
+    agent::AsyncToolRegistry tools;
+    agent::Agent subject(
+        *client,
+        std::move(tools),
+        agent::AsyncAgentOptions{3, "fake-model"});
+
+    auto failed = run_prompt(
+        subject,
+        "first",
+        [](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            const auto* end = std::get_if<agent::MessageEndEvent>(&event);
+            if (end != nullptr && std::holds_alternative<ai::UserMessage>(end->message)) {
+                return std::unexpected(util::make_error(
+                    util::ErrorCode::Session,
+                    "commitment rejected user message"));
+            }
+            return {};
+        });
+    REQUIRE_FALSE(failed);
+    CHECK(failed.error().code == util::ErrorCode::Session);
+    CHECK(failed.error().message == "commitment rejected user message");
+    CHECK_FALSE(subject.state().is_running);
+    REQUIRE(subject.state().messages.size() == 1);
+
+    REQUIRE(run_prompt(subject, "second"));
+    CHECK(subject.state().messages.size() == 3);
 }
 
 TEST_CASE("stateful Agent keeps weak observer failure from vetoing a prompt", "[agent][stateful][issue35]") {

@@ -600,7 +600,7 @@ TEST_CASE("RPC mode reports accepted prompt failures only through events", "[cod
     CHECK(count_responses(result.records, "prompt", "prompt-1") == 1);
 }
 
-TEST_CASE("RPC mode does not report rejection after accepted subscriber failure", "[coding-agent][runtime][rpc]") {
+TEST_CASE("RPC mode keeps one event stream after a weak subscriber failure", "[coding-agent][runtime][rpc][issue36]") {
     cch::tests::TempWorkspace workspace;
     coding_agent::CreateAgentSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{
@@ -643,14 +643,18 @@ TEST_CASE("RPC mode does not report rejection after accepted subscriber failure"
 
     REQUIRE(exit_code == 0);
     const auto records = parse_records(output.str());
-    REQUIRE(records.size() == 3);
+    REQUIRE(records.size() == 14);
     const auto* prompt = find_response(records, "prompt", "prompt-1");
     REQUIRE(prompt != nullptr);
     CHECK(prompt->at("success").get<bool>());
     CHECK(count_responses(records, "prompt", "prompt-1") == 1);
-    CHECK(find_response(records, "get_state", "state-1") != nullptr);
+    const auto* state = find_response(records, "get_state", "state-1");
+    REQUIRE(state != nullptr);
+    CHECK(static_cast<int>(state->at("data").get<JsonObject>().at("messageCount").get<double>()) == 2);
     CHECK(find_response(records, "shutdown", "stop-1") != nullptr);
-    CHECK(find_first_event_index(records) == records.size());
+    CHECK(find_record_index(records, "agent_start") < records.size());
+    CHECK(find_record_index(records, "agent_end") < records.size());
+    CHECK_FALSE(static_cast<bool>(*rejecting));
     REQUIRE(created->session->close().has_value());
 }
 

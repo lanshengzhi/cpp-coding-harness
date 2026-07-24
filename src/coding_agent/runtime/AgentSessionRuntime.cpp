@@ -78,15 +78,26 @@ AgentSessionRuntime::AgentSessionRuntime(
         };
     }
 
-    // Construct loop_ last — it takes ownership of tools (move-only).
-    loop_.emplace(*services_.client, std::move(services_.tools), std::move(options));
+    // Resumed history is transferred exactly once into the authoritative Agent
+    // state. AgentSession retains product metadata and durable storage only.
+    agent::AgentInitialState initial_state;
+    initial_state.messages = std::move(session_.history);
+    initial_state.thinking_level = session_.context_thinking_level.value_or("off");
+
+    // Construct Agent last: it borrows the factory-owned client and takes sole
+    // ownership of the move-only tool registry.
+    agent_.emplace(
+        *services_.client,
+        std::move(services_.tools),
+        std::move(options),
+        std::move(initial_state));
 }
 
 util::ExpectedVoid AgentSessionRuntime::run_prompt(
     std::string prompt,
     bool expand_prompt_templates,
     std::move_only_function<util::ExpectedVoid()> on_preflight_accepted) {
-    if (state_ == State::Closed) {
+    if (state_ == State::Closing || state_ == State::Closed) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "session is closed"));
@@ -99,7 +110,9 @@ util::ExpectedVoid AgentSessionRuntime::run_prompt(
 
     state_ = State::RunningPrompt;
     ScopeExit restore_state{[this] {
-        if (state_ != State::Closed) {
+        if (state_ == State::Closing) {
+            finalize_close();
+        } else if (state_ == State::RunningPrompt) {
             state_ = State::Open;
         }
     }};
@@ -114,16 +127,21 @@ util::ExpectedVoid AgentSessionRuntime::run_prompt(
 }
 
 util::ExpectedVoid AgentSessionRuntime::run_agent_loop(std::string prompt) {
-    boost::asio::io_context io;
-    std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
+    if (!agent_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session Agent is unavailable"));
+    }
 
-    SessionEventCommitment commitment{session_.history, subscribers_, *session_.store};
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> result;
+    SessionEventCommitment commitment{*session_.store};
 
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            result = co_await loop_->continue_with(
-                session_.history, std::move(prompt), commitment.sink());
+            result = co_await agent_->prompt(
+                std::move(prompt), commitment.sink());
             co_return;
         },
         boost::asio::detached);
@@ -132,49 +150,49 @@ util::ExpectedVoid AgentSessionRuntime::run_agent_loop(std::string prompt) {
     return commitment.conclude(std::move(result));
 }
 
-int AgentSessionRuntime::subscribe(agent::AgentEventSink sink) {
-    if (state_ == State::Closed) {
-        return -1;
+util::Expected<agent::AgentEventSubscription> AgentSessionRuntime::subscribe(
+    agent::AgentEventSink sink) {
+    if (state_ == State::Closing || state_ == State::Closed || !agent_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is closed"));
     }
-    int id = next_subscriber_id_++;
-    subscribers_.push_back({id, std::move(sink), true});
-    return id;
+    return agent_->subscribe(std::move(sink));
 }
 
-void AgentSessionRuntime::unsubscribe(int id) {
-    for (auto& sub : subscribers_) {
-        if (sub.id == id) {
-            sub.active = false;
-            return;
-        }
-    }
-}
-
-bool AgentSessionRuntime::is_subscribed(int id) const {
-    for (const auto& sub : subscribers_) {
-        if (sub.id == id) {
-            return sub.active;
-        }
-    }
-    return false;
+std::size_t AgentSessionRuntime::message_count() const {
+    return agent_ ? agent_->state().messages.size() : 0;
 }
 
 std::optional<std::string> AgentSessionRuntime::last_assistant_text() const {
-    return last_assistant_text_from(session_.history);
+    return agent_ ? last_assistant_text_from(agent_->state().messages) : std::nullopt;
 }
 
 void AgentSessionRuntime::close() {
+    if (state_ == State::Closing || state_ == State::Closed) {
+        return;
+    }
+
+    if (agent_) {
+        agent_->clear_subscriptions();
+    }
+    if (state_ == State::RunningPrompt) {
+        // The active Agent coroutine, strong commitment, store, client, tools,
+        // and execution environment remain valid until run_prompt unwinds.
+        state_ = State::Closing;
+        return;
+    }
+
+    state_ = State::Closing;
+    finalize_close();
+}
+
+void AgentSessionRuntime::finalize_close() {
     if (state_ == State::Closed) {
         return;
     }
     state_ = State::Closed;
-
-    for (auto& sub : subscribers_) {
-        sub.active = false;
-    }
-    subscribers_.clear();
-
-    loop_.reset();
+    agent_.reset();
 
     // Best-effort async cleanup of the execution environment only when the
     // factory owns it. Host-provided shared environments must outlive the
