@@ -12,6 +12,10 @@ _Avoid_: Implemented feature, partial placeholder
 A pi capability that this harness does not currently claim to provide; its absence is not contract drift and creates no placeholder contract.
 _Avoid_: Missing contract, unsupported stub
 
+**Native TUI**:
+The harness-owned interactive terminal product surface, combining reusable terminal UI capabilities with coding-agent-specific interaction. A rich client connected only through JSON/RPC or the SDK is not the Native TUI.
+_Avoid_: Text REPL, RPC frontend
+
 **Semantic Parity**:
 For a Supported Capability, preservation of pi's externally observable meanings and state transitions while allowing an idiomatic C++ API shape.
 _Avoid_: API-shape parity, mechanical translation
