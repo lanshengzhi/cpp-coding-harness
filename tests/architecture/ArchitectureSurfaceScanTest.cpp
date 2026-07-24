@@ -127,6 +127,20 @@ TEST_CASE("tool scheduling vocabulary stays in the agent package", "[architectur
     CHECK(agent_context.find("BoundedParallelToolExecution") != std::string::npos);
 }
 
+TEST_CASE("stateful Agent stays independent of coding-agent product concerns", "[architecture][agent][issue35]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto agent_header = read_text(source_root / "include" / "cch" / "agent" / "Agent.hpp");
+    const auto agent_source = read_text(source_root / "src" / "agent" / "Agent.cpp");
+    const auto combined = agent_header + agent_source;
+
+    CHECK(combined.find("cch/coding_agent") == std::string::npos);
+    CHECK(combined.find("cch/harness") == std::string::npos);
+    CHECK(combined.find("AgentSession") == std::string::npos);
+    CHECK(combined.find("SessionStore") == std::string::npos);
+    CHECK(combined.find("ProjectResource") == std::string::npos);
+    CHECK(combined.find("CliConfig") == std::string::npos);
+}
+
 TEST_CASE("provider DTOs stay out of the public contract surface", "[architecture][u4]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
     CHECK_FALSE(std::filesystem::exists(source_root / "include" / "cch" / "ai" / "glaze" / "ProviderDtos.hpp"));

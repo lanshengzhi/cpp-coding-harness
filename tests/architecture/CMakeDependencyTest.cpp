@@ -58,6 +58,9 @@ TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake]") {
     CHECK(block_mentions(cmake, "add_library(cch_util"));
     CHECK(block_mentions(cmake, "add_library(cch_ai"));
     CHECK(block_mentions(cmake, "add_library(cch_agent"));
+    const auto agent_sources = cmake_command_block(cmake, "add_library(cch_agent");
+    CHECK(block_mentions(agent_sources, "src/agent/Agent.cpp"));
+    CHECK(block_mentions(agent_sources, "src/agent/AgentLoop.cpp"));
     CHECK(block_mentions(cmake, "add_library(cch_harness"));
     CHECK(block_mentions(cmake, "add_library(cch_tools"));
     CHECK(block_mentions(cmake, "add_library(cch_coding_agent_runtime"));

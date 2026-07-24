@@ -197,7 +197,7 @@ Package targets and responsibilities:
 
 - `cch_util` (`include/cch/util`, `src/util`): project error/expected contracts, move-only callback vocabulary, passive `JsonValue`, the Glaze-backed JSON adapter in `src/util/Json.hpp`, and async process execution.
 - `cch_ai` (`include/cch/ai`, `src/ai`): passive message/content/tool/context contracts, provider-neutral stream events, provider registry, OpenAICompletionsCompat flags, OpenAI-compatible provider, scripted fake provider; SSE and Glaze provider mapping live under `src/ai/`.
-- `cch_agent` (`include/cch/agent`, `src/agent`): coroutine agent loop, observable state values, lifecycle event values, move-only event sinks, async tool registry, private Tool Argument Contract preparation, expected-style tool execution contracts, optional pre/post tool-call hooks (`beforeToolCall`/`afterToolCall`), context transform / LLM conversion hooks, steering/follow-up queues, prepare-next-turn updates, and a safe-default sequential/bounded-parallel tool execution policy.
+- `cch_agent` (`include/cch/agent`, `src/agent`): public stateful `Agent` ownership of live message history, model/thinking/tool state, weak move-only subscriptions with bounded diagnostics, passive state snapshots, and one active run; the existing coroutine agent loop remains available during the expand step. The package also owns async tool registration, private Tool Argument Contract preparation, expected-style tool execution, pi-ordered prepare/stop/steering/follow-up policy seams, and sequential/bounded-parallel tool execution policy.
 - `cch_harness` (`include/cch/harness`, `src/harness`): pi-shaped filesystem and shell execution capability contracts (`FileSystem`/`Shell`), local implementation with workspace containment, symlink safety, atomic writes, split-stream process execution, secret environment filtering, and JSONL/in-memory Session Store implementations.
 - `cch_tools` (`include/cch/tools`, `src/tools`): built-in read/write/edit/bash tool factories bridging agent tool contracts to harness capabilities.
 - `cch_coding_agent_runtime` (`src/cli/` for CLI11 parsing/`CliConfig`, `src/coding_agent/runtime/AsyncCliRuntime.*`, `src/coding_agent/runtime/`, `include/cch/coding_agent/`, `src/coding_agent/`): CLI argument parsing into one intent, SessionFactory-authoritative session assembly (including `settings.json` precedence), agent config directory path resolution (`AgentConfigDir`), user settings and auth loading (`SettingsLoader`, `AuthLoader`), runtime orchestration, session lifecycle, provider/tool service assembly, semantic event printing, JSON/RPC output modes, private skill/template prompt interpretation (`prompt/PromptProcessor`), live-state-first event handling with incremental message persistence, project trust/resource controls (`ProjectTrust`, `ProjectResources`, `ProjectResourceLoader`), project-local skill discovery/loading and prompt formatting, `/skill:name` expansion from cached content, and prompt-template file loading with `--prompt-template`/`--no-prompt-templates` CLI flags.
@@ -415,6 +415,7 @@ Useful default validation slices:
 ./build/cpp_harness_tests "[architecture]"
 ./build/cpp_harness_tests "[ai][u2]"
 ./build/cpp_harness_tests "[ai][provider]"
+./build/cpp_harness_tests "[agent][stateful]"
 ./build/cpp_harness_tests "[agent][async]"
 ./build/cpp_harness_tests "[tools][async]"
 ./build/cpp_harness_tests "[harness][session]"
@@ -428,6 +429,7 @@ Useful default validation slices:
 These cover:
 
 - public headers compile from the include contract surface without `src`, legacy sync contracts, Boost.JSON, or raw Glaze generic values in domain contracts;
+- stateful Agent prompts retain live history, expose passive snapshots, reject overlapping runs, and notify weak move-only observers in lifecycle order;
 - fake model/tool loops route through provider-neutral value contracts and owned tool capabilities;
 - move-only event sinks can capture unique state and propagate errors;
 - provider-specific OpenAI/SSE/Glaze wire mapping stays isolated from the agent loop;

@@ -60,6 +60,7 @@ target_link_libraries(cch_ai
 target_compile_options(cch_ai PRIVATE -Wall -Wextra -Wpedantic)
 
 add_library(cch_agent
+    src/agent/Agent.cpp
     src/agent/AgentLoop.cpp
     src/agent/ToolArgumentPreparation.cpp
     src/agent/ToolCallExecutor.cpp
@@ -166,6 +167,7 @@ if(CCH_BUILD_TESTS)
         tests/architecture/CMakeDependencyTest.cpp
         tests/architecture/MoveOnlyCallbackTest.cpp
         tests/architecture/PublicHeaderBoundaryTest.cpp
+        tests/agent/AgentTest.cpp
         tests/agent/AsyncAgentLoopTest.cpp
         tests/agent/ToolCallExecutorTest.cpp
         tests/ai/GlazeRoundTripTest.cpp

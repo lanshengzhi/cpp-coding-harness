@@ -147,13 +147,7 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
     AsyncAgentOptions& options,
     ai::AiContext& context,
     AgentState& state,
-    AgentEventSink& sink,
     const AgentLoopTurnUpdate& update) {
-    if (update.append_messages) {
-        if (auto validated = validate_queued_messages(*update.append_messages); !validated) {
-            return validated;
-        }
-    }
     if (update.model && update.model->empty()) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
@@ -167,12 +161,10 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
             *update.thinking_level));
     }
 
-    if (update.append_messages) {
-        for (auto& message : *update.append_messages) {
-            if (auto r = append_message_with_lifecycle_impl(state, context, sink, message); !r) {
-                return r;
-            }
-        }
+    if (update.context) {
+        context.system_prompt = update.context->system_prompt;
+        context.messages = update.context->messages;
+        sync_state(state, context);
     }
 
     if (update.model) {
@@ -182,6 +174,7 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
     }
 
     if (update.thinking_level) {
+        options.thinking_level = *update.thinking_level;
         state.thinking_level = *update.thinking_level;
     }
 
@@ -256,6 +249,20 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
     }
 }
 
+[[nodiscard]] util::Expected<bool> invoke_should_stop_after_turn_hook(
+    ShouldStopAfterTurnHook& hook,
+    const PrepareNextTurnContext& context) {
+    try {
+        return hook(context);
+    } catch (const std::exception& e) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Tool, "shouldStopAfterTurn hook failed", e.what()));
+    } catch (...) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Tool, "shouldStopAfterTurn hook failed", "unknown exception"));
+    }
+}
+
 [[nodiscard]] util::ExpectedVoid invoke_validate_turn_update_hook(
     ValidateTurnUpdateHook& hook,
     const AgentLoopTurnUpdate& update) {
@@ -289,10 +296,14 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
     context.model = options_.model;
     context.tools = registry_.definitions();
     context.messages = std::move(history);
-    const std::size_t prior_message_count = context.messages.size();
+    std::vector<ai::MessageVariant> new_messages;
+    const auto emit_agent_end = [&]() -> util::ExpectedVoid {
+        return emit(sink, AgentEndEvent{new_messages});
+    };
 
     AgentState state;
     state.model = options_.model;
+    state.thinking_level = options_.thinking_level;
 
     CCH_TRY_VOID(emit(sink, AgentStartEvent{}));
 
@@ -305,16 +316,17 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
 
         if (turn == 1) {
             CCH_TRY_VOID(append_message_with_lifecycle(state, context, sink, std::move(user_message)));
+            new_messages.push_back(context.messages.back());
         }
 
         if (turn == 1 && options_.get_steering_messages) {
             auto steering = invoke_get_steering_messages_hook(*options_.get_steering_messages);
             if (!steering) {
-                CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
+                CCH_TRY_VOID(emit_agent_end());
                 co_return std::unexpected(steering.error());
             }
             if (auto validated = validate_queued_messages(*steering); !validated) {
-                CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
+                CCH_TRY_VOID(emit_agent_end());
                 co_return std::unexpected(validated.error());
             }
             pending_messages = std::move(*steering);
@@ -323,6 +335,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         if (!pending_messages.empty()) {
             for (auto& message : pending_messages) {
                 CCH_TRY_VOID(append_message_with_lifecycle(state, context, sink, std::move(message)));
+                new_messages.push_back(context.messages.back());
             }
             pending_messages.clear();
         }
@@ -336,7 +349,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                 auto transformed = invoke_transform_context_hook(
                     *options_.transform_context, request_context.messages);
                 if (!transformed) {
-                    CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
+                    CCH_TRY_VOID(emit_agent_end());
                     co_return std::unexpected(transformed.error());
                 }
                 request_context.messages = std::move(*transformed);
@@ -345,7 +358,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                 auto converted = invoke_convert_to_llm_hook(
                     *options_.convert_to_llm, request_context.messages);
                 if (!converted) {
-                    CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
+                    CCH_TRY_VOID(emit_agent_end());
                     co_return std::unexpected(converted.error());
                 }
                 if (converted->empty()) {
@@ -353,7 +366,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                         util::ErrorCode::Validation,
                         "convertToLlm returned no messages",
                         "LLM request would be empty");
-                    CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
+                    CCH_TRY_VOID(emit_agent_end());
                     co_return std::unexpected(error);
                 }
                 request_context.messages = std::move(*converted);
@@ -431,11 +444,12 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             if (assistant.error().code == util::ErrorCode::Provider && !assistant.error().detail.empty()) {
                 reason += " (" + assistant.error().detail + ")";
             }
-            CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
+            CCH_TRY_VOID(emit_agent_end());
             co_return std::unexpected(assistant.error());
         }
 
         context.messages.push_back(ai::MessageVariant{*assistant});
+        new_messages.push_back(context.messages.back());
         state.streaming_message = *assistant;
         sync_state(state, context);
         if (!assistant_start_emitted) {
@@ -452,10 +466,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             state.pending_tool_call_ids.clear();
             CCH_TRY_VOID(emit(sink, TurnEndEvent{ai::MessageVariant{*assistant}, {}}));
             state.streaming_message.reset();
-            std::vector<ai::MessageVariant> invocation_messages{
-                context.messages.begin() + static_cast<std::ptrdiff_t>(prior_message_count),
-                context.messages.end()};
-            CCH_TRY_VOID(emit(sink, AgentEndEvent{std::move(invocation_messages)}));
+            CCH_TRY_VOID(emit_agent_end());
             co_return AsyncAgentRunResult{
                 std::move(context), assistant->stop_reason, turn, std::move(state)};
         }
@@ -516,7 +527,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                 agent::ToolCallBatchRequest{*assistant, context},
                 sink);
             if (!execution) {
-                CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
+                CCH_TRY_VOID(emit_agent_end());
                 co_return std::unexpected(execution.error());
             }
 
@@ -527,6 +538,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         if (!tool_results.empty()) {
             for (const auto& result : tool_results) {
                 context.messages.push_back(ai::MessageVariant{result});
+                new_messages.push_back(context.messages.back());
             }
             state.active_tool_names.clear();
             state.pending_tool_call_ids.clear();
@@ -535,51 +547,19 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
 
         CCH_TRY_VOID(emit(sink, TurnEndEvent{ai::MessageVariant{*assistant}, tool_results}));
 
-        if (terminate_batch) {
-            state.streaming_message.reset();
-            CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
-            sync_state(state, context);
-            co_return AsyncAgentRunResult{std::move(context), ai::AssistantStopReason::ToolUse, turn, std::move(state)};
-        }
+        const bool has_more_tool_calls = !calls.empty() && !terminate_batch;
 
-        if (options_.get_steering_messages) {
-            auto steering = invoke_get_steering_messages_hook(*options_.get_steering_messages);
-            if (!steering) {
-                CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
-                co_return std::unexpected(steering.error());
-            }
-            if (auto validated = validate_queued_messages(*steering); !validated) {
-                CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
-                co_return std::unexpected(validated.error());
-            }
-            pending_messages = std::move(*steering);
-        }
-
-        if (calls.empty() && pending_messages.empty()) {
-            if (options_.get_follow_up_messages) {
-                auto follow_up = invoke_get_follow_up_messages_hook(*options_.get_follow_up_messages);
-                if (!follow_up) {
-                    CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
-                    co_return std::unexpected(follow_up.error());
-                }
-                if (auto validated = validate_queued_messages(*follow_up); !validated) {
-                    CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
-                    co_return std::unexpected(validated.error());
-                }
-                pending_messages = std::move(*follow_up);
-            }
-        }
+        PrepareNextTurnContext next_turn_context;
+        next_turn_context.assistant_message = *assistant;
+        next_turn_context.tool_results = tool_results;
+        next_turn_context.context = context;
+        next_turn_context.new_messages = new_messages;
 
         if (options_.prepare_next_turn) {
-            PrepareNextTurnContext prepare_context;
-            prepare_context.assistant_message = *assistant;
-            prepare_context.tool_results = tool_results;
-            prepare_context.context = context;
-            prepare_context.queued_messages = pending_messages;
-
-            auto update = invoke_prepare_next_turn_hook(*options_.prepare_next_turn, prepare_context);
+            auto update = invoke_prepare_next_turn_hook(
+                *options_.prepare_next_turn, next_turn_context);
             if (!update) {
-                CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
+                CCH_TRY_VOID(emit_agent_end());
                 co_return std::unexpected(update.error());
             }
             if (*update) {
@@ -588,26 +568,72 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                         util::ErrorCode::Validation,
                         "model update requires validation",
                         (**update).model.value());
-                    CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
+                    CCH_TRY_VOID(emit_agent_end());
                     co_return std::unexpected(error);
                 }
                 if (options_.validate_turn_update) {
-                    auto validated = invoke_validate_turn_update_hook(*options_.validate_turn_update, **update);
+                    auto validated = invoke_validate_turn_update_hook(
+                        *options_.validate_turn_update, **update);
                     if (!validated) {
-                        CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
+                        CCH_TRY_VOID(emit_agent_end());
                         co_return std::unexpected(validated.error());
                     }
                 }
-                if (auto applied = apply_turn_update(options_, context, state, sink, **update); !applied) {
-                    CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
+                if (auto applied = apply_turn_update(
+                        options_, context, state, **update);
+                    !applied) {
+                    CCH_TRY_VOID(emit_agent_end());
                     co_return std::unexpected(applied.error());
                 }
             }
         }
 
-        if (calls.empty() && pending_messages.empty()) {
+        next_turn_context.context = context;
+        if (options_.should_stop_after_turn) {
+            auto should_stop = invoke_should_stop_after_turn_hook(
+                *options_.should_stop_after_turn, next_turn_context);
+            if (!should_stop) {
+                CCH_TRY_VOID(emit_agent_end());
+                co_return std::unexpected(should_stop.error());
+            }
+            if (*should_stop) {
+                state.streaming_message.reset();
+                CCH_TRY_VOID(emit_agent_end());
+                sync_state(state, context);
+                co_return AsyncAgentRunResult{
+                    std::move(context), assistant->stop_reason, turn, std::move(state)};
+            }
+        }
+
+        if (options_.get_steering_messages) {
+            auto steering = invoke_get_steering_messages_hook(*options_.get_steering_messages);
+            if (!steering) {
+                CCH_TRY_VOID(emit_agent_end());
+                co_return std::unexpected(steering.error());
+            }
+            if (auto validated = validate_queued_messages(*steering); !validated) {
+                CCH_TRY_VOID(emit_agent_end());
+                co_return std::unexpected(validated.error());
+            }
+            pending_messages = std::move(*steering);
+        }
+
+        if (!has_more_tool_calls && pending_messages.empty() && options_.get_follow_up_messages) {
+            auto follow_up = invoke_get_follow_up_messages_hook(*options_.get_follow_up_messages);
+            if (!follow_up) {
+                CCH_TRY_VOID(emit_agent_end());
+                co_return std::unexpected(follow_up.error());
+            }
+            if (auto validated = validate_queued_messages(*follow_up); !validated) {
+                CCH_TRY_VOID(emit_agent_end());
+                co_return std::unexpected(validated.error());
+            }
+            pending_messages = std::move(*follow_up);
+        }
+
+        if (!has_more_tool_calls && pending_messages.empty()) {
             state.streaming_message.reset();
-            CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
+            CCH_TRY_VOID(emit_agent_end());
             sync_state(state, context);
             co_return AsyncAgentRunResult{std::move(context), assistant->stop_reason, turn, std::move(state)};
         }
@@ -617,7 +643,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         util::ErrorCode::Provider,
         "max turns exceeded",
         "agent reached max_turns before a final assistant response");
-    CCH_TRY_VOID(emit(sink, AgentEndEvent{context.messages}));
+    CCH_TRY_VOID(emit_agent_end());
     co_return std::unexpected(error);
 }
 

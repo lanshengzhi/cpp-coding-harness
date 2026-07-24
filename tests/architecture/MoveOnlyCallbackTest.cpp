@@ -1,5 +1,6 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
+#include "../../include/cch/agent/Agent.hpp"
 #include "../../include/cch/agent/AgentContext.hpp"
 #include "../../include/cch/agent/AgentEvent.hpp"
 #include "../../include/cch/ai/ChatClient.hpp"
@@ -11,6 +12,16 @@
 using namespace cch;
 
 TEST_CASE("event sink contracts are move-only", "[architecture][u5]") {
+    static_assert(!std::is_copy_constructible_v<agent::Agent>);
+    static_assert(!std::is_copy_assignable_v<agent::Agent>);
+    static_assert(std::is_move_constructible_v<agent::Agent>);
+    static_assert(std::is_move_assignable_v<agent::Agent>);
+
+    static_assert(!std::is_copy_constructible_v<agent::AgentEventSubscription>);
+    static_assert(!std::is_copy_assignable_v<agent::AgentEventSubscription>);
+    static_assert(std::is_move_constructible_v<agent::AgentEventSubscription>);
+    static_assert(std::is_move_assignable_v<agent::AgentEventSubscription>);
+
     static_assert(!std::is_copy_constructible_v<agent::AgentEventSink>);
     static_assert(!std::is_copy_assignable_v<agent::AgentEventSink>);
     static_assert(std::is_move_constructible_v<agent::AgentEventSink>);
@@ -30,6 +41,8 @@ TEST_CASE("event sink contracts are move-only", "[architecture][u5]") {
     static_assert(std::is_move_constructible_v<agent::GetFollowUpMessagesHook>);
     static_assert(!std::is_copy_constructible_v<agent::PrepareNextTurnHook>);
     static_assert(std::is_move_constructible_v<agent::PrepareNextTurnHook>);
+    static_assert(!std::is_copy_constructible_v<agent::ShouldStopAfterTurnHook>);
+    static_assert(std::is_move_constructible_v<agent::ShouldStopAfterTurnHook>);
     static_assert(!std::is_copy_constructible_v<agent::ValidateTurnUpdateHook>);
     static_assert(std::is_move_constructible_v<agent::ValidateTurnUpdateHook>);
 

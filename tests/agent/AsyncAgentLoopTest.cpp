@@ -1232,15 +1232,36 @@ RunResult run_loop_on_pool(agent::AsyncAgentLoop& loop, std::string prompt) {
 
 } // namespace
 
-TEST_CASE("afterToolCall terminate hint stops the run when all calls agree", "[agent][async][u7]") {
+TEST_CASE("afterToolCall terminate hint stops automatic continuation after post-turn policies", "[agent][async][issue35]") {
     FakeStreamingClient client;
     client.responses.push_back(tool_call_response());
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
+    std::vector<std::string> decisions;
+    int steering_calls = 0;
     agent::AsyncAgentOptions options{4, "gpt-test"};
     options.after_tool_call = [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
         return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
+    };
+    options.prepare_next_turn = [&](const agent::PrepareNextTurnContext&)
+        -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+        decisions.push_back("prepare");
+        return std::nullopt;
+    };
+    options.should_stop_after_turn = [&](const agent::PrepareNextTurnContext&)
+        -> util::Expected<bool> {
+        decisions.push_back("stop");
+        return false;
+    };
+    options.get_steering_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        ++steering_calls;
+        decisions.push_back(steering_calls == 1 ? "initial-steering" : "steering");
+        return std::vector<ai::MessageVariant>{};
+    };
+    options.get_follow_up_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        decisions.push_back("follow-up");
+        return std::vector<ai::MessageVariant>{};
     };
 
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
@@ -1249,6 +1270,10 @@ TEST_CASE("afterToolCall terminate hint stops the run when all calls agree", "[a
     REQUIRE(run.result);
     CHECK(run.result->turns == 1);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    CHECK(client.requests.size() == 1);
+    const std::vector<std::string> expected_decisions{
+        "initial-steering", "prepare", "stop", "steering", "follow-up"};
+    CHECK(decisions == expected_decisions);
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 3);
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 3);
@@ -1770,7 +1795,97 @@ TEST_CASE("steering and follow-up callback failures abort the run", "[agent][asy
     }
 }
 
-TEST_CASE("prepareNextTurn sees queued steering messages", "[agent][async][u8]") {
+TEST_CASE("agent_end contains only messages from the current invocation", "[agent][async][issue35]") {
+    FakeStreamingClient client;
+    client.responses.push_back(ai::assistant_text_message("current reply"));
+    agent::AsyncToolRegistry registry;
+    agent::AsyncAgentLoop loop(
+        client,
+        std::move(registry),
+        agent::AsyncAgentOptions{4, "gpt-test"});
+
+    auto run = run_loop(
+        loop,
+        "current prompt",
+        std::vector<ai::MessageVariant>{ai::user_text_message("prior prompt")});
+
+    REQUIRE(run.result);
+    const auto* ended = std::get_if<agent::AgentEndEvent>(&run.events.back());
+    REQUIRE(ended != nullptr);
+    REQUIRE(ended->messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(ended->messages[0]));
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(ended->messages[0]).content) ==
+          "current prompt");
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(ended->messages[1]));
+}
+
+TEST_CASE("post-turn policies follow prepare stop steering follow-up order", "[agent][async][issue35]") {
+    FakeStreamingClient client;
+    client.responses.push_back(ai::assistant_text_message("done"));
+
+    agent::AsyncToolRegistry registry;
+    std::vector<std::string> decisions;
+    int steering_calls = 0;
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.get_steering_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        ++steering_calls;
+        decisions.push_back(steering_calls == 1 ? "initial-steering" : "steering");
+        return std::vector<ai::MessageVariant>{};
+    };
+    options.prepare_next_turn = [&](const agent::PrepareNextTurnContext&)
+        -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+        decisions.push_back("prepare");
+        return std::nullopt;
+    };
+    options.should_stop_after_turn = [&](const agent::PrepareNextTurnContext&)
+        -> util::Expected<bool> {
+        decisions.push_back("stop");
+        return false;
+    };
+    options.get_follow_up_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        decisions.push_back("follow-up");
+        return std::vector<ai::MessageVariant>{};
+    };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "hi");
+
+    REQUIRE(run.result);
+    const std::vector<std::string> expected{
+        "initial-steering", "prepare", "stop", "steering", "follow-up"};
+    CHECK(decisions == expected);
+}
+
+TEST_CASE("stop-after-turn ends before steering and follow-up decisions", "[agent][async][issue35]") {
+    FakeStreamingClient client;
+    client.responses.push_back(ai::assistant_text_message("done"));
+
+    agent::AsyncToolRegistry registry;
+    int steering_calls = 0;
+    int follow_up_calls = 0;
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.get_steering_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        ++steering_calls;
+        return std::vector<ai::MessageVariant>{};
+    };
+    options.get_follow_up_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        ++follow_up_calls;
+        return std::vector<ai::MessageVariant>{};
+    };
+    options.should_stop_after_turn = [](const agent::PrepareNextTurnContext&)
+        -> util::Expected<bool> { return true; };
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "hi");
+
+    REQUIRE(run.result);
+    CHECK(steering_calls == 1);
+    CHECK(follow_up_calls == 0);
+    CHECK(count_events<agent::TurnEndEvent>(run.events) == 1);
+    CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+}
+
+TEST_CASE("prepareNextTurn runs before post-turn steering is polled", "[agent][async][u8]") {
     FakeStreamingClient client;
     client.responses.push_back(ai::assistant_text_message("first"));
     client.responses.push_back(ai::assistant_text_message("second"));
@@ -1778,7 +1893,7 @@ TEST_CASE("prepareNextTurn sees queued steering messages", "[agent][async][u8]")
     agent::AsyncToolRegistry registry;
 
     int steering_calls = 0;
-    std::vector<ai::MessageVariant> observed_queued;
+    std::vector<std::size_t> observed_new_message_counts;
     agent::AsyncAgentOptions options{4, "gpt-test"};
     options.get_steering_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
         ++steering_calls;
@@ -1789,9 +1904,7 @@ TEST_CASE("prepareNextTurn sees queued steering messages", "[agent][async][u8]")
     };
     options.prepare_next_turn = [&](const agent::PrepareNextTurnContext& context)
         -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
-        if (!context.queued_messages.empty()) {
-            observed_queued = context.queued_messages;
-        }
+        observed_new_message_counts.push_back(context.new_messages.size());
         return std::nullopt;
     };
 
@@ -1799,9 +1912,15 @@ TEST_CASE("prepareNextTurn sees queued steering messages", "[agent][async][u8]")
     auto run = run_loop(loop, "hi");
 
     REQUIRE(run.result);
-    REQUIRE(observed_queued.size() == 1);
-    REQUIRE(std::holds_alternative<ai::UserMessage>(observed_queued[0]));
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(observed_queued[0]).content) == "steer");
+    const std::vector<std::size_t> expected_new_message_counts{2, 4};
+    CHECK(observed_new_message_counts == expected_new_message_counts);
+    CHECK(steering_calls == 3);
+    REQUIRE(client.requests.size() == 2);
+    REQUIRE(client.requests[1].context.messages.size() == 3);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(client.requests[1].context.messages[2]));
+    CHECK(ai::text_from_content(
+              std::get<ai::UserMessage>(client.requests[1].context.messages[2]).content) ==
+          "steer");
 }
 
 TEST_CASE("prepareNextTurn model swap changes next request model", "[agent][async][u8]") {
@@ -1905,84 +2024,73 @@ TEST_CASE("prepareNextTurn rejected update does not persist partial model change
     CHECK(second.result->state.model == "gpt-test");
 }
 
-TEST_CASE("prepareNextTurn append_messages appends to transcript", "[agent][async][u8]") {
+TEST_CASE("prepareNextTurn replaces model context without publishing replacement messages", "[agent][async][issue35]") {
     FakeStreamingClient client;
-    client.responses.push_back(ai::assistant_text_message("first"));
+    client.responses.push_back(tool_call_response());
+    client.responses.push_back(ai::assistant_text_message("second"));
 
     agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<FakeTool>(
+        ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
+    bool prepared = false;
+    bool stop_observed_replacement = false;
+    std::size_t first_prepare_new_message_count = 0;
     agent::AsyncAgentOptions options{4, "gpt-test"};
-    options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
+    options.prepare_next_turn = [&](const agent::PrepareNextTurnContext& context)
         -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+        if (prepared) {
+            return std::nullopt;
+        }
+        prepared = true;
+        first_prepare_new_message_count = context.new_messages.size();
+        agent::AgentLoopContextReplacement replacement;
+        replacement.system_prompt = "replacement prompt";
+        replacement.messages.push_back(ai::user_text_message("replacement history"));
         return agent::AgentLoopTurnUpdate{
-            std::vector<ai::MessageVariant>{ai::user_text_message("appended")},
-            std::nullopt,
-            std::nullopt};
+            std::move(replacement), std::nullopt, std::nullopt};
+    };
+    options.should_stop_after_turn = [&](const agent::PrepareNextTurnContext& context)
+        -> util::Expected<bool> {
+        if (context.context.system_prompt &&
+            *context.context.system_prompt == "replacement prompt" &&
+            context.context.messages.size() == 1) {
+            stop_observed_replacement = true;
+        }
+        return false;
     };
 
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
-    auto run = run_loop(loop, "hi");
+    auto run = run_loop(loop, "read");
 
     REQUIRE(run.result);
-    REQUIRE(run.result->context.messages.size() == 3);
-    REQUIRE(std::holds_alternative<ai::UserMessage>(run.result->context.messages.back()));
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(run.result->context.messages.back()).content) == "appended");
-}
+    CHECK(prepared);
+    CHECK(first_prepare_new_message_count == 3);
+    CHECK(stop_observed_replacement);
+    REQUIRE(client.requests.size() == 2);
+    REQUIRE(client.requests[1].context.system_prompt.has_value());
+    CHECK(*client.requests[1].context.system_prompt == "replacement prompt");
+    REQUIRE(client.requests[1].context.messages.size() == 1);
+    CHECK(ai::text_from_content(
+              std::get<ai::UserMessage>(client.requests[1].context.messages[0]).content) ==
+          "replacement history");
+    REQUIRE(client.requests[1].context.tools.size() == 1);
+    CHECK(client.requests[1].context.tools[0].name == "read_file");
 
-TEST_CASE("prepareNextTurn append_messages emits ordinary message lifecycle", "[agent][async]") {
-    FakeStreamingClient client;
-    client.responses.push_back(ai::assistant_text_message("first"));
-
-    agent::AsyncToolRegistry registry;
-    agent::AsyncAgentOptions options{4, "gpt-test"};
-    options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
-        -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
-        return agent::AgentLoopTurnUpdate{
-            std::vector<ai::MessageVariant>{ai::user_text_message("appended")},
-            std::nullopt,
-            std::nullopt};
-    };
-
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
-    auto run = run_loop(loop, "hi");
-
-    REQUIRE(run.result);
-    CHECK(run.result->turns == 1);
-    REQUIRE(run.result->context.messages.size() == 3);
-    REQUIRE(std::holds_alternative<ai::UserMessage>(run.result->context.messages.back()));
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(run.result->context.messages.back()).content) == "appended");
-
-    std::size_t turn_end_index = 0;
-    std::size_t agent_end_index = 0;
-    for (std::size_t i = 0; i < run.events.size(); ++i) {
-        if (std::holds_alternative<agent::TurnEndEvent>(run.events[i])) {
-            turn_end_index = i;
-        } else if (std::holds_alternative<agent::AgentEndEvent>(run.events[i])) {
-            agent_end_index = i;
-        }
-    }
-    REQUIRE(turn_end_index > 0);
-    REQUIRE(agent_end_index > turn_end_index);
-
-    std::size_t appended_starts = 0;
-    std::size_t appended_ends = 0;
-    std::optional<std::string> appended_text;
-    for (std::size_t i = turn_end_index + 1; i < agent_end_index; ++i) {
-        if (const auto* start = std::get_if<agent::MessageStartEvent>(&run.events[i])) {
-            if (std::holds_alternative<ai::UserMessage>(start->message)) {
-                ++appended_starts;
-                appended_text = ai::text_from_content(std::get<ai::UserMessage>(start->message).content);
-            }
-        } else if (const auto* end = std::get_if<agent::MessageEndEvent>(&run.events[i])) {
-            if (std::holds_alternative<ai::UserMessage>(end->message)) {
-                ++appended_ends;
-            }
-        }
-    }
-    CHECK(appended_starts == 1);
-    CHECK(appended_ends == 1);
-    REQUIRE(appended_text.has_value());
-    CHECK(*appended_text == "appended");
+    REQUIRE(run.result->context.messages.size() == 2);
+    CHECK(ai::text_from_content(
+              std::get<ai::UserMessage>(run.result->context.messages[0]).content) ==
+          "replacement history");
+    CHECK(ai::text_from_assistant_content(
+              std::get<ai::AssistantMessage>(run.result->context.messages[1]).content) ==
+          "second");
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
+    const auto* ended = std::get_if<agent::AgentEndEvent>(&run.events.back());
+    REQUIRE(ended != nullptr);
+    REQUIRE(ended->messages.size() == 4);
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(ended->messages[0]).content) ==
+          "read");
 }
 
 TEST_CASE("prepareNextTurn no update leaves model and thinking level unchanged", "[agent][async][u8]") {

@@ -27,6 +27,15 @@ public:
         AgentEventSink sink = {});
 
 private:
+    friend class Agent;
+
+    [[nodiscard]] const std::string& current_model() const noexcept {
+        return options_.model;
+    }
+    [[nodiscard]] const std::string& current_thinking_level() const noexcept {
+        return options_.thinking_level;
+    }
+
     [[nodiscard]] util::ExpectedVoid append_message_with_lifecycle(
         AgentState& state,
         ai::AiContext& context,

@@ -1,5 +1,6 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
+#include "../../include/cch/agent/Agent.hpp"
 #include "../../include/cch/agent/AgentContext.hpp"
 #include "../../include/cch/agent/AgentEvent.hpp"
 #include "../../include/cch/agent/AgentLoop.hpp"
@@ -58,6 +59,11 @@ TEST_CASE("public headers compile from the include contract surface", "[architec
 }
 
 TEST_CASE("public contracts remain value and interface oriented", "[architecture][u1]") {
+    static_assert(std::is_aggregate_v<agent::AgentInitialState>);
+    static_assert(std::is_copy_constructible_v<agent::AgentState>);
+    static_assert(std::is_same_v<
+                  decltype(std::declval<const agent::Agent&>().state()),
+                  agent::AgentState>);
     static_assert(std::is_move_constructible_v<ai::MessageVariant>);
     static_assert(std::is_move_constructible_v<ai::Content>);
     static_assert(std::is_abstract_v<ai::StreamingChatClient>);

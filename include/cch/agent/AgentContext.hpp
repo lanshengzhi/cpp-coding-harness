@@ -30,17 +30,27 @@ struct PrepareNextTurnContext {
     ai::AssistantMessage assistant_message;
     std::vector<ai::ToolResultMessage> tool_results;
     ai::AiContext context;
-    std::vector<ai::MessageVariant> queued_messages;
+    std::vector<ai::MessageVariant> new_messages;
+};
+
+/// Replacement model-facing context for the next request in the current run.
+/// Executable tool capabilities remain owned by the loop's tool registry.
+struct AgentLoopContextReplacement {
+    std::optional<std::string> system_prompt;
+    std::vector<ai::MessageVariant> messages;
 };
 
 struct AgentLoopTurnUpdate {
-    std::optional<std::vector<ai::MessageVariant>> append_messages;
+    std::optional<AgentLoopContextReplacement> context;
     std::optional<std::string> model;
     std::optional<std::string> thinking_level;
 };
 
 using PrepareNextTurnHook = std::move_only_function<
     util::Expected<std::optional<AgentLoopTurnUpdate>>(const PrepareNextTurnContext&)>;
+
+using ShouldStopAfterTurnHook = std::move_only_function<
+    util::Expected<bool>(const PrepareNextTurnContext&)>;
 
 // Validates high-privilege turn updates before they are applied. Model changes
 // require this hook until a provider/model registry validator is wired directly
@@ -61,6 +71,7 @@ using ToolExecutionPolicy = std::variant<
 struct AsyncAgentOptions {
     int max_turns{8};
     std::string model;
+    std::string thinking_level;
     std::optional<BeforeToolCallHook> before_tool_call;
     std::optional<AfterToolCallHook> after_tool_call;
     std::optional<TransformContextHook> transform_context;
@@ -68,6 +79,7 @@ struct AsyncAgentOptions {
     std::optional<GetSteeringMessagesHook> get_steering_messages;
     std::optional<GetFollowUpMessagesHook> get_follow_up_messages;
     std::optional<PrepareNextTurnHook> prepare_next_turn;
+    std::optional<ShouldStopAfterTurnHook> should_stop_after_turn;
     std::optional<ValidateTurnUpdateHook> validate_turn_update;
     ToolExecutionPolicy tool_execution{SequentialToolExecution{}};
 
@@ -83,11 +95,14 @@ struct AsyncAgentOptions {
 
 struct AgentState {
     std::vector<ai::MessageVariant> messages;
+    bool is_running{false};
     std::optional<ai::AssistantMessage> streaming_message;
     std::vector<std::string> active_tool_names;
     std::vector<std::string> pending_tool_call_ids;
     std::string model;
     std::string thinking_level;
+    // Bounded, redacted observations from weak-subscriber failures.
+    std::vector<util::Error> diagnostics;
 };
 
 struct AsyncAgentRunResult {
