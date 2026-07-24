@@ -4,6 +4,10 @@
 #include "coding_agent/runtime/AgentSessionRuntime.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/io_context.hpp>
+
+#include <exception>
 #include <memory>
 #include <optional>
 #include <string>
@@ -23,6 +27,38 @@ public:
 private:
     Callback callback_;
 };
+
+thread_local const AgentSession::Impl* blocking_prompt_wait = nullptr;
+
+class BlockingPromptWaitScope final {
+public:
+    explicit BlockingPromptWaitScope(const AgentSession::Impl* impl)
+        : previous_(blocking_prompt_wait) {
+        blocking_prompt_wait = impl;
+    }
+    BlockingPromptWaitScope(const BlockingPromptWaitScope&) = delete;
+    BlockingPromptWaitScope& operator=(const BlockingPromptWaitScope&) = delete;
+    ~BlockingPromptWaitScope() { blocking_prompt_wait = previous_; }
+
+private:
+    const AgentSession::Impl* previous_;
+};
+
+[[nodiscard]] util::ExpectedVoid prompt_exception(std::exception_ptr exception) {
+    try {
+        std::rethrow_exception(exception);
+    } catch (const std::exception& error) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Unknown,
+            "session prompt coroutine failed",
+            error.what()));
+    } catch (...) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Unknown,
+            "session prompt coroutine failed",
+            "unknown exception"));
+    }
+}
 
 } // namespace
 
@@ -97,31 +133,58 @@ AgentSession::~AgentSession() {
     }
 }
 
-util::ExpectedVoid AgentSession::prompt(std::string text, PromptOptions options) {
+boost::asio::awaitable<util::ExpectedVoid> AgentSession::prompt(
+    std::string text,
+    PromptOptions options) {
+    // AgentSessionPromptAccess copies impl_ before returning its lazy awaitable,
+    // so moving or closing the public handle cannot invalidate an active frame.
     return detail::AgentSessionPromptAccess::prompt(
         *this,
-        std::move(text),
+        std::exchange(text, {}),
         options.expand_prompt_templates,
         {});
 }
 
-util::ExpectedVoid detail::AgentSessionPromptAccess::prompt(
+util::ExpectedVoid AgentSession::prompt_blocking(
+    std::string text,
+    PromptOptions options) {
+    return detail::AgentSessionPromptAccess::prompt_blocking(
+        *this,
+        std::exchange(text, {}),
+        options.expand_prompt_templates,
+        {});
+}
+
+boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::prompt(
     AgentSession& session,
     std::string text,
     bool expand_prompt_templates,
     std::move_only_function<util::ExpectedVoid()> on_preflight_accepted) {
-    // Retain the implementation independently of the public handle so close or
-    // destruction from an observer cannot invalidate the active callback stack.
-    auto impl = session.impl_;
-    if (!impl) {
-        return std::unexpected(util::make_error(util::ErrorCode::Validation, "session is not initialized"));
+    return prompt_impl(
+        session.impl_,
+        std::exchange(text, {}),
+        expand_prompt_templates,
+        std::exchange(on_preflight_accepted, {}));
+}
+
+boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::prompt_impl(
+    std::shared_ptr<AgentSession::Impl> impl,
+    std::string text,
+    bool expand_prompt_templates,
+    std::move_only_function<util::ExpectedVoid()> on_preflight_accepted) {
+    if (!impl || !impl->runtime) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
     }
     if (impl->state == AgentSession::Impl::State::Closing ||
         impl->state == AgentSession::Impl::State::Closed) {
-        return std::unexpected(util::make_error(util::ErrorCode::Validation, "session is closed"));
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is closed"));
     }
     if (impl->state == AgentSession::Impl::State::RunningPrompt) {
-        return std::unexpected(util::make_error(
+        co_return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "session is busy (prompt already in flight)"));
     }
@@ -135,10 +198,71 @@ util::ExpectedVoid detail::AgentSessionPromptAccess::prompt(
         }
     }};
 
-    return impl->runtime->run_prompt(
-        std::move(text),
-        expand_prompt_templates,
-        std::move(on_preflight_accepted));
+    try {
+        co_return co_await impl->runtime->run_prompt(
+            std::exchange(text, {}),
+            expand_prompt_templates,
+            std::exchange(on_preflight_accepted, {}));
+    } catch (...) {
+        co_return prompt_exception(std::current_exception());
+    }
+}
+
+util::ExpectedVoid detail::AgentSessionPromptAccess::prompt_blocking(
+    AgentSession& session,
+    std::string text,
+    bool expand_prompt_templates,
+    std::move_only_function<util::ExpectedVoid()> on_preflight_accepted) {
+    const auto impl = session.impl_;
+    if (!impl) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    if (blocking_prompt_wait == impl.get()) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is busy (prompt already in flight)"));
+    }
+    if (impl->state == AgentSession::Impl::State::Closing ||
+        impl->state == AgentSession::Impl::State::Closed) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is closed"));
+    }
+    if (impl->state == AgentSession::Impl::State::RunningPrompt) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is busy (prompt already in flight)"));
+    }
+
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> result;
+    std::exception_ptr exception;
+    BlockingPromptWaitScope wait_scope{impl.get()};
+
+    boost::asio::co_spawn(
+        io,
+        prompt(
+            session,
+            std::exchange(text, {}),
+            expand_prompt_templates,
+            std::exchange(on_preflight_accepted, {})),
+        [&](std::exception_ptr completion_exception, util::ExpectedVoid completion) {
+            exception = completion_exception;
+            result.emplace(std::exchange(completion, {}));
+        });
+    io.run();
+
+    if (exception) {
+        return prompt_exception(exception);
+    }
+    if (!result) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Unknown,
+            "session prompt coroutine did not complete"));
+    }
+    return std::exchange(*result, {});
 }
 
 util::Expected<EventSubscription> AgentSession::subscribe(agent::AgentEventSink sink) {

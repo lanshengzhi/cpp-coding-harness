@@ -158,7 +158,7 @@ TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point",
 
     auto session_result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(session_result);
-    auto prompt_result = session_result->session->prompt("continue branch");
+    auto prompt_result = session_result->session->prompt_blocking("continue branch");
     REQUIRE(prompt_result);
     CHECK(session_result->session->close().has_value());
 
@@ -208,7 +208,7 @@ TEST_CASE(
     // A resumed branch message append writes the message and then its active
     // leaf marker. Fail only the second physical write.
     harness::session::testing::fail_nth_append_for_test(path, 2);
-    auto failed = session->prompt("continue after partial write");
+    auto failed = session->prompt_blocking("continue after partial write");
     REQUIRE_FALSE(failed);
     CHECK(failed.error().code == util::ErrorCode::Session);
     CHECK(failed.error().message == "could not persist session entry");
@@ -225,7 +225,7 @@ TEST_CASE(
 
     // The live store advances to the successfully written message, so a later
     // prompt extends it instead of retrying or abandoning it.
-    auto recovered = session->prompt("recover branch");
+    auto recovered = session->prompt_blocking("recover branch");
     REQUIRE(recovered);
     CHECK(session->message_count() == 4);
     CHECK(session->close().has_value());

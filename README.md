@@ -295,8 +295,9 @@ auto sub = session->subscribe(
         return {};
     });
 
-// Run a prompt. Progress arrives through the persistent subscription.
-if (auto prompted = session->prompt("hello"); !prompted) {
+// From a coroutine running on the host's Asio executor, run a prompt.
+// Progress arrives through the persistent subscription.
+if (auto prompted = co_await session->prompt("hello"); !prompted) {
     // handle prompted.error()
 }
 auto last_text = session->last_assistant_text();
@@ -326,7 +327,7 @@ if (!result) {
 
 // UUID metadata, events, prompts, tools, and live state remain available.
 auto& session = result->session;
-session->prompt("inspect the workspace");
+session->prompt_blocking("inspect the workspace");
 auto count = session->message_count();
 
 // Both optional path accessors are absent; no JSONL file is created.
@@ -341,7 +342,8 @@ session->close();
 - One passive `SessionTarget` variant: default persisted creation, `ExplicitNewSessionTarget`, `ExplicitResumeSessionTarget`, or `InMemorySessionTarget`. Default construction stores a workspace-keyed session beneath the Agent Config Directory; explicit paths are used exactly and may live elsewhere; in-memory creation never publishes a session directory or JSONL file.
 - `CreateAgentSessionResult::session_path` and `AgentSession::session_path()` use `std::optional<std::filesystem::path>`. Persisted targets return the actual path; in-memory sessions return no value, never an empty-path sentinel.
 - The old experimental `session_path` / `resume_path` option fields were intentionally removed without aliases or compatibility adapters. Explicit targets now look like `opts.session_target = coding_agent::ExplicitNewSessionTarget{"/tmp/my-session.jsonl"};` or `ExplicitResumeSessionTarget{"/tmp/my-session.jsonl"}`.
-- Blocking `prompt()` — serial and single-prompt-at-a-time. Provider rejection before runtime transport, failures reported by the provider event sink, and persistence failures return an explicit `util::Error`; accepted provider `error` and `aborted` outcomes complete successfully and expose their final Assistant Message through ordinary lifecycle events and Live Session State.
+- Async-first `prompt()` — an awaitable, serial, single-prompt-at-a-time operation that runs on the host's Asio executor without a session-owned thread or nested prompt loop. Provider rejection before runtime transport, failures reported by the provider event sink, and persistence failures return an explicit `util::Error`; accepted provider `error` and `aborted` outcomes complete successfully and expose their final Assistant Message through ordinary lifecycle events and Live Session State.
+- `prompt_blocking()` is a separately named convenience facade over the async path. It owns a temporary executor for the call and rejects same-session callback reentry that would recursively wait on itself.
 - One persistent event-subscription path via move-only `agent::AgentEventSink`; prompt progress is not returned or delivered through per-prompt sinks.
 - Host-provided chat clients and execution environments. Chat clients and custom tools passed by `unique_ptr` transfer ownership to the session; `shared_ptr` execution environments remain host-owned and are not cleaned up by session close.
 - SDK convenience provider construction from `SdkProviderConfig` when no host client is supplied.

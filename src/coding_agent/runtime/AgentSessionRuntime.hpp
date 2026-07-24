@@ -9,6 +9,8 @@
 #include "SessionEventCommitment.hpp"
 #include "SessionLifecycle.hpp"
 
+#include <boost/asio/awaitable.hpp>
+
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -38,9 +40,9 @@ public:
     AgentSessionRuntime(AgentSessionRuntime&&) = delete;
     AgentSessionRuntime& operator=(AgentSessionRuntime&&) = delete;
 
-    /// Run one blocking prompt through optional prompt interpretation, the
-    /// stateful Agent, persistence, and event fanout.
-    [[nodiscard]] util::ExpectedVoid run_prompt(
+    /// Run one prompt on the awaiting host executor through optional prompt
+    /// interpretation, the stateful Agent, persistence, and event fanout.
+    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> run_prompt(
         std::string prompt,
         bool expand_prompt_templates,
         std::move_only_function<util::ExpectedVoid()> on_preflight_accepted = {});
@@ -73,7 +75,8 @@ public:
 private:
     enum class State { Open, RunningPrompt, Closing, Closed };
 
-    [[nodiscard]] util::ExpectedVoid run_agent_loop(std::string prompt);
+    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> run_agent_loop(
+        std::string prompt);
     void finalize_close();
 
     RuntimeServices services_;

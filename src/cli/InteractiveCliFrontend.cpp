@@ -118,7 +118,7 @@ int InteractiveCliFrontend::run_prompt(
     }
 
     // Unmatched slash input reaches AgentSession via ordinary prompt.
-    auto prompt_result = session_.prompt(prompt);
+    auto prompt_result = session_.prompt_blocking(prompt);
 
     config_.output.flush();
 

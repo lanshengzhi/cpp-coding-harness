@@ -297,6 +297,8 @@ TEST_CASE("AgentSession has one prompt completion and event subscription path", 
     const auto sdk_header = read_text(source_root / "include" / "cch" / "coding_agent" / "Sdk.hpp");
     const auto runtime_header = read_text(
         source_root / "src" / "coding_agent" / "runtime" / "AgentSessionRuntime.hpp");
+    const auto runtime_source = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "AgentSessionRuntime.cpp");
     const auto rpc_source = read_text(
         source_root / "src" / "coding_agent" / "runtime" / "RpcMode.cpp");
 
@@ -309,13 +311,18 @@ TEST_CASE("AgentSession has one prompt completion and event subscription path", 
     CHECK(runtime_header.find(private_result) == std::string::npos);
     CHECK(sdk_header.find(prompt_sink_field) == std::string::npos);
     CHECK(runtime_header.find(prompt_scope_name) == std::string::npos);
-    CHECK(count_occurrences(sdk_header, "util::ExpectedVoid prompt(") == 1);
+    CHECK(count_occurrences(
+              sdk_header,
+              "boost::asio::awaitable<util::ExpectedVoid> prompt(") == 1);
+    CHECK(count_occurrences(sdk_header, "util::ExpectedVoid prompt_blocking(") == 1);
+    CHECK(runtime_source.find("result = co_await agent_->prompt(") != std::string::npos);
+    CHECK(count_occurrences(runtime_source, "boost::asio::co_spawn(") == 1);
     CHECK(count_occurrences(sdk_header, "AgentEventSink") == 1);
     CHECK(sdk_header.find("subscribe(") != std::string::npos);
     CHECK(count_occurrences(rpc_source, "config.session.subscribe(") == 1);
     CHECK(rpc_source.find(prompt_sink_field) == std::string::npos);
     CHECK(sdk_header.find("preflight_result") == std::string::npos);
-    CHECK(rpc_source.find("AgentSessionPromptAccess::prompt") != std::string::npos);
+    CHECK(rpc_source.find("AgentSessionPromptAccess::prompt_blocking") != std::string::npos);
 }
 
 TEST_CASE("removed event and command contracts stay out of session ownership", "[architecture][agent][session][sdk]") {

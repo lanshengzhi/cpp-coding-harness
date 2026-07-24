@@ -93,17 +93,17 @@ AgentSessionRuntime::AgentSessionRuntime(
         std::move(initial_state));
 }
 
-util::ExpectedVoid AgentSessionRuntime::run_prompt(
+boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
     std::string prompt,
     bool expand_prompt_templates,
     std::move_only_function<util::ExpectedVoid()> on_preflight_accepted) {
     if (state_ == State::Closing || state_ == State::Closed) {
-        return std::unexpected(util::make_error(
+        co_return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "session is closed"));
     }
     if (state_ == State::RunningPrompt) {
-        return std::unexpected(util::make_error(
+        co_return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "session is busy (prompt already in flight)"));
     }
@@ -120,34 +120,25 @@ util::ExpectedVoid AgentSessionRuntime::run_prompt(
     auto expanded = prompt_processor_.process(std::move(prompt), expand_prompt_templates);
     if (on_preflight_accepted) {
         if (auto acknowledged = on_preflight_accepted(); !acknowledged) {
-            return acknowledged;
+            co_return acknowledged;
         }
     }
-    return run_agent_loop(std::move(expanded.text));
+    co_return co_await run_agent_loop(std::move(expanded.text));
 }
 
-util::ExpectedVoid AgentSessionRuntime::run_agent_loop(std::string prompt) {
+boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
+    std::string prompt) {
     if (!agent_) {
-        return std::unexpected(util::make_error(
+        co_return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "session Agent is unavailable"));
     }
 
-    boost::asio::io_context io;
-    std::optional<util::ExpectedVoid> result;
     SessionEventCommitment commitment{*session_.store};
-
-    boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            result = co_await agent_->prompt(
-                std::move(prompt), commitment.sink());
-            co_return;
-        },
-        boost::asio::detached);
-    io.run();
-
-    return commitment.conclude(std::move(result));
+    std::optional<util::ExpectedVoid> result;
+    result = co_await agent_->prompt(
+        std::move(prompt), commitment.sink());
+    co_return commitment.conclude(std::move(result));
 }
 
 util::Expected<agent::AgentEventSubscription> AgentSessionRuntime::subscribe(

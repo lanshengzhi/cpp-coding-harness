@@ -849,7 +849,7 @@ TEST_CASE("RPC mode returns a correlated error when a busy session rejects promp
         nested_output = output.str();
     };
 
-    REQUIRE(created->session->prompt("outer").has_value());
+    REQUIRE(created->session->prompt_blocking("outer").has_value());
     REQUIRE(nested_exit_code == 0);
     const auto records = parse_records(nested_output);
     REQUIRE(records.size() == 2);

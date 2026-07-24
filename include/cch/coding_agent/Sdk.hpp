@@ -11,6 +11,8 @@
 #include <cch/harness/session/SessionEntry.hpp>
 #include <cch/util/Error.hpp>
 
+#include <boost/asio/awaitable.hpp>
+
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -239,9 +241,13 @@ private:
 /// Move-only session handle. Created by create_agent_session().
 ///
 /// Lifecycle: Open → (prompt)* → Closed.
-///   - prompt() is blocking and serial; reentrant calls return an error.
+///   - prompt() is awaitable and serial; reentrant calls return an error.
 ///   - close() is idempotent; prompts after close return an error.
 ///   - subscribers are cleared on close.
+///
+/// Async operations and state access are confined to the host executor driving
+/// prompt(); unrelated concurrent-thread access is not supported. AgentSession
+/// owns no prompt executor or background thread.
 ///
 /// State accessors (message_count(), last_assistant_text(), ...) reflect live
 /// history as each message completes. A completed message remains visible if
@@ -260,14 +266,23 @@ public:
 
     // ── Prompt execution ─────────────────────────────────────────────────
 
-    /// Run a blocking prompt to completion. Progress is delivered through
-    /// persistent subscriptions, and resulting state is queried separately.
-    /// Provider rejection before runtime transport and infrastructure failures
-    /// such as a provider event sink or persistence return explicit errors. An accepted
-    /// provider error or aborted outcome completes normally; its final Assistant
-    /// Message is delivered through the ordinary lifecycle and retained in state.
-    /// Closed, busy, or other agent-execution failures also return errors.
-    [[nodiscard]] util::ExpectedVoid prompt(
+    /// Run a prompt to completion on the awaiting coroutine's Asio executor.
+    /// Progress is delivered through persistent subscriptions, and resulting
+    /// state is queried separately. Provider rejection before runtime transport
+    /// and infrastructure failures such as a provider event sink or persistence
+    /// return explicit errors. An accepted provider error or aborted outcome
+    /// completes normally; its final Assistant Message is delivered through the
+    /// ordinary lifecycle and retained in state. Closed, busy, or other
+    /// agent-execution failures also return errors.
+    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> prompt(
+        std::string text,
+        PromptOptions options = {});
+
+    /// Blocking convenience facade over prompt(). It creates and drains a
+    /// temporary executor for this call. Do not invoke it from callbacks or an
+    /// execution context already driving a blocking prompt for this session;
+    /// such self-wait attempts are rejected. Async hosts should use prompt().
+    [[nodiscard]] util::ExpectedVoid prompt_blocking(
         std::string text,
         PromptOptions options = {});
 

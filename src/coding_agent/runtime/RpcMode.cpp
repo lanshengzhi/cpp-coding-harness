@@ -200,7 +200,7 @@ int run_rpc_mode(RpcModeConfig config) {
             }
 
             pending_prompt = PendingPromptResponse{.id = id};
-            auto result = detail::AgentSessionPromptAccess::prompt(
+            auto result = detail::AgentSessionPromptAccess::prompt_blocking(
                 config.session,
                 std::move(*message),
                 true,

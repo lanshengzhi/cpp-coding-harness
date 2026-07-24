@@ -21,7 +21,17 @@
 #include "../support/TempWorkspace.hpp"
 #include "../support/UsageAssertions.hpp"
 
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/execution/context.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_awaitable.hpp>
+
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -295,6 +305,60 @@ public:
     }
 };
 
+class ExecutorCapturingChatClient final : public ai::StreamingChatClient {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink /*sink*/) override {
+        auto executor = co_await boost::asio::this_coro::executor;
+        execution_context = &boost::asio::query(
+            executor, boost::asio::execution::context);
+        ++request_count;
+
+        auto response = ai::assistant_text_message("async response");
+        response.provider = "executor-capturing-fake";
+        response.api = "fake";
+        response.model = request.model;
+        co_return response;
+    }
+
+    boost::asio::execution_context* execution_context{nullptr};
+    int request_count{0};
+};
+
+class GatedSdkChatClient final : public ai::StreamingChatClient {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink /*sink*/) override {
+        auto executor = co_await boost::asio::this_coro::executor;
+        gate.emplace(executor);
+        gate->expires_at(std::chrono::steady_clock::time_point::max());
+        ++request_count;
+        started = true;
+
+        boost::system::error_code error;
+        co_await gate->async_wait(
+            boost::asio::redirect_error(boost::asio::use_awaitable, error));
+
+        auto response = ai::assistant_text_message("released");
+        response.provider = "gated-fake";
+        response.api = "fake";
+        response.model = request.model;
+        co_return response;
+    }
+
+    void release() {
+        if (gate) {
+            gate->cancel();
+        }
+    }
+
+    bool started{false};
+    int request_count{0};
+    std::optional<boost::asio::steady_timer> gate;
+};
+
 /// A conforming host-provided client whose accepted call emits one terminal
 /// error event before any assistant start event and returns the same final
 /// AssistantMessage through the value alternative.
@@ -480,7 +544,12 @@ TEST_CASE("SDK prompt contract exposes success-or-error and separate state", "[s
 
     using PromptCompletion = decltype(
         std::declval<coding_agent::AgentSession&>().prompt(std::declval<std::string>()));
-    static_assert(std::is_same_v<PromptCompletion, util::ExpectedVoid>);
+    using BlockingPromptCompletion = decltype(
+        std::declval<coding_agent::AgentSession&>().prompt_blocking(std::declval<std::string>()));
+    static_assert(std::is_same_v<
+                  PromptCompletion,
+                  boost::asio::awaitable<util::ExpectedVoid>>);
+    static_assert(std::is_same_v<BlockingPromptCompletion, util::ExpectedVoid>);
     static_assert(!std::is_constructible_v<coding_agent::PromptOptions, agent::AgentEventSink>);
 }
 
@@ -571,7 +640,7 @@ TEST_CASE(
         });
     REQUIRE(subscription.has_value());
 
-    auto prompted = result->session->prompt("read target.txt");
+    auto prompted = result->session->prompt_blocking("read target.txt");
     REQUIRE(prompted.has_value());
     CHECK(message_ends == 4);
     CHECK(tool_results == 1);
@@ -664,7 +733,7 @@ TEST_CASE(
         });
     REQUIRE(healthy_subscription.has_value());
 
-    auto prompted = result->session->prompt("hello");
+    auto prompted = result->session->prompt_blocking("hello");
     REQUIRE(prompted.has_value());
     CHECK_FALSE(static_cast<bool>(*failed_subscription));
     CHECK(static_cast<bool>(*healthy_subscription));
@@ -703,7 +772,7 @@ TEST_CASE(
     REQUIRE(result->session->templates().size() == 1);
     CHECK(result->session->templates()[0].name == "project-review");
 
-    auto prompted = result->session->prompt("/project-review target.cpp");
+    auto prompted = result->session->prompt_blocking("/project-review target.cpp");
     REQUIRE(prompted.has_value());
     REQUIRE(result->session->last_assistant_text().has_value());
     CHECK(result->session->last_assistant_text()->find("Review in memory: target.cpp.") !=
@@ -741,7 +810,7 @@ TEST_CASE(
         });
     REQUIRE(subscription.has_value());
 
-    auto failed = result->session->prompt("hello");
+    auto failed = result->session->prompt_blocking("hello");
     REQUIRE_FALSE(failed.has_value());
     CHECK(failed.error().code == util::ErrorCode::Provider);
     CHECK(failed.error().message == "provider rejected in-memory prompt");
@@ -788,7 +857,7 @@ TEST_CASE(
         });
     REQUIRE(subscription.has_value());
 
-    auto failed = session->prompt("hello");
+    auto failed = session->prompt_blocking("hello");
     REQUIRE_FALSE(failed.has_value());
     CHECK(failed.error().code == util::ErrorCode::Provider);
     CHECK(failed.error().message == "missing API key");
@@ -864,7 +933,7 @@ TEST_CASE(
         });
     REQUIRE(subscription.has_value());
 
-    auto prompted = session->prompt("hello");
+    auto prompted = session->prompt_blocking("hello");
     REQUIRE(prompted.has_value());
     REQUIRE(transport->requests.size() == 1);
 
@@ -955,7 +1024,7 @@ TEST_CASE(
         });
     REQUIRE(subscription.has_value());
 
-    auto error_turn = session->prompt("hello");
+    auto error_turn = session->prompt_blocking("hello");
     REQUIRE(error_turn.has_value());
     CHECK(transport->requests.size() == 1);
     CHECK(terminal_was_live_before_message_end);
@@ -1006,7 +1075,7 @@ TEST_CASE(
     CHECK(durable_terminal.error_message == terminal_error_message);
 
     events.clear();
-    auto recovered_turn = session->prompt("try again");
+    auto recovered_turn = session->prompt_blocking("try again");
     REQUIRE(recovered_turn.has_value());
     CHECK(transport->requests.size() == 2);
     CHECK(session->message_count() == 4);
@@ -1024,7 +1093,7 @@ TEST_CASE(
     auto reopened = coding_agent::create_agent_session(std::move(resume));
     REQUIRE(reopened.has_value());
     CHECK(reopened->session->message_count() == 4);
-    auto after_resume = reopened->session->prompt("after resume");
+    auto after_resume = reopened->session->prompt_blocking("after resume");
     REQUIRE(after_resume.has_value());
     REQUIRE(capture_ptr->captured_request.has_value());
     REQUIRE(capture_ptr->captured_request->context.messages.size() == 5);
@@ -1080,7 +1149,7 @@ TEST_CASE(
         });
     REQUIRE(subscription.has_value());
 
-    REQUIRE(created->session->prompt("exercise malformed and valid calls").has_value());
+    REQUIRE(created->session->prompt_blocking("exercise malformed and valid calls").has_value());
     CHECK(*tool_execution_count == 1);
     REQUIRE(execution_end_diagnostic.has_value());
     REQUIRE(message_end_diagnostic.has_value());
@@ -1176,7 +1245,7 @@ TEST_CASE(
         });
     REQUIRE(subscription.has_value());
 
-    auto aborted_turn = session->prompt("hello");
+    auto aborted_turn = session->prompt_blocking("hello");
     REQUIRE(aborted_turn.has_value());
     CHECK(transport->requests.size() == 1);
     CHECK(*tool_execution_count == 0);
@@ -1231,7 +1300,7 @@ TEST_CASE(
     check_aborted_terminal(std::get<ai::AssistantMessage>(durable->messages[1]));
 
     events.clear();
-    auto recovered_turn = session->prompt("try again");
+    auto recovered_turn = session->prompt_blocking("try again");
     REQUIRE(recovered_turn.has_value());
     CHECK(transport->requests.size() == 2);
     CHECK(*tool_execution_count == 0);
@@ -1250,7 +1319,7 @@ TEST_CASE(
     auto reopened = coding_agent::create_agent_session(std::move(resume));
     REQUIRE(reopened.has_value());
     CHECK(reopened->session->message_count() == 4);
-    auto after_resume = reopened->session->prompt("after resume");
+    auto after_resume = reopened->session->prompt_blocking("after resume");
     REQUIRE(after_resume.has_value());
     REQUIRE(capture_ptr->captured_request.has_value());
     REQUIRE(capture_ptr->captured_request->context.messages.size() == 5);
@@ -1296,7 +1365,7 @@ TEST_CASE(
         });
     REQUIRE(subscription.has_value());
 
-    auto completed = session->prompt("hello");
+    auto completed = session->prompt_blocking("hello");
     REQUIRE(completed.has_value());
     CHECK(client_ptr->request_count == 1);
     CHECK(terminal_was_live_before_message_end);
@@ -1355,7 +1424,7 @@ TEST_CASE(
 
     // The session remains usable for another prompt.
     events.clear();
-    auto second = session->prompt("again");
+    auto second = session->prompt_blocking("again");
     REQUIRE(second.has_value());
     CHECK(client_ptr->request_count == 2);
     CHECK(session->message_count() == 4);
@@ -1387,7 +1456,7 @@ TEST_CASE(
         });
     REQUIRE(subscription.has_value());
 
-    auto completed = session->prompt("hello");
+    auto completed = session->prompt_blocking("hello");
     REQUIRE(completed.has_value());
     CHECK(session->is_open());
     CHECK(session->message_count() == 2);
@@ -1479,7 +1548,7 @@ TEST_CASE(
         });
     REQUIRE(subscription.has_value());
 
-    auto prompted = session->prompt("hello");
+    auto prompted = session->prompt_blocking("hello");
     REQUIRE(prompted.has_value());
     CHECK(transport->requests.size() == 1);
     CHECK(*tool_execution_count == 0);
@@ -1555,7 +1624,7 @@ TEST_CASE(
     auto reopened = coding_agent::create_agent_session(std::move(resume));
     REQUIRE(reopened.has_value());
     CHECK(reopened->session->message_count() == 2);
-    auto after_resume = reopened->session->prompt("after resume");
+    auto after_resume = reopened->session->prompt_blocking("after resume");
     REQUIRE(after_resume.has_value());
     REQUIRE(capture_ptr->captured_request.has_value());
     REQUIRE(capture_ptr->captured_request->context.messages.size() == 3);
@@ -2160,6 +2229,210 @@ TEST_CASE("SDK resume uses config-derived api_key_env chain", "[sdk][u2][api-key
 // U3: Session facade, prompt lifecycle, event fanout
 // ─────────────────────────────────────────────────────────────────────────────
 
+TEST_CASE("SDK async prompt runs on the awaiting host executor", "[sdk][u3][async]") {
+    TestPaths paths;
+
+    auto client = std::make_unique<ExecutorCapturingChatClient>();
+    auto* client_ptr = client.get();
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::InMemorySessionTarget{};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::move(client);
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+
+    boost::asio::io_context host_io;
+    std::optional<util::ExpectedVoid> prompt_result;
+    boost::asio::co_spawn(
+        host_io,
+        [&]() -> boost::asio::awaitable<void> {
+            prompt_result = co_await created->session->prompt("hello from host executor");
+            co_return;
+        },
+        boost::asio::detached);
+
+    CHECK(client_ptr->request_count == 0);
+    CHECK_FALSE(prompt_result.has_value());
+
+    host_io.run();
+
+    REQUIRE(prompt_result.has_value());
+    REQUIRE(prompt_result->has_value());
+    CHECK(client_ptr->request_count == 1);
+    CHECK(client_ptr->execution_context == &host_io);
+    CHECK(created->session->message_count() == 2);
+}
+
+TEST_CASE("SDK async prompt rejects overlap before session mutation", "[sdk][u3][async]") {
+    TestPaths paths;
+
+    auto client = std::make_unique<GatedSdkChatClient>();
+    auto* client_ptr = client.get();
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::InMemorySessionTarget{};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::move(client);
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+
+    boost::asio::io_context host_io;
+    std::optional<util::ExpectedVoid> first_result;
+    std::optional<util::ExpectedVoid> overlapping_result;
+    boost::asio::co_spawn(
+        host_io,
+        [&]() -> boost::asio::awaitable<void> {
+            first_result = co_await created->session->prompt("first");
+            co_return;
+        },
+        boost::asio::detached);
+
+    while (!client_ptr->started) {
+        REQUIRE(host_io.poll_one() == 1);
+    }
+    REQUIRE(created->session->is_busy());
+    const auto messages_before_overlap = created->session->message_count();
+    REQUIRE(messages_before_overlap == 1);
+
+    boost::asio::co_spawn(
+        host_io,
+        [&]() -> boost::asio::awaitable<void> {
+            overlapping_result = co_await created->session->prompt("overlap");
+            co_return;
+        },
+        boost::asio::detached);
+    while (!overlapping_result) {
+        REQUIRE(host_io.poll_one() == 1);
+    }
+
+    REQUIRE_FALSE(overlapping_result->has_value());
+    CHECK(overlapping_result->error().code == util::ErrorCode::Validation);
+    CHECK(overlapping_result->error().message == "session is busy (prompt already in flight)");
+    CHECK(created->session->message_count() == messages_before_overlap);
+    CHECK(client_ptr->request_count == 1);
+
+    client_ptr->release();
+    if (host_io.stopped()) {
+        host_io.restart();
+    }
+    host_io.run();
+
+    REQUIRE(first_result.has_value());
+    REQUIRE(first_result->has_value());
+    CHECK_FALSE(created->session->is_busy());
+    CHECK(created->session->message_count() == 2);
+}
+
+TEST_CASE("SDK async prompt returns fake provider failure as an expected value", "[sdk][u3][async]") {
+    TestPaths paths;
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::InMemorySessionTarget{};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::make_unique<PreflightRejectingChatClient>();
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+
+    boost::asio::io_context host_io;
+    std::optional<util::ExpectedVoid> prompt_result;
+    boost::asio::co_spawn(
+        host_io,
+        [&]() -> boost::asio::awaitable<void> {
+            prompt_result = co_await created->session->prompt("rejected");
+            co_return;
+        },
+        boost::asio::detached);
+    host_io.run();
+
+    REQUIRE(prompt_result.has_value());
+    REQUIRE_FALSE(prompt_result->has_value());
+    CHECK(prompt_result->error().code == util::ErrorCode::Provider);
+    CHECK(prompt_result->error().message == "provider rejected in-memory prompt");
+    CHECK(created->session->is_open());
+    CHECK_FALSE(created->session->is_busy());
+    CHECK(created->session->message_count() == 1);
+}
+
+TEST_CASE("SDK async prompt defers callback close until quiescence", "[sdk][u3][async]") {
+    TestPaths paths;
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::InMemorySessionTarget{};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::make_unique<ExecutorCapturingChatClient>();
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+
+    bool close_requested = false;
+    auto subscription = created->session->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            if (std::holds_alternative<agent::AgentStartEvent>(event)) {
+                close_requested = true;
+                return created->session->close();
+            }
+            return {};
+        });
+    REQUIRE(subscription.has_value());
+
+    boost::asio::io_context host_io;
+    std::optional<util::ExpectedVoid> prompt_result;
+    boost::asio::co_spawn(
+        host_io,
+        [&]() -> boost::asio::awaitable<void> {
+            prompt_result = co_await created->session->prompt("close after start");
+            co_return;
+        },
+        boost::asio::detached);
+    host_io.run();
+
+    REQUIRE(prompt_result.has_value());
+    REQUIRE(prompt_result->has_value());
+    CHECK(close_requested);
+    CHECK_FALSE(created->session->is_open());
+    CHECK_FALSE(created->session->is_busy());
+}
+
+TEST_CASE("SDK blocking prompt rejects same-session callback self-wait", "[sdk][u3][blocking]") {
+    TestPaths paths;
+
+    auto client = std::make_unique<ExecutorCapturingChatClient>();
+    auto* client_ptr = client.get();
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::InMemorySessionTarget{};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::move(client);
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+
+    std::optional<util::ExpectedVoid> nested_result;
+    auto subscription = created->session->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            if (std::holds_alternative<agent::AgentStartEvent>(event) && !nested_result) {
+                nested_result = created->session->prompt_blocking("nested");
+            }
+            return {};
+        });
+    REQUIRE(subscription.has_value());
+
+    auto outer_result = created->session->prompt_blocking("outer");
+
+    REQUIRE(outer_result.has_value());
+    REQUIRE(nested_result.has_value());
+    REQUIRE_FALSE(nested_result->has_value());
+    CHECK(nested_result->error().code == util::ErrorCode::Validation);
+    CHECK(nested_result->error().message ==
+          "session is busy (prompt already in flight)");
+    CHECK(client_ptr->request_count == 1);
+    CHECK(created->session->message_count() == 2);
+}
+
 TEST_CASE("SDK create/prompt/close cycle with fake client", "[sdk][u3]") {
     TestPaths paths;
 
@@ -2177,7 +2450,7 @@ TEST_CASE("SDK create/prompt/close cycle with fake client", "[sdk][u3]") {
     CHECK_FALSE(session->is_busy());
 
     // Prompt completion reports success; resulting state is queried separately.
-    auto prompt_result = session->prompt("hello world");
+    auto prompt_result = session->prompt_blocking("hello world");
     REQUIRE(prompt_result.has_value());
     CHECK(session->message_count() > 0);
 
@@ -2190,7 +2463,7 @@ TEST_CASE("SDK create/prompt/close cycle with fake client", "[sdk][u3]") {
     CHECK(close2.has_value());
 
     // Prompt after close fails
-    auto prompt_after = session->prompt("should fail");
+    auto prompt_after = session->prompt_blocking("should fail");
     REQUIRE_FALSE(prompt_after.has_value());
     CHECK(prompt_after.error().code == util::ErrorCode::Validation);
 }
@@ -2219,7 +2492,7 @@ TEST_CASE("SDK event subscription delivers lifecycle events", "[sdk][u3]") {
     CHECK(static_cast<bool>(*sub_result));
 
     // Run a prompt
-    auto prompt_result = session->prompt("test event delivery");
+    auto prompt_result = session->prompt_blocking("test event delivery");
     REQUIRE(prompt_result.has_value());
     CHECK(event_count > 0);
 
@@ -2252,7 +2525,7 @@ TEST_CASE("SDK custom tool is registered and can be called", "[sdk][u4]") {
     REQUIRE(create_result.has_value());
 
     auto& session = create_result->session;
-    auto prompt_result = session->prompt("hello");
+    auto prompt_result = session->prompt_blocking("hello");
     REQUIRE(prompt_result.has_value());
 
     CHECK(session->close().has_value());
@@ -2314,7 +2587,7 @@ TEST_CASE("SDK unknown skill command reaches the provider without diagnostics", 
     REQUIRE(create_result.has_value());
 
     auto& session = create_result->session;
-    auto prompt_result = session->prompt("/skill:unknown");
+    auto prompt_result = session->prompt_blocking("/skill:unknown");
     REQUIRE(prompt_result.has_value());
 
     CHECK(session->close().has_value());
@@ -2339,10 +2612,10 @@ TEST_CASE("SDK prompt leaves diagnostics empty for valid and bare skill commands
     REQUIRE(create_result.has_value());
 
     auto& session = create_result->session;
-    auto valid_result = session->prompt("/skill:valid-skill with args");
+    auto valid_result = session->prompt_blocking("/skill:valid-skill with args");
     REQUIRE(valid_result.has_value());
 
-    auto bare_result = session->prompt("/skill:");
+    auto bare_result = session->prompt_blocking("/skill:");
     REQUIRE(bare_result.has_value());
 
     CHECK(session->close().has_value());
@@ -2387,7 +2660,7 @@ TEST_CASE("moved SDK session retains its owned prompt resource snapshot", "[sdk]
     REQUIRE(created.has_value());
     coding_agent::AgentSession moved_session{std::move(*created->session)};
 
-    auto result = moved_session.prompt("/review target.cpp");
+    auto result = moved_session.prompt_blocking("/review target.cpp");
     REQUIRE(result.has_value());
     REQUIRE(capture_ptr->captured_request.has_value());
     const auto& messages = capture_ptr->captured_request->context.messages;
@@ -2418,7 +2691,7 @@ TEST_CASE("SDK expand_prompt_templates false sends slash-shaped input raw to the
     for (const std::string raw : {"/skill:cached", "/review arg"}) {
         coding_agent::PromptOptions prompt_options;
         prompt_options.expand_prompt_templates = false;
-        auto result = created->session->prompt(raw, std::move(prompt_options));
+        auto result = created->session->prompt_blocking(raw, std::move(prompt_options));
         REQUIRE(result.has_value());
         REQUIRE(capture_ptr->captured_request.has_value());
         const auto& messages = capture_ptr->captured_request->context.messages;
@@ -2446,7 +2719,7 @@ TEST_CASE("SDK treats user bash prefixes as ordinary prompts", "[sdk][u4][prompt
     REQUIRE(created.has_value());
 
     for (const std::string raw : {"!echo visible", "!!echo excluded-later"}) {
-        auto result = created->session->prompt(raw);
+        auto result = created->session->prompt_blocking(raw);
         REQUIRE(result.has_value());
         REQUIRE(capture_ptr->captured_request.has_value());
         const auto& messages = capture_ptr->captured_request->context.messages;
@@ -2479,12 +2752,12 @@ TEST_CASE("SDK loads trusted project resources through shared loader", "[sdk][pr
     REQUIRE(result->session->templates().size() == 1);
     CHECK(result->session->templates()[0].name == "project-review");
 
-    auto skill_prompt = result->session->prompt("/skill:project-skill now");
+    auto skill_prompt = result->session->prompt_blocking("/skill:project-skill now");
     REQUIRE(skill_prompt.has_value());
     REQUIRE(result->session->last_assistant_text().has_value());
     CHECK(result->session->last_assistant_text()->find("Use project skill instructions.") != std::string::npos);
 
-    auto template_prompt = result->session->prompt("/project-review Ada");
+    auto template_prompt = result->session->prompt_blocking("/project-review Ada");
     REQUIRE(template_prompt.has_value());
     REQUIRE(result->session->last_assistant_text().has_value());
     CHECK(result->session->last_assistant_text()->find("Review project item: Ada.") != std::string::npos);
@@ -2713,7 +2986,7 @@ TEST_CASE("SDK default built-in tools exclude bash", "[sdk][u4]") {
     // Prompt with "bash ..." — the fake client would try to make a bash tool call
     // But since bash is not registered, it should just get a text response
     auto& session = create_result->session;
-    auto prompt_result = session->prompt("bash echo hello");
+    auto prompt_result = session->prompt_blocking("bash echo hello");
     REQUIRE(prompt_result.has_value());
     // The fake client responds with text when no tool is matched for "bash" prefix
     // (it checks prompt.rfind("bash ", 0), which matches, then returns a bash tool call)
@@ -2757,7 +3030,7 @@ TEST_CASE("SDK can resume a linear session", "[sdk][u3]") {
         auto result = coding_agent::create_agent_session(std::move(opts));
         REQUIRE(result.has_value());
         auto& session = result->session;
-        auto pr = session->prompt("hello");
+        auto pr = session->prompt_blocking("hello");
         REQUIRE(pr.has_value());
         CHECK(session->close().has_value());
     }
@@ -2784,7 +3057,7 @@ TEST_CASE("SDK can resume a linear session", "[sdk][u3]") {
         REQUIRE(subscription.has_value());
         CHECK(resumed_run_events == 0);
 
-        auto pr = session->prompt("continue");
+        auto pr = session->prompt_blocking("continue");
         REQUIRE(pr.has_value());
         CHECK(resumed_run_events == 11);
         CHECK(session->message_count() == 4);
@@ -2858,7 +3131,7 @@ TEST_CASE("SDK resumes linear active topology with inactive branch and compactio
     REQUIRE(result.has_value());
     CHECK(result->session->message_count() == 3);
 
-    auto prompt_result = result->session->prompt("continue linear path");
+    auto prompt_result = result->session->prompt_blocking("continue linear path");
     REQUIRE(prompt_result.has_value());
     CHECK(result->session->close().has_value());
 }
@@ -2882,7 +3155,7 @@ TEST_CASE("SDK state accessors reflect committed history", "[sdk][u3]") {
     CHECK(session->message_count() == 0);
     CHECK_FALSE(session->last_assistant_text().has_value());
 
-    auto pr = session->prompt("hello");
+    auto pr = session->prompt_blocking("hello");
     REQUIRE(pr.has_value());
     CHECK(session->message_count() > 0);
     CHECK(session->last_assistant_text().has_value());
@@ -2935,7 +3208,7 @@ TEST_CASE("SDK message_end subscribers observe live state updated before deliver
     });
     REQUIRE(sub.has_value());
 
-    auto first = session->prompt("hello");
+    auto first = session->prompt_blocking("hello");
     REQUIRE(first.has_value());
     CHECK(user_message_ends == 1);
     CHECK(assistant_message_ends == 1);
@@ -2948,7 +3221,7 @@ TEST_CASE("SDK message_end subscribers observe live state updated before deliver
 
     // Tool-using prompt: user, assistant with tool call, tool result, final assistant.
     assistant_text_in_subscriber.reset();
-    auto second = session->prompt("read target.txt");
+    auto second = session->prompt_blocking("read target.txt");
     REQUIRE(second.has_value());
     CHECK(user_message_ends == 2);
     CHECK(tool_result_message_ends == 1);
@@ -2997,7 +3270,7 @@ TEST_CASE(
     });
     REQUIRE(sub.has_value());
 
-    auto prompt = session->prompt("read target.txt");
+    auto prompt = session->prompt_blocking("read target.txt");
     REQUIRE(prompt.has_value());
     CHECK(delivered_message_ends == 4);
 
@@ -3053,7 +3326,7 @@ TEST_CASE(
         });
     REQUIRE(healthy.has_value());
 
-    auto prompted = session->prompt("hello");
+    auto prompted = session->prompt_blocking("hello");
     REQUIRE(prompted.has_value());
     CHECK(rejecting_calls == 1);
     CHECK_FALSE(static_cast<bool>(*rejecting));
@@ -3107,13 +3380,13 @@ TEST_CASE(
     REQUIRE(subscribed.has_value());
     self.emplace(std::move(*subscribed));
 
-    REQUIRE(session->prompt("first").has_value());
+    REQUIRE(session->prompt_blocking("first").has_value());
     CHECK(self_events == 11);
     CHECK(late_events == 0);
     CHECK_FALSE(static_cast<bool>(*self));
     CHECK(static_cast<bool>(*late));
 
-    REQUIRE(session->prompt("second").has_value());
+    REQUIRE(session->prompt_blocking("second").has_value());
     CHECK(self_events == 11);
     CHECK(late_events == 11);
     CHECK(session->close().has_value());
@@ -3149,7 +3422,7 @@ TEST_CASE(
     REQUIRE(subscribed.has_value());
     closing.emplace(std::move(*subscribed));
 
-    REQUIRE(session->prompt("hello").has_value());
+    REQUIRE(session->prompt_blocking("hello").has_value());
     CHECK_FALSE(session->is_open());
     CHECK_FALSE(session->is_busy());
     CHECK(closing_events == 1);
@@ -3183,7 +3456,7 @@ TEST_CASE(
         });
     REQUIRE(destroying.has_value());
 
-    REQUIRE(active->prompt("hello").has_value());
+    REQUIRE(active->prompt_blocking("hello").has_value());
     CHECK_FALSE(session);
     CHECK_FALSE(static_cast<bool>(*destroying));
 
@@ -3224,7 +3497,7 @@ TEST_CASE(
     // The user message reaches storage, then the assistant append fails. The
     // one-shot private hook leaves the next prompt free to persist normally.
     harness::session::testing::fail_nth_append_for_test(paths.session_file, 2);
-    auto failed = session->prompt("first");
+    auto failed = session->prompt_blocking("first");
     REQUIRE_FALSE(failed.has_value());
     CHECK(failed.error().code == util::ErrorCode::Session);
     CHECK(failed.error().message == "could not persist session entry");
@@ -3241,7 +3514,7 @@ TEST_CASE(
     REQUIRE(std::holds_alternative<ai::UserMessage>(durable_after_failure->messages[0]));
     CHECK(ai::text_from_content(std::get<ai::UserMessage>(durable_after_failure->messages[0]).content) == "first");
 
-    auto recovered = session->prompt("second");
+    auto recovered = session->prompt_blocking("second");
     REQUIRE(recovered.has_value());
     CHECK(session->message_count() == 4);
 
@@ -3463,7 +3736,7 @@ TEST_CASE("SDK disabled bash is absent from the model-visible tool registry", "[
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
-    auto prompt_result = result->session->prompt("hello");
+    auto prompt_result = result->session->prompt_blocking("hello");
     REQUIRE(prompt_result.has_value());
 
     REQUIRE(capture_ptr->captured_request.has_value());
@@ -3487,7 +3760,7 @@ TEST_CASE("SDK enabled bash appears in the model-visible tool registry", "[sdk][
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
-    auto prompt_result = result->session->prompt("hello");
+    auto prompt_result = result->session->prompt_blocking("hello");
     REQUIRE(prompt_result.has_value());
 
     REQUIRE(capture_ptr->captured_request.has_value());
