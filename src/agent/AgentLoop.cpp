@@ -1,4 +1,4 @@
-#include "../../include/cch/agent/AgentLoop.hpp"
+#include "AgentLoop.hpp"
 
 #include "ToolCallExecutor.hpp"
 

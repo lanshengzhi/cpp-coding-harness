@@ -3,7 +3,7 @@
 #include "../../../include/cch/agent/Agent.hpp"
 #include "../../../include/cch/coding_agent/PromptTemplate.hpp"
 #include "../../../include/cch/coding_agent/Skill.hpp"
-#include "coding_agent/prompt/PromptProcessor.hpp"
+#include "../prompt/PromptProcessor.hpp"
 #include "../../../include/cch/util/Error.hpp"
 #include "RuntimeServices.hpp"
 #include "SessionEventCommitment.hpp"
@@ -39,7 +39,7 @@ public:
     AgentSessionRuntime& operator=(AgentSessionRuntime&&) = delete;
 
     /// Run one blocking prompt through optional prompt interpretation, the
-    /// agent loop, persistence, and event fanout.
+    /// stateful Agent, persistence, and event fanout.
     [[nodiscard]] util::ExpectedVoid run_prompt(
         std::string prompt,
         bool expand_prompt_templates,

@@ -3,7 +3,6 @@
 #include "../../include/cch/agent/Agent.hpp"
 #include "../../include/cch/agent/AgentContext.hpp"
 #include "../../include/cch/agent/AgentEvent.hpp"
-#include "../../include/cch/agent/AgentLoop.hpp"
 #include "../../include/cch/agent/AgentTool.hpp"
 #include "../../include/cch/agent/ToolRegistry.hpp"
 #include "../../include/cch/ai/ChatClient.hpp"

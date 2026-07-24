@@ -1,10 +1,9 @@
 #pragma once
 
-#include "AgentContext.hpp"
-#include "AgentEvent.hpp"
-#include "ToolRegistry.hpp"
-
-#include "../ai/ChatClient.hpp"
+#include <cch/agent/AgentContext.hpp>
+#include <cch/agent/AgentEvent.hpp>
+#include <cch/agent/ToolRegistry.hpp>
+#include <cch/ai/ChatClient.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -13,6 +12,15 @@
 
 namespace cch::agent {
 
+/// Private result carrier for one coroutine-loop invocation.
+struct AsyncAgentRunResult {
+    ai::AiContext context;
+    ai::AssistantStopReason stop_reason{ai::AssistantStopReason::Stop};
+    int turns{0};
+    AgentState state;
+};
+
+/// Private execution machinery owned by the stateful Agent.
 class AsyncAgentLoop {
 public:
     AsyncAgentLoop(ai::StreamingChatClient& client, AsyncToolRegistry registry, AsyncAgentOptions options = {});

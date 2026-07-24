@@ -1,6 +1,6 @@
 #include "../../include/cch/agent/Agent.hpp"
 
-#include "../../include/cch/agent/AgentLoop.hpp"
+#include "AgentLoop.hpp"
 #include "../../include/cch/ai/Content.hpp"
 #include "util/BoundedText.hpp"
 

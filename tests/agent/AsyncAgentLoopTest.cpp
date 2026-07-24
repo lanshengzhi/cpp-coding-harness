@@ -1,12 +1,12 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include "util/ExpectedMacros.hpp"
+#include "../../src/util/ExpectedMacros.hpp"
 
 #include "../support/ToolArgumentContracts.hpp"
-#include "../../include/cch/agent/AgentLoop.hpp"
+#include "../../src/agent/AgentLoop.hpp"
 #include "../../include/cch/ai/Content.hpp"
 #include "../../include/cch/util/Error.hpp"
-#include "util/Json.hpp"
+#include "../../src/util/Json.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>

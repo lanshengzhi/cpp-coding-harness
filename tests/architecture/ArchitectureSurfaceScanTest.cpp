@@ -142,8 +142,50 @@ TEST_CASE("stateful Agent stays independent of coding-agent product concerns", "
 }
 
 TEST_CASE(
+    "the coroutine loop is private behind the stateful Agent",
+    "[architecture][agent][session][issue37]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto former_loop_header = std::string{"Agent"} + "Loop.hpp";
+    const auto former_loop_type = std::string{"AsyncAgent"} + "Loop";
+    const auto former_run_result = std::string{"AsyncAgentRun"} + "Result";
+
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "include" / "cch" / "agent" / former_loop_header));
+    CHECK(std::filesystem::exists(
+        source_root / "src" / "agent" / former_loop_header));
+
+    for (const auto& header : public_headers()) {
+        const auto text = read_text(header);
+        CHECK(text.find(former_loop_type) == std::string::npos);
+        CHECK(text.find(former_run_result) == std::string::npos);
+    }
+
+    const auto private_agent_dir = source_root / "src" / "agent";
+    const auto agent_source_path = private_agent_dir / "Agent.cpp";
+    const auto loop_source_path = private_agent_dir / "AgentLoop.cpp";
+    const auto loop_header_path = private_agent_dir / former_loop_header;
+    const auto agent_source = read_text(agent_source_path);
+    CHECK(agent_source.find("#include \"AgentLoop.hpp\"") != std::string::npos);
+    CHECK(agent_source.find("impl->loop.continue_with(") != std::string::npos);
+
+    for (const auto& file : files_under({"src"})) {
+        const auto is_loop_implementation =
+            file == agent_source_path ||
+            file == loop_source_path ||
+            file == loop_header_path;
+        if (is_loop_implementation) {
+            continue;
+        }
+        const auto text = read_text(file);
+        CHECK(text.find(former_loop_header) == std::string::npos);
+        CHECK(text.find(former_loop_type) == std::string::npos);
+        CHECK(text.find(former_run_result) == std::string::npos);
+    }
+}
+
+TEST_CASE(
     "AgentSessionRuntime composes the stateful Agent without a second loop or live history",
-    "[architecture][agent][session][issue36]") {
+    "[architecture][agent][session][issue36][issue37]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
     const auto runtime_header = read_text(
         source_root / "src" / "coding_agent" / "runtime" / "AgentSessionRuntime.hpp");
@@ -158,6 +200,8 @@ TEST_CASE(
     CHECK(runtime_header.find("AsyncAgentLoop") == std::string::npos);
     CHECK(runtime_source.find(direct_loop_call) == std::string::npos);
     CHECK(runtime_header.find(duplicate_registry) == std::string::npos);
+    CHECK(runtime_header.find("agent::AgentState") == std::string::npos);
+    CHECK(runtime_header.find("std::vector<ai::MessageVariant>") == std::string::npos);
     // OpenSession history is resume input only and is moved exactly once into
     // AgentInitialState; prompt execution never advances or copies it back.
     CHECK(count_occurrences(runtime_source, "session_.history") == 1);

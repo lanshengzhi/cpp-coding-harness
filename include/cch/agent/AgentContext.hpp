@@ -105,11 +105,4 @@ struct AgentState {
     std::vector<util::Error> diagnostics;
 };
 
-struct AsyncAgentRunResult {
-    ai::AiContext context;
-    ai::AssistantStopReason stop_reason{ai::AssistantStopReason::Stop};
-    int turns{0};
-    AgentState state;
-};
-
 } // namespace cch::agent
