@@ -22,6 +22,8 @@ Repository guidance for Matt's engineering skills and coding agents.
 
 Do not reintroduce the legacy synchronous tool surface, `util::Result`, Boost.JSON domain contracts, `src` as a public include surface, or compatibility-only empty flags.
 
+Code-level conventions (style, naming, error handling, async, tests, CMake) live in `CODING_STANDARDS.md`; the guardrails above stay architecture-level.
+
 ## pi C++ Parity
 
 - The [pi C++ parity map](https://github.com/lanshengzhi/cpp-coding-harness/issues/2) is the current planning authority for open parity decisions.
