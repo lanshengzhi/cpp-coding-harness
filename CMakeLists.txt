@@ -75,6 +75,10 @@ target_link_libraries(cch_agent
 add_library(cch_harness
     src/harness/AsyncLocalExecutionEnv.cpp
     src/harness/SyncLocalExecutionEnv.cpp
+    src/harness/WorkspaceFileSystemFdWalk.cpp
+    src/harness/WorkspaceFileSystemLegacy.cpp
+    src/harness/WorkspaceFileSystemPi.cpp
+    src/harness/WorkspaceFileSystemTemp.cpp
     src/harness/session/SessionJournal.cpp
     src/harness/session/EntrySerializer.cpp
     src/harness/session/InMemorySessionStore.cpp

@@ -483,6 +483,22 @@ TEST_CASE("process capability follows async naming and carries one output limit"
     CHECK(process_header.find("max_output_lines") == std::string::npos);
 }
 
+TEST_CASE("workspace filesystem responsibilities stay in four cohesive units", "[architecture][harness][issue76]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto cmake = read_text(source_root / "CMakeLists.txt");
+    const std::vector<std::string> units{
+        "WorkspaceFileSystemLegacy.cpp",
+        "WorkspaceFileSystemPi.cpp",
+        "WorkspaceFileSystemFdWalk.cpp",
+        "WorkspaceFileSystemTemp.cpp",
+    };
+
+    for (const auto& unit : units) {
+        CHECK(std::filesystem::exists(source_root / "src" / "harness" / unit));
+        CHECK(cmake.find("src/harness/" + unit) != std::string::npos);
+    }
+}
+
 TEST_CASE("active source tree does not retain legacy sync contracts", "[architecture][u2]") {
     const auto files = files_under({"include", "src", "tests"});
     REQUIRE_FALSE(files.empty());
