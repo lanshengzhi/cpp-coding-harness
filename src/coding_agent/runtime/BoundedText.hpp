@@ -4,7 +4,6 @@
 
 #include <cstddef>
 #include <string>
-#include <string_view>
 #include <utility>
 
 namespace cch::coding_agent::runtime {
@@ -15,12 +14,6 @@ namespace cch::coding_agent::runtime {
 // budget, and output stays valid UTF-8.
 constexpr std::size_t kMaxPayloadStringBytes = 8192;
 constexpr std::size_t kSecretBoundaryLookaheadBytes = 256;
-
-[[nodiscard]] inline std::string bounded_utf8(
-    std::string_view text,
-    std::size_t max_bytes) {
-    return util::bounded_utf8(text, max_bytes);
-}
 
 [[nodiscard]] inline std::string bounded_redacted(
     std::string text,

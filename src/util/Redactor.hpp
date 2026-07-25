@@ -8,7 +8,9 @@
 
 namespace cch::util {
 
-inline std::string normalized_secret_key(std::string_view key) {
+inline constexpr std::string_view kRedactionMarker{"[REDACTED]"};
+
+[[nodiscard]] inline std::string normalized_secret_key(std::string_view key) {
     std::string normalized;
     normalized.reserve(key.size());
     for (const unsigned char ch : key) {
@@ -19,7 +21,7 @@ inline std::string normalized_secret_key(std::string_view key) {
     return normalized;
 }
 
-inline bool looks_secret_key(std::string_view key) {
+[[nodiscard]] inline bool looks_secret_key(std::string_view key) {
     const auto normalized = normalized_secret_key(key);
     if (normalized == "TOTALTOKENS" || normalized == "TOKENSBEFORE") {
         return false;
@@ -35,10 +37,6 @@ inline bool is_key_character(unsigned char ch) {
     return std::isalnum(ch) || ch == '_' || ch == '-';
 }
 
-inline bool is_token_character(unsigned char ch) {
-    return std::isalnum(ch) || ch == '_' || ch == '-';
-}
-
 inline void redact_prefixed_tokens(
     std::string& text,
     std::string_view prefix,
@@ -47,7 +45,7 @@ inline void redact_prefixed_tokens(
     std::size_t position = 0;
     while ((position = text.find(prefix, position)) != std::string::npos) {
         std::size_t end = position + prefix.size();
-        while (end < text.size() && is_token_character(static_cast<unsigned char>(text[end]))) {
+        while (end < text.size() && is_key_character(static_cast<unsigned char>(text[end]))) {
             if (uppercase_digits_only && !(std::isdigit(static_cast<unsigned char>(text[end])) ||
                                            (text[end] >= 'A' && text[end] <= 'Z'))) {
                 break;
@@ -58,8 +56,8 @@ inline void redact_prefixed_tokens(
             position += prefix.size();
             continue;
         }
-        text.replace(position, end - position, "[REDACTED]");
-        position += std::string_view{"[REDACTED]"}.size();
+        text.replace(position, end - position, kRedactionMarker);
+        position += kRedactionMarker.size();
     }
 }
 
@@ -139,22 +137,18 @@ inline void redact_assignments(std::string& text) {
             }
         }
 
-        text.replace(value_begin, value_end - value_begin, "[REDACTED]");
-        separator = value_begin + std::string_view{"[REDACTED]"}.size() + (quoted ? 1 : 0);
+        text.replace(value_begin, value_end - value_begin, kRedactionMarker);
+        separator = value_begin + kRedactionMarker.size() + (quoted ? 1 : 0);
     }
 }
 
 } // namespace redactor_detail
 
-inline std::string redact_text(std::string text) {
+[[nodiscard]] inline std::string redact_text(std::string text) {
     redactor_detail::redact_assignments(text);
     redactor_detail::redact_prefixed_tokens(text, "sk-", 8);
     redactor_detail::redact_prefixed_tokens(text, "AKIA", 16, true);
     return text;
-}
-
-inline std::string redact_json_text(const std::string& text) {
-    return redact_text(text);
 }
 
 } // namespace cch::util

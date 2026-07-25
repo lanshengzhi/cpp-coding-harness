@@ -456,7 +456,7 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
         util::JsonValue::object_t redacted;
         for (const auto& [key, item] : *object) {
             if (util::looks_secret_key(key)) {
-                redacted.emplace(key, util::JsonValue{"[REDACTED]"});
+                redacted.emplace(key, util::JsonValue{std::string{util::kRedactionMarker}});
             } else {
                 redacted.emplace(key, redact_json_value(item));
             }
@@ -504,7 +504,7 @@ void redact_assistant_content(ai::AssistantContent& content) {
                 if (block.arguments) {
                     block.arguments = redact_json_value(*block.arguments);
                 }
-                block.raw_arguments = util::redact_json_text(block.raw_arguments);
+                block.raw_arguments = util::redact_text(std::move(block.raw_arguments));
                 if (block.argument_error) {
                     block.argument_error = util::redact_text(std::move(*block.argument_error));
                 }

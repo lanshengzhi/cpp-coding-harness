@@ -210,8 +210,11 @@ if(CCH_BUILD_TESTS)
         tests/harness/session/SessionTreeTest.cpp
         tests/tools/AsyncToolsTest.cpp
         tests/harness/WorkspaceFileSystemTest.cpp
+        tests/util/BoundedTextTest.cpp
         tests/util/ExpectedErrorTest.cpp
         tests/util/ExpectedMacrosTest.cpp
+        tests/util/OutputLimiterTest.cpp
+        tests/util/RedactorTest.cpp
     )
     target_include_directories(cpp_harness_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include

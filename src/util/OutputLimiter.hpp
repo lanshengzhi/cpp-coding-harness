@@ -1,5 +1,7 @@
 #pragma once
 
+#include "BoundedText.hpp"
+
 #include <sstream>
 #include <string>
 #include <vector>
@@ -16,7 +18,7 @@ struct OutputLimitResult {
     bool truncated{false};
 };
 
-inline OutputLimitResult limit_output(const std::string& input, OutputLimit limit = {}) {
+[[nodiscard]] inline OutputLimitResult limit_output(const std::string& input, OutputLimit limit = {}) {
     OutputLimitResult result;
     std::size_t bytes = 0;
     std::size_t lines = 0;
@@ -33,10 +35,10 @@ inline OutputLimitResult limit_output(const std::string& input, OutputLimit limi
         bytes = next_bytes;
         ++lines;
     }
-    if (input.empty()) {
-        result.text.clear();
-    } else if (result.text.empty() && !input.empty()) {
-        result.text = input.substr(0, limit.max_bytes);
+    if (result.text.empty() && !input.empty()) {
+        // The first line alone exceeds the byte budget; bound it without
+        // splitting a UTF-8 multibyte sequence.
+        result.text = bounded_utf8(input, limit.max_bytes);
         result.truncated = input.size() > limit.max_bytes;
     } else if (!input.empty() && input.back() != '\n' && !result.truncated && !result.text.empty()) {
         result.text.pop_back();

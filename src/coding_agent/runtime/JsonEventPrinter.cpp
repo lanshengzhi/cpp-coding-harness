@@ -78,7 +78,7 @@ struct JsonSafetyBudget {
                 auto safe_key = bounded_redacted(key, std::min(kMaxPayloadStringBytes, budget.string_bytes));
                 budget.string_bytes -= safe_key.size();
                 if (util::looks_secret_key(key)) {
-                    safe.emplace(std::move(safe_key), util::JsonValue{"[REDACTED]"});
+                    safe.emplace(std::move(safe_key), util::JsonValue{std::string{util::kRedactionMarker}});
                 } else {
                     safe.emplace(std::move(safe_key), safe_json_value(item, budget, depth + 1));
                 }

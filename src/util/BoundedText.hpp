@@ -104,13 +104,12 @@ namespace cch::util {
     const auto content_bytes = max_bytes > suffix.size()
         ? max_bytes - suffix.size()
         : 0;
-    constexpr std::string_view marker{"[REDACTED]"};
-    if (content_bytes >= marker.size() && text.size() > content_bytes) {
-        const auto crossing_marker = text.rfind(marker, content_bytes);
+    if (content_bytes >= kRedactionMarker.size() && text.size() > content_bytes) {
+        const auto crossing_marker = text.rfind(kRedactionMarker, content_bytes);
         if (crossing_marker != std::string::npos &&
-            crossing_marker + marker.size() > content_bytes) {
-            auto safe = bounded_utf8(text, content_bytes - marker.size());
-            safe += marker;
+            crossing_marker + kRedactionMarker.size() > content_bytes) {
+            auto safe = bounded_utf8(text, content_bytes - kRedactionMarker.size());
+            safe += kRedactionMarker;
             safe += suffix;
             return safe;
         }

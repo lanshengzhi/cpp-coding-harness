@@ -51,14 +51,10 @@ void append_limited(
             }
         }
     }
-    // Invoke callback with the chunk we read (before truncation).
+    // Invoke callback with the chunk we read (before truncation). A throwing
+    // callback propagates and becomes an execution error at the caller level.
     if (callback) {
-        try {
-            (*callback)(std::string_view(data, size));
-        } catch (...) {
-            // Callback failure becomes an execution error at the caller level.
-            throw;
-        }
+        (*callback)(std::string_view(data, size));
     }
     if (offset < size) {
         capture.truncated = true;
@@ -83,12 +79,7 @@ boost::asio::awaitable<OutputCapture> drain_pipe(
             capture.truncated = true;
             break;
         }
-        try {
-            append_limited(capture, buffer.data(), size, max_bytes, max_lines, callback);
-        } catch (...) {
-            // Callback threw — rethrow to propagate as an error.
-            throw;
-        }
+        append_limited(capture, buffer.data(), size, max_bytes, max_lines, callback);
     }
     co_return capture;
 }
