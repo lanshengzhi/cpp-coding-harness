@@ -409,18 +409,21 @@ public:
             co_return error_result_from(shell.error());
         }
 
-        std::string full_output = (received_stdout || received_stderr)
-            ? strip_ansi(combine_output(full_stdout, full_stderr))
-            : strip_ansi(combine_output(shell->stdout_output, shell->stderr_output));
+        // Streamed callbacks carry pre-truncation output. When the environment
+        // never fires them, the result fields are already capped at the
+        // execution layer and no complete output exists to spill.
+        const bool streamed = received_stdout || received_stderr;
+        const std::string& stdout_source = streamed ? full_stdout : shell->stdout_output;
+        const std::string& stderr_source = streamed ? full_stderr : shell->stderr_output;
+        std::string full_output = strip_ansi(combine_output(stdout_source, stderr_source));
 
         // Redact the complete output before splitting between model-visible and spill.
         std::string redacted_full = util::redact_text(full_output);
-        const util::OutputLimit output_limit;
-        auto limited_output = util::limit_output_tail(redacted_full, output_limit);
+        auto limited_output = util::limit_output_tail(redacted_full);
         bool truncated = limited_output.truncated;
         std::string output = std::move(limited_output.text);
-        std::string full_output_path;
-        if (truncated) {
+        if (truncated && streamed) {
+            std::string full_output_path;
             auto ts = std::chrono::system_clock::now().time_since_epoch().count();
             full_output_path = "bash-output-" + std::to_string(ts) + ".txt";
             if (auto write = co_await (*environment)->writeFile(full_output_path, redacted_full); !write) {
@@ -430,6 +433,9 @@ public:
                 std::to_string(output.size()) +
                 " bytes]" + (!full_output_path.empty() ? " full output: " + full_output_path : "") +
                 "\n" + output;
+        } else if (truncated) {
+            output = "[output capped at execution layer, showing last " +
+                std::to_string(output.size()) + " bytes]\n" + output;
         }
         std::ostringstream out;
         out << "exit_code=" << shell->exitCode;

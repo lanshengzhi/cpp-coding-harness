@@ -29,7 +29,7 @@ TEST_CASE("tail output limiter starts on a UTF-8 character boundary", "[util][ou
     CHECK(result.truncated);
 }
 
-TEST_CASE("limit_output_tail preserves unreduced text when no limit is hit", "[util][output-limiter][issue73]") {
+TEST_CASE("limit_output_tail preserves unredacted text when no limit is hit", "[util][output-limiter][issue73]") {
     const auto result = util::limit_output_tail("api_key=secret");
     CHECK(result.text == "api_key=secret");
     CHECK_FALSE(result.truncated);

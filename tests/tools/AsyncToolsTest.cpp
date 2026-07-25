@@ -307,6 +307,34 @@ TEST_CASE("async bash tool spill file contains complete output beyond the visibl
     CHECK(env->last_write_content.ends_with("complete-tail\xc3\xa9"));
 }
 
+TEST_CASE("async bash tool without streamed output reports capping at the execution layer without a spill file", "[tools][async][issue73]") {
+    tests::TempWorkspace workspace;
+    auto env = std::make_shared<CapturingEnv>(workspace.path());
+    const util::OutputLimit limit;
+    // streamed_stdout/streamed_stderr stay empty, so the fake env never fires
+    // the streaming callbacks and only the runner-capped result fields exist.
+    env->next_shell_result.stdout_output = std::string(limit.max_bytes + 100, 'x') +
+        "\napi_key=super-secret\ncomplete-tail";
+    auto tool = tools::make_async_bash_tool(env);
+
+    auto result = run_tool([&]() {
+        return tool->execute(invocation("bash", R"({"command":"emit-large-output"})"));
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    const auto visible = ai::text_from_content(result->content);
+    CHECK(visible.find("truncated=true") != std::string::npos);
+    CHECK(visible.find("capped at execution layer") != std::string::npos);
+    CHECK(visible.find("full output:") == std::string::npos);
+    CHECK(visible.find("super-secret") == std::string::npos);
+    CHECK(visible.find("complete-tail") != std::string::npos);
+    CHECK(visible.size() <= limit.max_bytes + 200);
+    // No spill file: the capped text is all that exists, so a "complete
+    // output" promise would be untruthful.
+    CHECK(env->last_write_path.empty());
+}
+
 TEST_CASE("async bash tool strips ANSI escape sequences", "[tools][async]") {
     tests::TempWorkspace workspace;
     auto env = std::make_shared<CapturingEnv>(workspace.path());
