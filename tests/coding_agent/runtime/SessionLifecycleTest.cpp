@@ -21,7 +21,13 @@ namespace runtime = cch::coding_agent::runtime;
 namespace {
 
 harness::session::SessionMetadata test_metadata(const tests::TempWorkspace& workspace) {
-    return {"session-lifecycle-test", "2026-07-05T00:00:00Z", workspace.path(), "fake", "fake-model"};
+    return {
+        .session_id = "session-lifecycle-test",
+        .created_at = "2026-07-05T00:00:00Z",
+        .workspace = workspace.path(),
+        .provider = "fake",
+        .model = "fake-model",
+    };
 }
 
 ai::MessageVariant user_msg(std::string text) {

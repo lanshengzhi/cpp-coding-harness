@@ -53,51 +53,51 @@ struct DiagnosticEntryDto {
 
 struct ContentDto {
     std::string type;
-    std::optional<std::string> text;
-    std::optional<std::string> textSignature;
-    std::optional<std::string> thinking;
-    std::optional<std::string> thinkingSignature;
-    std::optional<bool> redacted;
-    std::optional<std::string> data;
-    std::optional<std::string> mimeType;
-    std::optional<std::string> id;
-    std::optional<std::string> name;
-    std::optional<glz::generic> arguments;
-    std::optional<std::string> rawArguments;
-    std::optional<std::string> thoughtSignature;
-    std::optional<bool> argumentsValid;
-    std::optional<std::string> argumentError;
+    std::optional<std::string> text{std::nullopt};
+    std::optional<std::string> textSignature{std::nullopt};
+    std::optional<std::string> thinking{std::nullopt};
+    std::optional<std::string> thinkingSignature{std::nullopt};
+    std::optional<bool> redacted{std::nullopt};
+    std::optional<std::string> data{std::nullopt};
+    std::optional<std::string> mimeType{std::nullopt};
+    std::optional<std::string> id{std::nullopt};
+    std::optional<std::string> name{std::nullopt};
+    std::optional<glz::generic> arguments{std::nullopt};
+    std::optional<std::string> rawArguments{std::nullopt};
+    std::optional<std::string> thoughtSignature{std::nullopt};
+    std::optional<bool> argumentsValid{std::nullopt};
+    std::optional<std::string> argumentError{std::nullopt};
 };
 
 struct MessageDto {
     std::string role;
-    std::optional<std::vector<ContentDto>> content;
-    std::optional<std::string> api;
-    std::optional<std::string> provider;
-    std::optional<std::string> model;
-    std::optional<std::string> responseModel;
-    std::optional<std::string> responseId;
-    std::optional<UsageDto> usage;
-    std::optional<std::string> stopReason;
-    std::optional<std::string> errorMessage;
-    std::optional<std::vector<DiagnosticEntryDto>> diagnostics;
-    std::optional<std::string> toolCallId;
-    std::optional<std::string> toolName;
-    std::optional<glz::generic> details;
-    std::optional<bool> isError;
+    std::optional<std::vector<ContentDto>> content{std::nullopt};
+    std::optional<std::string> api{std::nullopt};
+    std::optional<std::string> provider{std::nullopt};
+    std::optional<std::string> model{std::nullopt};
+    std::optional<std::string> responseModel{std::nullopt};
+    std::optional<std::string> responseId{std::nullopt};
+    std::optional<UsageDto> usage{std::nullopt};
+    std::optional<std::string> stopReason{std::nullopt};
+    std::optional<std::string> errorMessage{std::nullopt};
+    std::optional<std::vector<DiagnosticEntryDto>> diagnostics{std::nullopt};
+    std::optional<std::string> toolCallId{std::nullopt};
+    std::optional<std::string> toolName{std::nullopt};
+    std::optional<glz::generic> details{std::nullopt};
+    std::optional<bool> isError{std::nullopt};
     // Extended message type fields
-    std::optional<std::string> command;
-    std::optional<std::string> output;
-    std::optional<std::int64_t> exitCode;
-    std::optional<bool> cancelled;
-    std::optional<bool> truncated;
-    std::optional<std::string> fullOutputPath;
-    std::optional<bool> excludeFromContext;
-    std::optional<std::string> customType;
-    std::optional<bool> display;
-    std::optional<std::string> summary;
-    std::optional<std::string> fromId;
-    std::optional<std::int64_t> tokensBefore;
+    std::optional<std::string> command{std::nullopt};
+    std::optional<std::string> output{std::nullopt};
+    std::optional<std::int64_t> exitCode{std::nullopt};
+    std::optional<bool> cancelled{std::nullopt};
+    std::optional<bool> truncated{std::nullopt};
+    std::optional<std::string> fullOutputPath{std::nullopt};
+    std::optional<bool> excludeFromContext{std::nullopt};
+    std::optional<std::string> customType{std::nullopt};
+    std::optional<bool> display{std::nullopt};
+    std::optional<std::string> summary{std::nullopt};
+    std::optional<std::string> fromId{std::nullopt};
+    std::optional<std::int64_t> tokensBefore{std::nullopt};
     std::int64_t timestamp{};
 };
 
@@ -269,47 +269,43 @@ template <typename T>
 }
 
 [[nodiscard]] inline ContentDto to_dto(const TextContent& content) {
-    ContentDto dto;
-    dto.type = "text";
-    dto.text = content.text;
-    dto.textSignature = content.text_signature;
-    return dto;
+    return ContentDto{
+        .type = "text",
+        .text = content.text,
+        .textSignature = content.text_signature,
+    };
 }
 
 [[nodiscard]] inline ContentDto to_dto(const ThinkingContent& content) {
-    ContentDto dto;
-    dto.type = "thinking";
-    dto.thinking = content.thinking;
-    dto.thinkingSignature = content.thinking_signature;
-    if (content.redacted) {
-        dto.redacted = content.redacted;
-    }
-    return dto;
+    return ContentDto{
+        .type = "thinking",
+        .thinking = content.thinking,
+        .thinkingSignature = content.thinking_signature,
+        .redacted = content.redacted ? std::optional<bool>{true} : std::nullopt,
+    };
 }
 
 [[nodiscard]] inline ContentDto to_dto(const ImageContent& content) {
-    ContentDto dto;
-    dto.type = "image";
-    dto.data = content.data;
-    dto.mimeType = content.mime_type;
-    return dto;
+    return ContentDto{
+        .type = "image",
+        .data = content.data,
+        .mimeType = content.mime_type,
+    };
 }
 
 [[nodiscard]] inline ContentDto to_dto(const ToolCallContent& content) {
-    ContentDto dto;
-    dto.type = "toolCall";
-    dto.id = content.id;
-    dto.name = content.name;
-    if (content.arguments) {
-        dto.arguments = util::json_to_glaze(*content.arguments);
-    }
-    dto.rawArguments = content.raw_arguments;
-    dto.thoughtSignature = content.thought_signature;
-    if (!content.arguments_valid) {
-        dto.argumentsValid = false;
-    }
-    dto.argumentError = content.argument_error;
-    return dto;
+    return ContentDto{
+        .type = "toolCall",
+        .id = content.id,
+        .name = content.name,
+        .arguments = content.arguments
+            ? std::optional<glz::generic>{util::json_to_glaze(*content.arguments)}
+            : std::nullopt,
+        .rawArguments = content.raw_arguments,
+        .thoughtSignature = content.thought_signature,
+        .argumentsValid = content.arguments_valid ? std::nullopt : std::optional<bool>{false},
+        .argumentError = content.argument_error,
+    };
 }
 
 [[nodiscard]] inline ContentDto to_dto(const Content& content) {
@@ -325,13 +321,20 @@ template <typename T>
         if (auto required = require_field(dto.text, "text content", "text", context); !required) {
             return std::unexpected(required.error());
         }
-        return Content{TextContent{*dto.text, dto.textSignature}};
+        return Content{TextContent{
+            .text = *dto.text,
+            .text_signature = dto.textSignature,
+        }};
     }
     if (dto.type == "thinking") {
         if (auto required = require_field(dto.thinking, "thinking content", "thinking", context); !required) {
             return std::unexpected(required.error());
         }
-        return Content{ThinkingContent{*dto.thinking, dto.thinkingSignature, dto.redacted.value_or(false)}};
+        return Content{ThinkingContent{
+            .thinking = *dto.thinking,
+            .thinking_signature = dto.thinkingSignature,
+            .redacted = dto.redacted.value_or(false),
+        }};
     }
     if (dto.type == "image") {
         if (auto required = require_field(dto.data, "image content", "data", context); !required) {
@@ -340,7 +343,10 @@ template <typename T>
         if (auto required = require_field(dto.mimeType, "image content", "mimeType", context); !required) {
             return std::unexpected(required.error());
         }
-        return Content{ImageContent{*dto.data, *dto.mimeType}};
+        return Content{ImageContent{
+            .data = *dto.data,
+            .mime_type = *dto.mimeType,
+        }};
     }
     if (dto.type == "toolCall") {
         return std::unexpected(json_contract_error(
@@ -377,13 +383,20 @@ template <typename T>
         if (auto required = require_field(dto.text, "text content", "text", context); !required) {
             return std::unexpected(required.error());
         }
-        return AssistantContent{TextContent{*dto.text, dto.textSignature}};
+        return AssistantContent{TextContent{
+            .text = *dto.text,
+            .text_signature = dto.textSignature,
+        }};
     }
     if (dto.type == "thinking") {
         if (auto required = require_field(dto.thinking, "thinking content", "thinking", context); !required) {
             return std::unexpected(required.error());
         }
-        return AssistantContent{ThinkingContent{*dto.thinking, dto.thinkingSignature, dto.redacted.value_or(false)}};
+        return AssistantContent{ThinkingContent{
+            .thinking = *dto.thinking,
+            .thinking_signature = dto.thinkingSignature,
+            .redacted = dto.redacted.value_or(false),
+        }};
     }
     if (dto.type == "toolCall") {
         if (auto required = require_field(dto.id, "toolCall content", "id", context); !required) {
@@ -407,13 +420,15 @@ template <typename T>
             raw_arguments = std::move(*raw);
         }
         return AssistantContent{ToolCallContent{
-            *dto.id,
-            *dto.name,
-            dto.arguments ? std::optional<util::JsonValue>{util::json_from_glaze(*dto.arguments)} : std::nullopt,
-            std::move(raw_arguments),
-            dto.thoughtSignature,
-            dto.argumentsValid.value_or(true),
-            dto.argumentError,
+            .id = *dto.id,
+            .name = *dto.name,
+            .arguments = dto.arguments
+                ? std::optional<util::JsonValue>{util::json_from_glaze(*dto.arguments)}
+                : std::nullopt,
+            .raw_arguments = std::move(raw_arguments),
+            .thought_signature = dto.thoughtSignature,
+            .arguments_valid = dto.argumentsValid.value_or(true),
+            .argument_error = dto.argumentError,
         }};
     }
     if (dto.type == "image") {
@@ -553,99 +568,103 @@ template <typename T>
 }
 
 [[nodiscard]] inline MessageDto to_dto(const SystemMessage& message) {
-    MessageDto dto;
-    dto.role = "system";
-    dto.content = std::vector<ContentDto>{to_dto(TextContent{message.content, std::nullopt})};
-    dto.timestamp = message.timestamp;
-    return dto;
+    return MessageDto{
+        .role = "system",
+        .content = std::vector<ContentDto>{to_dto(TextContent{
+            .text = message.content,
+            .text_signature = std::nullopt,
+        })},
+        .timestamp = message.timestamp,
+    };
 }
 
 [[nodiscard]] inline MessageDto to_dto(const UserMessage& message) {
-    MessageDto dto;
-    dto.role = "user";
-    dto.content = to_content_dtos(message.content);
-    dto.timestamp = message.timestamp;
-    return dto;
+    return MessageDto{
+        .role = "user",
+        .content = to_content_dtos(message.content),
+        .timestamp = message.timestamp,
+    };
 }
 
 [[nodiscard]] inline MessageDto to_dto(const AssistantMessage& message) {
-    MessageDto dto;
-    dto.role = "assistant";
-    dto.content = to_assistant_content_dtos(message.content);
-    dto.api = message.api;
-    dto.provider = message.provider;
-    dto.model = message.model;
-    dto.responseModel = message.response_model;
-    dto.responseId = message.response_id;
-    dto.usage = to_dto(message.usage);
-    dto.stopReason = stop_reason_to_json(message.stop_reason);
-    dto.errorMessage = message.error_message;
-    if (message.diagnostics.has_value()) {
-        dto.diagnostics = to_diagnostic_entry_dtos(*message.diagnostics);
-    }
-    dto.timestamp = message.timestamp;
-    return dto;
+    return MessageDto{
+        .role = "assistant",
+        .content = to_assistant_content_dtos(message.content),
+        .api = message.api,
+        .provider = message.provider,
+        .model = message.model,
+        .responseModel = message.response_model,
+        .responseId = message.response_id,
+        .usage = to_dto(message.usage),
+        .stopReason = stop_reason_to_json(message.stop_reason),
+        .errorMessage = message.error_message,
+        .diagnostics = message.diagnostics
+            ? std::optional<std::vector<DiagnosticEntryDto>>{
+                  to_diagnostic_entry_dtos(*message.diagnostics)}
+            : std::nullopt,
+        .timestamp = message.timestamp,
+    };
 }
 
 [[nodiscard]] inline MessageDto to_dto(const ToolResultMessage& message) {
-    MessageDto dto;
-    dto.role = "toolResult";
-    dto.toolCallId = message.tool_call_id;
-    dto.toolName = message.tool_name;
-    dto.content = to_content_dtos(message.content);
-    if (message.details) {
-        dto.details = util::json_to_glaze(*message.details);
-    }
-    dto.isError = message.is_error;
-    dto.timestamp = message.timestamp;
-    return dto;
+    return MessageDto{
+        .role = "toolResult",
+        .content = to_content_dtos(message.content),
+        .toolCallId = message.tool_call_id,
+        .toolName = message.tool_name,
+        .details = message.details
+            ? std::optional<glz::generic>{util::json_to_glaze(*message.details)}
+            : std::nullopt,
+        .isError = message.is_error,
+        .timestamp = message.timestamp,
+    };
 }
 
 [[nodiscard]] inline MessageDto to_dto(const BashExecutionMessage& message) {
-    MessageDto dto;
-    dto.role = "bashExecution";
-    dto.command = message.command;
-    dto.output = message.output;
-    if (message.exit_code.has_value()) {
-        dto.exitCode = static_cast<std::int64_t>(*message.exit_code);
-    }
-    dto.cancelled = message.cancelled;
-    dto.truncated = message.truncated;
-    dto.fullOutputPath = message.full_output_path;
-    dto.excludeFromContext = message.exclude_from_context;
-    dto.timestamp = message.timestamp;
-    return dto;
+    return MessageDto{
+        .role = "bashExecution",
+        .command = message.command,
+        .output = message.output,
+        .exitCode = message.exit_code
+            ? std::optional<std::int64_t>{static_cast<std::int64_t>(*message.exit_code)}
+            : std::nullopt,
+        .cancelled = message.cancelled,
+        .truncated = message.truncated,
+        .fullOutputPath = message.full_output_path,
+        .excludeFromContext = message.exclude_from_context,
+        .timestamp = message.timestamp,
+    };
 }
 
 [[nodiscard]] inline MessageDto to_dto(const CustomMessage& message) {
-    MessageDto dto;
-    dto.role = "custom";
-    dto.customType = message.custom_type;
-    dto.content = to_content_dtos(message.content);
-    dto.display = message.display;
-    if (message.details) {
-        dto.details = util::json_to_glaze(*message.details);
-    }
-    dto.timestamp = message.timestamp;
-    return dto;
+    return MessageDto{
+        .role = "custom",
+        .content = to_content_dtos(message.content),
+        .details = message.details
+            ? std::optional<glz::generic>{util::json_to_glaze(*message.details)}
+            : std::nullopt,
+        .customType = message.custom_type,
+        .display = message.display,
+        .timestamp = message.timestamp,
+    };
 }
 
 [[nodiscard]] inline MessageDto to_dto(const BranchSummaryMessage& message) {
-    MessageDto dto;
-    dto.role = "branchSummary";
-    dto.summary = message.summary;
-    dto.fromId = message.from_id;
-    dto.timestamp = message.timestamp;
-    return dto;
+    return MessageDto{
+        .role = "branchSummary",
+        .summary = message.summary,
+        .fromId = message.from_id,
+        .timestamp = message.timestamp,
+    };
 }
 
 [[nodiscard]] inline MessageDto to_dto(const CompactionSummaryMessage& message) {
-    MessageDto dto;
-    dto.role = "compactionSummary";
-    dto.summary = message.summary;
-    dto.tokensBefore = message.tokens_before;
-    dto.timestamp = message.timestamp;
-    return dto;
+    return MessageDto{
+        .role = "compactionSummary",
+        .summary = message.summary,
+        .tokensBefore = message.tokens_before,
+        .timestamp = message.timestamp,
+    };
 }
 
 [[nodiscard]] inline MessageDto to_dto(const MessageVariant& message) {
@@ -664,7 +683,10 @@ template <typename T>
                 text += text_block->text;
             }
         }
-        return MessageVariant{SystemMessage{std::move(text), dto.timestamp}};
+        return MessageVariant{SystemMessage{
+            .content = std::move(text),
+            .timestamp = dto.timestamp,
+        }};
     }
 
     if (dto.role == "user") {
@@ -672,7 +694,10 @@ template <typename T>
         if (!content) {
             return std::unexpected(content.error());
         }
-        return MessageVariant{UserMessage{std::move(*content), dto.timestamp}};
+        return MessageVariant{UserMessage{
+            .content = std::move(*content),
+            .timestamp = dto.timestamp,
+        }};
     }
 
     if (dto.role == "assistant") {
@@ -695,13 +720,6 @@ template <typename T>
         if (!content) {
             return std::unexpected(content.error());
         }
-        AssistantMessage message;
-        message.content = std::move(*content);
-        message.api = *dto.api;
-        message.provider = *dto.provider;
-        message.model = *dto.model;
-        message.response_model = dto.responseModel;
-        message.response_id = dto.responseId;
         if (auto required = require_field(dto.usage, "assistant message", "usage", context); !required) {
             return std::unexpected(required.error());
         }
@@ -709,7 +727,6 @@ template <typename T>
         if (!usage) {
             return std::unexpected(usage.error());
         }
-        message.usage = std::move(*usage);
         if (auto required = require_field(dto.stopReason, "assistant message", "stopReason", context); !required) {
             return std::unexpected(required.error());
         }
@@ -720,17 +737,27 @@ template <typename T>
                 "unsupported stopReason '" + *dto.stopReason + "' for assistant message",
                 context));
         }
-        message.stop_reason = *stop_reason;
-        message.error_message = dto.errorMessage;
+        std::optional<std::vector<DiagnosticEntry>> diagnostics;
         if (dto.diagnostics.has_value()) {
             auto diags = required_diagnostic_entries_from_dto(dto.diagnostics, context);
             if (!diags) {
                 return std::unexpected(diags.error());
             }
-            message.diagnostics = std::move(*diags);
+            diagnostics = std::move(*diags);
         }
-        message.timestamp = dto.timestamp;
-        return MessageVariant{std::move(message)};
+        return MessageVariant{AssistantMessage{
+            .content = std::move(*content),
+            .api = *dto.api,
+            .provider = *dto.provider,
+            .model = *dto.model,
+            .response_model = dto.responseModel,
+            .response_id = dto.responseId,
+            .usage = std::move(*usage),
+            .stop_reason = *stop_reason,
+            .error_message = dto.errorMessage,
+            .diagnostics = std::move(diagnostics),
+            .timestamp = dto.timestamp,
+        }};
     }
 
     if (dto.role == "toolResult") {
@@ -745,12 +772,14 @@ template <typename T>
             return std::unexpected(required.error());
         }
         return MessageVariant{ToolResultMessage{
-            *dto.toolCallId,
-            *dto.toolName,
-            std::move(*content),
-            dto.details ? std::optional<util::JsonValue>{util::json_from_glaze(*dto.details)} : std::nullopt,
-            dto.isError.value_or(false),
-            dto.timestamp,
+            .tool_call_id = *dto.toolCallId,
+            .tool_name = *dto.toolName,
+            .content = std::move(*content),
+            .details = dto.details
+                ? std::optional<util::JsonValue>{util::json_from_glaze(*dto.details)}
+                : std::nullopt,
+            .is_error = dto.isError.value_or(false),
+            .timestamp = dto.timestamp,
         }};
     }
 
@@ -759,14 +788,16 @@ template <typename T>
             return std::unexpected(required.error());
         }
         return MessageVariant{BashExecutionMessage{
-            *dto.command,
-            dto.output.value_or(""),
-            dto.exitCode ? std::optional<int>{static_cast<int>(*dto.exitCode)} : std::nullopt,
-            dto.cancelled.value_or(false),
-            dto.truncated.value_or(false),
-            dto.fullOutputPath,
-            dto.excludeFromContext.value_or(false),
-            dto.timestamp,
+            .command = *dto.command,
+            .output = dto.output.value_or(""),
+            .exit_code = dto.exitCode
+                ? std::optional<int>{static_cast<int>(*dto.exitCode)}
+                : std::nullopt,
+            .cancelled = dto.cancelled.value_or(false),
+            .truncated = dto.truncated.value_or(false),
+            .full_output_path = dto.fullOutputPath,
+            .exclude_from_context = dto.excludeFromContext.value_or(false),
+            .timestamp = dto.timestamp,
         }};
     }
 
@@ -783,11 +814,13 @@ template <typename T>
             content = std::move(*blocks);
         }
         return MessageVariant{CustomMessage{
-            *dto.customType,
-            std::move(content),
-            dto.display.value_or(true),
-            dto.details ? std::optional<util::JsonValue>{util::json_from_glaze(*dto.details)} : std::nullopt,
-            dto.timestamp,
+            .custom_type = *dto.customType,
+            .content = std::move(content),
+            .display = dto.display.value_or(true),
+            .details = dto.details
+                ? std::optional<util::JsonValue>{util::json_from_glaze(*dto.details)}
+                : std::nullopt,
+            .timestamp = dto.timestamp,
         }};
     }
 
@@ -799,9 +832,9 @@ template <typename T>
             return std::unexpected(required.error());
         }
         return MessageVariant{BranchSummaryMessage{
-            *dto.summary,
-            *dto.fromId,
-            dto.timestamp,
+            .summary = *dto.summary,
+            .from_id = *dto.fromId,
+            .timestamp = dto.timestamp,
         }};
     }
 
@@ -810,9 +843,9 @@ template <typename T>
             return std::unexpected(required.error());
         }
         return MessageVariant{CompactionSummaryMessage{
-            *dto.summary,
-            dto.tokensBefore.value_or(0),
-            dto.timestamp,
+            .summary = *dto.summary,
+            .tokens_before = dto.tokensBefore.value_or(0),
+            .timestamp = dto.timestamp,
         }};
     }
 

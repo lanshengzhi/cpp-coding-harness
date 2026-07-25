@@ -405,14 +405,20 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
         if (!directory_override) {
             return std::unexpected(directory_override.error());
         }
-        plan.target = AutomaticNewSessionTarget{std::move(*workspace), std::move(*directory_override)};
+        plan.target = AutomaticNewSessionTarget{
+            .workspace = std::move(*workspace),
+            .directory_override = std::move(*directory_override),
+        };
     } else if (const auto* target =
                    std::get_if<ExplicitNewSessionTarget>(&request.session_target)) {
         auto workspace = resolve_canonical_workspace(request.workspace);
         if (!workspace) {
             return std::unexpected(workspace.error());
         }
-        plan.target = NewSessionTarget{target->path, std::move(*workspace)};
+        plan.target = NewSessionTarget{
+            .session_path = target->path,
+            .workspace = std::move(*workspace),
+        };
     } else if (const auto* target =
                    std::get_if<ExplicitResumeSessionTarget>(&request.session_target)) {
         // Resume keeps one resolved workspace: an explicit --workspace must
@@ -422,13 +428,18 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
             return std::unexpected(workspace.error());
         }
         plan.target = ResumeSessionTarget{
-            target->path, std::move(*workspace), request.workspace_explicit};
+            .resume_path = target->path,
+            .workspace = std::move(*workspace),
+            .workspace_explicit = request.workspace_explicit,
+        };
     } else if (std::holds_alternative<InMemorySessionTarget>(request.session_target)) {
         auto workspace = resolve_canonical_workspace(request.workspace);
         if (!workspace) {
             return std::unexpected(workspace.error());
         }
-        plan.target = InMemoryNewSessionTarget{std::move(*workspace)};
+        plan.target = InMemoryNewSessionTarget{
+            .workspace = std::move(*workspace),
+        };
     } else {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
@@ -499,14 +510,20 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
             return std::unexpected(workspace.error());
         }
         // SDK default persistence never consumes CLI session-directory inputs.
-        plan.target = AutomaticNewSessionTarget{std::move(*workspace), std::nullopt};
+        plan.target = AutomaticNewSessionTarget{
+            .workspace = std::move(*workspace),
+            .directory_override = std::nullopt,
+        };
     } else if (const auto* target =
                    std::get_if<ExplicitNewSessionTarget>(&options.session_target)) {
         auto workspace = resolve_canonical_workspace(options.workspace);
         if (!workspace) {
             return std::unexpected(workspace.error());
         }
-        plan.target = NewSessionTarget{target->path, std::move(*workspace)};
+        plan.target = NewSessionTarget{
+            .session_path = target->path,
+            .workspace = std::move(*workspace),
+        };
     } else if (const auto* resume_target =
                    std::get_if<ExplicitResumeSessionTarget>(&options.session_target)) {
         const bool workspace_explicit = !options.workspace.empty();
@@ -518,13 +535,18 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
             options.workspace = std::move(*workspace);
         }
         plan.target = ResumeSessionTarget{
-            resume_target->path, options.workspace, workspace_explicit};
+            .resume_path = resume_target->path,
+            .workspace = options.workspace,
+            .workspace_explicit = workspace_explicit,
+        };
     } else if (std::holds_alternative<InMemorySessionTarget>(options.session_target)) {
         auto workspace = resolve_canonical_workspace(options.workspace);
         if (!workspace) {
             return std::unexpected(workspace.error());
         }
-        plan.target = InMemoryNewSessionTarget{std::move(*workspace)};
+        plan.target = InMemoryNewSessionTarget{
+            .workspace = std::move(*workspace),
+        };
     } else {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
@@ -833,16 +855,18 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
         NewSessionPublication publication;
         if (const auto* automatic = std::get_if<AutomaticNewSessionTarget>(&plan.target)) {
             publication = AutomaticPublication{
-                automatic->workspace,
-                automatic->directory_override,
+                .workspace = automatic->workspace,
+                .directory_override = automatic->directory_override,
             };
         } else if (const auto* in_memory = std::get_if<InMemoryNewSessionTarget>(&plan.target)) {
-            publication = InMemoryPublication{in_memory->workspace};
+            publication = InMemoryPublication{
+                .workspace = in_memory->workspace,
+            };
         } else {
             const auto& explicit_new = std::get<NewSessionTarget>(plan.target);
             publication = ExplicitNewPublication{
-                explicit_new.session_path,
-                explicit_new.workspace,
+                .session_path = explicit_new.session_path,
+                .workspace = explicit_new.workspace,
             };
         }
         auto published = publish_session(

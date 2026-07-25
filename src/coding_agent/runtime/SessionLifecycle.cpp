@@ -282,11 +282,11 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
     std::string provider,
     std::string model) {
     return harness::session::SessionMetadata{
-        identity.session_id,
-        identity.created_at,
-        workspace,
-        std::move(provider),
-        std::move(model),
+        .session_id = identity.session_id,
+        .created_at = identity.created_at,
+        .workspace = workspace,
+        .provider = std::move(provider),
+        .model = std::move(model),
     };
 }
 

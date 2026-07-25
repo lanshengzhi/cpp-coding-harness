@@ -27,7 +27,10 @@ struct ProviderToolCallDto {
 };
 
 [[nodiscard]] inline ProviderToolDto to_provider_tool_dto(const Tool& tool) {
-    return ProviderToolDto{"function", to_function_tool_dto(tool)};
+    return ProviderToolDto{
+        .type = "function",
+        .function = to_function_tool_dto(tool),
+    };
 }
 
 struct OpenAIImageUrlDto {
@@ -45,9 +48,9 @@ using OpenAIMessageContentDto = std::variant<std::string, std::vector<OpenAICont
 struct OpenAIChatMessageDto {
     std::string role;
     OpenAIMessageContentDto content;
-    std::optional<std::string> name;
-    std::optional<std::string> tool_call_id;
-    std::optional<std::vector<ProviderToolCallDto>> tool_calls;
+    std::optional<std::string> name{std::nullopt};
+    std::optional<std::string> tool_call_id{std::nullopt};
+    std::optional<std::vector<ProviderToolCallDto>> tool_calls{std::nullopt};
 };
 
 struct OpenAIStreamOptionsDto {

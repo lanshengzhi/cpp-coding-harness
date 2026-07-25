@@ -63,7 +63,13 @@ TEST_CASE("AI contracts are aggregate-friendly passive value types", "[ai][u3][c
 }
 
 TEST_CASE("user text message serializes through explicit Glaze content tags", "[ai][u2][glaze]") {
-    ai::MessageVariant original = ai::UserMessage{{ai::TextContent{"hello model", "sig-1"}}, 1718000000000};
+    ai::MessageVariant original = ai::UserMessage{
+        .content = {ai::TextContent{
+            .text = "hello model",
+            .text_signature = "sig-1",
+        }},
+        .timestamp = 1718000000000,
+    };
 
     auto json = ai::glaze::write_message_json(original);
     REQUIRE(json);
@@ -89,15 +95,18 @@ TEST_CASE("assistant text and tool-call content round-trip in order with metadat
     REQUIRE(arguments);
 
     ai::AssistantMessage assistant;
-    assistant.content.emplace_back(ai::TextContent{"I'll read it", std::nullopt});
+    assistant.content.emplace_back(ai::TextContent{
+        .text = "I'll read it",
+        .text_signature = std::nullopt,
+    });
     assistant.content.emplace_back(ai::ToolCallContent{
-        "call-1",
-        "read_file",
-        *arguments,
-        R"({"path":"README.md","limit":20})",
-        std::nullopt,
-        true,
-        std::nullopt,
+        .id = "call-1",
+        .name = "read_file",
+        .arguments = *arguments,
+        .raw_arguments = R"({"path":"README.md","limit":20})",
+        .thought_signature = std::nullopt,
+        .arguments_valid = true,
+        .argument_error = std::nullopt,
     });
     assistant.api = "openai-completions";
     assistant.provider = "openai";
@@ -300,7 +309,10 @@ TEST_CASE("BranchSummaryMessage serializes and deserializes round-trip", "[ai][e
 TEST_CASE("CustomMessage serializes and deserializes round-trip", "[ai][extended][glaze]") {
     ai::CustomMessage custom;
     custom.custom_type = "my-extension";
-    custom.content.emplace_back(ai::TextContent{"hello from extension", std::nullopt});
+    custom.content.emplace_back(ai::TextContent{
+        .text = "hello from extension",
+        .text_signature = std::nullopt,
+    });
     custom.display = true;
     custom.timestamp = 1718000000005;
 
@@ -416,9 +428,18 @@ TEST_CASE(
     "[ai][extended][convert][issue22]") {
     ai::CustomMessage custom;
     custom.custom_type = "ext";
-    custom.content.emplace_back(ai::TextContent{"part1", std::nullopt});
-    custom.content.emplace_back(ai::ImageContent{"aW1hZ2U=", "image/png"});
-    custom.content.emplace_back(ai::TextContent{"part2", std::nullopt});
+    custom.content.emplace_back(ai::TextContent{
+        .text = "part1",
+        .text_signature = std::nullopt,
+    });
+    custom.content.emplace_back(ai::ImageContent{
+        .data = "aW1hZ2U=",
+        .mime_type = "image/png",
+    });
+    custom.content.emplace_back(ai::TextContent{
+        .text = "part2",
+        .text_signature = std::nullopt,
+    });
     custom.timestamp = 1718000000005;
 
     auto msg = ai::custom_message_to_user_message(custom);

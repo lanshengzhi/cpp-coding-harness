@@ -92,7 +92,13 @@ struct TestPaths {
 };
 
 harness::session::SessionMetadata test_metadata(const TestPaths& paths) {
-    return {"sdk-session-test", "2026-07-05T00:00:00Z", paths.workspace.path(), "fake", "fake-model"};
+    return {
+        .session_id = "sdk-session-test",
+        .created_at = "2026-07-05T00:00:00Z",
+        .workspace = paths.workspace.path(),
+        .provider = "fake",
+        .model = "fake-model",
+    };
 }
 
 ai::MessageVariant user_msg(std::string text) {
@@ -2068,11 +2074,11 @@ TEST_CASE("SDK default creation ignores a valid legacy session that remains expl
         auto legacy_store = harness::session::JsonlSessionStore::create_new(
             legacy_session,
             harness::session::SessionMetadata{
-                "legacy-session-id",
-                "2026-07-18T00:00:00.000Z",
-                paths.workspace.path(),
-                "fake",
-                "fake-model",
+                .session_id = "legacy-session-id",
+                .created_at = "2026-07-18T00:00:00.000Z",
+                .workspace = paths.workspace.path(),
+                .provider = "fake",
+                .model = "fake-model",
             });
         REQUIRE(legacy_store.has_value());
     }

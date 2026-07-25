@@ -141,7 +141,10 @@ TEST_CASE("automatic session publication correlates path header and identity", "
 
     CHECK_FALSE(std::filesystem::exists(sessions_root));
     auto published = runtime::publish_session(
-        runtime::AutomaticPublication{workspace, std::nullopt},
+        runtime::AutomaticPublication{
+            .workspace = workspace,
+            .directory_override = std::nullopt,
+        },
         "fake",
         "fake-model");
     REQUIRE(published);
@@ -181,7 +184,10 @@ TEST_CASE("automatic publication makes default directories and file private", "[
     ::chmod(workspace_directory.c_str(), 0755);
 
     auto published = runtime::publish_session(
-        runtime::AutomaticPublication{workspace, std::nullopt},
+        runtime::AutomaticPublication{
+            .workspace = workspace,
+            .directory_override = std::nullopt,
+        },
         "fake",
         "fake-model");
 
@@ -227,7 +233,10 @@ TEST_CASE("custom automatic publication creates a missing override directory pri
     std::filesystem::create_directory(workspace);
 
     auto published = runtime::publish_session(
-        runtime::AutomaticPublication{workspace, directory},
+        runtime::AutomaticPublication{
+            .workspace = workspace,
+            .directory_override = directory,
+        },
         "fake",
         "fake-model");
 
@@ -255,7 +264,10 @@ TEST_CASE("custom automatic publication preserves an existing override directory
     ::chmod(directory.c_str(), 0755);
 
     auto published = runtime::publish_session(
-        runtime::AutomaticPublication{workspace, directory},
+        runtime::AutomaticPublication{
+            .workspace = workspace,
+            .directory_override = directory,
+        },
         "fake",
         "fake-model");
 
@@ -279,7 +291,10 @@ TEST_CASE("custom automatic publication rejects symbolic link override directori
     REQUIRE(::symlink(real_directory.c_str(), linked_directory.c_str()) == 0);
 
     auto published = runtime::publish_session(
-        runtime::AutomaticPublication{workspace, linked_directory},
+        runtime::AutomaticPublication{
+            .workspace = workspace,
+            .directory_override = linked_directory,
+        },
         "fake",
         "fake-model");
 
@@ -303,7 +318,10 @@ TEST_CASE("custom automatic publication failures include attempted target and re
     }
 
     auto published = runtime::publish_session(
-        runtime::AutomaticPublication{workspace, directory},
+        runtime::AutomaticPublication{
+            .workspace = workspace,
+            .directory_override = directory,
+        },
         "fake",
         "fake-model");
 
@@ -315,8 +333,9 @@ TEST_CASE("custom automatic publication failures include attempted target and re
 TEST_CASE("custom automatic publication rejects a relative override directory", "[coding_agent][session-path-policy][publication]") {
     auto published = runtime::publish_session(
         runtime::AutomaticPublication{
-            std::filesystem::path{"/resolved/workspace"},
-            std::filesystem::path{"relative-sessions"}},
+            .workspace = std::filesystem::path{"/resolved/workspace"},
+            .directory_override = std::filesystem::path{"relative-sessions"},
+        },
         "fake",
         "fake-model");
 
@@ -334,7 +353,10 @@ TEST_CASE("explicit publication preserves custom directory mode while making fil
     const auto path = custom_directory / "explicit.jsonl";
 
     auto published = runtime::publish_session(
-        runtime::ExplicitNewPublication{path, temp.path()},
+        runtime::ExplicitNewPublication{
+            .session_path = path,
+            .workspace = temp.path(),
+        },
         "fake",
         "fake-model");
 
@@ -361,7 +383,10 @@ TEST_CASE("automatic publication rejects symbolic link directories", "[coding_ag
     REQUIRE(::symlink(real_root.c_str(), sessions_root.c_str()) == 0);
 
     auto published = runtime::publish_session(
-        runtime::AutomaticPublication{workspace, std::nullopt},
+        runtime::AutomaticPublication{
+            .workspace = workspace,
+            .directory_override = std::nullopt,
+        },
         "fake",
         "fake-model");
 
@@ -389,7 +414,10 @@ TEST_CASE("automatic publication failures include attempted target and reason", 
     }
 
     auto published = runtime::publish_session(
-        runtime::AutomaticPublication{workspace, std::nullopt},
+        runtime::AutomaticPublication{
+            .workspace = workspace,
+            .directory_override = std::nullopt,
+        },
         "fake",
         "fake-model");
 
@@ -404,7 +432,10 @@ TEST_CASE("automatic publication rejects a relative sessions root", "[coding_age
     config_dir.set("relative-agent");
 
     auto published = runtime::publish_session(
-        runtime::AutomaticPublication{temp.path(), std::nullopt},
+        runtime::AutomaticPublication{
+            .workspace = temp.path(),
+            .directory_override = std::nullopt,
+        },
         "fake",
         "fake-model");
 
@@ -425,7 +456,10 @@ TEST_CASE("automatic publication fails when the user sessions root is unresolved
     user_profile.set("");
 
     auto published = runtime::publish_session(
-        runtime::AutomaticPublication{temp.path(), std::nullopt},
+        runtime::AutomaticPublication{
+            .workspace = temp.path(),
+            .directory_override = std::nullopt,
+        },
         "fake",
         "fake-model");
 

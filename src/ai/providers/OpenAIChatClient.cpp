@@ -173,9 +173,12 @@ void append_plain_text_part(std::string& text, std::string_view part, std::strin
     for (const auto& block : content) {
         if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
             calls.push_back(ai::glaze::ProviderToolCallDto{
-                call->id,
-                "function",
-                ai::glaze::ProviderToolCallFunctionDto{call->name, call->raw_arguments},
+                .id = call->id,
+                .type = "function",
+                .function = ai::glaze::ProviderToolCallFunctionDto{
+                    .name = call->name,
+                    .arguments = call->raw_arguments,
+                },
             });
         }
     }
@@ -185,11 +188,8 @@ void append_plain_text_part(std::string& text, std::string_view part, std::strin
 void append_tool_result_assistant_bridge(
     std::vector<ai::glaze::OpenAIChatMessageDto>& messages) {
     messages.push_back(ai::glaze::OpenAIChatMessageDto{
-        "assistant",
-        "I have processed the tool results.",
-        std::nullopt,
-        std::nullopt,
-        std::nullopt,
+        .role = "assistant",
+        .content = "I have processed the tool results.",
     });
 }
 
@@ -203,11 +203,9 @@ void append_tool_result_assistant_bridge(
             : "(no tool output)";
     }
     auto dto = ai::glaze::OpenAIChatMessageDto{
-        "tool",
-        std::move(text),
-        std::nullopt,
-        tool.tool_call_id,
-        std::nullopt,
+        .role = "tool",
+        .content = std::move(text),
+        .tool_call_id = tool.tool_call_id,
     };
     if (compat.requires_tool_result_name.value_or(false)) {
         dto.name = tool.tool_name;
@@ -221,10 +219,16 @@ void append_tool_result_assistant_bridge(
     return std::visit(
         Overloaded{
             [&compat](const ai::SystemMessage& system) {
-                return ai::glaze::OpenAIChatMessageDto{system_role(compat), system.content, std::nullopt, std::nullopt, std::nullopt};
+                return ai::glaze::OpenAIChatMessageDto{
+                    .role = system_role(compat),
+                    .content = system.content,
+                };
             },
             [](const ai::UserMessage& user) {
-                return ai::glaze::OpenAIChatMessageDto{"user", user_content(user.content), std::nullopt, std::nullopt, std::nullopt};
+                return ai::glaze::OpenAIChatMessageDto{
+                    .role = "user",
+                    .content = user_content(user.content),
+                };
             },
             [&compat](const ai::AssistantMessage& assistant) {
                 auto calls = tool_calls_from_assistant_content(assistant.content);
@@ -233,11 +237,9 @@ void append_tool_result_assistant_bridge(
                     tool_calls = std::move(calls);
                 }
                 return ai::glaze::OpenAIChatMessageDto{
-                    "assistant",
-                    assistant_content_text(assistant.content, compat),
-                    std::nullopt,
-                    std::nullopt,
-                    std::move(tool_calls),
+                    .role = "assistant",
+                    .content = assistant_content_text(assistant.content, compat),
+                    .tool_calls = std::move(tool_calls),
                 };
             },
             [&compat](const ai::ToolResultMessage& tool) {
@@ -245,19 +247,31 @@ void append_tool_result_assistant_bridge(
             },
             [](const ai::BashExecutionMessage& bash) {
                 auto msg = bash_execution_to_user_message(bash);
-                return ai::glaze::OpenAIChatMessageDto{"user", content_text(msg.content), std::nullopt, std::nullopt, std::nullopt};
+                return ai::glaze::OpenAIChatMessageDto{
+                    .role = "user",
+                    .content = content_text(msg.content),
+                };
             },
             [](const ai::CustomMessage& custom) {
                 auto msg = custom_message_to_user_message(custom);
-                return ai::glaze::OpenAIChatMessageDto{"user", user_content(msg.content), std::nullopt, std::nullopt, std::nullopt};
+                return ai::glaze::OpenAIChatMessageDto{
+                    .role = "user",
+                    .content = user_content(msg.content),
+                };
             },
             [](const ai::BranchSummaryMessage& branch) {
                 auto msg = branch_summary_to_user_message(branch);
-                return ai::glaze::OpenAIChatMessageDto{"user", content_text(msg.content), std::nullopt, std::nullopt, std::nullopt};
+                return ai::glaze::OpenAIChatMessageDto{
+                    .role = "user",
+                    .content = content_text(msg.content),
+                };
             },
             [](const ai::CompactionSummaryMessage& compaction) {
                 auto msg = compaction_summary_to_user_message(compaction);
-                return ai::glaze::OpenAIChatMessageDto{"user", content_text(msg.content), std::nullopt, std::nullopt, std::nullopt};
+                return ai::glaze::OpenAIChatMessageDto{
+                    .role = "user",
+                    .content = content_text(msg.content),
+                };
             },
         },
         message);
@@ -383,7 +397,10 @@ void append_tool_result_assistant_bridge(
     std::string last_emitted_role;
     if (request.context.system_prompt) {
         const auto role = system_role(config.compat);
-        dto.messages.push_back(ai::glaze::OpenAIChatMessageDto{role, *request.context.system_prompt, std::nullopt, std::nullopt, std::nullopt});
+        dto.messages.push_back(ai::glaze::OpenAIChatMessageDto{
+            .role = role,
+            .content = *request.context.system_prompt,
+        });
         last_emitted_role = role;
     }
     std::vector<const ai::MessageVariant*> model_context_messages;
@@ -433,11 +450,8 @@ void append_tool_result_assistant_bridge(
                 std::make_move_iterator(image_parts.begin()),
                 std::make_move_iterator(image_parts.end()));
             dto.messages.push_back(ai::glaze::OpenAIChatMessageDto{
-                "user",
-                std::move(attachment_parts),
-                std::nullopt,
-                std::nullopt,
-                std::nullopt,
+                .role = "user",
+                .content = std::move(attachment_parts),
             });
             last_emitted_role = "user";
             continue;
@@ -468,7 +482,9 @@ void append_tool_result_assistant_bridge(
         dto.store = false;
     }
     if (config.compat.supports_usage_in_streaming.value_or(true)) {
-        dto.stream_options = ai::glaze::OpenAIStreamOptionsDto{true};
+        dto.stream_options = ai::glaze::OpenAIStreamOptionsDto{
+            .include_usage = true,
+        };
     }
     return dto;
 }
@@ -714,7 +730,10 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
                     if (!text_started) {
                         text_started = true;
                         text_index = assistant.content.size();
-                        assistant.content.emplace_back(ai::TextContent{"", std::nullopt});
+                        assistant.content.emplace_back(ai::TextContent{
+                            .text = "",
+                            .text_signature = std::nullopt,
+                        });
                         auto emitted = emit_stream_event(ai::TextStartEvent{*text_index, assistant});
                         if (!emitted) {
                             return std::unexpected(emitted.error());
@@ -748,7 +767,10 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
                         thinking_started = true;
                         thinking_index = assistant.content.size();
                         assistant.content.emplace_back(ai::ThinkingContent{
-                            "", std::string{reasoning_signature}, false});
+                            .thinking = "",
+                            .thinking_signature = std::string{reasoning_signature},
+                            .redacted = false,
+                        });
                         auto emitted = emit_stream_event(ai::ThinkingStartEvent{*thinking_index, assistant});
                         if (!emitted) {
                             return std::unexpected(emitted.error());

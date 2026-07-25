@@ -732,8 +732,15 @@ TEST_CASE("streaming OpenAI client serializes assistant thinking as text when co
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::AssistantMessage prior_assistant;
-    prior_assistant.content.emplace_back(ai::ThinkingContent{"reasoning", std::nullopt, false});
-    prior_assistant.content.emplace_back(ai::TextContent{"visible", std::nullopt});
+    prior_assistant.content.emplace_back(ai::ThinkingContent{
+        .thinking = "reasoning",
+        .thinking_signature = std::nullopt,
+        .redacted = false,
+    });
+    prior_assistant.content.emplace_back(ai::TextContent{
+        .text = "visible",
+        .text_signature = std::nullopt,
+    });
     ai::StreamChatRequest request;
     request.model = ai::Model{"gpt-test"};
     request.context.messages.push_back(ai::MessageVariant{prior_assistant});
@@ -763,16 +770,28 @@ TEST_CASE(
 
     ai::UserMessage user;
     user.content.emplace_back(ai::text_content("before"));
-    user.content.emplace_back(ai::ImageContent{"cG5nLWJ5dGVz", "image/png"});
+    user.content.emplace_back(ai::ImageContent{
+        .data = "cG5nLWJ5dGVz",
+        .mime_type = "image/png",
+    });
     user.content.emplace_back(ai::text_content("between"));
-    user.content.emplace_back(ai::ImageContent{"d2VicC1ieXRlcw==", "image/webp"});
+    user.content.emplace_back(ai::ImageContent{
+        .data = "d2VicC1ieXRlcw==",
+        .mime_type = "image/webp",
+    });
     user.content.emplace_back(ai::text_content("after"));
 
     ai::CustomMessage custom;
     custom.custom_type = "extension-image";
-    custom.content.emplace_back(ai::ImageContent{"anBlZy1ieXRlcw==", "image/jpeg"});
+    custom.content.emplace_back(ai::ImageContent{
+        .data = "anBlZy1ieXRlcw==",
+        .mime_type = "image/jpeg",
+    });
     custom.content.emplace_back(ai::text_content("custom caption"));
-    custom.content.emplace_back(ai::ImageContent{"Z2lmLWJ5dGVz", "image/gif"});
+    custom.content.emplace_back(ai::ImageContent{
+        .data = "Z2lmLWJ5dGVz",
+        .mime_type = "image/gif",
+    });
 
     ai::StreamChatRequest request;
     request.model = ai::Model{"gpt-test"};
@@ -841,15 +860,24 @@ TEST_CASE(
     mixed.tool_call_id = "call-mixed";
     mixed.tool_name = "inspect";
     mixed.content.emplace_back(ai::text_content("first text"));
-    mixed.content.emplace_back(ai::ImageContent{"Zmlyc3QtaW1hZ2U=", "image/png"});
+    mixed.content.emplace_back(ai::ImageContent{
+        .data = "Zmlyc3QtaW1hZ2U=",
+        .mime_type = "image/png",
+    });
     mixed.content.emplace_back(ai::text_content(""));
     mixed.content.emplace_back(ai::text_content("second text"));
-    mixed.content.emplace_back(ai::ImageContent{"c2Vjb25kLWltYWdl", "image/webp"});
+    mixed.content.emplace_back(ai::ImageContent{
+        .data = "c2Vjb25kLWltYWdl",
+        .mime_type = "image/webp",
+    });
 
     ai::ToolResultMessage image_only;
     image_only.tool_call_id = "call-image";
     image_only.tool_name = "capture";
-    image_only.content.emplace_back(ai::ImageContent{"dGhpcmQtaW1hZ2U=", "image/jpeg"});
+    image_only.content.emplace_back(ai::ImageContent{
+        .data = "dGhpcmQtaW1hZ2U=",
+        .mime_type = "image/jpeg",
+    });
 
     ai::ToolResultMessage empty;
     empty.tool_call_id = "call-empty";
@@ -909,7 +937,10 @@ TEST_CASE(
     ai::ToolResultMessage tool;
     tool.tool_call_id = "call-image";
     tool.tool_name = "capture";
-    tool.content.emplace_back(ai::ImageContent{"aW1hZ2U=", "image/png"});
+    tool.content.emplace_back(ai::ImageContent{
+        .data = "aW1hZ2U=",
+        .mime_type = "image/png",
+    });
 
     ai::StreamChatRequest request;
     request.model = ai::Model{"gpt-test"};
@@ -952,7 +983,10 @@ TEST_CASE(
     first_tool.tool_call_id = "call-first";
     first_tool.tool_name = "capture";
     first_tool.content.emplace_back(ai::text_content("first capture"));
-    first_tool.content.emplace_back(ai::ImageContent{"Zmlyc3Q=", "image/png"});
+    first_tool.content.emplace_back(ai::ImageContent{
+        .data = "Zmlyc3Q=",
+        .mime_type = "image/png",
+    });
 
     ai::BashExecutionMessage excluded_bash;
     excluded_bash.command = "cat hidden-command";
@@ -962,7 +996,10 @@ TEST_CASE(
     ai::ToolResultMessage second_tool;
     second_tool.tool_call_id = "call-second";
     second_tool.tool_name = "capture";
-    second_tool.content.emplace_back(ai::ImageContent{"c2Vjb25k", "image/webp"});
+    second_tool.content.emplace_back(ai::ImageContent{
+        .data = "c2Vjb25k",
+        .mime_type = "image/webp",
+    });
 
     ai::StreamChatRequest request;
     request.model = ai::Model{"gpt-test"};
@@ -1015,7 +1052,10 @@ TEST_CASE(
     ai::ToolResultMessage first_tool;
     first_tool.tool_call_id = "call-first";
     first_tool.tool_name = "capture";
-    first_tool.content.emplace_back(ai::ImageContent{"Zmlyc3Q=", "image/png"});
+    first_tool.content.emplace_back(ai::ImageContent{
+        .data = "Zmlyc3Q=",
+        .mime_type = "image/png",
+    });
 
     ai::BashExecutionMessage visible_bash;
     visible_bash.command = "printf visible";
@@ -1024,7 +1064,10 @@ TEST_CASE(
     ai::ToolResultMessage second_tool;
     second_tool.tool_call_id = "call-second";
     second_tool.tool_name = "capture";
-    second_tool.content.emplace_back(ai::ImageContent{"c2Vjb25k", "image/webp"});
+    second_tool.content.emplace_back(ai::ImageContent{
+        .data = "c2Vjb25k",
+        .mime_type = "image/webp",
+    });
 
     ai::StreamChatRequest request;
     request.model = ai::Model{"gpt-test"};
@@ -1061,11 +1104,17 @@ TEST_CASE(
     "[ai][provider][stream][session][issue22][issue28]") {
     ai::UserMessage user;
     user.content.emplace_back(ai::text_content("compare"));
-    user.content.emplace_back(ai::ImageContent{"dXNlci1pbWFnZQ==", "image/png"});
+    user.content.emplace_back(ai::ImageContent{
+        .data = "dXNlci1pbWFnZQ==",
+        .mime_type = "image/png",
+    });
 
     ai::CustomMessage custom;
     custom.custom_type = "extension-image";
-    custom.content.emplace_back(ai::ImageContent{"Y3VzdG9tLWltYWdl", "image/webp"});
+    custom.content.emplace_back(ai::ImageContent{
+        .data = "Y3VzdG9tLWltYWdl",
+        .mime_type = "image/webp",
+    });
     custom.content.emplace_back(ai::text_content("custom context"));
 
     ai::AssistantMessage assistant;
@@ -1081,12 +1130,18 @@ TEST_CASE(
     first_tool.tool_call_id = "call-one";
     first_tool.tool_name = "capture";
     first_tool.content.emplace_back(ai::text_content("first capture"));
-    first_tool.content.emplace_back(ai::ImageContent{"dG9vbC1pbWFnZS0x", "image/jpeg"});
+    first_tool.content.emplace_back(ai::ImageContent{
+        .data = "dG9vbC1pbWFnZS0x",
+        .mime_type = "image/jpeg",
+    });
 
     ai::ToolResultMessage second_tool;
     second_tool.tool_call_id = "call-two";
     second_tool.tool_name = "capture";
-    second_tool.content.emplace_back(ai::ImageContent{"dG9vbC1pbWFnZS0y", "image/gif"});
+    second_tool.content.emplace_back(ai::ImageContent{
+        .data = "dG9vbC1pbWFnZS0y",
+        .mime_type = "image/gif",
+    });
 
     std::vector<ai::MessageVariant> fresh_messages;
     fresh_messages.emplace_back(std::move(user));
@@ -1110,7 +1165,10 @@ TEST_CASE(
     REQUIRE(store->append(fresh_messages[0]));
     const auto& persisted_custom = std::get<ai::CustomMessage>(fresh_messages[1]);
     std::vector<harness::session::CustomMessageEntryContentBlock> persisted_custom_content;
-    persisted_custom_content.emplace_back(ai::ImageContent{"Y3VzdG9tLWltYWdl", "image/webp"});
+    persisted_custom_content.emplace_back(ai::ImageContent{
+        .data = "Y3VzdG9tLWltYWdl",
+        .mime_type = "image/webp",
+    });
     persisted_custom_content.emplace_back(ai::text_content("custom context"));
     REQUIRE(store->append_custom_message_entry(
         std::nullopt,
@@ -1554,7 +1612,10 @@ TEST_CASE(
 
     ai::UserMessage user;
     user.content.emplace_back(ai::text_content("inspect"));
-    user.content.emplace_back(ai::ImageContent{"aW1hZ2U=", "image/png"});
+    user.content.emplace_back(ai::ImageContent{
+        .data = "aW1hZ2U=",
+        .mime_type = "image/png",
+    });
     ai::StreamChatRequest request;
     request.model = ai::Model{"gpt-test"};
     request.context.messages.emplace_back(std::move(user));

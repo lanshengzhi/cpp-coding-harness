@@ -17,8 +17,14 @@ TEST_CASE("tool-result message round-trips linkage details and error state", "[a
     ai::ToolResultMessage result;
     result.tool_call_id = "call-1";
     result.tool_name = "read_file";
-    result.content.emplace_back(ai::TextContent{"could not read", std::nullopt});
-    result.content.emplace_back(ai::ImageContent{"ZmFrZQ==", "image/png"});
+    result.content.emplace_back(ai::TextContent{
+        .text = "could not read",
+        .text_signature = std::nullopt,
+    });
+    result.content.emplace_back(ai::ImageContent{
+        .data = "ZmFrZQ==",
+        .mime_type = "image/png",
+    });
     result.details = *details;
     result.is_error = true;
     result.timestamp = 1718000000456;
@@ -50,9 +56,24 @@ TEST_CASE("tool-result message round-trips linkage details and error state", "[a
 
 TEST_CASE("assistant content round-trips text, thinking, and tool-call variants", "[ai][u2][glaze]") {
     ai::AssistantMessage msg;
-    msg.content.emplace_back(ai::TextContent{"hello", std::nullopt});
-    msg.content.emplace_back(ai::ThinkingContent{"reasoning", std::nullopt, false});
-    msg.content.emplace_back(ai::ToolCallContent{"call-1", "bash", std::nullopt, R"({"cmd":"ls"})", std::nullopt, true, std::nullopt});
+    msg.content.emplace_back(ai::TextContent{
+        .text = "hello",
+        .text_signature = std::nullopt,
+    });
+    msg.content.emplace_back(ai::ThinkingContent{
+        .thinking = "reasoning",
+        .thinking_signature = std::nullopt,
+        .redacted = false,
+    });
+    msg.content.emplace_back(ai::ToolCallContent{
+        .id = "call-1",
+        .name = "bash",
+        .arguments = std::nullopt,
+        .raw_arguments = R"({"cmd":"ls"})",
+        .thought_signature = std::nullopt,
+        .arguments_valid = true,
+        .argument_error = std::nullopt,
+    });
     msg.api = "openai-completions";
     msg.provider = "openai";
     msg.model = "gpt-test";
@@ -77,7 +98,10 @@ TEST_CASE("assistant content round-trips text, thinking, and tool-call variants"
 
 TEST_CASE("assistant message round-trips diagnostics and cacheWrite1h", "[ai][u2][glaze]") {
     ai::AssistantMessage msg;
-    msg.content.emplace_back(ai::TextContent{"test", std::nullopt});
+    msg.content.emplace_back(ai::TextContent{
+        .text = "test",
+        .text_signature = std::nullopt,
+    });
     msg.api = "openai-completions";
     msg.provider = "openai";
     msg.model = "gpt-test";
