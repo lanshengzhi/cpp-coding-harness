@@ -16,11 +16,12 @@ public:
         std::filesystem::path workspace,
         bool bash_enabled = false,
         std::vector<std::string> secret_environment_names = {},
-        std::shared_ptr<util::ProcessRunner> runner = std::make_shared<util::DefaultProcessRunner>());
+        std::shared_ptr<util::AsyncProcessRunner> runner =
+            std::make_shared<util::DefaultAsyncProcessRunner>());
 
     [[nodiscard]] const std::filesystem::path& workspace() const { return workspace_; }
 
-    [[nodiscard]] std::shared_ptr<util::ProcessRunner> process_runner() const { return runner_; }
+    [[nodiscard]] std::shared_ptr<util::AsyncProcessRunner> process_runner() const { return runner_; }
 
     // -- Pi-shaped filesystem methods ---
 
@@ -61,7 +62,7 @@ private:
     std::filesystem::path workspace_;
     bool bash_enabled_{false};
     std::vector<std::string> secret_environment_names_;
-    std::shared_ptr<util::ProcessRunner> runner_;
+    std::shared_ptr<util::AsyncProcessRunner> runner_;
     WorkspaceFileSystem fs_;
 };
 

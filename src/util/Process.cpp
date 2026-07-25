@@ -35,18 +35,17 @@ void append_limited(
     OutputCapture& capture,
     const char* data,
     std::size_t size,
-    std::size_t max_bytes,
-    std::size_t max_lines,
+    const OutputLimit& limit,
     std::optional<std::move_only_function<void(std::string_view)>>& callback) {
-    bool line_limit_reached = max_lines == 0 || capture.lines >= max_lines;
+    bool line_limit_reached = limit.max_lines == 0 || capture.lines >= limit.max_lines;
     std::size_t offset = 0;
-    while (offset < size && capture.bytes < max_bytes && !line_limit_reached) {
+    while (offset < size && capture.bytes < limit.max_bytes && !line_limit_reached) {
         const char ch = data[offset++];
         capture.data.push_back(ch);
         ++capture.bytes;
         if (ch == '\n') {
             ++capture.lines;
-            if (capture.lines >= max_lines) {
+            if (capture.lines >= limit.max_lines) {
                 line_limit_reached = true;
             }
         }
@@ -63,8 +62,7 @@ void append_limited(
 
 boost::asio::awaitable<OutputCapture> drain_pipe(
     boost::process::v1::async_pipe& pipe,
-    std::size_t max_bytes,
-    std::size_t max_lines,
+    OutputLimit limit,
     std::optional<std::move_only_function<void(std::string_view)>> callback) {
     OutputCapture capture;
     std::array<char, 4096> buffer{};
@@ -79,7 +77,7 @@ boost::asio::awaitable<OutputCapture> drain_pipe(
             capture.truncated = true;
             break;
         }
-        append_limited(capture, buffer.data(), size, max_bytes, max_lines, callback);
+        append_limited(capture, buffer.data(), size, limit, callback);
     }
     co_return capture;
 }
@@ -120,7 +118,7 @@ constexpr std::chrono::milliseconds sigkill_grace_period{100};
 
 } // namespace
 
-boost::asio::awaitable<Expected<ProcessResult>> DefaultProcessRunner::run(ProcessRequest request) {
+boost::asio::awaitable<Expected<ProcessResult>> DefaultAsyncProcessRunner::run(ProcessRequest request) {
     namespace bp = boost::process::v1;
     try {
         auto executor = co_await boost::asio::this_coro::executor;
@@ -152,13 +150,11 @@ boost::asio::awaitable<Expected<ProcessResult>> DefaultProcessRunner::run(Proces
         // Move callbacks into the drain coroutines.
         auto stdout_drain = boost::asio::co_spawn(
             executor,
-            drain_pipe(stdout_pipe, request.max_output_bytes, request.max_output_lines,
-                       std::move(request.on_stdout)),
+            drain_pipe(stdout_pipe, request.output_limit, std::move(request.on_stdout)),
             boost::asio::deferred);
         auto stderr_drain = boost::asio::co_spawn(
             executor,
-            drain_pipe(stderr_pipe, request.max_output_bytes, request.max_output_lines,
-                       std::move(request.on_stderr)),
+            drain_pipe(stderr_pipe, request.output_limit, std::move(request.on_stderr)),
             boost::asio::deferred);
 
         ProcessResult result;

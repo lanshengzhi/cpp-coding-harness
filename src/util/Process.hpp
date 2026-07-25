@@ -1,6 +1,7 @@
 #pragma once
 
-#include "../../include/cch/util/Error.hpp"
+#include <cch/util/Error.hpp>
+#include "OutputLimiter.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
@@ -19,8 +20,7 @@ struct ProcessRequest {
     std::chrono::milliseconds timeout{30000};
     std::map<std::string, std::string> environment;
     bool use_explicit_environment{false};
-    std::size_t max_output_bytes{50 * 1024};
-    std::size_t max_output_lines{2000};
+    OutputLimit output_limit;
 
     /// Called with stdout chunks as they are produced.
     std::optional<std::move_only_function<void(std::string_view)>> on_stdout;
@@ -42,13 +42,13 @@ struct ProcessResult {
     bool stderr_truncated{false};
 };
 
-class ProcessRunner {
+class AsyncProcessRunner {
 public:
-    virtual ~ProcessRunner() = default;
+    virtual ~AsyncProcessRunner() = default;
     [[nodiscard]] virtual boost::asio::awaitable<Expected<ProcessResult>> run(ProcessRequest request) = 0;
 };
 
-class DefaultProcessRunner : public ProcessRunner {
+class DefaultAsyncProcessRunner final : public AsyncProcessRunner {
 public:
     [[nodiscard]] boost::asio::awaitable<Expected<ProcessResult>> run(ProcessRequest request) override;
 };

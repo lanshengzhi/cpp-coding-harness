@@ -66,7 +66,7 @@ SyncLocalExecutionEnv::SyncLocalExecutionEnv(
     std::filesystem::path workspace,
     bool bash_enabled,
     std::vector<std::string> secret_environment_names,
-    std::shared_ptr<util::ProcessRunner> runner)
+    std::shared_ptr<util::AsyncProcessRunner> runner)
     : workspace_(std::move(workspace)),
       bash_enabled_(bash_enabled),
       secret_environment_names_(std::move(secret_environment_names)),

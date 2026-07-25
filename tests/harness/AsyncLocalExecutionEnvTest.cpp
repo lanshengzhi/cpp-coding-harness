@@ -15,13 +15,14 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 using namespace cch;
 
 namespace {
 
-class FakeProcessRunner final : public util::ProcessRunner {
+class FakeAsyncProcessRunner final : public util::AsyncProcessRunner {
 public:
     boost::asio::awaitable<util::Expected<util::ProcessResult>> run(util::ProcessRequest request) override {
         requests.push_back(std::move(request));
@@ -71,6 +72,11 @@ T run_awaitable_pi(boost::asio::awaitable<T> start) {
 }
 
 } // namespace
+
+TEST_CASE("process runner capability follows async naming and ownership rules", "[harness][async][issue75]") {
+    static_assert(std::is_abstract_v<util::AsyncProcessRunner>);
+    static_assert(std::is_final_v<util::DefaultAsyncProcessRunner>);
+}
 
 TEST_CASE("async local execution env preserves file read and write safety", "[harness][async][u6]") {
     tests::TempWorkspace workspace;
@@ -132,7 +138,7 @@ TEST_CASE("async local execution env sanitizes shell environment through process
     setenv("CCH_CREDENTIAL", "plain-secret-value", 1);
 #endif
     tests::TempWorkspace workspace;
-    auto runner = std::make_shared<FakeProcessRunner>();
+    auto runner = std::make_shared<FakeAsyncProcessRunner>();
     runner->next.exit_code = 0;
     runner->next.stdout_output = "ok";
     harness::SyncLocalExecutionEnv env(workspace.path(), true, {"CCH_CREDENTIAL", "KIMI_API_KEY"}, runner);
@@ -159,13 +165,12 @@ TEST_CASE("async local execution env sanitizes shell environment through process
 }
 
 TEST_CASE("default process runner caps newline-free output without waiting for line breaks", "[harness][async][process]") {
-    util::DefaultProcessRunner runner;
+    util::DefaultAsyncProcessRunner runner;
     util::ProcessRequest request;
     request.command = "printf '%60000s' '' | tr ' ' x";
     request.working_directory = std::filesystem::current_path();
     request.timeout = std::chrono::milliseconds(5000);
-    request.max_output_bytes = 1024;
-    request.max_output_lines = 2000;
+    request.output_limit = util::OutputLimit{.max_bytes = 1024, .max_lines = 2000};
 
     auto result = run_awaitable<util::ProcessResult>([&]() {
         return runner.run(std::move(request));

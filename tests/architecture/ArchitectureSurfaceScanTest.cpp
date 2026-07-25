@@ -470,6 +470,19 @@ TEST_CASE("the deleted CLI preflight module and its build registrations stay gon
     }
 }
 
+TEST_CASE("process capability follows async naming and carries one output limit", "[architecture][util][issue75]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto process_header = read_text(source_root / "src" / "util" / "Process.hpp");
+
+    CHECK(process_header.find("class AsyncProcessRunner") != std::string::npos);
+    CHECK(process_header.find("class DefaultAsyncProcessRunner final") != std::string::npos);
+    CHECK(process_header.find("class ProcessRunner") == std::string::npos);
+    CHECK(process_header.find("DefaultProcessRunner") == std::string::npos);
+    CHECK(process_header.find("OutputLimit output_limit") != std::string::npos);
+    CHECK(process_header.find("max_output_bytes") == std::string::npos);
+    CHECK(process_header.find("max_output_lines") == std::string::npos);
+}
+
 TEST_CASE("active source tree does not retain legacy sync contracts", "[architecture][u2]") {
     const auto files = files_under({"include", "src", "tests"});
     REQUIRE_FALSE(files.empty());
