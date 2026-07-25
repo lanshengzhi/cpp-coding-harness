@@ -5,6 +5,7 @@
 #include "ai/glaze/AiJson.hpp"
 #include "../../../include/cch/ai/providers/OpenAICompletionsCompat.hpp"
 #include "ai/providers/SseParser.hpp"
+#include "ai/providers/StreamEmit.hpp"
 #include "util/Json.hpp"
 
 #include <algorithm>
@@ -44,20 +45,32 @@ void append_plain_text_part(std::string& text, std::string_view part, std::strin
     text += part;
 }
 
+// Plain-text stand-in for the content blocks that carry model-readable text:
+// text blocks map to their text, thinking blocks to a fixed omission marker,
+// and images have no text form. The visit keeps the single mapping
+// compile-time exhaustive over the Content alternatives.
+[[nodiscard]] std::optional<std::string_view> text_like_content(const ai::Content& block) {
+    return std::visit(
+        Overloaded{
+            [](const ai::TextContent& text) -> std::optional<std::string_view> {
+                return text.text;
+            },
+            [](const ai::ThinkingContent&) -> std::optional<std::string_view> {
+                return "[thinking content omitted]";
+            },
+            [](const ai::ImageContent&) -> std::optional<std::string_view> {
+                return std::nullopt;
+            },
+        },
+        block);
+}
+
 [[nodiscard]] std::string content_text(const std::vector<ai::Content>& content) {
     std::string text;
     for (const auto& block : content) {
-        std::visit(
-            Overloaded{
-                [&text](const ai::TextContent& text_block) {
-                    append_plain_text_part(text, text_block.text, "\n");
-                },
-                [&text](const ai::ThinkingContent&) {
-                    append_plain_text_part(text, "[thinking content omitted]", "\n");
-                },
-                [](const ai::ImageContent&) {},
-            },
-            block);
+        if (const auto part = text_like_content(block)) {
+            append_plain_text_part(text, *part, "\n");
+        }
     }
     return text;
 }
@@ -95,19 +108,16 @@ void append_plain_text_part(std::string& text, std::string_view part, std::strin
     std::vector<ai::glaze::OpenAIContentPartDto> parts;
     parts.reserve(content.size());
     for (const auto& block : content) {
-        std::visit(
-            Overloaded{
-                [&parts](const ai::TextContent& text) {
-                    parts.push_back(text_part(text.text));
-                },
-                [&parts](const ai::ThinkingContent&) {
-                    parts.push_back(text_part("[thinking content omitted]"));
-                },
-                [&parts](const ai::ImageContent& image) {
-                    parts.push_back(image_part(image));
-                },
-            },
-            block);
+        if (const auto part = text_like_content(block)) {
+            parts.push_back(text_part(std::string{*part}));
+            continue;
+        }
+        // Only image blocks have no text form per the exhaustive mapping
+        // above; probe instead of std::get so an unexpected alternative is
+        // skipped rather than throwing bad_variant_access.
+        if (const auto* image = std::get_if<ai::ImageContent>(&block)) {
+            parts.push_back(image_part(*image));
+        }
     }
     return parts;
 }
@@ -511,13 +521,6 @@ void append_tool_result_assistant_bridge(
     return std::nullopt;
 }
 
-[[nodiscard]] util::ExpectedVoid emit(ai::AssistantEventSink& sink, const ai::AssistantStreamEvent& event) {
-    if (!sink) {
-        return {};
-    }
-    return sink(event);
-}
-
 [[nodiscard]] util::ExpectedVoid emit_error(
     ai::AssistantEventSink& sink,
     const util::Error& error,
@@ -582,10 +585,10 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
             "OpenAI streaming client requires a transport"));
     }
 
-    const std::string& model = !request.model.empty()
-        ? request.model
-        : (!request.context.model.empty() ? request.context.model : config_.model);
-    if (model.empty()) {
+    // ADR 0019 precedence rule: a present request Model is authoritative; the
+    // configured Model applies when the request carries none.
+    const ai::Model& model = request.model ? *request.model : config_.model;
+    if (model.id.empty()) {
         co_return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "model is required",
@@ -610,7 +613,7 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
             "OpenAI request timeout must be greater than zero"));
     }
 
-    CCH_TRY(body, serialize_openai_request(request_to_openai(request, config_, model)));
+    CCH_TRY(body, serialize_openai_request(request_to_openai(request, config_, model.id)));
 
     StreamRequest http;
     http.method = "POST";
@@ -630,7 +633,7 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
     ai::AssistantMessage assistant;
     assistant.api = config_.api;
     assistant.provider = config_.provider;
-    assistant.model = model;
+    assistant.model = model.id;
     assistant.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
 
@@ -678,7 +681,7 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
             if (!assistant.response_id && chunk->id && !chunk->id->empty()) {
                 assistant.response_id = *chunk->id;
             }
-            if (!assistant.response_model && chunk->model && !chunk->model->empty() && *chunk->model != model) {
+            if (!assistant.response_model && chunk->model && !chunk->model->empty() && *chunk->model != model.id) {
                 assistant.response_model = *chunk->model;
             }
             if (chunk->usage) {
@@ -931,7 +934,7 @@ std::string StreamingOpenAIChatClient::completions_url() const {
     if (base.empty()) {
         base = "https://api.openai.com";
     }
-    if (base.size() >= 3 && base.substr(base.size() - 3) == "/v1") {
+    if (base.ends_with("/v1")) {
         return base + "/chat/completions";
     }
     return base + "/v1/chat/completions";

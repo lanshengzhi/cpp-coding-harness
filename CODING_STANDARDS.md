@@ -44,7 +44,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 3.3. Suffix vocabulary: `*Event` for event structs; `*Result`, `*Options`, `*Config` for passive structs; `*Sink`, `*Hook`, `*Committer` for `move_only_function` aliases; `*Variant` for variant aliases; `*Dto` confined to the Glaze layer. Awaitable capability interfaces carry an `Async` prefix (`AsyncAgentTool`, `AsyncExecutionEnv`); synchronous ones are plain nouns (`SessionStore`).
 
-3.4. Enums are always `enum class`; enumerators are `PascalCase` unless mirroring wire vocabulary (`MaxTokensField::max_tokens`).
+3.4. Enums are always `enum class`; enumerators are `PascalCase` unless mirroring wire vocabulary, which keeps its wire spelling.
 
 3.5. Constants are `kCamelCase` (`kDefaultMaxOutputLines`). Macros are `SCREAMING_SNAKE` and private to `src/`.
 

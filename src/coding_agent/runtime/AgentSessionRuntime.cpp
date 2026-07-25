@@ -51,7 +51,7 @@ AgentSessionRuntime::AgentSessionRuntime(
     // used for explicit /skill:name invocation.
     agent::AsyncAgentOptions options;
     options.max_turns = config_.max_turns;
-    options.model = std::move(config_.model);
+    options.model = ai::Model{std::move(config_.model)};
 
     std::string skills_block = formatSkillsForPrompt(prompt_processor_.skills());
     if (!skills_block.empty()) {

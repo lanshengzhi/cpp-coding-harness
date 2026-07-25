@@ -241,7 +241,7 @@ TEST_CASE("async agent loop emits deterministic lifecycle events for text", "[ag
     FakeStreamingClient client;
     client.responses.push_back(ai::assistant_text_message("hello user"));
     agent::AsyncToolRegistry registry;
-    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{3, "gpt-test"});
+    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{3, ai::Model{"gpt-test"}});
 
     auto run = run_loop(loop, "hi");
 
@@ -278,7 +278,7 @@ TEST_CASE(
     int steering_decisions = 0;
     int follow_up_decisions = 0;
     int prepare_decisions = 0;
-    agent::AsyncAgentOptions options{3, "gpt-test"};
+    agent::AsyncAgentOptions options{3, ai::Model{"gpt-test"}};
     options.get_steering_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
         ++steering_decisions;
         return std::vector<ai::MessageVariant>{};
@@ -364,7 +364,7 @@ TEST_CASE(
 
     int follow_up_decisions = 0;
     int prepare_decisions = 0;
-    agent::AsyncAgentOptions options{3, "gpt-test"};
+    agent::AsyncAgentOptions options{3, ai::Model{"gpt-test"}};
     options.get_follow_up_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
         ++follow_up_decisions;
         return std::vector<ai::MessageVariant>{ai::user_text_message("must not be consumed")};
@@ -446,7 +446,7 @@ TEST_CASE(
     int steering_decisions = 0;
     int follow_up_decisions = 0;
     int prepare_decisions = 0;
-    agent::AsyncAgentOptions options{3, "gpt-test"};
+    agent::AsyncAgentOptions options{3, ai::Model{"gpt-test"}};
     options.get_steering_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
         ++steering_decisions;
         return std::vector<ai::MessageVariant>{};
@@ -542,7 +542,7 @@ TEST_CASE(
 
     int follow_up_decisions = 0;
     int prepare_decisions = 0;
-    agent::AsyncAgentOptions options{3, "gpt-test"};
+    agent::AsyncAgentOptions options{3, ai::Model{"gpt-test"}};
     options.get_follow_up_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
         ++follow_up_decisions;
         return std::vector<ai::MessageVariant>{ai::user_text_message("must not be consumed")};
@@ -616,7 +616,7 @@ TEST_CASE(
     TerminalBeforeStartClient client(std::move(terminal));
 
     agent::AsyncToolRegistry registry;
-    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{3, "gpt-test"});
+    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{3, ai::Model{"gpt-test"}});
     auto run = run_loop(loop, "hello");
 
     REQUIRE(run.result.has_value());
@@ -660,7 +660,7 @@ TEST_CASE(
     TerminalOutcomeClient client(std::move(terminal));
 
     agent::AsyncToolRegistry registry;
-    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{3, "gpt-test"});
+    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{3, ai::Model{"gpt-test"}});
     auto run = run_loop(loop, "hello");
 
     REQUIRE(run.result.has_value());
@@ -696,7 +696,7 @@ TEST_CASE(
     DuplicateStartClient client(std::move(terminal));
 
     agent::AsyncToolRegistry registry;
-    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{3, "gpt-test"});
+    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{3, ai::Model{"gpt-test"}});
     auto run = run_loop(loop, "hello");
 
     REQUIRE(run.result.has_value());
@@ -723,7 +723,7 @@ TEST_CASE("async agent loop emits user message lifecycle before assistant respon
     FakeStreamingClient client;
     client.responses.push_back(ai::assistant_text_message("hello user"));
     agent::AsyncToolRegistry registry;
-    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{3, "gpt-test"});
+    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{3, ai::Model{"gpt-test"}});
 
     auto run = run_loop(loop, "hi");
 
@@ -782,7 +782,7 @@ TEST_CASE("async agent loop emits user lifecycle before steering failure", "[age
     client.responses.push_back(ai::assistant_text_message("should not reach"));
     agent::AsyncToolRegistry registry;
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.get_steering_messages = []() -> util::Expected<std::vector<ai::MessageVariant>> {
         return std::unexpected(util::make_error(util::ErrorCode::Validation, "steering validation failed"));
     };
@@ -833,7 +833,7 @@ TEST_CASE("async agent loop forwards thinking and tool-call stream lifecycle eve
         "Read a workspace file",
         test::path_tool_argument_contract(),
     })));
-    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{4, "gpt-test"});
+    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{4, ai::Model{"gpt-test"}});
 
     auto run = run_loop(loop, "read");
 
@@ -841,7 +841,7 @@ TEST_CASE("async agent loop forwards thinking and tool-call stream lifecycle eve
     CHECK(count_events<agent::MessageUpdateEvent>(run.events) >= 1);
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
-    CHECK(run.result->state.model == "gpt-test");
+    CHECK(run.result->state.model.id == "gpt-test");
     CHECK(run.result->state.pending_tool_call_ids.empty());
     CHECK(run.result->state.active_tool_names.empty());
     CHECK(run.result->state.messages.size() == run.result->context.messages.size());
@@ -860,7 +860,7 @@ TEST_CASE("async agent loop executes tool calls and continues with tool result c
     auto* tool_ptr = tool.get();
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::move(tool)));
-    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{4, "gpt-test"});
+    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{4, ai::Model{"gpt-test"}});
 
     auto run = run_loop(loop, "read");
 
@@ -888,7 +888,7 @@ TEST_CASE("async agent loop turns malformed tool arguments into error tool resul
     client.responses.push_back(ai::assistant_text_message("saw error"));
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
-    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{4, "gpt-test"});
+    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{4, ai::Model{"gpt-test"}});
 
     auto run = run_loop(loop, "read");
 
@@ -911,7 +911,7 @@ TEST_CASE("async agent loop default options impose no turn cap", "[agent][async]
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
     agent::AsyncAgentOptions options;
-    options.model = "gpt-test";
+    options.model = ai::Model{"gpt-test"};
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
 
     auto run = run_loop(loop, "read");
@@ -927,7 +927,7 @@ TEST_CASE("async agent loop enforces an explicit host-set turn cap", "[agent][as
     client.responses.push_back(tool_call_response());
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
-    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{1, "gpt-test"});
+    agent::AsyncAgentLoop loop(client, std::move(registry), agent::AsyncAgentOptions{1, ai::Model{"gpt-test"}});
 
     auto run = run_loop(loop, "read");
 
@@ -947,7 +947,7 @@ TEST_CASE("steering admission enforces the configured message count bound", "[ag
     FakeStreamingClient client;
     client.responses.push_back(ai::assistant_text_message("done"));
     agent::AsyncToolRegistry registry;
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.max_queued_messages = 1;
     bool steering_returned = false;
     options.get_steering_messages = [&steering_returned]() -> util::Expected<std::vector<ai::MessageVariant>> {
@@ -981,7 +981,7 @@ TEST_CASE("follow-up admission enforces the configured byte budget", "[agent][as
     FakeStreamingClient client;
     client.responses.push_back(ai::assistant_text_message("done"));
     agent::AsyncToolRegistry registry;
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.max_queued_bytes = 4;
     options.get_follow_up_messages = []() -> util::Expected<std::vector<ai::MessageVariant>> {
         return std::vector<ai::MessageVariant>{ai::user_text_message("more than four bytes")};
@@ -1004,7 +1004,7 @@ TEST_CASE("raising the configured steering bound admits larger queues", "[agent]
     FakeStreamingClient client;
     client.responses.push_back(ai::assistant_text_message("done"));
     agent::AsyncToolRegistry registry;
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.max_queued_messages = 300;
     bool steering_returned = false;
     options.get_steering_messages = [&steering_returned]() -> util::Expected<std::vector<ai::MessageVariant>> {
@@ -1031,7 +1031,7 @@ TEST_CASE("steering admission accepts a queue at exactly the configured message 
     FakeStreamingClient client;
     client.responses.push_back(ai::assistant_text_message("done"));
     agent::AsyncToolRegistry registry;
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.max_queued_messages = 2;
     bool steering_returned = false;
     options.get_steering_messages = [&steering_returned]() -> util::Expected<std::vector<ai::MessageVariant>> {
@@ -1058,7 +1058,7 @@ TEST_CASE("steering admission accepts a queue at exactly the configured byte bud
     FakeStreamingClient client;
     client.responses.push_back(ai::assistant_text_message("done"));
     agent::AsyncToolRegistry registry;
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     // "abc" (3 bytes) and "defg" (4 bytes) land exactly on the budget.
     options.max_queued_bytes = 7;
     bool steering_returned = false;
@@ -1088,7 +1088,7 @@ TEST_CASE("queue byte budget accounting measures bytes not characters", "[agent]
     FakeStreamingClient rejecting_client;
     rejecting_client.responses.push_back(ai::assistant_text_message("done"));
     agent::AsyncToolRegistry rejecting_registry;
-    agent::AsyncAgentOptions rejecting_options{4, "gpt-test"};
+    agent::AsyncAgentOptions rejecting_options{4, ai::Model{"gpt-test"}};
     rejecting_options.max_queued_bytes = 5;
     bool rejecting_returned = false;
     rejecting_options.get_steering_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
@@ -1111,7 +1111,7 @@ TEST_CASE("queue byte budget accounting measures bytes not characters", "[agent]
     FakeStreamingClient admitting_client;
     admitting_client.responses.push_back(ai::assistant_text_message("done"));
     agent::AsyncToolRegistry admitting_registry;
-    agent::AsyncAgentOptions admitting_options{4, "gpt-test"};
+    agent::AsyncAgentOptions admitting_options{4, ai::Model{"gpt-test"}};
     admitting_options.max_queued_bytes = 6;
     bool admitting_returned = false;
     admitting_options.get_steering_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
@@ -1139,7 +1139,7 @@ TEST_CASE("repeated over-limit steering admissions each report the same rejectio
     auto* tool_ptr = tool.get();
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::move(tool)));
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.max_queued_messages = 1;
     int steering_calls = 0;
     options.get_steering_messages = [&steering_calls]() -> util::Expected<std::vector<ai::MessageVariant>> {
@@ -1174,7 +1174,7 @@ TEST_CASE("rejected steering admission does not stop the run or modify queued me
     auto* tool_ptr = tool.get();
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::move(tool)));
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.max_queued_messages = 1;
     int steering_calls = 0;
     options.get_steering_messages = [&steering_calls]() -> util::Expected<std::vector<ai::MessageVariant>> {
@@ -1219,7 +1219,7 @@ TEST_CASE("beforeToolCall hook can block a tool call", "[agent][async][u7]") {
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::move(tool)));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.before_tool_call = [](const agent::BeforeToolCallContext&) -> util::Expected<agent::BeforeToolCallResult> {
         return agent::BeforeToolCallResult{true, "blocked by policy"};
     };
@@ -1260,11 +1260,10 @@ TEST_CASE("beforeToolCall hook passes context and skips execution on block", "[a
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::move(tool)));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.before_tool_call = [](const agent::BeforeToolCallContext& ctx) -> util::Expected<agent::BeforeToolCallResult> {
         REQUIRE(ctx.tool_call.name == "read_file");
         REQUIRE(ctx.args.get<util::JsonValue::object_t>().at("path").get_string() == "README.md");
-        REQUIRE(ctx.context.model == "gpt-test");
         REQUIRE(!ctx.context.messages.empty());
         return agent::BeforeToolCallResult{false, std::nullopt};
     };
@@ -1284,7 +1283,7 @@ TEST_CASE("beforeToolCall hook failure aborts the run", "[agent][async][u7]") {
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.before_tool_call = [](const agent::BeforeToolCallContext&) -> util::Expected<agent::BeforeToolCallResult> {
         return std::unexpected(util::make_error(util::ErrorCode::Tool, "policy rejected"));
     };
@@ -1308,7 +1307,7 @@ TEST_CASE("beforeToolCall hook exception becomes a tool error", "[agent][async][
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.before_tool_call = [](const agent::BeforeToolCallContext&) -> util::Expected<agent::BeforeToolCallResult> {
         throw std::runtime_error("boom");
     };
@@ -1330,7 +1329,7 @@ TEST_CASE("afterToolCall hook overrides tool result content", "[agent][async][u7
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.after_tool_call = [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
         return agent::AfterToolCallResult{
             std::vector<ai::Content>{ai::text_content("overridden")}, std::nullopt, std::nullopt, std::nullopt};
@@ -1355,7 +1354,7 @@ TEST_CASE("afterToolCall hook overrides error flag", "[agent][async][u7]") {
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.after_tool_call = [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
         return agent::AfterToolCallResult{std::nullopt, std::nullopt, true, std::nullopt};
     };
@@ -1530,7 +1529,7 @@ struct DecisionRecorder {
 };
 
 agent::AsyncAgentOptions decision_recording_options(DecisionRecorder& recorder) {
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.prepare_next_turn = [&recorder](const agent::PrepareNextTurnContext&)
         -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
         recorder.decisions.push_back("prepare");
@@ -1593,7 +1592,7 @@ TEST_CASE("terminate batch continues when one call declines", "[agent][async][u7
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()})));
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()})));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.after_tool_call = [](const agent::AfterToolCallContext& ctx) -> util::Expected<agent::AfterToolCallResult> {
         if (ctx.tool_call.name == "alpha") {
             return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
@@ -1620,7 +1619,7 @@ TEST_CASE("blocked call prevents terminate batch", "[agent][async][u7]") {
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()})));
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()})));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.before_tool_call = [](const agent::BeforeToolCallContext& ctx) -> util::Expected<agent::BeforeToolCallResult> {
         if (ctx.tool_call.name == "alpha") {
             return agent::BeforeToolCallResult{true, "no alpha"};
@@ -1649,7 +1648,7 @@ TEST_CASE("tool execution error prevents terminate batch", "[agent][async][u7]")
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()})));
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()})));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.after_tool_call = [](const agent::AfterToolCallContext& ctx) -> util::Expected<agent::AfterToolCallResult> {
         if (ctx.tool_call.name == "alpha") {
             return agent::AfterToolCallResult{std::nullopt, std::nullopt, true, true};
@@ -1672,7 +1671,7 @@ TEST_CASE("afterToolCall hook failure aborts the run", "[agent][async][u7]") {
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.after_tool_call = [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
         return std::unexpected(util::make_error(util::ErrorCode::Tool, "post-processor failed"));
     };
@@ -1693,7 +1692,7 @@ TEST_CASE("afterToolCall hook exception becomes a tool error", "[agent][async][u
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.after_tool_call = [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
         throw std::runtime_error("after boom");
     };
@@ -1719,7 +1718,7 @@ TEST_CASE("transformContext hook prunes old messages from LLM request", "[agent]
     client.responses.push_back(ai::assistant_text_message("ok"));
     agent::AsyncToolRegistry registry;
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.transform_context = [](const std::vector<ai::MessageVariant>& messages)
         -> util::Expected<std::vector<ai::MessageVariant>> {
         if (messages.size() <= 1) {
@@ -1743,7 +1742,7 @@ TEST_CASE("convertToLlm hook filters non-LLM messages", "[agent][async][u8]") {
     client.responses.push_back(ai::assistant_text_message("ok"));
     agent::AsyncToolRegistry registry;
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.convert_to_llm = [](const std::vector<ai::MessageVariant>& messages)
         -> util::Expected<std::vector<ai::MessageVariant>> {
         std::vector<ai::MessageVariant> result;
@@ -1770,7 +1769,7 @@ TEST_CASE("convertToLlm returning empty aborts with validation error", "[agent][
     client.responses.push_back(ai::assistant_text_message("ok"));
     agent::AsyncToolRegistry registry;
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.convert_to_llm = [](const std::vector<ai::MessageVariant>&)
         -> util::Expected<std::vector<ai::MessageVariant>> { return std::vector<ai::MessageVariant>{}; };
 
@@ -1788,7 +1787,7 @@ TEST_CASE("transformContext hook error aborts the run", "[agent][async][u8]") {
     client.responses.push_back(ai::assistant_text_message("ok"));
     agent::AsyncToolRegistry registry;
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.transform_context = [](const std::vector<ai::MessageVariant>&)
         -> util::Expected<std::vector<ai::MessageVariant>> {
         return std::unexpected(util::make_error(util::ErrorCode::Tool, "context transform failed"));
@@ -1807,7 +1806,7 @@ TEST_CASE("convertToLlm hook error aborts the run", "[agent][async][u8]") {
     client.responses.push_back(ai::assistant_text_message("ok"));
     agent::AsyncToolRegistry registry;
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.convert_to_llm = [](const std::vector<ai::MessageVariant>&)
         -> util::Expected<std::vector<ai::MessageVariant>> {
         return std::unexpected(util::make_error(util::ErrorCode::Tool, "conversion failed"));
@@ -1827,7 +1826,7 @@ TEST_CASE("transformContext and convertToLlm exceptions abort cleanly", "[agent]
         client.responses.push_back(ai::assistant_text_message("ok"));
         agent::AsyncToolRegistry registry;
 
-        agent::AsyncAgentOptions options{4, "gpt-test"};
+        agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
         options.transform_context = [](const std::vector<ai::MessageVariant>&)
             -> util::Expected<std::vector<ai::MessageVariant>> {
             throw std::runtime_error("transform boom");
@@ -1847,7 +1846,7 @@ TEST_CASE("transformContext and convertToLlm exceptions abort cleanly", "[agent]
         client.responses.push_back(ai::assistant_text_message("ok"));
         agent::AsyncToolRegistry registry;
 
-        agent::AsyncAgentOptions options{4, "gpt-test"};
+        agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
         options.convert_to_llm = [](const std::vector<ai::MessageVariant>&)
             -> util::Expected<std::vector<ai::MessageVariant>> {
             throw std::runtime_error("convert boom");
@@ -1872,7 +1871,7 @@ TEST_CASE("steering message is injected before next LLM request", "[agent][async
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
     bool steering_returned = false;
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.get_steering_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
         if (steering_returned) {
             return std::vector<ai::MessageVariant>{};
@@ -1913,7 +1912,7 @@ TEST_CASE("follow-up message triggers an additional turn", "[agent][async][u8]")
     client.responses.push_back(ai::assistant_text_message("second"));
 
     bool follow_up_returned = false;
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.get_follow_up_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
         if (follow_up_returned) {
             return std::vector<ai::MessageVariant>{};
@@ -1939,7 +1938,7 @@ TEST_CASE("follow-up empty ends after the final response", "[agent][async][u8]")
     client.responses.push_back(ai::assistant_text_message("done"));
 
     int follow_up_calls = 0;
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.get_follow_up_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
         ++follow_up_calls;
         return std::vector<ai::MessageVariant>{};
@@ -1961,7 +1960,7 @@ TEST_CASE("steering messages emit ordinary message lifecycle in order", "[agent]
 
     agent::AsyncToolRegistry registry;
     bool steering_returned = false;
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.get_steering_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
         if (steering_returned) {
             return std::vector<ai::MessageVariant>{};
@@ -2011,7 +2010,7 @@ TEST_CASE("follow-up messages emit ordinary message lifecycle across turns", "[a
 
     agent::AsyncToolRegistry registry;
     bool follow_up_returned = false;
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.get_follow_up_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
         if (follow_up_returned) {
             return std::vector<ai::MessageVariant>{};
@@ -2067,7 +2066,7 @@ TEST_CASE("steering and follow-up callback failures abort the run", "[agent][asy
         client.responses.push_back(ai::assistant_text_message("ok"));
         agent::AsyncToolRegistry registry;
 
-        agent::AsyncAgentOptions options{4, "gpt-test"};
+        agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
         options.get_steering_messages = []() -> util::Expected<std::vector<ai::MessageVariant>> {
             return std::unexpected(util::make_error(util::ErrorCode::Tool, "steering failed"));
         };
@@ -2084,7 +2083,7 @@ TEST_CASE("steering and follow-up callback failures abort the run", "[agent][asy
         client.responses.push_back(ai::assistant_text_message("done"));
         agent::AsyncToolRegistry registry;
 
-        agent::AsyncAgentOptions options{4, "gpt-test"};
+        agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
         options.get_follow_up_messages = []() -> util::Expected<std::vector<ai::MessageVariant>> {
             throw std::runtime_error("follow boom");
         };
@@ -2105,7 +2104,7 @@ TEST_CASE("agent_end contains only messages from the current invocation", "[agen
     agent::AsyncAgentLoop loop(
         client,
         std::move(registry),
-        agent::AsyncAgentOptions{4, "gpt-test"});
+        agent::AsyncAgentOptions{4, ai::Model{"gpt-test"}});
 
     auto run = run_loop(
         loop,
@@ -2146,7 +2145,7 @@ TEST_CASE("stop-after-turn ends before steering and follow-up decisions", "[agen
     agent::AsyncToolRegistry registry;
     int steering_calls = 0;
     int follow_up_calls = 0;
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.get_steering_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
         ++steering_calls;
         return std::vector<ai::MessageVariant>{};
@@ -2177,7 +2176,7 @@ TEST_CASE("prepareNextTurn runs before post-turn steering is polled", "[agent][a
 
     int steering_calls = 0;
     std::vector<std::size_t> observed_new_message_counts;
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.get_steering_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
         ++steering_calls;
         if (steering_calls == 2) {
@@ -2214,13 +2213,13 @@ TEST_CASE("prepareNextTurn model swap changes next request model", "[agent][asyn
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
         -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
-        return agent::AgentLoopTurnUpdate{std::nullopt, std::string{"gpt-swapped"}, std::nullopt};
+        return agent::AgentLoopTurnUpdate{std::nullopt, ai::Model{"gpt-swapped"}, std::nullopt};
     };
     options.validate_turn_update = [](const agent::AgentLoopTurnUpdate& update) -> util::ExpectedVoid {
-        if (update.model && *update.model == "gpt-swapped") {
+        if (update.model && update.model->id == "gpt-swapped") {
             return {};
         }
         return std::unexpected(util::make_error(util::ErrorCode::Validation, "unknown model"));
@@ -2231,8 +2230,8 @@ TEST_CASE("prepareNextTurn model swap changes next request model", "[agent][asyn
 
     REQUIRE(run.result);
     REQUIRE(client.requests.size() == 2);
-    CHECK(client.requests[1].model == "gpt-swapped");
-    CHECK(run.result->state.model == "gpt-swapped");
+    CHECK(client.requests[1].model->id == "gpt-swapped");
+    CHECK(run.result->state.model.id == "gpt-swapped");
 }
 
 TEST_CASE("prepareNextTurn model update without validator is rejected", "[agent][async][u8]") {
@@ -2242,10 +2241,10 @@ TEST_CASE("prepareNextTurn model update without validator is rejected", "[agent]
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
         -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
-        return agent::AgentLoopTurnUpdate{std::nullopt, std::string{"gpt-swapped"}, std::nullopt};
+        return agent::AgentLoopTurnUpdate{std::nullopt, ai::Model{"gpt-swapped"}, std::nullopt};
     };
 
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
@@ -2262,7 +2261,7 @@ TEST_CASE("prepareNextTurn thinking level is validated", "[agent][async][u8]") {
 
     agent::AsyncToolRegistry registry;
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
         -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
         return agent::AgentLoopTurnUpdate{std::nullopt, std::nullopt, std::string{"invalid"}};
@@ -2284,12 +2283,12 @@ TEST_CASE("prepareNextTurn rejected update does not persist partial model change
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
     int prepare_calls = 0;
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.prepare_next_turn = [&](const agent::PrepareNextTurnContext&)
         -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
         ++prepare_calls;
         if (prepare_calls == 1) {
-            return agent::AgentLoopTurnUpdate{std::nullopt, std::string{"gpt-swapped"}, std::string{"invalid"}};
+            return agent::AgentLoopTurnUpdate{std::nullopt, ai::Model{"gpt-swapped"}, std::string{"invalid"}};
         }
         return std::nullopt;
     };
@@ -2303,8 +2302,8 @@ TEST_CASE("prepareNextTurn rejected update does not persist partial model change
     auto second = run_loop(loop, "hi again");
     REQUIRE(second.result);
     REQUIRE(client.requests.size() == 2);
-    CHECK(client.requests[1].model == "gpt-test");
-    CHECK(second.result->state.model == "gpt-test");
+    CHECK(client.requests[1].model->id == "gpt-test");
+    CHECK(second.result->state.model.id == "gpt-test");
 }
 
 TEST_CASE("prepareNextTurn replaces model context without publishing replacement messages", "[agent][async][issue35]") {
@@ -2319,7 +2318,7 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
     bool prepared = false;
     bool stop_observed_replacement = false;
     std::size_t first_prepare_new_message_count = 0;
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.prepare_next_turn = [&](const agent::PrepareNextTurnContext& context)
         -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
         if (prepared) {
@@ -2382,7 +2381,7 @@ TEST_CASE("prepareNextTurn no update leaves model and thinking level unchanged",
 
     agent::AsyncToolRegistry registry;
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
         -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> { return std::nullopt; };
 
@@ -2390,7 +2389,7 @@ TEST_CASE("prepareNextTurn no update leaves model and thinking level unchanged",
     auto run = run_loop(loop, "hi");
 
     REQUIRE(run.result);
-    CHECK(run.result->state.model == "gpt-test");
+    CHECK(run.result->state.model.id == "gpt-test");
     CHECK(run.result->state.thinking_level.empty());
 }
 
@@ -2400,7 +2399,7 @@ TEST_CASE("prepareNextTurn valid thinking level is preserved in state", "[agent]
 
     agent::AsyncToolRegistry registry;
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
         -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
         return agent::AgentLoopTurnUpdate{std::nullopt, std::nullopt, std::string{"high"}};
@@ -2421,14 +2420,14 @@ TEST_CASE("prepareNextTurn model validation hook can reject unknown models", "[a
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
         -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
-        return agent::AgentLoopTurnUpdate{std::nullopt, std::string{"missing-model"}, std::nullopt};
+        return agent::AgentLoopTurnUpdate{std::nullopt, ai::Model{"missing-model"}, std::nullopt};
     };
     options.validate_turn_update = [](const agent::AgentLoopTurnUpdate& update) -> util::ExpectedVoid {
-        if (update.model && *update.model != "gpt-test") {
-            return std::unexpected(util::make_error(util::ErrorCode::Validation, "unknown model", *update.model));
+        if (update.model && update.model->id != "gpt-test") {
+            return std::unexpected(util::make_error(util::ErrorCode::Validation, "unknown model", update.model->id));
         }
         return {};
     };
@@ -2447,7 +2446,7 @@ TEST_CASE("prepareNextTurn and turn-update validation exceptions abort cleanly",
         client.responses.push_back(ai::assistant_text_message("first"));
         agent::AsyncToolRegistry registry;
 
-        agent::AsyncAgentOptions options{4, "gpt-test"};
+        agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
         options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
             -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
             throw std::runtime_error("prepare boom");
@@ -2466,10 +2465,10 @@ TEST_CASE("prepareNextTurn and turn-update validation exceptions abort cleanly",
         client.responses.push_back(ai::assistant_text_message("first"));
         agent::AsyncToolRegistry registry;
 
-        agent::AsyncAgentOptions options{4, "gpt-test"};
+        agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
         options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
             -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
-            return agent::AgentLoopTurnUpdate{std::nullopt, std::string{"gpt-next"}, std::nullopt};
+            return agent::AgentLoopTurnUpdate{std::nullopt, ai::Model{"gpt-next"}, std::nullopt};
         };
         options.validate_turn_update = [](const agent::AgentLoopTurnUpdate&) -> util::ExpectedVoid {
             throw std::runtime_error("validator boom");
@@ -2505,7 +2504,7 @@ TEST_CASE("an exclusive tool forces a bounded batch to execute sequentially", "[
         agent::ToolConcurrency::Exclusive,
         probe)));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.tool_execution = agent::BoundedParallelToolExecution{2};
 
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
@@ -2535,7 +2534,7 @@ TEST_CASE("bounded parallel execution preserves source order in the transcript",
     REQUIRE(registry.add(std::move(alpha)));
     REQUIRE(registry.add(std::move(beta)));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.tool_execution = agent::BoundedParallelToolExecution{2};
 
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
@@ -2606,7 +2605,7 @@ TEST_CASE(
 
     std::vector<std::string> before_hook_names;
     std::vector<util::JsonValue> before_hook_arguments;
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.tool_execution = agent::BoundedParallelToolExecution{2};
     options.before_tool_call = [&](const agent::BeforeToolCallContext& context)
         -> util::Expected<agent::BeforeToolCallResult> {
@@ -2674,7 +2673,7 @@ TEST_CASE("bounded parallel limit one executes sequentially", "[agent][async][u8
         agent::ToolConcurrency::ParallelSafe,
         probe)));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.tool_execution = agent::BoundedParallelToolExecution{1};
 
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
@@ -2701,7 +2700,7 @@ TEST_CASE("bounded parallel policy rejects zero before tools start", "[agent][as
         agent::ToolConcurrency::ParallelSafe,
         probe)));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.tool_execution = agent::BoundedParallelToolExecution{0};
 
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
@@ -2732,7 +2731,7 @@ TEST_CASE("bounded parallel execution keeps blocked calls out of tool adapters",
     REQUIRE(registry.add(std::move(alpha)));
     REQUIRE(registry.add(std::move(beta)));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.tool_execution = agent::BoundedParallelToolExecution{2};
     options.before_tool_call = [](const agent::BeforeToolCallContext& context)
         -> util::Expected<agent::BeforeToolCallResult> {
@@ -2773,7 +2772,7 @@ TEST_CASE("bounded parallel before-hook failure starts no workers", "[agent][asy
         agent::ToolConcurrency::ParallelSafe,
         probe)));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.tool_execution = agent::BoundedParallelToolExecution{2};
     options.before_tool_call = [](const agent::BeforeToolCallContext&)
         -> util::Expected<agent::BeforeToolCallResult> {
@@ -2804,7 +2803,7 @@ TEST_CASE("bounded parallel execution preserves peer success after a tool error"
         agent::ToolConcurrency::ParallelSafe,
         "beta result")));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.tool_execution = agent::BoundedParallelToolExecution{2};
 
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
@@ -2834,7 +2833,7 @@ TEST_CASE("bounded parallel event-sink failure drains workers and emits one agen
         agent::ToolConcurrency::ParallelSafe,
         "beta result")));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.tool_execution = agent::BoundedParallelToolExecution{2};
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
 
@@ -2888,7 +2887,7 @@ TEST_CASE("bounded parallel execution keeps hook failures as agent errors", "[ag
         agent::ToolConcurrency::ParallelSafe,
         "beta result")));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.tool_execution = agent::BoundedParallelToolExecution{2};
     options.after_tool_call = [](const agent::AfterToolCallContext& context)
         -> util::Expected<agent::AfterToolCallResult> {
@@ -2924,7 +2923,7 @@ TEST_CASE("bounded parallel execution emits end events in completion order", "[a
         std::chrono::milliseconds{10},
         "beta result")));
 
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.tool_execution = agent::BoundedParallelToolExecution{2};
 
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
@@ -2980,7 +2979,7 @@ TEST_CASE("length-truncated tool calls emit errors without crossing the executor
 
     int before_calls = 0;
     int after_calls = 0;
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    agent::AsyncAgentOptions options{4, ai::Model{"gpt-test"}};
     options.tool_execution = agent::BoundedParallelToolExecution{2};
     options.before_tool_call = [&](const agent::BeforeToolCallContext&)
         -> util::Expected<agent::BeforeToolCallResult> {

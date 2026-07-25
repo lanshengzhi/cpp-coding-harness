@@ -66,7 +66,10 @@ using AssistantContent = std::variant<TextContent, ThinkingContent, ToolCallCont
     };
 }
 
-[[nodiscard]] inline std::string text_from_content(const std::vector<Content>& content) {
+namespace detail {
+
+template <typename ContentBlock>
+[[nodiscard]] inline std::string text_from_blocks(const std::vector<ContentBlock>& content) {
     std::string text;
     for (const auto& block : content) {
         if (const auto* text_block = std::get_if<TextContent>(&block)) {
@@ -76,15 +79,15 @@ using AssistantContent = std::variant<TextContent, ThinkingContent, ToolCallCont
     return text;
 }
 
+} // namespace detail
+
+[[nodiscard]] inline std::string text_from_content(const std::vector<Content>& content) {
+    return detail::text_from_blocks(content);
+}
+
 [[nodiscard]] inline std::string text_from_assistant_content(
     const std::vector<AssistantContent>& content) {
-    std::string text;
-    for (const auto& block : content) {
-        if (const auto* text_block = std::get_if<TextContent>(&block)) {
-            text += text_block->text;
-        }
-    }
-    return text;
+    return detail::text_from_blocks(content);
 }
 
 } // namespace cch::ai

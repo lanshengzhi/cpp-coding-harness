@@ -2,6 +2,7 @@
 
 #include "AgentTool.hpp"
 #include "../ai/Context.hpp"
+#include "../ai/Model.hpp"
 #include "../ai/Tool.hpp"
 #include "../util/Error.hpp"
 
@@ -42,7 +43,7 @@ struct AgentLoopContextReplacement {
 
 struct AgentLoopTurnUpdate {
     std::optional<AgentLoopContextReplacement> context;
-    std::optional<std::string> model;
+    std::optional<ai::Model> model;
     std::optional<std::string> thinking_level;
 };
 
@@ -81,7 +82,7 @@ struct AsyncAgentOptions {
     /// message content.
     std::size_t max_queued_messages{256};
     std::size_t max_queued_bytes{16 * 1024 * 1024};
-    std::string model;
+    ai::Model model;
     std::string thinking_level;
     std::optional<BeforeToolCallHook> before_tool_call;
     std::optional<AfterToolCallHook> after_tool_call;
@@ -100,7 +101,7 @@ struct AsyncAgentOptions {
     AsyncAgentOptions(const AsyncAgentOptions&) = delete;
     AsyncAgentOptions& operator=(const AsyncAgentOptions&) = delete;
 
-    AsyncAgentOptions(int max_turns_, std::string model_)
+    AsyncAgentOptions(int max_turns_, ai::Model model_)
         : max_turns(max_turns_), model(std::move(model_)) {}
 };
 
@@ -110,7 +111,7 @@ struct AgentState {
     std::optional<ai::AssistantMessage> streaming_message;
     std::vector<std::string> active_tool_names;
     std::vector<std::string> pending_tool_call_ids;
-    std::string model;
+    ai::Model model;
     std::string thinking_level;
     // Bounded observations reported without vetoing run progress: redacted
     // weak-subscriber failures and rejected steering/follow-up queue

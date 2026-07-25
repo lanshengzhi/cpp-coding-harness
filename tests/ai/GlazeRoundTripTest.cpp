@@ -131,7 +131,6 @@ TEST_CASE("context JSON preserves a complete Tool Argument Contract unchanged", 
 
     ai::AiContext context;
     context.system_prompt = "sys";
-    context.model = "gpt-test";
     context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
     context.tools.push_back(ai::Tool{
         "read_file",
@@ -146,7 +145,6 @@ TEST_CASE("context JSON preserves a complete Tool Argument Contract unchanged", 
 
     REQUIRE(parsed->system_prompt);
     CHECK(*parsed->system_prompt == "sys");
-    CHECK(parsed->model == "gpt-test");
     REQUIRE(parsed->messages.size() == 1);
     REQUIRE(std::holds_alternative<ai::UserMessage>(parsed->messages[0]));
     const auto& user = std::get<ai::UserMessage>(parsed->messages[0]);

@@ -37,7 +37,7 @@ public:
 private:
     friend class Agent;
 
-    [[nodiscard]] const std::string& current_model() const noexcept {
+    [[nodiscard]] const ai::Model& current_model() const noexcept {
         return options_.model;
     }
     [[nodiscard]] const std::string& current_thinking_level() const noexcept {

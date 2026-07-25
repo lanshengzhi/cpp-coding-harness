@@ -25,7 +25,9 @@ struct ProviderFactoryContext {
     // Provider/API identity written into assistant messages.
     std::string provider{"openai-compatible"};
     std::string api{"openai-completions"};
-    std::string model;
+    // Configured default model identity; the request's Model takes precedence
+    // (see StreamChatRequest::model, ADR 0019).
+    Model model;
     std::string base_url{"https://api.openai.com"};
     std::string api_key;
     std::string api_key_env{"OPENAI_API_KEY"};

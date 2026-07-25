@@ -251,7 +251,7 @@ void add_project_resource_loading_diagnostics(
     ctx.provider_registry_name = resolved.provider_registry_name;
     ctx.provider = resolved.provider;
     ctx.api = resolved.api;
-    ctx.model = resolved.model;
+    ctx.model = ai::Model{resolved.model};
     ctx.base_url = resolved.base_url;
     ctx.api_key = resolved.api_key;
     ctx.api_key_env = resolved_env_name.empty() ? resolved.api_key_env : resolved_env_name;

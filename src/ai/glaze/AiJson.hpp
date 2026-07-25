@@ -103,7 +103,6 @@ struct MessageDto {
 
 struct ContextDto {
     std::optional<std::string> systemPrompt;
-    std::optional<std::string> model;
     std::vector<MessageDto> messages;
     std::optional<std::vector<FunctionToolDto>> tools;
 };
@@ -134,13 +133,6 @@ struct ContextDto {
 namespace detail {
 
 inline constexpr std::int64_t kMinimumRealUnixEpochMilliseconds = 1'000'000'000'000;
-
-template <typename... Ts>
-struct Overloaded : Ts... {
-    using Ts::operator()...;
-};
-template <typename... Ts>
-Overloaded(Ts...) -> Overloaded<Ts...>;
 
 [[nodiscard]] inline util::Error json_contract_error(std::string message, std::string detail, std::string_view context) {
     return util::make_error(
@@ -833,9 +825,6 @@ template <typename T>
 [[nodiscard]] inline ContextDto to_dto(const AiContext& context) {
     ContextDto dto;
     dto.systemPrompt = context.system_prompt;
-    if (!context.model.empty()) {
-        dto.model = context.model;
-    }
     for (const auto& message : context.messages) {
         dto.messages.push_back(to_dto(message));
     }
@@ -852,7 +841,6 @@ template <typename T>
 [[nodiscard]] inline util::Expected<AiContext> context_from_dto(const ContextDto& dto, std::string_view context_json) {
     AiContext context;
     context.system_prompt = dto.systemPrompt;
-    context.model = dto.model.value_or("");
     for (const auto& message_dto : dto.messages) {
         auto message = message_from_dto(message_dto, context_json);
         if (!message) {

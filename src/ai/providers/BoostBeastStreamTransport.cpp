@@ -30,7 +30,7 @@ struct ParsedUrl {
 
 [[nodiscard]] util::Expected<ParsedUrl> parse_https_url(const std::string& url) {
     constexpr std::string_view scheme = "https://";
-    if (url.rfind(std::string(scheme), 0) != 0) {
+    if (!url.starts_with(scheme)) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "unsupported URL scheme",

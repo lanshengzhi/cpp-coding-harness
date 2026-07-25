@@ -26,7 +26,7 @@ public:
         const ai::StreamChatRequest& request,
         ai::AssistantEventSink) override {
         ai::AssistantMessage message = ai::assistant_text_message("null");
-        message.model = request.model;
+        message.model = request.model->id;
         message.provider = "null";
         co_return message;
     }
@@ -83,7 +83,7 @@ TEST_CASE("provider registry creates registered clients", "[ai][provider][regist
     REQUIRE(registry.register_provider("null", make_null_client));
 
     ai::ProviderFactoryContext context;
-    context.model = "model-from-context";
+    context.model = ai::Model{"model-from-context"};
     auto client = registry.create("null", context);
 
     REQUIRE(client);
@@ -119,7 +119,7 @@ TEST_CASE("default provider registry includes fake and OpenAI-compatible provide
     CHECK(registry->contains("openai-compatible"));
 
     ai::ProviderFactoryContext context;
-    context.model = "fake-model";
+    context.model = ai::Model{"fake-model"};
     auto fake = registry->create("fake", context);
     REQUIRE(fake);
 
@@ -145,7 +145,7 @@ TEST_CASE(
     REQUIRE(registry);
 
     ai::ProviderFactoryContext context;
-    context.model = "fake-model";
+    context.model = ai::Model{"fake-model"};
     auto fake = registry->create("fake", context);
     REQUIRE(fake);
 
@@ -199,7 +199,7 @@ TEST_CASE("fake provider emits read tool calls from prompts", "[ai][provider][re
     REQUIRE(registry);
 
     ai::ProviderFactoryContext context;
-    context.model = "fake-model";
+    context.model = ai::Model{"fake-model"};
     auto fake = registry->create("fake", context);
     REQUIRE(fake);
 
@@ -226,7 +226,7 @@ TEST_CASE("fake provider emits bash tool calls from prompts", "[ai][provider][re
     REQUIRE(registry);
 
     ai::ProviderFactoryContext context;
-    context.model = "fake-model";
+    context.model = ai::Model{"fake-model"};
     auto fake = registry->create("fake", context);
     REQUIRE(fake);
 
@@ -253,7 +253,7 @@ TEST_CASE("fake provider observes trailing tool results", "[ai][provider][regist
     REQUIRE(registry);
 
     ai::ProviderFactoryContext context;
-    context.model = "fake-model";
+    context.model = ai::Model{"fake-model"};
     auto fake = registry->create("fake", context);
     REQUIRE(fake);
 

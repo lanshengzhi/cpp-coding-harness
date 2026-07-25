@@ -16,7 +16,9 @@ struct OpenAIStreamConfig {
     std::string base_url{"https://api.openai.com"};
     std::string api_key;
     std::string api_key_env{"OPENAI_API_KEY"};
-    std::string model{"gpt-4.1-mini"};
+    // Configured default model identity; the request's Model takes precedence
+    // (see StreamChatRequest::model, ADR 0019).
+    ai::Model model{"gpt-4.1-mini"};
     std::string organization;
     std::string project;
     std::chrono::milliseconds timeout{30000};

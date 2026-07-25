@@ -65,7 +65,7 @@ public:
         ai::AssistantMessage message;
         message.provider = "host";
         message.api = "host";
-        message.model = request.model;
+        message.model = request.model->id;
         if (request_count == 1) {
             message.stop_reason = reason_;
             message.error_message = "host transport lost";
@@ -118,7 +118,7 @@ public:
         ai::AssistantMessage terminal;
         terminal.provider = "host";
         terminal.api = "host";
-        terminal.model = request.model;
+        terminal.model = request.model->id;
         terminal.stop_reason = ai::AssistantStopReason::Error;
         terminal.error_message = diagnostic_;
         if (sink) {

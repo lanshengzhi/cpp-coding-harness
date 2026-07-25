@@ -2,6 +2,7 @@
 
 #include "Context.hpp"
 #include "Message.hpp"
+#include "Model.hpp"
 #include "StreamEvent.hpp"
 
 #include "../util/Error.hpp"
@@ -9,13 +10,18 @@
 #include <boost/asio/awaitable.hpp>
 
 #include <functional>
+#include <optional>
 #include <string>
 
 namespace cch::ai {
 
 struct StreamChatRequest {
     AiContext context;
-    std::string model;
+    /// Model identity requested for this call (ADR 0019). Precedence rule:
+    /// when present, this value is authoritative; when std::nullopt, the
+    /// provider client's configured Model applies. A call with neither is
+    /// rejected as a validation error.
+    std::optional<Model> model;
 };
 
 using AssistantEventSink = std::move_only_function<util::ExpectedVoid(const AssistantStreamEvent&)>;

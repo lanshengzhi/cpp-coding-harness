@@ -62,7 +62,7 @@ RunResult run_fake(
 
 ai::StreamChatRequest request_with(ai::MessageVariant message) {
     ai::StreamChatRequest request;
-    request.model = "fake-model";
+    request.model = ai::Model{"fake-model"};
     request.context.messages.push_back(std::move(message));
     return request;
 }

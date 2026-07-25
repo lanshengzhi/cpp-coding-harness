@@ -158,7 +158,7 @@ void record_queue_rejection(AgentState& state, util::Error error) {
     ai::AiContext& context,
     AgentState& state,
     const AgentLoopTurnUpdate& update) {
-    if (update.model && update.model->empty()) {
+    if (update.model && update.model->id.empty()) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "invalid model",
@@ -179,7 +179,6 @@ void record_queue_rejection(AgentState& state, util::Error error) {
 
     if (update.model) {
         options.model = *update.model;
-        context.model = *update.model;
         state.model = *update.model;
     }
 
@@ -303,7 +302,6 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
     std::string user_prompt,
     AgentEventSink sink) {
     ai::AiContext context;
-    context.model = options_.model;
     context.tools = registry_.definitions();
     context.messages = std::move(history);
     std::vector<ai::MessageVariant> new_messages;
@@ -579,7 +577,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                     auto error = util::make_error(
                         util::ErrorCode::Validation,
                         "model update requires validation",
-                        (**update).model.value());
+                        (**update).model->id);
                     CCH_TRY_VOID(emit_agent_end());
                     co_return std::unexpected(error);
                 }

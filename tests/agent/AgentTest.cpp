@@ -114,7 +114,7 @@ public:
     boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
         const ai::StreamChatRequest& request,
         ai::AssistantEventSink sink) override {
-        request_models.push_back(request.model);
+        request_models.push_back(request.model->id);
         if (responses.empty()) {
             co_return std::unexpected(util::make_error(
                 util::ErrorCode::Provider,
@@ -211,14 +211,14 @@ TEST_CASE("stateful Agent retains a scripted fake-provider prompt in its passive
     agent::Agent subject(
         *client,
         std::move(tools),
-        agent::AsyncAgentOptions{3, "fake-model"});
+        agent::AsyncAgentOptions{3, ai::Model{"fake-model"}});
 
     REQUIRE(run_prompt(subject, "hello"));
     auto snapshot = subject.state();
     CHECK_FALSE(snapshot.is_running);
     CHECK_FALSE(snapshot.streaming_message.has_value());
     CHECK(snapshot.pending_tool_call_ids.empty());
-    CHECK(snapshot.model == "fake-model");
+    CHECK(snapshot.model.id == "fake-model");
     CHECK(snapshot.thinking_level == "off");
     REQUIRE(snapshot.messages.size() == 2);
     REQUIRE(std::holds_alternative<ai::UserMessage>(snapshot.messages[0]));
@@ -238,7 +238,7 @@ TEST_CASE("stateful Agent reduces lifecycle state before ordered move-only obser
     agent::Agent subject(
         *client,
         std::move(tools),
-        agent::AsyncAgentOptions{3, "fake-model"});
+        agent::AsyncAgentOptions{3, ai::Model{"fake-model"}});
 
     std::vector<std::string> events;
     bool user_was_committed_before_delivery = false;
@@ -301,7 +301,7 @@ TEST_CASE(
     agent::Agent subject(
         *client,
         std::move(tools),
-        agent::AsyncAgentOptions{3, "fake-model"});
+        agent::AsyncAgentOptions{3, ai::Model{"fake-model"}});
 
     std::vector<std::string> ordering;
     auto subscribed = subject.subscribe(
@@ -341,7 +341,7 @@ TEST_CASE(
     agent::Agent subject(
         *client,
         std::move(tools),
-        agent::AsyncAgentOptions{3, "fake-model"});
+        agent::AsyncAgentOptions{3, ai::Model{"fake-model"}});
 
     int failing_calls = 0;
     auto failing_result = subject.subscribe(
@@ -386,7 +386,7 @@ TEST_CASE(
     agent::Agent subject(
         *client,
         std::move(tools),
-        agent::AsyncAgentOptions{3, "fake-model"});
+        agent::AsyncAgentOptions{3, ai::Model{"fake-model"}});
 
     auto failed = run_prompt(
         subject,
@@ -416,7 +416,7 @@ TEST_CASE("stateful Agent keeps weak observer failure from vetoing a prompt", "[
     agent::Agent subject(
         *client,
         std::move(tools),
-        agent::AsyncAgentOptions{3, "fake-model"});
+        agent::AsyncAgentOptions{3, ai::Model{"fake-model"}});
 
     int failing_calls = 0;
     auto failing_result = subject.subscribe(
@@ -470,7 +470,7 @@ TEST_CASE("stateful Agent bounds accumulated weak-observer diagnostics", "[agent
     agent::Agent subject(
         *client,
         std::move(tools),
-        agent::AsyncAgentOptions{3, "fake-model"});
+        agent::AsyncAgentOptions{3, ai::Model{"fake-model"}});
 
     std::vector<agent::AgentEventSubscription> subscriptions;
     for (int index = 0; index < 20; ++index) {
@@ -501,7 +501,7 @@ TEST_CASE("stateful Agent retains history while agent_end stays invocation-local
     agent::Agent subject(
         *client,
         std::move(tools),
-        agent::AsyncAgentOptions{3, "fake-model"});
+        agent::AsyncAgentOptions{3, ai::Model{"fake-model"}});
 
     std::vector<std::size_t> invocation_message_counts;
     auto subscribed = subject.subscribe(
@@ -533,7 +533,7 @@ TEST_CASE("stateful Agent rejects a second prompt while its active run is suspen
     agent::Agent subject(
         client,
         std::move(tools),
-        agent::AsyncAgentOptions{3, "fake-model"});
+        agent::AsyncAgentOptions{3, ai::Model{"fake-model"}});
 
     std::optional<util::ExpectedVoid> first_prompt;
     boost::asio::co_spawn(
@@ -583,7 +583,7 @@ TEST_CASE("stateful Agent keeps a suspended run valid when its handle is moved",
     agent::Agent original(
         client,
         std::move(tools),
-        agent::AsyncAgentOptions{3, "fake-model"});
+        agent::AsyncAgentOptions{3, ai::Model{"fake-model"}});
 
     std::optional<util::ExpectedVoid> prompted;
     boost::asio::co_spawn(
@@ -613,7 +613,7 @@ TEST_CASE("stateful Agent releases its active run after an unexpected provider e
     agent::Agent subject(
         client,
         std::move(tools),
-        agent::AsyncAgentOptions{3, "fake-model"});
+        agent::AsyncAgentOptions{3, ai::Model{"fake-model"}});
 
     const auto failed = run_prompt(subject, "first");
     REQUIRE_FALSE(failed);
@@ -635,13 +635,13 @@ TEST_CASE("stateful Agent retains applied run-state updates after a later policy
     REQUIRE(tools.add(std::make_unique<ReadTool>()));
     int prepared_turns = 0;
     int stop_decisions = 0;
-    agent::AsyncAgentOptions options{4, "model-old"};
+    agent::AsyncAgentOptions options{4, ai::Model{"model-old"}};
     options.prepare_next_turn = [&prepared_turns](const agent::PrepareNextTurnContext&)
         -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
         ++prepared_turns;
         if (prepared_turns == 1) {
             return agent::AgentLoopTurnUpdate{
-                std::nullopt, std::string{"model-new"}, std::string{"high"}};
+                std::nullopt, ai::Model{"model-new"}, std::string{"high"}};
         }
         return std::nullopt;
     };
@@ -663,7 +663,7 @@ TEST_CASE("stateful Agent retains applied run-state updates after a later policy
     const auto first = run_prompt(subject, "first");
     REQUIRE_FALSE(first);
     CHECK(first.error().message == "stop policy failed");
-    CHECK(subject.state().model == "model-new");
+    CHECK(subject.state().model.id == "model-new");
     CHECK(subject.state().thinking_level == "high");
 
     REQUIRE(run_prompt(subject, "second"));
@@ -680,7 +680,7 @@ TEST_CASE("stateful Agent owns configured tool state through a fake tool run", "
     agent::Agent subject(
         *client,
         std::move(tools),
-        agent::AsyncAgentOptions{3, "fake-model"});
+        agent::AsyncAgentOptions{3, ai::Model{"fake-model"}});
 
     const auto initial = subject.state();
     REQUIRE(initial.active_tool_names.size() == 1);
@@ -707,7 +707,7 @@ TEST_CASE("stateful Agent retains its configured thinking state across a run", "
     agent::Agent subject(
         *client,
         std::move(tools),
-        agent::AsyncAgentOptions{3, "fake-model"},
+        agent::AsyncAgentOptions{3, ai::Model{"fake-model"}},
         std::move(initial_state));
 
     REQUIRE(run_prompt(subject, "hello"));

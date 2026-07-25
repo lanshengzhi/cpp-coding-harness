@@ -279,7 +279,7 @@ public:
         ai::AssistantMessage msg;
         msg.provider = "capture";
         msg.api = "capture";
-        msg.model = request.model;
+        msg.model = request.model->id;
         msg.stop_reason = ai::AssistantStopReason::Stop;
         msg.content.emplace_back(ai::TextContent{"captured", std::nullopt});
         msg.timestamp = 1718000000123;
@@ -300,7 +300,7 @@ public:
         ai::AssistantMessage response;
         response.provider = "fake";
         response.api = "issue33-fake";
-        response.model = request.model;
+        response.model = request.model->id;
         response.timestamp = 1718000000123;
         if (requests.size() > 1) {
             response.content.emplace_back(ai::text_content("recovered after malformed call"));
@@ -364,7 +364,7 @@ public:
         auto response = ai::assistant_text_message("async response");
         response.provider = "executor-capturing-fake";
         response.api = "fake";
-        response.model = request.model;
+        response.model = request.model->id;
         co_return response;
     }
 
@@ -390,7 +390,7 @@ public:
         auto response = ai::assistant_text_message("released");
         response.provider = "gated-fake";
         response.api = "fake";
-        response.model = request.model;
+        response.model = request.model->id;
         co_return response;
     }
 
@@ -420,7 +420,7 @@ public:
         ai::AssistantMessage terminal;
         terminal.provider = "host";
         terminal.api = "host";
-        terminal.model = request.model;
+        terminal.model = request.model->id;
         terminal.stop_reason = reason_;
         terminal.error_message = diagnostic_;
         terminal.timestamp = 1718000000123;
@@ -892,7 +892,7 @@ TEST_CASE(
     ai::providers::OpenAIStreamConfig provider;
     provider.api_key.clear();
     provider.api_key_env.clear();
-    provider.model = "gpt-test";
+    provider.model = ai::Model{"gpt-test"};
 
     coding_agent::CreateAgentSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
@@ -953,7 +953,7 @@ TEST_CASE(
     provider.api_key = "sk-test-api-key";
     provider.api = "openai-completions";
     provider.provider = "openai-compatible";
-    provider.model = "gpt-test";
+    provider.model = ai::Model{"gpt-test"};
 
     coding_agent::CreateAgentSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
@@ -1047,7 +1047,7 @@ TEST_CASE(
     provider.api_key = "sk-test-api-key";
     provider.api = "openai-completions";
     provider.provider = "openai-compatible";
-    provider.model = "gpt-test";
+    provider.model = ai::Model{"gpt-test"};
 
     coding_agent::CreateAgentSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
@@ -1267,7 +1267,7 @@ TEST_CASE(
     provider.api_key = "sk-test-api-key";
     provider.api = "openai-completions";
     provider.provider = "openai-compatible";
-    provider.model = "gpt-test";
+    provider.model = ai::Model{"gpt-test"};
 
     coding_agent::CreateAgentSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
@@ -1570,7 +1570,7 @@ TEST_CASE(
     provider.api_key = "sk-test-api-key";
     provider.api = "openai-completions";
     provider.provider = "openai-compatible";
-    provider.model = "gpt-test";
+    provider.model = ai::Model{"gpt-test"};
 
     coding_agent::CreateAgentSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};

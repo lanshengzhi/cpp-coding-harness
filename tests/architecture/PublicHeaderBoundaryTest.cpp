@@ -45,12 +45,12 @@ TEST_CASE("public headers compile from the include contract surface", "[architec
 
     agent::AsyncAgentOptions options;
     options.max_turns = 2;
-    options.model = "gpt-test";
+    options.model = ai::Model{"gpt-test"};
 
     harness::session::SessionMetadata metadata;
     metadata.session_id = "session-1";
     metadata.provider = "fake";
-    metadata.model = options.model;
+    metadata.model = options.model.id;
 
     CHECK(context.messages.size() == 1);
     CHECK(context.tools.size() == 1);
@@ -59,6 +59,7 @@ TEST_CASE("public headers compile from the include contract surface", "[architec
 
 TEST_CASE("public contracts remain value and interface oriented", "[architecture][u1]") {
     static_assert(std::is_aggregate_v<agent::AgentInitialState>);
+    static_assert(std::is_aggregate_v<ai::Model>);
     static_assert(std::is_copy_constructible_v<agent::AgentState>);
     static_assert(std::is_same_v<
                   decltype(std::declval<const agent::Agent&>().state()),

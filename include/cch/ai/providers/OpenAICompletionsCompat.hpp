@@ -1,42 +1,20 @@
 #pragma once
 
 #include <optional>
-#include <string>
 
 namespace cch::ai::providers {
 
-enum class ThinkingFormat {
-    openai,
-    openrouter,
-    deepseek,
-    together,
-    zai,
-    qwen,
-    qwen_chat_template,
-    string_thinking,
-    ant_ling,
-};
-
-enum class MaxTokensField {
-    max_tokens,
-    max_completion_tokens,
-};
-
+// Every flag here has an observable effect on the emitted request or the
+// parsed response. Deferred pi-parity controls add no inert fields
+// (ADR 0019); they return together with the StreamChatRequest controls that
+// make them observable.
 struct OpenAICompletionsCompat {
     std::optional<bool> supports_store;
     std::optional<bool> supports_developer_role;
-    // Reserved for pi parity; currently inert until StreamChatRequest carries max-token/reasoning controls.
-    std::optional<bool> supports_reasoning_effort;
     std::optional<bool> supports_usage_in_streaming;
-    // Reserved for pi parity; currently inert until StreamChatRequest carries max-token/reasoning controls.
-    std::optional<MaxTokensField> max_tokens_field;
     std::optional<bool> requires_tool_result_name;
     std::optional<bool> requires_assistant_after_tool_result;
     std::optional<bool> requires_thinking_as_text;
-    // Reserved for pi parity; currently inert until StreamChatRequest carries max-token/reasoning controls.
-    std::optional<bool> requires_reasoning_content_on_assistant_messages;
-    // Reserved for pi parity; currently inert until StreamChatRequest carries max-token/reasoning controls.
-    std::optional<ThinkingFormat> thinking_format;
 };
 
 } // namespace cch::ai::providers
