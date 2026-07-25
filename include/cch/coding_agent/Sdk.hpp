@@ -173,7 +173,7 @@ struct CreateAgentSessionOptions {
     /// Optional explicit turn cap per prompt (passed through to
     /// AsyncAgentOptions). std::nullopt (the default) imposes no turn cap
     /// (ADR 0015).
-    std::optional<int> max_turns;
+    std::optional<int> max_turns{std::nullopt};
 };
 
 // ── CreateAgentSessionResult ─────────────────────────────────────────────────

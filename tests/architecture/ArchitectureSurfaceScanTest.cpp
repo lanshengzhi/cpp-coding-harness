@@ -236,15 +236,28 @@ TEST_CASE("AI message surface does not accept new runtime-only message variants"
 
     const auto section_start = message_header.find("// ── pi extended runtime message types ──");
     const auto variant_start = message_header.find("using MessageVariant", section_start);
+    const auto variant_end = message_header.find(">;", variant_start);
     REQUIRE(section_start != std::string::npos);
     REQUIRE(variant_start != std::string::npos);
+    REQUIRE(variant_end != std::string::npos);
 
-    const auto legacy_runtime_section = message_header.substr(section_start, variant_start - section_start);
-    CHECK(cch::tests::count_occurrences(legacy_runtime_section, "struct ") == 4);
-    CHECK(legacy_runtime_section.find("BashExecutionMessage") != std::string::npos);
-    CHECK(legacy_runtime_section.find("CustomMessage") != std::string::npos);
-    CHECK(legacy_runtime_section.find("BranchSummaryMessage") != std::string::npos);
-    CHECK(legacy_runtime_section.find("CompactionSummaryMessage") != std::string::npos);
+    const auto runtime_type_section = message_header.substr(section_start, variant_start - section_start);
+    CHECK(cch::tests::count_occurrences(runtime_type_section, "struct ") == 4);
+    CHECK(runtime_type_section.find("BashExecutionMessage") != std::string::npos);
+    CHECK(runtime_type_section.find("CustomMessage") != std::string::npos);
+    CHECK(runtime_type_section.find("BranchSummaryMessage") != std::string::npos);
+    CHECK(runtime_type_section.find("CompactionSummaryMessage") != std::string::npos);
+
+    const auto variant_section = message_header.substr(variant_start, variant_end - variant_start);
+    CHECK(cch::tests::count_occurrences(variant_section, ",") == 7);
+    CHECK(variant_section.find("SystemMessage") != std::string::npos);
+    CHECK(variant_section.find("UserMessage") != std::string::npos);
+    CHECK(variant_section.find("AssistantMessage") != std::string::npos);
+    CHECK(variant_section.find("ToolResultMessage") != std::string::npos);
+    CHECK(variant_section.find("BashExecutionMessage") != std::string::npos);
+    CHECK(variant_section.find("CustomMessage") != std::string::npos);
+    CHECK(variant_section.find("BranchSummaryMessage") != std::string::npos);
+    CHECK(variant_section.find("CompactionSummaryMessage") != std::string::npos);
 }
 
 TEST_CASE(
@@ -514,6 +527,30 @@ TEST_CASE("active source tree does not retain legacy sync contracts", "[architec
         CHECK(text.find("src/tools/Tools.hpp") == std::string::npos);
         CHECK(text.find("make_read_file_tool") == std::string::npos);
         CHECK(text.find("make_bash_tool") == std::string::npos);
+    }
+}
+
+TEST_CASE(
+    "all Agent Turn cap inputs default to absent",
+    "[architecture][agent][coding_agent][cli][sdk][issue68][issue80]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const std::vector<std::filesystem::path> turn_cap_contracts{
+        source_root / "include" / "cch" / "agent" / "AgentContext.hpp",
+        source_root / "include" / "cch" / "coding_agent" / "Sdk.hpp",
+        source_root / "src" / "cli" / "CliConfig.hpp",
+        source_root / "src" / "coding_agent" / "runtime" / "AgentSessionRuntime.hpp",
+        source_root / "src" / "coding_agent" / "runtime" / "SessionFactory.hpp",
+        source_root / "src" / "coding_agent" / "runtime" / "SessionFactory.cpp",
+    };
+
+    // The explicit host-set max_turns extension remains available, but every
+    // layer defaults it to std::nullopt. A non-null default here would silently
+    // reintroduce the local product cap rejected by ADR 0015.
+    for (const auto& contract : turn_cap_contracts) {
+        const auto text = read_text(contract);
+        CHECK(cch::tests::count_occurrences(
+                  text,
+                  "std::optional<int> max_turns{std::nullopt};") == 1);
     }
 }
 

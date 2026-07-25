@@ -1,13 +1,13 @@
 #pragma once
 
 #include <cch/agent/Agent.hpp>
-#include "../../../include/cch/coding_agent/PromptTemplate.hpp"
-#include "../../../include/cch/coding_agent/Skill.hpp"
+#include <cch/coding_agent/PromptTemplate.hpp>
+#include <cch/coding_agent/Skill.hpp>
+#include <cch/util/Error.hpp>
 #include "coding_agent/prompt/PromptProcessor.hpp"
-#include "../../../include/cch/util/Error.hpp"
-#include "RuntimeServices.hpp"
-#include "SessionEventCommitment.hpp"
-#include "SessionLifecycle.hpp"
+#include "coding_agent/runtime/RuntimeServices.hpp"
+#include "coding_agent/runtime/SessionEventCommitment.hpp"
+#include "coding_agent/runtime/SessionLifecycle.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
@@ -23,7 +23,7 @@ namespace cch::coding_agent::runtime {
 struct AgentSessionRuntimeConfig {
     /// Explicit turn cap forwarded to the Agent; std::nullopt imposes no cap
     /// (ADR 0015).
-    std::optional<int> max_turns;
+    std::optional<int> max_turns{std::nullopt};
     std::string model;
 };
 

@@ -1,10 +1,10 @@
 #pragma once
 
-#include "AgentTool.hpp"
-#include "../ai/Context.hpp"
-#include "../ai/Model.hpp"
-#include "../ai/Tool.hpp"
-#include "../util/Error.hpp"
+#include <cch/agent/AgentTool.hpp>
+#include <cch/ai/Context.hpp>
+#include <cch/ai/Model.hpp>
+#include <cch/ai/Tool.hpp>
+#include <cch/util/Error.hpp>
 
 #include <cstddef>
 #include <functional>
@@ -76,7 +76,7 @@ struct AsyncAgentOptions {
     /// (ADR 0015). An explicitly set cap ends the run with a validation error
     /// once the budget is exhausted; exhaustion is never reported as a
     /// provider error.
-    std::optional<int> max_turns;
+    std::optional<int> max_turns{std::nullopt};
     /// Admission bounds applied to each steering/follow-up queue validation
     /// pass (ADR 0022). Defaults: 256 messages and 16 MiB of approximate
     /// message content.

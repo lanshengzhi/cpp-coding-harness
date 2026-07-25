@@ -1,22 +1,20 @@
 #include "SessionFactory.hpp"
 
-#include "AgentSessionRuntime.hpp"
-#include "RuntimeServices.hpp"
-#include "SessionLifecycle.hpp"
-
+#include <cch/ai/ProviderRegistry.hpp>
+#include <cch/coding_agent/AgentConfigDir.hpp>
+#include <cch/coding_agent/ProjectResources.hpp>
+#include <cch/coding_agent/ProjectTrust.hpp>
+#include <cch/coding_agent/Settings.hpp>
+#include <cch/tools/ToolFactories.hpp>
+#include <cch/util/Error.hpp>
 #include "coding_agent/ProjectResourceLoader.hpp"
-#include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/ProviderConfigResolution.hpp"
+#include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/prompt/PromptProcessor.hpp"
-
-#include "../../../include/cch/ai/ProviderRegistry.hpp"
-#include "../../../include/cch/coding_agent/AgentConfigDir.hpp"
-#include "../../../include/cch/coding_agent/ProjectResources.hpp"
-#include "../../../include/cch/coding_agent/ProjectTrust.hpp"
-#include "../../../include/cch/coding_agent/Settings.hpp"
-#include "../../../include/cch/tools/ToolFactories.hpp"
-#include "../../../include/cch/util/Error.hpp"
-#include "../../harness/WorkspaceFileSystem.hpp"
+#include "coding_agent/runtime/AgentSessionRuntime.hpp"
+#include "coding_agent/runtime/RuntimeServices.hpp"
+#include "coding_agent/runtime/SessionLifecycle.hpp"
+#include "harness/WorkspaceFileSystem.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -91,7 +89,7 @@ struct AssemblyPlan {
     std::optional<bool> project_trust_override;
     /// Explicit turn cap carried into the runtime config; std::nullopt (the
     /// default) imposes no cap (ADR 0015).
-    std::optional<int> max_turns;
+    std::optional<int> max_turns{std::nullopt};
 };
 
 [[nodiscard]] SdkDiagnostic make_diag(SdkDiagnostic::Severity severity,

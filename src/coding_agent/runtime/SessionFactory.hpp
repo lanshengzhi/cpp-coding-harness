@@ -1,9 +1,9 @@
 #pragma once
 
-#include "../../../include/cch/coding_agent/Sdk.hpp"
-#include "../../../include/cch/coding_agent/Settings.hpp"
-#include "AgentSessionRuntime.hpp"
-#include "SessionLifecycle.hpp"
+#include <cch/coding_agent/Sdk.hpp>
+#include <cch/coding_agent/Settings.hpp>
+#include "coding_agent/runtime/AgentSessionRuntime.hpp"
+#include "coding_agent/runtime/SessionLifecycle.hpp"
 
 #include <filesystem>
 #include <memory>
@@ -26,7 +26,7 @@ struct AgentSessionCreationRequest {
     bool workspace_explicit{false};
     /// Explicit turn cap for the assembled session; std::nullopt (the default)
     /// imposes no cap (ADR 0015).
-    std::optional<int> max_turns;
+    std::optional<int> max_turns{std::nullopt};
     std::filesystem::path workspace;
     /// Normalized CLI session intent. Default construction selects
     /// workspace-keyed default persisted creation; explicit create and resume

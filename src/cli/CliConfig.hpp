@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../../include/cch/coding_agent/Sdk.hpp"
-#include "../../include/cch/coding_agent/Settings.hpp"
+#include <cch/coding_agent/Sdk.hpp>
+#include <cch/coding_agent/Settings.hpp>
 
 #include <filesystem>
 #include <optional>
@@ -33,7 +33,7 @@ struct CliConfig {
     bool workspace_explicit{false};
     /// Explicit turn cap forwarded to session creation; std::nullopt (the
     /// default) imposes no cap (ADR 0015). Set only by --max-turns.
-    std::optional<int> max_turns;
+    std::optional<int> max_turns{std::nullopt};
     /// Default workspace, resolved non-throwingly by parse_args from the
     /// current working directory; an unreadable cwd becomes a parse diagnostic.
     std::filesystem::path workspace;
