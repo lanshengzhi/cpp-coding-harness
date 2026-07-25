@@ -171,6 +171,10 @@ TEST_CASE("default process runner caps newline-free output without waiting for l
     request.working_directory = std::filesystem::current_path();
     request.timeout = std::chrono::milliseconds(5000);
     request.output_limit = util::OutputLimit{.max_bytes = 1024, .max_lines = 2000};
+    std::string streamed_output;
+    request.on_stdout = [&](std::string_view chunk) {
+        streamed_output.append(chunk);
+    };
 
     auto result = run_awaitable<util::ProcessResult>([&]() {
         return runner.run(std::move(request));
@@ -179,6 +183,7 @@ TEST_CASE("default process runner caps newline-free output without waiting for l
     REQUIRE(result);
     CHECK(result->output.size() <= 1100);
     CHECK(result->output.find("[output truncated]") != std::string::npos);
+    CHECK(streamed_output.size() == 60000);
 }
 
 // ---------------------------------------------------------------------------

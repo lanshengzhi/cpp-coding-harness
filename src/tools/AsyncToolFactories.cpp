@@ -37,9 +37,6 @@ struct EditFileArgs {
     std::optional<std::string> new_text;
 };
 
-constexpr int kDefaultMaxOutputLines = 2000;
-constexpr std::size_t kDefaultMaxOutputBytes = 50 * 1024;
-
 struct BashArgs {
     std::string command;
     std::optional<int> timeout;  // seconds, optional (no default = no timeout)
@@ -81,6 +78,22 @@ struct BashArgs {
 
 [[nodiscard]] agent::AsyncToolExecutionResult error_result(std::string content) {
     return agent::AsyncToolExecutionResult{std::vector<ai::Content>{ai::text_content(std::move(content))}, std::nullopt, true};
+}
+
+template <typename Error>
+[[nodiscard]] agent::AsyncToolExecutionResult error_result_from(const Error& error) {
+    return error_result(error.message);
+}
+
+[[nodiscard]] std::string combine_output(const std::string& stdout_output, const std::string& stderr_output) {
+    std::string combined = stdout_output;
+    if (!stderr_output.empty()) {
+        if (!combined.empty() && combined.back() != '\n') {
+            combined += '\n';
+        }
+        combined += stderr_output;
+    }
+    return combined;
 }
 
 template <typename Args>
@@ -138,7 +151,7 @@ public:
         }
         auto lines = co_await (*environment)->readTextLines(parsed->path, std::nullopt);
         if (!lines) {
-            co_return error_result(lines.error().message);
+            co_return error_result_from(lines.error());
         }
         // offset is 1-based; limit 0 means no explicit limit.
         const auto offset = std::max(1, parsed->offset);
@@ -208,7 +221,7 @@ public:
         }
         auto written = co_await (*environment)->writeFile(parsed->path, parsed->content);
         if (!written) {
-            co_return error_result(written.error().message);
+            co_return error_result_from(written.error());
         }
         co_return agent::AsyncToolExecutionResult{std::vector<ai::Content>{ai::text_content("wrote " + std::to_string(parsed->content.size()) + " bytes")}, std::nullopt, false};
     }
@@ -265,7 +278,7 @@ public:
         // Read the original file
         auto read = co_await (*environment)->readTextFile(parsed->path);
         if (!read) {
-            co_return error_result(read.error().message);
+            co_return error_result_from(read.error());
         }
         const std::string original = *read;
         // Validate all edits against the original content
@@ -300,7 +313,7 @@ public:
         // Write back
         auto written = co_await (*environment)->writeFile(parsed->path, working);
         if (!written) {
-            co_return error_result(written.error().message);
+            co_return error_result_from(written.error());
         }
         // Build a simple result message
         std::string result_text = "Successfully replaced " + std::to_string(applied.size()) + " block(s) in " + parsed->path + ".";
@@ -378,54 +391,41 @@ public:
         exec_options.timeout = parsed->timeout
             ? std::chrono::milliseconds(std::chrono::seconds(*parsed->timeout))
             : std::chrono::milliseconds{0};
+        std::string full_stdout;
+        std::string full_stderr;
+        bool received_stdout = false;
+        bool received_stderr = false;
+        exec_options.onStdout = [&](std::string_view chunk) {
+            received_stdout = true;
+            full_stdout.append(chunk);
+        };
+        exec_options.onStderr = [&](std::string_view chunk) {
+            received_stderr = true;
+            full_stderr.append(chunk);
+        };
         auto shell = co_await (*environment)->exec(parsed->command, std::move(exec_options));
         if (!shell) {
-            co_return error_result(shell.error().message);
+            co_return error_result_from(shell.error());
         }
-        std::string combined = shell->stdout_output;
-        if (!shell->stderr_output.empty()) {
-            if (!combined.empty() && combined.back() != '\n') {
-                combined += '\n';
-            }
-            combined += shell->stderr_output;
-        }
-        // Strip ANSI CSI escape sequences
-        std::string output = strip_ansi(combined);
-        // Apply truncation
-        bool truncated = false;
+
+        std::string full_output = (received_stdout || received_stderr)
+            ? strip_ansi(combine_output(full_stdout, full_stderr))
+            : strip_ansi(combine_output(shell->stdout_output, shell->stderr_output));
+        const util::OutputLimit output_limit;
+        auto limited_output = util::limit_output_tail_redacted(full_output, output_limit);
+        bool truncated = limited_output.truncated;
+        std::string output = std::move(limited_output.text);
         std::string full_output_path;
-        {
-            std::size_t line_count = 1;
-            std::size_t byte_count = 0;
-            for (char c : output) {
-                if (c == '\n') ++line_count;
-                ++byte_count;
+        if (truncated) {
+            auto ts = std::chrono::system_clock::now().time_since_epoch().count();
+            full_output_path = "bash-output-" + std::to_string(ts) + ".txt";
+            if (auto write = co_await (*environment)->writeFile(full_output_path, full_output); !write) {
+                full_output_path.clear();
             }
-            if (line_count > kDefaultMaxOutputLines || byte_count > kDefaultMaxOutputBytes) {
-                truncated = true;
-                auto ts = std::chrono::system_clock::now().time_since_epoch().count();
-                full_output_path = "bash-output-" + std::to_string(ts) + ".txt";
-                if (auto write = co_await (*environment)->writeFile(full_output_path, output); !write) {
-                    full_output_path.clear();
-                }
-                // Truncate: keep last 2000 lines / 50KB (tail truncation)
-                std::size_t keep_bytes = 0;
-                std::size_t keep_lines = 0;
-                std::size_t cut_pos = output.size();
-                for (std::size_t i = output.size(); i > 0; --i) {
-                    char c = output[i - 1];
-                    if (c == '\n') ++keep_lines;
-                    keep_bytes += 1;
-                    if (keep_lines >= kDefaultMaxOutputLines || keep_bytes >= kDefaultMaxOutputBytes) {
-                        cut_pos = i;
-                        break;
-                    }
-                }
-                output = "[output truncated, showing last " +
-                    std::to_string(static_cast<int>(output.size() - cut_pos)) +
-                    " bytes]" + (!full_output_path.empty() ? " full output: " + full_output_path : "") +
-                    "\n" + output.substr(cut_pos);
-            }
+            output = "[output truncated, showing last " +
+                std::to_string(output.size()) +
+                " bytes]" + (!full_output_path.empty() ? " full output: " + full_output_path : "") +
+                "\n" + output;
         }
         std::ostringstream out;
         out << "exit_code=" << shell->exitCode;

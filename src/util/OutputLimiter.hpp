@@ -4,6 +4,7 @@
 
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace cch::util {
@@ -17,6 +18,50 @@ struct OutputLimitResult {
     std::string text;
     bool truncated{false};
 };
+
+[[nodiscard]] inline OutputLimitResult limit_output_tail_redacted(
+    std::string input,
+    OutputLimit limit = {}) {
+    input = redact_text(std::move(input));
+    if (input.empty()) {
+        return {};
+    }
+    if (limit.max_bytes == 0 || limit.max_lines == 0) {
+        return OutputLimitResult{.text = {}, .truncated = true};
+    }
+
+    std::size_t start = input.size();
+    std::size_t bytes = 0;
+    std::size_t lines = 1;
+    while (start > 0 && bytes < limit.max_bytes) {
+        const char ch = input[start - 1];
+        if (ch == '\n' && lines >= limit.max_lines) {
+            break;
+        }
+        --start;
+        ++bytes;
+        if (ch == '\n') {
+            ++lines;
+        }
+    }
+
+    if (start > 0) {
+        while (start < input.size() &&
+               (static_cast<unsigned char>(input[start]) & 0xc0) == 0x80) {
+            ++start;
+        }
+        const auto marker = input.rfind(kRedactionMarker, start);
+        if (marker != std::string::npos && marker < start &&
+            marker + kRedactionMarker.size() > start) {
+            start = marker + kRedactionMarker.size();
+        }
+    }
+
+    return OutputLimitResult{
+        .text = bounded_utf8(std::string_view(input).substr(start), limit.max_bytes),
+        .truncated = start > 0,
+    };
+}
 
 [[nodiscard]] inline OutputLimitResult limit_output(const std::string& input, OutputLimit limit = {}) {
     OutputLimitResult result;

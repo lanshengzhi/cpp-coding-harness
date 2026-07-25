@@ -5,6 +5,7 @@
 #include <cch/harness/LocalExecutionEnv.hpp>
 #include <cch/tools/ToolFactories.hpp>
 #include "util/Json.hpp"
+#include "util/OutputLimiter.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -47,7 +48,12 @@ public:
         co_return harness::BinaryData{};
     }
     boost::asio::awaitable<std::expected<void, harness::FileError>> writeFile(
-        std::string, harness::WriteContent) override {
+        std::string path,
+        harness::WriteContent content) override {
+        last_write_path = std::move(path);
+        if (const auto* text = std::get_if<std::string>(&content)) {
+            last_write_content = *text;
+        }
         co_return std::expected<void, harness::FileError>{};
     }
     boost::asio::awaitable<std::expected<void, harness::FileError>> appendFile(
@@ -92,11 +98,26 @@ public:
         harness::ExecOptions options) override {
         last_command = std::move(command);
         last_timeout = options.timeout.value_or(std::chrono::milliseconds{0});
-        co_return harness::ShellExecResult{.stdout_output = "ok", .stderr_output = "", .exitCode = 0};
+        if (options.onStdout && !streamed_stdout.empty()) {
+            (*options.onStdout)(streamed_stdout);
+        }
+        if (options.onStderr && !streamed_stderr.empty()) {
+            (*options.onStderr)(streamed_stderr);
+        }
+        co_return next_shell_result;
     }
 
     std::string last_command;
     std::chrono::milliseconds last_timeout{0};
+    std::string streamed_stdout;
+    std::string streamed_stderr;
+    harness::ShellExecResult next_shell_result{
+        .stdout_output = "ok",
+        .stderr_output = "",
+        .exitCode = 0,
+    };
+    std::string last_write_path;
+    std::string last_write_content;
 
 private:
     std::filesystem::path workspace_path_;
@@ -259,18 +280,47 @@ TEST_CASE("async bash tool uses timeout in seconds", "[tools][async]") {
     CHECK(env->last_timeout == std::chrono::milliseconds(5000));
 }
 
+TEST_CASE("async bash tool spill file contains complete output beyond the visible limit", "[tools][async][issue73]") {
+    tests::TempWorkspace workspace;
+    auto env = std::make_shared<CapturingEnv>(workspace.path());
+    const util::OutputLimit limit;
+    env->streamed_stdout = std::string(limit.max_bytes + 100, 'x') +
+        "\napi_key=super-secret\ncomplete-tail\xc3\xa9";
+    env->next_shell_result.stdout_output = env->streamed_stdout.substr(0, limit.max_bytes);
+    auto tool = tools::make_async_bash_tool(env);
+
+    auto result = run_tool([&]() {
+        return tool->execute(invocation("bash", R"({"command":"emit-large-output"})"));
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    const auto visible = ai::text_from_content(result->content);
+    CHECK(visible.find("truncated=true") != std::string::npos);
+    CHECK(visible.find("super-secret") == std::string::npos);
+    CHECK(visible.find("[REDACTED]") != std::string::npos);
+    CHECK(visible.size() <= limit.max_bytes + 200);
+    CHECK_FALSE(env->last_write_path.empty());
+    CHECK(env->last_write_content == env->streamed_stdout);
+    CHECK(env->last_write_content.ends_with("complete-tail\xc3\xa9"));
+}
+
 TEST_CASE("async bash tool strips ANSI escape sequences", "[tools][async]") {
     tests::TempWorkspace workspace;
     auto env = std::make_shared<CapturingEnv>(workspace.path());
+    env->streamed_stdout = "\x1b[31mred\x1b[0m";
+    env->next_shell_result.stdout_output = env->streamed_stdout;
     auto tool = tools::make_async_bash_tool(env);
 
-    // CapturingEnv returns "ok" for all commands; test strip_ansi directly via a manual check
     auto result = run_tool([&]() {
         return tool->execute(invocation("bash", R"({"command":"echo hi"})"));
     });
 
     REQUIRE(result);
     CHECK_FALSE(result->is_error);
+    const auto visible = ai::text_from_content(result->content);
+    CHECK(visible.find("red") != std::string::npos);
+    CHECK(visible.find('\x1b') == std::string::npos);
 }
 
 TEST_CASE("async bash tool is disabled unless env explicitly enables it", "[tools][async]") {

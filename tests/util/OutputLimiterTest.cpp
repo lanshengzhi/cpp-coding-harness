@@ -7,6 +7,28 @@
 
 using namespace cch;
 
+TEST_CASE("tail output limiter redacts before applying byte and line limits", "[util][output-limiter][issue73]") {
+    const auto redacted = util::limit_output_tail_redacted("api_key=secret");
+    CHECK(redacted.text == "api_key=[REDACTED]");
+    CHECK_FALSE(redacted.truncated);
+
+    const auto lines = util::limit_output_tail_redacted(
+        "a\nb\nc",
+        util::OutputLimit{.max_bytes = 1024, .max_lines = 2});
+    CHECK(lines.text == "b\nc");
+    CHECK(lines.truncated);
+}
+
+TEST_CASE("tail output limiter starts on a UTF-8 character boundary", "[util][output-limiter][issue73]") {
+    const std::string accented = "xx\xc3\xa9\xc3\xa9";
+    const auto result = util::limit_output_tail_redacted(
+        accented,
+        util::OutputLimit{.max_bytes = 5, .max_lines = 2000});
+
+    CHECK(result.text == "x\xc3\xa9\xc3\xa9");
+    CHECK(result.truncated);
+}
+
 TEST_CASE("limit_output passes input under the limits through unchanged", "[util][output-limiter][issue66]") {
     const auto with_newline = util::limit_output("line1\nline2\n");
     CHECK(with_newline.text == "line1\nline2\n");
