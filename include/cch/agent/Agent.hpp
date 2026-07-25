@@ -3,8 +3,9 @@
 #include "AgentContext.hpp"
 #include "AgentEvent.hpp"
 #include "ToolRegistry.hpp"
-#include "../ai/ChatClient.hpp"
-#include "../util/Error.hpp"
+
+#include <cch/ai/ChatClient.hpp>
+#include <cch/util/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 

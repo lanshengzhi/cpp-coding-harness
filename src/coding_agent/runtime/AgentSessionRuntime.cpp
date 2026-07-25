@@ -93,19 +93,33 @@ AgentSessionRuntime::AgentSessionRuntime(
         std::move(initial_state));
 }
 
+util::ExpectedVoid AgentSessionRuntime::reject_if_closed() const {
+    if (state_ == State::Closing || state_ == State::Closed) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is closed"));
+    }
+    return {};
+}
+
+util::ExpectedVoid AgentSessionRuntime::reject_if_busy() const {
+    if (state_ == State::RunningPrompt) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is busy (prompt already in flight)"));
+    }
+    return {};
+}
+
 boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
     std::string prompt,
     bool expand_prompt_templates,
     std::move_only_function<util::ExpectedVoid()> on_preflight_accepted) {
-    if (state_ == State::Closing || state_ == State::Closed) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "session is closed"));
+    if (auto rejected = reject_if_closed(); !rejected) {
+        co_return std::unexpected(rejected.error());
     }
-    if (state_ == State::RunningPrompt) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "session is busy (prompt already in flight)"));
+    if (auto rejected = reject_if_busy(); !rejected) {
+        co_return std::unexpected(rejected.error());
     }
 
     state_ = State::RunningPrompt;
@@ -143,7 +157,10 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
 
 util::Expected<agent::AgentEventSubscription> AgentSessionRuntime::subscribe(
     agent::AgentEventSink sink) {
-    if (state_ == State::Closing || state_ == State::Closed || !agent_) {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        return std::unexpected(rejected.error());
+    }
+    if (!agent_) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "session is closed"));

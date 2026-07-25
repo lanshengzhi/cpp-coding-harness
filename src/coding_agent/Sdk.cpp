@@ -76,6 +76,26 @@ struct EventSubscription::Impl {
 struct AgentSession::Impl {
     enum class State { Open, RunningPrompt, Closing, Closed };
 
+    /// Shared preflight outcome for entry points that require a non-closed session.
+    [[nodiscard]] util::ExpectedVoid reject_if_closed() const {
+        if (state == State::Closing || state == State::Closed) {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Validation,
+                "session is closed"));
+        }
+        return {};
+    }
+
+    /// Shared preflight outcome for entry points that reject a concurrent prompt.
+    [[nodiscard]] util::ExpectedVoid reject_if_busy() const {
+        if (state == State::RunningPrompt) {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Validation,
+                "session is busy (prompt already in flight)"));
+        }
+        return {};
+    }
+
     State state{State::Closed};
     std::optional<std::filesystem::path> session_path;
     std::unique_ptr<runtime::AgentSessionRuntime> runtime;
@@ -136,11 +156,13 @@ AgentSession::~AgentSession() {
 boost::asio::awaitable<util::ExpectedVoid> AgentSession::prompt(
     std::string text,
     PromptOptions options) {
-    // AgentSessionPromptAccess copies impl_ before returning its lazy awaitable,
-    // so moving or closing the public handle cannot invalidate an active frame.
+    // AgentSessionPromptAccess::prompt is deliberately an ordinary function
+    // (no coroutine keywords): session.impl_ is copied into the prompt_impl
+    // frame synchronously at the call, so moving or closing the public handle
+    // before the first co_await cannot invalidate the returned lazy awaitable.
     return detail::AgentSessionPromptAccess::prompt(
         *this,
-        std::exchange(text, {}),
+        std::move(text),
         options.expand_prompt_templates,
         {});
 }
@@ -150,7 +172,7 @@ util::ExpectedVoid AgentSession::prompt_blocking(
     PromptOptions options) {
     return detail::AgentSessionPromptAccess::prompt_blocking(
         *this,
-        std::exchange(text, {}),
+        std::move(text),
         options.expand_prompt_templates,
         {});
 }
@@ -162,9 +184,9 @@ boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::pro
     std::move_only_function<util::ExpectedVoid()> on_preflight_accepted) {
     return prompt_impl(
         session.impl_,
-        std::exchange(text, {}),
+        std::move(text),
         expand_prompt_templates,
-        std::exchange(on_preflight_accepted, {}));
+        std::move(on_preflight_accepted));
 }
 
 boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::prompt_impl(
@@ -177,16 +199,11 @@ boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::pro
             util::ErrorCode::Validation,
             "session is not initialized"));
     }
-    if (impl->state == AgentSession::Impl::State::Closing ||
-        impl->state == AgentSession::Impl::State::Closed) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "session is closed"));
+    if (auto rejected = impl->reject_if_closed(); !rejected) {
+        co_return std::unexpected(rejected.error());
     }
-    if (impl->state == AgentSession::Impl::State::RunningPrompt) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "session is busy (prompt already in flight)"));
+    if (auto rejected = impl->reject_if_busy(); !rejected) {
+        co_return std::unexpected(rejected.error());
     }
 
     impl->state = AgentSession::Impl::State::RunningPrompt;
@@ -200,9 +217,9 @@ boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::pro
 
     try {
         co_return co_await impl->runtime->run_prompt(
-            std::exchange(text, {}),
+            std::move(text),
             expand_prompt_templates,
-            std::exchange(on_preflight_accepted, {}));
+            std::move(on_preflight_accepted));
     } catch (...) {
         co_return prompt_exception(std::current_exception());
     }
@@ -224,16 +241,11 @@ util::ExpectedVoid detail::AgentSessionPromptAccess::prompt_blocking(
             util::ErrorCode::Validation,
             "session is busy (prompt already in flight)"));
     }
-    if (impl->state == AgentSession::Impl::State::Closing ||
-        impl->state == AgentSession::Impl::State::Closed) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "session is closed"));
+    if (auto rejected = impl->reject_if_closed(); !rejected) {
+        return std::unexpected(rejected.error());
     }
-    if (impl->state == AgentSession::Impl::State::RunningPrompt) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "session is busy (prompt already in flight)"));
+    if (auto rejected = impl->reject_if_busy(); !rejected) {
+        return std::unexpected(rejected.error());
     }
 
     boost::asio::io_context io;
@@ -245,12 +257,12 @@ util::ExpectedVoid detail::AgentSessionPromptAccess::prompt_blocking(
         io,
         prompt(
             session,
-            std::exchange(text, {}),
+            std::move(text),
             expand_prompt_templates,
-            std::exchange(on_preflight_accepted, {})),
+            std::move(on_preflight_accepted)),
         [&](std::exception_ptr completion_exception, util::ExpectedVoid completion) {
             exception = completion_exception;
-            result.emplace(std::exchange(completion, {}));
+            result.emplace(std::move(completion));
         });
     io.run();
 
@@ -262,16 +274,15 @@ util::ExpectedVoid detail::AgentSessionPromptAccess::prompt_blocking(
             util::ErrorCode::Unknown,
             "session prompt coroutine did not complete"));
     }
-    return std::exchange(*result, {});
+    return std::move(*result);
 }
 
 util::Expected<EventSubscription> AgentSession::subscribe(agent::AgentEventSink sink) {
     if (!impl_) {
         return std::unexpected(util::make_error(util::ErrorCode::Validation, "session is not initialized"));
     }
-    if (impl_->state == AgentSession::Impl::State::Closing ||
-        impl_->state == AgentSession::Impl::State::Closed) {
-        return std::unexpected(util::make_error(util::ErrorCode::Validation, "session is closed"));
+    if (auto rejected = impl_->reject_if_closed(); !rejected) {
+        return std::unexpected(rejected.error());
     }
     if (!sink) {
         return std::unexpected(util::make_error(util::ErrorCode::Validation, "event sink is empty"));

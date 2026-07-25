@@ -1,9 +1,9 @@
 #pragma once
 
-#include "../../../include/cch/agent/Agent.hpp"
+#include <cch/agent/Agent.hpp>
 #include "../../../include/cch/coding_agent/PromptTemplate.hpp"
 #include "../../../include/cch/coding_agent/Skill.hpp"
-#include "../prompt/PromptProcessor.hpp"
+#include "coding_agent/prompt/PromptProcessor.hpp"
 #include "../../../include/cch/util/Error.hpp"
 #include "RuntimeServices.hpp"
 #include "SessionEventCommitment.hpp"
@@ -74,6 +74,11 @@ public:
 
 private:
     enum class State { Open, RunningPrompt, Closing, Closed };
+
+    /// Shared preflight outcome for entry points that require a non-closed session.
+    [[nodiscard]] util::ExpectedVoid reject_if_closed() const;
+    /// Shared preflight outcome for entry points that reject a concurrent prompt.
+    [[nodiscard]] util::ExpectedVoid reject_if_busy() const;
 
     [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> run_agent_loop(
         std::string prompt);

@@ -1230,6 +1230,36 @@ RunResult run_loop_on_pool(agent::AsyncAgentLoop& loop, std::string prompt) {
     return RunResult{std::move(*result), std::move(events)};
 }
 
+/// Records the prepare/stop/steering/follow-up decision order of one run.
+struct DecisionRecorder {
+    std::vector<std::string> decisions;
+    int steering_calls{0};
+};
+
+agent::AsyncAgentOptions decision_recording_options(DecisionRecorder& recorder) {
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.prepare_next_turn = [&recorder](const agent::PrepareNextTurnContext&)
+        -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
+        recorder.decisions.push_back("prepare");
+        return std::nullopt;
+    };
+    options.should_stop_after_turn = [&recorder](const agent::PrepareNextTurnContext&)
+        -> util::Expected<bool> {
+        recorder.decisions.push_back("stop");
+        return false;
+    };
+    options.get_steering_messages = [&recorder]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        ++recorder.steering_calls;
+        recorder.decisions.push_back(recorder.steering_calls == 1 ? "initial-steering" : "steering");
+        return std::vector<ai::MessageVariant>{};
+    };
+    options.get_follow_up_messages = [&recorder]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        recorder.decisions.push_back("follow-up");
+        return std::vector<ai::MessageVariant>{};
+    };
+    return options;
+}
+
 } // namespace
 
 TEST_CASE("afterToolCall terminate hint stops automatic continuation after post-turn policies", "[agent][async][issue35]") {
@@ -1238,30 +1268,10 @@ TEST_CASE("afterToolCall terminate hint stops automatic continuation after post-
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
-    std::vector<std::string> decisions;
-    int steering_calls = 0;
-    agent::AsyncAgentOptions options{4, "gpt-test"};
+    DecisionRecorder recorder;
+    auto options = decision_recording_options(recorder);
     options.after_tool_call = [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
         return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
-    };
-    options.prepare_next_turn = [&](const agent::PrepareNextTurnContext&)
-        -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
-        decisions.push_back("prepare");
-        return std::nullopt;
-    };
-    options.should_stop_after_turn = [&](const agent::PrepareNextTurnContext&)
-        -> util::Expected<bool> {
-        decisions.push_back("stop");
-        return false;
-    };
-    options.get_steering_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
-        ++steering_calls;
-        decisions.push_back(steering_calls == 1 ? "initial-steering" : "steering");
-        return std::vector<ai::MessageVariant>{};
-    };
-    options.get_follow_up_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
-        decisions.push_back("follow-up");
-        return std::vector<ai::MessageVariant>{};
     };
 
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
@@ -1273,7 +1283,7 @@ TEST_CASE("afterToolCall terminate hint stops automatic continuation after post-
     CHECK(client.requests.size() == 1);
     const std::vector<std::string> expected_decisions{
         "initial-steering", "prepare", "stop", "steering", "follow-up"};
-    CHECK(decisions == expected_decisions);
+    CHECK(recorder.decisions == expected_decisions);
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 3);
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 3);
@@ -1824,28 +1834,8 @@ TEST_CASE("post-turn policies follow prepare stop steering follow-up order", "[a
     client.responses.push_back(ai::assistant_text_message("done"));
 
     agent::AsyncToolRegistry registry;
-    std::vector<std::string> decisions;
-    int steering_calls = 0;
-    agent::AsyncAgentOptions options{4, "gpt-test"};
-    options.get_steering_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
-        ++steering_calls;
-        decisions.push_back(steering_calls == 1 ? "initial-steering" : "steering");
-        return std::vector<ai::MessageVariant>{};
-    };
-    options.prepare_next_turn = [&](const agent::PrepareNextTurnContext&)
-        -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
-        decisions.push_back("prepare");
-        return std::nullopt;
-    };
-    options.should_stop_after_turn = [&](const agent::PrepareNextTurnContext&)
-        -> util::Expected<bool> {
-        decisions.push_back("stop");
-        return false;
-    };
-    options.get_follow_up_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
-        decisions.push_back("follow-up");
-        return std::vector<ai::MessageVariant>{};
-    };
+    DecisionRecorder recorder;
+    auto options = decision_recording_options(recorder);
 
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
     auto run = run_loop(loop, "hi");
@@ -1853,7 +1843,7 @@ TEST_CASE("post-turn policies follow prepare stop steering follow-up order", "[a
     REQUIRE(run.result);
     const std::vector<std::string> expected{
         "initial-steering", "prepare", "stop", "steering", "follow-up"};
-    CHECK(decisions == expected);
+    CHECK(recorder.decisions == expected);
 }
 
 TEST_CASE("stop-after-turn ends before steering and follow-up decisions", "[agent][async][issue35]") {

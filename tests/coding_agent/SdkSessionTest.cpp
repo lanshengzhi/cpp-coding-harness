@@ -2265,6 +2265,77 @@ TEST_CASE("SDK async prompt runs on the awaiting host executor", "[sdk][u3][asyn
     CHECK(created->session->message_count() == 2);
 }
 
+TEST_CASE("SDK stashed prompt awaitable survives destruction of the session handle", "[sdk][u3][async][issue38]") {
+    TestPaths paths;
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::InMemorySessionTarget{};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+
+    // The session impl is captured synchronously when prompt() is called, so
+    // destroying the public handle before the first resume must be safe.
+    auto stashed = created->session->prompt("stashed prompt");
+    created->session.reset();
+
+    boost::asio::io_context host_io;
+    std::optional<util::ExpectedVoid> prompt_result;
+    boost::asio::co_spawn(
+        host_io,
+        [&]() -> boost::asio::awaitable<void> {
+            prompt_result = co_await std::move(stashed);
+            co_return;
+        },
+        boost::asio::detached);
+    host_io.run();
+
+    // Destroying the handle closed the session, so the stashed awaitable
+    // completes with the ordinary preflight rejection instead of touching
+    // freed state.
+    REQUIRE(prompt_result.has_value());
+    REQUIRE_FALSE(prompt_result->has_value());
+    CHECK(prompt_result->error().code == util::ErrorCode::Validation);
+    CHECK(prompt_result->error().message == "session is closed");
+}
+
+TEST_CASE("SDK stashed prompt awaitable survives a moved-from session handle", "[sdk][u3][async][issue38]") {
+    TestPaths paths;
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::InMemorySessionTarget{};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+
+    auto stashed = created->session->prompt("moved prompt");
+
+    // Move the session into a new handle and destroy the moved-from original
+    // before the first resume; the prompt must still complete normally.
+    coding_agent::AgentSession moved(std::move(*created->session));
+    created->session.reset();
+
+    boost::asio::io_context host_io;
+    std::optional<util::ExpectedVoid> prompt_result;
+    boost::asio::co_spawn(
+        host_io,
+        [&]() -> boost::asio::awaitable<void> {
+            prompt_result = co_await std::move(stashed);
+            co_return;
+        },
+        boost::asio::detached);
+    host_io.run();
+
+    REQUIRE(prompt_result.has_value());
+    CHECK(prompt_result->has_value());
+    CHECK(moved.message_count() == 2);
+    CHECK(moved.close().has_value());
+}
+
 TEST_CASE("SDK async prompt rejects overlap before session mutation", "[sdk][u3][async]") {
     TestPaths paths;
 

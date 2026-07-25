@@ -1,7 +1,7 @@
 #include "SessionJournal.hpp"
 #include "SessionJournalTestHooks.hpp"
 
-#include "../UniqueFd.hpp"
+#include "harness/UniqueFd.hpp"
 
 #include <algorithm>
 #include <array>

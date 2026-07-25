@@ -1,7 +1,7 @@
-#include "../../include/cch/agent/Agent.hpp"
+#include <cch/agent/Agent.hpp>
 
 #include "AgentLoop.hpp"
-#include "../../include/cch/ai/Content.hpp"
+#include <cch/ai/Content.hpp>
 #include "util/BoundedText.hpp"
 
 #include <algorithm>
@@ -127,8 +127,8 @@ struct Agent::Impl {
     }
 
     void record_observer_diagnostic(const util::Error& failure) {
-        constexpr std::size_t max_diagnostics = 16;
-        constexpr std::size_t max_detail_bytes = 1024;
+        constexpr std::size_t kMaxDiagnostics = 16;
+        constexpr std::size_t kMaxDetailBytes = 1024;
 
         std::string detail = failure.message;
         if (!failure.detail.empty()) {
@@ -136,9 +136,9 @@ struct Agent::Impl {
             detail += failure.detail;
         }
         detail = util::bounded_redacted_text(
-            std::move(detail), max_detail_bytes, "...");
+            std::move(detail), kMaxDetailBytes, "...");
 
-        if (state.diagnostics.size() == max_diagnostics) {
+        if (state.diagnostics.size() == kMaxDiagnostics) {
             state.diagnostics.erase(state.diagnostics.begin());
         }
         state.diagnostics.push_back(util::make_error(

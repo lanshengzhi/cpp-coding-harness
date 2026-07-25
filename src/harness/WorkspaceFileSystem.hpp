@@ -673,8 +673,7 @@ private:
             return dup_fd;
         }
 
-        int current_fd = root_guard.release();
-        UniqueFd current_guard(current_fd);
+        UniqueFd current_guard(root_guard.release());
         for (const auto& part : rel) {
             if (part == "." || part.empty()) {
                 continue;
@@ -682,13 +681,13 @@ private:
             if (part == "..") {
                 return std::unexpected(workspace_error("parent path escapes workspace"));
             }
-            int next_fd = ::openat(current_fd, part.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+            int next_fd = ::openat(current_guard.get(), part.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
             if (next_fd == -1) {
                 if (errno == ENOENT && create_missing) {
-                    if (::mkdirat(current_fd, part.c_str(), 0755) != 0) {
+                    if (::mkdirat(current_guard.get(), part.c_str(), 0755) != 0) {
                         return std::unexpected(workspace_error("could not create parent directory: " + std::string(std::strerror(errno))));
                     }
-                    next_fd = ::openat(current_fd, part.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+                    next_fd = ::openat(current_guard.get(), part.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
                     if (next_fd == -1) {
                         return std::unexpected(workspace_error("could not open created parent directory: " + std::string(std::strerror(errno))));
                     }
@@ -697,7 +696,6 @@ private:
                 }
             }
             current_guard.reset(next_fd);
-            current_fd = next_fd;
         }
 
         return current_guard.release();
