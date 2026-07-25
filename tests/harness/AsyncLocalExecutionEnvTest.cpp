@@ -186,6 +186,29 @@ TEST_CASE("default process runner caps newline-free output without waiting for l
     CHECK(streamed_output.size() == 60000);
 }
 
+TEST_CASE("default process runner bounds truncated output on UTF-8 character boundaries", "[harness][async][process][issue72]") {
+    util::DefaultAsyncProcessRunner runner;
+    util::ProcessRequest request;
+    // 500 euro signs (3 bytes each); a byte-exact 1024 cap would split the last one.
+    request.command = "printf '€%.0s' {1..500}";
+    request.working_directory = std::filesystem::current_path();
+    request.timeout = std::chrono::milliseconds(5000);
+    request.output_limit = util::OutputLimit{.max_bytes = 1024, .max_lines = 2000};
+
+    auto result = run_awaitable<util::ProcessResult>([&]() {
+        return runner.run(std::move(request));
+    });
+
+    REQUIRE(result);
+    REQUIRE(result->stdout_truncated);
+    std::string expected;
+    for (int i = 0; i < 341; ++i) {
+        expected += "€";
+    }
+    CHECK(result->stdout_output == expected);
+    CHECK(result->output.find("[output truncated]") != std::string::npos);
+}
+
 // ---------------------------------------------------------------------------
 // U1: pi-shaped public contract compile / construction tests
 // ---------------------------------------------------------------------------

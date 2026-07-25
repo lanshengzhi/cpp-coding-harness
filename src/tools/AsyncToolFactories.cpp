@@ -1,5 +1,6 @@
 #include <cch/tools/ToolFactories.hpp>
 
+#include "util/BoundedText.hpp"
 #include "util/Json.hpp"
 #include "util/OutputLimiter.hpp"
 
@@ -299,12 +300,12 @@ public:
             }
             if (count == 0) {
                 co_return error_result("edit_file: oldText not found in file: '" +
-                    (edit.oldText.length() > 50 ? edit.oldText.substr(0, 47) + "..." : edit.oldText) + "'");
+                    util::bounded_redacted_text(edit.oldText, 50, "...") + "'");
             }
             if (count > 1) {
                 co_return error_result("edit_file: oldText matches " + std::to_string(count) +
                     " occurrences, must be unique. Text: '" +
-                    (edit.oldText.length() > 40 ? edit.oldText.substr(0, 37) + "..." : edit.oldText) + "'");
+                    util::bounded_redacted_text(edit.oldText, 40, "...") + "'");
             }
             // Apply replacement
             working.replace(match_pos, edit.oldText.length(), edit.newText);

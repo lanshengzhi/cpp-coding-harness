@@ -297,10 +297,10 @@ TEST_CASE(
         "call-1",
         "hostile-tool",
         cch::agent::AsyncToolExecutionResult{
-            {cch::ai::text_content("tool failed with " + secret + " " + std::string(9000, 'x'))},
-            std::nullopt,
-            false,
-            false},
+            .content = {cch::ai::text_content("tool failed with " + secret + " " + std::string(9000, 'x'))},
+            .details = std::nullopt,
+            .is_error = false,
+            .terminate = false},
         true};
 
     std::ostringstream text_output;

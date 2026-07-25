@@ -1,5 +1,7 @@
 #include "Process.hpp"
 
+#include "BoundedText.hpp"
+
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -78,6 +80,12 @@ boost::asio::awaitable<OutputCapture> drain_pipe(
             break;
         }
         append_limited(capture, buffer.data(), size, limit, callback);
+    }
+    if (capture.truncated) {
+        // The byte cap can stop inside a multibyte UTF-8 character; re-bound
+        // the captured text through the shared seam so model-visible output
+        // never ends on a split sequence.
+        capture.data = bounded_utf8(capture.data, limit.max_bytes);
     }
     co_return capture;
 }
