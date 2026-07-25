@@ -2,7 +2,7 @@
 
 #include <string_view>
 
-namespace cch::test {
+namespace cch::tests {
 
 inline constexpr std::string_view kComplexToolArgumentContract = R"json({
   "$schema": "http://json-schema.org/draft-07/schema#",
@@ -93,4 +93,4 @@ inline constexpr std::string_view kComplexToolArgumentContract = R"json({
   }
 })json";
 
-} // namespace cch::test
+} // namespace cch::tests

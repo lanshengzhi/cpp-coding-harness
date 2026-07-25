@@ -1,18 +1,17 @@
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
-#include "../ComplexToolSchemaFixture.hpp"
 #include "ai/glaze/AiJson.hpp"
+#include "support/ComplexToolSchemaFixture.hpp"
+#include "support/TempWorkspace.hpp"
+#include "support/ToolArgumentContracts.hpp"
+#include "support/UsageAssertions.hpp"
 #include "util/ExpectedMacros.hpp"
-
-#include "../../../include/cch/ai/providers/OpenAIChatClient.hpp"
-#include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
-#include "../../../include/cch/harness/session/SessionResume.hpp"
-#include "../../../include/cch/util/Error.hpp"
 #include "util/Json.hpp"
-#include "../../../include/cch/util/JsonValue.hpp"
-#include "../../support/TempWorkspace.hpp"
-#include "../../support/ToolArgumentContracts.hpp"
-#include "../../support/UsageAssertions.hpp"
+#include <cch/ai/providers/OpenAIChatClient.hpp>
+#include <cch/harness/session/JsonlSessionStore.hpp>
+#include <cch/harness/session/SessionResume.hpp>
+#include <cch/util/Error.hpp>
+#include <cch/util/JsonValue.hpp>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -168,7 +167,7 @@ TEST_CASE("streaming OpenAI client serializes typed context and emits text delta
     request.model = ai::Model{"gpt-test"};
     request.context.system_prompt = "You are concise";
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
-    auto expected_contract = util::read_json<util::JsonValue>(test::kComplexToolArgumentContract);
+    auto expected_contract = util::read_json<util::JsonValue>(tests::kComplexToolArgumentContract);
     REQUIRE(expected_contract);
     request.context.tools.push_back(ai::Tool{
         "read_file",

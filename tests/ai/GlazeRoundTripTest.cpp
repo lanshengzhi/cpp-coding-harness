@@ -1,9 +1,9 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include "ComplexToolSchemaFixture.hpp"
 #include "ai/glaze/AiJson.hpp"
-#include "../../include/cch/util/Error.hpp"
+#include "support/ComplexToolSchemaFixture.hpp"
 #include "util/Json.hpp"
+#include <cch/util/Error.hpp>
 
 #include <string>
 #include <variant>
@@ -150,7 +150,7 @@ TEST_CASE("assistant message round-trips diagnostics and cacheWrite1h", "[ai][u2
 }
 
 TEST_CASE("context JSON preserves a complete Tool Argument Contract unchanged", "[ai][u2][glaze][issue24]") {
-    auto expected_contract = util::read_json<util::JsonValue>(test::kComplexToolArgumentContract);
+    auto expected_contract = util::read_json<util::JsonValue>(tests::kComplexToolArgumentContract);
     REQUIRE(expected_contract);
 
     ai::AiContext context;

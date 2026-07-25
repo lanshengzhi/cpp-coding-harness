@@ -167,6 +167,8 @@ if(CCH_BUILD_TESTS)
     include(CTest)
     add_executable(cpp_harness_tests
         tests/TestMain.cpp
+        tests/support/ComplexToolSchemaFixture.hpp
+        tests/support/ToolArgumentCompatibilityFixture.hpp
         tests/architecture/ArchitectureSurfaceScanTest.cpp
         tests/architecture/CMakeDependencyTest.cpp
         tests/architecture/MoveOnlyCallbackTest.cpp
@@ -223,6 +225,7 @@ if(CCH_BUILD_TESTS)
     target_include_directories(cpp_harness_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests
         third_party
     )
     target_link_libraries(cpp_harness_tests PRIVATE cpp_harness_lib CLI11::CLI11)

@@ -1,10 +1,10 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include "ComplexToolSchemaFixture.hpp"
 #include "ai/glaze/ToolDtos.hpp"
-#include "../../include/cch/ai/Tool.hpp"
-#include "../../include/cch/util/JsonValue.hpp"
+#include "support/ComplexToolSchemaFixture.hpp"
 #include "util/Json.hpp"
+#include <cch/ai/Tool.hpp>
+#include <cch/util/JsonValue.hpp>
 
 #include <string>
 #include <type_traits>
@@ -14,7 +14,7 @@ using namespace cch;
 namespace {
 
 util::JsonValue complex_contract() {
-    auto parsed = util::read_json<util::JsonValue>(test::kComplexToolArgumentContract);
+    auto parsed = util::read_json<util::JsonValue>(tests::kComplexToolArgumentContract);
     REQUIRE(parsed);
     return std::move(*parsed);
 }

@@ -3,7 +3,7 @@
 #include <array>
 #include <string_view>
 
-namespace cch::test {
+namespace cch::tests {
 
 inline constexpr std::string_view kRecursiveCollectionContract = R"json({
   "type": "object",
@@ -216,4 +216,4 @@ inline constexpr std::array<JsonFormatFixture, 18> kIdnSeparatorFixtures{{
     {"idn-email", R"json("\u7528\u6237@\u4F8B\u3048\u3002")json", false},
 }};
 
-} // namespace cch::test
+} // namespace cch::tests

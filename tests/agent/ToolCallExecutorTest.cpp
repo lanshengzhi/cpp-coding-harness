@@ -2,16 +2,16 @@
 
 #include "agent/ToolCallExecutor.hpp"
 
-#include "../support/ToolArgumentContracts.hpp"
-#include "ToolArgumentCompatibilityFixture.hpp"
-#include "../../include/cch/agent/AgentContext.hpp"
-#include "../../include/cch/agent/ToolRegistry.hpp"
-#include "../../include/cch/ai/Content.hpp"
-#include "../../include/cch/ai/Context.hpp"
-#include "../../include/cch/ai/Message.hpp"
-#include "../../include/cch/ai/Tool.hpp"
-#include "../../include/cch/util/Error.hpp"
+#include "support/ToolArgumentCompatibilityFixture.hpp"
+#include "support/ToolArgumentContracts.hpp"
 #include "util/Json.hpp"
+#include <cch/agent/AgentContext.hpp>
+#include <cch/agent/ToolRegistry.hpp>
+#include <cch/ai/Content.hpp>
+#include <cch/ai/Context.hpp>
+#include <cch/ai/Message.hpp>
+#include <cch/ai/Tool.hpp>
+#include <cch/util/Error.hpp>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -261,7 +261,7 @@ void check_format_fixture(
     CHECK(tool_ptr->invocation_count() == (valid ? 1 : 0));
 }
 
-void check_json_format_fixture(const test::JsonFormatFixture& fixture) {
+void check_json_format_fixture(const tests::JsonFormatFixture& fixture) {
     agent::AsyncToolRegistry registry;
     auto tool = std::make_unique<RecordingTool>(ai::Tool{
         "json-format-fixture",
@@ -460,7 +460,7 @@ TEST_CASE(
     auto tool = std::make_unique<RecordingTool>(ai::Tool{
         "collections",
         "Collections",
-        fixture_json(test::kRecursiveCollectionContract)});
+        fixture_json(tests::kRecursiveCollectionContract)});
     auto* tool_ptr = tool.get();
     REQUIRE(registry.add(std::move(tool)));
 
@@ -468,7 +468,7 @@ TEST_CASE(
     auto assistant = assistant_with_calls({make_call(
         "call-1",
         "collections",
-        std::string(test::kRecursiveCollectionArguments))});
+        std::string(tests::kRecursiveCollectionArguments))});
 
     auto run = run_executor(executor, assistant);
 
@@ -478,7 +478,7 @@ TEST_CASE(
     REQUIRE(invocation);
     auto prepared = util::write_json(invocation->arguments);
     REQUIRE(prepared);
-    CHECK(*prepared == test::kRecursiveCollectionExpected);
+    CHECK(*prepared == tests::kRecursiveCollectionExpected);
 }
 
 TEST_CASE(
@@ -488,16 +488,16 @@ TEST_CASE(
     auto tool = std::make_unique<RecordingTool>(ai::Tool{
         "bounded",
         "Bounded",
-        fixture_json(test::kBoundedContract)});
+        fixture_json(tests::kBoundedContract)});
     auto* tool_ptr = tool.get();
     REQUIRE(registry.add(std::move(tool)));
 
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({
-        make_call("call-valid", "bounded", std::string(test::kBoundedValidArguments)),
-        make_call("call-invalid", "bounded", std::string(test::kBoundedInvalidArguments)),
-        make_call("call-upper", "bounded", std::string(test::kBoundedUpperInvalidArguments)),
-        make_call("call-lower", "bounded", std::string(test::kBoundedLowerInvalidArguments)),
+        make_call("call-valid", "bounded", std::string(tests::kBoundedValidArguments)),
+        make_call("call-invalid", "bounded", std::string(tests::kBoundedInvalidArguments)),
+        make_call("call-upper", "bounded", std::string(tests::kBoundedUpperInvalidArguments)),
+        make_call("call-lower", "bounded", std::string(tests::kBoundedLowerInvalidArguments)),
     });
 
     auto run = run_executor(executor, assistant);
@@ -529,7 +529,7 @@ TEST_CASE(
     auto tool = std::make_unique<RecordingTool>(ai::Tool{
         "baseline-boundaries",
         "Baseline boundaries",
-        fixture_json(test::kTypeBoxBoundaryContract)});
+        fixture_json(tests::kTypeBoxBoundaryContract)});
     auto* tool_ptr = tool.get();
     REQUIRE(registry.add(std::move(tool)));
 
@@ -537,7 +537,7 @@ TEST_CASE(
     auto assistant = assistant_with_calls({make_call(
         "call-boundaries",
         "baseline-boundaries",
-        std::string(test::kTypeBoxBoundaryArguments))});
+        std::string(tests::kTypeBoxBoundaryArguments))});
 
     auto run = run_executor(executor, assistant);
 
@@ -564,8 +564,8 @@ TEST_CASE(
     REQUIRE(registry.add(std::move(min_two_tool)));
 
     std::vector<ai::ToolCallContent> calls;
-    for (std::size_t index = 0; index < test::kStringBoundFixtures.size(); ++index) {
-        const auto& fixture = test::kStringBoundFixtures[index];
+    for (std::size_t index = 0; index < tests::kStringBoundFixtures.size(); ++index) {
+        const auto& fixture = tests::kStringBoundFixtures[index];
         calls.push_back(make_call(
             "call-max-" + std::to_string(index),
             "max-one",
@@ -581,11 +581,11 @@ TEST_CASE(
     auto run = run_executor(executor, assistant);
 
     REQUIRE(run.result);
-    REQUIRE(run.result->results.size() == test::kStringBoundFixtures.size() * 2);
+    REQUIRE(run.result->results.size() == tests::kStringBoundFixtures.size() * 2);
     std::size_t expected_max_invocations = 0;
     std::size_t expected_min_invocations = 0;
-    for (std::size_t index = 0; index < test::kStringBoundFixtures.size(); ++index) {
-        const auto& fixture = test::kStringBoundFixtures[index];
+    for (std::size_t index = 0; index < tests::kStringBoundFixtures.size(); ++index) {
+        const auto& fixture = tests::kStringBoundFixtures[index];
         CHECK(run.result->results[index * 2].is_error ==
               !fixture.accepted_by_max_length_one);
         CHECK(run.result->results[index * 2 + 1].is_error ==
@@ -676,7 +676,7 @@ TEST_CASE(
     auto composed_tool = std::make_unique<RecordingTool>(ai::Tool{
         "composed",
         "Composed",
-        fixture_json(test::kCompositionContract)});
+        fixture_json(tests::kCompositionContract)});
     auto branch_tool = std::make_unique<RecordingTool>(ai::Tool{
         "branch",
         "Branch",
@@ -700,7 +700,7 @@ TEST_CASE(
 
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({
-        make_call("call-valid", "composed", std::string(test::kCompositionArguments)),
+        make_call("call-valid", "composed", std::string(tests::kCompositionArguments)),
         make_call("call-no-branch", "branch", R"("1")"),
         make_call("call-ambiguous", "ambiguous", "3"),
     });
@@ -716,7 +716,7 @@ TEST_CASE(
     REQUIRE(invocation);
     auto prepared = util::write_json(invocation->arguments);
     REQUIRE(prepared);
-    CHECK(*prepared == test::kCompositionExpected);
+    CHECK(*prepared == tests::kCompositionExpected);
     CHECK(branch_ptr->invocation_count() == 0);
     CHECK(ambiguous_ptr->invocation_count() == 0);
 }
@@ -724,10 +724,10 @@ TEST_CASE(
 TEST_CASE(
     "recorded baseline formats reject invalid strings while unknown formats remain annotations",
     "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
-    for (const auto& fixture : test::kRecognizedFormatFixtures) {
+    for (const auto& fixture : tests::kRecognizedFormatFixtures) {
         check_format_fixture(fixture.format, fixture.valid, fixture.invalid);
     }
-    for (const auto& fixture : test::kRejectedFormatRegressionFixtures) {
+    for (const auto& fixture : tests::kRejectedFormatRegressionFixtures) {
         check_format_fixture(fixture.format, std::nullopt, fixture.value);
     }
 
@@ -757,7 +757,7 @@ TEST_CASE(
 TEST_CASE(
     "recorded TypeBox IDN separator behavior remains executable",
     "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
-    for (const auto& fixture : test::kIdnSeparatorFixtures) {
+    for (const auto& fixture : tests::kIdnSeparatorFixtures) {
         check_json_format_fixture(fixture);
     }
 }
