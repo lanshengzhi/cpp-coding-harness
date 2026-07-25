@@ -1,7 +1,5 @@
 #include "SyncLocalExecutionEnv.hpp"
 
-#include "../util/OutputLimiter.hpp"
-
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
@@ -10,7 +8,6 @@
 #include <cctype>
 #include <cstdlib>
 #include <optional>
-#include <sstream>
 #include <utility>
 
 #if defined(__unix__) || defined(__APPLE__)
@@ -19,19 +16,6 @@ extern char** environ;
 
 namespace cch::harness {
 namespace {
-
-std::size_t count_occurrences(const std::string& haystack, const std::string& needle) {
-    if (needle.empty()) {
-        return 0;
-    }
-    std::size_t count = 0;
-    std::size_t pos = 0;
-    while ((pos = haystack.find(needle, pos)) != std::string::npos) {
-        ++count;
-        ++pos;
-    }
-    return count;
-}
 
 bool secret_env_name(std::string name, const std::vector<std::string>& explicit_secret_names = {}) {
     for (const auto& explicit_name : explicit_secret_names) {
@@ -88,137 +72,6 @@ SyncLocalExecutionEnv::SyncLocalExecutionEnv(
       secret_environment_names_(std::move(secret_environment_names)),
       runner_(std::move(runner)),
       fs_(workspace_) {}
-
-// ---------------------------------------------------------------------------
-// Tool-shaped methods (compatibility)
-// ---------------------------------------------------------------------------
-
-util::Expected<AsyncFileReadResult> SyncLocalExecutionEnv::read_file(std::string path, int offset, int limit) {
-    auto content = fs_.read_existing_file(path);
-    if (!content) {
-        return std::unexpected(content.error());
-    }
-    offset = std::max(1, offset);
-    util::OutputLimit output_limit;
-    AsyncFileReadResult result;
-    std::string line;
-    std::size_t bytes = 0;
-    std::size_t lines = 0;
-    int line_number = 1;
-    int emitted = 0;
-    std::istringstream input(*content);
-    while (std::getline(input, line)) {
-        if (line_number++ < offset) {
-            continue;
-        }
-        if (limit > 0 && emitted >= limit) {
-            break;
-        }
-        const auto next_bytes = bytes + line.size() + 1;
-        if (lines >= output_limit.max_lines || next_bytes > output_limit.max_bytes) {
-            result.truncated = true;
-            break;
-        }
-        result.content += line;
-        result.content += '\n';
-        bytes = next_bytes;
-        ++lines;
-        ++emitted;
-    }
-    if (!result.content.empty()) {
-        result.content.pop_back();
-    }
-    result.lines_read = static_cast<int>(lines);
-    result.bytes_read = bytes;
-    if (result.truncated) {
-        result.content += "\n[output truncated]";
-    }
-    return result;
-}
-
-util::Expected<AsyncFileWriteResult> SyncLocalExecutionEnv::write_file(std::string path, std::string content, bool create_parents) {
-    auto written = fs_.write_file(path, content, create_parents);
-    if (!written) {
-        return std::unexpected(written.error());
-    }
-    return AsyncFileWriteResult{*written};
-}
-
-util::Expected<AsyncFileEditResult> SyncLocalExecutionEnv::edit_file(std::string path, std::string old_text, std::string new_text) {
-    auto existing = fs_.read_existing_file(path);
-    if (!existing) {
-        return std::unexpected(existing.error());
-    }
-    auto content = std::move(*existing);
-    const auto matches = count_occurrences(content, old_text);
-    if (matches == 0) {
-        return std::unexpected(workspace_error("old_text did not match any text in " + path));
-    }
-    if (matches > 1) {
-        return std::unexpected(workspace_error("old_text matched multiple regions in " + path + "; edit is ambiguous"));
-    }
-    const auto pos = content.find(old_text);
-    content.replace(pos, old_text.size(), new_text);
-    auto written = fs_.write_file(path, content, false);
-    if (!written) {
-        return std::unexpected(written.error());
-    }
-    return AsyncFileEditResult{old_text.substr(0, 80), new_text.substr(0, 80)};
-}
-
-// ---------------------------------------------------------------------------
-// Shell methods (compatibility)
-// ---------------------------------------------------------------------------
-
-util::Expected<util::ProcessRequest> SyncLocalExecutionEnv::make_shell_request(
-    std::string command,
-    std::chrono::milliseconds timeout) const {
-    if (!bash_enabled_) {
-        return std::unexpected(process_error("bash is disabled by default; rerun with explicit bash enablement"));
-    }
-    util::ProcessRequest request;
-    request.command = std::move(command);
-    request.working_directory = workspace_;
-    request.timeout = timeout;
-    request.environment = sanitized_environment(secret_environment_names_);
-    request.use_explicit_environment = true;
-    return request;
-}
-
-AsyncShellResult SyncLocalExecutionEnv::shell_result_from_process(const util::ProcessResult& process) const {
-    auto limited = util::limit_output(process.output);
-    AsyncShellResult result;
-    result.exit_code = process.exit_code;
-    result.output = limited.text;
-    result.timed_out = process.timed_out;
-    return result;
-}
-
-util::Expected<AsyncShellResult> SyncLocalExecutionEnv::run_shell(std::string command, std::chrono::milliseconds timeout) {
-    auto request = make_shell_request(std::move(command), timeout);
-    if (!request) {
-        return std::unexpected(request.error());
-    }
-
-    boost::asio::io_context io;
-    std::optional<util::Expected<util::ProcessResult>> process;
-    boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            process = co_await runner_->run(std::move(*request));
-            co_return;
-        },
-        boost::asio::detached);
-    io.run();
-
-    if (!process) {
-        return std::unexpected(process_error("process execution did not complete"));
-    }
-    if (!*process) {
-        return std::unexpected((*process).error());
-    }
-    return shell_result_from_process(**process);
-}
 
 // ---------------------------------------------------------------------------
 // Pi-shaped filesystem methods

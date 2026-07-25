@@ -1,9 +1,10 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include "../../include/cch/harness/LocalExecutionEnv.hpp"
+#include "../support/TempWorkspace.hpp"
+
+#include <cch/harness/LocalExecutionEnv.hpp>
 #include "harness/SyncLocalExecutionEnv.hpp"
 #include "util/Process.hpp"
-#include "../support/TempWorkspace.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -75,64 +76,16 @@ TEST_CASE("async local execution env preserves file read and write safety", "[ha
     tests::TempWorkspace workspace;
     harness::AsyncLocalExecutionEnv env(workspace.path());
 
-    auto written = run_awaitable<harness::AsyncFileWriteResult>([&]() {
-        return env.write_file("nested/note.txt", "hello", true);
-    });
+    auto written = run_awaitable_pi(env.writeFile("nested/note.txt", std::string{"hello"}));
     REQUIRE(written);
-    CHECK(written->bytes_written == 5);
 
-    auto read = run_awaitable<harness::AsyncFileReadResult>([&]() {
-        return env.read_file("nested/note.txt", 1, 0);
-    });
+    auto read = run_awaitable_pi(env.readTextFile("nested/note.txt"));
     REQUIRE(read);
-    CHECK(read->content == "hello");
+    CHECK(*read == "hello");
 
-    auto escaped = run_awaitable<harness::AsyncFileReadResult>([&]() {
-        return env.read_file("../outside.txt", 1, 0);
-    });
+    auto escaped = run_awaitable_pi(env.readTextFile("../outside.txt"));
     REQUIRE_FALSE(escaped);
-    CHECK(escaped.error().code == util::ErrorCode::Workspace);
-}
-
-TEST_CASE("async local execution env preserves exact edit ambiguity errors", "[harness][async][u6][ae4]") {
-    tests::TempWorkspace workspace;
-    workspace.write("note.txt", "same\nsame\n");
-    harness::AsyncLocalExecutionEnv env(workspace.path());
-
-    auto edited = run_awaitable<harness::AsyncFileEditResult>([&]() {
-        return env.edit_file("note.txt", "same", "new");
-    });
-
-    REQUIRE_FALSE(edited);
-    CHECK(edited.error().detail.find("multiple") != std::string::npos);
-    CHECK(workspace.read("note.txt") == "same\nsame\n");
-}
-
-TEST_CASE("async local execution env rejects overlapping exact edit matches", "[harness][async][u6]") {
-    tests::TempWorkspace workspace;
-    workspace.write("note.txt", "aaa");
-    harness::AsyncLocalExecutionEnv env(workspace.path());
-
-    auto edited = run_awaitable<harness::AsyncFileEditResult>([&]() {
-        return env.edit_file("note.txt", "aa", "b");
-    });
-
-    REQUIRE_FALSE(edited);
-    CHECK(edited.error().detail.find("multiple") != std::string::npos);
-    CHECK(workspace.read("note.txt") == "aaa");
-}
-
-TEST_CASE("async local execution env returns typed shell unavailable errors", "[harness][async][u6]") {
-    tests::TempWorkspace workspace;
-    harness::AsyncLocalExecutionEnv env(workspace.path(), false);
-
-    auto shell = run_awaitable<harness::AsyncShellResult>([&]() {
-        return env.run_shell("echo blocked", std::chrono::milliseconds(1000));
-    });
-
-    REQUIRE_FALSE(shell);
-    CHECK(shell.error().code == util::ErrorCode::Process);
-    CHECK(shell.error().detail.find("disabled") != std::string::npos);
+    CHECK(escaped.error().code == harness::FileErrorCode::PermissionDenied);
 }
 
 TEST_CASE("async local execution env runs shell commands concurrently", "[harness][async][u6]") {
@@ -140,21 +93,21 @@ TEST_CASE("async local execution env runs shell commands concurrently", "[harnes
     harness::AsyncLocalExecutionEnv env(workspace.path(), true);
 
     boost::asio::io_context io;
-    std::optional<util::Expected<harness::AsyncShellResult>> first;
-    std::optional<util::Expected<harness::AsyncShellResult>> second;
+    std::optional<std::expected<harness::ShellExecResult, harness::ExecutionError>> first;
+    std::optional<std::expected<harness::ShellExecResult, harness::ExecutionError>> second;
     const auto started = std::chrono::steady_clock::now();
 
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            first = co_await env.run_shell("sleep 0.6; echo first", std::chrono::milliseconds(3000));
+            first = co_await env.exec("sleep 0.6; echo first");
             co_return;
         },
         boost::asio::detached);
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            second = co_await env.run_shell("sleep 0.6; echo second", std::chrono::milliseconds(3000));
+            second = co_await env.exec("sleep 0.6; echo second");
             co_return;
         },
         boost::asio::detached);
@@ -164,26 +117,11 @@ TEST_CASE("async local execution env runs shell commands concurrently", "[harnes
 
     REQUIRE(first.has_value());
     REQUIRE(second.has_value());
-    REQUIRE(*first);
-    REQUIRE(*second);
-    CHECK((*first)->output.find("first") != std::string::npos);
-    CHECK((*second)->output.find("second") != std::string::npos);
+    REQUIRE(first->has_value());
+    REQUIRE(second->has_value());
+    CHECK((*first)->stdout_output.find("first") != std::string::npos);
+    CHECK((*second)->stdout_output.find("second") != std::string::npos);
     CHECK(elapsed < std::chrono::milliseconds(1100));
-}
-
-TEST_CASE("async local execution env times out shell commands without blocking the io context", "[harness][async][u6]") {
-    tests::TempWorkspace workspace;
-    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
-    const auto started = std::chrono::steady_clock::now();
-
-    auto shell = run_awaitable<harness::AsyncShellResult>([&]() {
-        return env.run_shell("sleep 2", std::chrono::milliseconds(100));
-    });
-    const auto elapsed = std::chrono::steady_clock::now() - started;
-
-    REQUIRE(shell);
-    CHECK(shell->timed_out);
-    CHECK(elapsed < std::chrono::milliseconds(1500));
 }
 
 TEST_CASE("async local execution env sanitizes shell environment through process capability", "[harness][async][u2]") {
@@ -196,10 +134,12 @@ TEST_CASE("async local execution env sanitizes shell environment through process
     tests::TempWorkspace workspace;
     auto runner = std::make_shared<FakeProcessRunner>();
     runner->next.exit_code = 0;
-    runner->next.output = "ok";
+    runner->next.stdout_output = "ok";
     harness::SyncLocalExecutionEnv env(workspace.path(), true, {"CCH_CREDENTIAL", "KIMI_API_KEY"}, runner);
 
-    auto shell = env.run_shell("env", std::chrono::milliseconds(123));
+    harness::ExecOptions opts;
+    opts.timeout = std::chrono::milliseconds(123);
+    auto shell = env.exec("env", std::move(opts));
 
     REQUIRE(shell);
     REQUIRE(runner->requests.size() == 1);
@@ -333,87 +273,180 @@ TEST_CASE("pi-shaped error conversion helpers map to util::Error", "[harness][u1
     }
 }
 
-TEST_CASE("focused fake can override only tool-shaped methods", "[harness][u1]") {
-    // A fake that only implements the required pure virtual methods.
-    // The new pi-shaped methods inherit default not_supported implementations.
+TEST_CASE("focused fake implements the complete pi-shaped surface", "[harness][u1][issue69]") {
+    // ADR 0006: the contract has no tool-shaped methods and no default
+    // NotSupported bodies, so a fake must satisfy the full pi-shaped
+    // capability set at compile time.
     struct FocusedFake : harness::AsyncExecutionEnv {
         std::filesystem::path ws{"/tmp/ws"};
         const std::filesystem::path& workspace() const override { return ws; }
-        bool bash_enabled() const override { return false; }
 
-        boost::asio::awaitable<util::Expected<harness::AsyncFileReadResult>> read_file(
-            std::string, int, int) override {
-            co_return harness::AsyncFileReadResult{"fake"};
+        boost::asio::awaitable<std::expected<std::string, harness::FileError>> absolutePath(
+            std::string path) override {
+            co_return path;
         }
-        boost::asio::awaitable<util::Expected<harness::AsyncFileWriteResult>> write_file(
-            std::string, std::string, bool) override {
-            co_return harness::AsyncFileWriteResult{4};
+        boost::asio::awaitable<std::expected<std::string, harness::FileError>> joinPath(
+            std::vector<std::string>) override {
+            co_return std::string{"/joined"};
         }
-        boost::asio::awaitable<util::Expected<harness::AsyncFileEditResult>> edit_file(
-            std::string, std::string, std::string) override {
-            co_return harness::AsyncFileEditResult{};
+        boost::asio::awaitable<std::expected<std::string, harness::FileError>> readTextFile(
+            std::string) override {
+            co_return std::string{"fake"};
         }
-        boost::asio::awaitable<util::Expected<harness::AsyncShellResult>> run_shell(
-            std::string, std::chrono::milliseconds) override {
-            co_return harness::AsyncShellResult{};
+        boost::asio::awaitable<std::expected<std::vector<std::string>, harness::FileError>> readTextLines(
+            std::string, std::optional<int>) override {
+            co_return std::vector<std::string>{"fake"};
+        }
+        boost::asio::awaitable<std::expected<harness::BinaryData, harness::FileError>> readBinaryFile(
+            std::string) override {
+            co_return harness::BinaryData{};
+        }
+        boost::asio::awaitable<std::expected<void, harness::FileError>> writeFile(
+            std::string, harness::WriteContent) override {
+            co_return std::expected<void, harness::FileError>{};
+        }
+        boost::asio::awaitable<std::expected<void, harness::FileError>> appendFile(
+            std::string, harness::WriteContent) override {
+            co_return std::expected<void, harness::FileError>{};
+        }
+        boost::asio::awaitable<std::expected<harness::FileInfo, harness::FileError>> fileInfo(
+            std::string path) override {
+            co_return harness::FileInfo{.name = path, .path = "/tmp/ws/" + path};
+        }
+        boost::asio::awaitable<std::expected<std::vector<harness::FileInfo>, harness::FileError>> listDir(
+            std::string) override {
+            co_return std::vector<harness::FileInfo>{};
+        }
+        boost::asio::awaitable<std::expected<std::string, harness::FileError>> canonicalPath(
+            std::string path) override {
+            co_return path;
+        }
+        boost::asio::awaitable<std::expected<bool, harness::FileError>> exists(
+            std::string) override {
+            co_return true;
+        }
+        boost::asio::awaitable<std::expected<void, harness::FileError>> createDir(
+            std::string, bool) override {
+            co_return std::expected<void, harness::FileError>{};
+        }
+        boost::asio::awaitable<std::expected<void, harness::FileError>> remove(
+            std::string, bool) override {
+            co_return std::expected<void, harness::FileError>{};
+        }
+        boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempDir(
+            std::optional<std::string>) override {
+            co_return std::string{"/tmp/ws/tmp"};
+        }
+        boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempFile(
+            std::optional<std::string>, std::optional<std::string>) override {
+            co_return std::string{"/tmp/ws/tmp-file"};
+        }
+
+        boost::asio::awaitable<std::expected<harness::ShellExecResult, harness::ExecutionError>> exec(
+            std::string command, harness::ExecOptions) override {
+            co_return harness::ShellExecResult{.stdout_output = command, .stderr_output = "", .exitCode = 0};
         }
     };
 
     FocusedFake fake;
     CHECK(fake.workspace() == "/tmp/ws");
-    CHECK_FALSE(fake.bash_enabled());
 
-    // Tool-shaped methods work.
-    auto read = run_awaitable<harness::AsyncFileReadResult>(
-        [&]() { return fake.read_file("x", 1, 0); });
+    auto read = run_awaitable_pi(fake.readTextFile("x"));
     REQUIRE(read);
-    CHECK(read->content == "fake");
+    CHECK(*read == "fake");
 
-    // Pi-shaped methods return not_supported.
     auto info = run_awaitable_pi(fake.fileInfo("x"));
-    REQUIRE_FALSE(info);
-    CHECK(info.error().code == harness::FileErrorCode::NotSupported);
+    REQUIRE(info);
+    CHECK(info->name == "x");
 
-    auto exec_result = run_awaitable_pi(fake.exec("ls"));
-    REQUIRE_FALSE(exec_result);
-    CHECK(exec_result.error().code == harness::ExecutionErrorCode::NotSupported);
+    auto exec_result = run_awaitable_pi(fake.exec("ls", harness::ExecOptions{}));
+    REQUIRE(exec_result);
+    CHECK(exec_result->stdout_output == "ls");
+
+    // cleanup() keeps its best-effort default body.
+    boost::asio::io_context io;
+    bool cleaned = false;
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            co_await fake.cleanup();
+            cleaned = true;
+            co_return;
+        },
+        boost::asio::detached);
+    io.run();
+    CHECK(cleaned);
 }
 
 TEST_CASE("complete fake can override full pi-shaped capability surface", "[harness][u1]") {
     struct CompleteFake : harness::AsyncExecutionEnv {
         std::filesystem::path ws{"/ws"};
         const std::filesystem::path& workspace() const override { return ws; }
-        bool bash_enabled() const override { return true; }
 
-        boost::asio::awaitable<util::Expected<harness::AsyncFileReadResult>> read_file(
-            std::string, int, int) override {
-            co_return harness::AsyncFileReadResult{};
-        }
-        boost::asio::awaitable<util::Expected<harness::AsyncFileWriteResult>> write_file(
-            std::string, std::string, bool) override {
-            co_return harness::AsyncFileWriteResult{};
-        }
-        boost::asio::awaitable<util::Expected<harness::AsyncFileEditResult>> edit_file(
-            std::string, std::string, std::string) override {
-            co_return harness::AsyncFileEditResult{};
-        }
-        boost::asio::awaitable<util::Expected<harness::AsyncShellResult>> run_shell(
-            std::string, std::chrono::milliseconds) override {
-            co_return harness::AsyncShellResult{};
-        }
-
-        // Override a sampling of pi-shaped methods.
-        boost::asio::awaitable<std::expected<harness::FileInfo, harness::FileError>> fileInfo(
+        boost::asio::awaitable<std::expected<std::string, harness::FileError>> absolutePath(
             std::string path) override {
-            co_return harness::FileInfo{.name = path, .path = "/ws/" + path, .kind = harness::FileKind::File};
+            co_return path;
+        }
+        boost::asio::awaitable<std::expected<std::string, harness::FileError>> joinPath(
+            std::vector<std::string>) override {
+            co_return std::string{"/joined"};
         }
         boost::asio::awaitable<std::expected<std::string, harness::FileError>> readTextFile(
             std::string path) override {
             co_return path + "-content";
         }
+        boost::asio::awaitable<std::expected<std::vector<std::string>, harness::FileError>> readTextLines(
+            std::string, std::optional<int>) override {
+            co_return std::vector<std::string>{};
+        }
+        boost::asio::awaitable<std::expected<harness::BinaryData, harness::FileError>> readBinaryFile(
+            std::string) override {
+            co_return harness::BinaryData{};
+        }
+        boost::asio::awaitable<std::expected<void, harness::FileError>> writeFile(
+            std::string, harness::WriteContent) override {
+            co_return std::expected<void, harness::FileError>{};
+        }
+        boost::asio::awaitable<std::expected<void, harness::FileError>> appendFile(
+            std::string, harness::WriteContent) override {
+            co_return std::expected<void, harness::FileError>{};
+        }
+        boost::asio::awaitable<std::expected<harness::FileInfo, harness::FileError>> fileInfo(
+            std::string path) override {
+            co_return harness::FileInfo{.name = path, .path = "/ws/" + path, .kind = harness::FileKind::File};
+        }
+        boost::asio::awaitable<std::expected<std::vector<harness::FileInfo>, harness::FileError>> listDir(
+            std::string) override {
+            co_return std::vector<harness::FileInfo>{};
+        }
+        boost::asio::awaitable<std::expected<std::string, harness::FileError>> canonicalPath(
+            std::string path) override {
+            co_return path;
+        }
+        boost::asio::awaitable<std::expected<bool, harness::FileError>> exists(
+            std::string) override {
+            co_return true;
+        }
+        boost::asio::awaitable<std::expected<void, harness::FileError>> createDir(
+            std::string, bool) override {
+            co_return std::expected<void, harness::FileError>{};
+        }
+        boost::asio::awaitable<std::expected<void, harness::FileError>> remove(
+            std::string, bool) override {
+            co_return std::expected<void, harness::FileError>{};
+        }
+        boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempDir(
+            std::optional<std::string>) override {
+            co_return std::string{"/ws/tmp"};
+        }
+        boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempFile(
+            std::optional<std::string>, std::optional<std::string>) override {
+            co_return std::string{"/ws/tmp-file"};
+        }
+
         boost::asio::awaitable<std::expected<harness::ShellExecResult, harness::ExecutionError>> exec(
             std::string cmd, harness::ExecOptions) override {
-            co_return harness::ShellExecResult{cmd, "", 0};
+            co_return harness::ShellExecResult{.stdout_output = cmd, .stderr_output = "", .exitCode = 0};
         }
     };
 

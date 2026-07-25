@@ -1,30 +1,30 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include "../../include/cch/agent/Agent.hpp"
-#include "../../include/cch/agent/AgentContext.hpp"
-#include "../../include/cch/agent/AgentEvent.hpp"
-#include "../../include/cch/agent/AgentTool.hpp"
-#include "../../include/cch/agent/ToolRegistry.hpp"
-#include "../../include/cch/ai/ChatClient.hpp"
-#include "../../include/cch/ai/Content.hpp"
-#include "../../include/cch/ai/Context.hpp"
-#include "../../include/cch/ai/Message.hpp"
-#include "../../include/cch/ai/ProviderRegistry.hpp"
-#include "../../include/cch/ai/StreamEvent.hpp"
-#include "../../include/cch/ai/Tool.hpp"
-#include "../../include/cch/ai/Usage.hpp"
-#include "../../include/cch/ai/providers/OpenAIChatClient.hpp"
-#include "../../include/cch/ai/providers/StreamTransport.hpp"
-#include "../../include/cch/coding_agent/AgentConfigDir.hpp"
-#include "../../include/cch/coding_agent/Settings.hpp"
-#include "../../include/cch/coding_agent/Sdk.hpp"
-#include "../../include/cch/harness/ExecutionEnv.hpp"
-#include "../../include/cch/harness/LocalExecutionEnv.hpp"
-#include "../../include/cch/harness/session/JsonlSessionStore.hpp"
-#include "../../include/cch/harness/session/SessionEntry.hpp"
-#include "../../include/cch/harness/session/SessionStore.hpp"
-#include "../../include/cch/tools/ToolFactories.hpp"
-#include "../../include/cch/util/Error.hpp"
+#include <cch/agent/Agent.hpp>
+#include <cch/agent/AgentContext.hpp>
+#include <cch/agent/AgentEvent.hpp>
+#include <cch/agent/AgentTool.hpp>
+#include <cch/agent/ToolRegistry.hpp>
+#include <cch/ai/ChatClient.hpp>
+#include <cch/ai/Content.hpp>
+#include <cch/ai/Context.hpp>
+#include <cch/ai/Message.hpp>
+#include <cch/ai/ProviderRegistry.hpp>
+#include <cch/ai/StreamEvent.hpp>
+#include <cch/ai/Tool.hpp>
+#include <cch/ai/Usage.hpp>
+#include <cch/ai/providers/OpenAIChatClient.hpp>
+#include <cch/ai/providers/StreamTransport.hpp>
+#include <cch/coding_agent/AgentConfigDir.hpp>
+#include <cch/coding_agent/Settings.hpp>
+#include <cch/coding_agent/Sdk.hpp>
+#include <cch/harness/ExecutionEnv.hpp>
+#include <cch/harness/LocalExecutionEnv.hpp>
+#include <cch/harness/session/JsonlSessionStore.hpp>
+#include <cch/harness/session/SessionEntry.hpp>
+#include <cch/harness/session/SessionStore.hpp>
+#include <cch/tools/ToolFactories.hpp>
+#include <cch/util/Error.hpp>
 
 #include <filesystem>
 #include <optional>
@@ -70,6 +70,11 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_abstract_v<harness::AsyncExecutionEnv>);
     static_assert(std::is_abstract_v<agent::AsyncAgentTool>);
     static_assert(std::is_abstract_v<harness::session::SessionStore>);
+    // ADR 0006: the local environment uniquely owns its synchronous state, so
+    // environment copies cannot alias live state.
+    static_assert(!std::is_copy_constructible_v<harness::AsyncLocalExecutionEnv>);
+    static_assert(!std::is_copy_assignable_v<harness::AsyncLocalExecutionEnv>);
+    static_assert(std::is_move_constructible_v<harness::AsyncLocalExecutionEnv>);
     static_assert(std::is_base_of_v<
                   harness::session::SessionStore,
                   harness::session::JsonlSessionStore>);

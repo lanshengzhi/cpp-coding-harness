@@ -1,7 +1,9 @@
-#include "../../include/cch/tools/ToolFactories.hpp"
+#include <cch/tools/ToolFactories.hpp>
 
 #include "util/Json.hpp"
+#include "util/OutputLimiter.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <exception>
 #include <memory>
@@ -134,14 +136,42 @@ public:
         if (!environment) {
             co_return std::unexpected(environment.error());
         }
-        auto read = co_await (*environment)->read_file(parsed->path, parsed->offset, parsed->limit);
-        if (!read) {
-            co_return error_result(read.error().detail.empty() ? read.error().message : read.error().detail);
+        auto lines = co_await (*environment)->readTextLines(parsed->path, std::nullopt);
+        if (!lines) {
+            co_return error_result(lines.error().message);
+        }
+        // offset is 1-based; limit 0 means no explicit limit.
+        const auto offset = std::max(1, parsed->offset);
+        const util::OutputLimit output_limit;
+        std::string result;
+        std::size_t bytes = 0;
+        int emitted = 0;
+        bool truncated = false;
+        int line_number = 1;
+        for (const auto& line : *lines) {
+            if (line_number++ < offset) {
+                continue;
+            }
+            if (parsed->limit > 0 && emitted >= parsed->limit) {
+                break;
+            }
+            const auto next_bytes = bytes + line.size() + 1;
+            if (static_cast<std::size_t>(emitted) >= output_limit.max_lines || next_bytes > output_limit.max_bytes) {
+                truncated = true;
+                break;
+            }
+            result += line;
+            result += '\n';
+            bytes = next_bytes;
+            ++emitted;
+        }
+        if (!result.empty()) {
+            result.pop_back();
         }
         // Append continuation hint when truncated
-        std::string result = read->content;
-        if (read->truncated) {
-            int next_offset = parsed->offset + read->lines_read;
+        if (truncated) {
+            int next_offset = offset + emitted;
+            result += "\n[output truncated]";
             result += "\n\n[Output truncated. Use offset=" + std::to_string(next_offset) + " to continue.]";
         }
         co_return agent::AsyncToolExecutionResult{std::vector<ai::Content>{ai::text_content(std::move(result))}, std::nullopt, false};
@@ -176,11 +206,11 @@ public:
         if (!environment) {
             co_return std::unexpected(environment.error());
         }
-        auto written = co_await (*environment)->write_file(parsed->path, parsed->content, true);
+        auto written = co_await (*environment)->writeFile(parsed->path, parsed->content);
         if (!written) {
-            co_return error_result(written.error().detail.empty() ? written.error().message : written.error().detail);
+            co_return error_result(written.error().message);
         }
-        co_return agent::AsyncToolExecutionResult{std::vector<ai::Content>{ai::text_content("wrote " + std::to_string(written->bytes_written) + " bytes")}, std::nullopt, false};
+        co_return agent::AsyncToolExecutionResult{std::vector<ai::Content>{ai::text_content("wrote " + std::to_string(parsed->content.size()) + " bytes")}, std::nullopt, false};
     }
 };
 
@@ -233,11 +263,11 @@ public:
             co_return std::unexpected(environment.error());
         }
         // Read the original file
-        auto read = co_await (*environment)->read_file(parsed->path, 1, 0);
+        auto read = co_await (*environment)->readTextFile(parsed->path);
         if (!read) {
-            co_return error_result(read.error().detail.empty() ? read.error().message : read.error().detail);
+            co_return error_result(read.error().message);
         }
-        const std::string original = read->content;
+        const std::string original = *read;
         // Validate all edits against the original content
         std::string working = original;
         std::vector<std::pair<std::string, std::string>> applied;
@@ -268,9 +298,9 @@ public:
             applied.emplace_back(edit.oldText, edit.newText);
         }
         // Write back
-        auto written = co_await (*environment)->write_file(parsed->path, working, true);
+        auto written = co_await (*environment)->writeFile(parsed->path, working);
         if (!written) {
-            co_return error_result(written.error().detail.empty() ? written.error().message : written.error().detail);
+            co_return error_result(written.error().message);
         }
         // Build a simple result message
         std::string result_text = "Successfully replaced " + std::to_string(applied.size()) + " block(s) in " + parsed->path + ".";
@@ -343,18 +373,24 @@ public:
         if (!environment) {
             co_return std::unexpected(environment.error());
         }
-        // Convert seconds to milliseconds for ExecutionEnv
-        auto timeout_ms = parsed->timeout
-            ? std::optional<std::chrono::milliseconds>(std::chrono::seconds(*parsed->timeout))
-            : std::optional<std::chrono::milliseconds>{};
-        auto shell = co_await (*environment)->run_shell(
-            parsed->command,
-            timeout_ms.value_or(std::chrono::milliseconds::zero()));
+        // Convert seconds to milliseconds for ExecutionEnv; zero means no timeout.
+        harness::ExecOptions exec_options;
+        exec_options.timeout = parsed->timeout
+            ? std::chrono::milliseconds(std::chrono::seconds(*parsed->timeout))
+            : std::chrono::milliseconds{0};
+        auto shell = co_await (*environment)->exec(parsed->command, std::move(exec_options));
         if (!shell) {
-            co_return error_result(shell.error().detail.empty() ? shell.error().message : shell.error().detail);
+            co_return error_result(shell.error().message);
+        }
+        std::string combined = shell->stdout_output;
+        if (!shell->stderr_output.empty()) {
+            if (!combined.empty() && combined.back() != '\n') {
+                combined += '\n';
+            }
+            combined += shell->stderr_output;
         }
         // Strip ANSI CSI escape sequences
-        std::string output = strip_ansi(shell->output);
+        std::string output = strip_ansi(combined);
         // Apply truncation
         bool truncated = false;
         std::string full_output_path;
@@ -369,7 +405,7 @@ public:
                 truncated = true;
                 auto ts = std::chrono::system_clock::now().time_since_epoch().count();
                 full_output_path = "bash-output-" + std::to_string(ts) + ".txt";
-                if (auto write = co_await (*environment)->write_file(full_output_path, output, true); !write) {
+                if (auto write = co_await (*environment)->writeFile(full_output_path, output); !write) {
                     full_output_path.clear();
                 }
                 // Truncate: keep last 2000 lines / 50KB (tail truncation)
@@ -392,10 +428,7 @@ public:
             }
         }
         std::ostringstream out;
-        out << "exit_code=" << shell->exit_code;
-        if (shell->timed_out) {
-            out << " timed_out=true";
-        }
+        out << "exit_code=" << shell->exitCode;
         if (truncated) {
             out << " truncated=true";
         }
@@ -405,7 +438,7 @@ public:
         co_return agent::AsyncToolExecutionResult{
             std::vector<ai::Content>{ai::text_content(out.str())},
             std::nullopt,
-            shell->exit_code != 0 || shell->timed_out};
+            shell->exitCode != 0};
     }
 
 private:

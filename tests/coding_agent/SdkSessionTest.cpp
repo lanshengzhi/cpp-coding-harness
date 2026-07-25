@@ -1,25 +1,26 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include "../../include/cch/coding_agent/Sdk.hpp"
-#include "../../include/cch/agent/AgentEvent.hpp"
-#include "../../include/cch/agent/AgentTool.hpp"
-#include "../../include/cch/ai/Content.hpp"
-#include "../../include/cch/ai/Context.hpp"
-#include "../../include/cch/ai/Message.hpp"
-#include "../../include/cch/ai/providers/OpenAIChatClient.hpp"
-#include "../../include/cch/ai/providers/StreamTransport.hpp"
-#include "../../include/cch/coding_agent/Skill.hpp"
-#include "../../include/cch/harness/ExecutionEnv.hpp"
-#include "../../include/cch/harness/session/JsonlSessionStore.hpp"
-#include "../../include/cch/util/Error.hpp"
+#include "../support/EnvVarGuard.hpp"
+#include "../support/TempWorkspace.hpp"
+#include "../support/UsageAssertions.hpp"
+
+#include <cch/coding_agent/Sdk.hpp>
+#include <cch/agent/AgentEvent.hpp>
+#include <cch/agent/AgentTool.hpp>
+#include <cch/ai/Content.hpp>
+#include <cch/ai/Context.hpp>
+#include <cch/ai/Message.hpp>
+#include <cch/ai/providers/OpenAIChatClient.hpp>
+#include <cch/ai/providers/StreamTransport.hpp>
+#include <cch/coding_agent/Skill.hpp>
+#include <cch/harness/ExecutionEnv.hpp>
+#include <cch/harness/session/JsonlSessionStore.hpp>
+#include <cch/util/Error.hpp>
 #include "ai/providers/FakeChatClient.hpp"
 #include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "harness/session/SessionJournalTestHooks.hpp"
 #include "util/Json.hpp"
-#include "../support/EnvVarGuard.hpp"
-#include "../support/TempWorkspace.hpp"
-#include "../support/UsageAssertions.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -180,33 +181,78 @@ public:
         : workspace_(std::move(workspace)) {}
 
     [[nodiscard]] const std::filesystem::path& workspace() const override { return workspace_; }
-    [[nodiscard]] bool bash_enabled() const override { return false; }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<harness::AsyncFileReadResult>> read_file(
-        std::string /*path*/,
-        int /*offset*/,
-        int /*limit*/) override {
-        co_return harness::AsyncFileReadResult{};
+    [[nodiscard]] boost::asio::awaitable<std::expected<std::string, harness::FileError>> absolutePath(
+        std::string path) override {
+        co_return path;
+    }
+    [[nodiscard]] boost::asio::awaitable<std::expected<std::string, harness::FileError>> joinPath(
+        std::vector<std::string>) override {
+        co_return std::string{};
+    }
+    [[nodiscard]] boost::asio::awaitable<std::expected<std::string, harness::FileError>> readTextFile(
+        std::string) override {
+        co_return std::string{};
+    }
+    [[nodiscard]] boost::asio::awaitable<std::expected<std::vector<std::string>, harness::FileError>> readTextLines(
+        std::string,
+        std::optional<int>) override {
+        co_return std::vector<std::string>{};
+    }
+    [[nodiscard]] boost::asio::awaitable<std::expected<harness::BinaryData, harness::FileError>> readBinaryFile(
+        std::string) override {
+        co_return harness::BinaryData{};
+    }
+    [[nodiscard]] boost::asio::awaitable<std::expected<void, harness::FileError>> writeFile(
+        std::string,
+        harness::WriteContent) override {
+        co_return std::expected<void, harness::FileError>{};
+    }
+    [[nodiscard]] boost::asio::awaitable<std::expected<void, harness::FileError>> appendFile(
+        std::string,
+        harness::WriteContent) override {
+        co_return std::expected<void, harness::FileError>{};
+    }
+    [[nodiscard]] boost::asio::awaitable<std::expected<harness::FileInfo, harness::FileError>> fileInfo(
+        std::string) override {
+        co_return harness::FileInfo{};
+    }
+    [[nodiscard]] boost::asio::awaitable<std::expected<std::vector<harness::FileInfo>, harness::FileError>> listDir(
+        std::string) override {
+        co_return std::vector<harness::FileInfo>{};
+    }
+    [[nodiscard]] boost::asio::awaitable<std::expected<std::string, harness::FileError>> canonicalPath(
+        std::string path) override {
+        co_return path;
+    }
+    [[nodiscard]] boost::asio::awaitable<std::expected<bool, harness::FileError>> exists(
+        std::string) override {
+        co_return true;
+    }
+    [[nodiscard]] boost::asio::awaitable<std::expected<void, harness::FileError>> createDir(
+        std::string,
+        bool) override {
+        co_return std::expected<void, harness::FileError>{};
+    }
+    [[nodiscard]] boost::asio::awaitable<std::expected<void, harness::FileError>> remove(
+        std::string,
+        bool) override {
+        co_return std::expected<void, harness::FileError>{};
+    }
+    [[nodiscard]] boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempDir(
+        std::optional<std::string>) override {
+        co_return std::string{};
+    }
+    [[nodiscard]] boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempFile(
+        std::optional<std::string>,
+        std::optional<std::string>) override {
+        co_return std::string{};
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<harness::AsyncFileWriteResult>> write_file(
-        std::string /*path*/,
-        std::string /*content*/,
-        bool /*create_parents*/) override {
-        co_return harness::AsyncFileWriteResult{};
-    }
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<harness::AsyncFileEditResult>> edit_file(
-        std::string /*path*/,
-        std::string /*old_text*/,
-        std::string /*new_text*/) override {
-        co_return harness::AsyncFileEditResult{};
-    }
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<harness::AsyncShellResult>> run_shell(
-        std::string /*command*/,
-        std::chrono::milliseconds /*timeout*/) override {
-        co_return harness::AsyncShellResult{};
+    [[nodiscard]] boost::asio::awaitable<std::expected<harness::ShellExecResult, harness::ExecutionError>> exec(
+        std::string,
+        harness::ExecOptions) override {
+        co_return harness::ShellExecResult{};
     }
 
     boost::asio::awaitable<void> cleanup() override {

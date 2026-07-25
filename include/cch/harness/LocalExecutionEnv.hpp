@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ExecutionEnv.hpp"
+#include <cch/harness/ExecutionEnv.hpp>
 
 #include <memory>
 #include <vector>
@@ -13,25 +13,13 @@ public:
         std::filesystem::path workspace,
         bool bash_enabled = false,
         std::vector<std::string> secret_environment_names = {});
+    AsyncLocalExecutionEnv(AsyncLocalExecutionEnv&&) noexcept;
+    AsyncLocalExecutionEnv& operator=(AsyncLocalExecutionEnv&&) noexcept;
+    ~AsyncLocalExecutionEnv() override;
+    AsyncLocalExecutionEnv(const AsyncLocalExecutionEnv&) = delete;
+    AsyncLocalExecutionEnv& operator=(const AsyncLocalExecutionEnv&) = delete;
 
     [[nodiscard]] const std::filesystem::path& workspace() const override;
-    [[nodiscard]] bool bash_enabled() const override;
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncFileReadResult>> read_file(
-        std::string path,
-        int offset,
-        int limit) override;
-    [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncFileWriteResult>> write_file(
-        std::string path,
-        std::string content,
-        bool create_parents) override;
-    [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncFileEditResult>> edit_file(
-        std::string path,
-        std::string old_text,
-        std::string new_text) override;
-    [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncShellResult>> run_shell(
-        std::string command,
-        std::chrono::milliseconds timeout) override;
 
     // -- Pi-shaped filesystem overrides ---
 
@@ -79,7 +67,7 @@ public:
         ExecOptions options = {}) override;
 
 private:
-    std::shared_ptr<class SyncLocalExecutionEnv> sync_;
+    std::unique_ptr<class SyncLocalExecutionEnv> sync_;
 };
 
 } // namespace cch::harness

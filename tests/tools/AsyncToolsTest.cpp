@@ -1,9 +1,10 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include "../../include/cch/harness/LocalExecutionEnv.hpp"
-#include "../../include/cch/tools/ToolFactories.hpp"
-#include "util/Json.hpp"
 #include "../support/TempWorkspace.hpp"
+
+#include <cch/harness/LocalExecutionEnv.hpp>
+#include <cch/tools/ToolFactories.hpp>
+#include "util/Json.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -24,35 +25,74 @@ public:
     explicit CapturingEnv(std::filesystem::path workspace_path) : workspace_path_(std::move(workspace_path)) {}
 
     const std::filesystem::path& workspace() const override { return workspace_path_; }
-    bool bash_enabled() const override { return true; }
 
-    boost::asio::awaitable<util::Expected<harness::AsyncFileReadResult>> read_file(
-        std::string,
-        int,
-        int) override {
-        co_return harness::AsyncFileReadResult{""};
+    boost::asio::awaitable<std::expected<std::string, harness::FileError>> absolutePath(
+        std::string path) override {
+        co_return path;
     }
-
-    boost::asio::awaitable<util::Expected<harness::AsyncFileWriteResult>> write_file(
-        std::string,
-        std::string,
-        bool) override {
-        co_return harness::AsyncFileWriteResult{};
+    boost::asio::awaitable<std::expected<std::string, harness::FileError>> joinPath(
+        std::vector<std::string>) override {
+        co_return std::string{};
     }
-
-    boost::asio::awaitable<util::Expected<harness::AsyncFileEditResult>> edit_file(
-        std::string,
-        std::string,
+    boost::asio::awaitable<std::expected<std::string, harness::FileError>> readTextFile(
         std::string) override {
-        co_return harness::AsyncFileEditResult{};
+        co_return std::string{};
+    }
+    boost::asio::awaitable<std::expected<std::vector<std::string>, harness::FileError>> readTextLines(
+        std::string, std::optional<int>) override {
+        co_return std::vector<std::string>{};
+    }
+    boost::asio::awaitable<std::expected<harness::BinaryData, harness::FileError>> readBinaryFile(
+        std::string) override {
+        co_return harness::BinaryData{};
+    }
+    boost::asio::awaitable<std::expected<void, harness::FileError>> writeFile(
+        std::string, harness::WriteContent) override {
+        co_return std::expected<void, harness::FileError>{};
+    }
+    boost::asio::awaitable<std::expected<void, harness::FileError>> appendFile(
+        std::string, harness::WriteContent) override {
+        co_return std::expected<void, harness::FileError>{};
+    }
+    boost::asio::awaitable<std::expected<harness::FileInfo, harness::FileError>> fileInfo(
+        std::string) override {
+        co_return harness::FileInfo{};
+    }
+    boost::asio::awaitable<std::expected<std::vector<harness::FileInfo>, harness::FileError>> listDir(
+        std::string) override {
+        co_return std::vector<harness::FileInfo>{};
+    }
+    boost::asio::awaitable<std::expected<std::string, harness::FileError>> canonicalPath(
+        std::string path) override {
+        co_return path;
+    }
+    boost::asio::awaitable<std::expected<bool, harness::FileError>> exists(
+        std::string) override {
+        co_return true;
+    }
+    boost::asio::awaitable<std::expected<void, harness::FileError>> createDir(
+        std::string, bool) override {
+        co_return std::expected<void, harness::FileError>{};
+    }
+    boost::asio::awaitable<std::expected<void, harness::FileError>> remove(
+        std::string, bool) override {
+        co_return std::expected<void, harness::FileError>{};
+    }
+    boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempDir(
+        std::optional<std::string>) override {
+        co_return std::string{};
+    }
+    boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempFile(
+        std::optional<std::string>, std::optional<std::string>) override {
+        co_return std::string{};
     }
 
-    boost::asio::awaitable<util::Expected<harness::AsyncShellResult>> run_shell(
+    boost::asio::awaitable<std::expected<harness::ShellExecResult, harness::ExecutionError>> exec(
         std::string command,
-        std::chrono::milliseconds timeout) override {
+        harness::ExecOptions options) override {
         last_command = std::move(command);
-        last_timeout = timeout;
-        co_return harness::AsyncShellResult{0, "ok", false};
+        last_timeout = options.timeout.value_or(std::chrono::milliseconds{0});
+        co_return harness::ShellExecResult{.stdout_output = "ok", .stderr_output = "", .exitCode = 0};
     }
 
     std::string last_command;
@@ -147,9 +187,9 @@ TEST_CASE("async edit_file tool supports edits[] array with multiple replacement
     REQUIRE(result);
     CHECK_FALSE(result->is_error);
     CHECK(ai::text_from_content(result->content).find("replaced 2 block") != std::string::npos);
-    // Note: read_file strips trailing newline (std::getline behavior),
-    // so write_file writes content without trailing newline.
-    CHECK(workspace.read("note.txt") == "hi world\nfoo bar\nzip qux");
+    // The edit tool reads and writes the exact file content, so the
+    // trailing newline is preserved.
+    CHECK(workspace.read("note.txt") == "hi world\nfoo bar\nzip qux\n");
 }
 
 TEST_CASE("async edit_file tool rejects empty edits array", "[tools][async]") {

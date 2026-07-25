@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../agent/AgentTool.hpp"
-#include "../harness/ExecutionEnv.hpp"
+#include <cch/agent/AgentTool.hpp>
+#include <cch/harness/ExecutionEnv.hpp>
 
 #include <memory>
 

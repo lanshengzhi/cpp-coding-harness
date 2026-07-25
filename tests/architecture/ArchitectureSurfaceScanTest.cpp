@@ -461,4 +461,50 @@ TEST_CASE("active source tree does not retain legacy sync contracts", "[architec
     }
 }
 
+TEST_CASE(
+    "execution environment contract has no tool-shaped or not-supported surface",
+    "[architecture][harness][issue69]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto env_header = read_text(source_root / "include" / "cch" / "harness" / "ExecutionEnv.hpp");
+    const auto local_header = read_text(source_root / "include" / "cch" / "harness" / "LocalExecutionEnv.hpp");
+    const auto public_contract = env_header + local_header;
+
+    // Build the needles dynamically so this test file does not match itself.
+    const auto bash_query = std::string{"bash_"} + "enabled()";
+    const auto legacy_shell_method = std::string{"run_"} + "shell";
+    const std::vector<std::string> removed_types{
+        std::string{"AsyncFile"} + "ReadResult",
+        std::string{"AsyncFile"} + "WriteResult",
+        std::string{"AsyncFile"} + "EditResult",
+        std::string{"AsyncShell"} + "Result",
+    };
+
+    // The public contract dropped the tool-shaped methods, the bash
+    // availability query, and every default NotSupported body (ADR 0006).
+    CHECK(public_contract.find(bash_query) == std::string::npos);
+    CHECK(public_contract.find("read_file(") == std::string::npos);
+    CHECK(public_contract.find("write_file(") == std::string::npos);
+    CHECK(public_contract.find("edit_file(") == std::string::npos);
+    CHECK(public_contract.find(" not supported") == std::string::npos);
+    CHECK(public_contract.find("co_return std::unexpected") == std::string::npos);
+    for (const auto& removed : removed_types) {
+        CHECK(public_contract.find(removed) == std::string::npos);
+    }
+
+    // The removed surface stays gone across the active source tree.
+    const auto files = files_under({"include", "src", "tests"});
+    REQUIRE_FALSE(files.empty());
+    for (const auto& file : files) {
+        if (file.filename() == "ArchitectureSurfaceScanTest.cpp") {
+            continue;
+        }
+        const auto text = read_text(file);
+        CHECK(text.find(bash_query) == std::string::npos);
+        CHECK(text.find(legacy_shell_method) == std::string::npos);
+        for (const auto& removed : removed_types) {
+            CHECK(text.find(removed) == std::string::npos);
+        }
+    }
+}
+
 

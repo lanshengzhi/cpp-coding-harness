@@ -2,7 +2,7 @@
 
 #include "../support/TempWorkspace.hpp"
 
-#include "cch/coding_agent/AuthLoader.hpp"
+#include <cch/coding_agent/AuthLoader.hpp>
 
 #include <filesystem>
 #include <fstream>
