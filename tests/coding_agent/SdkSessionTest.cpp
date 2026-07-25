@@ -553,6 +553,16 @@ TEST_CASE("SDK prompt contract exposes success-or-error and separate state", "[s
     static_assert(!std::is_constructible_v<coding_agent::PromptOptions, agent::AgentEventSink>);
 }
 
+TEST_CASE("SDK session options default to no turn cap", "[sdk][u1][issue68]") {
+    const coding_agent::CreateAgentSessionOptions opts;
+    CHECK_FALSE(opts.max_turns.has_value());
+
+    coding_agent::CreateAgentSessionOptions capped;
+    capped.max_turns = 10;
+    REQUIRE(capped.max_turns.has_value());
+    CHECK(*capped.max_turns == 10);
+}
+
 TEST_CASE("AgentSession is move-only", "[sdk][u1]") {
     static_assert(std::is_move_constructible_v<coding_agent::AgentSession>);
     static_assert(!std::is_copy_constructible_v<coding_agent::AgentSession>);

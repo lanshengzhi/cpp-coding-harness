@@ -170,8 +170,10 @@ struct CreateAgentSessionOptions {
     std::optional<std::filesystem::path> trust_store_path;
 
     // ── Reserved ─────────────────────────────────────────────────────────
-    /// Max agent turns per prompt (passed through to AsyncAgentOptions).
-    int max_turns{30};
+    /// Optional explicit turn cap per prompt (passed through to
+    /// AsyncAgentOptions). std::nullopt (the default) imposes no turn cap
+    /// (ADR 0015).
+    std::optional<int> max_turns;
 };
 
 // ── CreateAgentSessionResult ─────────────────────────────────────────────────

@@ -21,7 +21,9 @@
 namespace cch::coding_agent::runtime {
 
 struct AgentSessionRuntimeConfig {
-    int max_turns{30};
+    /// Explicit turn cap forwarded to the Agent; std::nullopt imposes no cap
+    /// (ADR 0015).
+    std::optional<int> max_turns;
     std::string model;
 };
 

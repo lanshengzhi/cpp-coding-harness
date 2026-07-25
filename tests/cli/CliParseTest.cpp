@@ -59,6 +59,21 @@ TEST_CASE("parse_args records explicit provider overrides", "[cli][parse]") {
     CHECK(*parsed->provider_overrides.api_key_env == "DEMO_KEY");
 }
 
+TEST_CASE("parse_args defaults to no turn cap and records an explicit --max-turns", "[cli][parse][issue68]") {
+    std::vector<std::string> args{"cpp-harness", "--fake", "hello"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    CHECK_FALSE(parsed->max_turns.has_value());
+
+    std::vector<std::string> capped_args{"cpp-harness", "--fake", "--max-turns", "12", "hello"};
+    auto capped_argv = argv_from_strings(capped_args);
+    auto capped_parsed = cch::cli::parse_args(static_cast<int>(capped_argv.size()), capped_argv.data());
+    REQUIRE(capped_parsed);
+    REQUIRE(capped_parsed->max_turns.has_value());
+    CHECK(*capped_parsed->max_turns == 12);
+}
+
 TEST_CASE("parse_args rejects json mode with repl", "[cli][parse]") {
     std::vector<std::string> args{"cpp-harness", "--fake", "--mode", "json", "--repl"};
     auto argv = argv_from_strings(args);

@@ -902,7 +902,27 @@ TEST_CASE("async agent loop turns malformed tool arguments into error tool resul
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
 }
 
-TEST_CASE("async agent loop reports max turn exhaustion", "[agent][async][u5]") {
+TEST_CASE("async agent loop default options impose no turn cap", "[agent][async][u5][issue68]") {
+    FakeStreamingClient client;
+    for (int turn = 0; turn < 9; ++turn) {
+        client.responses.push_back(tool_call_response());
+    }
+    client.responses.push_back(ai::assistant_text_message("done"));
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
+    agent::AsyncAgentOptions options;
+    options.model = "gpt-test";
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+
+    auto run = run_loop(loop, "read");
+
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 10);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
+    CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+}
+
+TEST_CASE("async agent loop enforces an explicit host-set turn cap", "[agent][async][u5][issue68]") {
     FakeStreamingClient client;
     client.responses.push_back(tool_call_response());
     agent::AsyncToolRegistry registry;
@@ -912,7 +932,280 @@ TEST_CASE("async agent loop reports max turn exhaustion", "[agent][async][u5]") 
     auto run = run_loop(loop, "read");
 
     REQUIRE_FALSE(run.result);
+    CHECK(run.result.error().code == util::ErrorCode::Validation);
     CHECK(run.result.error().message == "max turns exceeded");
+    CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+}
+
+TEST_CASE("agent queue bounds are documented configuration fields", "[agent][async][issue68]") {
+    const agent::AsyncAgentOptions options;
+    CHECK(options.max_queued_messages == 256);
+    CHECK(options.max_queued_bytes == 16 * 1024 * 1024);
+}
+
+TEST_CASE("steering admission enforces the configured message count bound", "[agent][async][issue68]") {
+    FakeStreamingClient client;
+    client.responses.push_back(ai::assistant_text_message("done"));
+    agent::AsyncToolRegistry registry;
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.max_queued_messages = 1;
+    bool steering_returned = false;
+    options.get_steering_messages = [&steering_returned]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        if (steering_returned) {
+            return std::vector<ai::MessageVariant>{};
+        }
+        steering_returned = true;
+        return std::vector<ai::MessageVariant>{
+            ai::user_text_message("one"),
+            ai::user_text_message("two")};
+    };
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+
+    auto run = run_loop(loop, "hi");
+
+    // The over-limit batch is rejected without aborting the prompt (ADR 0022):
+    // the run completes, no steering content is admitted, and the rejection is
+    // reported as a bounded diagnostic.
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 1);
+    CHECK(run.result->context.messages.size() == 2);
+    REQUIRE(client.requests.size() == 1);
+    REQUIRE(run.result->state.diagnostics.size() == 1);
+    CHECK(run.result->state.diagnostics[0].code == util::ErrorCode::Validation);
+    CHECK(run.result->state.diagnostics[0].message == "too many queued messages");
+    CHECK(run.result->state.diagnostics[0].detail == "steering/follow-up message count exceeds 1");
+    CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+}
+
+TEST_CASE("follow-up admission enforces the configured byte budget", "[agent][async][issue68]") {
+    FakeStreamingClient client;
+    client.responses.push_back(ai::assistant_text_message("done"));
+    agent::AsyncToolRegistry registry;
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.max_queued_bytes = 4;
+    options.get_follow_up_messages = []() -> util::Expected<std::vector<ai::MessageVariant>> {
+        return std::vector<ai::MessageVariant>{ai::user_text_message("more than four bytes")};
+    };
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+
+    auto run = run_loop(loop, "hi");
+
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 1);
+    CHECK(run.result->context.messages.size() == 2);
+    REQUIRE(run.result->state.diagnostics.size() == 1);
+    CHECK(run.result->state.diagnostics[0].code == util::ErrorCode::Validation);
+    CHECK(run.result->state.diagnostics[0].message == "queued messages too large");
+    CHECK(run.result->state.diagnostics[0].detail == "steering/follow-up message byte size exceeds 4");
+    CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+}
+
+TEST_CASE("raising the configured steering bound admits larger queues", "[agent][async][issue68]") {
+    FakeStreamingClient client;
+    client.responses.push_back(ai::assistant_text_message("done"));
+    agent::AsyncToolRegistry registry;
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.max_queued_messages = 300;
+    bool steering_returned = false;
+    options.get_steering_messages = [&steering_returned]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        if (steering_returned) {
+            return std::vector<ai::MessageVariant>{};
+        }
+        steering_returned = true;
+        std::vector<ai::MessageVariant> messages;
+        for (int index = 0; index < 257; ++index) {
+            messages.push_back(ai::user_text_message("steer"));
+        }
+        return messages;
+    };
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+
+    auto run = run_loop(loop, "hi");
+
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 1);
+    CHECK(run.result->context.messages.size() == 259);
+}
+
+TEST_CASE("steering admission accepts a queue at exactly the configured message count bound", "[agent][async][issue68]") {
+    FakeStreamingClient client;
+    client.responses.push_back(ai::assistant_text_message("done"));
+    agent::AsyncToolRegistry registry;
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.max_queued_messages = 2;
+    bool steering_returned = false;
+    options.get_steering_messages = [&steering_returned]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        if (steering_returned) {
+            return std::vector<ai::MessageVariant>{};
+        }
+        steering_returned = true;
+        return std::vector<ai::MessageVariant>{
+            ai::user_text_message("one"),
+            ai::user_text_message("two")};
+    };
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+
+    auto run = run_loop(loop, "hi");
+
+    REQUIRE(run.result);
+    CHECK(run.result->state.diagnostics.empty());
+    REQUIRE(run.result->context.messages.size() == 4);
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(run.result->context.messages[1]).content) == "one");
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(run.result->context.messages[2]).content) == "two");
+}
+
+TEST_CASE("steering admission accepts a queue at exactly the configured byte budget", "[agent][async][issue68]") {
+    FakeStreamingClient client;
+    client.responses.push_back(ai::assistant_text_message("done"));
+    agent::AsyncToolRegistry registry;
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    // "abc" (3 bytes) and "defg" (4 bytes) land exactly on the budget.
+    options.max_queued_bytes = 7;
+    bool steering_returned = false;
+    options.get_steering_messages = [&steering_returned]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        if (steering_returned) {
+            return std::vector<ai::MessageVariant>{};
+        }
+        steering_returned = true;
+        return std::vector<ai::MessageVariant>{
+            ai::user_text_message("abc"),
+            ai::user_text_message("defg")};
+    };
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+
+    auto run = run_loop(loop, "hi");
+
+    REQUIRE(run.result);
+    CHECK(run.result->state.diagnostics.empty());
+    CHECK(run.result->context.messages.size() == 4);
+}
+
+TEST_CASE("queue byte budget accounting measures bytes not characters", "[agent][async][issue68]") {
+    // Three é characters occupy six UTF-8 bytes; the budget measures bytes.
+    const std::string multibyte = "\xC3\xA9\xC3\xA9\xC3\xA9";
+    REQUIRE(multibyte.size() == 6);
+
+    FakeStreamingClient rejecting_client;
+    rejecting_client.responses.push_back(ai::assistant_text_message("done"));
+    agent::AsyncToolRegistry rejecting_registry;
+    agent::AsyncAgentOptions rejecting_options{4, "gpt-test"};
+    rejecting_options.max_queued_bytes = 5;
+    bool rejecting_returned = false;
+    rejecting_options.get_steering_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        if (rejecting_returned) {
+            return std::vector<ai::MessageVariant>{};
+        }
+        rejecting_returned = true;
+        return std::vector<ai::MessageVariant>{ai::user_text_message(multibyte)};
+    };
+    agent::AsyncAgentLoop rejecting_loop(rejecting_client, std::move(rejecting_registry), std::move(rejecting_options));
+
+    auto rejected = run_loop(rejecting_loop, "hi");
+
+    // Three characters fit within 5, but six bytes do not: rejected on bytes.
+    REQUIRE(rejected.result);
+    CHECK(rejected.result->context.messages.size() == 2);
+    REQUIRE(rejected.result->state.diagnostics.size() == 1);
+    CHECK(rejected.result->state.diagnostics[0].message == "queued messages too large");
+
+    FakeStreamingClient admitting_client;
+    admitting_client.responses.push_back(ai::assistant_text_message("done"));
+    agent::AsyncToolRegistry admitting_registry;
+    agent::AsyncAgentOptions admitting_options{4, "gpt-test"};
+    admitting_options.max_queued_bytes = 6;
+    bool admitting_returned = false;
+    admitting_options.get_steering_messages = [&]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        if (admitting_returned) {
+            return std::vector<ai::MessageVariant>{};
+        }
+        admitting_returned = true;
+        return std::vector<ai::MessageVariant>{ai::user_text_message(multibyte)};
+    };
+    agent::AsyncAgentLoop admitting_loop(admitting_client, std::move(admitting_registry), std::move(admitting_options));
+
+    auto admitted = run_loop(admitting_loop, "hi");
+
+    REQUIRE(admitted.result);
+    CHECK(admitted.result->state.diagnostics.empty());
+    REQUIRE(admitted.result->context.messages.size() == 3);
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(admitted.result->context.messages[1]).content) == multibyte);
+}
+
+TEST_CASE("repeated over-limit steering admissions each report the same rejection", "[agent][async][issue68]") {
+    FakeStreamingClient client;
+    client.responses.push_back(tool_call_response());
+    client.responses.push_back(ai::assistant_text_message("done"));
+    auto tool = std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()});
+    auto* tool_ptr = tool.get();
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::move(tool)));
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.max_queued_messages = 1;
+    int steering_calls = 0;
+    options.get_steering_messages = [&steering_calls]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        ++steering_calls;
+        return std::vector<ai::MessageVariant>{
+            ai::user_text_message("one"),
+            ai::user_text_message("two")};
+    };
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+
+    auto run = run_loop(loop, "hi");
+
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 2);
+    CHECK(steering_calls == 3);
+    REQUIRE(tool_ptr->invocations.size() == 1);
+    CHECK(run.result->context.messages.size() == 4);
+    REQUIRE(run.result->state.diagnostics.size() == 3);
+    for (const auto& diagnostic : run.result->state.diagnostics) {
+        CHECK(diagnostic.code == util::ErrorCode::Validation);
+        CHECK(diagnostic.message == "too many queued messages");
+        CHECK(diagnostic.detail == "steering/follow-up message count exceeds 1");
+    }
+    CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+}
+
+TEST_CASE("rejected steering admission does not stop the run or modify queued messages", "[agent][async][issue68]") {
+    FakeStreamingClient client;
+    client.responses.push_back(tool_call_response());
+    client.responses.push_back(ai::assistant_text_message("done"));
+    auto tool = std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()});
+    auto* tool_ptr = tool.get();
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::move(tool)));
+    agent::AsyncAgentOptions options{4, "gpt-test"};
+    options.max_queued_messages = 1;
+    int steering_calls = 0;
+    options.get_steering_messages = [&steering_calls]() -> util::Expected<std::vector<ai::MessageVariant>> {
+        ++steering_calls;
+        if (steering_calls == 1) {
+            return std::vector<ai::MessageVariant>{ai::user_text_message("keep me")};
+        }
+        return std::vector<ai::MessageVariant>{
+            ai::user_text_message("drop-a"),
+            ai::user_text_message("drop-b")};
+    };
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+
+    auto run = run_loop(loop, "hi");
+
+    // The in-flight prompt completes normally; the admitted "keep me" survives
+    // unmodified and no rejected content enters the context (ADR 0022).
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 2);
+    CHECK(steering_calls == 3);
+    REQUIRE(tool_ptr->invocations.size() == 1);
+    REQUIRE(run.result->context.messages.size() == 5);
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(run.result->context.messages[1]).content) == "keep me");
+    for (const auto& message : run.result->context.messages) {
+        if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
+            CHECK_FALSE(ai::text_from_content(user->content).starts_with("drop"));
+        }
+    }
+    REQUIRE(run.result->state.diagnostics.size() == 2);
+    CHECK(run.result->state.diagnostics[0].message == "too many queued messages");
+    CHECK(run.result->state.diagnostics[1].message == "too many queued messages");
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }
 

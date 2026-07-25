@@ -76,7 +76,6 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     std::string session_text;
     std::string resume_text;
     std::string session_dir_text;
-    int max_turns_option = config.max_turns;
     std::vector<std::string> prompt_parts;
     bool approve_project = false;
     bool no_approve_project = false;
@@ -119,7 +118,7 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     auto* no_session_option = app.add_flag("--no-session", "Run the session in memory without persisting a transcript");
     auto* session_dir_option = app.add_option("--session-dir", session_dir_text,
         "Directory for automatic session storage (overrides CCH_CODING_AGENT_SESSION_DIR and settings.json sessionDir)");
-    app.add_option("--max-turns", max_turns_option, "Maximum model turns per prompt")
+    app.add_option("--max-turns", config.max_turns, "Maximum model turns per prompt (default: no cap)")
         ->check(CLI::Range(1, 64));
     auto* model_option = app.add_option("--model", model_text, "Provider model name")->default_str("gpt-4.1-mini");
     auto* base_url_option = app.add_option("--base-url", base_url_text, "OpenAI-compatible base URL")
@@ -165,9 +164,6 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     }
     if (session_dir_option->count() > 0) {
         config.session_dir = session_dir_text;
-    }
-    if (app.count("--max-turns") > 0) {
-        config.max_turns = max_turns_option;
     }
     if (model_option->count() > 0) {
         config.provider_overrides.model = model_text;

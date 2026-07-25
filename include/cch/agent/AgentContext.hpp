@@ -69,7 +69,18 @@ using ToolExecutionPolicy = std::variant<
     BoundedParallelToolExecution>;
 
 struct AsyncAgentOptions {
-    int max_turns{8};
+    /// Maximum model turns for one run. std::nullopt (the default) imposes no
+    /// turn cap: a run stops through pi-aligned terminal conditions, the
+    /// stop-after-turn policy, termination decisions, or cancellation
+    /// (ADR 0015). An explicitly set cap ends the run with a validation error
+    /// once the budget is exhausted; exhaustion is never reported as a
+    /// provider error.
+    std::optional<int> max_turns;
+    /// Admission bounds applied to each steering/follow-up queue validation
+    /// pass (ADR 0022). Defaults: 256 messages and 16 MiB of approximate
+    /// message content.
+    std::size_t max_queued_messages{256};
+    std::size_t max_queued_bytes{16 * 1024 * 1024};
     std::string model;
     std::string thinking_level;
     std::optional<BeforeToolCallHook> before_tool_call;
@@ -101,7 +112,9 @@ struct AgentState {
     std::vector<std::string> pending_tool_call_ids;
     std::string model;
     std::string thinking_level;
-    // Bounded, redacted observations from weak-subscriber failures.
+    // Bounded observations reported without vetoing run progress: redacted
+    // weak-subscriber failures and rejected steering/follow-up queue
+    // admissions (ADR 0022).
     std::vector<util::Error> diagnostics;
 };
 

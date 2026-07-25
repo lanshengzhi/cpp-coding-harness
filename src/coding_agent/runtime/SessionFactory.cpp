@@ -89,7 +89,9 @@ struct AssemblyPlan {
     bool prompt_templates_enabled{true};
     std::optional<std::filesystem::path> trust_store_path;
     std::optional<bool> project_trust_override;
-    int max_turns{30};
+    /// Explicit turn cap carried into the runtime config; std::nullopt (the
+    /// default) imposes no cap (ADR 0015).
+    std::optional<int> max_turns;
 };
 
 [[nodiscard]] SdkDiagnostic make_diag(SdkDiagnostic::Severity severity,

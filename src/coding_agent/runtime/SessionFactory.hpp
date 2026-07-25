@@ -24,7 +24,9 @@ struct AgentSessionCreationRequest {
     bool disable_prompt_templates{false};
     std::vector<std::string> prompt_template_paths;
     bool workspace_explicit{false};
-    int max_turns{30};
+    /// Explicit turn cap for the assembled session; std::nullopt (the default)
+    /// imposes no cap (ADR 0015).
+    std::optional<int> max_turns;
     std::filesystem::path workspace;
     /// Normalized CLI session intent. Default construction selects
     /// workspace-keyed default persisted creation; explicit create and resume

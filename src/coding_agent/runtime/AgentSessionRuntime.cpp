@@ -50,7 +50,7 @@ AgentSessionRuntime::AgentSessionRuntime(
     // Build the <available_skills> block once from the same immutable snapshot
     // used for explicit /skill:name invocation.
     agent::AsyncAgentOptions options;
-    options.max_turns = config_.max_turns > 0 ? config_.max_turns : 30;
+    options.max_turns = config_.max_turns;
     options.model = std::move(config_.model);
 
     std::string skills_block = formatSkillsForPrompt(prompt_processor_.skills());

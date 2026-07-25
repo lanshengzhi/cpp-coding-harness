@@ -31,7 +31,9 @@ struct CliConfig {
     std::vector<std::string> prompt_template_paths;
     OutputMode output_mode{OutputMode::Text};
     bool workspace_explicit{false};
-    int max_turns{8};
+    /// Explicit turn cap forwarded to session creation; std::nullopt (the
+    /// default) imposes no cap (ADR 0015). Set only by --max-turns.
+    std::optional<int> max_turns;
     /// Default workspace, resolved non-throwingly by parse_args from the
     /// current working directory; an unreadable cwd becomes a parse diagnostic.
     std::filesystem::path workspace;

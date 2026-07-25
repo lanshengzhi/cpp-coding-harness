@@ -112,11 +112,21 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
         message);
 }
 
-[[nodiscard]] util::ExpectedVoid validate_queued_messages(
-    const std::vector<ai::MessageVariant>& messages) {
-    constexpr std::size_t max_queued_messages = 256;
-    constexpr std::size_t max_queued_bytes = 16 * 1024 * 1024;
+// A rejected steering/follow-up admission never aborts the active run and
+// never modifies already-queued messages (ADR 0022): the batch is not
+// admitted and the rejection is reported as a bounded diagnostic instead.
+void record_queue_rejection(AgentState& state, util::Error error) {
+    constexpr std::size_t kMaxQueueRejectionDiagnostics = 16;
+    if (state.diagnostics.size() == kMaxQueueRejectionDiagnostics) {
+        state.diagnostics.erase(state.diagnostics.begin());
+    }
+    state.diagnostics.push_back(std::move(error));
+}
 
+[[nodiscard]] util::ExpectedVoid validate_queued_messages(
+    const std::vector<ai::MessageVariant>& messages,
+    std::size_t max_queued_messages,
+    std::size_t max_queued_bytes) {
     if (messages.size() > max_queued_messages) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
@@ -311,7 +321,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
 
     std::vector<ai::MessageVariant> pending_messages;
 
-    for (int turn = 1; turn <= options_.max_turns; ++turn) {
+    for (int turn = 1; !options_.max_turns || turn <= *options_.max_turns; ++turn) {
         CCH_TRY_VOID(emit(sink, TurnStartEvent{}));
 
         if (turn == 1) {
@@ -325,11 +335,13 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                 CCH_TRY_VOID(emit_agent_end());
                 co_return std::unexpected(steering.error());
             }
-            if (auto validated = validate_queued_messages(*steering); !validated) {
-                CCH_TRY_VOID(emit_agent_end());
-                co_return std::unexpected(validated.error());
+            if (auto validated = validate_queued_messages(
+                    *steering, options_.max_queued_messages, options_.max_queued_bytes);
+                !validated) {
+                record_queue_rejection(state, validated.error());
+            } else {
+                pending_messages = std::move(*steering);
             }
-            pending_messages = std::move(*steering);
         }
 
         if (!pending_messages.empty()) {
@@ -611,11 +623,13 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                 CCH_TRY_VOID(emit_agent_end());
                 co_return std::unexpected(steering.error());
             }
-            if (auto validated = validate_queued_messages(*steering); !validated) {
-                CCH_TRY_VOID(emit_agent_end());
-                co_return std::unexpected(validated.error());
+            if (auto validated = validate_queued_messages(
+                    *steering, options_.max_queued_messages, options_.max_queued_bytes);
+                !validated) {
+                record_queue_rejection(state, validated.error());
+            } else {
+                pending_messages = std::move(*steering);
             }
-            pending_messages = std::move(*steering);
         }
 
         if (!has_more_tool_calls && pending_messages.empty() && options_.get_follow_up_messages) {
@@ -624,11 +638,13 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                 CCH_TRY_VOID(emit_agent_end());
                 co_return std::unexpected(follow_up.error());
             }
-            if (auto validated = validate_queued_messages(*follow_up); !validated) {
-                CCH_TRY_VOID(emit_agent_end());
-                co_return std::unexpected(validated.error());
+            if (auto validated = validate_queued_messages(
+                    *follow_up, options_.max_queued_messages, options_.max_queued_bytes);
+                !validated) {
+                record_queue_rejection(state, validated.error());
+            } else {
+                pending_messages = std::move(*follow_up);
             }
-            pending_messages = std::move(*follow_up);
         }
 
         if (!has_more_tool_calls && pending_messages.empty()) {
@@ -639,10 +655,14 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         }
     }
 
+    // Reachable only when an explicit host-set turn cap is configured: the
+    // uncapped default never exhausts the loop (ADR 0015). Exhaustion of the
+    // host's own configured budget is a validation-classified outcome, never
+    // a provider error.
     auto error = util::make_error(
-        util::ErrorCode::Provider,
+        util::ErrorCode::Validation,
         "max turns exceeded",
-        "agent reached max_turns before a final assistant response");
+        "agent reached the configured max_turns before a final assistant response");
     CCH_TRY_VOID(emit_agent_end());
     co_return std::unexpected(error);
 }
