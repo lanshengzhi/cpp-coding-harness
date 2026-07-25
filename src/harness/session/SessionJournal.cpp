@@ -32,7 +32,7 @@ namespace {
 }
 
 #if defined(__unix__) || defined(__APPLE__)
-[[nodiscard]] util::Expected<int> open_parent_directory(
+[[nodiscard]] util::Expected<UniqueFd> open_parent_directory(
     const std::filesystem::path& path,
     bool create_missing) {
     int open_flags = O_RDONLY | O_DIRECTORY;
@@ -47,8 +47,8 @@ namespace {
         ? std::filesystem::path{"."}
         : path.parent_path();
     const auto start = parent.is_absolute() ? parent.root_path() : std::filesystem::path{"."};
-    int current = ::open(start.c_str(), open_flags);
-    if (current == -1) {
+    UniqueFd current(::open(start.c_str(), open_flags));
+    if (!current) {
         return std::unexpected(session_error(
             "could not open session directory root", std::strerror(errno)));
     }
@@ -59,33 +59,29 @@ namespace {
             continue;
         }
         if (component == "..") {
-            ::close(current);
             return std::unexpected(session_error(
                 "session parent path contains parent traversal",
                 "refusing to open a session through '..'"));
         }
         if (create_missing &&
-            ::mkdirat(current, component.c_str(), S_IRWXU | S_IRWXG | S_IRWXO) != 0 &&
+            ::mkdirat(current.get(), component.c_str(), S_IRWXU | S_IRWXG | S_IRWXO) != 0 &&
             errno != EEXIST) {
             const auto reason = std::string{std::strerror(errno)};
-            ::close(current);
             return std::unexpected(session_error("could not create session directory", reason));
         }
-        const int next = ::openat(current, component.c_str(), open_flags);
-        if (next == -1) {
+        UniqueFd next(::openat(current.get(), component.c_str(), open_flags));
+        if (!next) {
             const auto reason = std::string{std::strerror(errno)};
-            ::close(current);
             return std::unexpected(session_error(
                 "session parent path contains a symlink or non-directory",
                 component.string() + ": " + reason));
         }
-        ::close(current);
-        current = next;
+        current = std::move(next);
     }
     return current;
 }
 
-[[nodiscard]] util::Expected<int> open_session_path(
+[[nodiscard]] util::Expected<UniqueFd> open_session_path(
     const std::filesystem::path& path,
     int flags,
     int mode = 0,
@@ -102,11 +98,9 @@ namespace {
 #ifdef O_NOFOLLOW
     final_flags |= O_NOFOLLOW;
 #endif
-    const int descriptor = ::openat(*parent, path.filename().c_str(), final_flags, mode);
-    const auto open_errno = errno;
-    ::close(*parent);
-    if (descriptor == -1) {
-        return std::unexpected(session_error("could not open session file", std::strerror(open_errno)));
+    UniqueFd descriptor(::openat(parent->get(), path.filename().c_str(), final_flags, mode));
+    if (!descriptor) {
+        return std::unexpected(session_error("could not open session file", std::strerror(errno)));
     }
     return descriptor;
 }
@@ -116,8 +110,7 @@ void remove_session_file(const std::filesystem::path& path) {
     if (!parent) {
         return;
     }
-    ::unlinkat(*parent, path.filename().c_str(), 0);
-    ::close(*parent);
+    ::unlinkat(parent->get(), path.filename().c_str(), 0);
 }
 
 [[nodiscard]] util::Expected<std::string> read_file_contents(int fd) {
@@ -363,13 +356,11 @@ util::ExpectedVoid SessionJournal::append_line(std::string_view line) const {
             "could not append to session file",
             opened.error().message + ": " + opened.error().detail));
     }
-    const int fd = *opened;
-    UniqueFd fd_guard(fd);
 
     const char* data = line.data();
     std::size_t remaining = line.size();
     while (remaining > 0) {
-        ssize_t written = ::write(fd, data, remaining);
+        ssize_t written = ::write(opened->get(), data, remaining);
         if (written < 0) {
             const auto message = std::string(std::strerror(errno));
             return std::unexpected(session_error("could not write session entry", message));
@@ -378,14 +369,13 @@ util::ExpectedVoid SessionJournal::append_line(std::string_view line) const {
         remaining -= static_cast<std::size_t>(written);
     }
 
-    if (::fsync(fd) != 0) {
+    if (::fsync(opened->get()) != 0) {
         const auto message = std::string(std::strerror(errno));
         return std::unexpected(session_error("could not persist session entry", message));
     }
-    if (::close(fd) != 0) {
+    if (opened->close() != 0) {
         return std::unexpected(session_error("could not close session file", std::strerror(errno)));
     }
-    fd_guard.release();
     return {};
 #elif defined(_WIN32)
     auto opened = open_windows_session_file(path_, FILE_APPEND_DATA, OPEN_EXISTING);
@@ -445,10 +435,8 @@ util::Expected<std::vector<std::string>> SessionJournal::read_lines() const {
     if (!opened) {
         return std::unexpected(opened.error());
     }
-    const int fd = *opened;
-    const UniqueFd fd_guard(fd);
 
-    auto read_contents = read_file_contents(fd);
+    auto read_contents = read_file_contents(opened->get());
     if (!read_contents) {
         return std::unexpected(read_contents.error());
     }
@@ -534,10 +522,8 @@ util::ExpectedVoid SessionJournal::ensure_private_permissions(
             "could not open session file for permission check",
             opened.error().message + ": " + opened.error().detail));
     }
-    const int fd = *opened;
-    const UniqueFd fd_guard(fd);
 
-    if (auto perms = set_fd_private_permissions(fd); !perms) {
+    if (auto perms = set_fd_private_permissions(opened->get()); !perms) {
         if (!existing) {
             auto detail = perms.error().detail.empty()
                 ? "could not set owner-only session permissions"
@@ -575,28 +561,25 @@ util::ExpectedVoid SessionJournal::write_new_file_exclusive(
             "could not create session file",
             opened.error().message + ": " + opened.error().detail));
     }
-    const int fd = *opened;
 
     const char* data = content.data();
     std::size_t remaining = content.size();
     while (remaining > 0) {
-        ssize_t written = ::write(fd, data, remaining);
+        ssize_t written = ::write(opened->get(), data, remaining);
         if (written < 0) {
             const auto message = std::string(std::strerror(errno));
-            ::close(fd);
             remove_session_file(path);
             return std::unexpected(session_error("could not write session header", message));
         }
         data += written;
         remaining -= static_cast<std::size_t>(written);
     }
-    if (::fsync(fd) != 0) {
+    if (::fsync(opened->get()) != 0) {
         const auto message = std::string(std::strerror(errno));
-        ::close(fd);
         remove_session_file(path);
         return std::unexpected(session_error("could not flush session header", message));
     }
-    if (::close(fd) != 0) {
+    if (opened->close() != 0) {
         const auto message = std::string(std::strerror(errno));
         remove_session_file(path);
         return std::unexpected(session_error("could not close session file", message));

@@ -1,10 +1,17 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
 #include "cli/CliParse.hpp"
+#include "harness/UniqueFd.hpp"
 
+#include <filesystem>
 #include <string>
 #include <variant>
 #include <vector>
+
+#if defined(__unix__) || defined(__APPLE__)
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 namespace {
 
@@ -257,3 +264,27 @@ TEST_CASE("parse_args still requires prompt for json mode", "[cli][parse]") {
     REQUIRE_FALSE(parsed);
     CHECK(parsed.error().message.find("prompt is required") != std::string::npos);
 }
+
+#if defined(__unix__) || defined(__APPLE__)
+TEST_CASE("parse_args reports a diagnostic when the working directory is unavailable", "[cli][parse][issue67]") {
+    const cch::harness::UniqueFd saved_cwd(::open(".", O_RDONLY | O_DIRECTORY));
+    REQUIRE(saved_cwd);
+
+    auto dir_template = (std::filesystem::temp_directory_path() / "cch-cli-deleted-cwd-XXXXXX").string();
+    std::vector<char> dir_buffer(dir_template.begin(), dir_template.end());
+    dir_buffer.push_back('\0');
+    const char* deleted_dir = ::mkdtemp(dir_buffer.data());
+    REQUIRE(deleted_dir != nullptr);
+    REQUIRE(::chdir(deleted_dir) == 0);
+    REQUIRE(::rmdir(deleted_dir) == 0);
+
+    std::vector<std::string> args{"cpp-harness", "--fake", "hello"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+
+    REQUIRE(::fchdir(saved_cwd.get()) == 0);
+
+    REQUIRE_FALSE(parsed);
+    CHECK(parsed.error().message.find("working directory") != std::string::npos);
+}
+#endif

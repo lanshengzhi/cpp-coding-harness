@@ -36,6 +36,18 @@ public:
         return fd;
     }
 
+    // Closes the held descriptor (if any) and reports close(2)'s result so
+    // callers can detect deferred write-back failures. Always releases
+    // ownership; the descriptor is never closed twice.
+    [[nodiscard]] int close() noexcept {
+        if (fd_ == -1) {
+            return 0;
+        }
+        const int fd = fd_;
+        fd_ = -1;
+        return ::close(fd);
+    }
+
     // Closes the held descriptor (if any) and adopts fd.
     void reset(int fd = -1) noexcept {
         if (fd_ != -1) {

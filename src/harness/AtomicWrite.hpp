@@ -66,50 +66,47 @@ inline util::ExpectedVoid write_atomic_file(const std::filesystem::path& target,
 #ifdef O_NOFOLLOW
     dir_flags |= O_NOFOLLOW;
 #endif
-    int dir_fd = ::open(parent.c_str(), dir_flags);
-    if (dir_fd == -1) {
+    const UniqueFd dir_fd(::open(parent.c_str(), dir_flags));
+    if (!dir_fd) {
         return std::unexpected(write_error("could not open target parent directory: " + std::string(std::strerror(errno))));
     }
-    const UniqueFd dir_guard(dir_fd);
 
     auto temp_filename = temp.filename().string();
     int flags = O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC;
 #ifdef O_NOFOLLOW
     flags |= O_NOFOLLOW;
 #endif
-    int fd = ::openat(dir_fd, temp_filename.c_str(), flags, mode);
-    if (fd == -1) {
+    UniqueFd file_fd(::openat(dir_fd.get(), temp_filename.c_str(), flags, mode));
+    if (!file_fd) {
         return std::unexpected(write_error("could not create temporary file: " + std::string(std::strerror(errno))));
     }
     const char* data = content.data();
     std::size_t remaining = content.size();
     while (remaining > 0) {
-        ssize_t written = ::write(fd, data, remaining);
+        ssize_t written = ::write(file_fd.get(), data, remaining);
         if (written < 0) {
             const auto message = std::string(std::strerror(errno));
-            ::close(fd);
-            ::unlinkat(dir_fd, temp_filename.c_str(), 0);
+            ::unlinkat(dir_fd.get(), temp_filename.c_str(), 0);
             return std::unexpected(write_error("could not write temporary file: " + message));
         }
         data += written;
         remaining -= static_cast<std::size_t>(written);
     }
-    if (::fsync(fd) != 0) {
+    if (::fsync(file_fd.get()) != 0) {
         const auto message = std::string(std::strerror(errno));
-        ::close(fd);
-        ::unlinkat(dir_fd, temp_filename.c_str(), 0);
+        ::unlinkat(dir_fd.get(), temp_filename.c_str(), 0);
         return std::unexpected(write_error("could not flush temporary file: " + message));
     }
-    if (::close(fd) != 0) {
+    if (file_fd.close() != 0) {
         const auto message = std::string(std::strerror(errno));
-        ::unlinkat(dir_fd, temp_filename.c_str(), 0);
+        ::unlinkat(dir_fd.get(), temp_filename.c_str(), 0);
         return std::unexpected(write_error("could not close temporary file: " + message));
     }
 
     auto target_filename = target.filename().string();
-    if (::renameat(dir_fd, temp_filename.c_str(), dir_fd, target_filename.c_str()) != 0) {
+    if (::renameat(dir_fd.get(), temp_filename.c_str(), dir_fd.get(), target_filename.c_str()) != 0) {
         const auto message = std::string(std::strerror(errno));
-        ::unlinkat(dir_fd, temp_filename.c_str(), 0);
+        ::unlinkat(dir_fd.get(), temp_filename.c_str(), 0);
         return std::unexpected(write_error("could not replace target atomically: " + message));
     }
 #else

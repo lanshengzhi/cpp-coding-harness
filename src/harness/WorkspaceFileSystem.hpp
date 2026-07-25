@@ -33,7 +33,7 @@ class WorkspaceFileSystem {
 public:
     WorkspaceFileSystem() = default;
     explicit WorkspaceFileSystem(std::filesystem::path workspace)
-        : root_(std::filesystem::weakly_canonical(std::move(workspace))) {}
+        : root_(canonicalized(std::move(workspace))) {}
 
     static util::Expected<WorkspaceFileSystem> create(const std::filesystem::path& workspace) {
         std::error_code ec;
@@ -79,31 +79,29 @@ public:
         }
 
 #if defined(__unix__) || defined(__APPLE__)
-        auto parent_fd = open_parent_directory(*target, false);
-        if (!parent_fd) {
-            return std::unexpected(parent_fd.error());
+        auto parent_guard = open_parent_directory(*target, false);
+        if (!parent_guard) {
+            return std::unexpected(parent_guard.error());
         }
-        UniqueFd parent_guard(*parent_fd);
 
         auto filename = target->filename().string();
-        int fd = ::openat(*parent_fd, filename.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
-        if (fd == -1) {
+        UniqueFd fd(::openat(parent_guard->get(), filename.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+        if (!fd) {
             if (errno == ELOOP) {
                 return std::unexpected(workspace_error("refusing to read through symlink: " + requested));
             }
             return std::unexpected(workspace_error("could not open file for reading: " + requested));
         }
-        UniqueFd fd_guard(fd);
 
         struct stat st {};
-        if (::fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+        if (::fstat(fd.get(), &st) != 0 || !S_ISREG(st.st_mode)) {
             return std::unexpected(workspace_error("path is not a regular file: " + requested));
         }
 
         std::string content;
         char buffer[4096];
         ssize_t n = 0;
-        while ((n = ::read(fd, buffer, sizeof(buffer))) > 0) {
+        while ((n = ::read(fd.get(), buffer, sizeof(buffer))) > 0) {
             content.append(buffer, static_cast<std::size_t>(n));
         }
         if (n < 0) {
@@ -146,7 +144,8 @@ public:
         if (parent.empty()) {
             parent = root_;
         }
-        if (!std::filesystem::exists(parent)) {
+        std::error_code ec;
+        if (!std::filesystem::exists(parent, ec)) {
             if (!create_parents) {
                 return std::unexpected(workspace_error("parent directory does not exist: " + requested));
             }
@@ -155,13 +154,14 @@ public:
                 return std::unexpected(created.error());
             }
         }
-        auto parent_fd = open_parent_directory(*target, create_parents);
-        if (!parent_fd) {
-            return std::unexpected(parent_fd.error());
+        auto parent_guard = open_parent_directory(*target, create_parents);
+        if (!parent_guard) {
+            return std::unexpected(parent_guard.error());
         }
-        UniqueFd parent_guard(*parent_fd);
-        (void)parent_guard;
-        auto target_status = std::filesystem::symlink_status(*target);
+        auto target_status = std::filesystem::symlink_status(*target, ec);
+        if (ec && target_status.type() != std::filesystem::file_type::not_found) {
+            return std::unexpected(workspace_error("could not inspect target: " + requested));
+        }
         if (std::filesystem::is_symlink(target_status)) {
             return std::unexpected(workspace_error("refusing to write through final symlink: " + requested));
         }
@@ -509,13 +509,19 @@ public:
         }
 
         // Reject workspace root removal.
-        auto canonical = std::filesystem::weakly_canonical(*resolved);
+        std::error_code ec;
+        auto canonical = std::filesystem::weakly_canonical(*resolved, ec);
+        if (ec) {
+            return std::unexpected(FileError{
+                .code = FileErrorCode::Invalid,
+                .message = "could not resolve path: " + path,
+                .path = std::string{path}});
+        }
         if (canonical == root_) {
             return std::unexpected(FileError{
                 FileErrorCode::Invalid, "cannot remove workspace root", std::string{path}});
         }
 
-        std::error_code ec;
         auto status = std::filesystem::symlink_status(*resolved, ec);
         if (ec) {
             return std::unexpected(FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
@@ -638,27 +644,27 @@ private:
     }
 
 #if defined(__unix__) || defined(__APPLE__)
-    [[nodiscard]] util::Expected<int> open_workspace_root() const {
-        int fd = ::open(root_.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
-        if (fd == -1) {
+    [[nodiscard]] util::Expected<UniqueFd> open_workspace_root() const {
+        UniqueFd fd(::open(root_.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+        if (!fd) {
             return std::unexpected(workspace_error("could not open workspace root: " + std::string(std::strerror(errno))));
         }
         return fd;
     }
 
-    [[nodiscard]] util::Expected<int> open_parent_directory(
+    [[nodiscard]] util::Expected<UniqueFd> open_parent_directory(
         const std::filesystem::path& target,
         bool create_missing) const {
-        auto root_fd = open_workspace_root();
-        if (!root_fd) {
-            return std::unexpected(root_fd.error());
+        auto root_guard = open_workspace_root();
+        if (!root_guard) {
+            return std::unexpected(root_guard.error());
         }
-        UniqueFd root_guard(*root_fd);
 
         auto parent = target.parent_path();
-        if (parent.empty() || std::filesystem::weakly_canonical(parent) == root_) {
-            int dup_fd = ::dup(*root_fd);
-            if (dup_fd == -1) {
+        std::error_code parent_ec;
+        if (parent.empty() || std::filesystem::weakly_canonical(parent, parent_ec) == root_) {
+            UniqueFd dup_fd(::dup(root_guard->get()));
+            if (!dup_fd) {
                 return std::unexpected(workspace_error("could not duplicate workspace fd: " + std::string(std::strerror(errno))));
             }
             return dup_fd;
@@ -666,14 +672,14 @@ private:
 
         auto rel = parent.lexically_normal().lexically_relative(root_);
         if (rel.empty() || rel == ".") {
-            int dup_fd = ::dup(*root_fd);
-            if (dup_fd == -1) {
+            UniqueFd dup_fd(::dup(root_guard->get()));
+            if (!dup_fd) {
                 return std::unexpected(workspace_error("could not duplicate workspace fd: " + std::string(std::strerror(errno))));
             }
             return dup_fd;
         }
 
-        UniqueFd current_guard(root_guard.release());
+        UniqueFd current_guard(root_guard->release());
         for (const auto& part : rel) {
             if (part == "." || part.empty()) {
                 continue;
@@ -681,24 +687,24 @@ private:
             if (part == "..") {
                 return std::unexpected(workspace_error("parent path escapes workspace"));
             }
-            int next_fd = ::openat(current_guard.get(), part.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
-            if (next_fd == -1) {
+            UniqueFd next_fd(::openat(current_guard.get(), part.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+            if (!next_fd) {
                 if (errno == ENOENT && create_missing) {
                     if (::mkdirat(current_guard.get(), part.c_str(), 0755) != 0) {
                         return std::unexpected(workspace_error("could not create parent directory: " + std::string(std::strerror(errno))));
                     }
-                    next_fd = ::openat(current_guard.get(), part.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
-                    if (next_fd == -1) {
+                    next_fd.reset(::openat(current_guard.get(), part.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+                    if (!next_fd) {
                         return std::unexpected(workspace_error("could not open created parent directory: " + std::string(std::strerror(errno))));
                     }
                 } else {
                     return std::unexpected(workspace_error("could not open parent directory: " + std::string(std::strerror(errno))));
                 }
             }
-            current_guard.reset(next_fd);
+            current_guard = std::move(next_fd);
         }
 
-        return current_guard.release();
+        return current_guard;
     }
 
     [[nodiscard]] util::Expected<void> create_parent_directories(const std::filesystem::path& target) const {
@@ -706,14 +712,17 @@ private:
         if (!parent_fd) {
             return std::unexpected(parent_fd.error());
         }
-        const UniqueFd guard(*parent_fd);
-        (void)guard;
         return {};
     }
 #endif
 
     [[nodiscard]] bool inside(const std::filesystem::path& path) const {
-        return inside_lexically(std::filesystem::weakly_canonical(path));
+        std::error_code ec;
+        auto canonical = std::filesystem::weakly_canonical(path, ec);
+        if (ec) {
+            return false;
+        }
+        return inside_lexically(canonical);
     }
 
     [[nodiscard]] bool inside_lexically(const std::filesystem::path& path) const {
@@ -800,7 +809,27 @@ private:
         return *target;
     }
 
-    std::filesystem::path root_{std::filesystem::current_path()};
+    // Non-throwing canonicalization: on failure the addressed path is kept
+    // so later operations surface their own Expected diagnostics.
+    [[nodiscard]] static std::filesystem::path canonicalized(std::filesystem::path workspace) {
+        std::error_code ec;
+        auto canonical = std::filesystem::weakly_canonical(workspace, ec);
+        if (ec) {
+            return workspace;
+        }
+        return canonical;
+    }
+
+    [[nodiscard]] static std::filesystem::path default_root() {
+        std::error_code ec;
+        auto cwd = std::filesystem::current_path(ec);
+        if (ec) {
+            return std::filesystem::path{"."};
+        }
+        return cwd;
+    }
+
+    std::filesystem::path root_{default_root()};
 };
 
 } // namespace cch::harness

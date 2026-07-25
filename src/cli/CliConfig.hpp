@@ -32,7 +32,9 @@ struct CliConfig {
     OutputMode output_mode{OutputMode::Text};
     bool workspace_explicit{false};
     int max_turns{8};
-    std::filesystem::path workspace{std::filesystem::current_path()};
+    /// Default workspace, resolved non-throwingly by parse_args from the
+    /// current working directory; an unreadable cwd becomes a parse diagnostic.
+    std::filesystem::path workspace;
     /// Normalized session intent: default persisted creation when no explicit
     /// target flag (--session/--resume/--no-session) was supplied.
     coding_agent::SessionTarget session_target{};

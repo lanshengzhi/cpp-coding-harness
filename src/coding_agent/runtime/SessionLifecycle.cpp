@@ -3,6 +3,7 @@
 #include "../../../include/cch/coding_agent/AgentConfigDir.hpp"
 #include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
 #include "../SessionPathPolicy.hpp"
+#include "harness/UniqueFd.hpp"
 #include "harness/session/InMemorySessionStore.hpp"
 
 #include <cerrno>
@@ -112,8 +113,8 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
 #endif
 
     const auto start = path.is_absolute() ? path.root_path() : std::filesystem::path{"."};
-    int current = ::open(start.c_str(), open_flags);
-    if (current == -1) {
+    harness::UniqueFd current(::open(start.c_str(), open_flags));
+    if (!current) {
         return std::unexpected(session_error(
             "could not open session directory root",
             start.string() + ": " + std::strerror(errno)));
@@ -128,7 +129,6 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
             continue;
         }
         if (*component == "..") {
-            ::close(current);
             return std::unexpected(session_error(
                 "session directory contains parent traversal",
                 "refusing to create a session directory through '..'"));
@@ -137,10 +137,9 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
         const auto next_component = std::next(component);
         const bool final_component = next_component == relative.end();
         const mode_t create_mode = final_component ? S_IRWXU : (S_IRWXU | S_IRWXG | S_IRWXO);
-        if (::mkdirat(current, component->c_str(), create_mode) != 0) {
+        if (::mkdirat(current.get(), component->c_str(), create_mode) != 0) {
             if (errno != EEXIST) {
                 const auto reason = std::string{std::strerror(errno)};
-                ::close(current);
                 return std::unexpected(session_error(
                     "could not create session directory",
                     path.string() + ": " + reason));
@@ -149,29 +148,26 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
             final_created = true;
         }
 
-        const int next = ::openat(current, component->c_str(), open_flags);
-        if (next == -1) {
+        harness::UniqueFd next(::openat(current.get(), component->c_str(), open_flags));
+        if (!next) {
             const auto reason = std::string{std::strerror(errno)};
-            ::close(current);
             return std::unexpected(session_error(
                 "session directory path contains a symlink or non-directory",
                 component->string() + ": " + reason));
         }
-        ::close(current);
-        current = next;
+        current = std::move(next);
         component = next_component;
     }
 
     if (tighten_existing || final_created) {
-        if (::fchmod(current, S_IRWXU) != 0) {
+        if (::fchmod(current.get(), S_IRWXU) != 0) {
             const auto reason = std::string{std::strerror(errno)};
-            ::close(current);
             return std::unexpected(session_error(
                 "could not make session directory private",
                 path.string() + ": " + reason));
         }
     }
-    if (::close(current) != 0) {
+    if (current.close() != 0) {
         return std::unexpected(session_error(
             "could not close session directory",
             path.string() + ": " + std::strerror(errno)));

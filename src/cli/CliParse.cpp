@@ -4,6 +4,7 @@
 
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <utility>
 
 namespace cch::cli {
@@ -63,6 +64,14 @@ std::string normalize_parse_error(const CLI::ParseError& error) {
 
 cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     CliConfig config;
+    std::error_code cwd_ec;
+    config.workspace = std::filesystem::current_path(cwd_ec);
+    if (cwd_ec) {
+        return std::unexpected(cch::util::make_error(
+            cch::util::ErrorCode::Validation,
+            "could not determine the current working directory",
+            "the default workspace is unavailable: " + cwd_ec.message()));
+    }
     std::string workspace_text = config.workspace.string();
     std::string session_text;
     std::string resume_text;
