@@ -10,20 +10,21 @@
 
 #include <boost/asio/awaitable.hpp>
 
-#include <optional>
 #include <vector>
 
 namespace cch::agent {
 
 struct ToolCallExecutorOptions {
-    std::optional<BeforeToolCallHook> before_tool_call;
-    std::optional<AfterToolCallHook> after_tool_call;
+    // Non-owning hooks borrowed from the run's owning AsyncAgentOptions; they
+    // must outlive the ToolCallExecutor built from these options.
+    BeforeToolCallHook* before_tool_call{nullptr};
+    AfterToolCallHook* after_tool_call{nullptr};
     ToolExecutionPolicy execution{SequentialToolExecution{}};
 };
 
 struct ToolCallBatchRequest {
-    const ai::AssistantMessage& assistant_message;
-    const ai::AiContext& context;
+    const ai::AssistantMessage& assistant_message; // must outlive the execute coroutine
+    const ai::AiContext& context;                  // must outlive the execute coroutine
 };
 
 struct ToolCallBatchResult {
@@ -34,6 +35,11 @@ struct ToolCallBatchResult {
 class ToolCallExecutor {
 public:
     ToolCallExecutor(const AsyncToolRegistry& registry, ToolCallExecutorOptions options);
+    ToolCallExecutor(ToolCallExecutor&&) noexcept = default;
+    ToolCallExecutor& operator=(ToolCallExecutor&&) = delete;
+    ~ToolCallExecutor() = default;
+    ToolCallExecutor(const ToolCallExecutor&) = delete;
+    ToolCallExecutor& operator=(const ToolCallExecutor&) = delete;
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ToolCallBatchResult>> execute(
         ToolCallBatchRequest request,
@@ -51,7 +57,7 @@ private:
         std::size_t max_in_flight,
         AgentEventSink& sink);
 
-    const AsyncToolRegistry& registry_;
+    const AsyncToolRegistry& registry_; // must outlive every execute coroutine
     ToolCallExecutorOptions options_;
 };
 

@@ -376,13 +376,14 @@ TEST_CASE(
 
     std::optional<util::JsonValue> hook_arguments;
     std::optional<std::string> hook_raw_arguments;
-    agent::ToolCallExecutorOptions options;
-    options.before_tool_call = [&](const agent::BeforeToolCallContext& context)
+    agent::BeforeToolCallHook before_hook = [&](const agent::BeforeToolCallContext& context)
         -> util::Expected<agent::BeforeToolCallResult> {
         hook_arguments = context.args;
         hook_raw_arguments = context.tool_call.raw_arguments;
         return agent::BeforeToolCallResult{};
     };
+    agent::ToolCallExecutorOptions options;
+    options.before_tool_call = &before_hook;
     agent::ToolCallExecutor executor{registry, std::move(options)};
     const std::string raw_arguments =
         R"({"enabled":"true","binary_number":"0b10","hexadecimal_number":"0x10","count":false,"label":1000000,"large_label":100000000000000000000,"scientific_label":1e21,"tiny_label":0.000001,"spaced_number":"\u00a042\u00a0","nothing":"","values":[],"operation":"read","metadata":{"free":true},"dynamic":{"feature":{"active":"false"}},"settings":{"level":"2"},"retries":"3"})";
@@ -428,12 +429,13 @@ TEST_CASE(
     REQUIRE(registry.add(std::move(tool)));
 
     std::optional<util::JsonValue> hook_arguments;
-    agent::ToolCallExecutorOptions options;
-    options.before_tool_call = [&](const agent::BeforeToolCallContext& context)
+    agent::BeforeToolCallHook before_hook = [&](const agent::BeforeToolCallContext& context)
         -> util::Expected<agent::BeforeToolCallResult> {
         hook_arguments = context.args;
         return agent::BeforeToolCallResult{};
     };
+    agent::ToolCallExecutorOptions options;
+    options.before_tool_call = &before_hook;
     agent::ToolCallExecutor executor{registry, std::move(options)};
     auto assistant = assistant_with_calls({make_call(
         "call-1",
@@ -875,12 +877,13 @@ TEST_CASE(
     REQUIRE(registry.add(std::move(tool)));
 
     int before_calls = 0;
-    agent::ToolCallExecutorOptions options;
-    options.before_tool_call = [&](const agent::BeforeToolCallContext&)
+    agent::BeforeToolCallHook before_hook = [&](const agent::BeforeToolCallContext&)
         -> util::Expected<agent::BeforeToolCallResult> {
         ++before_calls;
         return agent::BeforeToolCallResult{};
     };
+    agent::ToolCallExecutorOptions options;
+    options.before_tool_call = &before_hook;
     agent::ToolCallExecutor executor{registry, std::move(options)};
     auto assistant = assistant_with_calls({
         make_call(
@@ -953,8 +956,7 @@ TEST_CASE(
 
     bool tool_execution_started = false;
     int before_calls = 0;
-    agent::ToolCallExecutorOptions options;
-    options.before_tool_call = [&](const agent::BeforeToolCallContext& context)
+    agent::BeforeToolCallHook before_hook = [&](const agent::BeforeToolCallContext& context)
         -> util::Expected<agent::BeforeToolCallResult> {
         CHECK(tool_execution_started);
         CHECK(context.tool_call.name == "valid");
@@ -963,6 +965,8 @@ TEST_CASE(
         ++before_calls;
         return agent::BeforeToolCallResult{};
     };
+    agent::ToolCallExecutorOptions options;
+    options.before_tool_call = &before_hook;
     agent::ToolCallExecutor executor{registry, std::move(options)};
     auto assistant = assistant_with_calls({
         make_call("call-malformed", "malformed", "not-json"),
@@ -1039,13 +1043,14 @@ TEST_CASE(
     REQUIRE(registry.add(std::move(valid_tool)));
 
     int before_calls = 0;
-    agent::ToolCallExecutorOptions options;
-    options.before_tool_call = [&](const agent::BeforeToolCallContext& context)
+    agent::BeforeToolCallHook before_hook = [&](const agent::BeforeToolCallContext& context)
         -> util::Expected<agent::BeforeToolCallResult> {
         ++before_calls;
         CHECK(context.tool_call.name == "valid");
         return agent::BeforeToolCallResult{};
     };
+    agent::ToolCallExecutorOptions options;
+    options.before_tool_call = &before_hook;
     agent::ToolCallExecutor executor{registry, std::move(options)};
 
     auto malformed = make_call("call-malformed", "malformed", "not-json");
@@ -1257,9 +1262,7 @@ TEST_CASE(
         REQUIRE(registry.add(std::move(tool)));
 
         ExecutionSnapshot snapshot;
-        agent::ToolCallExecutorOptions options;
-        options.execution = std::move(policy);
-        options.before_tool_call = [&](const agent::BeforeToolCallContext& context)
+        agent::BeforeToolCallHook before_hook = [&](const agent::BeforeToolCallContext& context)
             -> util::Expected<agent::BeforeToolCallResult> {
             snapshot.before_hook_ids.push_back(context.tool_call.id);
             auto encoded = util::write_json(context.args);
@@ -1267,6 +1270,9 @@ TEST_CASE(
             snapshot.before_hook_arguments.push_back(std::move(*encoded));
             return agent::BeforeToolCallResult{};
         };
+        agent::ToolCallExecutorOptions options;
+        options.execution = std::move(policy);
+        options.before_tool_call = &before_hook;
         agent::ToolCallExecutor executor{registry, std::move(options)};
         auto run = run_executor(executor, assistant);
 
@@ -1370,9 +1376,7 @@ TEST_CASE(
         std::chrono::milliseconds{10});
 
     std::vector<std::string> hook_ids;
-    agent::ToolCallExecutorOptions options;
-    options.execution = agent::BoundedParallelToolExecution{2};
-    options.before_tool_call = [&](const agent::BeforeToolCallContext& context)
+    agent::BeforeToolCallHook before_hook = [&](const agent::BeforeToolCallContext& context)
         -> util::Expected<agent::BeforeToolCallResult> {
         hook_ids.push_back(context.tool_call.id);
         if (context.tool_call.id == "call-blocked") {
@@ -1380,6 +1384,9 @@ TEST_CASE(
         }
         return agent::BeforeToolCallResult{};
     };
+    agent::ToolCallExecutorOptions options;
+    options.execution = agent::BoundedParallelToolExecution{2};
+    options.before_tool_call = &before_hook;
     agent::ToolCallExecutor executor{registry, std::move(options)};
     auto assistant = assistant_with_calls({
         make_call("call-unknown", "missing"),
@@ -1574,13 +1581,14 @@ TEST_CASE("bounded parallel execution serializes hooks and lifecycle callbacks",
         --active_callbacks;
     };
 
-    agent::ToolCallExecutorOptions options;
-    options.execution = agent::BoundedParallelToolExecution{2};
-    options.after_tool_call = [&](const agent::AfterToolCallContext&)
+    agent::AfterToolCallHook after_hook = [&](const agent::AfterToolCallContext&)
         -> util::Expected<agent::AfterToolCallResult> {
         enter_callback();
         return agent::AfterToolCallResult{};
     };
+    agent::ToolCallExecutorOptions options;
+    options.execution = agent::BoundedParallelToolExecution{2};
+    options.after_tool_call = &after_hook;
     agent::ToolCallExecutor executor{registry, std::move(options)};
     auto assistant = assistant_with_calls({
         make_call("call-1", "alpha"),
@@ -1641,11 +1649,12 @@ TEST_CASE("ToolCallExecutor keeps hook policy behind its interface", "[agent][to
     auto* tool_ptr = tool.get();
     REQUIRE(registry.add(std::move(tool)));
 
-    agent::ToolCallExecutorOptions options;
-    options.before_tool_call = [](const agent::BeforeToolCallContext&)
+    agent::BeforeToolCallHook before_hook = [](const agent::BeforeToolCallContext&)
         -> util::Expected<agent::BeforeToolCallResult> {
         return agent::BeforeToolCallResult{true, "blocked"};
     };
+    agent::ToolCallExecutorOptions options;
+    options.before_tool_call = &before_hook;
     agent::ToolCallExecutor executor{registry, std::move(options)};
     auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
 
@@ -1665,8 +1674,7 @@ TEST_CASE("ToolCallExecutor applies after-hook overrides and termination", "[age
     REQUIRE(registry.add(std::make_unique<RecordingTool>(
         ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()})));
 
-    agent::ToolCallExecutorOptions options;
-    options.after_tool_call = [](const agent::AfterToolCallContext&)
+    agent::AfterToolCallHook after_hook = [](const agent::AfterToolCallContext&)
         -> util::Expected<agent::AfterToolCallResult> {
         return agent::AfterToolCallResult{
             std::vector<ai::Content>{ai::text_content("overridden")},
@@ -1674,6 +1682,8 @@ TEST_CASE("ToolCallExecutor applies after-hook overrides and termination", "[age
             std::nullopt,
             true};
     };
+    agent::ToolCallExecutorOptions options;
+    options.after_tool_call = &after_hook;
     agent::ToolCallExecutor executor{registry, std::move(options)};
     auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
 

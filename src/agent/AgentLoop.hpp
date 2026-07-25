@@ -44,15 +44,7 @@ private:
         return options_.thinking_level;
     }
 
-    [[nodiscard]] util::ExpectedVoid append_message_with_lifecycle(
-        AgentState& state,
-        ai::AiContext& context,
-        AgentEventSink& sink,
-        ai::MessageVariant message) const;
-    [[nodiscard]] util::ExpectedVoid emit(AgentEventSink& sink, const AgentLifecycleEvent& event) const;
-    [[nodiscard]] std::vector<ai::ToolCallContent> tool_calls(const ai::AssistantMessage& message) const;
-
-    ai::StreamingChatClient& client_;
+    ai::StreamingChatClient& client_; // must outlive every run coroutine
     AsyncToolRegistry registry_;
     AsyncAgentOptions options_;
 };

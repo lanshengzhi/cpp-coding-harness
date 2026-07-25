@@ -94,15 +94,6 @@ struct AsyncAgentOptions {
     std::optional<ShouldStopAfterTurnHook> should_stop_after_turn;
     std::optional<ValidateTurnUpdateHook> validate_turn_update;
     ToolExecutionPolicy tool_execution{SequentialToolExecution{}};
-
-    AsyncAgentOptions() = default;
-    AsyncAgentOptions(AsyncAgentOptions&&) = default;
-    AsyncAgentOptions& operator=(AsyncAgentOptions&&) = default;
-    AsyncAgentOptions(const AsyncAgentOptions&) = delete;
-    AsyncAgentOptions& operator=(const AsyncAgentOptions&) = delete;
-
-    AsyncAgentOptions(int max_turns_, ai::Model model_)
-        : max_turns(max_turns_), model(std::move(model_)) {}
 };
 
 struct AgentState {

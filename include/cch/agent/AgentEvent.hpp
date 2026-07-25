@@ -49,7 +49,7 @@ struct ToolExecutionEndEvent {
     std::string tool_call_id;
     std::string tool_name;
     AsyncToolExecutionResult result;
-    bool is_error;
+    bool is_error{false};
 };
 
 using AgentLifecycleEvent = std::variant<

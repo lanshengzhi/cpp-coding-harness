@@ -1,5 +1,6 @@
 #include "AgentLoop.hpp"
 
+#include "ExecutionShared.hpp"
 #include "ToolCallExecutor.hpp"
 
 #include "../../src/util/ExpectedMacros.hpp"
@@ -34,36 +35,17 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
     state.messages = context.messages;
 }
 
-[[nodiscard]] util::ExpectedVoid emit_event_impl(AgentEventSink& sink, const AgentLifecycleEvent& event) {
-    if (!sink) {
-        return {};
-    }
-    try {
-        return sink(event);
-    } catch (const std::exception& e) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool,
-            "agent event sink failed",
-            e.what()));
-    } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool,
-            "agent event sink failed",
-            "unknown exception"));
-    }
-}
-
-[[nodiscard]] util::ExpectedVoid append_message_with_lifecycle_impl(
+[[nodiscard]] util::ExpectedVoid append_message_with_lifecycle(
     AgentState& state,
     ai::AiContext& context,
     AgentEventSink& sink,
     ai::MessageVariant message) {
-    if (auto r = emit_event_impl(sink, MessageStartEvent{message}); !r) {
+    if (auto r = emit_agent_event(sink, MessageStartEvent{message}); !r) {
         return r;
     }
     context.messages.push_back(std::move(message));
     sync_state(state, context);
-    return emit_event_impl(sink, MessageEndEvent{context.messages.back()});
+    return emit_agent_event(sink, MessageEndEvent{context.messages.back()});
 }
 
 [[nodiscard]] std::size_t approximate_content_size(const ai::Content& block) {
@@ -190,102 +172,6 @@ void record_queue_rejection(AgentState& state, util::Error error) {
     return {};
 }
 
-[[nodiscard]] util::Expected<std::vector<ai::MessageVariant>> invoke_transform_context_hook(
-    TransformContextHook& hook,
-    const std::vector<ai::MessageVariant>& messages) {
-    try {
-        return hook(messages);
-    } catch (const std::exception& e) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool, "transformContext hook failed", e.what()));
-    } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool, "transformContext hook failed", "unknown exception"));
-    }
-}
-
-[[nodiscard]] util::Expected<std::vector<ai::MessageVariant>> invoke_convert_to_llm_hook(
-    ConvertToLlmHook& hook,
-    const std::vector<ai::MessageVariant>& messages) {
-    try {
-        return hook(messages);
-    } catch (const std::exception& e) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool, "convertToLlm hook failed", e.what()));
-    } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool, "convertToLlm hook failed", "unknown exception"));
-    }
-}
-
-[[nodiscard]] util::Expected<std::vector<ai::MessageVariant>> invoke_get_steering_messages_hook(
-    GetSteeringMessagesHook& hook) {
-    try {
-        return hook();
-    } catch (const std::exception& e) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool, "getSteeringMessages hook failed", e.what()));
-    } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool, "getSteeringMessages hook failed", "unknown exception"));
-    }
-}
-
-[[nodiscard]] util::Expected<std::vector<ai::MessageVariant>> invoke_get_follow_up_messages_hook(
-    GetFollowUpMessagesHook& hook) {
-    try {
-        return hook();
-    } catch (const std::exception& e) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool, "getFollowUpMessages hook failed", e.what()));
-    } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool, "getFollowUpMessages hook failed", "unknown exception"));
-    }
-}
-
-[[nodiscard]] util::Expected<std::optional<AgentLoopTurnUpdate>> invoke_prepare_next_turn_hook(
-    PrepareNextTurnHook& hook,
-    const PrepareNextTurnContext& context) {
-    try {
-        return hook(context);
-    } catch (const std::exception& e) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool, "prepareNextTurn hook failed", e.what()));
-    } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool, "prepareNextTurn hook failed", "unknown exception"));
-    }
-}
-
-[[nodiscard]] util::Expected<bool> invoke_should_stop_after_turn_hook(
-    ShouldStopAfterTurnHook& hook,
-    const PrepareNextTurnContext& context) {
-    try {
-        return hook(context);
-    } catch (const std::exception& e) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool, "shouldStopAfterTurn hook failed", e.what()));
-    } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool, "shouldStopAfterTurn hook failed", "unknown exception"));
-    }
-}
-
-[[nodiscard]] util::ExpectedVoid invoke_validate_turn_update_hook(
-    ValidateTurnUpdateHook& hook,
-    const AgentLoopTurnUpdate& update) {
-    try {
-        return hook(update);
-    } catch (const std::exception& e) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool, "validateTurnUpdate hook failed", e.what()));
-    } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool, "validateTurnUpdate hook failed", "unknown exception"));
-    }
-}
-
 } // namespace
 
 AsyncAgentLoop::AsyncAgentLoop(ai::StreamingChatClient& client, AsyncToolRegistry registry, AsyncAgentOptions options)
@@ -306,21 +192,21 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
     context.messages = std::move(history);
     std::vector<ai::MessageVariant> new_messages;
     const auto emit_agent_end = [&]() -> util::ExpectedVoid {
-        return emit(sink, AgentEndEvent{new_messages});
+        return emit_agent_event(sink, AgentEndEvent{new_messages});
     };
 
     AgentState state;
     state.model = options_.model;
     state.thinking_level = options_.thinking_level;
 
-    CCH_TRY_VOID(emit(sink, AgentStartEvent{}));
+    CCH_TRY_VOID(emit_agent_event(sink, AgentStartEvent{}));
 
     ai::MessageVariant user_message = ai::user_text_message(std::move(user_prompt));
 
     std::vector<ai::MessageVariant> pending_messages;
 
     for (int turn = 1; !options_.max_turns || turn <= *options_.max_turns; ++turn) {
-        CCH_TRY_VOID(emit(sink, TurnStartEvent{}));
+        CCH_TRY_VOID(emit_agent_event(sink, TurnStartEvent{}));
 
         if (turn == 1) {
             CCH_TRY_VOID(append_message_with_lifecycle(state, context, sink, std::move(user_message)));
@@ -328,7 +214,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         }
 
         if (turn == 1 && options_.get_steering_messages) {
-            auto steering = invoke_get_steering_messages_hook(*options_.get_steering_messages);
+            auto steering = invoke_agent_hook("getSteeringMessages", *options_.get_steering_messages);
             if (!steering) {
                 CCH_TRY_VOID(emit_agent_end());
                 co_return std::unexpected(steering.error());
@@ -356,8 +242,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         {
             ai::AiContext request_context = context;
             if (options_.transform_context) {
-                auto transformed = invoke_transform_context_hook(
-                    *options_.transform_context, request_context.messages);
+                auto transformed = invoke_agent_hook(
+                    "transformContext", *options_.transform_context, request_context.messages);
                 if (!transformed) {
                     CCH_TRY_VOID(emit_agent_end());
                     co_return std::unexpected(transformed.error());
@@ -365,8 +251,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                 request_context.messages = std::move(*transformed);
             }
             if (options_.convert_to_llm) {
-                auto converted = invoke_convert_to_llm_hook(
-                    *options_.convert_to_llm, request_context.messages);
+                auto converted = invoke_agent_hook(
+                    "convertToLlm", *options_.convert_to_llm, request_context.messages);
                 if (!converted) {
                     CCH_TRY_VOID(emit_agent_end());
                     co_return std::unexpected(converted.error());
@@ -397,46 +283,46 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                     }
                     assistant_start_emitted = true;
                     state.streaming_message = start->partial;
-                    return emit(sink, MessageStartEvent{ai::MessageVariant{start->partial}});
+                    return emit_agent_event(sink, MessageStartEvent{ai::MessageVariant{start->partial}});
                 }
                 if (const auto* start = std::get_if<ai::TextStartEvent>(&event)) {
                     state.streaming_message = start->partial;
-                    return emit(sink, MessageUpdateEvent{ai::MessageVariant{start->partial}, event});
+                    return emit_agent_event(sink, MessageUpdateEvent{ai::MessageVariant{start->partial}, event});
                 }
                 if (const auto* delta = std::get_if<ai::TextDeltaEvent>(&event)) {
                     state.streaming_message = delta->partial;
-                    return emit(sink, MessageUpdateEvent{ai::MessageVariant{delta->partial}, event});
+                    return emit_agent_event(sink, MessageUpdateEvent{ai::MessageVariant{delta->partial}, event});
                 }
                 if (const auto* end = std::get_if<ai::TextEndEvent>(&event)) {
                     state.streaming_message = end->partial;
-                    return emit(sink, MessageUpdateEvent{ai::MessageVariant{end->partial}, event});
+                    return emit_agent_event(sink, MessageUpdateEvent{ai::MessageVariant{end->partial}, event});
                 }
                 if (const auto* start = std::get_if<ai::ThinkingStartEvent>(&event)) {
                     state.streaming_message = start->partial;
-                    return emit(sink, MessageUpdateEvent{ai::MessageVariant{start->partial}, event});
+                    return emit_agent_event(sink, MessageUpdateEvent{ai::MessageVariant{start->partial}, event});
                 }
                 if (const auto* delta = std::get_if<ai::ThinkingDeltaEvent>(&event)) {
                     state.streaming_message = delta->partial;
-                    return emit(sink, MessageUpdateEvent{ai::MessageVariant{delta->partial}, event});
+                    return emit_agent_event(sink, MessageUpdateEvent{ai::MessageVariant{delta->partial}, event});
                 }
                 if (const auto* end = std::get_if<ai::ThinkingEndEvent>(&event)) {
                     state.streaming_message = end->partial;
-                    return emit(sink, MessageUpdateEvent{ai::MessageVariant{end->partial}, event});
+                    return emit_agent_event(sink, MessageUpdateEvent{ai::MessageVariant{end->partial}, event});
                 }
                 if (const auto* start = std::get_if<ai::ToolCallStartEvent>(&event)) {
                     state.streaming_message = start->partial;
-                    return emit(sink, MessageUpdateEvent{ai::MessageVariant{start->partial}, event});
+                    return emit_agent_event(sink, MessageUpdateEvent{ai::MessageVariant{start->partial}, event});
                 }
                 if (const auto* delta = std::get_if<ai::ToolCallDeltaEvent>(&event)) {
                     state.streaming_message = delta->partial;
-                    return emit(sink, MessageUpdateEvent{ai::MessageVariant{delta->partial}, event});
+                    return emit_agent_event(sink, MessageUpdateEvent{ai::MessageVariant{delta->partial}, event});
                 }
                 if (const auto* end = std::get_if<ai::ToolCallEndEvent>(&event)) {
                     state.streaming_message = end->partial;
                     if (!end->tool_call.id.empty()) {
                         state.pending_tool_call_ids.push_back(end->tool_call.id);
                     }
-                    return emit(sink, MessageUpdateEvent{ai::MessageVariant{end->partial}, event});
+                    return emit_agent_event(sink, MessageUpdateEvent{ai::MessageVariant{end->partial}, event});
                 }
                 if (const auto* done = std::get_if<ai::AssistantDoneEvent>(&event)) {
                     state.streaming_message = done->message;
@@ -450,10 +336,6 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             });
 
         if (!assistant) {
-            std::string reason = assistant.error().message;
-            if (assistant.error().code == util::ErrorCode::Provider && !assistant.error().detail.empty()) {
-                reason += " (" + assistant.error().detail + ")";
-            }
             CCH_TRY_VOID(emit_agent_end());
             co_return std::unexpected(assistant.error());
         }
@@ -467,21 +349,21 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             // any assistant start event. Synthesize the missing start from the
             // authoritative final message so consumers observe exactly one
             // complete assistant lifecycle.
-            CCH_TRY_VOID(emit(sink, MessageStartEvent{context.messages.back()}));
+            CCH_TRY_VOID(emit_agent_event(sink, MessageStartEvent{context.messages.back()}));
         }
-        CCH_TRY_VOID(emit(sink, MessageEndEvent{context.messages.back()}));
+        CCH_TRY_VOID(emit_agent_event(sink, MessageEndEvent{context.messages.back()}));
 
         if (assistant->stop_reason == ai::AssistantStopReason::Error ||
             assistant->stop_reason == ai::AssistantStopReason::Aborted) {
             state.pending_tool_call_ids.clear();
-            CCH_TRY_VOID(emit(sink, TurnEndEvent{ai::MessageVariant{*assistant}, {}}));
+            CCH_TRY_VOID(emit_agent_event(sink, TurnEndEvent{ai::MessageVariant{*assistant}, {}}));
             state.streaming_message.reset();
             CCH_TRY_VOID(emit_agent_end());
             co_return AsyncAgentRunResult{
                 std::move(context), assistant->stop_reason, turn, std::move(state)};
         }
 
-        auto calls = tool_calls(*assistant);
+        auto calls = tool_calls_from(*assistant);
         state.pending_tool_call_ids.clear();
         for (const auto& call : calls) {
             if (!call.id.empty()) {
@@ -494,7 +376,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         if (!calls.empty() && assistant->stop_reason == ai::AssistantStopReason::Length) {
             tool_results.reserve(calls.size());
             for (const auto& call : calls) {
-                CCH_TRY_VOID(emit(sink, ToolExecutionStartEvent{call.id, call.name, call.arguments.value_or(util::JsonValue{})}));
+                CCH_TRY_VOID(emit_agent_event(sink, ToolExecutionStartEvent{call.id, call.name, call.arguments.value_or(util::JsonValue{})}));
 
                 ai::ToolResultMessage result;
                 result.tool_call_id = call.id;
@@ -508,28 +390,17 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                 AsyncToolExecutionResult execution_result;
                 execution_result.content = result.content;
                 execution_result.is_error = true;
-                CCH_TRY_VOID(emit(sink, ToolExecutionEndEvent{
+                CCH_TRY_VOID(emit_agent_event(sink, ToolExecutionEndEvent{
                     call.id, call.name, std::move(execution_result), true}));
-                CCH_TRY_VOID(emit(sink, MessageStartEvent{ai::MessageVariant{result}}));
-                CCH_TRY_VOID(emit(sink, MessageEndEvent{ai::MessageVariant{result}}));
+                CCH_TRY_VOID(emit_tool_result_message(sink, result));
                 tool_results.push_back(std::move(result));
             }
         } else if (!calls.empty()) {
             agent::ToolCallExecutorOptions executor_options;
-            if (options_.before_tool_call) {
-                executor_options.before_tool_call = [&hook = options_.before_tool_call](
-                                                         const BeforeToolCallContext& context)
-                                                         -> util::Expected<BeforeToolCallResult> {
-                    return (*hook)(context);
-                };
-            }
-            if (options_.after_tool_call) {
-                executor_options.after_tool_call = [&hook = options_.after_tool_call](
-                                                        const AfterToolCallContext& context)
-                                                        -> util::Expected<AfterToolCallResult> {
-                    return (*hook)(context);
-                };
-            }
+            executor_options.before_tool_call =
+                options_.before_tool_call ? &*options_.before_tool_call : nullptr;
+            executor_options.after_tool_call =
+                options_.after_tool_call ? &*options_.after_tool_call : nullptr;
             executor_options.execution = options_.tool_execution;
             agent::ToolCallExecutor executor{registry_, std::move(executor_options)};
 
@@ -555,7 +426,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             sync_state(state, context);
         }
 
-        CCH_TRY_VOID(emit(sink, TurnEndEvent{ai::MessageVariant{*assistant}, tool_results}));
+        CCH_TRY_VOID(emit_agent_event(sink, TurnEndEvent{ai::MessageVariant{*assistant}, tool_results}));
 
         const bool has_more_tool_calls = !calls.empty() && !terminate_batch;
 
@@ -566,8 +437,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         next_turn_context.new_messages = new_messages;
 
         if (options_.prepare_next_turn) {
-            auto update = invoke_prepare_next_turn_hook(
-                *options_.prepare_next_turn, next_turn_context);
+            auto update = invoke_agent_hook(
+                "prepareNextTurn", *options_.prepare_next_turn, next_turn_context);
             if (!update) {
                 CCH_TRY_VOID(emit_agent_end());
                 co_return std::unexpected(update.error());
@@ -582,8 +453,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                     co_return std::unexpected(error);
                 }
                 if (options_.validate_turn_update) {
-                    auto validated = invoke_validate_turn_update_hook(
-                        *options_.validate_turn_update, **update);
+                    auto validated = invoke_agent_hook(
+                        "validateTurnUpdate", *options_.validate_turn_update, **update);
                     if (!validated) {
                         CCH_TRY_VOID(emit_agent_end());
                         co_return std::unexpected(validated.error());
@@ -600,8 +471,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
 
         next_turn_context.context = context;
         if (options_.should_stop_after_turn) {
-            auto should_stop = invoke_should_stop_after_turn_hook(
-                *options_.should_stop_after_turn, next_turn_context);
+            auto should_stop = invoke_agent_hook(
+                "shouldStopAfterTurn", *options_.should_stop_after_turn, next_turn_context);
             if (!should_stop) {
                 CCH_TRY_VOID(emit_agent_end());
                 co_return std::unexpected(should_stop.error());
@@ -616,7 +487,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         }
 
         if (options_.get_steering_messages) {
-            auto steering = invoke_get_steering_messages_hook(*options_.get_steering_messages);
+            auto steering = invoke_agent_hook("getSteeringMessages", *options_.get_steering_messages);
             if (!steering) {
                 CCH_TRY_VOID(emit_agent_end());
                 co_return std::unexpected(steering.error());
@@ -631,7 +502,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         }
 
         if (!has_more_tool_calls && pending_messages.empty() && options_.get_follow_up_messages) {
-            auto follow_up = invoke_get_follow_up_messages_hook(*options_.get_follow_up_messages);
+            auto follow_up = invoke_agent_hook("getFollowUpMessages", *options_.get_follow_up_messages);
             if (!follow_up) {
                 CCH_TRY_VOID(emit_agent_end());
                 co_return std::unexpected(follow_up.error());
@@ -663,28 +534,6 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         "agent reached the configured max_turns before a final assistant response");
     CCH_TRY_VOID(emit_agent_end());
     co_return std::unexpected(error);
-}
-
-util::ExpectedVoid AsyncAgentLoop::append_message_with_lifecycle(
-    AgentState& state,
-    ai::AiContext& context,
-    AgentEventSink& sink,
-    ai::MessageVariant message) const {
-    return append_message_with_lifecycle_impl(state, context, sink, std::move(message));
-}
-
-util::ExpectedVoid AsyncAgentLoop::emit(AgentEventSink& sink, const AgentLifecycleEvent& event) const {
-    return emit_event_impl(sink, event);
-}
-
-std::vector<ai::ToolCallContent> AsyncAgentLoop::tool_calls(const ai::AssistantMessage& message) const {
-    std::vector<ai::ToolCallContent> calls;
-    for (const auto& block : message.content) {
-        if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
-            calls.push_back(*call);
-        }
-    }
-    return calls;
 }
 
 } // namespace cch::agent

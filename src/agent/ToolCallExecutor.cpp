@@ -1,5 +1,6 @@
 #include "ToolCallExecutor.hpp"
 
+#include "ExecutionShared.hpp"
 #include "ToolArgumentPreparation.hpp"
 #include "../../include/cch/ai/Content.hpp"
 #include "../../include/cch/util/Error.hpp"
@@ -25,17 +26,6 @@
 namespace cch::agent {
 namespace {
 
-[[nodiscard]] std::vector<ai::ToolCallContent> tool_calls(
-    const ai::AssistantMessage& message) {
-    std::vector<ai::ToolCallContent> calls;
-    for (const auto& block : message.content) {
-        if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
-            calls.push_back(*call);
-        }
-    }
-    return calls;
-}
-
 [[nodiscard]] ai::ToolResultMessage error_tool_result(
     const ai::ToolCallContent& call,
     std::string message) {
@@ -45,62 +35,6 @@ namespace {
     result.content.emplace_back(ai::TextContent{std::move(message), std::nullopt});
     result.is_error = true;
     return result;
-}
-
-[[nodiscard]] util::Expected<BeforeToolCallResult> invoke_before_hook(
-    BeforeToolCallHook& hook,
-    const BeforeToolCallContext& context) {
-    try {
-        return hook(context);
-    } catch (const std::exception& e) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool, "beforeToolCall hook failed", e.what()));
-    } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool, "beforeToolCall hook failed", "unknown exception"));
-    }
-}
-
-[[nodiscard]] util::Expected<AfterToolCallResult> invoke_after_hook(
-    AfterToolCallHook& hook,
-    const AfterToolCallContext& context) {
-    try {
-        return hook(context);
-    } catch (const std::exception& e) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool, "afterToolCall hook failed", e.what()));
-    } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool, "afterToolCall hook failed", "unknown exception"));
-    }
-}
-
-[[nodiscard]] util::ExpectedVoid emit(AgentEventSink& sink, const AgentLifecycleEvent& event) {
-    if (!sink) {
-        return {};
-    }
-    try {
-        return sink(event);
-    } catch (const std::exception& e) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool,
-            "agent event sink failed",
-            e.what()));
-    } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Tool,
-            "agent event sink failed",
-            "unknown exception"));
-    }
-}
-
-[[nodiscard]] util::ExpectedVoid emit_tool_result_message(
-    AgentEventSink& sink,
-    const ai::ToolResultMessage& message) {
-    if (auto r = emit(sink, MessageStartEvent{ai::MessageVariant{message}}); !r) {
-        return r;
-    }
-    return emit(sink, MessageEndEvent{ai::MessageVariant{message}});
 }
 
 struct FinalizedToolCall {
@@ -158,7 +92,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
             "max_in_flight must be greater than zero"));
     }
 
-    const auto calls = tool_calls(request.assistant_message);
+    const auto calls = tool_calls_from(request.assistant_message);
     if (calls.empty()) {
         co_return ToolCallBatchResult{};
     }
@@ -178,7 +112,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
     finalized.reserve(calls.size());
 
     for (const auto& call : calls) {
-        CCH_TRY_VOID(emit(sink, ToolExecutionStartEvent{call.id, call.name, call.arguments.value_or(util::JsonValue{})}));
+        CCH_TRY_VOID(emit_agent_event(sink, ToolExecutionStartEvent{call.id, call.name, call.arguments.value_or(util::JsonValue{})}));
 
         ai::ToolResultMessage tool_result;
         bool executed_successfully = false;
@@ -202,7 +136,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                 if (options_.before_tool_call) {
                     BeforeToolCallContext hook_context{
                         request.assistant_message, call, invocation.arguments, request.context};
-                    auto before_result = invoke_before_hook(*options_.before_tool_call, hook_context);
+                    auto before_result = invoke_agent_hook("beforeToolCall", *options_.before_tool_call, hook_context);
                     if (!before_result) {
                         co_return std::unexpected(before_result.error());
                     }
@@ -243,7 +177,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                                     **executed,
                                     false,
                                     request.context};
-                                auto after_result = invoke_after_hook(*options_.after_tool_call, hook_context);
+                                auto after_result = invoke_agent_hook("afterToolCall", *options_.after_tool_call, hook_context);
                                 if (!after_result) {
                                     co_return std::unexpected(after_result.error());
                                 }
@@ -265,14 +199,12 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
             call_terminate = false;
         }
 
-        const auto tool_text = ai::text_from_content(tool_result.content);
-        (void)tool_text;
         AsyncToolExecutionResult execution_result;
         execution_result.content = tool_result.content;
         execution_result.details = tool_result.details;
         execution_result.is_error = tool_result.is_error;
         execution_result.terminate = call_terminate;
-        CCH_TRY_VOID(emit(sink, ToolExecutionEndEvent{
+        CCH_TRY_VOID(emit_agent_event(sink, ToolExecutionEndEvent{
             call.id, call.name, std::move(execution_result), tool_result.is_error}));
         CCH_TRY_VOID(emit_tool_result_message(sink, tool_result));
         finalized.push_back(FinalizedToolCall{std::move(tool_result), call_terminate});
@@ -304,7 +236,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
         execution_result.content = result.content;
         execution_result.details = result.details;
         execution_result.is_error = result.is_error;
-        auto emitted = emit(sink, ToolExecutionEndEvent{
+        auto emitted = emit_agent_event(sink, ToolExecutionEndEvent{
             call.id, call.name, std::move(execution_result), result.is_error});
         if (!emitted) {
             return emitted;
@@ -315,7 +247,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
 
     for (std::size_t source_index = 0; source_index < calls.size(); ++source_index) {
         const auto& call = calls[source_index];
-        CCH_TRY_VOID(emit(sink, ToolExecutionStartEvent{call.id, call.name, call.arguments.value_or(util::JsonValue{})}));
+        CCH_TRY_VOID(emit_agent_event(sink, ToolExecutionStartEvent{call.id, call.name, call.arguments.value_or(util::JsonValue{})}));
 
         auto* tool = registry_.find(call.name);
         if (tool == nullptr) {
@@ -343,7 +275,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
         if (options_.before_tool_call) {
             BeforeToolCallContext hook_context{
                 request.assistant_message, call, *arguments, request.context};
-            auto before_result = invoke_before_hook(*options_.before_tool_call, hook_context);
+            auto before_result = invoke_agent_hook("beforeToolCall", *options_.before_tool_call, hook_context);
             if (!before_result) {
                 co_return std::unexpected(before_result.error());
             }
@@ -385,7 +317,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
 
     auto parallel_emit = [state, sink_ptr = &sink](const AgentLifecycleEvent& event) -> util::ExpectedVoid {
         std::lock_guard callback_lock(state->callback_mutex);
-        auto result = emit(*sink_ptr, event);
+        auto result = emit_agent_event(*sink_ptr, event);
         if (!result) {
             std::lock_guard error_lock(state->error_mutex);
             if (!state->emit_error) {
@@ -395,7 +327,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
         return result;
     };
 
-    AfterToolCallHook* after_hook = options_.after_tool_call ? &*options_.after_tool_call : nullptr;
+    AfterToolCallHook* const after_hook = options_.after_tool_call;
 
     auto worker_body = [after_hook,
                         prepared_calls,
@@ -446,7 +378,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                                 *context_snapshot};
                             auto after_result = [&]() {
                                 std::lock_guard callback_lock(state->callback_mutex);
-                                return invoke_after_hook(*after_hook, hook_context);
+                                return invoke_agent_hook("afterToolCall", *after_hook, hook_context);
                             }();
                             if (!after_result) {
                                 std::lock_guard error_lock(state->error_mutex);
@@ -477,8 +409,6 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                     outcome.call_terminate = false;
                 }
 
-                const auto tool_text = ai::text_from_content(outcome.result.content);
-                (void)tool_text;
                 AsyncToolExecutionResult execution_result;
                 execution_result.content = outcome.result.content;
                 execution_result.details = outcome.result.details;

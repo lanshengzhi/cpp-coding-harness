@@ -76,7 +76,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 5.3. Inside coroutines, propagate errors with `CCH_TRY` / `CCH_TRY_VOID` (`src/util/ExpectedMacros.hpp`). The macros `co_return`, so they never appear in public headers.
 
-5.4. Exceptions are not an error mechanism. Do not throw for control flow; wrap callback invocation in try/catch at the boundary and convert to `util::Error` (ADR 0017 — see `emit_event_impl` in `src/agent/AgentLoop.cpp`). Exceptions never unwind through a live coroutine.
+5.4. Exceptions are not an error mechanism. Do not throw for control flow; wrap callback invocation in try/catch at the boundary and convert to `util::Error` (ADR 0017 — see `emit_agent_event` in `src/agent/ExecutionShared.hpp`). Exceptions never unwind through a live coroutine.
 
 5.5. Filesystem calls use the `std::error_code` overloads, not the throwing overloads.
 
