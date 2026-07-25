@@ -19,10 +19,9 @@ struct OutputLimitResult {
     bool truncated{false};
 };
 
-[[nodiscard]] inline OutputLimitResult limit_output_tail_redacted(
-    std::string input,
+[[nodiscard]] inline OutputLimitResult limit_output_tail(
+    const std::string& input,
     OutputLimit limit = {}) {
-    input = redact_text(std::move(input));
     if (input.empty()) {
         return {};
     }
@@ -61,6 +60,12 @@ struct OutputLimitResult {
         .text = bounded_utf8(std::string_view(input).substr(start), limit.max_bytes),
         .truncated = start > 0,
     };
+}
+
+[[nodiscard]] inline OutputLimitResult limit_output_tail_redacted(
+    std::string input,
+    OutputLimit limit = {}) {
+    return limit_output_tail(redact_text(std::move(input)), limit);
 }
 
 [[nodiscard]] inline OutputLimitResult limit_output(const std::string& input, OutputLimit limit = {}) {

@@ -411,15 +411,18 @@ public:
         std::string full_output = (received_stdout || received_stderr)
             ? strip_ansi(combine_output(full_stdout, full_stderr))
             : strip_ansi(combine_output(shell->stdout_output, shell->stderr_output));
+
+        // Redact the complete output before splitting between model-visible and spill.
+        std::string redacted_full = util::redact_text(full_output);
         const util::OutputLimit output_limit;
-        auto limited_output = util::limit_output_tail_redacted(full_output, output_limit);
+        auto limited_output = util::limit_output_tail(redacted_full, output_limit);
         bool truncated = limited_output.truncated;
         std::string output = std::move(limited_output.text);
         std::string full_output_path;
         if (truncated) {
             auto ts = std::chrono::system_clock::now().time_since_epoch().count();
             full_output_path = "bash-output-" + std::to_string(ts) + ".txt";
-            if (auto write = co_await (*environment)->writeFile(full_output_path, full_output); !write) {
+            if (auto write = co_await (*environment)->writeFile(full_output_path, redacted_full); !write) {
                 full_output_path.clear();
             }
             output = "[output truncated, showing last " +

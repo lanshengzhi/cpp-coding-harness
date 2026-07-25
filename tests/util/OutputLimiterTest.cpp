@@ -29,6 +29,28 @@ TEST_CASE("tail output limiter starts on a UTF-8 character boundary", "[util][ou
     CHECK(result.truncated);
 }
 
+TEST_CASE("limit_output_tail preserves unreduced text when no limit is hit", "[util][output-limiter][issue73]") {
+    const auto result = util::limit_output_tail("api_key=secret");
+    CHECK(result.text == "api_key=secret");
+    CHECK_FALSE(result.truncated);
+}
+
+TEST_CASE("limit_output_tail does not redact", "[util][output-limiter][issue73]") {
+    const auto result = util::limit_output_tail(
+        "api_key=secret",
+        util::OutputLimit{.max_bytes = 1024, .max_lines = 2000});
+    CHECK(result.text == "api_key=secret");
+    CHECK_FALSE(result.truncated);
+}
+
+TEST_CASE("limit_output_tail applies byte and line limits", "[util][output-limiter][issue73]") {
+    const auto result = util::limit_output_tail(
+        "a\nb\nc",
+        util::OutputLimit{.max_bytes = 1024, .max_lines = 2});
+    CHECK(result.text == "b\nc");
+    CHECK(result.truncated);
+}
+
 TEST_CASE("limit_output passes input under the limits through unchanged", "[util][output-limiter][issue66]") {
     const auto with_newline = util::limit_output("line1\nline2\n");
     CHECK(with_newline.text == "line1\nline2\n");

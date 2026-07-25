@@ -301,7 +301,9 @@ TEST_CASE("async bash tool spill file contains complete output beyond the visibl
     CHECK(visible.find("[REDACTED]") != std::string::npos);
     CHECK(visible.size() <= limit.max_bytes + 200);
     CHECK_FALSE(env->last_write_path.empty());
-    CHECK(env->last_write_content == env->streamed_stdout);
+    CHECK(env->last_write_content.find("super-secret") == std::string::npos);
+    CHECK(env->last_write_content.find("[REDACTED]") != std::string::npos);
+    CHECK(env->last_write_content.size() > limit.max_bytes);
     CHECK(env->last_write_content.ends_with("complete-tail\xc3\xa9"));
 }
 
