@@ -35,6 +35,23 @@ struct ProjectResourceAdapter {
         LoadedResourceNames&);
 };
 
+[[nodiscard]] ProjectResourceLoadingDiagnostic loading_diagnostic(
+    ResourceDiagnosticSeverity severity,
+    ProjectResourceLoadingDiagnosticCategory category,
+    std::string code,
+    std::string message,
+    std::optional<std::string> path = std::nullopt,
+    std::optional<ProjectResourceKind> kind = std::nullopt) {
+    return ProjectResourceLoadingDiagnostic{
+        .severity = severity,
+        .category = category,
+        .code = std::move(code),
+        .message = std::move(message),
+        .path = std::move(path),
+        .kind = kind,
+    };
+}
+
 [[nodiscard]] ResourceDiagnosticSeverity to_resource_severity(ProjectTrustDiagnosticSeverity severity) {
     switch (severity) {
     case ProjectTrustDiagnosticSeverity::Info:
@@ -87,14 +104,12 @@ void add_trust_diagnostics(
     ProjectResourceLoadingResult& result,
     const ProjectTrustResolution& trust) {
     for (const auto& diagnostic : trust.diagnostics) {
-        result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
-            .severity = to_resource_severity(diagnostic.severity),
-            .category = ProjectResourceLoadingDiagnosticCategory::Trust,
-            .code = diagnostic.code,
-            .message = diagnostic.message,
-            .path = diagnostic.path,
-            .kind = std::nullopt,
-        });
+        result.diagnostics.push_back(loading_diagnostic(
+            to_resource_severity(diagnostic.severity),
+            ProjectResourceLoadingDiagnosticCategory::Trust,
+            diagnostic.code,
+            diagnostic.message,
+            diagnostic.path));
     }
 }
 
@@ -102,28 +117,26 @@ void add_load_plan_diagnostics(
     ProjectResourceLoadingResult& result,
     const ProjectResourceLoadPlan& plan) {
     for (const auto& diagnostic : plan.diagnostics) {
-        result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
-            .severity = diagnostic.severity,
-            .category = ProjectResourceLoadingDiagnosticCategory::LoadPlan,
-            .code = diagnostic.code,
-            .message = diagnostic.message,
-            .path = diagnostic.path.empty() ? std::nullopt : std::optional<std::string>{diagnostic.path},
-            .kind = diagnostic.kind,
-        });
+        result.diagnostics.push_back(loading_diagnostic(
+            diagnostic.severity,
+            ProjectResourceLoadingDiagnosticCategory::LoadPlan,
+            diagnostic.code,
+            diagnostic.message,
+            diagnostic.path.empty() ? std::nullopt : std::optional<std::string>{diagnostic.path},
+            diagnostic.kind));
     }
 
     for (const auto& decision : plan.decisions) {
         if (!decision.detected || decision.allowed || decision.reason == ResourceSkipReason::Unsupported) {
             continue;
         }
-        result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
-            .severity = ResourceDiagnosticSeverity::Info,
-            .category = ProjectResourceLoadingDiagnosticCategory::LoadPlan,
-            .code = to_string(decision.kind),
-            .message = to_string(decision.kind) + " skipped: " + to_string(decision.reason),
-            .path = decision.path.empty() ? std::nullopt : std::optional<std::string>{decision.path},
-            .kind = decision.kind,
-        });
+        result.diagnostics.push_back(loading_diagnostic(
+            ResourceDiagnosticSeverity::Info,
+            ProjectResourceLoadingDiagnosticCategory::LoadPlan,
+            to_string(decision.kind),
+            to_string(decision.kind) + " skipped: " + to_string(decision.reason),
+            decision.path.empty() ? std::nullopt : std::optional<std::string>{decision.path},
+            decision.kind));
     }
 }
 
@@ -138,14 +151,13 @@ void add_skill_diagnostics(
             category = ProjectResourceLoadingDiagnosticCategory::Duplicate;
             code = "duplicate_skill_skipped";
         }
-        result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
-            .severity = ResourceDiagnosticSeverity::Warning,
-            .category = category,
-            .code = std::move(code),
-            .message = diagnostic.message,
-            .path = diagnostic.path.empty() ? std::nullopt : std::optional<std::string>{diagnostic.path},
-            .kind = kind,
-        });
+        result.diagnostics.push_back(loading_diagnostic(
+            ResourceDiagnosticSeverity::Warning,
+            category,
+            std::move(code),
+            diagnostic.message,
+            diagnostic.path.empty() ? std::nullopt : std::optional<std::string>{diagnostic.path},
+            kind));
     }
 }
 
@@ -160,14 +172,13 @@ void add_prompt_template_diagnostics(
             category = ProjectResourceLoadingDiagnosticCategory::Duplicate;
             code = "duplicate_template_skipped";
         }
-        result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
-            .severity = ResourceDiagnosticSeverity::Warning,
-            .category = category,
-            .code = std::move(code),
-            .message = diagnostic.message,
-            .path = diagnostic.path.empty() ? std::nullopt : std::optional<std::string>{diagnostic.path},
-            .kind = kind,
-        });
+        result.diagnostics.push_back(loading_diagnostic(
+            ResourceDiagnosticSeverity::Warning,
+            category,
+            std::move(code),
+            diagnostic.message,
+            diagnostic.path.empty() ? std::nullopt : std::optional<std::string>{diagnostic.path},
+            kind));
     }
 }
 
@@ -179,16 +190,15 @@ void append_project_skills(
 
     for (auto& skill : load.skills) {
         if (names.skill_names.contains(skill.name)) {
-            result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
-                .severity = ResourceDiagnosticSeverity::Info,
-                .category = ProjectResourceLoadingDiagnosticCategory::Duplicate,
-                .code = "duplicate_skill_skipped",
-                .message = std::format(
+            result.diagnostics.push_back(loading_diagnostic(
+                ResourceDiagnosticSeverity::Info,
+                ProjectResourceLoadingDiagnosticCategory::Duplicate,
+                "duplicate_skill_skipped",
+                std::format(
                     "project skill '{}' skipped: earlier resource takes precedence",
                     skill.name),
-                .path = skill.filePath.empty() ? std::nullopt : std::optional<std::string>{skill.filePath},
-                .kind = ProjectResourceKind::ProjectSkills,
-            });
+                skill.filePath.empty() ? std::nullopt : std::optional<std::string>{skill.filePath},
+                ProjectResourceKind::ProjectSkills));
             continue;
         }
         names.skill_names.insert(skill.name);
@@ -205,16 +215,15 @@ void append_prompt_templates(
 
     for (auto& tmpl : load.templates) {
         if (names.prompt_template_names.contains(tmpl.name)) {
-            result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
-                .severity = ResourceDiagnosticSeverity::Info,
-                .category = ProjectResourceLoadingDiagnosticCategory::Duplicate,
-                .code = "duplicate_template_skipped",
-                .message = std::format(
+            result.diagnostics.push_back(loading_diagnostic(
+                ResourceDiagnosticSeverity::Info,
+                ProjectResourceLoadingDiagnosticCategory::Duplicate,
+                "duplicate_template_skipped",
+                std::format(
                     "prompt template '{}' skipped: earlier resource takes precedence",
                     tmpl.name),
-                .path = std::nullopt,
-                .kind = kind,
-            });
+                std::nullopt,
+                kind));
             continue;
         }
         names.prompt_template_names.insert(tmpl.name);
@@ -289,14 +298,11 @@ void bound_diagnostics(ProjectResourceLoadingResult& result) {
     }
 
     result.diagnostics.resize(kMaxResourceDiagnostics - 1);
-    result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
-        .severity = ResourceDiagnosticSeverity::Warning,
-        .category = ProjectResourceLoadingDiagnosticCategory::LoadPlan,
-        .code = "diagnostics_truncated",
-        .message = "Additional project resource diagnostics were omitted",
-        .path = std::nullopt,
-        .kind = std::nullopt,
-    });
+    result.diagnostics.push_back(loading_diagnostic(
+        ResourceDiagnosticSeverity::Warning,
+        ProjectResourceLoadingDiagnosticCategory::LoadPlan,
+        "diagnostics_truncated",
+        "Additional project resource diagnostics were omitted"));
 }
 
 } // namespace
@@ -347,50 +353,42 @@ ProjectResourceLoadingResult load_project_resources(
                 }});
 
             if (explicit_load.templates.empty() && explicit_load.diagnostics.empty()) {
-                result.fatal_errors.push_back(ProjectResourceLoadingDiagnostic{
-                    .severity = ResourceDiagnosticSeverity::Error,
-                    .category = ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter,
-                    .code = "no_templates_found",
-                    .message = "explicit prompt template input contains no loadable .md files",
-                    .path = input_path,
-                    .kind = std::nullopt,
-                });
+                result.fatal_errors.push_back(loading_diagnostic(
+                    ResourceDiagnosticSeverity::Error,
+                    ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter,
+                    "no_templates_found",
+                    "explicit prompt template input contains no loadable .md files",
+                    input_path));
             }
 
             for (auto& diag : explicit_load.diagnostics) {
                 if (diag.code == PromptTemplateDiagnosticCode::duplicate_name) {
-                    result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
-                        .severity = ResourceDiagnosticSeverity::Warning,
-                        .category = ProjectResourceLoadingDiagnosticCategory::Duplicate,
-                        .code = "duplicate_template_skipped",
-                        .message = diag.message,
-                        .path = diag.path.empty() ? std::nullopt : std::optional<std::string>{diag.path},
-                        .kind = std::nullopt,
-                    });
+                    result.diagnostics.push_back(loading_diagnostic(
+                        ResourceDiagnosticSeverity::Warning,
+                        ProjectResourceLoadingDiagnosticCategory::Duplicate,
+                        "duplicate_template_skipped",
+                        diag.message,
+                        diag.path.empty() ? std::nullopt : std::optional<std::string>{diag.path}));
                 } else {
-                    result.fatal_errors.push_back(ProjectResourceLoadingDiagnostic{
-                        .severity = ResourceDiagnosticSeverity::Error,
-                        .category = ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter,
-                        .code = to_code(diag.code),
-                        .message = diag.message,
-                        .path = diag.path.empty() ? std::nullopt : std::optional<std::string>{diag.path},
-                        .kind = std::nullopt,
-                    });
+                    result.fatal_errors.push_back(loading_diagnostic(
+                        ResourceDiagnosticSeverity::Error,
+                        ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter,
+                        to_code(diag.code),
+                        diag.message,
+                        diag.path.empty() ? std::nullopt : std::optional<std::string>{diag.path}));
                 }
             }
 
             for (auto& tmpl : explicit_load.templates) {
                 if (names.prompt_template_names.contains(tmpl.name)) {
-                    result.diagnostics.push_back(ProjectResourceLoadingDiagnostic{
-                        .severity = ResourceDiagnosticSeverity::Info,
-                        .category = ProjectResourceLoadingDiagnosticCategory::Duplicate,
-                        .code = "duplicate_template_skipped",
-                        .message = std::format(
+                    result.diagnostics.push_back(loading_diagnostic(
+                        ResourceDiagnosticSeverity::Info,
+                        ProjectResourceLoadingDiagnosticCategory::Duplicate,
+                        "duplicate_template_skipped",
+                        std::format(
                             "explicit prompt template '{}' skipped: earlier resource takes precedence",
                             tmpl.name),
-                        .path = input_path,
-                        .kind = std::nullopt,
-                    });
+                        input_path));
                     continue;
                 }
                 names.prompt_template_names.insert(tmpl.name);

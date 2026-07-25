@@ -11,10 +11,17 @@
 namespace cch::harness::session {
 
 struct JsonlSessionStore::Impl {
+    [[nodiscard]] util::ExpectedVoid append_serialized(
+        util::Expected<std::string> serialized) {
+        if (!serialized) {
+            return std::unexpected(serialized.error());
+        }
+        return journal.append_line(*serialized);
+    }
+
     std::filesystem::path path;
     SessionMetadata metadata;
     SessionJournal journal;
-    std::size_t next_entry_id{1};
     std::optional<std::string> active_append_parent_id;
     bool persist_leaf_after_message_append{false};
 };
@@ -63,7 +70,6 @@ util::Expected<JsonlSessionStore> JsonlSessionStore::open_existing(const std::fi
     store.impl_->path = path;
     store.impl_->metadata = loaded->metadata;
     store.impl_->journal = std::move(*journal);
-    store.impl_->next_entry_id = loaded->entries.size();
     auto active_leaf = select_active_leaf_target(loaded->entries);
     if (active_leaf.saw_leaf_marker) {
         store.impl_->active_append_parent_id = std::move(active_leaf.target_id);
@@ -109,7 +115,6 @@ util::ExpectedVoid JsonlSessionStore::append(const ai::MessageVariant& message) 
     if (!result) {
         return result;
     }
-    ++impl_->next_entry_id;
 
     if (impl_->persist_leaf_after_message_append) {
         // The message itself is already durable. Advance the in-process append
@@ -117,16 +122,11 @@ util::ExpectedVoid JsonlSessionStore::append(const ai::MessageVariant& message) 
         // poison or roll back later appends.
         impl_->active_append_parent_id = entry->entry_id;
 
-        auto leaf_line = serializer.serialize_leaf(std::nullopt, entry->entry_id);
-        if (!leaf_line) {
-            return std::unexpected(leaf_line.error());
-        }
-
-        auto leaf_result = impl_->journal.append_line(*leaf_line);
-        if (!leaf_result) {
+        if (auto leaf_result = impl_->append_serialized(
+                serializer.serialize_leaf(std::nullopt, entry->entry_id));
+            !leaf_result) {
             return leaf_result;
         }
-        ++impl_->next_entry_id;
     }
     return {};
 }
@@ -136,48 +136,24 @@ util::ExpectedVoid JsonlSessionStore::append_model_change(
     std::string provider,
     std::string model_id) {
     EntrySerializer serializer;
-    auto line = serializer.serialize_model_change(std::move(parent_id), std::move(provider), std::move(model_id));
-    if (!line) {
-        return std::unexpected(line.error());
-    }
-
-    auto result = impl_->journal.append_line(*line);
-    if (result) {
-        ++impl_->next_entry_id;
-    }
-    return result;
+    return impl_->append_serialized(serializer.serialize_model_change(
+        std::move(parent_id), std::move(provider), std::move(model_id)));
 }
 
 util::ExpectedVoid JsonlSessionStore::append_thinking_level_change(
     std::optional<std::string> parent_id,
     std::string thinking_level) {
     EntrySerializer serializer;
-    auto line = serializer.serialize_thinking_level_change(std::move(parent_id), std::move(thinking_level));
-    if (!line) {
-        return std::unexpected(line.error());
-    }
-
-    auto result = impl_->journal.append_line(*line);
-    if (result) {
-        ++impl_->next_entry_id;
-    }
-    return result;
+    return impl_->append_serialized(serializer.serialize_thinking_level_change(
+        std::move(parent_id), std::move(thinking_level)));
 }
 
 util::ExpectedVoid JsonlSessionStore::append_active_tools_change(
     std::optional<std::string> parent_id,
     std::vector<std::string> tools) {
     EntrySerializer serializer;
-    auto line = serializer.serialize_active_tools_change(std::move(parent_id), std::move(tools));
-    if (!line) {
-        return std::unexpected(line.error());
-    }
-
-    auto result = impl_->journal.append_line(*line);
-    if (result) {
-        ++impl_->next_entry_id;
-    }
-    return result;
+    return impl_->append_serialized(serializer.serialize_active_tools_change(
+        std::move(parent_id), std::move(tools)));
 }
 
 util::ExpectedVoid JsonlSessionStore::append_custom_entry(
@@ -185,16 +161,8 @@ util::ExpectedVoid JsonlSessionStore::append_custom_entry(
     std::string custom_type,
     util::JsonValue data) {
     EntrySerializer serializer;
-    auto line = serializer.serialize_custom_entry(std::move(parent_id), std::move(custom_type), std::move(data));
-    if (!line) {
-        return std::unexpected(line.error());
-    }
-
-    auto result = impl_->journal.append_line(*line);
-    if (result) {
-        ++impl_->next_entry_id;
-    }
-    return result;
+    return impl_->append_serialized(serializer.serialize_custom_entry(
+        std::move(parent_id), std::move(custom_type), std::move(data)));
 }
 
 util::ExpectedVoid JsonlSessionStore::append_custom_message_entry(
@@ -204,17 +172,12 @@ util::ExpectedVoid JsonlSessionStore::append_custom_message_entry(
     bool display,
     std::optional<util::JsonValue> details) {
     EntrySerializer serializer;
-    auto line = serializer.serialize_custom_message_entry(
-        std::move(parent_id), std::move(custom_type), std::move(content), display, std::move(details));
-    if (!line) {
-        return std::unexpected(line.error());
-    }
-
-    auto result = impl_->journal.append_line(*line);
-    if (result) {
-        ++impl_->next_entry_id;
-    }
-    return result;
+    return impl_->append_serialized(serializer.serialize_custom_message_entry(
+        std::move(parent_id),
+        std::move(custom_type),
+        std::move(content),
+        display,
+        std::move(details)));
 }
 
 util::ExpectedVoid JsonlSessionStore::append_label_change(
@@ -222,16 +185,8 @@ util::ExpectedVoid JsonlSessionStore::append_label_change(
     std::string target_id,
     std::optional<std::string> label) {
     EntrySerializer serializer;
-    auto line = serializer.serialize_label_change(std::move(parent_id), std::move(target_id), std::move(label));
-    if (!line) {
-        return std::unexpected(line.error());
-    }
-
-    auto result = impl_->journal.append_line(*line);
-    if (result) {
-        ++impl_->next_entry_id;
-    }
-    return result;
+    return impl_->append_serialized(serializer.serialize_label_change(
+        std::move(parent_id), std::move(target_id), std::move(label)));
 }
 
 util::ExpectedVoid JsonlSessionStore::append_compaction(
@@ -242,22 +197,13 @@ util::ExpectedVoid JsonlSessionStore::append_compaction(
     std::optional<util::JsonValue> details,
     std::optional<bool> from_hook) {
     EntrySerializer serializer;
-    auto line = serializer.serialize_compaction(
+    return impl_->append_serialized(serializer.serialize_compaction(
         std::move(parent_id),
         std::move(summary),
         std::move(first_kept_entry_id),
         tokens_before,
         std::move(details),
-        from_hook);
-    if (!line) {
-        return std::unexpected(line.error());
-    }
-
-    auto result = impl_->journal.append_line(*line);
-    if (result) {
-        ++impl_->next_entry_id;
-    }
-    return result;
+        from_hook));
 }
 
 util::ExpectedVoid JsonlSessionStore::append_branch_summary(
@@ -267,49 +213,28 @@ util::ExpectedVoid JsonlSessionStore::append_branch_summary(
     std::optional<util::JsonValue> details,
     std::optional<bool> from_hook) {
     EntrySerializer serializer;
-    auto line = serializer.serialize_branch_summary(
-        std::move(parent_id), std::move(from_id), std::move(summary), std::move(details), from_hook);
-    if (!line) {
-        return std::unexpected(line.error());
-    }
-
-    auto result = impl_->journal.append_line(*line);
-    if (result) {
-        ++impl_->next_entry_id;
-    }
-    return result;
+    return impl_->append_serialized(serializer.serialize_branch_summary(
+        std::move(parent_id),
+        std::move(from_id),
+        std::move(summary),
+        std::move(details),
+        from_hook));
 }
 
 util::ExpectedVoid JsonlSessionStore::append_session_info(
     std::optional<std::string> parent_id,
     std::string name) {
     EntrySerializer serializer;
-    auto line = serializer.serialize_session_info(std::move(parent_id), std::move(name));
-    if (!line) {
-        return std::unexpected(line.error());
-    }
-
-    auto result = impl_->journal.append_line(*line);
-    if (result) {
-        ++impl_->next_entry_id;
-    }
-    return result;
+    return impl_->append_serialized(serializer.serialize_session_info(
+        std::move(parent_id), std::move(name)));
 }
 
 util::ExpectedVoid JsonlSessionStore::append_leaf(
     std::optional<std::string> parent_id,
     std::string target_id) {
     EntrySerializer serializer;
-    auto line = serializer.serialize_leaf(std::move(parent_id), std::move(target_id));
-    if (!line) {
-        return std::unexpected(line.error());
-    }
-
-    auto result = impl_->journal.append_line(*line);
-    if (result) {
-        ++impl_->next_entry_id;
-    }
-    return result;
+    return impl_->append_serialized(serializer.serialize_leaf(
+        std::move(parent_id), std::move(target_id)));
 }
 
 } // namespace cch::harness::session

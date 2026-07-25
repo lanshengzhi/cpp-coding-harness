@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../include/cch/util/Error.hpp"
+#include "PosixWrite.hpp"
 #include "UniqueFd.hpp"
 
 #include <filesystem>
@@ -80,21 +81,12 @@ inline util::ExpectedVoid write_atomic_file(const std::filesystem::path& target,
     if (!file_fd) {
         return std::unexpected(write_error("could not create temporary file: " + std::string(std::strerror(errno))));
     }
-    const char* data = content.data();
-    std::size_t remaining = content.size();
-    while (remaining > 0) {
-        ssize_t written = ::write(file_fd.get(), data, remaining);
-        if (written < 0) {
-            const auto message = std::string(std::strerror(errno));
-            ::unlinkat(dir_fd.get(), temp_filename.c_str(), 0);
+    if (auto persisted = write_all_fsync(file_fd.get(), content); !persisted) {
+        const auto message = std::string(std::strerror(persisted.error().error_number));
+        ::unlinkat(dir_fd.get(), temp_filename.c_str(), 0);
+        if (persisted.error().kind == PosixWriteErrorKind::Write) {
             return std::unexpected(write_error("could not write temporary file: " + message));
         }
-        data += written;
-        remaining -= static_cast<std::size_t>(written);
-    }
-    if (::fsync(file_fd.get()) != 0) {
-        const auto message = std::string(std::strerror(errno));
-        ::unlinkat(dir_fd.get(), temp_filename.c_str(), 0);
         return std::unexpected(write_error("could not flush temporary file: " + message));
     }
     if (file_fd.close() != 0) {

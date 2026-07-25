@@ -1,6 +1,7 @@
 #include "coding_agent/PromptTemplateLoader.hpp"
 
 #include "SkillFrontmatterParser.hpp"
+#include "LoaderPath.hpp"
 #include "../harness/WorkspaceFileSystem.hpp"
 
 #include <algorithm>
@@ -170,27 +171,10 @@ PromptTemplateLoadResult loadPromptTemplates(
             // Only load .md files.
             if (!hasMarkdownExtension(entry.name)) continue;
 
-            // Build relative path from the entry's path. The entry.path is
-            // an absolute path; we need a workspace-relative path for the loader.
-            // Extract the relative portion from the workspace root.
-            auto rel = entry.path;
-            // Use the entry path directly since listDir returns workspace-relative paths
-            // for entries... actually, listDir returns absolute paths. We need to
-            // compute the relative path for loadPromptTemplateFromFile.
-            // The loadPromptTemplateFromFile takes a workspace-relative path.
-            // We can compute it from the workspace root.
-            std::string relative_path;
-            const auto& root = fs.root().string();
-            if (entry.path.starts_with(root)) {
-                relative_path = entry.path.substr(root.size());
-                // Strip leading slash.
-                if (!relative_path.empty() && relative_path.front() == '/') {
-                    relative_path.erase(0, 1);
-                }
-            } else {
-                // Fallback: use the name relative to the spec path.
-                relative_path = spec.path + "/" + entry.name;
-            }
+            // listDir returns absolute entry paths; convert paths beneath the
+            // workspace to the relative form required by the file loader.
+            const auto stripped_path = strip_workspace_root(fs.root(), entry.path);
+            const auto relative_path = stripped_path.value_or(spec.path + "/" + entry.name);
 
             auto file_result = loadPromptTemplateFromFile(fs, relative_path);
 

@@ -1,6 +1,7 @@
 #include "SessionJournal.hpp"
 #include "SessionJournalTestHooks.hpp"
 
+#include "harness/PosixWrite.hpp"
 #include "harness/UniqueFd.hpp"
 
 #include <algorithm>
@@ -357,20 +358,11 @@ util::ExpectedVoid SessionJournal::append_line(std::string_view line) const {
             opened.error().message + ": " + opened.error().detail));
     }
 
-    const char* data = line.data();
-    std::size_t remaining = line.size();
-    while (remaining > 0) {
-        ssize_t written = ::write(opened->get(), data, remaining);
-        if (written < 0) {
-            const auto message = std::string(std::strerror(errno));
+    if (auto persisted = write_all_fsync(opened->get(), line); !persisted) {
+        const auto message = std::string(std::strerror(persisted.error().error_number));
+        if (persisted.error().kind == PosixWriteErrorKind::Write) {
             return std::unexpected(session_error("could not write session entry", message));
         }
-        data += written;
-        remaining -= static_cast<std::size_t>(written);
-    }
-
-    if (::fsync(opened->get()) != 0) {
-        const auto message = std::string(std::strerror(errno));
         return std::unexpected(session_error("could not persist session entry", message));
     }
     if (opened->close() != 0) {
@@ -562,21 +554,12 @@ util::ExpectedVoid SessionJournal::write_new_file_exclusive(
             opened.error().message + ": " + opened.error().detail));
     }
 
-    const char* data = content.data();
-    std::size_t remaining = content.size();
-    while (remaining > 0) {
-        ssize_t written = ::write(opened->get(), data, remaining);
-        if (written < 0) {
-            const auto message = std::string(std::strerror(errno));
-            remove_session_file(path);
+    if (auto persisted = write_all_fsync(opened->get(), content); !persisted) {
+        const auto message = std::string(std::strerror(persisted.error().error_number));
+        remove_session_file(path);
+        if (persisted.error().kind == PosixWriteErrorKind::Write) {
             return std::unexpected(session_error("could not write session header", message));
         }
-        data += written;
-        remaining -= static_cast<std::size_t>(written);
-    }
-    if (::fsync(opened->get()) != 0) {
-        const auto message = std::string(std::strerror(errno));
-        remove_session_file(path);
         return std::unexpected(session_error("could not flush session header", message));
     }
     if (opened->close() != 0) {

@@ -134,7 +134,6 @@ add_library(cch_coding_agent_runtime
     src/coding_agent/runtime/JsonEventPrinter.cpp
     src/coding_agent/runtime/RpcJsonl.cpp
     src/coding_agent/runtime/RpcMode.cpp
-    src/coding_agent/runtime/RuntimeServices.cpp
     src/coding_agent/runtime/SessionLifecycle.cpp
 )
 cch_target_defaults(cch_coding_agent_runtime)

@@ -1,5 +1,6 @@
 #include <cch/harness/LocalExecutionEnv.hpp>
 
+#include "ExecutionErrorClassification.hpp"
 #include "SyncLocalExecutionEnv.hpp"
 #include "util/Process.hpp"
 
@@ -114,23 +115,13 @@ boost::asio::awaitable<std::expected<ShellExecResult, ExecutionError>> AsyncLoca
     ExecOptions options) {
     auto request = sync_->make_exec_request(std::move(command), std::move(options));
     if (!request) {
-        if (request.error().detail.find("disabled") != std::string::npos) {
-            co_return std::unexpected(ExecutionError{ExecutionErrorCode::ShellUnavailable, request.error().detail});
-        }
-        co_return std::unexpected(ExecutionError{ExecutionErrorCode::SpawnError, request.error().detail});
+        co_return std::unexpected(classify_execution_error(
+            request.error(), ExecutionErrorOrigin::Request));
     }
     auto process = co_await sync_->process_runner()->run(std::move(*request));
     if (!process) {
-        const auto& err = process.error();
-        auto code = ExecutionErrorCode::Unknown;
-        if (err.code == util::ErrorCode::Timeout) {
-            code = ExecutionErrorCode::Timeout;
-        } else if (err.detail.find("callback") != std::string::npos) {
-            code = ExecutionErrorCode::CallbackError;
-        } else {
-            code = ExecutionErrorCode::SpawnError;
-        }
-        co_return std::unexpected(ExecutionError{code, err.detail});
+        co_return std::unexpected(classify_execution_error(
+            process.error(), ExecutionErrorOrigin::Process));
     }
     if (process->timed_out) {
         co_return std::unexpected(ExecutionError{ExecutionErrorCode::Timeout, "shell command timed out"});

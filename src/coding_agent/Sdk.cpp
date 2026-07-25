@@ -1,5 +1,6 @@
 #include "../../include/cch/coding_agent/Sdk.hpp"
 
+#include "coding_agent/ScopeExit.hpp"
 #include "coding_agent/runtime/AgentSessionPromptAccess.hpp"
 #include "coding_agent/runtime/AgentSessionRuntime.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
@@ -15,18 +16,6 @@
 
 namespace cch::coding_agent {
 namespace {
-
-template <typename Callback>
-class ScopeExit final {
-public:
-    explicit ScopeExit(Callback callback) : callback_(std::move(callback)) {}
-    ScopeExit(const ScopeExit&) = delete;
-    ScopeExit& operator=(const ScopeExit&) = delete;
-    ~ScopeExit() { callback_(); }
-
-private:
-    Callback callback_;
-};
 
 thread_local const AgentSession::Impl* blocking_prompt_wait = nullptr;
 

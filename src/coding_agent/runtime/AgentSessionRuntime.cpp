@@ -1,6 +1,8 @@
 #include "AgentSessionRuntime.hpp"
 
-#include "../../../include/cch/ai/Content.hpp"
+#include <cch/ai/Content.hpp>
+
+#include "coding_agent/ScopeExit.hpp"
 #include "coding_agent/SkillFormatting.hpp"
 
 #include <boost/asio/co_spawn.hpp>
@@ -13,18 +15,6 @@
 namespace cch::coding_agent::runtime {
 
 namespace {
-
-template <typename Callback>
-class ScopeExit final {
-public:
-    explicit ScopeExit(Callback callback) : callback_(std::move(callback)) {}
-    ScopeExit(const ScopeExit&) = delete;
-    ScopeExit& operator=(const ScopeExit&) = delete;
-    ~ScopeExit() { callback_(); }
-
-private:
-    Callback callback_;
-};
 
 [[nodiscard]] std::optional<std::string> last_assistant_text_from(
     const std::vector<ai::MessageVariant>& history) {

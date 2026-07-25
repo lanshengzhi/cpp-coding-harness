@@ -147,6 +147,15 @@ struct LeafDto {
     return util::make_error(util::ErrorCode::Session, std::move(message), std::move(detail));
 }
 
+template <typename Dto>
+[[nodiscard]] util::Expected<std::string> serialize_tree_entry(const Dto& dto) {
+    auto json = glz::write_json(dto);
+    if (!json) {
+        return std::unexpected(session_error("failed to serialize tree entry"));
+    }
+    return *json + '\n';
+}
+
 [[nodiscard]] util::Expected<std::string> entry_type(const glz::generic& parsed, std::size_t line_number) {
     try {
         return parsed.get<glz::generic::object_t>().at("type").get<std::string>();
@@ -807,12 +816,7 @@ util::Expected<std::string> EntrySerializer::serialize_model_change(
     dto.timestamp = generate_iso_timestamp();
     dto.provider = std::move(provider);
     dto.modelId = std::move(model_id);
-
-    auto json_str = glz::write_json(dto);
-    if (!json_str) {
-        return std::unexpected(session_error("failed to serialize tree entry"));
-    }
-    return *json_str + '\n';
+    return serialize_tree_entry(dto);
 }
 
 util::Expected<std::string> EntrySerializer::serialize_thinking_level_change(
@@ -823,12 +827,7 @@ util::Expected<std::string> EntrySerializer::serialize_thinking_level_change(
     dto.parentId = std::move(parent_id);
     dto.timestamp = generate_iso_timestamp();
     dto.thinkingLevel = std::move(thinking_level);
-
-    auto json_str = glz::write_json(dto);
-    if (!json_str) {
-        return std::unexpected(session_error("failed to serialize tree entry"));
-    }
-    return *json_str + '\n';
+    return serialize_tree_entry(dto);
 }
 
 util::Expected<std::string> EntrySerializer::serialize_active_tools_change(
@@ -839,12 +838,7 @@ util::Expected<std::string> EntrySerializer::serialize_active_tools_change(
     dto.parentId = std::move(parent_id);
     dto.timestamp = generate_iso_timestamp();
     dto.tools = std::move(tools);
-
-    auto json_str = glz::write_json(dto);
-    if (!json_str) {
-        return std::unexpected(session_error("failed to serialize tree entry"));
-    }
-    return *json_str + '\n';
+    return serialize_tree_entry(dto);
 }
 
 util::Expected<std::string> EntrySerializer::serialize_custom_entry(
@@ -862,12 +856,7 @@ util::Expected<std::string> EntrySerializer::serialize_custom_entry(
     dto.timestamp = generate_iso_timestamp();
     dto.customType = std::move(custom_type);
     dto.data = glz::raw_json{std::move(*data_json)};
-
-    auto json_str = glz::write_json(dto);
-    if (!json_str) {
-        return std::unexpected(session_error("failed to serialize tree entry"));
-    }
-    return *json_str + '\n';
+    return serialize_tree_entry(dto);
 }
 
 util::Expected<std::string> EntrySerializer::serialize_custom_message_entry(
@@ -895,12 +884,7 @@ util::Expected<std::string> EntrySerializer::serialize_custom_message_entry(
         }
         dto.details = glz::raw_json{std::move(*details_json)};
     }
-
-    auto json_str = glz::write_json(dto);
-    if (!json_str) {
-        return std::unexpected(session_error("failed to serialize tree entry"));
-    }
-    return *json_str + '\n';
+    return serialize_tree_entry(dto);
 }
 
 util::Expected<std::string> EntrySerializer::serialize_label_change(
@@ -913,12 +897,7 @@ util::Expected<std::string> EntrySerializer::serialize_label_change(
     dto.timestamp = generate_iso_timestamp();
     dto.targetId = std::move(target_id);
     dto.label = std::move(label);
-
-    auto json_str = glz::write_json(dto);
-    if (!json_str) {
-        return std::unexpected(session_error("failed to serialize tree entry"));
-    }
-    return *json_str + '\n';
+    return serialize_tree_entry(dto);
 }
 
 util::Expected<std::string> EntrySerializer::serialize_compaction(
@@ -943,12 +922,7 @@ util::Expected<std::string> EntrySerializer::serialize_compaction(
         dto.details = glz::raw_json{std::move(*details_json)};
     }
     dto.fromHook = from_hook;
-
-    auto json_str = glz::write_json(dto);
-    if (!json_str) {
-        return std::unexpected(session_error("failed to serialize tree entry"));
-    }
-    return *json_str + '\n';
+    return serialize_tree_entry(dto);
 }
 
 util::Expected<std::string> EntrySerializer::serialize_branch_summary(
@@ -971,12 +945,7 @@ util::Expected<std::string> EntrySerializer::serialize_branch_summary(
         dto.details = glz::raw_json{std::move(*details_json)};
     }
     dto.fromHook = from_hook;
-
-    auto json_str = glz::write_json(dto);
-    if (!json_str) {
-        return std::unexpected(session_error("failed to serialize tree entry"));
-    }
-    return *json_str + '\n';
+    return serialize_tree_entry(dto);
 }
 
 util::Expected<std::string> EntrySerializer::serialize_session_info(
@@ -987,12 +956,7 @@ util::Expected<std::string> EntrySerializer::serialize_session_info(
     dto.parentId = std::move(parent_id);
     dto.timestamp = generate_iso_timestamp();
     dto.name = std::move(name);
-
-    auto json_str = glz::write_json(dto);
-    if (!json_str) {
-        return std::unexpected(session_error("failed to serialize tree entry"));
-    }
-    return *json_str + '\n';
+    return serialize_tree_entry(dto);
 }
 
 util::Expected<std::string> EntrySerializer::serialize_leaf(
@@ -1003,12 +967,7 @@ util::Expected<std::string> EntrySerializer::serialize_leaf(
     dto.parentId = std::move(parent_id);
     dto.timestamp = generate_iso_timestamp();
     dto.targetId = std::move(target_id);
-
-    auto json_str = glz::write_json(dto);
-    if (!json_str) {
-        return std::unexpected(session_error("failed to serialize tree entry"));
-    }
-    return *json_str + '\n';
+    return serialize_tree_entry(dto);
 }
 
 } // namespace cch::harness::session

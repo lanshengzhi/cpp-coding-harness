@@ -1,5 +1,7 @@
 #include "SyncLocalExecutionEnv.hpp"
 
+#include "ExecutionErrorClassification.hpp"
+
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
@@ -211,10 +213,8 @@ std::expected<ShellExecResult, ExecutionError> SyncLocalExecutionEnv::exec(
     ExecOptions options) const {
     auto request = make_exec_request(std::move(command), std::move(options));
     if (!request) {
-        if (request.error().detail.find("disabled") != std::string::npos) {
-            return std::unexpected(ExecutionError{ExecutionErrorCode::ShellUnavailable, request.error().detail});
-        }
-        return std::unexpected(ExecutionError{ExecutionErrorCode::SpawnError, request.error().detail});
+        return std::unexpected(classify_execution_error(
+            request.error(), ExecutionErrorOrigin::Request));
     }
 
     boost::asio::io_context io;
@@ -232,16 +232,8 @@ std::expected<ShellExecResult, ExecutionError> SyncLocalExecutionEnv::exec(
         return std::unexpected(ExecutionError{ExecutionErrorCode::SpawnError, "process execution did not complete"});
     }
     if (!*process) {
-        const auto& err = (*process).error();
-        auto code = ExecutionErrorCode::Unknown;
-        if (err.code == util::ErrorCode::Timeout) {
-            code = ExecutionErrorCode::Timeout;
-        } else if (err.detail.find("callback") != std::string::npos) {
-            code = ExecutionErrorCode::CallbackError;
-        } else {
-            code = ExecutionErrorCode::SpawnError;
-        }
-        return std::unexpected(ExecutionError{code, err.detail});
+        return std::unexpected(classify_execution_error(
+            (*process).error(), ExecutionErrorOrigin::Process));
     }
     if ((*process)->timed_out) {
         return std::unexpected(ExecutionError{ExecutionErrorCode::Timeout, "shell command timed out"});

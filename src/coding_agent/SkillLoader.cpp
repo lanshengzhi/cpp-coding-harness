@@ -1,6 +1,7 @@
 #include "coding_agent/SkillLoader.hpp"
 
 #include "SkillFrontmatterParser.hpp"
+#include "LoaderPath.hpp"
 #include "../harness/WorkspaceFileSystem.hpp"
 
 #include <algorithm>
@@ -95,23 +96,14 @@ SkillLoadResult loadSkillFromFile(
     const std::string& filePath) {
     SkillLoadResult result;
 
-    // Resolve absolute path for storage and convert to workspace-relative
-    // for readTextFile (which requires relative paths).
-    std::string readPath = filePath;
-    std::string absolutePath = filePath;
-
-    // If the path is absolute, make it relative to the workspace root.
+    // Resolve absolute path for storage and convert paths beneath the
+    // workspace to the relative form required by readTextFile.
     const auto& root = fs.root();
-    std::string rootStr = root.string();
-    if (filePath.starts_with("/") && filePath.starts_with(rootStr)) {
-        readPath = filePath.substr(rootStr.size());
-        if (readPath.starts_with("/")) {
-            readPath = readPath.substr(1);
-        }
-    } else {
-        // Relative path: construct absolute for storage.
-        absolutePath = (root / filePath).lexically_normal().string();
-    }
+    const auto relative_path = strip_workspace_root(root, filePath);
+    const std::string readPath = relative_path.value_or(filePath);
+    const std::string absolutePath = std::filesystem::path{filePath}.is_absolute()
+        ? filePath
+        : (root / filePath).lexically_normal().string();
 
     auto readResult = fs.readTextFile(readPath);
     if (!readResult.has_value()) {
@@ -331,28 +323,22 @@ SkillLoadResult loadSkills(
     std::unordered_set<std::string> seenNames;
 
     for (const auto& dirSpec : dirs) {
-        // Convert absolute paths to workspace-relative for fileInfo.
-        std::string dirPath = dirSpec.path;
-        const auto& root = fs.root();
-        std::string rootStr = root.string();
-        if (dirPath.starts_with("/") && dirPath.starts_with(rootStr)) {
-            dirPath = dirPath.substr(rootStr.size());
-            if (dirPath.starts_with("/")) dirPath = dirPath.substr(1);
-        }
-        // If absolute but not under workspace root, skip (can't access).
-        if (dirPath.starts_with("/")) {
+        // Convert absolute paths beneath the workspace to relative paths for
+        // fileInfo. Absolute paths outside the workspace are inaccessible.
+        auto dir_path = strip_workspace_root(fs.root(), dirSpec.path);
+        if (!dir_path) {
             continue;
         }
 
         // Check if the directory exists (skip missing dirs silently).
-        auto infoResult = fs.fileInfo(dirPath);
+        auto infoResult = fs.fileInfo(*dir_path);
         if (!infoResult.has_value()) {
             if (infoResult.error().code != harness::FileErrorCode::NotFound) {
                 result.diagnostics.push_back(SkillDiagnostic{
                     .type = "warning",
                     .code = SkillDiagnosticCode::file_info_failed,
                     .message = infoResult.error().message,
-                    .path = dirPath,
+                    .path = *dir_path,
                 });
             }
             continue;
@@ -364,7 +350,7 @@ SkillLoadResult loadSkills(
         }
 
         // Walk the directory recursively.
-        loadSkillsFromDir(fs, dirPath, dirSpec.includeRootFiles, seenNames, result);
+        loadSkillsFromDir(fs, *dir_path, dirSpec.includeRootFiles, seenNames, result);
     }
 
     return result;

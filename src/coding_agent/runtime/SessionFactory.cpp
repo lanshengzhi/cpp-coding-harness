@@ -64,7 +64,7 @@ struct ResumeSessionTarget {
     bool workspace_explicit{false};
 };
 
-using SessionTarget = std::variant<
+using NormalizedSessionTarget = std::variant<
     AutomaticNewSessionTarget,
     NewSessionTarget,
     InMemoryNewSessionTarget,
@@ -74,7 +74,7 @@ enum class CreationProfile { Cli, Sdk };
 
 struct AssemblyPlan {
     CreationProfile profile;
-    SessionTarget target;
+    NormalizedSessionTarget target;
     coding_agent::ProviderRequest provider_request;
     std::unique_ptr<ai::StreamingChatClient> host_client;
     std::shared_ptr<harness::AsyncExecutionEnv> host_execution_env;
@@ -206,10 +206,7 @@ void add_project_resource_loading_diagnostics(
 
 [[nodiscard]] util::Expected<std::unique_ptr<ai::StreamingChatClient>> build_chat_client(
     const coding_agent::ProviderRequest& explicit_request,
-    const coding_agent::ResolvedProviderSettings& resolved,
-    std::vector<SdkDiagnostic>& diagnostics) {
-    (void)diagnostics;
-
+    const coding_agent::ResolvedProviderSettings& resolved) {
     auto registry = ai::make_default_provider_registry();
     if (!registry) {
         return std::unexpected(registry.error());
@@ -388,63 +385,89 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
     return std::optional<std::filesystem::path>{std::move(*resolved)};
 }
 
+struct SessionTargetNormalizationOptions {
+    CreationProfile profile;
+    std::filesystem::path workspace;
+    bool workspace_explicit{false};
+    std::optional<std::string> cli_session_dir{std::nullopt};
+    std::optional<std::string> settings_session_dir{std::nullopt};
+};
+
+[[nodiscard]] util::Expected<NormalizedSessionTarget> normalize_session_target(
+    coding_agent::SessionTarget target,
+    SessionTargetNormalizationOptions options) {
+    const bool sdk_resume_without_workspace =
+        options.profile == CreationProfile::Sdk &&
+        std::holds_alternative<ExplicitResumeSessionTarget>(target) &&
+        options.workspace.empty();
+    if (!sdk_resume_without_workspace) {
+        auto workspace = resolve_canonical_workspace(options.workspace);
+        if (!workspace) {
+            return std::unexpected(workspace.error());
+        }
+        options.workspace = std::move(*workspace);
+    }
+
+    if (std::holds_alternative<DefaultPersistedSessionTarget>(target)) {
+        std::optional<std::filesystem::path> directory_override;
+        if (options.profile == CreationProfile::Cli) {
+            auto resolved = resolve_cli_session_dir_override(
+                options.cli_session_dir,
+                options.settings_session_dir,
+                options.workspace);
+            if (!resolved) {
+                return std::unexpected(resolved.error());
+            }
+            directory_override = std::move(*resolved);
+        }
+        return NormalizedSessionTarget{AutomaticNewSessionTarget{
+            .workspace = std::move(options.workspace),
+            .directory_override = std::move(directory_override),
+        }};
+    }
+    if (auto* explicit_new = std::get_if<ExplicitNewSessionTarget>(&target)) {
+        return NormalizedSessionTarget{NewSessionTarget{
+            .session_path = std::move(explicit_new->path),
+            .workspace = std::move(options.workspace),
+        }};
+    }
+    if (auto* explicit_resume = std::get_if<ExplicitResumeSessionTarget>(&target)) {
+        return NormalizedSessionTarget{ResumeSessionTarget{
+            .resume_path = std::move(explicit_resume->path),
+            .workspace = std::move(options.workspace),
+            .workspace_explicit = options.workspace_explicit,
+        }};
+    }
+    if (std::holds_alternative<InMemorySessionTarget>(target)) {
+        return NormalizedSessionTarget{InMemoryNewSessionTarget{
+            .workspace = std::move(options.workspace),
+        }};
+    }
+    return std::unexpected(util::make_error(
+        util::ErrorCode::Validation,
+        options.profile == CreationProfile::Cli
+            ? "unsupported CLI session target"
+            : "unsupported SDK session target"));
+}
+
 [[nodiscard]] util::Expected<AssemblyPlan> normalize_cli(
     AgentSessionCreationRequest request,
     const coding_agent::UserSettings& settings) {
     AssemblyPlan plan;
     plan.profile = CreationProfile::Cli;
-    if (std::holds_alternative<DefaultPersistedSessionTarget>(request.session_target)) {
-        // An omitted --session/--resume is default persisted creation under
-        // the canonical workspace key, not a preflight-invented project path.
-        auto workspace = resolve_canonical_workspace(request.workspace);
-        if (!workspace) {
-            return std::unexpected(workspace.error());
-        }
-        auto directory_override = resolve_cli_session_dir_override(
-            request.session_dir, settings.session_dir, *workspace);
-        if (!directory_override) {
-            return std::unexpected(directory_override.error());
-        }
-        plan.target = AutomaticNewSessionTarget{
-            .workspace = std::move(*workspace),
-            .directory_override = std::move(*directory_override),
-        };
-    } else if (const auto* target =
-                   std::get_if<ExplicitNewSessionTarget>(&request.session_target)) {
-        auto workspace = resolve_canonical_workspace(request.workspace);
-        if (!workspace) {
-            return std::unexpected(workspace.error());
-        }
-        plan.target = NewSessionTarget{
-            .session_path = target->path,
-            .workspace = std::move(*workspace),
-        };
-    } else if (const auto* target =
-                   std::get_if<ExplicitResumeSessionTarget>(&request.session_target)) {
-        // Resume keeps one resolved workspace: an explicit --workspace must
-        // name a real directory, while the process-cwd fallback always does.
-        auto workspace = resolve_canonical_workspace(request.workspace);
-        if (!workspace) {
-            return std::unexpected(workspace.error());
-        }
-        plan.target = ResumeSessionTarget{
-            .resume_path = target->path,
-            .workspace = std::move(*workspace),
+    auto target = normalize_session_target(
+        std::move(request.session_target),
+        SessionTargetNormalizationOptions{
+            .profile = CreationProfile::Cli,
+            .workspace = request.workspace,
             .workspace_explicit = request.workspace_explicit,
-        };
-    } else if (std::holds_alternative<InMemorySessionTarget>(request.session_target)) {
-        auto workspace = resolve_canonical_workspace(request.workspace);
-        if (!workspace) {
-            return std::unexpected(workspace.error());
-        }
-        plan.target = InMemoryNewSessionTarget{
-            .workspace = std::move(*workspace),
-        };
-    } else {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "unsupported CLI session target"));
+            .cli_session_dir = request.session_dir,
+            .settings_session_dir = settings.session_dir,
+        });
+    if (!target) {
+        return std::unexpected(target.error());
     }
+    plan.target = std::move(*target);
 
     coding_agent::ProviderRequest pr;
     pr.model = request.provider_overrides.model;
@@ -504,54 +527,18 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
 
     AssemblyPlan plan;
     plan.profile = CreationProfile::Sdk;
-    if (std::holds_alternative<DefaultPersistedSessionTarget>(options.session_target)) {
-        auto workspace = resolve_canonical_workspace(options.workspace);
-        if (!workspace) {
-            return std::unexpected(workspace.error());
-        }
-        // SDK default persistence never consumes CLI session-directory inputs.
-        plan.target = AutomaticNewSessionTarget{
-            .workspace = std::move(*workspace),
-            .directory_override = std::nullopt,
-        };
-    } else if (const auto* target =
-                   std::get_if<ExplicitNewSessionTarget>(&options.session_target)) {
-        auto workspace = resolve_canonical_workspace(options.workspace);
-        if (!workspace) {
-            return std::unexpected(workspace.error());
-        }
-        plan.target = NewSessionTarget{
-            .session_path = target->path,
-            .workspace = std::move(*workspace),
-        };
-    } else if (const auto* resume_target =
-                   std::get_if<ExplicitResumeSessionTarget>(&options.session_target)) {
-        const bool workspace_explicit = !options.workspace.empty();
-        if (workspace_explicit) {
-            auto workspace = resolve_canonical_workspace(options.workspace);
-            if (!workspace) {
-                return std::unexpected(workspace.error());
-            }
-            options.workspace = std::move(*workspace);
-        }
-        plan.target = ResumeSessionTarget{
-            .resume_path = resume_target->path,
+    const bool workspace_explicit = !options.workspace.empty();
+    auto target = normalize_session_target(
+        std::move(options.session_target),
+        SessionTargetNormalizationOptions{
+            .profile = CreationProfile::Sdk,
             .workspace = options.workspace,
             .workspace_explicit = workspace_explicit,
-        };
-    } else if (std::holds_alternative<InMemorySessionTarget>(options.session_target)) {
-        auto workspace = resolve_canonical_workspace(options.workspace);
-        if (!workspace) {
-            return std::unexpected(workspace.error());
-        }
-        plan.target = InMemoryNewSessionTarget{
-            .workspace = std::move(*workspace),
-        };
-    } else {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "unsupported SDK session target"));
+        });
+    if (!target) {
+        return std::unexpected(target.error());
     }
+    plan.target = std::move(*target);
 
     coding_agent::ProviderRequest pr;
     if (options.provider_config) {
@@ -704,7 +691,7 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
                 "Resumed session with host-provided chat client; stored provider/model metadata may differ"));
         }
     } else {
-        auto client_result = build_chat_client(plan.provider_request, resolved, diagnostics);
+        auto client_result = build_chat_client(plan.provider_request, resolved);
         if (!client_result) {
             return std::unexpected(client_result.error());
         }
