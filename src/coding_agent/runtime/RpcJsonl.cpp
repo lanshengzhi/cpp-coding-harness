@@ -1,5 +1,6 @@
 #include "RpcJsonl.hpp"
 
+#include "coding_agent/runtime/BoundedText.hpp"
 #include "util/Json.hpp"
 
 #include <ostream>
@@ -18,10 +19,7 @@ std::string strip_trailing_cr(std::string line) {
 }
 
 std::string bounded_error(std::string message) {
-    if (message.size() > kMaxErrorBytes) {
-        message.resize(kMaxErrorBytes);
-    }
-    return message;
+    return bounded_redacted(std::move(message), kMaxErrorBytes);
 }
 
 std::optional<std::string> string_field(const util::JsonValue::object_t& object, const std::string& key) {

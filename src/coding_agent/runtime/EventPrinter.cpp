@@ -37,7 +37,7 @@ void print_agent_event(const agent::AgentLifecycleEvent& event, std::ostream& ou
     } else if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
         out << (end->is_error ? "[tool-error] " : "[tool-success] ") << end->tool_call_id << '\n';
         if (end->is_error && !end->result.content.empty()) {
-            out << ai::text_from_content(end->result.content) << '\n';
+            out << bounded_redacted(ai::text_from_content(end->result.content)) << '\n';
         }
     } else if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
         if (const auto* assistant = std::get_if<ai::AssistantMessage>(&end->message)) {

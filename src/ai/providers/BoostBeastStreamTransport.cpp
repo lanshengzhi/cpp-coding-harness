@@ -1,5 +1,7 @@
 #include "ai/providers/BoostBeastStreamTransport.hpp"
 
+#include "ai/providers/ProviderError.hpp"
+
 #include <boost/asio/connect.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/redirect_error.hpp>
@@ -183,12 +185,12 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
             std::string detail = std::to_string(response.head.status_code);
             if (!error_body.empty()) {
                 detail += ": ";
-                detail.append(error_body, 0, std::min(error_body.size(), std::size_t{4096}));
+                detail += error_body;
             }
             co_return std::unexpected(util::make_error(
                 util::ErrorCode::Provider,
                 "provider returned non-success HTTP status",
-                std::move(detail)));
+                bounded_provider_error_detail(std::move(detail))));
         }
 
         const bool stream_to_callback = static_cast<bool>(on_body_chunk);

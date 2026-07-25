@@ -1,6 +1,7 @@
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
 #include "coding_agent/runtime/RpcMode.hpp"
+#include "coding_agent/runtime/RpcJsonl.hpp"
 #include "ai/providers/FakeChatClient.hpp"
 #include "../../support/TempWorkspace.hpp"
 #include "util/Json.hpp"
@@ -315,6 +316,22 @@ TranscriptResult run_transcript(
 }
 
 } // namespace
+
+TEST_CASE("RPC errors are redacted and bounded on a UTF-8 boundary", "[coding_agent][runtime][rpc][issue72]") {
+    const std::string secret = "sk-rpc-error-secret-123456";
+    const auto redacted = coding_agent::runtime::rpc_jsonl::bounded_error(
+        "provider rejected " + secret + " " + std::string(600, 'x'));
+
+    std::string multibyte = std::string(510, 'a');
+    multibyte += "\xf0\x9f\x99\x82";
+    multibyte += std::string(100, 'b');
+    const auto bounded = coding_agent::runtime::rpc_jsonl::bounded_error(std::move(multibyte));
+
+    CHECK(redacted.size() <= 512);
+    CHECK(redacted.find(secret) == std::string::npos);
+    CHECK(redacted.find("[REDACTED]") != std::string::npos);
+    CHECK(bounded == std::string(510, 'a'));
+}
 
 TEST_CASE("RPC mode reports safe session state through its interface", "[coding-agent][runtime][rpc]") {
     const auto result = run_transcript(

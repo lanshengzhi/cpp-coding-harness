@@ -4,6 +4,7 @@
 #include "../glaze/ProviderDtos.hpp"
 #include "ai/glaze/AiJson.hpp"
 #include "../../../include/cch/ai/providers/OpenAICompletionsCompat.hpp"
+#include "ai/providers/ProviderError.hpp"
 #include "ai/providers/SseParser.hpp"
 #include "ai/providers/StreamEmit.hpp"
 #include "util/Json.hpp"
@@ -529,7 +530,8 @@ void append_tool_result_assistant_bridge(
         ? ai::AssistantStopReason::Aborted
         : ai::AssistantStopReason::Error;
     partial.stop_reason = reason;
-    partial.error_message = error.detail.empty() ? error.message : error.detail;
+    partial.error_message = bounded_provider_error_detail(
+        error.detail.empty() ? error.message : error.detail);
     return emit(sink, ai::AssistantErrorEvent{reason, partial});
 }
 

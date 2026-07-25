@@ -413,6 +413,58 @@ TEST_CASE("project resource loader classifies adapter duplicate diagnostics once
                      "duplicate_name") == 0);
 }
 
+TEST_CASE(
+    "project resource diagnostics redact before shared bounded truncation",
+    "[coding_agent][project-resource-loader][issue72]") {
+    LoaderFixture fix;
+    const std::string secret = "sk-resource-diagnostic-secret-123456";
+    const std::string hostile_name = secret + std::string(1100, 'x');
+    fix.write(
+        ".cpp-harness/skills/safe/SKILL.md",
+        "---\nname: " + hostile_name + "\ndescription: Hostile metadata.\n---\nBody.\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    const auto result = fix.load(std::move(request));
+
+    REQUIRE(!result.diagnostics.empty());
+
+    // The name mismatch diagnostic includes the hostile frontmatter name.
+    const auto secret_diag = std::find_if(
+        result.diagnostics.begin(),
+        result.diagnostics.end(),
+        [](const auto& d) {
+            return d.message.find("does not match parent directory") != std::string::npos;
+        });
+    REQUIRE(secret_diag != result.diagnostics.end());
+    CHECK(secret_diag->message.find(secret) == std::string::npos);
+    CHECK(secret_diag->message.find("[REDACTED]") != std::string::npos);
+    CHECK(secret_diag->message.size() <= 1024);
+}
+
+TEST_CASE(
+    "project resource diagnostic paths are bounded at the shared seam",
+    "[coding_agent][project-resource-loader][issue72]") {
+    LoaderFixture fix;
+    const std::string long_dir = std::string(200, 'a') + "/" +
+        std::string(200, 'b') + "/" + std::string(200, 'c') + "/" +
+        std::string(200, 'd') + "/" + std::string(200, 'e') + "/" +
+        std::string(200, 'f');
+    fix.write(
+        ".cpp-harness/skills/" + long_dir + "/SKILL.md",
+        "---\nname: deep-skill\ndescription: Deep.\n---\nBody.\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    const auto result = fix.load(std::move(request));
+
+    REQUIRE(!result.diagnostics.empty());
+    for (const auto& diagnostic : result.diagnostics) {
+        CHECK(diagnostic.message.size() <= 1024);
+        if (diagnostic.path) CHECK(diagnostic.path->size() <= 1024);
+    }
+}
+
 TEST_CASE("project resource loader treats explicit prompt template read failure as fatal", "[coding_agent][project-resource-loader]") {
     LoaderFixture fix;
     // No file named missing.md exists.

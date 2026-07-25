@@ -3,6 +3,7 @@
 #include "coding_agent/PromptTemplateLoader.hpp"
 #include "coding_agent/SkillLoader.hpp"
 #include "../harness/WorkspaceFileSystem.hpp"
+#include "util/BoundedText.hpp"
 
 #include <algorithm>
 #include <array>
@@ -18,7 +19,6 @@ namespace {
 
 constexpr std::size_t kMaxResourceDiagnostics = 64;
 constexpr std::size_t kMaxResourceDiagnosticTextBytes = 1024;
-constexpr std::string_view kTruncationSuffix = "...[truncated]";
 
 struct LoadedResourceNames {
     std::set<std::string> skill_names;
@@ -270,17 +270,10 @@ constexpr std::array<ProjectResourceAdapter, 2> kProjectResourceAdapters{{
 }
 
 void bound_text(std::string& text) {
-    if (text.size() <= kMaxResourceDiagnosticTextBytes) {
-        return;
-    }
-
-    auto keep = kMaxResourceDiagnosticTextBytes - kTruncationSuffix.size();
-    while (keep > 0 &&
-           (static_cast<unsigned char>(text[keep]) & 0xc0U) == 0x80U) {
-        --keep;
-    }
-    text.resize(keep);
-    text.append(kTruncationSuffix);
+    text = util::bounded_redacted_text(
+        std::move(text),
+        kMaxResourceDiagnosticTextBytes,
+        "...[truncated]");
 }
 
 void bound_diagnostics(ProjectResourceLoadingResult& result) {

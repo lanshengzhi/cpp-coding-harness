@@ -1,5 +1,6 @@
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
+#include "coding_agent/runtime/EventPrinter.hpp"
 #include "coding_agent/runtime/JsonEventPrinter.hpp"
 
 #include "util/Json.hpp"
@@ -286,6 +287,41 @@ TEST_CASE("JSON event printer preserves payload structure while redacting and bo
     CHECK(result_text.size() <= 8192);
     CHECK(string_at(object_at(result, "details"), "authorization") == "[REDACTED]");
     CHECK(string_at(object_at(result, "details"), "safe") == "value");
+}
+
+TEST_CASE(
+    "text and JSON frontends share bounded redaction for tool errors",
+    "[coding_agent][runtime][tool-errors][issue72]") {
+    const std::string secret = "sk-tool-error-secret-123456";
+    const cch::agent::AgentLifecycleEvent event = cch::agent::ToolExecutionEndEvent{
+        "call-1",
+        "hostile-tool",
+        cch::agent::AsyncToolExecutionResult{
+            {cch::ai::text_content("tool failed with " + secret + " " + std::string(9000, 'x'))},
+            std::nullopt,
+            false,
+            false},
+        true};
+
+    std::ostringstream text_output;
+    cch::coding_agent::runtime::print_agent_event(event, text_output);
+    std::ostringstream json_output;
+    cch::coding_agent::runtime::JsonEventPrinter json_printer{json_output};
+    REQUIRE(json_printer.print_agent_event(event).has_value());
+
+    auto presented_text = text_output.str();
+    const auto content_start = presented_text.find('\n') + 1;
+    presented_text = presented_text.substr(content_start);
+    REQUIRE(!presented_text.empty());
+    presented_text.pop_back();
+
+    const auto record = object(parse_line(lines(json_output.str()).front()));
+    const auto& result = object_at(record, "result");
+    const auto json_text = string_at(object(array_at(result, "content").front()), "text");
+    CHECK(presented_text == json_text);
+    CHECK(presented_text.find(secret) == std::string::npos);
+    CHECK(presented_text.find("[REDACTED]") != std::string::npos);
+    CHECK(presented_text.size() <= 8192);
 }
 
 TEST_CASE("JSON event printer keeps bounded text valid UTF-8", "[coding-agent][json-events]") {

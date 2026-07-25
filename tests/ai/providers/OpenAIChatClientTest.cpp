@@ -1583,6 +1583,36 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "streaming OpenAI client redacts provider error detail before bounding model-visible text",
+    "[ai][provider][stream][issue72]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    const std::string secret = "sk-provider-body-secret-123456";
+    transport->failure = util::make_error(
+        util::ErrorCode::Provider,
+        "provider returned non-success HTTP status",
+        "401: upstream rejected " + secret + " " + std::string(5000, 'x'));
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::StreamChatRequest request;
+    request.model = ai::Model{"gpt-test"};
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result.has_value());
+    REQUIRE(run.result->error_message.has_value());
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    CHECK(run.result->error_message->find(secret) == std::string::npos);
+    CHECK(run.result->error_message->find("[REDACTED]") != std::string::npos);
+    CHECK(run.result->error_message->size() <= 4096);
+    const auto& terminal = matching_terminal_error(run);
+    CHECK(terminal.error.error_message == run.result->error_message);
+}
+
+TEST_CASE(
     "streaming OpenAI client completes a cancellation-class transport failure as one aborted message",
     "[ai][provider][stream][issue13]") {
     auto transport = std::make_shared<FakeStreamTransport>();
