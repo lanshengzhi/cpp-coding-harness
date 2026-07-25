@@ -8,6 +8,7 @@
 #include "../../include/cch/coding_agent/Sdk.hpp"
 #include "util/Json.hpp"
 #include "../support/TempWorkspace.hpp"
+#include "../support/TextHelpers.hpp"
 
 #include <sstream>
 #include <streambuf>
@@ -109,18 +110,6 @@ public:
 
     int request_count{0};
 };
-
-[[nodiscard]] std::size_t count_occurrences(
-    const std::string& text,
-    const std::string& needle) {
-    std::size_t count = 0;
-    std::size_t position = 0;
-    while ((position = text.find(needle, position)) != std::string::npos) {
-        ++count;
-        position += needle.size();
-    }
-    return count;
-}
 
 coding_agent::CreateAgentSessionOptions fake_in_memory_options(
     const std::filesystem::path& workspace) {
@@ -240,7 +229,7 @@ TEST_CASE(
             .input = input, .output = broken_output, .error = error,
             .repl = false, .prompt = "hello"}};
 
-    CHECK(frontend.run() == 2);
+    CHECK(frontend.run() == cli::InteractiveCliOutcome::StartupFailure);
     CHECK(error.str().find("event printer failed: ") != std::string::npos);
 }
 
@@ -263,7 +252,7 @@ TEST_CASE(
             .input = input, .output = output, .error = error,
             .repl = false, .prompt = "hello"}};
 
-    CHECK(frontend.run() == 2);
+    CHECK(frontend.run() == cli::InteractiveCliOutcome::StartupFailure);
     CHECK(error.str().find("could not subscribe event renderer: ") != std::string::npos);
 }
 
@@ -286,7 +275,7 @@ TEST_CASE(
             .input = input, .output = broken_output, .error = error,
             .repl = false, .prompt = "/clear"}};
 
-    CHECK(frontend.run() == 1);
+    CHECK(frontend.run() == cli::InteractiveCliOutcome::RuntimeError);
     CHECK(error.str().find("failed to clear terminal") != std::string::npos);
 }
 
@@ -308,7 +297,7 @@ TEST_CASE(
             .input = input, .output = output, .error = error,
             .repl = false, .prompt = "hello"}};
 
-    CHECK(frontend.run() == 0);
+    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
     CHECK(output.str().find("fake: hello") != std::string::npos);
     CHECK(error.str().empty());
 }
@@ -334,9 +323,9 @@ TEST_CASE(
             .input = input, .output = output, .error = error,
             .repl = false, .prompt = "hello"}};
 
-    CHECK(frontend.run() == 0);
+    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
     CHECK(output.str().find("[assistant] partial draft") != std::string::npos);
-    CHECK(count_occurrences(output.str(), "[error] host transport lost") == 1);
+    CHECK(tests::count_occurrences(output.str(), "[error] host transport lost") == 1);
     CHECK(output.str().find("[completed]") != std::string::npos);
     CHECK(error.str().empty());
 }
@@ -362,8 +351,8 @@ TEST_CASE(
             .input = input, .output = output, .error = error,
             .repl = false, .prompt = "hello"}};
 
-    CHECK(frontend.run() == 0);
-    CHECK(count_occurrences(output.str(), "[aborted] host cancelled the request") == 1);
+    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
+    CHECK(tests::count_occurrences(output.str(), "[aborted] host cancelled the request") == 1);
     CHECK(output.str().find("[completed]") != std::string::npos);
     CHECK(output.str().find("[error]") == std::string::npos);
     CHECK(error.str().empty());
@@ -393,7 +382,7 @@ TEST_CASE(
             .input = input, .output = output, .error = error,
             .repl = false, .prompt = "hello"}};
 
-    CHECK(frontend.run() == 0);
+    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
     CHECK(output.str().find(secret) == std::string::npos);
     CHECK(output.str().find("[REDACTED]") != std::string::npos);
     // The presented diagnostic stays inside the bounded-output budget even
@@ -428,11 +417,11 @@ TEST_CASE(
             .input = input, .output = output, .error = error,
             .repl = false, .prompt = "hello"}};
 
-    CHECK(frontend.run() == 0);
+    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
     CHECK(output.str().find(secret) == std::string::npos);
     CHECK(output.str().find("[assistant] draft contains [REDACTED]") != std::string::npos);
     CHECK(output.str().size() < partial.size());
-    CHECK(count_occurrences(output.str(), "[error] transport failed") == 1);
+    CHECK(tests::count_occurrences(output.str(), "[error] transport failed") == 1);
     CHECK(error.str().empty());
 }
 
@@ -456,9 +445,9 @@ TEST_CASE(
             .input = input, .output = output, .error = error,
             .repl = true, .prompt = {}}};
 
-    CHECK(frontend.run() == 0);
+    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
     CHECK(probe->request_count == 2);
-    CHECK(count_occurrences(output.str(), "[error] first transport lost") == 1);
+    CHECK(tests::count_occurrences(output.str(), "[error] first transport lost") == 1);
     CHECK(output.str().find("[assistant] recovered answer") != std::string::npos);
     CHECK(error.str().empty());
 }
@@ -481,7 +470,7 @@ TEST_CASE(
             .input = input, .output = output, .error = error,
             .repl = true, .prompt = {}}};
 
-    CHECK(frontend.run() == 0);
+    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
     CHECK(output.str().find("Session: ") != std::string::npos);
     CHECK(output.str().find("Shutting down.") != std::string::npos);
 }
@@ -504,7 +493,7 @@ TEST_CASE(
             .input = input, .output = output, .error = error,
             .repl = true, .prompt = {}}};
 
-    CHECK(frontend.run() == 0);
+    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
     CHECK(output.str().find("\033[2J\033[H") != std::string::npos);
 }
 
@@ -537,7 +526,7 @@ TEST_CASE(
             .input = input, .output = output, .error = error,
             .repl = false, .prompt = "hello"}};
 
-    CHECK(frontend.run() == 0);
+    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
     CHECK(error.str().empty());
     CHECK(output.str().find("[model-request]") != std::string::npos);
     CHECK(output.str().find("[assistant]") != std::string::npos);
@@ -563,7 +552,7 @@ TEST_CASE(
             .input = input, .output = output, .error = error,
             .repl = true, .prompt = {}}};
 
-    CHECK(frontend.run() == 0);
+    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
     CHECK(output.str().find("Shell passthrough (!) is not yet implemented.") != std::string::npos);
     CHECK(output.str().find("> ") != std::string::npos);
     CHECK(error.str().empty());
@@ -587,7 +576,7 @@ TEST_CASE(
             .input = input, .output = output, .error = error,
             .repl = false, .prompt = "hello"}};
 
-    CHECK(frontend.run() == 0);
+    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
 
     std::istringstream records{output.str()};
     std::string header_line;
@@ -624,7 +613,7 @@ TEST_CASE(
             .input = input, .output = output, .error = error,
             .repl = false, .prompt = "hello"}};
 
-    CHECK(frontend.run() == 0);
+    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
     CHECK(error.str().empty());
 
     const auto records = parse_json_lines(output.str());
@@ -678,7 +667,7 @@ TEST_CASE(
             .input = input, .output = output, .error = error,
             .repl = false, .prompt = "/session"}};
 
-    CHECK(frontend.run() == 0);
+    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
     CHECK(output.str().find("Session: ") == std::string::npos);
     CHECK(output.str().find("\033[2J\033[H") == std::string::npos);
 

@@ -99,7 +99,7 @@ int run_async_cli(const CliConfig& config) {
             renderer,
             created->metadata,
             std::move(frontend_config)};
-        return frontend.run();
+        return exit_code_for(frontend.run());
     };
 
     if (config.output_mode == OutputMode::Json) {

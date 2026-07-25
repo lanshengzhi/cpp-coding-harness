@@ -9,7 +9,7 @@
 namespace cch::cli {
 
 /// Presentation seam for the interactive CLI frontend. InteractiveCliFrontend
-/// owns the control flow (prompt loop, command dispatch, exit codes); a
+/// owns the control flow (prompt loop, command dispatch, run outcomes); a
 /// CliRenderer owns how session start, agent events, frontend command
 /// results, and prompt failures are presented. Two real implementations:
 /// TextCliRenderer and JsonCliRenderer.

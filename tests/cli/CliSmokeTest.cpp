@@ -1,6 +1,8 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
+#include "../support/ShellQuoting.hpp"
 #include "../support/TempWorkspace.hpp"
+#include "../support/TextHelpers.hpp"
 
 #include <cch/coding_agent/Sdk.hpp>
 #include "coding_agent/runtime/AsyncCliRuntime.hpp"
@@ -15,7 +17,6 @@
 #include <regex>
 #include <sstream>
 #include <string>
-#include <string_view>
 #include <vector>
 
 #if defined(__unix__) || defined(__APPLE__)
@@ -27,6 +28,10 @@
 #endif
 
 namespace {
+
+using cch::tests::count_occurrences;
+using cch::tests::shell_quote;
+
 struct CommandResult {
     int exit_code{0};
     std::string output;
@@ -90,11 +95,7 @@ SplitCommandResult run_command_split_with_input(const std::string& command, cons
     return {exit_code, read_file(stdout_path), read_file(stderr_path)};
 }
 
-std::string q(const std::filesystem::path& path) {
-    return "'" + path.string() + "'";
-}
-
-std::string bin() { return q(CCH_BINARY); }
+std::string bin() { return shell_quote(CCH_BINARY); }
 
 std::vector<std::string> non_empty_lines(const std::string& text) {
     std::vector<std::string> result;
@@ -106,19 +107,6 @@ std::vector<std::string> non_empty_lines(const std::string& text) {
         }
     }
     return result;
-}
-
-std::size_t count_occurrences(std::string_view haystack, std::string_view needle) {
-    if (needle.empty()) {
-        return 0;
-    }
-    std::size_t count = 0;
-    std::size_t pos = 0;
-    while ((pos = haystack.find(needle, pos)) != std::string_view::npos) {
-        ++count;
-        pos += needle.size();
-    }
-    return count;
 }
 
 cch::util::JsonValue parse_json_line(const std::string& line) {
@@ -270,7 +258,7 @@ AutomaticSessionFile require_single_session_in_directory(
 TEST_CASE("CLI fake one-shot prints transcript and writes session", "[cli][u6]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "one-shot.jsonl";
-    auto result = run_command(bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " hello");
+    auto result = run_command(bin() + " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) + " hello");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.output.find("[model-request]") != std::string::npos);
@@ -284,7 +272,7 @@ TEST_CASE("CLI text one-shot displays /help without invoking the model", "[cli][
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "help-one-shot.jsonl";
     auto result = run_command(
-        bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " /help");
+        bin() + " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) + " /help");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.output.find("Available commands:") != std::string::npos);
@@ -297,7 +285,7 @@ TEST_CASE("CLI text one-shot unknown /help target does not invoke the model", "[
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "help-unknown.jsonl";
     auto result = run_command(
-        bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) +
+        bin() + " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) +
         " '/help missing'");
 
     REQUIRE(result.exit_code == 0);
@@ -311,7 +299,7 @@ TEST_CASE("CLI text REPL dispatches /commands as /help", "[cli][commands]") {
     auto session = workspace.path() / "commands-repl.jsonl";
     auto result = run_command(
         "printf '/commands\\nquit\\n' | " + bin() + " --fake --repl --workspace " +
-        q(workspace.path()) + " --session " + q(session));
+        shell_quote(workspace.path()) + " --session " + shell_quote(session));
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.output.find("Available commands:") != std::string::npos);
@@ -323,7 +311,7 @@ TEST_CASE("CLI text one-shot sends unmatched slash input to the model", "[cli][c
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "unknown-slash.jsonl";
     auto result = run_command(
-        bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " /missing");
+        bin() + " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) + " /missing");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.output.find("fake: /missing") != std::string::npos);
@@ -335,7 +323,7 @@ TEST_CASE("CLI text REPL temporarily intercepts user bash while one-shot does no
     auto repl_session = repl_workspace.path() / "repl-user-bash.jsonl";
     auto repl = run_command(
         "printf '!echo hi\\n!!echo hidden\\nquit\\n' | " + bin() + " --fake --repl --workspace " +
-        q(repl_workspace.path()) + " --session " + q(repl_session));
+        shell_quote(repl_workspace.path()) + " --session " + shell_quote(repl_session));
 
     REQUIRE(repl.exit_code == 0);
     CHECK(count_occurrences(repl.output, "Shell passthrough (!) is not yet implemented.") == 2);
@@ -345,8 +333,8 @@ TEST_CASE("CLI text REPL temporarily intercepts user bash while one-shot does no
     cch::tests::TempWorkspace one_shot_workspace;
     auto one_shot_session = one_shot_workspace.path() / "oneshot-user-bash.jsonl";
     auto one_shot = run_command(
-        bin() + " --fake --workspace " + q(one_shot_workspace.path()) + " --session " +
-        q(one_shot_session) + " '!echo hi'");
+        bin() + " --fake --workspace " + shell_quote(one_shot_workspace.path()) + " --session " +
+        shell_quote(one_shot_session) + " '!echo hi'");
 
     REQUIRE(one_shot.exit_code == 0);
     CHECK(one_shot.output.find("fake: !echo hi") != std::string::npos);
@@ -354,8 +342,8 @@ TEST_CASE("CLI text REPL temporarily intercepts user bash while one-shot does no
     cch::tests::TempWorkspace double_bang_workspace;
     auto double_bang_session = double_bang_workspace.path() / "oneshot-double-bang.jsonl";
     auto double_bang = run_command(
-        bin() + " --fake --workspace " + q(double_bang_workspace.path()) + " --session " +
-        q(double_bang_session) + " '!!echo hidden'");
+        bin() + " --fake --workspace " + shell_quote(double_bang_workspace.path()) + " --session " +
+        shell_quote(double_bang_session) + " '!!echo hidden'");
 
     REQUIRE(double_bang.exit_code == 0);
     CHECK(double_bang.output.find("fake: !!echo hidden") != std::string::npos);
@@ -365,7 +353,7 @@ TEST_CASE("CLI text one-shot /clear emits terminal controls without invoking the
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "clear-one-shot.jsonl";
     auto result = run_command_split(
-        bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " /clear");
+        bin() + " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) + " /clear");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.empty());
@@ -378,7 +366,7 @@ TEST_CASE("CLI text REPL /clear stays in the frontend and /exit displays shutdow
     auto session = workspace.path() / "clear-exit-repl.jsonl";
     auto result = run_command(
         "printf '/clear\\n/exit\\nignored\\n' | " + bin() + " --fake --repl --workspace " +
-        q(workspace.path()) + " --session " + q(session));
+        shell_quote(workspace.path()) + " --session " + shell_quote(session));
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.output.find("\033[2J\033[H") != std::string::npos);
@@ -391,17 +379,17 @@ TEST_CASE("CLI text one-shot /exit displays shutdown text", "[cli][commands]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "exit-one-shot.jsonl";
     auto result = run_command(
-        bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " /exit");
+        bin() + " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) + " /exit");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.output.find("Shutting down.") != std::string::npos);
     CHECK(result.output.find("[model-request]") == std::string::npos);
 }
 
-TEST_CASE("CLI fake one-shot streams through the current event path", "[cli][u8][ae5]") {
+TEST_CASE("CLI fake one-shot streams through the current event path", "[cli][u8]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "event-path.jsonl";
-    auto result = run_command(bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " hello");
+    auto result = run_command(bin() + " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) + " hello");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.output.find("[model-request]") != std::string::npos);
@@ -416,7 +404,7 @@ TEST_CASE("CLI text tool flow renders subscription events without duplicate pres
     std::ofstream(workspace.path() / "note.txt") << "subscription text";
     auto session = workspace.path() / "text-tool-flow.jsonl";
     auto result = run_command(
-        bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) +
+        bin() + " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) +
         " 'read note.txt'");
 
     REQUIRE(result.exit_code == 0);
@@ -430,7 +418,7 @@ TEST_CASE("CLI text tool flow renders subscription events without duplicate pres
 TEST_CASE("CLI rejects removed async compatibility flag before model request", "[cli][u8]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "removed-async.jsonl";
-    auto result = run_command(bin() + " --async --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " hello");
+    auto result = run_command(bin() + " --async --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) + " hello");
 
     REQUIRE(result.exit_code != 0);
     CHECK(result.output.find("unknown option: --async") != std::string::npos);
@@ -449,7 +437,7 @@ TEST_CASE("CLI help no longer advertises compatibility-only async flag", "[cli][
 TEST_CASE("CLI rejects unsupported JSON mode combinations before model request", "[cli][json]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "json-repl.jsonl";
-    auto result = run_command_split(bin() + " --fake --mode json --repl --workspace " + q(workspace.path()) + " --session " + q(session));
+    auto result = run_command_split(bin() + " --fake --mode json --repl --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session));
 
     REQUIRE(result.exit_code != 0);
     CHECK(result.stdout_text.empty());
@@ -460,7 +448,7 @@ TEST_CASE("CLI rejects unsupported JSON mode combinations before model request",
 TEST_CASE("CLI rejects RPC positional prompt before session creation", "[cli][rpc]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "rpc-positional.jsonl";
-    auto result = run_command_split(bin() + " --fake --mode rpc --workspace " + q(workspace.path()) + " --session " + q(session) + " hello");
+    auto result = run_command_split(bin() + " --fake --mode rpc --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) + " hello");
 
     REQUIRE(result.exit_code != 0);
     CHECK(result.stdout_text.empty());
@@ -471,7 +459,7 @@ TEST_CASE("CLI rejects RPC positional prompt before session creation", "[cli][rp
 TEST_CASE("CLI rejects RPC repl before session creation", "[cli][rpc]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "rpc-repl.jsonl";
-    auto result = run_command_split(bin() + " --fake --mode rpc --repl --workspace " + q(workspace.path()) + " --session " + q(session));
+    auto result = run_command_split(bin() + " --fake --mode rpc --repl --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session));
 
     REQUIRE(result.exit_code != 0);
     CHECK(result.stdout_text.empty());
@@ -482,7 +470,7 @@ TEST_CASE("CLI rejects RPC repl before session creation", "[cli][rpc]") {
 TEST_CASE("CLI JSON fake one-shot emits a header followed by direct session events", "[cli][json]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "json-one-shot.jsonl";
-    auto result = run_command_split(bin() + " --fake --mode json --workspace " + q(workspace.path()) + " --session " + q(session) + " hello");
+    auto result = run_command_split(bin() + " --fake --mode json --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) + " hello");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.empty());
@@ -544,8 +532,8 @@ TEST_CASE("CLI JSON frontend commands emit no synthetic terminal records", "[cli
         cch::tests::TempWorkspace workspace;
         auto session = workspace.path() / "json-command.jsonl";
         auto result = run_command_split(
-            bin() + " --fake --mode json --workspace " + q(workspace.path()) +
-            " --session " + q(session) + " " + command);
+            bin() + " --fake --mode json --workspace " + shell_quote(workspace.path()) +
+            " --session " + shell_quote(session) + " " + command);
 
         REQUIRE(result.exit_code == 0);
         CHECK(result.stderr_text.empty());
@@ -561,7 +549,7 @@ TEST_CASE("CLI JSON frontend commands emit no synthetic terminal records", "[cli
 TEST_CASE("CLI JSON fake tool flow emits correlated tool events", "[cli][json]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "json-tool.jsonl";
-    auto result = run_command_split(bin() + " --fake --mode json --workspace " + q(workspace.path()) + " --session " + q(session) + " read missing.txt");
+    auto result = run_command_split(bin() + " --fake --mode json --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) + " read missing.txt");
 
     REQUIRE(result.exit_code == 0);
     auto output_lines = non_empty_lines(result.stdout_text);
@@ -587,9 +575,9 @@ TEST_CASE("CLI JSON fake tool flow emits correlated tool events", "[cli][json]")
 TEST_CASE("CLI JSON max-turn flow ends with the direct agent event", "[cli][json]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "json-max-turn.jsonl";
-    auto result = run_command_split(bin() + " --fake --mode json --workspace " + q(workspace.path()) + " --session " + q(session) + " --max-turns 1 read missing.txt");
+    auto result = run_command_split(bin() + " --fake --mode json --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) + " --max-turns 1 read missing.txt");
 
-    REQUIRE(result.exit_code != 0);
+    REQUIRE(result.exit_code == 1);
     auto output_lines = non_empty_lines(result.stdout_text);
     REQUIRE(output_lines.size() >= 2);
     for (const auto& line : output_lines) {
@@ -609,7 +597,7 @@ TEST_CASE("CLI RPC wires stdin and JSONL stdout to a session", "[cli][rpc]") {
         "{\"id\":\"p1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
         "{\"id\":\"q1\",\"type\":\"shutdown\"}\n";
     auto result = run_command_split_with_input(
-        bin() + " --fake --mode rpc --workspace " + q(workspace.path()) + " --session " + q(session),
+        bin() + " --fake --mode rpc --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session),
         input);
 
     REQUIRE(result.exit_code == 0);
@@ -634,9 +622,9 @@ TEST_CASE("CLI JSON creation validation errors do not write stdout", "[cli][json
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "json-real.jsonl";
     auto result = run_command_split(
-        "HOME=" + q(home.path()) + " env -u CCH_TEST_MISSING_KEY " + bin() +
-        " --mode json --workspace " + q(workspace.path()) +
-        " --session " + q(session) +
+        "HOME=" + shell_quote(home.path()) + " env -u CCH_TEST_MISSING_KEY " + bin() +
+        " --mode json --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) +
         " --api-key-env CCH_TEST_MISSING_KEY hello");
 
     REQUIRE(result.exit_code == 2);
@@ -657,9 +645,9 @@ TEST_CASE("CLI creation failure after malformed settings keeps the settings warn
     }
     auto session = workspace.path() / "settings-fallback-failure.jsonl";
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " env -u CCH_TEST_MISSING_KEY " + bin() +
-        " --workspace " + q(workspace.path()) +
-        " --session " + q(session) +
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " env -u CCH_TEST_MISSING_KEY " + bin() +
+        " --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) +
         " --api-key-env CCH_TEST_MISSING_KEY hello");
 
     REQUIRE(result.exit_code == 2);
@@ -673,8 +661,8 @@ TEST_CASE("CLI rejects an unresolvable workspace before model request", "[cli][a
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "workspace-invalid.jsonl";
     auto result = run_command_split(
-        bin() + " --fake --workspace " + q(workspace.path() / "missing-workspace") +
-        " --session " + q(session) + " hello");
+        bin() + " --fake --workspace " + shell_quote(workspace.path() / "missing-workspace") +
+        " --session " + shell_quote(session) + " hello");
 
     REQUIRE(result.exit_code == 2);
     CHECK(result.stdout_text.empty());
@@ -687,7 +675,7 @@ TEST_CASE("CLI rejects an unresolvable workspace before model request", "[cli][a
 TEST_CASE("CLI fake REPL preserves process history for two prompts", "[cli][u6]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "repl.jsonl";
-    auto command = "printf 'one\\ntwo\\nexit\\n' | " + bin() + " --fake --repl --workspace " + q(workspace.path()) + " --session " + q(session);
+    auto command = "printf 'one\\ntwo\\nexit\\n' | " + bin() + " --fake --repl --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session);
     auto result = run_command(command);
 
     REQUIRE(result.exit_code == 0);
@@ -698,10 +686,10 @@ TEST_CASE("CLI fake REPL preserves process history for two prompts", "[cli][u6]"
 TEST_CASE("CLI resume appends to an existing redacted session", "[cli][u6]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "resume.jsonl";
-    auto first = run_command(bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " first");
+    auto first = run_command(bin() + " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) + " first");
     REQUIRE(first.exit_code == 0);
 
-    auto second = run_command(bin() + " --fake --workspace " + q(workspace.path()) + " --resume " + q(session) + " second");
+    auto second = run_command(bin() + " --fake --workspace " + shell_quote(workspace.path()) + " --resume " + shell_quote(session) + " second");
 
     REQUIRE(second.exit_code == 0);
     CHECK(second.output.find("[assistant] fake: second") != std::string::npos);
@@ -712,10 +700,10 @@ TEST_CASE("CLI resume uses session workspace when workspace is omitted", "[cli][
     cch::tests::TempWorkspace other;
     original.write("note.txt", "from-session-workspace");
     auto session = original.path() / "resume-workspace.jsonl";
-    auto first = run_command(bin() + " --fake --workspace " + q(original.path()) + " --session " + q(session) + " first");
+    auto first = run_command(bin() + " --fake --workspace " + shell_quote(original.path()) + " --session " + shell_quote(session) + " first");
     REQUIRE(first.exit_code == 0);
 
-    auto resumed = run_command(bin() + " --fake --resume " + q(session) + " read note.txt");
+    auto resumed = run_command(bin() + " --fake --resume " + shell_quote(session) + " read note.txt");
 
     REQUIRE(resumed.exit_code == 0);
     CHECK(resumed.output.find("from-session-workspace") != std::string::npos);
@@ -725,10 +713,10 @@ TEST_CASE("CLI resume rejects explicit workspace mismatch", "[cli][u6]") {
     cch::tests::TempWorkspace original;
     cch::tests::TempWorkspace other;
     auto session = original.path() / "resume-mismatch.jsonl";
-    auto first = run_command(bin() + " --fake --workspace " + q(original.path()) + " --session " + q(session) + " first");
+    auto first = run_command(bin() + " --fake --workspace " + shell_quote(original.path()) + " --session " + shell_quote(session) + " first");
     REQUIRE(first.exit_code == 0);
 
-    auto resumed = run_command(bin() + " --fake --workspace " + q(other.path()) + " --resume " + q(session) + " second");
+    auto resumed = run_command(bin() + " --fake --workspace " + shell_quote(other.path()) + " --resume " + shell_quote(session) + " second");
 
     REQUIRE(resumed.exit_code == 2);
     CHECK(resumed.output.find("could not resume session") != std::string::npos);
@@ -739,11 +727,11 @@ TEST_CASE("CLI resume rejects explicit workspace mismatch", "[cli][u6]") {
 TEST_CASE("CLI RPC resume exposes committed history without activating text output", "[cli][rpc]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "rpc-resume.jsonl";
-    auto first = run_command(bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " first");
+    auto first = run_command(bin() + " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) + " first");
     REQUIRE(first.exit_code == 0);
 
     auto resumed = run_command_split_with_input(
-        bin() + " --fake --mode rpc --resume " + q(session),
+        bin() + " --fake --mode rpc --resume " + shell_quote(session),
         "{\"id\":\"l1\",\"type\":\"get_last_assistant_text\"}\n{\"type\":\"shutdown\"}\n");
 
     REQUIRE(resumed.exit_code == 0);
@@ -760,11 +748,11 @@ TEST_CASE("CLI RPC resume workspace mismatch fails before loop activation", "[cl
     cch::tests::TempWorkspace original;
     cch::tests::TempWorkspace other;
     auto session = original.path() / "rpc-resume-mismatch.jsonl";
-    auto first = run_command(bin() + " --fake --workspace " + q(original.path()) + " --session " + q(session) + " first");
+    auto first = run_command(bin() + " --fake --workspace " + shell_quote(original.path()) + " --session " + shell_quote(session) + " first");
     REQUIRE(first.exit_code == 0);
 
     auto resumed = run_command_split_with_input(
-        bin() + " --fake --mode rpc --workspace " + q(other.path()) + " --resume " + q(session),
+        bin() + " --fake --mode rpc --workspace " + shell_quote(other.path()) + " --resume " + shell_quote(session),
         "{\"type\":\"get_state\"}\n");
 
     REQUIRE(resumed.exit_code == 2);
@@ -776,7 +764,7 @@ TEST_CASE("CLI RPC resume workspace mismatch fails before loop activation", "[cl
 TEST_CASE("CLI rejects session and resume together before model request", "[cli][u6]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "exclusive.jsonl";
-    auto result = run_command(bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " --resume " + q(session) + " hello");
+    auto result = run_command(bin() + " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) + " --resume " + shell_quote(session) + " hello");
 
     REQUIRE(result.exit_code != 0);
     CHECK(result.output.find("use either --session or --resume") != std::string::npos);
@@ -786,7 +774,7 @@ TEST_CASE("CLI rejects session and resume together before model request", "[cli]
 TEST_CASE("CLI text mode without prompt defaults to REPL", "[cli][u6]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "default-repl.jsonl";
-    auto result = run_command("printf '' | " + bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session));
+    auto result = run_command("printf '' | " + bin() + " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session));
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.output.find("prompt is required") == std::string::npos);
@@ -797,7 +785,7 @@ TEST_CASE("CLI blocks existing session path without resume before model request"
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "exists.jsonl";
     std::ofstream(session) << "already here";
-    auto result = run_command(bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " hello");
+    auto result = run_command(bin() + " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) + " hello");
 
     REQUIRE(result.exit_code == 2);
     CHECK(result.output.find("could not create session") != std::string::npos);
@@ -808,7 +796,7 @@ TEST_CASE("CLI blocks existing session path without resume before model request"
 TEST_CASE("CLI rejects invalid max turns before model request", "[cli][u6]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "bad-turns.jsonl";
-    auto result = run_command(bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " --max-turns nope hello");
+    auto result = run_command(bin() + " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) + " --max-turns nope hello");
 
     REQUIRE(result.exit_code != 0);
     CHECK((result.output.find("--max-turns") != std::string::npos ||
@@ -819,7 +807,7 @@ TEST_CASE("CLI rejects invalid max turns before model request", "[cli][u6]") {
 TEST_CASE("CLI fake bash request is blocked by default", "[cli][u6]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "bash.jsonl";
-    auto result = run_command(bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " bash echo hi");
+    auto result = run_command(bin() + " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) + " bash echo hi");
 
     REQUIRE(result.exit_code == 0);
     // With bash disabled, the bash tool is not registered. The scripted fake
@@ -833,9 +821,9 @@ TEST_CASE("CLI fake bash request is blocked by default", "[cli][u6]") {
 TEST_CASE("CLI fake read loop prints max-turn marker when turn budget is exhausted", "[cli][u1]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "max-turn.jsonl";
-    auto result = run_command(bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " --max-turns 1 read missing.txt");
+    auto result = run_command(bin() + " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) + " --max-turns 1 read missing.txt");
 
-    REQUIRE(result.exit_code != 0);
+    REQUIRE(result.exit_code == 1);
     CHECK(result.output.find("[model-request]") != std::string::npos);
     CHECK(result.output.find("[tool-call] read#fake-read-1") != std::string::npos);
     CHECK(result.output.find("[tool-error] fake-read-1") != std::string::npos);
@@ -847,9 +835,9 @@ TEST_CASE("CLI real-provider mode reports missing API key before model request",
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "real.jsonl";
     auto result = run_command(
-        "HOME=" + q(home.path()) + " env -u CCH_TEST_MISSING_KEY " + bin() +
-        " --workspace " + q(workspace.path()) +
-        " --session " + q(session) +
+        "HOME=" + shell_quote(home.path()) + " env -u CCH_TEST_MISSING_KEY " + bin() +
+        " --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) +
         " --api-key-env CCH_TEST_MISSING_KEY hello");
 
     REQUIRE(result.exit_code == 2);
@@ -862,9 +850,9 @@ TEST_CASE("CLI Kimi path validates KIMI_API_KEY before model request and session
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "kimi-missing-key.jsonl";
     auto result = run_command(
-        "HOME=" + q(home.path()) + " env -u KIMI_API_KEY " + bin() +
-        " --workspace " + q(workspace.path()) +
-        " --session " + q(session) +
+        "HOME=" + shell_quote(home.path()) + " env -u KIMI_API_KEY " + bin() +
+        " --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) +
         " --base-url https://api.kimi.com/coding/v1"
         " --model kimi-for-coding"
         " --api-key-env KIMI_API_KEY hello");
@@ -889,9 +877,9 @@ TEST_CASE("CLI skips project skills by default when project trust is unknown", "
     auto session = workspace.path() / "untrusted-skills.jsonl";
 
     auto result = run_command_split(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
-        " --session " + q(session) + " /skill:demo");
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) + " /skill:demo");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.find("project_skills skipped: untrusted") != std::string::npos);
@@ -913,9 +901,9 @@ TEST_CASE("CLI project-controlled default trust store cannot authorize project s
     auto session = workspace.path() / "project-controlled-trust.jsonl";
 
     auto result = run_command_split(
-        "HOME=" + q(workspace.path()) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
-        " --session " + q(session) + " /skill:demo");
+        "HOME=" + shell_quote(workspace.path()) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) + " /skill:demo");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.find("[trust:warn] trust_store_unavailable") != std::string::npos);
@@ -936,9 +924,9 @@ TEST_CASE("CLI approve loads project skills for one run", "[cli][project-trust]"
     auto session = workspace.path() / "trusted-skills.jsonl";
 
     auto result = run_command_split(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --approve --workspace " + q(workspace.path()) +
-        " --session " + q(session) + " /skill:demo");
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --approve --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) + " /skill:demo");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.find("project_skills skipped") == std::string::npos);
@@ -959,9 +947,9 @@ TEST_CASE("CLI no-approve skips project skills for one run", "[cli][project-trus
     auto session = workspace.path() / "no-approve-skills.jsonl";
 
     auto result = run_command_split(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --no-approve --workspace " + q(workspace.path()) +
-        " --session " + q(session) + " /skill:demo");
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --no-approve --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) + " /skill:demo");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.find("project_skills skipped: untrusted") != std::string::npos);
@@ -979,9 +967,9 @@ TEST_CASE("CLI approve loads project prompt templates for one run", "[cli][proje
     auto session = workspace.path() / "trusted-prompts.jsonl";
 
     auto result = run_command_split(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --approve --workspace " + q(workspace.path()) +
-        " --session " + q(session) + " /greet Ada");
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --approve --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) + " /greet Ada");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.find("project_prompts skipped") == std::string::npos);
@@ -1001,9 +989,9 @@ TEST_CASE("CLI no-skills disables project skills even when approved", "[cli][pro
     auto session = workspace.path() / "disabled-skills.jsonl";
 
     auto result = run_command_split(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --approve --no-skills --workspace " + q(workspace.path()) +
-        " --session " + q(session) + " /skill:demo");
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --approve --no-skills --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) + " /skill:demo");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.find("project_skills skipped: disabled") != std::string::npos);
@@ -1021,9 +1009,9 @@ TEST_CASE("CLI no-skills disables project prompt templates even when approved", 
     auto session = workspace.path() / "disabled-prompts.jsonl";
 
     auto result = run_command_split(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --approve --no-skills --workspace " + q(workspace.path()) +
-        " --session " + q(session) + " /greet Ada");
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --approve --no-skills --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) + " /greet Ada");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.find("project_prompts skipped: disabled") != std::string::npos);
@@ -1041,9 +1029,9 @@ TEST_CASE("CLI explicit prompt template file loads through resource inputs", "[c
     auto session = workspace.path() / "explicit-template.jsonl";
 
     auto result = run_command_split(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
-        " --session " + q(session) +
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) +
         " --prompt-template custom.md /custom Ada");
 
     REQUIRE(result.exit_code == 0);
@@ -1062,9 +1050,9 @@ TEST_CASE("CLI no-prompt-templates disables explicit prompt template files", "[c
     auto session = workspace.path() / "explicit-template-disabled.jsonl";
 
     auto result = run_command_split(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
-        " --session " + q(session) +
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) +
         " --prompt-template custom.md --no-prompt-templates /custom Ada");
 
     REQUIRE(result.exit_code == 0);
@@ -1084,9 +1072,9 @@ TEST_CASE("CLI JSON project trust diagnostics stay on stderr", "[cli][json][proj
     auto session = workspace.path() / "json-untrusted-skills.jsonl";
 
     auto result = run_command_split(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --mode json --workspace " + q(workspace.path()) +
-        " --session " + q(session) + " hello");
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --mode json --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) + " hello");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.find("project_skills skipped: untrusted") != std::string::npos);
@@ -1111,9 +1099,9 @@ TEST_CASE("CLI text mode shows malformed project resource diagnostics on stderr"
     auto session = workspace.path() / "malformed-resources.jsonl";
 
     auto result = run_command_split(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --approve --workspace " + q(workspace.path()) +
-        " --session " + q(session) + " hello");
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --approve --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) + " hello");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.find("[skill:warn] invalid_metadata") != std::string::npos);
@@ -1132,9 +1120,9 @@ TEST_CASE("CLI JSON resource diagnostics stay off stdout for malformed resources
     auto session = workspace.path() / "json-malformed-resources.jsonl";
 
     auto result = run_command_split(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --approve --mode json --workspace " + q(workspace.path()) +
-        " --session " + q(session) + " hello");
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --approve --mode json --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) + " hello");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.find("[template:warn] parse_failed") != std::string::npos);
@@ -1160,9 +1148,9 @@ TEST_CASE("CLI JSON duplicate resource diagnostics stay off stdout", "[cli][json
     auto session = workspace.path() / "json-duplicate-resources.jsonl";
 
     auto result = run_command_split(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --approve --mode json --workspace " + q(workspace.path()) +
-        " --session " + q(session) + " --prompt-template dupe.md hello");
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --approve --mode json --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) + " --prompt-template dupe.md hello");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.find("[duplicate:info] duplicate_template_skipped") != std::string::npos);
@@ -1187,9 +1175,9 @@ TEST_CASE("CLI RPC resource diagnostics stay off command stream", "[cli][rpc][pr
         "{\"id\":\"q1\",\"type\":\"shutdown\"}\n";
 
     auto result = run_command_split_with_input(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --approve --mode rpc --workspace " + q(workspace.path()) +
-        " --session " + q(session),
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --approve --mode rpc --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session),
         input);
 
     REQUIRE(result.exit_code == 0);
@@ -1208,9 +1196,9 @@ TEST_CASE("CLI applies settings.json model when CLI omits --model", "[cli][setti
     auto session = workspace.path() / "settings-model-session.jsonl";
 
     auto result = run_command(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
-        " --session " + q(session) + " hello");
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) + " hello");
 
     REQUIRE(result.exit_code == 0);
     const auto header = parse_json_line(read_file(session));
@@ -1227,9 +1215,9 @@ TEST_CASE("CLI accepts settings.json api_key_env chain without explicit --api-ke
     auto session = workspace.path() / "settings-key-session.jsonl";
 
     auto result = run_command(
-        "env -u OPENAI_API_KEY CUSTOM_KEY=test HOME=" + q(home.path()) + " " + bin() +
-        " --workspace " + q(workspace.path()) +
-        " --session " + q(session) + " hello");
+        "env -u OPENAI_API_KEY CUSTOM_KEY=test HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) + " hello");
 
     CHECK(result.output.find("missing API key") == std::string::npos);
     CHECK(std::filesystem::exists(session));
@@ -1241,9 +1229,9 @@ TEST_CASE("CLI invalid explicit prompt template fails before session creation", 
     auto session = workspace.path() / "explicit-fail.jsonl";
 
     auto result = run_command_split(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
-        " --session " + q(session) +
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) +
         " --prompt-template missing.md hello");
 
     REQUIRE(result.exit_code != 0);
@@ -1260,9 +1248,9 @@ TEST_CASE("CLI rejects an explicit prompt template with an unsupported file type
     auto session = workspace.path() / "explicit-type-fail.jsonl";
 
     auto result = run_command_split(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
-        " --session " + q(session) +
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) +
         " --prompt-template not-a-template.txt hello");
 
     REQUIRE(result.exit_code != 0);
@@ -1279,9 +1267,9 @@ TEST_CASE("CLI rejects each explicit prompt template input that has no loadable 
     auto session = workspace.path() / "explicit-empty-dir-fail.jsonl";
 
     auto result = run_command_split(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
-        " --session " + q(session) +
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) +
         " --prompt-template valid.md --prompt-template empty-prompts hello");
 
     REQUIRE(result.exit_code != 0);
@@ -1298,9 +1286,9 @@ TEST_CASE("CLI applies settings.json provider identity when no explicit provider
     auto session = workspace.path() / "settings-provider-rpc.jsonl";
 
     auto result = run_command_split_with_input(
-        "env -u OPENAI_API_KEY CCH_CONFIG_PROVIDER_KEY=unused HOME=" + q(home.path()) + " " + bin() +
-        " --workspace " + q(workspace.path()) +
-        " --session " + q(session) +
+        "env -u OPENAI_API_KEY CCH_CONFIG_PROVIDER_KEY=unused HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) +
         " --api-key-env CCH_CONFIG_PROVIDER_KEY --mode rpc",
         "{\"type\":\"get_state\"}\n{\"type\":\"shutdown\"}\n");
 
@@ -1319,15 +1307,15 @@ TEST_CASE("CLI resume with explicit model override reports diagnostic and uses o
     auto session = workspace.path() / "resume-override.jsonl";
 
     auto first = run_command(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
-        " --session " + q(session) + " first");
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) + " first");
     REQUIRE(first.exit_code == 0);
 
     auto second = run_command_split_with_input(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
-        " --resume " + q(session) +
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
+        " --resume " + shell_quote(session) +
         " --model override-model --mode rpc",
         "{\"type\":\"get_state\"}\n{\"type\":\"shutdown\"}\n");
 
@@ -1346,15 +1334,15 @@ TEST_CASE("CLI resume without override retains stored provider and model", "[cli
     auto session = workspace.path() / "resume-retain.jsonl";
 
     auto first = run_command(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
-        " --session " + q(session) + " first");
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) + " first");
     REQUIRE(first.exit_code == 0);
 
     auto second = run_command_split_with_input(
-        "HOME=" + q(home.path()) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
-        " --resume " + q(session) + " --mode rpc",
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
+        " --resume " + shell_quote(session) + " --mode rpc",
         "{\"type\":\"get_state\"}\n{\"type\":\"shutdown\"}\n");
 
     REQUIRE(second.exit_code == 0);
@@ -1371,7 +1359,7 @@ TEST_CASE("CLI text command is resolved by the adapter and does not reach AgentS
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "command-adapter.jsonl";
     auto result = run_command(
-        bin() + " --fake --workspace " + q(workspace.path()) + " --session " + q(session) + " /help");
+        bin() + " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session) + " /help");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.output.find("Available commands:") != std::string::npos);
@@ -1396,8 +1384,8 @@ TEST_CASE("CLI default creation stores the session under the workspace-keyed age
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) + " hello");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) + " hello");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
@@ -1415,8 +1403,8 @@ TEST_CASE("CLI default creation follows the explicit workspace rather than the l
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
 
     auto result = run_command_split(
-        "cd " + q(launch_dir.path()) + " && CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) + " hello");
+        "cd " + shell_quote(launch_dir.path()) + " && CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) + " hello");
 
     REQUIRE(result.exit_code == 0);
     require_single_automatic_session(agent_dir / "sessions", canonical_workspace);
@@ -1435,12 +1423,12 @@ TEST_CASE("CLI default creation shares storage across symbolic-link workspace al
     const auto canonical_workspace = std::filesystem::canonical(real.path());
 
     auto direct = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(real.path()) + " first");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(real.path()) + " first");
     REQUIRE(direct.exit_code == 0);
     auto aliased = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(alias) + " second");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(alias) + " second");
     REQUIRE(aliased.exit_code == 0);
 
     const auto sessions_root = agent_dir / "sessions";
@@ -1476,8 +1464,8 @@ TEST_CASE("CLI JSON mode propagates the same default persisted target", "[cli][d
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --mode json --workspace " + q(workspace.path()) + " hello");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --mode json --workspace " + shell_quote(workspace.path()) + " hello");
 
     REQUIRE(result.exit_code == 0);
     const auto records = parse_json_objects(result.stdout_text);
@@ -1498,8 +1486,8 @@ TEST_CASE("CLI RPC mode propagates the same default persisted target", "[cli][de
         "{\"id\":\"p1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
         "{\"id\":\"q1\",\"type\":\"shutdown\"}\n";
     auto result = run_command_split_with_input(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --mode rpc --workspace " + q(workspace.path()),
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --mode rpc --workspace " + shell_quote(workspace.path()),
         input);
 
     REQUIRE(result.exit_code == 0);
@@ -1516,8 +1504,8 @@ TEST_CASE("CLI text REPL propagates the same default persisted target", "[cli][d
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
 
     auto result = run_command_split(
-        "printf 'hello\\nexit\\n' | CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --repl --workspace " + q(workspace.path()));
+        "printf 'hello\\nexit\\n' | CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --repl --workspace " + shell_quote(workspace.path()));
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
@@ -1531,15 +1519,15 @@ TEST_CASE("CLI explicit session targets keep their exact paths outside the defau
     const auto explicit_session = workspace.path() / "explicit.jsonl";
 
     auto created = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) + " --session " + q(explicit_session) + " first");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(explicit_session) + " first");
     REQUIRE(created.exit_code == 0);
     CHECK(std::filesystem::exists(explicit_session));
     CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
 
     auto resumed = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) + " --resume " + q(explicit_session) + " second");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) + " --resume " + shell_quote(explicit_session) + " second");
     REQUIRE(resumed.exit_code == 0);
     CHECK(resumed.stdout_text.find("fake: second") != std::string::npos);
     CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
@@ -1555,14 +1543,14 @@ TEST_CASE("CLI default creation ignores the old project-local sessions directory
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
 
     auto seed = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) + " --session " + q(legacy_file) + " legacy-seed");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(legacy_file) + " legacy-seed");
     REQUIRE(seed.exit_code == 0);
     const auto legacy_before = read_file(legacy_file);
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) + " hello");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) + " hello");
     REQUIRE(result.exit_code == 0);
     CHECK(read_file(legacy_file) == legacy_before);
     CHECK(jsonl_files_under(legacy_dir).size() == 1);
@@ -1570,8 +1558,8 @@ TEST_CASE("CLI default creation ignores the old project-local sessions directory
 
     // A valid old file remains usable only through the explicit resume contract.
     auto resumed = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) + " --resume " + q(legacy_file) + " second");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) + " --resume " + shell_quote(legacy_file) + " second");
     REQUIRE(resumed.exit_code == 0);
     CHECK(resumed.stdout_text.find("fake: second") != std::string::npos);
     CHECK(read_file(legacy_file) != legacy_before);
@@ -1588,8 +1576,8 @@ TEST_CASE("CLI default creation fails explicitly when default storage is unsafe"
     }
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(blocker) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) + " hello");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(blocker) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) + " hello");
 
     REQUIRE(result.exit_code != 0);
     CHECK(result.stdout_text.empty());
@@ -1603,7 +1591,7 @@ TEST_CASE("CLI default creation fails explicitly when no user-level root can be 
 
     auto result = run_command_split(
         "env -u HOME -u USERPROFILE -u CCH_CODING_AGENT_DIR " + bin() +
-        " --fake --workspace " + q(workspace.path()) + " hello");
+        " --fake --workspace " + shell_quote(workspace.path()) + " hello");
 
     REQUIRE(result.exit_code != 0);
     CHECK(result.stdout_text.empty());
@@ -1626,8 +1614,8 @@ TEST_CASE("CLI failed assembly publishes no default session file", "[cli][defaul
     const auto agent_dir = agent_root.path() / "agent";
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
         " --prompt-template missing.md hello");
 
     REQUIRE(result.exit_code != 0);
@@ -1655,8 +1643,8 @@ TEST_CASE("CLI --no-session runs a text prompt without publishing session state"
     const auto agent_dir = agent_root.path() / "agent";
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --no-session --workspace " + q(workspace.path()) + " hello");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --no-session --workspace " + shell_quote(workspace.path()) + " hello");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stdout_text.find("[model-request]") != std::string::npos);
@@ -1671,8 +1659,8 @@ TEST_CASE("CLI --no-session JSON mode propagates the in-memory target", "[cli][n
     const auto agent_dir = agent_root.path() / "agent";
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --no-session --mode json --workspace " + q(workspace.path()) + " hello");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --no-session --mode json --workspace " + shell_quote(workspace.path()) + " hello");
 
     REQUIRE(result.exit_code == 0);
     const auto records = parse_json_objects(result.stdout_text);
@@ -1692,8 +1680,8 @@ TEST_CASE("CLI --no-session RPC mode propagates the in-memory target", "[cli][no
         "{\"id\":\"s1\",\"type\":\"get_state\"}\n"
         "{\"id\":\"q1\",\"type\":\"shutdown\"}\n";
     auto result = run_command_split_with_input(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --no-session --mode rpc --workspace " + q(workspace.path()),
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --no-session --mode rpc --workspace " + shell_quote(workspace.path()),
         input);
 
     REQUIRE(result.exit_code == 0);
@@ -1716,8 +1704,8 @@ TEST_CASE("CLI --no-session text REPL propagates the in-memory target", "[cli][n
     const auto agent_dir = agent_root.path() / "agent";
 
     auto result = run_command_split(
-        "printf 'hello\\n/session\\nexit\\n' | CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --no-session --repl --workspace " + q(workspace.path()));
+        "printf 'hello\\n/session\\nexit\\n' | CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --no-session --repl --workspace " + shell_quote(workspace.path()));
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
@@ -1733,8 +1721,8 @@ TEST_CASE("CLI /session shows the persisted file for a default session", "[cli][
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) + " /session");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) + " /session");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
@@ -1750,17 +1738,17 @@ TEST_CASE("CLI rejects --no-session combined with explicit create or resume befo
     const auto explicit_session = workspace.path() / "explicit.jsonl";
 
     auto created = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --no-session --session " + q(explicit_session) +
-        " --workspace " + q(workspace.path()) + " hello");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --no-session --session " + shell_quote(explicit_session) +
+        " --workspace " + shell_quote(workspace.path()) + " hello");
     REQUIRE(created.exit_code != 0);
     CHECK(created.stdout_text.empty());
     CHECK(created.stderr_text.find("--no-session cannot be combined with --session") != std::string::npos);
 
     auto resumed = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --no-session --resume " + q(explicit_session) +
-        " --workspace " + q(workspace.path()) + " hello");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --no-session --resume " + shell_quote(explicit_session) +
+        " --workspace " + shell_quote(workspace.path()) + " hello");
     REQUIRE(resumed.exit_code != 0);
     CHECK(resumed.stdout_text.empty());
     CHECK(resumed.stderr_text.find("--no-session cannot be combined with --resume") != std::string::npos);
@@ -1778,8 +1766,8 @@ TEST_CASE("CLI --no-session does not consult default storage", "[cli][no-session
     }
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(blocker) + " " + bin() +
-        " --fake --no-session --workspace " + q(workspace.path()) + " hello");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(blocker) + " " + bin() +
+        " --fake --no-session --workspace " + shell_quote(workspace.path()) + " hello");
 
     // In-memory operation is explicit, so unusable default storage is never
     // inspected and cannot fail or redirect the run.
@@ -1795,8 +1783,8 @@ TEST_CASE("CLI --no-session preserves tool execution and events", "[cli][no-sess
     std::ofstream(workspace.path() / "note.txt") << "in-memory tool text";
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --no-session --workspace " + q(workspace.path()) + " 'read note.txt'");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --no-session --workspace " + shell_quote(workspace.path()) + " 'read note.txt'");
 
     REQUIRE(result.exit_code == 0);
     CHECK(count_occurrences(result.stdout_text, "[tool-call] read#fake-read-1") == 1);
@@ -1811,8 +1799,8 @@ TEST_CASE("CLI --no-session publishes no filesystem state after a startup failur
     const auto agent_dir = agent_root.path() / "agent";
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --no-session --workspace " + q(workspace.path()) +
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --no-session --workspace " + shell_quote(workspace.path()) +
         " --prompt-template missing.md hello");
 
     REQUIRE(result.exit_code != 0);
@@ -1829,9 +1817,9 @@ TEST_CASE("CLI --session-dir redirects automatic storage for one run", "[cli][se
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
-        " --session-dir " + q(override_dir) + " hello");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
+        " --session-dir " + shell_quote(override_dir) + " hello");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
@@ -1859,26 +1847,26 @@ TEST_CASE("CLI session directory precedence is flag over environment over settin
     }
 
     auto flagged = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) +
-        " CCH_CODING_AGENT_SESSION_DIR=" + q(env_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
-        " --session-dir " + q(flag_dir) + " first");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) +
+        " CCH_CODING_AGENT_SESSION_DIR=" + shell_quote(env_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
+        " --session-dir " + shell_quote(flag_dir) + " first");
     REQUIRE(flagged.exit_code == 0);
     CHECK(jsonl_files_under(flag_dir).size() == 1);
     CHECK_FALSE(std::filesystem::exists(env_dir));
     CHECK_FALSE(std::filesystem::exists(settings_dir));
 
     auto from_env = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) +
-        " CCH_CODING_AGENT_SESSION_DIR=" + q(env_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) + " second");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) +
+        " CCH_CODING_AGENT_SESSION_DIR=" + shell_quote(env_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) + " second");
     REQUIRE(from_env.exit_code == 0);
     CHECK(jsonl_files_under(env_dir).size() == 1);
     CHECK_FALSE(std::filesystem::exists(settings_dir));
 
     auto from_settings = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) + " third");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) + " third");
     REQUIRE(from_settings.exit_code == 0);
     CHECK(jsonl_files_under(settings_dir).size() == 1);
     CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
@@ -1892,8 +1880,8 @@ TEST_CASE("CLI relative --session-dir resolves against the final workspace", "[c
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
 
     auto result = run_command_split(
-        "cd " + q(launch_dir.path()) + " && CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
+        "cd " + shell_quote(launch_dir.path()) + " && CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
         " --session-dir my-sessions hello");
 
     REQUIRE(result.exit_code == 0);
@@ -1904,8 +1892,8 @@ TEST_CASE("CLI relative --session-dir resolves against the final workspace", "[c
     // The workspace itself determines resolution: the same relative value from
     // another launch directory lands in the same workspace-relative place.
     auto again = run_command_split(
-        "cd " + q(agent_root.path()) + " && CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
+        "cd " + shell_quote(agent_root.path()) + " && CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
         " --session-dir my-sessions again");
     REQUIRE(again.exit_code == 0);
     CHECK(jsonl_files_under(canonical_workspace / "my-sessions").size() == 2);
@@ -1920,9 +1908,9 @@ TEST_CASE("CLI session directory override expands a leading home marker", "[cli]
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
 
     auto result = run_command_split(
-        "HOME=" + q(home_root.path()) +
-        " CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
+        "HOME=" + shell_quote(home_root.path()) +
+        " CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
         " --session-dir '~/tilde-sessions' hello");
 
     REQUIRE(result.exit_code == 0);
@@ -1940,19 +1928,19 @@ TEST_CASE("CLI explicit create and resume targets ignore session directory overr
     const auto explicit_session = workspace.path() / "explicit.jsonl";
 
     auto created = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
-        " --session-dir " + q(override_dir) +
-        " --session " + q(explicit_session) + " first");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
+        " --session-dir " + shell_quote(override_dir) +
+        " --session " + shell_quote(explicit_session) + " first");
     REQUIRE(created.exit_code == 0);
     CHECK(std::filesystem::exists(explicit_session));
     CHECK_FALSE(std::filesystem::exists(override_dir));
 
     auto resumed = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) +
-        " CCH_CODING_AGENT_SESSION_DIR=" + q(override_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
-        " --resume " + q(explicit_session) + " second");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) +
+        " CCH_CODING_AGENT_SESSION_DIR=" + shell_quote(override_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
+        " --resume " + shell_quote(explicit_session) + " second");
     REQUIRE(resumed.exit_code == 0);
     CHECK(resumed.stdout_text.find("fake: second") != std::string::npos);
     CHECK_FALSE(std::filesystem::exists(override_dir));
@@ -1967,9 +1955,9 @@ TEST_CASE("CLI --no-session ignores session directory overrides and publishes no
     const auto override_dir = override_root.path() / "sessions";
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --no-session --workspace " + q(workspace.path()) +
-        " --session-dir " + q(override_dir) + " hello");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --no-session --workspace " + shell_quote(workspace.path()) +
+        " --session-dir " + shell_quote(override_dir) + " hello");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
@@ -1990,8 +1978,8 @@ TEST_CASE("CLI ignores a non-string settings sessionDir and uses the default roo
     }
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) + " hello");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) + " hello");
 
     REQUIRE(result.exit_code == 0);
     require_single_automatic_session(agent_dir / "sessions", canonical_workspace);
@@ -2009,8 +1997,8 @@ TEST_CASE("CLI malformed settings keep default session storage with a warning", 
     }
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) + " hello");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) + " hello");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.find("could not load user settings") != std::string::npos);
@@ -2029,9 +2017,9 @@ TEST_CASE("CLI unavailable session directory override fails explicitly without f
     }
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + q(agent_dir) + " " + bin() +
-        " --fake --workspace " + q(workspace.path()) +
-        " --session-dir " + q(blocker) + " hello");
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
+        " --session-dir " + shell_quote(blocker) + " hello");
 
     REQUIRE(result.exit_code != 0);
     CHECK(result.stdout_text.empty());

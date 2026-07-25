@@ -51,17 +51,17 @@ InteractiveCliFrontend::InteractiveCliFrontend(
       session_metadata_(session_metadata),
       config_(std::move(config)) {}
 
-int InteractiveCliFrontend::run() {
+InteractiveCliOutcome InteractiveCliFrontend::run() {
     coding_agent::CommandRegistry commands;
     if (auto registered = coding_agent::register_builtin_commands(commands); !registered) {
         config_.error << "could not register built-in command: "
                       << registered.error().message << '\n';
-        return 1;
+        return InteractiveCliOutcome::RuntimeError;
     }
 
     if (auto started = renderer_.on_session_start(session_metadata_); !started) {
         config_.error << "event printer failed: " << started.error().message << '\n';
-        return 2;
+        return InteractiveCliOutcome::StartupFailure;
     }
 
     auto subscribed = session_.subscribe(
@@ -71,7 +71,7 @@ int InteractiveCliFrontend::run() {
     if (!subscribed) {
         config_.error << "could not subscribe event renderer: "
                       << subscribed.error().message << '\n';
-        return 2;
+        return InteractiveCliOutcome::StartupFailure;
     }
     coding_agent::EventSubscription event_subscription{std::move(*subscribed)};
 
@@ -89,21 +89,23 @@ int InteractiveCliFrontend::run() {
                 continue;
             }
 
-            const int rc = run_prompt(line, commands);
-            if (rc == 1) {
-                return 1;
+            const auto outcome = run_prompt(line, commands);
+            if (outcome == InteractiveCliOutcome::RuntimeError) {
+                return InteractiveCliOutcome::RuntimeError;
             }
-            if (rc == 2) {
-                return 0;
+            if (outcome == InteractiveCliOutcome::ShutdownRequested) {
+                return InteractiveCliOutcome::Success;
             }
         }
-        return 0;
+        return InteractiveCliOutcome::Success;
     }
 
-    return run_prompt(config_.prompt, commands) == 1 ? 1 : 0;
+    const auto outcome = run_prompt(config_.prompt, commands);
+    return outcome == InteractiveCliOutcome::RuntimeError ? InteractiveCliOutcome::RuntimeError
+                                                          : InteractiveCliOutcome::Success;
 }
 
-int InteractiveCliFrontend::run_prompt(
+InteractiveCliOutcome InteractiveCliFrontend::run_prompt(
     const std::string& prompt,
     coding_agent::CommandRegistry& commands) {
     // Frontend commands are resolved by the CLI adapter before ordinary
@@ -112,9 +114,10 @@ int InteractiveCliFrontend::run_prompt(
         if (auto presented = renderer_.on_command_result(prompt, command_result->display_text);
             !presented) {
             config_.error << presented.error().message << '\n';
-            return 1;
+            return InteractiveCliOutcome::RuntimeError;
         }
-        return command_result->shutdown_requested ? 2 : 0;
+        return command_result->shutdown_requested ? InteractiveCliOutcome::ShutdownRequested
+                                                  : InteractiveCliOutcome::Success;
     }
 
     // Unmatched slash input reaches AgentSession via ordinary prompt.
@@ -124,12 +127,12 @@ int InteractiveCliFrontend::run_prompt(
 
     if (!prompt_result) {
         renderer_.on_prompt_error(prompt_result.error().message);
-        return 1;
+        return InteractiveCliOutcome::RuntimeError;
     }
 
     // Responses and tool activity have already been rendered by the
     // persistent subscription; do not present session state a second time.
-    return 0;
+    return InteractiveCliOutcome::Success;
 }
 
 coding_agent::CommandContext InteractiveCliFrontend::make_command_context() const {

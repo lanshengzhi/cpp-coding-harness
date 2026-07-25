@@ -1,5 +1,7 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
+#include "../support/TextHelpers.hpp"
+
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -18,16 +20,6 @@ std::string read_text(const std::filesystem::path& path) {
     std::ostringstream out;
     out << in.rdbuf();
     return out.str();
-}
-
-std::size_t count_occurrences(const std::string& text, const std::string& needle) {
-    std::size_t count = 0;
-    std::size_t pos = 0;
-    while ((pos = text.find(needle, pos)) != std::string::npos) {
-        ++count;
-        pos += needle.size();
-    }
-    return count;
 }
 
 std::vector<std::filesystem::path> files_under(std::initializer_list<std::string> roots) {
@@ -204,7 +196,7 @@ TEST_CASE(
     CHECK(runtime_header.find("std::vector<ai::MessageVariant>") == std::string::npos);
     // OpenSession history is resume input only and is moved exactly once into
     // AgentInitialState; prompt execution never advances or copies it back.
-    CHECK(count_occurrences(runtime_source, "session_.history") == 1);
+    CHECK(cch::tests::count_occurrences(runtime_source, "session_.history") == 1);
 }
 
 TEST_CASE("provider DTOs stay out of the public contract surface", "[architecture][u4]") {
@@ -248,7 +240,7 @@ TEST_CASE("AI message surface does not accept new runtime-only message variants"
     REQUIRE(variant_start != std::string::npos);
 
     const auto legacy_runtime_section = message_header.substr(section_start, variant_start - section_start);
-    CHECK(count_occurrences(legacy_runtime_section, "struct ") == 4);
+    CHECK(cch::tests::count_occurrences(legacy_runtime_section, "struct ") == 4);
     CHECK(legacy_runtime_section.find("BashExecutionMessage") != std::string::npos);
     CHECK(legacy_runtime_section.find("CustomMessage") != std::string::npos);
     CHECK(legacy_runtime_section.find("BranchSummaryMessage") != std::string::npos);
@@ -346,15 +338,15 @@ TEST_CASE("AgentSession has one prompt completion and event subscription path", 
     CHECK(runtime_header.find(private_result) == std::string::npos);
     CHECK(sdk_header.find(prompt_sink_field) == std::string::npos);
     CHECK(runtime_header.find(prompt_scope_name) == std::string::npos);
-    CHECK(count_occurrences(
+    CHECK(cch::tests::count_occurrences(
               sdk_header,
               "boost::asio::awaitable<util::ExpectedVoid> prompt(") == 1);
-    CHECK(count_occurrences(sdk_header, "util::ExpectedVoid prompt_blocking(") == 1);
+    CHECK(cch::tests::count_occurrences(sdk_header, "util::ExpectedVoid prompt_blocking(") == 1);
     CHECK(runtime_source.find("result = co_await agent_->prompt(") != std::string::npos);
-    CHECK(count_occurrences(runtime_source, "boost::asio::co_spawn(") == 1);
-    CHECK(count_occurrences(sdk_header, "AgentEventSink") == 1);
+    CHECK(cch::tests::count_occurrences(runtime_source, "boost::asio::co_spawn(") == 1);
+    CHECK(cch::tests::count_occurrences(sdk_header, "AgentEventSink") == 1);
     CHECK(sdk_header.find("subscribe(") != std::string::npos);
-    CHECK(count_occurrences(rpc_source, "config.session.subscribe(") == 1);
+    CHECK(cch::tests::count_occurrences(rpc_source, "config.session.subscribe(") == 1);
     CHECK(rpc_source.find(prompt_sink_field) == std::string::npos);
     CHECK(sdk_header.find("preflight_result") == std::string::npos);
     CHECK(rpc_source.find("AgentSessionPromptAccess::prompt_blocking") != std::string::npos);
@@ -447,8 +439,8 @@ TEST_CASE("AgentSessionRuntime is constructed only by the session factory", "[ar
     std::size_t factory_constructions = 0;
     for (const auto& file : files) {
         const auto text = read_text(file);
-        const auto make_unique_count = count_occurrences(text, make_unique_needle);
-        const auto new_count = count_occurrences(text, new_needle);
+        const auto make_unique_count = cch::tests::count_occurrences(text, make_unique_needle);
+        const auto new_count = cch::tests::count_occurrences(text, new_needle);
         if (file == factory) {
             factory_constructions += make_unique_count + new_count;
         } else {
