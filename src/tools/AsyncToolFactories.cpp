@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <exception>
 #include <memory>
 #include <sstream>
@@ -33,9 +34,6 @@ struct EditEntry {
 struct EditFileArgs {
     std::string path;
     std::vector<EditEntry> edits;
-    // Legacy single-arg fallback
-    std::optional<std::string> old_text;
-    std::optional<std::string> new_text;
 };
 
 struct BashArgs {
@@ -78,7 +76,11 @@ struct BashArgs {
 }
 
 [[nodiscard]] agent::AsyncToolExecutionResult error_result(std::string content) {
-    return agent::AsyncToolExecutionResult{std::vector<ai::Content>{ai::text_content(std::move(content))}, std::nullopt, true};
+    return agent::AsyncToolExecutionResult{
+        .content = std::vector<ai::Content>{ai::text_content(std::move(content))},
+        .details = std::nullopt,
+        .is_error = true,
+    };
 }
 
 template <typename Error>
@@ -146,11 +148,10 @@ public:
         if (!parsed || parsed->path.empty()) {
             co_return error_result("invalid read arguments");
         }
-        auto environment = env();
-        if (!environment) {
+        if (auto environment = env(); !environment) {
             co_return std::unexpected(environment.error());
         }
-        auto lines = co_await (*environment)->readTextLines(parsed->path, std::nullopt);
+        auto lines = co_await env_->readTextLines(parsed->path, std::nullopt);
         if (!lines) {
             co_return error_result_from(lines.error());
         }
@@ -188,7 +189,10 @@ public:
             result += "\n[output truncated]";
             result += "\n\n[Output truncated. Use offset=" + std::to_string(next_offset) + " to continue.]";
         }
-        co_return agent::AsyncToolExecutionResult{std::vector<ai::Content>{ai::text_content(std::move(result))}, std::nullopt, false};
+        co_return agent::AsyncToolExecutionResult{
+            .content = std::vector<ai::Content>{ai::text_content(std::move(result))},
+            .details = std::nullopt,
+        };
     }
 };
 
@@ -216,15 +220,18 @@ public:
         if (!parsed || parsed->path.empty()) {
             co_return error_result("invalid write arguments");
         }
-        auto environment = env();
-        if (!environment) {
+        if (auto environment = env(); !environment) {
             co_return std::unexpected(environment.error());
         }
-        auto written = co_await (*environment)->writeFile(parsed->path, parsed->content);
+        auto written = co_await env_->writeFile(parsed->path, parsed->content);
         if (!written) {
             co_return error_result_from(written.error());
         }
-        co_return agent::AsyncToolExecutionResult{std::vector<ai::Content>{ai::text_content("wrote " + std::to_string(parsed->content.size()) + " bytes")}, std::nullopt, false};
+        co_return agent::AsyncToolExecutionResult{
+            .content = std::vector<ai::Content>{
+                ai::text_content("wrote " + std::to_string(parsed->content.size()) + " bytes")},
+            .details = std::nullopt,
+        };
     }
 };
 
@@ -239,6 +246,12 @@ public:
                 {"newText", typed_schema("string", "Replacement text for this targeted edit.")},
             },
             {"oldText", "newText"});
+        static const auto edits_schema = [] {
+            auto schema = array_schema(edit_entry_schema, "One or more targeted replacements");
+            // Execution requires at least one replacement, so the contract does too.
+            schema.get_object().emplace("minItems", 1);
+            return schema;
+        }();
         static const ai::Tool tool{
             "edit_file",
             "Replace exact text regions inside a workspace file with one or more edits. "
@@ -247,9 +260,7 @@ public:
             object_schema(
                 {
                     {"path", typed_schema("string", "Workspace-relative file path")},
-                    {"edits", array_schema(edit_entry_schema, "One or more targeted replacements")},
-                    {"old_text", typed_schema("string", "Legacy: exact text to replace (single edit)")},
-                    {"new_text", typed_schema("string", "Legacy: replacement text (single edit)")},
+                    {"edits", edits_schema},
                 },
                 {"path", "edits"}),
         };
@@ -262,22 +273,14 @@ public:
         if (!parsed || parsed->path.empty()) {
             co_return error_result("invalid edit_file arguments: missing path");
         }
-        // Backward-compatible legacy conversion: single old_text/new_text → edits[]
-        if (parsed->edits.empty() && parsed->old_text && !parsed->old_text->empty()) {
-            if (!parsed->new_text) {
-                co_return error_result("invalid edit_file arguments: old_text without new_text");
-            }
-            parsed->edits.push_back(EditEntry{*parsed->old_text, *parsed->new_text});
-        }
         if (parsed->edits.empty()) {
             co_return error_result("invalid edit_file arguments: edits must contain at least one replacement");
         }
-        auto environment = env();
-        if (!environment) {
+        if (auto environment = env(); !environment) {
             co_return std::unexpected(environment.error());
         }
         // Read the original file
-        auto read = co_await (*environment)->readTextFile(parsed->path);
+        auto read = co_await env_->readTextFile(parsed->path);
         if (!read) {
             co_return error_result_from(read.error());
         }
@@ -290,9 +293,9 @@ public:
                 co_return error_result("invalid edit_file arguments: empty oldText in edits");
             }
             // Count occurrences
-            size_t pos = 0;
-            int count = 0;
-            size_t match_pos = std::string::npos;
+            std::size_t pos = 0;
+            std::size_t count = 0;
+            std::size_t match_pos = std::string::npos;
             while ((pos = working.find(edit.oldText, pos)) != std::string::npos) {
                 if (count == 0) match_pos = pos;
                 ++count;
@@ -312,7 +315,7 @@ public:
             applied.emplace_back(edit.oldText, edit.newText);
         }
         // Write back
-        auto written = co_await (*environment)->writeFile(parsed->path, working);
+        auto written = co_await env_->writeFile(parsed->path, working);
         if (!written) {
             co_return error_result_from(written.error());
         }
@@ -324,31 +327,32 @@ public:
             // Simple line-by-line diff: show first changed region
             auto orig_lines = split_lines(original);
             auto new_lines = split_lines(working);
-            size_t i = 0;
+            std::size_t i = 0;
             while (i < orig_lines.size() && i < new_lines.size() && orig_lines[i] == new_lines[i]) ++i;
             if (i < orig_lines.size() || i < new_lines.size()) {
                 // Show context: up to 3 lines before and after the first change
-                size_t ctx_start = (i > 3) ? i - 3 : 0;
-                size_t ctx_end_orig = std::min(i + 3, orig_lines.size());
-                size_t ctx_end_new = std::min(i + 3, new_lines.size());
-                for (size_t j = ctx_start; j < ctx_end_orig && j < orig_lines.size(); ++j) {
+                std::size_t ctx_start = (i > 3) ? i - 3 : 0;
+                std::size_t ctx_end_orig = std::min(i + 3, orig_lines.size());
+                std::size_t ctx_end_new = std::min(i + 3, new_lines.size());
+                for (std::size_t j = ctx_start; j < ctx_end_orig && j < orig_lines.size(); ++j) {
                     result_text += (j >= i && (j - i < new_lines.size() - i) ? "-" : " ") + orig_lines[j] + "\n";
                 }
-                for (size_t j = ctx_start; j < ctx_end_new && j < new_lines.size(); ++j) {
+                for (std::size_t j = ctx_start; j < ctx_end_new && j < new_lines.size(); ++j) {
                     result_text += (j >= i ? "+" : " ") + new_lines[j] + "\n";
                 }
             }
         }
         co_return agent::AsyncToolExecutionResult{
-            std::vector<ai::Content>{ai::text_content(result_text)},
-            std::nullopt, false};
+            .content = std::vector<ai::Content>{ai::text_content(result_text)},
+            .details = std::nullopt,
+        };
     }
 
 private:
     static std::vector<std::string> split_lines(const std::string& text) {
         std::vector<std::string> lines;
-        size_t start = 0;
-        for (size_t i = 0; i < text.size(); ++i) {
+        std::size_t start = 0;
+        for (std::size_t i = 0; i < text.size(); ++i) {
             if (text[i] == '\n') {
                 lines.push_back(text.substr(start, i - start));
                 start = i + 1;
@@ -383,8 +387,7 @@ public:
         if (!parsed || parsed->command.empty()) {
             co_return error_result("invalid bash arguments");
         }
-        auto environment = env();
-        if (!environment) {
+        if (auto environment = env(); !environment) {
             co_return std::unexpected(environment.error());
         }
         // Convert seconds to milliseconds for ExecutionEnv; zero means no timeout.
@@ -404,7 +407,7 @@ public:
             received_stderr = true;
             full_stderr.append(chunk);
         };
-        auto shell = co_await (*environment)->exec(parsed->command, std::move(exec_options));
+        auto shell = co_await env_->exec(parsed->command, std::move(exec_options));
         if (!shell) {
             co_return error_result_from(shell.error());
         }
@@ -426,7 +429,7 @@ public:
             std::string full_output_path;
             auto ts = std::chrono::system_clock::now().time_since_epoch().count();
             full_output_path = "bash-output-" + std::to_string(ts) + ".txt";
-            if (auto write = co_await (*environment)->writeFile(full_output_path, redacted_full); !write) {
+            if (auto write = co_await env_->writeFile(full_output_path, redacted_full); !write) {
                 full_output_path.clear();
             }
             output = "[output truncated, showing last " +
@@ -446,9 +449,10 @@ public:
             out << "\n" << output;
         }
         co_return agent::AsyncToolExecutionResult{
-            std::vector<ai::Content>{ai::text_content(out.str())},
-            std::nullopt,
-            shell->exitCode != 0};
+            .content = std::vector<ai::Content>{ai::text_content(out.str())},
+            .details = std::nullopt,
+            .is_error = shell->exitCode != 0,
+        };
     }
 
 private:

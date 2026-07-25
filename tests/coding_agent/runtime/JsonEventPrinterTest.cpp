@@ -138,10 +138,10 @@ TEST_CASE(
         "call-1",
         "read",
         cch::agent::AsyncToolExecutionResult{
-            tool_result.content,
-            std::nullopt,
-            false,
-            true},
+            .content = tool_result.content,
+            .details = std::nullopt,
+            .is_error = false,
+            .terminate = true},
         false}).has_value());
     REQUIRE(printer.print_agent_event(cch::agent::MessageEndEvent{cch::ai::MessageVariant{tool_result}}).has_value());
     REQUIRE(printer.print_agent_event(cch::agent::TurnEndEvent{
@@ -257,10 +257,10 @@ TEST_CASE("JSON event printer preserves payload structure while redacting and bo
         "call-1",
         "bash",
         cch::agent::AsyncToolExecutionResult{
-            {cch::ai::text_content("API_KEY='single-quoted-secret value' " + long_text)},
-            JsonValue{details},
-            false,
-            false},
+            .content = {cch::ai::text_content("API_KEY='single-quoted-secret value' " + long_text)},
+            .details = JsonValue{details},
+            .is_error = false,
+            .terminate = false},
         false}).has_value());
 
     const auto emitted = lines(output.str());

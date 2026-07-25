@@ -4,6 +4,7 @@
 
 #include <cch/harness/LocalExecutionEnv.hpp>
 #include <cch/tools/ToolFactories.hpp>
+#include "agent/ToolArgumentPreparation.hpp"
 #include "util/Json.hpp"
 #include "util/OutputLimiter.hpp"
 
@@ -183,9 +184,9 @@ TEST_CASE("async edit_file tool returns error for duplicate oldText matches", "[
     auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
     auto tool = tools::make_async_edit_file_tool(env);
 
-    // Legacy single-arg format: old_text/new_text
     auto result = run_tool([&]() {
-        return tool->execute(invocation("edit_file", R"({"path":"note.txt","old_text":"same","new_text":"new"})"));
+        return tool->execute(invocation("edit_file",
+            R"({"path":"note.txt","edits":[{"oldText":"same","newText":"new"}]})"));
     });
 
     REQUIRE(result);
@@ -243,6 +244,59 @@ TEST_CASE("async edit_file tool rejects oldText not found", "[tools][async]") {
     REQUIRE(result);
     CHECK(result->is_error);
     CHECK(ai::text_from_content(result->content).find("not found") != std::string::npos);
+}
+
+TEST_CASE("edit_file declared contract validation and execution acceptance agree", "[tools][async][issue77]") {
+    tests::TempWorkspace workspace;
+    workspace.write("note.txt", "hello world\n");
+    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
+    auto tool = tools::make_async_edit_file_tool(env);
+
+    // The agent loop validates every call with prepare_tool_arguments before
+    // execution (ADR 0007); execution must accept exactly what it accepts.
+    auto contract_accepts = [&](const std::string& json) {
+        ai::ToolCallContent call{
+            .id = "call-1",
+            .name = "edit_file",
+            .arguments = std::nullopt,
+            .raw_arguments = json,
+            .thought_signature = std::nullopt,
+            .argument_error = std::nullopt,
+        };
+        return agent::prepare_tool_arguments(tool->definition(), call).has_value();
+    };
+    auto execution_accepts = [&](const std::string& json) {
+        auto result = run_tool([&]() { return tool->execute(invocation("edit_file", json)); });
+        REQUIRE(result);
+        return !result->is_error;
+    };
+
+    // The declared edits[] form is accepted by both layers.
+    const std::string valid = R"({"path":"note.txt","edits":[{"oldText":"hello","newText":"hi"}]})";
+    CHECK(contract_accepts(valid));
+    CHECK(execution_accepts(valid));
+    CHECK(workspace.read("note.txt") == "hi world\n");
+
+    // The deleted legacy fallback is rejected by both layers.
+    const std::string legacy = R"({"path":"note.txt","old_text":"hi","new_text":"hey"})";
+    CHECK_FALSE(contract_accepts(legacy));
+    CHECK_FALSE(execution_accepts(legacy));
+
+    // Legacy fields stay rejected even next to a valid edits[] array.
+    const std::string mixed =
+        R"({"path":"note.txt","edits":[{"oldText":"hi","newText":"hey"}],"old_text":"a","new_text":"b"})";
+    CHECK_FALSE(contract_accepts(mixed));
+    CHECK_FALSE(execution_accepts(mixed));
+
+    // An empty edits[] array satisfies neither the contract nor execution.
+    const std::string empty_edits = R"({"path":"note.txt","edits":[]})";
+    CHECK_FALSE(contract_accepts(empty_edits));
+    CHECK_FALSE(execution_accepts(empty_edits));
+
+    // A missing path is rejected by both layers.
+    const std::string missing_path = R"({"edits":[{"oldText":"hi","newText":"hey"}]})";
+    CHECK_FALSE(contract_accepts(missing_path));
+    CHECK_FALSE(execution_accepts(missing_path));
 }
 
 TEST_CASE("async tools prefer structured arguments over raw provider text", "[tools][async][u6]") {

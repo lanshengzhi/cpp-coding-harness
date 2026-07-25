@@ -144,7 +144,10 @@ public:
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
         agent::ToolInvocation invocation) override {
         invocations.push_back(invocation);
-        co_return agent::AsyncToolExecutionResult{std::vector<ai::Content>{ai::text_content("tool says ok")}, std::nullopt, false};
+        co_return agent::AsyncToolExecutionResult{
+            .content = std::vector<ai::Content>{ai::text_content("tool says ok")},
+            .details = std::nullopt,
+            .is_error = false};
     }
 
     ai::Tool definition_;
@@ -1468,7 +1471,9 @@ public:
         agent::ToolInvocation invocation) override {
         invocations.push_back(invocation);
         co_return agent::AsyncToolExecutionResult{
-            std::vector<ai::Content>{ai::text_content(result_text_)}, std::nullopt, false};
+            .content = std::vector<ai::Content>{ai::text_content(result_text_)},
+            .details = std::nullopt,
+            .is_error = false};
     }
 
     ai::Tool definition_;
@@ -1497,7 +1502,9 @@ public:
         co_await timer.async_wait(boost::asio::use_awaitable);
         invocations.push_back(invocation);
         co_return agent::AsyncToolExecutionResult{
-            std::vector<ai::Content>{ai::text_content(result_text_)}, std::nullopt, false};
+            .content = std::vector<ai::Content>{ai::text_content(result_text_)},
+            .details = std::nullopt,
+            .is_error = false};
     }
 
     ai::Tool definition_;
@@ -1555,7 +1562,9 @@ public:
         co_await timer.async_wait(boost::asio::use_awaitable);
         --probe_.active;
         co_return agent::AsyncToolExecutionResult{
-            std::vector<ai::Content>{ai::text_content(definition_.name + " result")}, std::nullopt, false};
+            .content = std::vector<ai::Content>{ai::text_content(definition_.name + " result")},
+            .details = std::nullopt,
+            .is_error = false};
     }
 
     ai::Tool definition_;

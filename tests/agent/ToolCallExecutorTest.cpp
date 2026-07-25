@@ -88,9 +88,9 @@ public:
         }
 
         co_return agent::AsyncToolExecutionResult{
-            std::vector<ai::Content>{ai::text_content(result_text_)},
-            std::nullopt,
-            false};
+            .content = std::vector<ai::Content>{ai::text_content(result_text_)},
+            .details = std::nullopt,
+            .is_error = false};
     }
 
     [[nodiscard]] std::size_t invocation_count() const {
