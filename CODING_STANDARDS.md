@@ -148,7 +148,7 @@ This section is the checkable form of AGENTS.md guardrail 5.
 
 10.3. Bounded output goes through the existing budgets: `src/util/OutputLimiter.hpp` (default 50 KiB / 2000 lines) and the presentation budgets in `src/coding_agent/runtime/BoundedText.hpp`. No ad-hoc `substr` truncation of model- or user-visible text.
 
-10.4. Workspace containment lives in `src/harness/WorkspaceFileSystem.hpp` (absolute-path and `..` rejection, symlink-escape checks, atomic writes). File tools route through it; no parallel path-validation logic.
+10.4. Workspace containment lives in `src/harness/WorkspaceFileSystem.hpp` and its split implementation units `WorkspaceFileSystem{FdWalk,Legacy,Pi,Temp}.cpp` (absolute-path and `..` rejection, symlink-escape checks, atomic writes). File tools route through it; no parallel path-validation logic.
 
 10.5. `bash` runs with a sanitized environment that omits API-key, token, secret, password, and OpenAI-looking variables. Extend the filter; never bypass it.
 

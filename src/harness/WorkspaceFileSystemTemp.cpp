@@ -14,6 +14,7 @@ std::expected<std::string, FileError> WorkspaceFileSystem::createTempDir(
     auto tmp_area = root_ / ".cch-tmp";
     std::error_code ec;
     std::filesystem::create_directories(tmp_area, ec);
+    // Not an error if it already exists.
 
     std::string pfx = prefix.value_or("tmp-");
     for (int i = 0; i < 1000; ++i) {
