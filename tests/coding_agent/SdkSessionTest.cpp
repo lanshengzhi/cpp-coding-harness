@@ -18,6 +18,7 @@
 #include <cch/util/Error.hpp>
 #include "ai/providers/FakeChatClient.hpp"
 #include "coding_agent/AgentSessionBridge.hpp"
+#include "coding_agent/runtime/AgentSessionPromptAccess.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "harness/session/SessionJournalTestHooks.hpp"
 #include "util/Json.hpp"
@@ -81,6 +82,78 @@ public:
 private:
     ai::Tool def_;
     std::shared_ptr<std::size_t> execution_count_;
+};
+
+struct SdkOwnedLifetimeCounts {
+    std::size_t destroyed_clients{0};
+    std::size_t destroyed_tools{0};
+};
+
+struct SubscriberLifetimeToken {};
+
+[[nodiscard]] bool has_aborted_message_end(
+    const std::vector<agent::AgentLifecycleEvent>& events) {
+    return std::ranges::any_of(events, [](const agent::AgentLifecycleEvent& event) {
+        const auto* end = std::get_if<agent::MessageEndEvent>(&event);
+        return end != nullptr &&
+               std::holds_alternative<ai::AssistantMessage>(end->message) &&
+               std::get<ai::AssistantMessage>(end->message).stop_reason ==
+                   ai::AssistantStopReason::Aborted;
+    });
+}
+
+class LifetimeTrackedChatClient final : public ai::StreamingChatClient {
+public:
+    explicit LifetimeTrackedChatClient(std::shared_ptr<SdkOwnedLifetimeCounts> counts)
+        : counts_(std::move(counts)) {}
+
+    ~LifetimeTrackedChatClient() override {
+        ++counts_->destroyed_clients;
+    }
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink) override {
+        auto response = ai::assistant_text_message("tracked");
+        response.provider = "tracked-fake";
+        response.api = "fake";
+        response.model = request.model->id;
+        co_return response;
+    }
+
+private:
+    std::shared_ptr<SdkOwnedLifetimeCounts> counts_;
+};
+
+class LifetimeTrackedTool final : public agent::AsyncAgentTool {
+public:
+    explicit LifetimeTrackedTool(std::shared_ptr<SdkOwnedLifetimeCounts> counts)
+        : counts_(std::move(counts)) {
+        definition_.name = "lifetime_tracked";
+        definition_.description = "Track SDK-owned tool teardown";
+        definition_.parameters = util::JsonValue::object_t{
+            {"type", "object"},
+            {"additionalProperties", false},
+        };
+    }
+
+    ~LifetimeTrackedTool() override {
+        ++counts_->destroyed_tools;
+    }
+
+    [[nodiscard]] const ai::Tool& definition() const override {
+        return definition_;
+    }
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
+        agent::ToolInvocation,
+        std::stop_token) override {
+        co_return agent::AsyncToolExecutionResult{};
+    }
+
+private:
+    std::shared_ptr<SdkOwnedLifetimeCounts> counts_;
+    ai::Tool definition_;
 };
 
 /// Create a temp workspace and session path for testing.
@@ -374,6 +447,45 @@ public:
     }
 };
 
+struct PreflightCancellationObservation {
+    bool stop_requested{false};
+};
+
+class PreflightCancellationChatClient final : public ai::StreamingChatClient {
+public:
+    explicit PreflightCancellationChatClient(
+        std::shared_ptr<PreflightCancellationObservation> observation)
+        : observation_(std::move(observation)) {}
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        observation_->stop_requested = request.stop_token.stop_requested();
+        auto response = ai::assistant_text_message(
+            observation_->stop_requested ? "" : "not cancelled");
+        response.provider = "preflight-cancellation-fake";
+        response.api = "fake";
+        response.model = request.model->id;
+        if (observation_->stop_requested) {
+            response.stop_reason = ai::AssistantStopReason::Aborted;
+            response.error_message = "prompt aborted";
+            if (sink) {
+                if (auto emitted = sink(ai::AssistantErrorEvent{
+                        .reason = ai::AssistantStopReason::Aborted,
+                        .error = response,
+                    });
+                    !emitted) {
+                    co_return std::unexpected(emitted.error());
+                }
+            }
+        }
+        co_return response;
+    }
+
+private:
+    std::shared_ptr<PreflightCancellationObservation> observation_;
+};
+
 class ExecutorCapturingChatClient final : public ai::StreamingChatClient {
 public:
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
@@ -432,8 +544,17 @@ public:
 /// completes a stopped provider request through one aborted terminal event.
 class AbortAwareSdkChatClient final : public ai::StreamingChatClient {
 public:
-    explicit AbortAwareSdkChatClient(bool emit_partial)
-        : emit_partial_(emit_partial) {}
+    explicit AbortAwareSdkChatClient(
+        bool emit_partial,
+        std::shared_ptr<SdkOwnedLifetimeCounts> lifetime_counts = {})
+        : emit_partial_(emit_partial),
+          lifetime_counts_(std::move(lifetime_counts)) {}
+
+    ~AbortAwareSdkChatClient() override {
+        if (lifetime_counts_) {
+            ++lifetime_counts_->destroyed_clients;
+        }
+    }
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
         const ai::StreamChatRequest& request,
@@ -500,8 +621,10 @@ public:
         }};
 
         boost::system::error_code error;
-        co_await gate->async_wait(
-            boost::asio::redirect_error(boost::asio::use_awaitable, error));
+        if (!request.stop_token.stop_requested()) {
+            co_await gate->async_wait(
+                boost::asio::redirect_error(boost::asio::use_awaitable, error));
+        }
 
         if (request.stop_token.stop_requested()) {
             partial.stop_reason = ai::AssistantStopReason::Aborted;
@@ -537,6 +660,7 @@ public:
 
 private:
     bool emit_partial_{false};
+    std::shared_ptr<SdkOwnedLifetimeCounts> lifetime_counts_;
 };
 
 /// A conforming host-provided client whose accepted call emits one terminal
@@ -752,6 +876,15 @@ TEST_CASE("AgentSession is move-only", "[sdk][u1]") {
     static_assert(!std::is_copy_assignable_v<coding_agent::AgentSession>);
 }
 
+TEST_CASE(
+    "AgentSession close is a synchronous non-throwing request",
+    "[sdk][u1][lifecycle][issue41]") {
+    static_assert(std::is_same_v<
+                  decltype(std::declval<coding_agent::AgentSession&>().close()),
+                  void>);
+    static_assert(noexcept(std::declval<coding_agent::AgentSession&>().close()));
+}
+
 TEST_CASE("EventSubscription is move-only", "[sdk][u1]") {
     static_assert(std::is_move_constructible_v<coding_agent::EventSubscription>);
     static_assert(!std::is_copy_constructible_v<coding_agent::EventSubscription>);
@@ -848,8 +981,8 @@ TEST_CASE(
     CHECK(moved.is_open());
     CHECK_FALSE(moved.session_path().has_value());
     CHECK(moved.message_count() == 4);
-    CHECK(moved.close().has_value());
-    CHECK(moved.close().has_value());
+    moved.close();
+    moved.close();
     CHECK_FALSE(moved.is_open());
     CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
 }
@@ -884,7 +1017,7 @@ TEST_CASE(
         assigned = std::move(*second->session);
         CHECK_FALSE(static_cast<bool>(*first_subscription));
         CHECK(static_cast<bool>(*second_subscription));
-        CHECK(assigned.close().has_value());
+        assigned.close();
         CHECK_FALSE(static_cast<bool>(*second_subscription));
     }
 
@@ -937,7 +1070,7 @@ TEST_CASE(
     CHECK_FALSE(result->session->session_path().has_value());
     CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
     CHECK_FALSE(std::filesystem::exists(paths.workspace.path() / ".cpp-harness" / "sessions"));
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE(
@@ -973,7 +1106,7 @@ TEST_CASE(
     CHECK_FALSE(result->session_path.has_value());
     CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
     CHECK_FALSE(std::filesystem::exists(paths.workspace.path() / ".cpp-harness" / "sessions"));
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE(
@@ -1015,7 +1148,7 @@ TEST_CASE(
     CHECK_FALSE(result->session->session_path().has_value());
     CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
     CHECK_FALSE(std::filesystem::exists(paths.workspace.path() / ".cpp-harness" / "sessions"));
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE(
@@ -1077,7 +1210,7 @@ TEST_CASE(
     REQUIRE(std::holds_alternative<ai::UserMessage>(durable->messages[0]));
     CHECK(ai::text_from_content(std::get<ai::UserMessage>(durable->messages[0]).content) == "hello");
 
-    CHECK(session->close().has_value());
+    session->close();
 }
 
 TEST_CASE(
@@ -1168,7 +1301,7 @@ TEST_CASE(
     const auto& persisted = std::get<ai::AssistantMessage>(durable->messages[1]);
     tests::check_usage(persisted.usage, *terminal_usage);
 
-    CHECK(session->close().has_value());
+    session->close();
 }
 
 TEST_CASE(
@@ -1274,7 +1407,10 @@ TEST_CASE(
     CHECK(session->message_count() == 4);
     REQUIRE(session->last_assistant_text().has_value());
     CHECK(*session->last_assistant_text() == "recovered");
-    CHECK(session->close().has_value());
+    session->close();
+    CHECK_FALSE(session->is_open());
+    CHECK_FALSE(static_cast<bool>(*subscription));
+    session->close();
 
     auto capture = std::make_unique<CaptureChatClient>();
     auto* capture_ptr = capture.get();
@@ -1296,7 +1432,7 @@ TEST_CASE(
         capture_ptr->captured_request->context.messages[1]);
     CHECK(resumed_terminal.stop_reason == ai::AssistantStopReason::Error);
     CHECK(resumed_terminal.error_message == terminal_error_message);
-    CHECK(reopened->session->close().has_value());
+    reopened->session->close();
 }
 
 TEST_CASE(
@@ -1381,7 +1517,7 @@ TEST_CASE(
         (std::istreambuf_iterator<char>(transcript)),
         std::istreambuf_iterator<char>());
     CHECK(persisted.find(secret) == std::string::npos);
-    CHECK(created->session->close().has_value());
+    created->session->close();
 }
 
 TEST_CASE(
@@ -1500,7 +1636,7 @@ TEST_CASE(
     CHECK(session->message_count() == 4);
     REQUIRE(session->last_assistant_text().has_value());
     CHECK(*session->last_assistant_text() == "recovered");
-    CHECK(session->close().has_value());
+    session->close();
 
     auto capture = std::make_unique<CaptureChatClient>();
     auto* capture_ptr = capture.get();
@@ -1520,7 +1656,7 @@ TEST_CASE(
         capture_ptr->captured_request->context.messages[1]));
     check_aborted_terminal(std::get<ai::AssistantMessage>(
         capture_ptr->captured_request->context.messages[1]));
-    CHECK(reopened->session->close().has_value());
+    reopened->session->close();
 }
 
 TEST_CASE(
@@ -1621,7 +1757,7 @@ TEST_CASE(
     REQUIRE(second.has_value());
     CHECK(client_ptr->request_count == 2);
     CHECK(session->message_count() == 4);
-    CHECK(session->close().has_value());
+    session->close();
 }
 
 TEST_CASE(
@@ -1693,7 +1829,7 @@ TEST_CASE(
     CHECK(durable_terminal.stop_reason == ai::AssistantStopReason::Aborted);
     REQUIRE(durable_terminal.error_message.has_value());
     CHECK(*durable_terminal.error_message == "host cancelled before response start");
-    CHECK(session->close().has_value());
+    session->close();
 }
 
 TEST_CASE(
@@ -1805,7 +1941,7 @@ TEST_CASE(
     REQUIRE(std::holds_alternative<ai::AssistantMessage>(durable->messages[1]));
     check_partial_protocol_terminal(std::get<ai::AssistantMessage>(durable->messages[1]));
 
-    CHECK(session->close().has_value());
+    session->close();
 
     auto capture = std::make_unique<CaptureChatClient>();
     auto* capture_ptr = capture.get();
@@ -1825,7 +1961,7 @@ TEST_CASE(
         capture_ptr->captured_request->context.messages[1]));
     check_partial_protocol_terminal(std::get<ai::AssistantMessage>(
         capture_ptr->captured_request->context.messages[1]));
-    CHECK(reopened->session->close().has_value());
+    reopened->session->close();
 }
 
 TEST_CASE("SDK default target persists under the canonical workspace key", "[sdk][u2][default-persistence]") {
@@ -1858,7 +1994,7 @@ TEST_CASE("SDK default target persists under the canonical workspace key", "[sdk
     CHECK(stored->metadata.session_id == result->session_id);
     CHECK(stored->metadata.created_at == result->metadata.created_at);
     CHECK(stored->metadata.workspace == canonical_workspace);
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE("SDK default persistence ignores CLI-only session directory inputs", "[sdk][default-persistence]") {
@@ -1883,7 +2019,7 @@ TEST_CASE("SDK default persistence ignores CLI-only session directory inputs", "
     REQUIRE(result->session_path.has_value());
     CHECK(result->session_path->parent_path().parent_path() == agent_dir.path() / "sessions");
     CHECK(std::filesystem::is_empty(cli_directory.path()));
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1914,7 +2050,7 @@ TEST_CASE("SessionFactory applies one User Settings snapshot across provider and
     CHECK(result->model == "settings-model");
     REQUIRE(result->session_path.has_value());
     CHECK(result->session_path->parent_path() == settings_sessions.path());
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE("SessionFactory creation without User Settings applies defaults silently", "[sdk][settings-snapshot]") {
@@ -1931,7 +2067,7 @@ TEST_CASE("SessionFactory creation without User Settings applies defaults silent
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
     CHECK_FALSE(has_sdk_diag(result->diagnostics, "settings:fallback"));
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE("SessionFactory creation with malformed User Settings succeeds with safe defaults and a warning", "[sdk][settings-snapshot]") {
@@ -1953,7 +2089,7 @@ TEST_CASE("SessionFactory creation with malformed User Settings succeeds with sa
     CHECK(warning->severity == coding_agent::SdkDiagnostic::Severity::Warning);
     CHECK(warning->message.find("could not load user settings") != std::string::npos);
     CHECK(warning->message.find("invalid JSON") != std::string::npos);
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE("SessionFactory creation with invalid User Settings values falls back with a warning", "[sdk][settings-snapshot]") {
@@ -1974,7 +2110,7 @@ TEST_CASE("SessionFactory creation with invalid User Settings values falls back 
     REQUIRE(warning != result->diagnostics.end());
     CHECK(warning->severity == coding_agent::SdkDiagnostic::Severity::Warning);
     CHECK(warning->message.find("default_project_trust") != std::string::npos);
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE("SessionFactory SDK creation failure after User Settings fallback keeps the primary error and carries the warning", "[sdk][settings-snapshot]") {
@@ -2073,7 +2209,7 @@ TEST_CASE("SessionFactory CLI resume rejects an unresolvable explicit workspace"
     create_request.workspace = paths.workspace.path();
     auto created = coding_agent::create_agent_session(std::move(create_request));
     REQUIRE(created.has_value());
-    REQUIRE(created->session->close().has_value());
+    created->session->close();
 
     coding_agent::runtime::AgentSessionCreationRequest resume_request;
     resume_request.fake = true;
@@ -2139,8 +2275,8 @@ TEST_CASE("SDK default target gives workspace symlink aliases one directory", "[
     CHECK(physical->session_path->parent_path() == linked->session_path->parent_path());
     CHECK(physical->workspace == linked->workspace);
     CHECK(physical->metadata.workspace == linked->metadata.workspace);
-    CHECK(physical->session->close().has_value());
-    CHECK(linked->session->close().has_value());
+    physical->session->close();
+    linked->session->close();
 }
 #endif
 
@@ -2178,7 +2314,7 @@ TEST_CASE("SDK explicit new and resume paths bypass automatic storage", "[sdk][u
     CHECK(created->session_path == std::optional<std::filesystem::path>{paths.session_file});
     CHECK(created->session->session_path() == created->session_path);
     CHECK_FALSE(std::filesystem::exists(agent_dir.path() / "unused-agent-dir" / "sessions"));
-    CHECK(created->session->close().has_value());
+    created->session->close();
 
     coding_agent::CreateAgentSessionOptions resume;
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
@@ -2190,7 +2326,7 @@ TEST_CASE("SDK explicit new and resume paths bypass automatic storage", "[sdk][u
     CHECK(resumed->session_path == std::optional<std::filesystem::path>{paths.session_file});
     CHECK(resumed->session->session_path() == resumed->session_path);
     CHECK_FALSE(std::filesystem::exists(agent_dir.path() / "unused-agent-dir" / "sessions"));
-    CHECK(resumed->session->close().has_value());
+    resumed->session->close();
 }
 
 TEST_CASE("SDK default creation ignores a valid legacy session that remains explicitly resumable", "[sdk][default-persistence]") {
@@ -2224,7 +2360,7 @@ TEST_CASE("SDK default creation ignores a valid legacy session that remains expl
     CHECK(*created->session_path != legacy_session);
     CHECK(created->session_path->parent_path().parent_path() == agent_dir.path() / "sessions");
     CHECK(std::filesystem::is_regular_file(legacy_session));
-    CHECK(created->session->close().has_value());
+    created->session->close();
 
     coding_agent::CreateAgentSessionOptions resume;
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{legacy_session};
@@ -2235,7 +2371,7 @@ TEST_CASE("SDK default creation ignores a valid legacy session that remains expl
     REQUIRE(resumed.has_value());
     CHECK(resumed->session_id == "legacy-session-id");
     CHECK(resumed->session_path == std::optional<std::filesystem::path>{legacy_session});
-    CHECK(resumed->session->close().has_value());
+    resumed->session->close();
 }
 
 TEST_CASE("SDK default publication failure does not use the legacy workspace directory", "[sdk][default-persistence][failure]") {
@@ -2326,7 +2462,7 @@ TEST_CASE("SDK provider_config api_key_env chain accepts first set fallback", "[
     REQUIRE(result.has_value());
     CHECK(result->provider == "fake");
     CHECK(result->model == "fake-model");
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE("SDK provider_config api_key_env chain rejects unset variables", "[sdk][u2][api-key-env]") {
@@ -2404,7 +2540,7 @@ TEST_CASE("SDK resume uses config-derived api_key_env chain", "[sdk][u2][api-key
 
         auto result = coding_agent::create_agent_session(std::move(opts));
         REQUIRE(result.has_value());
-        CHECK(result->session->close().has_value());
+        result->session->close();
     }
 
     coding_agent::CreateAgentSessionOptions resume_opts;
@@ -2415,7 +2551,7 @@ TEST_CASE("SDK resume uses config-derived api_key_env chain", "[sdk][u2][api-key
     REQUIRE(resume_result.has_value());
     CHECK(resume_result->provider == "fake");
     CHECK(resume_result->model == "fake-model");
-    CHECK(resume_result->session->close().has_value());
+    resume_result->session->close();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2526,7 +2662,7 @@ TEST_CASE("SDK stashed prompt awaitable survives a moved-from session handle", "
     REQUIRE(prompt_result.has_value());
     CHECK(prompt_result->has_value());
     CHECK(moved.message_count() == 2);
-    CHECK(moved.close().has_value());
+    moved.close();
 }
 
 TEST_CASE("SDK async prompt rejects overlap before session mutation", "[sdk][u3][async]") {
@@ -2588,6 +2724,249 @@ TEST_CASE("SDK async prompt rejects overlap before session mutation", "[sdk][u3]
     REQUIRE(first_result->has_value());
     CHECK_FALSE(created->session->is_busy());
     CHECK(created->session->message_count() == 2);
+}
+
+TEST_CASE(
+    "SDK close from prompt preflight carries cancellation into the admitted run",
+    "[sdk][u3][lifecycle][issue41]") {
+    TestPaths paths;
+    auto observation = std::make_shared<PreflightCancellationObservation>();
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::InMemorySessionTarget{};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::make_unique<PreflightCancellationChatClient>(observation);
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+
+    std::vector<agent::AgentLifecycleEvent> events;
+    auto subscription = created->session->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            events.push_back(event);
+            return {};
+        });
+    REQUIRE(subscription.has_value());
+
+    bool preflight_accepted = false;
+    auto result = coding_agent::detail::AgentSessionPromptAccess::prompt_blocking(
+        *created->session,
+        "close during preflight",
+        true,
+        [&]() -> util::ExpectedVoid {
+            preflight_accepted = true;
+            created->session->close();
+            CHECK_FALSE(created->session->is_open());
+            CHECK(created->session->is_busy());
+            return {};
+        });
+
+    REQUIRE(result.has_value());
+    CHECK(preflight_accepted);
+    CHECK(observation->stop_requested);
+    CHECK(has_aborted_message_end(events));
+    CHECK_FALSE(created->session->is_open());
+    CHECK_FALSE(created->session->is_busy());
+    CHECK_FALSE(static_cast<bool>(*subscription));
+}
+
+TEST_CASE(
+    "SDK close while idle releases owned resources exactly once and rejects admission",
+    "[sdk][u3][lifecycle][issue41]") {
+    TestPaths paths;
+    auto counts = std::make_shared<SdkOwnedLifetimeCounts>();
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::InMemorySessionTarget{};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::make_unique<LifetimeTrackedChatClient>(counts);
+    opts.custom_tools.push_back(std::make_unique<LifetimeTrackedTool>(counts));
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+
+    auto sink_lifetime = std::make_shared<SubscriberLifetimeToken>();
+    std::weak_ptr<SubscriberLifetimeToken> weak_sink_lifetime = sink_lifetime;
+    auto subscription = created->session->subscribe(
+        [sink_lifetime](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+            return {};
+        });
+    REQUIRE(subscription.has_value());
+    sink_lifetime.reset();
+    REQUIRE_FALSE(weak_sink_lifetime.expired());
+
+    created->session->close();
+    CHECK_FALSE(created->session->is_open());
+    CHECK_FALSE(created->session->is_busy());
+    CHECK(counts->destroyed_clients == 1);
+    CHECK(counts->destroyed_tools == 1);
+    CHECK(weak_sink_lifetime.expired());
+    CHECK_FALSE(static_cast<bool>(*subscription));
+    CHECK_FALSE(created->session->subscribe(
+        [](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid { return {}; }).has_value());
+    CHECK_FALSE(created->session->prompt_blocking("too late").has_value());
+
+    created->session->close();
+    CHECK(counts->destroyed_clients == 1);
+    CHECK(counts->destroyed_tools == 1);
+    created->session.reset();
+    CHECK(counts->destroyed_clients == 1);
+    CHECK(counts->destroyed_tools == 1);
+}
+
+TEST_CASE(
+    "SDK close during an active prompt requests cancellation without waiting",
+    "[sdk][u3][async][lifecycle][issue41]") {
+    TestPaths paths;
+
+    auto client = std::make_unique<AbortAwareSdkChatClient>(false);
+    auto* client_ptr = client.get();
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::InMemorySessionTarget{};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::move(client);
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+
+    std::vector<agent::AgentLifecycleEvent> events;
+    auto subscription = created->session->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            events.push_back(event);
+            return {};
+        });
+    REQUIRE(subscription.has_value());
+
+    boost::asio::io_context host_io;
+    std::optional<util::ExpectedVoid> prompt_result;
+    boost::asio::co_spawn(
+        host_io,
+        [&]() -> boost::asio::awaitable<void> {
+            prompt_result = co_await created->session->prompt("close me");
+            co_return;
+        },
+        boost::asio::detached);
+
+    while (!client_ptr->started) {
+        REQUIRE(host_io.poll_one() == 1);
+    }
+    REQUIRE(client_ptr->first_stop_token.has_value());
+    REQUIRE_FALSE(prompt_result.has_value());
+
+    created->session->close();
+    CHECK(client_ptr->first_stop_token->stop_requested());
+    CHECK_FALSE(prompt_result.has_value());
+    CHECK_FALSE(created->session->is_open());
+    CHECK(created->session->is_busy());
+    CHECK_FALSE(created->session->subscribe(
+        [](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid { return {}; }).has_value());
+    CHECK_FALSE(created->session->prompt_blocking("too late").has_value());
+
+    if (host_io.stopped()) {
+        host_io.restart();
+    }
+    host_io.run();
+
+    REQUIRE(prompt_result.has_value());
+    REQUIRE(prompt_result->has_value());
+    CHECK_FALSE(created->session->is_busy());
+    CHECK_FALSE(created->session->is_open());
+    CHECK(has_aborted_message_end(events));
+    CHECK_FALSE(static_cast<bool>(*subscription));
+    created->session->close();
+}
+
+TEST_CASE(
+    "SDK close immediately after abort quiescence is safe and idempotent",
+    "[sdk][u3][async][abort][lifecycle][issue41]") {
+    TestPaths paths;
+    auto client = std::make_unique<AbortAwareSdkChatClient>(false);
+    auto* client_ptr = client.get();
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::InMemorySessionTarget{};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::move(client);
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+
+    boost::asio::io_context host_io;
+    std::optional<util::ExpectedVoid> prompt_result;
+    boost::asio::co_spawn(
+        host_io,
+        [&]() -> boost::asio::awaitable<void> {
+            prompt_result = co_await created->session->prompt("abort then close");
+            co_return;
+        },
+        boost::asio::detached);
+    while (!client_ptr->started) {
+        REQUIRE(host_io.poll_one() == 1);
+    }
+
+    created->session->abort();
+    if (host_io.stopped()) {
+        host_io.restart();
+    }
+    host_io.run();
+
+    REQUIRE(prompt_result.has_value());
+    REQUIRE(prompt_result->has_value());
+    CHECK(created->session->is_open());
+    CHECK_FALSE(created->session->is_busy());
+
+    created->session->close();
+    CHECK_FALSE(created->session->is_open());
+    CHECK_FALSE(created->session->is_busy());
+    created->session->close();
+}
+
+TEST_CASE(
+    "SDK close immediately after an accepted terminal failure is safe",
+    "[sdk][u3][lifecycle][issue41]") {
+    TestPaths paths;
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::InMemorySessionTarget{};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::make_unique<TerminalBeforeStartChatClient>(
+        ai::AssistantStopReason::Error,
+        "terminal failure");
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+    REQUIRE(created->session->prompt_blocking("fail").has_value());
+    CHECK(created->session->is_open());
+    CHECK_FALSE(created->session->is_busy());
+
+    created->session->close();
+    CHECK_FALSE(created->session->is_open());
+    CHECK_FALSE(created->session->is_busy());
+    created->session->close();
+}
+
+TEST_CASE(
+    "SDK close immediately after persistence failure is safe",
+    "[sdk][u3][lifecycle][persistence-failure][issue41]") {
+    TestPaths paths;
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::make_unique<CaptureChatClient>();
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+    harness::session::testing::fail_nth_append_for_test(paths.session_file, 2);
+    auto failed = created->session->prompt_blocking("fail persistence");
+    REQUIRE_FALSE(failed.has_value());
+    CHECK(failed.error().code == util::ErrorCode::Session);
+    CHECK(created->session->is_open());
+    CHECK_FALSE(created->session->is_busy());
+
+    created->session->close();
+    CHECK_FALSE(created->session->is_open());
+    CHECK_FALSE(created->session->is_busy());
+    created->session->close();
 }
 
 TEST_CASE(
@@ -2698,6 +3077,11 @@ TEST_CASE(
     durable = harness::session::JsonlSessionStore::load(paths.session_file);
     REQUIRE(durable.has_value());
     CHECK(durable->messages.size() == 4);
+
+    created->session->close();
+    CHECK_FALSE(created->session->is_open());
+    CHECK_FALSE(static_cast<bool>(*subscription));
+    created->session->close();
 }
 
 TEST_CASE(
@@ -2818,7 +3202,7 @@ TEST_CASE("SDK async prompt defers callback close until quiescence", "[sdk][u3][
         [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
             if (std::holds_alternative<agent::AgentStartEvent>(event)) {
                 close_requested = true;
-                return created->session->close();
+                created->session->close();
             }
             return {};
         });
@@ -2900,12 +3284,10 @@ TEST_CASE("SDK create/prompt/close cycle with fake client", "[sdk][u3]") {
     CHECK(session->message_count() > 0);
 
     // Close is idempotent
-    auto close1 = session->close();
-    CHECK(close1.has_value());
+    session->close();
     CHECK_FALSE(session->is_open());
 
-    auto close2 = session->close();
-    CHECK(close2.has_value());
+    session->close();
 
     // Prompt after close fails
     auto prompt_after = session->prompt_blocking("should fail");
@@ -2946,7 +3328,7 @@ TEST_CASE("SDK event subscription delivers lifecycle events", "[sdk][u3]") {
     CHECK_FALSE(static_cast<bool>(*sub_result));
 
     // Close
-    CHECK(session->close().has_value());
+    session->close();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2973,7 +3355,7 @@ TEST_CASE("SDK custom tool is registered and can be called", "[sdk][u4]") {
     auto prompt_result = session->prompt_blocking("hello");
     REQUIRE(prompt_result.has_value());
 
-    CHECK(session->close().has_value());
+    session->close();
 }
 
 TEST_CASE("SDK duplicate custom tool names fail creation", "[sdk][u4]") {
@@ -3017,7 +3399,7 @@ TEST_CASE("SDK host-provided skills are accessible", "[sdk][u4]") {
     CHECK(session->skills().size() == 1);
     CHECK(session->skills()[0].name == "test-skill");
 
-    CHECK(session->close().has_value());
+    session->close();
 }
 
 TEST_CASE("SDK unknown skill command reaches the provider without diagnostics", "[sdk][u4][skill-diagnostics]") {
@@ -3035,7 +3417,7 @@ TEST_CASE("SDK unknown skill command reaches the provider without diagnostics", 
     auto prompt_result = session->prompt_blocking("/skill:unknown");
     REQUIRE(prompt_result.has_value());
 
-    CHECK(session->close().has_value());
+    session->close();
 }
 
 TEST_CASE("SDK prompt leaves diagnostics empty for valid and bare skill commands", "[sdk][u4][skill-diagnostics]") {
@@ -3063,7 +3445,7 @@ TEST_CASE("SDK prompt leaves diagnostics empty for valid and bare skill commands
     auto bare_result = session->prompt_blocking("/skill:");
     REQUIRE(bare_result.has_value());
 
-    CHECK(session->close().has_value());
+    session->close();
 }
 
 TEST_CASE("SDK host-provided templates are accessible", "[sdk][u4]") {
@@ -3087,7 +3469,7 @@ TEST_CASE("SDK host-provided templates are accessible", "[sdk][u4]") {
     CHECK(session->templates().size() == 1);
     CHECK(session->templates()[0].name == "greet");
 
-    CHECK(session->close().has_value());
+    session->close();
 }
 
 TEST_CASE("moved SDK session retains its owned prompt resource snapshot", "[sdk][u4][prompt-processing]") {
@@ -3115,7 +3497,7 @@ TEST_CASE("moved SDK session retains its owned prompt resource snapshot", "[sdk]
     REQUIRE(user != messages.end());
     CHECK(ai::text_from_content(std::get<ai::UserMessage>(*user).content) == "Review cached: target.cpp");
 
-    CHECK(moved_session.close().has_value());
+    moved_session.close();
 }
 
 TEST_CASE("SDK expand_prompt_templates false sends slash-shaped input raw to the provider", "[sdk][u4][prompt-processing]") {
@@ -3147,7 +3529,7 @@ TEST_CASE("SDK expand_prompt_templates false sends slash-shaped input raw to the
         CHECK(ai::text_from_content(std::get<ai::UserMessage>(*user).content) == raw);
     }
 
-    CHECK(created->session->close().has_value());
+    created->session->close();
 }
 
 TEST_CASE("SDK treats user bash prefixes as ordinary prompts", "[sdk][u4][prompt-processing][user-bash]") {
@@ -3175,7 +3557,7 @@ TEST_CASE("SDK treats user bash prefixes as ordinary prompts", "[sdk][u4][prompt
         CHECK(ai::text_from_content(std::get<ai::UserMessage>(*user).content) == raw);
     }
 
-    CHECK(created->session->close().has_value());
+    created->session->close();
 }
 
 TEST_CASE("SDK loads trusted project resources through shared loader", "[sdk][project-resources]") {
@@ -3207,7 +3589,7 @@ TEST_CASE("SDK loads trusted project resources through shared loader", "[sdk][pr
     REQUIRE(result->session->last_assistant_text().has_value());
     CHECK(result->session->last_assistant_text()->find("Review project item: Ada.") != std::string::npos);
 
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE("SDK keeps host resources when project resource loading is disabled", "[sdk][project-resources]") {
@@ -3229,7 +3611,7 @@ TEST_CASE("SDK keeps host resources when project resource loading is disabled", 
     CHECK(result->session->skills()[0].name == "host-skill");
     REQUIRE(result->session->templates().size() == 1);
     CHECK(result->session->templates()[0].name == "host-review");
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE("SDK keeps host resources and returns resource decisions when project is untrusted", "[sdk][project-resources]") {
@@ -3259,7 +3641,7 @@ TEST_CASE("SDK keeps host resources and returns resource decisions when project 
     CHECK(result->session->templates()[0].name == "host-review");
     CHECK(has_sdk_diag(result->diagnostics, "resource:project_skills"));
     CHECK(has_sdk_diag(result->diagnostics, "resource:project_prompts"));
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE("SDK project resource duplicates prefer host resources with structured diagnostics", "[sdk][project-resources]") {
@@ -3284,7 +3666,7 @@ TEST_CASE("SDK project resource duplicates prefer host resources with structured
     CHECK(result->session->templates()[0].content == "Host template body.");
     CHECK(has_sdk_diag(result->diagnostics, "duplicate:duplicate_skill_skipped"));
     CHECK(has_sdk_diag(result->diagnostics, "duplicate:duplicate_template_skipped"));
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE("SDK returns trust and adapter diagnostics as values", "[sdk][project-resources]") {
@@ -3313,7 +3695,7 @@ TEST_CASE("SDK returns trust and adapter diagnostics as values", "[sdk][project-
         CHECK(has_sdk_diag(untrusted->diagnostics, "trust:trust_store_unavailable"));
         CHECK(has_sdk_diag(untrusted->diagnostics, "resource:project_skills"));
         CHECK(untrusted->session->skills().empty());
-        CHECK(untrusted->session->close().has_value());
+        untrusted->session->close();
     }
 
     TestPaths trusted_paths;
@@ -3336,7 +3718,7 @@ TEST_CASE("SDK returns trust and adapter diagnostics as values", "[sdk][project-
     REQUIRE(trusted.has_value());
     CHECK(has_sdk_diag(trusted->diagnostics, "skill:invalid_metadata"));
     CHECK(trusted->session->skills().empty());
-    CHECK(trusted->session->close().has_value());
+    trusted->session->close();
 }
 
 TEST_CASE("SDK bounds auto-discovered resource diagnostics", "[sdk][project-resources]") {
@@ -3382,7 +3764,7 @@ TEST_CASE("SDK bounds auto-discovered resource diagnostics", "[sdk][project-reso
         });
     REQUIRE(truncated_message != result->diagnostics.end());
     CHECK(truncated_message->message.size() <= 1024);
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE("SDK project resource diagnostics are not printed during creation", "[sdk][project-resources]") {
@@ -3413,7 +3795,7 @@ TEST_CASE("SDK project resource diagnostics are not printed during creation", "[
     CHECK(has_sdk_diag(result->diagnostics, "template:parse_failed"));
     CHECK(captured_out.str().empty());
     CHECK(captured_err.str().empty());
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE("SDK default built-in tools exclude bash", "[sdk][u4]") {
@@ -3438,7 +3820,7 @@ TEST_CASE("SDK default built-in tools exclude bash", "[sdk][u4]") {
     // But since bash is not registered, the agent loop won't find the tool and will error.
     // This verifies the tool is not registered by checking the session works.
 
-    CHECK(session->close().has_value());
+    session->close();
 }
 
 TEST_CASE("SDK bash tool can be explicitly enabled", "[sdk][u4]") {
@@ -3455,7 +3837,7 @@ TEST_CASE("SDK bash tool can be explicitly enabled", "[sdk][u4]") {
 
     auto& session = create_result->session;
     CHECK(session->is_open());
-    CHECK(session->close().has_value());
+    session->close();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3477,7 +3859,7 @@ TEST_CASE("SDK can resume a linear session", "[sdk][u3]") {
         auto& session = result->session;
         auto pr = session->prompt_blocking("hello");
         REQUIRE(pr.has_value());
-        CHECK(session->close().has_value());
+        session->close();
     }
 
     // Then, resume it
@@ -3510,7 +3892,7 @@ TEST_CASE("SDK can resume a linear session", "[sdk][u3]") {
         auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
         REQUIRE(durable.has_value());
         CHECK(durable->messages.size() == 4);
-        CHECK(session->close().has_value());
+        session->close();
     }
 }
 
@@ -3578,7 +3960,7 @@ TEST_CASE("SDK resumes linear active topology with inactive branch and compactio
 
     auto prompt_result = result->session->prompt_blocking("continue linear path");
     REQUIRE(prompt_result.has_value());
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3605,7 +3987,7 @@ TEST_CASE("SDK state accessors reflect committed history", "[sdk][u3]") {
     CHECK(session->message_count() > 0);
     CHECK(session->last_assistant_text().has_value());
 
-    CHECK(session->close().has_value());
+    session->close();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3676,7 +4058,7 @@ TEST_CASE("SDK message_end subscribers observe live state updated before deliver
     CHECK(assistant_text_in_subscriber->find("observed") != std::string::npos);
     CHECK(session->last_assistant_text() == assistant_text_in_subscriber);
 
-    CHECK(session->close().has_value());
+    session->close();
 }
 
 TEST_CASE(
@@ -3727,14 +4109,14 @@ TEST_CASE(
     CHECK(std::holds_alternative<ai::ToolResultMessage>(durable->messages[2]));
     CHECK(std::holds_alternative<ai::AssistantMessage>(durable->messages[3]));
 
-    CHECK(session->close().has_value());
+    session->close();
 
     auto reopened = coding_agent::create_agent_session(sdk_resume_options(paths));
     REQUIRE(reopened.has_value());
     CHECK(reopened->session->message_count() == 4);
     REQUIRE(reopened->session->last_assistant_text().has_value());
     CHECK(reopened->session->last_assistant_text()->find("observed") != std::string::npos);
-    CHECK(reopened->session->close().has_value());
+    reopened->session->close();
 }
 
 TEST_CASE(
@@ -3787,7 +4169,7 @@ TEST_CASE(
     CHECK(std::holds_alternative<ai::UserMessage>(durable->messages[0]));
     CHECK(std::holds_alternative<ai::AssistantMessage>(durable->messages[1]));
     CHECK(session->is_open());
-    CHECK(session->close().has_value());
+    session->close();
 }
 
 TEST_CASE(
@@ -3834,49 +4216,56 @@ TEST_CASE(
     REQUIRE(session->prompt_blocking("second").has_value());
     CHECK(self_events == 11);
     CHECK(late_events == 11);
-    CHECK(session->close().has_value());
+    session->close();
 }
 
 TEST_CASE(
-    "SDK defers close requested by an observer until the active prompt quiesces",
-    "[sdk][lifecycle][issue36]") {
+    "SDK close from an observer retains callbacks and capabilities until quiescence",
+    "[sdk][lifecycle][issue41]") {
     TestPaths paths;
     auto env = std::make_shared<CountingFakeEnv>(paths.workspace.path());
+    auto counts = std::make_shared<SdkOwnedLifetimeCounts>();
     coding_agent::CreateAgentSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.chat_client = std::make_unique<AbortAwareSdkChatClient>(false, counts);
     opts.execution_env = env;
+    opts.custom_tools.push_back(std::make_unique<LifetimeTrackedTool>(counts));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
     auto& session = created->session;
-    std::size_t closing_events = 0;
-    std::optional<coding_agent::EventSubscription> closing;
-    auto subscribed = session->subscribe(
+    std::vector<agent::AgentLifecycleEvent> events;
+    auto closing = session->subscribe(
         [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
-            ++closing_events;
+            events.push_back(event);
             if (std::holds_alternative<agent::AgentStartEvent>(event)) {
-                closing->unsubscribe();
-                REQUIRE(session->close().has_value());
+                session->close();
                 CHECK_FALSE(session->is_open());
                 CHECK(session->is_busy());
+                CHECK(counts->destroyed_clients == 0);
+                CHECK(counts->destroyed_tools == 0);
             }
             return {};
         });
-    REQUIRE(subscribed.has_value());
-    closing.emplace(std::move(*subscribed));
+    REQUIRE(closing.has_value());
 
     REQUIRE(session->prompt_blocking("hello").has_value());
     CHECK_FALSE(session->is_open());
     CHECK_FALSE(session->is_busy());
-    CHECK(closing_events == 1);
+    CHECK(events.size() > 1);
+    CHECK(has_aborted_message_end(events));
     CHECK_FALSE(static_cast<bool>(*closing));
+    CHECK(counts->destroyed_clients == 1);
+    CHECK(counts->destroyed_tools == 1);
     CHECK(env->cleanup_count == 0);
 
     auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
     REQUIRE(durable.has_value());
-    CHECK(durable->messages.size() == 2);
+    REQUIRE(durable->messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(durable->messages[1]));
+    CHECK(std::get<ai::AssistantMessage>(durable->messages[1]).stop_reason ==
+          ai::AssistantStopReason::Aborted);
 }
 
 TEST_CASE(
@@ -3983,13 +4372,15 @@ TEST_CASE(
     CHECK(std::holds_alternative<ai::AssistantMessage>(durable_after_recovery->messages[2]));
     CHECK(ai::text_from_content(std::get<ai::UserMessage>(durable_after_recovery->messages[1]).content) == "second");
 
-    CHECK(session->close().has_value());
+    session->close();
+    CHECK_FALSE(session->is_open());
+    session->close();
     auto reopened = coding_agent::create_agent_session(sdk_resume_options(paths));
     REQUIRE(reopened.has_value());
     CHECK(reopened->session->message_count() == 3);
     REQUIRE(reopened->session->last_assistant_text().has_value());
     CHECK(*reopened->session->last_assistant_text() == "captured");
-    CHECK(reopened->session->close().has_value());
+    reopened->session->close();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4021,7 +4412,7 @@ TEST_CASE("CreateAgentSessionResult contains metadata", "[sdk][u2]") {
     CHECK(result->metadata.provider == result->provider);
     CHECK(result->metadata.model == result->model);
 
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE("SDK new sessions receive fresh identity and resume preserves it", "[sdk][assembly]") {
@@ -4044,7 +4435,7 @@ TEST_CASE("SDK new sessions receive fresh identity and resume preserves it", "[s
         first_created_at,
         std::regex{R"(^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$)"}));
     CHECK(first_id != first_created_at);
-    CHECK(first->session->close().has_value());
+    first->session->close();
 
     coding_agent::CreateAgentSessionOptions second_opts;
     second_opts.session_target = coding_agent::ExplicitNewSessionTarget{second_paths.session_file};
@@ -4055,13 +4446,13 @@ TEST_CASE("SDK new sessions receive fresh identity and resume preserves it", "[s
     REQUIRE(second.has_value());
     CHECK(second->metadata.session_id != first_id);
     CHECK_FALSE(second->metadata.created_at.empty());
-    CHECK(second->session->close().has_value());
+    second->session->close();
 
     auto resumed = coding_agent::create_agent_session(sdk_resume_options(first_paths));
     REQUIRE(resumed.has_value());
     CHECK(resumed->metadata.session_id == first_id);
     CHECK(resumed->metadata.created_at == first_created_at);
-    CHECK(resumed->session->close().has_value());
+    resumed->session->close();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4088,7 +4479,7 @@ TEST_CASE("SDK creation with host client produces diagnostic", "[sdk][u2]") {
     }
     CHECK(found_host_diag);
 
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4164,7 +4555,7 @@ TEST_CASE("SDK host-provided execution environment is not cleaned up by session 
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
-    CHECK(result->session->close().has_value());
+    result->session->close();
     CHECK(env->cleanup_count == 0);
 }
 
@@ -4189,7 +4580,7 @@ TEST_CASE("SDK disabled bash is absent from the model-visible tool registry", "[
     CHECK(tool_registry_contains(capture_ptr->captured_request->context, "read"));
     CHECK(tool_registry_contains(capture_ptr->captured_request->context, "write"));
     CHECK(tool_registry_contains(capture_ptr->captured_request->context, "edit_file"));
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE("SDK enabled bash appears in the model-visible tool registry", "[sdk][assembly]") {
@@ -4210,7 +4601,7 @@ TEST_CASE("SDK enabled bash appears in the model-visible tool registry", "[sdk][
 
     REQUIRE(capture_ptr->captured_request.has_value());
     CHECK(tool_registry_contains(capture_ptr->captured_request->context, "bash"));
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE("SDK rejects workspace-local trust_store_path", "[sdk][assembly][trust]") {
@@ -4263,7 +4654,7 @@ TEST_CASE("SDK default trust store inside the workspace cannot authorize project
     REQUIRE(result.has_value());
     CHECK(result->session->skills().empty());
     CHECK(has_sdk_diag(result->diagnostics, "trust:trust_store_unavailable"));
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 #if defined(__unix__) || defined(__APPLE__)
@@ -4358,7 +4749,7 @@ TEST_CASE("SDK accepts an existing external trust store as project trust authori
     REQUIRE(result.has_value());
     REQUIRE(result->session->skills().size() == 1);
     CHECK(result->session->skills()[0].name == "externally-authorized");
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE("SDK accepts external not-yet-created trust_store_path", "[sdk][assembly][trust]") {
@@ -4376,7 +4767,7 @@ TEST_CASE("SDK accepts external not-yet-created trust_store_path", "[sdk][assemb
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4402,7 +4793,7 @@ TEST_CASE("SDK host client new session uses config provider but host model senti
     CHECK(result->model == "host-client");
     CHECK(result->session->provider() == "kimi-coding");
     CHECK(result->session->model() == "host-client");
-    CHECK(result->session->close().has_value());
+    result->session->close();
 }
 
 TEST_CASE("SDK host client resume without override retains stored metadata", "[sdk][provider-resolution]") {
@@ -4422,7 +4813,7 @@ TEST_CASE("SDK host client resume without override retains stored metadata", "[s
         REQUIRE(result.has_value());
         CHECK(result->provider == "fake");
         CHECK(result->model == "fake-model");
-        CHECK(result->session->close().has_value());
+        result->session->close();
     }
 
     {
@@ -4438,7 +4829,7 @@ TEST_CASE("SDK host client resume without override retains stored metadata", "[s
         CHECK_FALSE(has_sdk_diag(result->diagnostics, "resume_provider_override"));
         CHECK(result->session->provider() == "fake");
         CHECK(result->session->model() == "fake-model");
-        CHECK(result->session->close().has_value());
+        result->session->close();
     }
 }
 
@@ -4458,7 +4849,7 @@ TEST_CASE("SDK resume with explicit provider/model override reports diagnostic",
         REQUIRE(result.has_value());
         CHECK(result->provider == "sdk-host");
         CHECK(result->model == "host-client");
-        CHECK(result->session->close().has_value());
+        result->session->close();
     }
 
     {
@@ -4476,7 +4867,7 @@ TEST_CASE("SDK resume with explicit provider/model override reports diagnostic",
         CHECK(result->provider == "openai-compatible");
         CHECK(result->model == "gpt-4o");
         CHECK(has_sdk_diag(result->diagnostics, "resume_provider_override"));
-        CHECK(result->session->close().has_value());
+        result->session->close();
     }
 }
 
@@ -4495,7 +4886,7 @@ TEST_CASE("SDK resume with explicit model override alone reports diagnostic", "[
 
         auto result = coding_agent::create_agent_session(std::move(opts));
         REQUIRE(result.has_value());
-        CHECK(result->session->close().has_value());
+        result->session->close();
     }
 
     {
@@ -4512,7 +4903,7 @@ TEST_CASE("SDK resume with explicit model override alone reports diagnostic", "[
         REQUIRE(result.has_value());
         CHECK(result->model == "gpt-4o");
         CHECK(has_sdk_diag(result->diagnostics, "resume_provider_override"));
-        CHECK(result->session->close().has_value());
+        result->session->close();
     }
 }
 

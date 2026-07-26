@@ -1,19 +1,22 @@
 #pragma once
 
-#include "AgentContext.hpp"
-#include "AgentEvent.hpp"
-#include "ToolRegistry.hpp"
-
+#include <cch/agent/AgentContext.hpp>
+#include <cch/agent/AgentEvent.hpp>
+#include <cch/agent/ToolRegistry.hpp>
 #include <cch/ai/ChatClient.hpp>
 #include <cch/util/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
 #include <memory>
+#include <stop_token>
 #include <string>
 #include <vector>
 
 namespace cch::agent {
+namespace detail {
+class AgentPromptAccess;
+} // namespace detail
 
 /// Passive initial conversation state for a stateful Agent.
 /// Runtime-owned fields always begin idle; model and tool state come from the
@@ -97,6 +100,16 @@ public:
     struct Impl;
 
 private:
+    friend class detail::AgentPromptAccess;
+
+    /// Execute one prompt using a caller-created prompt-scoped cancellation
+    /// source. Copies of the source share one stop state, allowing an admission
+    /// owner to request cancellation before the Agent coroutine starts.
+    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> prompt(
+        std::string user_prompt,
+        AgentEventCommitter commitment,
+        std::stop_source stop_source);
+
     std::shared_ptr<Impl> impl_;
 };
 

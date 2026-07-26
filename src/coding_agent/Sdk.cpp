@@ -1,6 +1,5 @@
 #include <cch/coding_agent/Sdk.hpp>
 
-#include "coding_agent/ScopeExit.hpp"
 #include "coding_agent/runtime/AgentSessionPromptAccess.hpp"
 #include "coding_agent/runtime/AgentSessionRuntime.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
@@ -63,29 +62,6 @@ struct EventSubscription::Impl {
 };
 
 struct AgentSession::Impl {
-    enum class State { Open, RunningPrompt, Closing, Closed };
-
-    /// Shared preflight outcome for entry points that require a non-closed session.
-    [[nodiscard]] util::ExpectedVoid reject_if_closed() const {
-        if (state == State::Closing || state == State::Closed) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
-                "session is closed"));
-        }
-        return {};
-    }
-
-    /// Shared preflight outcome for entry points that reject a concurrent prompt.
-    [[nodiscard]] util::ExpectedVoid reject_if_busy() const {
-        if (state == State::RunningPrompt) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
-                "session is busy (prompt already in flight)"));
-        }
-        return {};
-    }
-
-    State state{State::Closed};
     std::optional<std::filesystem::path> session_path;
     std::unique_ptr<runtime::AgentSessionRuntime> runtime;
 };
@@ -129,7 +105,7 @@ AgentSession::AgentSession(AgentSession&&) noexcept = default;
 AgentSession& AgentSession::operator=(AgentSession&& other) noexcept {
     if (this != &other) {
         if (impl_) {
-            (void)close();
+            close();
         }
         impl_ = std::move(other.impl_);
     }
@@ -138,7 +114,7 @@ AgentSession& AgentSession::operator=(AgentSession&& other) noexcept {
 
 AgentSession::~AgentSession() {
     if (impl_) {
-        (void)close();
+        close();
     }
 }
 
@@ -188,22 +164,6 @@ boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::pro
             util::ErrorCode::Validation,
             "session is not initialized"));
     }
-    if (auto rejected = impl->reject_if_closed(); !rejected) {
-        co_return std::unexpected(rejected.error());
-    }
-    if (auto rejected = impl->reject_if_busy(); !rejected) {
-        co_return std::unexpected(rejected.error());
-    }
-
-    impl->state = AgentSession::Impl::State::RunningPrompt;
-    ScopeExit restore_state{[impl] {
-        if (impl->state == AgentSession::Impl::State::Closing) {
-            impl->state = AgentSession::Impl::State::Closed;
-        } else if (impl->state == AgentSession::Impl::State::RunningPrompt) {
-            impl->state = AgentSession::Impl::State::Open;
-        }
-    }};
-
     try {
         co_return co_await impl->runtime->run_prompt(
             std::move(text),
@@ -230,13 +190,6 @@ util::ExpectedVoid detail::AgentSessionPromptAccess::prompt_blocking(
             util::ErrorCode::Validation,
             "session is busy (prompt already in flight)"));
     }
-    if (auto rejected = impl->reject_if_closed(); !rejected) {
-        return std::unexpected(rejected.error());
-    }
-    if (auto rejected = impl->reject_if_busy(); !rejected) {
-        return std::unexpected(rejected.error());
-    }
-
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> result;
     std::exception_ptr exception;
@@ -269,9 +222,6 @@ util::ExpectedVoid detail::AgentSessionPromptAccess::prompt_blocking(
 util::Expected<EventSubscription> AgentSession::subscribe(agent::AgentEventSink sink) {
     if (!impl_) {
         return std::unexpected(util::make_error(util::ErrorCode::Validation, "session is not initialized"));
-    }
-    if (auto rejected = impl_->reject_if_closed(); !rejected) {
-        return std::unexpected(rejected.error());
     }
     if (!sink) {
         return std::unexpected(util::make_error(util::ErrorCode::Validation, "event sink is empty"));
@@ -324,27 +274,15 @@ const std::filesystem::path& AgentSession::workspace() const {
 }
 
 void AgentSession::abort() {
-    if (impl_ && impl_->runtime &&
-        impl_->state == AgentSession::Impl::State::RunningPrompt) {
+    if (impl_ && impl_->runtime) {
         impl_->runtime->abort();
     }
 }
 
-util::ExpectedVoid AgentSession::close() {
-    auto impl = impl_;
-    if (!impl) return {};
-    if (impl->state == AgentSession::Impl::State::Closing ||
-        impl->state == AgentSession::Impl::State::Closed) {
-        return {};
+void AgentSession::close() noexcept {
+    if (impl_ && impl_->runtime) {
+        impl_->runtime->close();
     }
-
-    if (impl->state == AgentSession::Impl::State::RunningPrompt) {
-        impl->state = AgentSession::Impl::State::Closing;
-    } else {
-        impl->state = AgentSession::Impl::State::Closed;
-    }
-    impl->runtime->close();
-    return {};
 }
 
 bool AgentSession::is_open() const {
@@ -352,9 +290,7 @@ bool AgentSession::is_open() const {
 }
 
 bool AgentSession::is_busy() const {
-    return impl_ &&
-           (impl_->state == AgentSession::Impl::State::RunningPrompt ||
-            impl_->state == AgentSession::Impl::State::Closing);
+    return impl_ && impl_->runtime && impl_->runtime->is_busy();
 }
 
 const std::vector<Skill>& AgentSession::skills() const {
@@ -383,7 +319,6 @@ public:
 
         auto session = std::make_unique<AgentSession>();
         session->impl_ = std::make_shared<AgentSession::Impl>();
-        session->impl_->state = AgentSession::Impl::State::Open;
         session->impl_->session_path = factory_result->session_path;
         session->impl_->runtime = std::move(factory_result->runtime);
 

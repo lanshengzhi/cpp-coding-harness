@@ -309,6 +309,16 @@ boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
 boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
     std::string user_prompt,
     AgentEventCommitter commitment) {
+    co_return co_await prompt(
+        std::move(user_prompt),
+        std::move(commitment),
+        std::stop_source{});
+}
+
+boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
+    std::string user_prompt,
+    AgentEventCommitter commitment,
+    std::stop_source stop_source) {
     auto impl = impl_;
     if (!impl) {
         co_return std::unexpected(util::make_error(
@@ -322,7 +332,7 @@ boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
     }
 
     impl->active_run = true;
-    impl->active_stop_source.emplace();
+    impl->active_stop_source.emplace(std::move(stop_source));
     impl->state.is_running = true;
     impl->state.streaming_message.reset();
     impl->state.pending_tool_call_ids.clear();

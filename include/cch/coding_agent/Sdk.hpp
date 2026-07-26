@@ -226,7 +226,9 @@ public:
     /// Unsubscribe from further events. Idempotent.
     void unsubscribe();
 
-    /// True while subscribed and session open.
+    /// True while the callback remains registered. A close request retains
+    /// active-run subscriber storage until callbacks quiesce, then invalidates
+    /// every remaining handle.
     [[nodiscard]] explicit operator bool() const;
 
 public:
@@ -246,8 +248,9 @@ private:
 ///   - prompt() is awaitable and serial; reentrant calls return an error.
 ///   - abort() idempotently requests cancellation of the active prompt and is
 ///     a no-op while idle; the session remains reusable after quiescence.
-///   - close() is idempotent; prompts after close return an error.
-///   - subscribers are cleared on close.
+///   - close() is a synchronous, non-blocking, idempotent request. It rejects
+///     new admission and cancels active work immediately, then releases
+///     subscribers and owned resources after active callbacks quiesce.
 ///
 /// Async operations and state access are confined to the host executor driving
 /// prompt(); unrelated concurrent-thread access is not supported. AgentSession
@@ -332,11 +335,13 @@ public:
     /// under the same contract as prompt() and state access.
     void abort();
 
-    /// Close the session. Idempotent. Clears all subscribers. Releases
-    /// tools, resources, and SDK-owned execution environment.
-    /// Host-provided execution environments are not cleaned up unless the
-    /// host explicitly requests it (deferred to future options).
-    [[nodiscard]] util::ExpectedVoid close();
+    /// Request session close. Synchronous, non-blocking, idempotent, and safe
+    /// from an event callback. New work is rejected immediately and an active
+    /// prompt receives the same cancellation request as abort(); subscriber
+    /// and owned-resource teardown occurs exactly once after active callbacks
+    /// and operations quiesce. Host-provided execution environments retain
+    /// their ownership contract and are never cleaned up by the session.
+    void close() noexcept;
 
     /// True while the session is open (not closed).
     [[nodiscard]] bool is_open() const;

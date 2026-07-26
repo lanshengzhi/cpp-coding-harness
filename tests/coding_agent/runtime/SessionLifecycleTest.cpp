@@ -3,9 +3,9 @@
 #include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 
-#include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
+#include <cch/harness/session/JsonlSessionStore.hpp>
 #include "harness/session/SessionJournalTestHooks.hpp"
-#include "../../support/TempWorkspace.hpp"
+#include "support/TempWorkspace.hpp"
 
 #include <cstddef>
 #include <filesystem>
@@ -166,7 +166,7 @@ TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point",
     REQUIRE(session_result);
     auto prompt_result = session_result->session->prompt_blocking("continue branch");
     REQUIRE(prompt_result);
-    CHECK(session_result->session->close().has_value());
+    session_result->session->close();
 
     auto reopened = open_resumed_session(path, workspace);
     REQUIRE(reopened);
@@ -234,7 +234,7 @@ TEST_CASE(
     auto recovered = session->prompt_blocking("recover branch");
     REQUIRE(recovered);
     CHECK(session->message_count() == 4);
-    CHECK(session->close().has_value());
+    session->close();
 
     auto reopened = open_resumed_session(path, workspace);
     REQUIRE(reopened);

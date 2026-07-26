@@ -5,10 +5,10 @@
 #include "cli/TextCliRenderer.hpp"
 
 #include "ai/providers/FakeChatClient.hpp"
-#include "../../include/cch/coding_agent/Sdk.hpp"
+#include <cch/coding_agent/Sdk.hpp>
 #include "util/Json.hpp"
-#include "../support/TempWorkspace.hpp"
-#include "../support/TextHelpers.hpp"
+#include "support/TempWorkspace.hpp"
+#include "support/TextHelpers.hpp"
 
 #include <sstream>
 #include <streambuf>
@@ -238,7 +238,7 @@ TEST_CASE(
     "[cli][frontend]") {
     tests::TempWorkspace workspace;
     auto session = make_session(workspace);
-    REQUIRE(session.created.session->close().has_value());
+    session.created.session->close();
 
     std::istringstream input;
     std::ostringstream output;

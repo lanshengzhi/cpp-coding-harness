@@ -2,13 +2,14 @@
 
 #include <cch/ai/Content.hpp>
 
+#include "agent/AgentPromptAccess.hpp"
 #include "coding_agent/ScopeExit.hpp"
 #include "coding_agent/SkillFormatting.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
-#include <boost/asio/io_context.hpp>
+#include <boost/asio/system_executor.hpp>
 
 #include <optional>
 #include <stop_token>
@@ -45,7 +46,7 @@ AgentSessionRuntime::AgentSessionRuntime(
     options.max_turns = config_.max_turns;
     options.model = ai::Model{std::move(config_.model)};
 
-    std::string skills_block = formatSkillsForPrompt(prompt_processor_.skills());
+    std::string skills_block = formatSkillsForPrompt(prompt_processor_->skills());
     if (!skills_block.empty()) {
         auto existing_transform = std::move(options.transform_context);
         options.transform_context = [block = std::move(skills_block),
@@ -116,7 +117,9 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
     }
 
     state_ = State::RunningPrompt;
+    active_stop_source_.emplace();
     ScopeExit restore_state{[this] {
+        active_stop_source_.reset();
         if (state_ == State::Closing) {
             finalize_close();
         } else if (state_ == State::RunningPrompt) {
@@ -124,17 +127,25 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
         }
     }};
 
-    auto expanded = prompt_processor_.process(std::move(prompt), expand_prompt_templates);
+    if (!prompt_processor_) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is closed"));
+    }
+    auto expanded = prompt_processor_->process(std::move(prompt), expand_prompt_templates);
     if (on_preflight_accepted) {
         if (auto acknowledged = on_preflight_accepted(); !acknowledged) {
             co_return acknowledged;
         }
     }
-    co_return co_await run_agent_loop(std::move(expanded.text));
+    co_return co_await run_agent_loop(
+        std::move(expanded.text),
+        *active_stop_source_);
 }
 
 boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
-    std::string prompt) {
+    std::string prompt,
+    std::stop_source stop_source) {
     if (!agent_) {
         co_return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
@@ -143,8 +154,11 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
 
     SessionEventCommitment commitment{*session_.store};
     std::optional<util::ExpectedVoid> result;
-    result = co_await agent_->prompt(
-        std::move(prompt), commitment.sink());
+    result = co_await agent::detail::AgentPromptAccess::prompt(
+        *agent_,
+        std::move(prompt),
+        commitment.sink(),
+        std::move(stop_source));
     co_return commitment.conclude(std::move(result));
 }
 
@@ -169,24 +183,35 @@ std::optional<std::string> AgentSessionRuntime::last_assistant_text() const {
     return agent_ ? last_assistant_text_from(agent_->state().messages) : std::nullopt;
 }
 
+const std::vector<Skill>& AgentSessionRuntime::skills() const {
+    static const std::vector<Skill> kEmptySkills;
+    return prompt_processor_ ? prompt_processor_->skills() : kEmptySkills;
+}
+
+const std::vector<PromptTemplate>& AgentSessionRuntime::templates() const {
+    static const std::vector<PromptTemplate> kEmptyTemplates;
+    return prompt_processor_ ? prompt_processor_->templates() : kEmptyTemplates;
+}
+
 void AgentSessionRuntime::abort() {
-    if (state_ == State::RunningPrompt && agent_) {
-        agent_->abort();
+    if (state_ == State::RunningPrompt && active_stop_source_) {
+        (void)active_stop_source_->request_stop();
     }
 }
 
-void AgentSessionRuntime::close() {
+void AgentSessionRuntime::close() noexcept {
     if (state_ == State::Closing || state_ == State::Closed) {
         return;
     }
 
-    if (agent_) {
-        agent_->clear_subscriptions();
-    }
     if (state_ == State::RunningPrompt) {
-        // The active Agent coroutine, strong commitment, store, client, tools,
-        // and execution environment remain valid until run_prompt unwinds.
+        // Request the same prompt-scoped cancellation as abort(), but retain
+        // the active loop, callbacks, commitment, store, and capabilities until
+        // run_prompt unwinds after the ordinary aborted lifecycle.
         state_ = State::Closing;
+        if (active_stop_source_) {
+            (void)active_stop_source_->request_stop();
+        }
         return;
     }
 
@@ -194,20 +219,45 @@ void AgentSessionRuntime::close() {
     finalize_close();
 }
 
-void AgentSessionRuntime::finalize_close() {
+void AgentSessionRuntime::finalize_close() noexcept {
     if (state_ == State::Closed) {
         return;
     }
     state_ = State::Closed;
+    if (agent_) {
+        agent_->clear_subscriptions();
+    }
     agent_.reset();
+    prompt_processor_.reset();
+    session_.store.reset();
+    services_.client.reset();
 
-    // Best-effort async cleanup of the execution environment only when the
-    // factory owns it. Host-provided shared environments must outlive the
-    // session and are never cleaned up here.
-    if (services_.env && services_.env_owned) {
-        boost::asio::io_context io;
-        boost::asio::co_spawn(io, services_.env->cleanup(), boost::asio::detached);
-        io.run();
+    // Detach the factory-owned environment before scheduling best-effort
+    // cleanup. Idle close has no host executor to await, so the system executor
+    // is the only work owner; active close reaches this point only after the
+    // prompt and every callback frame have quiesced. Host-provided environments
+    // are released from the session without invoking cleanup().
+    std::shared_ptr<harness::AsyncExecutionEnv> owned_env;
+    if (services_.env_owned) {
+        owned_env = std::move(services_.env);
+    } else {
+        services_.env.reset();
+    }
+    if (owned_env) {
+        try {
+            boost::asio::co_spawn(
+                boost::asio::system_executor{},
+                [env = std::move(owned_env)]() -> boost::asio::awaitable<void> {
+                    try {
+                        co_await env->cleanup();
+                    } catch (...) {
+                        // cleanup() is best-effort and must not make close fallible.
+                    }
+                },
+                boost::asio::detached);
+        } catch (...) {
+            // Scheduling is also best-effort; close remains noexcept.
+        }
     }
 }
 

@@ -15,6 +15,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <vector>
 
@@ -60,12 +61,14 @@ public:
     [[nodiscard]] std::size_t message_count() const;
     [[nodiscard]] std::optional<std::string> last_assistant_text() const;
     [[nodiscard]] const std::string& session_id() const { return session_.metadata.session_id; }
-    [[nodiscard]] std::optional<std::filesystem::path> session_path() const { return session_.store->path(); }
+    [[nodiscard]] std::optional<std::filesystem::path> session_path() const {
+        return session_.store ? session_.store->path() : std::nullopt;
+    }
     [[nodiscard]] const std::string& provider() const { return session_.metadata.provider; }
     [[nodiscard]] const std::string& model() const { return session_.metadata.model; }
     [[nodiscard]] const std::filesystem::path& workspace() const { return session_.workspace; }
-    [[nodiscard]] const std::vector<Skill>& skills() const { return prompt_processor_.skills(); }
-    [[nodiscard]] const std::vector<PromptTemplate>& templates() const { return prompt_processor_.templates(); }
+    [[nodiscard]] const std::vector<Skill>& skills() const;
+    [[nodiscard]] const std::vector<PromptTemplate>& templates() const;
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -76,7 +79,10 @@ public:
     [[nodiscard]] bool is_open() const {
         return state_ == State::Open || state_ == State::RunningPrompt;
     }
-    void close();
+    [[nodiscard]] bool is_busy() const {
+        return state_ == State::RunningPrompt || state_ == State::Closing;
+    }
+    void close() noexcept;
 
 private:
     enum class State { Open, RunningPrompt, Closing, Closed };
@@ -87,17 +93,19 @@ private:
     [[nodiscard]] util::ExpectedVoid reject_if_busy() const;
 
     [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> run_agent_loop(
-        std::string prompt);
-    void finalize_close();
+        std::string prompt,
+        std::stop_source stop_source);
+    void finalize_close() noexcept;
 
     RuntimeServices services_;
     OpenSession session_;
-    prompt::PromptProcessor prompt_processor_;
+    std::optional<prompt::PromptProcessor> prompt_processor_;
     // Declared after the borrowed client/store owners so it is destroyed first.
     std::optional<agent::Agent> agent_;
 
     AgentSessionRuntimeConfig config_;
     State state_{State::Open};
+    std::optional<std::stop_source> active_stop_source_;
 };
 
 } // namespace cch::coding_agent::runtime

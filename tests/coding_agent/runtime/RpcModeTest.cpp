@@ -3,7 +3,7 @@
 #include "coding_agent/runtime/RpcMode.hpp"
 #include "coding_agent/runtime/RpcJsonl.hpp"
 #include "ai/providers/FakeChatClient.hpp"
-#include "../../support/TempWorkspace.hpp"
+#include "support/TempWorkspace.hpp"
 #include "util/Json.hpp"
 
 #include <filesystem>
@@ -291,7 +291,7 @@ TranscriptResult run_transcript(
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
     if (close_before_run) {
-        REQUIRE(created->session->close().has_value());
+        created->session->close();
     }
 
     std::istringstream rpc_input{std::move(input)};
@@ -311,7 +311,7 @@ TranscriptResult run_transcript(
         .workspace = workspace.path().string(),
         .session_id = created->session_id,
     };
-    REQUIRE(created->session->close().has_value());
+    created->session->close();
     return result;
 }
 
@@ -502,7 +502,7 @@ TEST_CASE("RPC mode flushes direct events while a prompt is running", "[coding-a
     REQUIRE(exit_code == 0);
     CHECK(flushes_before_provider >= 5);
     CHECK(find_response(parse_records(buffer.str()), "shutdown", "stop-1") != nullptr);
-    REQUIRE(created->session->close().has_value());
+    created->session->close();
 }
 
 TEST_CASE("RPC mode reuses direct event serialization across prompts", "[coding-agent][runtime][rpc]") {
@@ -672,7 +672,7 @@ TEST_CASE("RPC mode keeps one event stream after a weak subscriber failure", "[c
     CHECK(find_record_index(records, "agent_start") < records.size());
     CHECK(find_record_index(records, "agent_end") < records.size());
     CHECK_FALSE(static_cast<bool>(*rejecting));
-    REQUIRE(created->session->close().has_value());
+    created->session->close();
 }
 
 TEST_CASE("RPC mode treats slash-shaped input as an ordinary prompt", "[coding-agent][runtime][rpc]") {
@@ -876,5 +876,5 @@ TEST_CASE("RPC mode returns a correlated error when a busy session rejects promp
     CHECK(string_at(*prompt, "error") == "session is busy (prompt already in flight)");
     CHECK(find_response(records, "shutdown", "stop-1") != nullptr);
     CHECK(find_first_event_index(records) == records.size());
-    REQUIRE(created->session->close().has_value());
+    created->session->close();
 }

@@ -1,6 +1,6 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include "../support/TextHelpers.hpp"
+#include "support/TextHelpers.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -188,7 +188,7 @@ TEST_CASE(
     const auto duplicate_registry = std::string{"subscribers"} + "_";
 
     CHECK(runtime_header.find("agent::Agent") != std::string::npos);
-    CHECK(runtime_source.find("agent_->prompt(") != std::string::npos);
+    CHECK(runtime_source.find("agent::detail::AgentPromptAccess::prompt(") != std::string::npos);
     CHECK(runtime_header.find("AsyncAgentLoop") == std::string::npos);
     CHECK(runtime_source.find(direct_loop_call) == std::string::npos);
     CHECK(runtime_header.find(duplicate_registry) == std::string::npos);
@@ -355,7 +355,9 @@ TEST_CASE("AgentSession has one prompt completion and event subscription path", 
               sdk_header,
               "boost::asio::awaitable<util::ExpectedVoid> prompt(") == 1);
     CHECK(cch::tests::count_occurrences(sdk_header, "util::ExpectedVoid prompt_blocking(") == 1);
-    CHECK(runtime_source.find("result = co_await agent_->prompt(") != std::string::npos);
+    CHECK(runtime_source.find(
+              "result = co_await agent::detail::AgentPromptAccess::prompt(") !=
+          std::string::npos);
     CHECK(cch::tests::count_occurrences(runtime_source, "boost::asio::co_spawn(") == 1);
     CHECK(cch::tests::count_occurrences(sdk_header, "AgentEventSink") == 1);
     CHECK(sdk_header.find("subscribe(") != std::string::npos);
