@@ -100,7 +100,8 @@ public:
     }
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation) override {
+        agent::ToolInvocation,
+        std::stop_token) override {
         agent::AsyncToolExecutionResult result;
         result.content.push_back(ai::text_content("file contents"));
         co_return result;

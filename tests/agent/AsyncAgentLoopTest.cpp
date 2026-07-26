@@ -197,7 +197,8 @@ public:
     const ai::Tool& definition() const override { return definition_; }
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation) override {
+        agent::ToolInvocation invocation,
+        std::stop_token) override {
         invocations.push_back(invocation);
         co_return agent::AsyncToolExecutionResult{
             .content = std::vector<ai::Content>{ai::text_content("tool says ok")},
@@ -207,6 +208,38 @@ public:
 
     ai::Tool definition_;
     std::vector<agent::ToolInvocation> invocations;
+};
+
+class CancellableFakeTool final : public agent::AsyncAgentTool {
+public:
+    explicit CancellableFakeTool(ai::Tool definition) : definition_(std::move(definition)) {}
+
+    const ai::Tool& definition() const override { return definition_; }
+
+    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
+        agent::ToolInvocation invocation,
+        std::stop_token stop_token) override {
+        invocations.push_back(std::move(invocation));
+        observed_stop_token = stop_token;
+        timer.emplace(co_await boost::asio::this_coro::executor);
+        timer->expires_at(std::chrono::steady_clock::time_point::max());
+        std::stop_callback cancellation{stop_token, [this] { timer->cancel(); }};
+        boost::system::error_code error;
+        co_await timer->async_wait(boost::asio::redirect_error(
+            boost::asio::use_awaitable,
+            error));
+        if (stop_token.stop_requested()) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Cancelled,
+                "Operation aborted"));
+        }
+        co_return agent::AsyncToolExecutionResult{};
+    }
+
+    ai::Tool definition_;
+    std::vector<agent::ToolInvocation> invocations;
+    std::optional<std::stop_token> observed_stop_token;
+    std::optional<boost::asio::steady_timer> timer;
 };
 
 struct RunResult {
@@ -1545,7 +1578,8 @@ public:
     }
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation) override {
+        agent::ToolInvocation invocation,
+        std::stop_token) override {
         invocations.push_back(invocation);
         co_return agent::AsyncToolExecutionResult{
             .content = std::vector<ai::Content>{ai::text_content(result_text_)},
@@ -1574,7 +1608,8 @@ public:
     }
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation) override {
+        agent::ToolInvocation invocation,
+        std::stop_token) override {
         auto timer = boost::asio::steady_timer(co_await boost::asio::this_coro::executor, delay_);
         co_await timer.async_wait(boost::asio::use_awaitable);
         invocations.push_back(invocation);
@@ -1601,7 +1636,8 @@ public:
     }
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation) override {
+        agent::ToolInvocation invocation,
+        std::stop_token) override {
         invocations.push_back(invocation);
         co_return std::unexpected(util::make_error(util::ErrorCode::Tool, "tool failed", "boom"));
     }
@@ -1630,7 +1666,8 @@ public:
     }
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation) override {
+        agent::ToolInvocation invocation,
+        std::stop_token) override {
         invocations.push_back(invocation);
         const int current = ++probe_.active;
         int observed = probe_.max_active.load();
@@ -2025,6 +2062,61 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "cancellation reaches a suspended tool and completes one ordinary aborted lifecycle",
+    "[agent][async][abort][issue40]") {
+    boost::asio::io_context io;
+    CancellationAwarePolicyClient client;
+    client.responses.push_back(tool_call_response());
+    agent::AsyncAgentOptions options;
+    options.model = ai::Model{"gpt-test"};
+
+    auto tool = std::make_unique<CancellableFakeTool>(ai::Tool{
+        .name = "read_file",
+        .description = "Read",
+        .parameters = test::permissive_object_tool_argument_contract(),
+    });
+    auto* tool_ptr = tool.get();
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::move(tool)));
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+
+    std::stop_source stop_source;
+    std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
+    std::vector<agent::AgentLifecycleEvent> events;
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            result = co_await loop.continue_with(
+                {},
+                "cancel active tool",
+                [&](const agent::AgentLifecycleEvent& event) {
+                    events.push_back(event);
+                    return util::ExpectedVoid{};
+                },
+                stop_source.get_token());
+            co_return;
+        },
+        boost::asio::detached);
+
+    while (!tool_ptr->timer) {
+        REQUIRE(io.run_one() == 1);
+    }
+    REQUIRE(stop_source.request_stop());
+    io.run();
+
+    REQUIRE(result.has_value());
+    REQUIRE(*result);
+    CHECK((*result)->stop_reason == ai::AssistantStopReason::Aborted);
+    REQUIRE(tool_ptr->observed_stop_token.has_value());
+    CHECK(*tool_ptr->observed_stop_token == stop_source.get_token());
+    CHECK(tool_ptr->observed_stop_token->stop_requested());
+    CHECK(tool_ptr->invocations.size() == 1);
+    REQUIRE(client.requests.size() == 2);
+    CHECK(client.requests[1].stop_token.stop_requested());
+    CHECK(count_events<agent::AgentEndEvent>(events) == 1);
+}
+
+TEST_CASE(
     "transform policy cancellation completes through an aborted provider turn",
     "[agent][async][abort][issue39]") {
     CancellationAwarePolicyClient client;
@@ -2056,7 +2148,7 @@ TEST_CASE(
 
 TEST_CASE(
     "before-tool policy cancellation skips the tool and reaches an aborted provider turn",
-    "[agent][async][abort][issue39]") {
+    "[agent][async][abort][issue39][issue40]") {
     CancellationAwarePolicyClient client;
     client.responses.push_back(tool_call_response());
     std::stop_source stop_source;
@@ -2094,7 +2186,7 @@ TEST_CASE(
 
 TEST_CASE(
     "after-tool policy cancellation keeps the tool result and reaches an aborted provider turn",
-    "[agent][async][abort][issue39]") {
+    "[agent][async][abort][issue39][issue40]") {
     CancellationAwarePolicyClient client;
     client.responses.push_back(tool_call_response());
     std::stop_source stop_source;

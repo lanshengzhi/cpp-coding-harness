@@ -45,6 +45,17 @@ struct FinalizedToolCall {
     bool call_terminate{false};
 };
 
+[[nodiscard]] AsyncToolExecutionResult execution_result_from(
+    const ai::ToolResultMessage& tool_result,
+    bool terminate = false) {
+    return AsyncToolExecutionResult{
+        .content = tool_result.content,
+        .details = tool_result.details,
+        .is_error = tool_result.is_error,
+        .terminate = terminate,
+    };
+}
+
 void apply_after_result(
     ai::ToolResultMessage& tool_result,
     bool& call_terminate,
@@ -115,6 +126,9 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
     finalized.reserve(calls.size());
 
     for (const auto& call : calls) {
+        if (options_.stop_token.stop_requested()) {
+            break;
+        }
         CCH_TRY_VOID(emit_agent_event(sink, ToolExecutionStartEvent{call.id, call.name, call.arguments.value_or(util::JsonValue{})}));
 
         ai::ToolResultMessage tool_result;
@@ -166,7 +180,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                 if (!blocked) {
                     std::optional<util::Expected<AsyncToolExecutionResult>> executed;
                     try {
-                        executed = co_await tool->execute(invocation);
+                        executed = co_await tool->execute(invocation, options_.stop_token);
                     } catch (...) {
                         tool_result = error_tool_result(call, "Tool execution failed.");
                     }
@@ -227,15 +241,16 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
             call_terminate = false;
         }
 
-        AsyncToolExecutionResult execution_result;
-        execution_result.content = tool_result.content;
-        execution_result.details = tool_result.details;
-        execution_result.is_error = tool_result.is_error;
-        execution_result.terminate = call_terminate;
         CCH_TRY_VOID(emit_agent_event(sink, ToolExecutionEndEvent{
-            call.id, call.name, std::move(execution_result), tool_result.is_error}));
+            call.id,
+            call.name,
+            execution_result_from(tool_result, call_terminate),
+            tool_result.is_error}));
         CCH_TRY_VOID(emit_tool_result_message(sink, tool_result));
         finalized.push_back(FinalizedToolCall{std::move(tool_result), call_terminate});
+        if (options_.stop_token.stop_requested()) {
+            break;
+        }
     }
 
     co_return make_batch_result(std::move(finalized));
@@ -255,17 +270,16 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
 
     std::vector<PreparedToolCall> prepared;
     prepared.reserve(calls.size());
-    std::vector<FinalizedToolCall> finalized_calls(calls.size());
+    std::vector<std::optional<FinalizedToolCall>> finalized_calls(calls.size());
 
     auto complete_immediate = [&](std::size_t source_index,
                                   const ai::ToolCallContent& call,
                                   ai::ToolResultMessage result) -> util::ExpectedVoid {
-        AsyncToolExecutionResult execution_result;
-        execution_result.content = result.content;
-        execution_result.details = result.details;
-        execution_result.is_error = result.is_error;
         auto emitted = emit_agent_event(sink, ToolExecutionEndEvent{
-            call.id, call.name, std::move(execution_result), result.is_error});
+            call.id,
+            call.name,
+            execution_result_from(result),
+            result.is_error});
         if (!emitted) {
             return emitted;
         }
@@ -274,6 +288,9 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
     };
 
     for (std::size_t source_index = 0; source_index < calls.size(); ++source_index) {
+        if (options_.stop_token.stop_requested()) {
+            break;
+        }
         const auto& call = calls[source_index];
         CCH_TRY_VOID(emit_agent_event(sink, ToolExecutionStartEvent{call.id, call.name, call.arguments.value_or(util::JsonValue{})}));
 
@@ -364,7 +381,8 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
     auto assistant_snapshot = std::make_shared<ai::AssistantMessage>(request.assistant_message);
     auto context_snapshot = std::make_shared<ai::AiContext>(request.context);
     auto next_index = std::make_shared<std::atomic_size_t>(0);
-    auto finalized = std::make_shared<std::vector<FinalizedToolCall>>(std::move(finalized_calls));
+    auto finalized = std::make_shared<std::vector<std::optional<FinalizedToolCall>>>(
+        std::move(finalized_calls));
 
     const bool all_prepared_tools_parallel_safe = std::all_of(
         prepared_calls->begin(), prepared_calls->end(), [](const PreparedToolCall& call) {
@@ -401,8 +419,14 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                         state]() -> boost::asio::awaitable<void> {
         try {
             while (true) {
+                if (stop_token.stop_requested()) {
+                    break;
+                }
                 const auto index = next_index->fetch_add(1);
                 if (index >= prepared_calls->size()) {
+                    break;
+                }
+                if (stop_token.stop_requested()) {
                     break;
                 }
 
@@ -415,7 +439,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                         prepared_call.tool_call.name,
                         std::move(prepared_call.arguments),
                         prepared_call.tool_call.raw_arguments};
-                    auto executed = co_await prepared_call.tool->execute(invocation);
+                    auto executed = co_await prepared_call.tool->execute(invocation, stop_token);
 
                     if (!executed) {
                         outcome.result = error_tool_result(
@@ -501,15 +525,10 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                     outcome.call_terminate = false;
                 }
 
-                AsyncToolExecutionResult execution_result;
-                execution_result.content = outcome.result.content;
-                execution_result.details = outcome.result.details;
-                execution_result.is_error = outcome.result.is_error;
-                execution_result.terminate = outcome.call_terminate;
                 (void)parallel_emit(ToolExecutionEndEvent{
                     prepared_call.tool_call.id,
                     prepared_call.tool_call.name,
-                    std::move(execution_result),
+                    execution_result_from(outcome.result, outcome.call_terminate),
                     outcome.result.is_error});
                 (*finalized)[prepared_call.source_index] = std::move(outcome);
             }
@@ -534,6 +553,20 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
             boost::asio::use_awaitable);
     }
 
+    for (const auto& prepared_call : *prepared_calls) {
+        auto& finalized_call = (*finalized)[prepared_call.source_index];
+        if (finalized_call) {
+            continue;
+        }
+        auto result = error_tool_result(prepared_call.tool_call, "Operation aborted");
+        (void)parallel_emit(ToolExecutionEndEvent{
+            prepared_call.tool_call.id,
+            prepared_call.tool_call.name,
+            execution_result_from(result),
+            true});
+        finalized_call = FinalizedToolCall{std::move(result), false};
+    }
+
     {
         std::lock_guard error_lock(state->error_mutex);
         if (state->emit_error) {
@@ -544,11 +577,17 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
         }
     }
 
-    for (const auto& finalized_call : *finalized) {
-        CCH_TRY_VOID(emit_tool_result_message(sink, finalized_call.result));
+    std::vector<FinalizedToolCall> completed;
+    completed.reserve(finalized->size());
+    for (auto& finalized_call : *finalized) {
+        if (!finalized_call) {
+            continue;
+        }
+        CCH_TRY_VOID(emit_tool_result_message(sink, finalized_call->result));
+        completed.push_back(std::move(*finalized_call));
     }
 
-    co_return make_batch_result(std::move(*finalized));
+    co_return make_batch_result(std::move(completed));
 }
 
 } // namespace cch::agent

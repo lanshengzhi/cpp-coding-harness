@@ -14,7 +14,9 @@ enum class ExecutionErrorOrigin {
     const util::Error& error,
     ExecutionErrorOrigin origin) {
     auto code = ExecutionErrorCode::SpawnError;
-    if (origin == ExecutionErrorOrigin::Request) {
+    if (error.code == util::ErrorCode::Cancelled) {
+        code = ExecutionErrorCode::Aborted;
+    } else if (origin == ExecutionErrorOrigin::Request) {
         if (error.detail.find("disabled") != std::string::npos) {
             code = ExecutionErrorCode::ShellUnavailable;
         }

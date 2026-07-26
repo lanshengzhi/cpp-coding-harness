@@ -483,7 +483,9 @@ TEST_CASE("the deleted CLI preflight module and its build registrations stay gon
     }
 }
 
-TEST_CASE("process capability follows async naming and carries one output limit", "[architecture][util][issue75]") {
+TEST_CASE(
+    "process capability carries one output limit and one cancellation token",
+    "[architecture][util][issue40][issue75]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
     const auto process_header = read_text(source_root / "src" / "util" / "Process.hpp");
 
@@ -492,6 +494,8 @@ TEST_CASE("process capability follows async naming and carries one output limit"
     CHECK(process_header.find("class ProcessRunner") == std::string::npos);
     CHECK(process_header.find("DefaultProcessRunner") == std::string::npos);
     CHECK(process_header.find("OutputLimit output_limit") != std::string::npos);
+    CHECK(process_header.find("std::stop_token stop_token") != std::string::npos);
+    CHECK(process_header.find("stop_source") == std::string::npos);
     CHECK(process_header.find("max_output_bytes") == std::string::npos);
     CHECK(process_header.find("max_output_lines") == std::string::npos);
 }

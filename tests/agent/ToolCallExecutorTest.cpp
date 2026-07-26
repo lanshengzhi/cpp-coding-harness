@@ -26,6 +26,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -64,7 +65,8 @@ public:
     }
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation) override {
+        agent::ToolInvocation invocation,
+        std::stop_token) override {
         {
             std::lock_guard lock(invocations_mutex_);
             invocations_.push_back(std::move(invocation));
@@ -129,7 +131,8 @@ public:
     const ai::Tool& definition() const override { return definition_; }
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation) override {
+        agent::ToolInvocation,
+        std::stop_token) override {
         co_return std::unexpected(util::make_error(
             util::ErrorCode::Tool,
             "tool failed",
@@ -138,6 +141,53 @@ public:
 
 private:
     ai::Tool definition_;
+};
+
+class CancellingParallelTool final : public agent::AsyncAgentTool {
+public:
+    CancellingParallelTool(ai::Tool definition, std::stop_source& stop_source)
+        : definition_(std::move(definition)), stop_source_(stop_source) {}
+
+    const ai::Tool& definition() const override { return definition_; }
+
+    agent::ToolConcurrency concurrency() const noexcept override {
+        return agent::ToolConcurrency::ParallelSafe;
+    }
+
+    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
+        agent::ToolInvocation invocation,
+        std::stop_token stop_token) override {
+        {
+            std::lock_guard lock(invocations_mutex_);
+            invocations_.push_back(std::move(invocation));
+        }
+        const auto started = ++started_;
+        if (started == 2) {
+            (void)stop_source_.request_stop();
+        }
+        boost::asio::steady_timer timer(
+            co_await boost::asio::this_coro::executor,
+            std::chrono::milliseconds{30});
+        co_await timer.async_wait(boost::asio::use_awaitable);
+        if (stop_token.stop_requested()) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Cancelled,
+                "Operation aborted"));
+        }
+        co_return agent::AsyncToolExecutionResult{};
+    }
+
+    [[nodiscard]] std::size_t invocation_count() const {
+        std::lock_guard lock(invocations_mutex_);
+        return invocations_.size();
+    }
+
+private:
+    ai::Tool definition_;
+    std::stop_source& stop_source_; // must outlive every execute coroutine
+    std::atomic<std::size_t> started_{0};
+    mutable std::mutex invocations_mutex_;
+    std::vector<agent::ToolInvocation> invocations_;
 };
 
 struct ExecuteResult {
@@ -1206,6 +1256,90 @@ TEST_CASE("exclusive tools force a bounded batch to execute sequentially", "[age
 
     REQUIRE(run.result);
     CHECK(probe.max_active.load() == 1);
+}
+
+TEST_CASE(
+    "sequential cancellation during a hook does not start later calls",
+    "[agent][tool-executor][issue40]") {
+    std::stop_source stop_source;
+    agent::AsyncToolRegistry registry;
+    auto tool = std::make_unique<RecordingTool>(ai::Tool{
+        .name = "work",
+        .description = "Work",
+        .parameters = test::permissive_object_tool_argument_contract(),
+    });
+    auto* tool_ptr = tool.get();
+    REQUIRE(registry.add(std::move(tool)));
+
+    agent::BeforeToolCallHook before_hook = [&stop_source](
+        agent::BeforeToolCallContext,
+        std::stop_token)
+        -> boost::asio::awaitable<util::Expected<agent::BeforeToolCallResult>> {
+        (void)stop_source.request_stop();
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Cancelled,
+            "Operation aborted"));
+    };
+    agent::ToolCallExecutor executor(registry, agent::ToolCallExecutorOptions{
+        .before_tool_call = &before_hook,
+        .stop_token = stop_source.get_token(),
+        .execution = agent::SequentialToolExecution{},
+    });
+    auto assistant = assistant_with_calls({
+        make_call("call-1", "work"),
+        make_call("call-2", "work"),
+        make_call("call-3", "work"),
+    });
+
+    auto execution = run_executor(executor, assistant);
+
+    REQUIRE(execution.result);
+    CHECK(tool_ptr->invocation_count() == 0);
+    REQUIRE(execution.result->results.size() == 1);
+    CHECK(execution.result->results[0].tool_call_id == "call-1");
+    CHECK(execution.result->results[0].is_error);
+    CHECK(count_events<agent::ToolExecutionStartEvent>(execution.events) == 1);
+    CHECK(count_events<agent::ToolExecutionEndEvent>(execution.events) == 1);
+}
+
+TEST_CASE(
+    "bounded parallel cancellation leaves queued tool capabilities unstarted",
+    "[agent][tool-executor][issue40]") {
+    std::stop_source stop_source;
+    agent::AsyncToolRegistry registry;
+    auto tool = std::make_unique<CancellingParallelTool>(
+        ai::Tool{
+            .name = "work",
+            .description = "Work",
+            .parameters = test::permissive_object_tool_argument_contract(),
+        },
+        stop_source);
+    auto* tool_ptr = tool.get();
+    REQUIRE(registry.add(std::move(tool)));
+
+    agent::ToolCallExecutor executor(registry, agent::ToolCallExecutorOptions{
+        .stop_token = stop_source.get_token(),
+        .execution = agent::BoundedParallelToolExecution{.max_in_flight = 2},
+    });
+    auto assistant = assistant_with_calls({
+        make_call("call-1", "work"),
+        make_call("call-2", "work"),
+        make_call("call-3", "work"),
+        make_call("call-4", "work"),
+        make_call("call-5", "work"),
+        make_call("call-6", "work"),
+    });
+
+    auto execution = run_executor(executor, assistant);
+
+    REQUIRE(execution.result);
+    CHECK(tool_ptr->invocation_count() == 2);
+    REQUIRE(execution.result->results.size() == 6);
+    for (std::size_t index = 0; index < execution.result->results.size(); ++index) {
+        CHECK(execution.result->results[index].tool_call_id ==
+              "call-" + std::to_string(index + 1));
+        CHECK(execution.result->results[index].is_error);
+    }
 }
 
 TEST_CASE("bounded parallel execution enforces max_in_flight", "[agent][tool-executor]") {

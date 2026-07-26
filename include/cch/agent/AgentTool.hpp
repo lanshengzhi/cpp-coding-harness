@@ -103,7 +103,8 @@ public:
 
     [[nodiscard]] virtual const ai::Tool& definition() const = 0;
     [[nodiscard]] virtual boost::asio::awaitable<util::Expected<AsyncToolExecutionResult>> execute(
-        ToolInvocation invocation) = 0;
+        ToolInvocation invocation,
+        std::stop_token stop_token) = 0;
 
     /** Ordinary tools are exclusive until their adapter proves concurrent execution is safe. */
     [[nodiscard]] virtual ToolConcurrency concurrency() const noexcept {

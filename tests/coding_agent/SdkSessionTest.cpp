@@ -68,7 +68,8 @@ public:
     [[nodiscard]] const ai::Tool& definition() const override { return def_; }
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation /*invocation*/) override {
+        agent::ToolInvocation /*invocation*/,
+        std::stop_token) override {
         if (execution_count_) {
             ++*execution_count_;
         }
@@ -190,69 +191,84 @@ public:
     [[nodiscard]] const std::filesystem::path& workspace() const override { return workspace_; }
 
     [[nodiscard]] boost::asio::awaitable<std::expected<std::string, harness::FileError>> absolutePath(
-        std::string path) override {
+        std::string path,
+        std::stop_token) override {
         co_return path;
     }
     [[nodiscard]] boost::asio::awaitable<std::expected<std::string, harness::FileError>> joinPath(
-        std::vector<std::string>) override {
+        std::vector<std::string>,
+        std::stop_token) override {
         co_return std::string{};
     }
     [[nodiscard]] boost::asio::awaitable<std::expected<std::string, harness::FileError>> readTextFile(
-        std::string) override {
+        std::string,
+        std::stop_token) override {
         co_return std::string{};
     }
     [[nodiscard]] boost::asio::awaitable<std::expected<std::vector<std::string>, harness::FileError>> readTextLines(
         std::string,
-        std::optional<int>) override {
+        std::optional<int>,
+        std::stop_token) override {
         co_return std::vector<std::string>{};
     }
     [[nodiscard]] boost::asio::awaitable<std::expected<harness::BinaryData, harness::FileError>> readBinaryFile(
-        std::string) override {
+        std::string,
+        std::stop_token) override {
         co_return harness::BinaryData{};
     }
     [[nodiscard]] boost::asio::awaitable<std::expected<void, harness::FileError>> writeFile(
         std::string,
-        harness::WriteContent) override {
+        harness::WriteContent,
+        std::stop_token) override {
         co_return std::expected<void, harness::FileError>{};
     }
     [[nodiscard]] boost::asio::awaitable<std::expected<void, harness::FileError>> appendFile(
         std::string,
-        harness::WriteContent) override {
+        harness::WriteContent,
+        std::stop_token) override {
         co_return std::expected<void, harness::FileError>{};
     }
     [[nodiscard]] boost::asio::awaitable<std::expected<harness::FileInfo, harness::FileError>> fileInfo(
-        std::string) override {
+        std::string,
+        std::stop_token) override {
         co_return harness::FileInfo{};
     }
     [[nodiscard]] boost::asio::awaitable<std::expected<std::vector<harness::FileInfo>, harness::FileError>> listDir(
-        std::string) override {
+        std::string,
+        std::stop_token) override {
         co_return std::vector<harness::FileInfo>{};
     }
     [[nodiscard]] boost::asio::awaitable<std::expected<std::string, harness::FileError>> canonicalPath(
-        std::string path) override {
+        std::string path,
+        std::stop_token) override {
         co_return path;
     }
     [[nodiscard]] boost::asio::awaitable<std::expected<bool, harness::FileError>> exists(
-        std::string) override {
+        std::string,
+        std::stop_token) override {
         co_return true;
     }
     [[nodiscard]] boost::asio::awaitable<std::expected<void, harness::FileError>> createDir(
         std::string,
-        bool) override {
+        bool,
+        std::stop_token) override {
         co_return std::expected<void, harness::FileError>{};
     }
     [[nodiscard]] boost::asio::awaitable<std::expected<void, harness::FileError>> remove(
         std::string,
-        bool) override {
+        bool,
+        std::stop_token) override {
         co_return std::expected<void, harness::FileError>{};
     }
     [[nodiscard]] boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempDir(
-        std::optional<std::string>) override {
+        std::optional<std::string>,
+        std::stop_token) override {
         co_return std::string{};
     }
     [[nodiscard]] boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempFile(
         std::optional<std::string>,
-        std::optional<std::string>) override {
+        std::optional<std::string>,
+        std::stop_token) override {
         co_return std::string{};
     }
 

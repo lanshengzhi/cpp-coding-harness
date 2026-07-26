@@ -143,7 +143,8 @@ public:
     }
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation) override {
+        agent::ToolInvocation invocation,
+        std::stop_token stop_token) override {
         auto parsed = parse_invocation_args<ReadFileArgs>(invocation);
         if (!parsed || parsed->path.empty()) {
             co_return error_result("invalid read arguments");
@@ -151,7 +152,7 @@ public:
         if (auto environment = env(); !environment) {
             co_return std::unexpected(environment.error());
         }
-        auto lines = co_await env_->readTextLines(parsed->path, std::nullopt);
+        auto lines = co_await env_->readTextLines(parsed->path, std::nullopt, stop_token);
         if (!lines) {
             co_return error_result_from(lines.error());
         }
@@ -215,7 +216,8 @@ public:
     }
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation) override {
+        agent::ToolInvocation invocation,
+        std::stop_token stop_token) override {
         auto parsed = parse_invocation_args<WriteFileArgs>(invocation);
         if (!parsed || parsed->path.empty()) {
             co_return error_result("invalid write arguments");
@@ -223,7 +225,7 @@ public:
         if (auto environment = env(); !environment) {
             co_return std::unexpected(environment.error());
         }
-        auto written = co_await env_->writeFile(parsed->path, parsed->content);
+        auto written = co_await env_->writeFile(parsed->path, parsed->content, stop_token);
         if (!written) {
             co_return error_result_from(written.error());
         }
@@ -268,7 +270,8 @@ public:
     }
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation) override {
+        agent::ToolInvocation invocation,
+        std::stop_token stop_token) override {
         auto parsed = parse_invocation_args<EditFileArgs>(invocation);
         if (!parsed || parsed->path.empty()) {
             co_return error_result("invalid edit_file arguments: missing path");
@@ -280,7 +283,7 @@ public:
             co_return std::unexpected(environment.error());
         }
         // Read the original file
-        auto read = co_await env_->readTextFile(parsed->path);
+        auto read = co_await env_->readTextFile(parsed->path, stop_token);
         if (!read) {
             co_return error_result_from(read.error());
         }
@@ -315,7 +318,7 @@ public:
             applied.emplace_back(edit.oldText, edit.newText);
         }
         // Write back
-        auto written = co_await env_->writeFile(parsed->path, working);
+        auto written = co_await env_->writeFile(parsed->path, working, stop_token);
         if (!written) {
             co_return error_result_from(written.error());
         }
@@ -382,7 +385,8 @@ public:
     }
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation) override {
+        agent::ToolInvocation invocation,
+        std::stop_token stop_token) override {
         auto parsed = parse_invocation_args<BashArgs>(invocation);
         if (!parsed || parsed->command.empty()) {
             co_return error_result("invalid bash arguments");
@@ -392,6 +396,7 @@ public:
         }
         // Convert seconds to milliseconds for ExecutionEnv; zero means no timeout.
         harness::ExecOptions exec_options;
+        exec_options.stop_token = stop_token;
         exec_options.timeout = parsed->timeout
             ? std::chrono::milliseconds(std::chrono::seconds(*parsed->timeout))
             : std::chrono::milliseconds{0};
@@ -429,7 +434,7 @@ public:
             std::string full_output_path;
             auto ts = std::chrono::system_clock::now().time_since_epoch().count();
             full_output_path = "bash-output-" + std::to_string(ts) + ".txt";
-            if (auto write = co_await env_->writeFile(full_output_path, redacted_full); !write) {
+            if (auto write = co_await env_->writeFile(full_output_path, redacted_full, stop_token); !write) {
                 full_output_path.clear();
             }
             output = "[output truncated, showing last " +

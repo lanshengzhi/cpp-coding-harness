@@ -9,14 +9,24 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/use_awaitable.hpp>
 
+#include <charconv>
 #include <chrono>
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <type_traits>
 #include <vector>
+
+#if defined(__unix__) || defined(__APPLE__)
+#include <cerrno>
+#include <csignal>
+#include <sys/types.h>
+#endif
 
 using namespace cch;
 
@@ -71,6 +81,21 @@ T run_awaitable_pi(boost::asio::awaitable<T> start) {
     return std::move(*result);
 }
 
+template <typename T>
+void check_file_operation_aborted(const std::expected<T, harness::FileError>& result) {
+    CHECK_FALSE(result);
+    if (!result) {
+        CHECK(result.error().code == harness::FileErrorCode::Aborted);
+    }
+}
+
+bool path_exists(const std::filesystem::path& path) {
+    std::error_code error;
+    const bool exists = std::filesystem::exists(path, error);
+    CHECK_FALSE(error);
+    return exists;
+}
+
 } // namespace
 
 TEST_CASE("process runner capability follows async naming and ownership rules", "[harness][async][issue75]") {
@@ -78,18 +103,49 @@ TEST_CASE("process runner capability follows async naming and ownership rules", 
     static_assert(std::is_final_v<util::DefaultAsyncProcessRunner>);
 }
 
+TEST_CASE("every async filesystem operation observes a pre-requested cancellation", "[harness][async][issue40]") {
+    tests::TempWorkspace workspace;
+    workspace.write("note.txt", "unchanged");
+    harness::AsyncLocalExecutionEnv env(workspace.path());
+    std::stop_source stop_source;
+    stop_source.request_stop();
+    const auto stop_token = stop_source.get_token();
+
+    check_file_operation_aborted(run_awaitable_pi(env.absolutePath("note.txt", stop_token)));
+    check_file_operation_aborted(run_awaitable_pi(env.joinPath({"nested", "note.txt"}, stop_token)));
+    check_file_operation_aborted(run_awaitable_pi(env.readTextFile("note.txt", stop_token)));
+    check_file_operation_aborted(run_awaitable_pi(env.readTextLines("note.txt", std::nullopt, stop_token)));
+    check_file_operation_aborted(run_awaitable_pi(env.readBinaryFile("note.txt", stop_token)));
+    check_file_operation_aborted(run_awaitable_pi(env.writeFile(
+        "note.txt", std::string{"changed"}, stop_token)));
+    check_file_operation_aborted(run_awaitable_pi(env.appendFile(
+        "note.txt", std::string{"changed"}, stop_token)));
+    check_file_operation_aborted(run_awaitable_pi(env.fileInfo("note.txt", stop_token)));
+    check_file_operation_aborted(run_awaitable_pi(env.listDir(".", stop_token)));
+    check_file_operation_aborted(run_awaitable_pi(env.canonicalPath("note.txt", stop_token)));
+    check_file_operation_aborted(run_awaitable_pi(env.exists("note.txt", stop_token)));
+    check_file_operation_aborted(run_awaitable_pi(env.createDir("new-dir", true, stop_token)));
+    check_file_operation_aborted(run_awaitable_pi(env.remove("note.txt", false, stop_token)));
+    check_file_operation_aborted(run_awaitable_pi(env.createTempDir("tmp-", stop_token)));
+    check_file_operation_aborted(run_awaitable_pi(env.createTempFile("tmp-", ".txt", stop_token)));
+
+    CHECK(workspace.read("note.txt") == "unchanged");
+    CHECK_FALSE(path_exists(workspace.path() / "new-dir"));
+}
+
 TEST_CASE("async local execution env preserves file read and write safety", "[harness][async][u6]") {
     tests::TempWorkspace workspace;
     harness::AsyncLocalExecutionEnv env(workspace.path());
 
-    auto written = run_awaitable_pi(env.writeFile("nested/note.txt", std::string{"hello"}));
+    auto written = run_awaitable_pi(env.writeFile(
+        "nested/note.txt", std::string{"hello"}, std::stop_token{}));
     REQUIRE(written);
 
-    auto read = run_awaitable_pi(env.readTextFile("nested/note.txt"));
+    auto read = run_awaitable_pi(env.readTextFile("nested/note.txt", std::stop_token{}));
     REQUIRE(read);
     CHECK(*read == "hello");
 
-    auto escaped = run_awaitable_pi(env.readTextFile("../outside.txt"));
+    auto escaped = run_awaitable_pi(env.readTextFile("../outside.txt", std::stop_token{}));
     REQUIRE_FALSE(escaped);
     CHECK(escaped.error().code == harness::FileErrorCode::PermissionDenied);
 }
@@ -143,14 +199,17 @@ TEST_CASE("async local execution env sanitizes shell environment through process
     runner->next.stdout_output = "ok";
     harness::SyncLocalExecutionEnv env(workspace.path(), true, {"CCH_CREDENTIAL", "KIMI_API_KEY"}, runner);
 
+    std::stop_source stop_source;
     harness::ExecOptions opts;
     opts.timeout = std::chrono::milliseconds(123);
+    opts.stop_token = stop_source.get_token();
     auto shell = env.exec("env", std::move(opts));
 
     REQUIRE(shell);
     REQUIRE(runner->requests.size() == 1);
     CHECK(runner->requests[0].working_directory == workspace.path());
     CHECK(runner->requests[0].timeout.count() == 123);
+    CHECK(runner->requests[0].stop_token == stop_source.get_token());
     CHECK(runner->requests[0].use_explicit_environment);
     CHECK(runner->requests[0].environment.find("OPENAI_API_KEY") == runner->requests[0].environment.end());
     CHECK(runner->requests[0].environment.find("KIMI_API_KEY") == runner->requests[0].environment.end());
@@ -161,6 +220,80 @@ TEST_CASE("async local execution env sanitizes shell environment through process
     unsetenv("KIMI_API_KEY");
     unsetenv("CCH_VISIBLE_ENV");
     unsetenv("CCH_CREDENTIAL");
+#endif
+}
+
+TEST_CASE("pi-shaped exec rejects a pre-cancelled request before spawning", "[harness][async][issue40]") {
+    tests::TempWorkspace workspace;
+    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+    std::stop_source stop_source;
+    stop_source.request_stop();
+    harness::ExecOptions options;
+    options.stop_token = stop_source.get_token();
+
+    auto result = run_awaitable_pi(env.exec("touch should-not-exist", std::move(options)));
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == harness::ExecutionErrorCode::Aborted);
+    CHECK_FALSE(path_exists(workspace.path() / "should-not-exist"));
+}
+
+TEST_CASE("cancelling exec terminates the process group and reaps the shell", "[harness][async][process][issue40]") {
+#if defined(__unix__) || defined(__APPLE__)
+    tests::TempWorkspace workspace;
+    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+    std::stop_source stop_source;
+    harness::ExecOptions options;
+    options.stop_token = stop_source.get_token();
+    options.timeout = std::chrono::seconds{30};
+
+    boost::asio::io_context io;
+    std::optional<std::expected<harness::ShellExecResult, harness::ExecutionError>> result;
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            result = co_await env.exec(
+                "echo $$ > shell.pid; sleep 30 & echo $! > descendant.pid; wait",
+                std::move(options));
+            co_return;
+        },
+        boost::asio::detached);
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            boost::asio::steady_timer timer(
+                co_await boost::asio::this_coro::executor,
+                std::chrono::milliseconds{250});
+            co_await timer.async_wait(boost::asio::use_awaitable);
+            stop_source.request_stop();
+            co_return;
+        },
+        boost::asio::detached);
+
+    const auto started = std::chrono::steady_clock::now();
+    io.run();
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+
+    REQUIRE(result.has_value());
+    REQUIRE_FALSE(*result);
+    CHECK(result->error().code == harness::ExecutionErrorCode::Aborted);
+    CHECK(elapsed < std::chrono::seconds{2});
+
+    auto check_process_absent = [&](const std::string& pid_file) {
+        const auto pid_text = workspace.read(pid_file);
+        pid_t pid{};
+        const auto [end, parse_error] = std::from_chars(
+            pid_text.data(), pid_text.data() + pid_text.size(), pid);
+        REQUIRE(parse_error == std::errc{});
+        CHECK(end != pid_text.data());
+        errno = 0;
+        CHECK(::kill(pid, 0) == -1);
+        CHECK(errno == ESRCH);
+    };
+    check_process_absent("shell.pid");
+    check_process_absent("descendant.pid");
+#else
+    SUCCEED("process-group cancellation is covered on supported POSIX platforms");
 #endif
 }
 
@@ -315,63 +448,84 @@ TEST_CASE("focused fake implements the complete pi-shaped surface", "[harness][u
         const std::filesystem::path& workspace() const override { return ws; }
 
         boost::asio::awaitable<std::expected<std::string, harness::FileError>> absolutePath(
-            std::string path) override {
+            std::string path,
+            std::stop_token) override {
             co_return path;
         }
         boost::asio::awaitable<std::expected<std::string, harness::FileError>> joinPath(
-            std::vector<std::string>) override {
+            std::vector<std::string>,
+            std::stop_token) override {
             co_return std::string{"/joined"};
         }
         boost::asio::awaitable<std::expected<std::string, harness::FileError>> readTextFile(
-            std::string) override {
+            std::string,
+            std::stop_token) override {
             co_return std::string{"fake"};
         }
         boost::asio::awaitable<std::expected<std::vector<std::string>, harness::FileError>> readTextLines(
-            std::string, std::optional<int>) override {
+            std::string,
+            std::optional<int>,
+            std::stop_token) override {
             co_return std::vector<std::string>{"fake"};
         }
         boost::asio::awaitable<std::expected<harness::BinaryData, harness::FileError>> readBinaryFile(
-            std::string) override {
+            std::string,
+            std::stop_token) override {
             co_return harness::BinaryData{};
         }
         boost::asio::awaitable<std::expected<void, harness::FileError>> writeFile(
-            std::string, harness::WriteContent) override {
+            std::string,
+            harness::WriteContent,
+            std::stop_token) override {
             co_return std::expected<void, harness::FileError>{};
         }
         boost::asio::awaitable<std::expected<void, harness::FileError>> appendFile(
-            std::string, harness::WriteContent) override {
+            std::string,
+            harness::WriteContent,
+            std::stop_token) override {
             co_return std::expected<void, harness::FileError>{};
         }
         boost::asio::awaitable<std::expected<harness::FileInfo, harness::FileError>> fileInfo(
-            std::string path) override {
+            std::string path,
+            std::stop_token) override {
             co_return harness::FileInfo{.name = path, .path = "/tmp/ws/" + path};
         }
         boost::asio::awaitable<std::expected<std::vector<harness::FileInfo>, harness::FileError>> listDir(
-            std::string) override {
+            std::string,
+            std::stop_token) override {
             co_return std::vector<harness::FileInfo>{};
         }
         boost::asio::awaitable<std::expected<std::string, harness::FileError>> canonicalPath(
-            std::string path) override {
+            std::string path,
+            std::stop_token) override {
             co_return path;
         }
         boost::asio::awaitable<std::expected<bool, harness::FileError>> exists(
-            std::string) override {
+            std::string,
+            std::stop_token) override {
             co_return true;
         }
         boost::asio::awaitable<std::expected<void, harness::FileError>> createDir(
-            std::string, bool) override {
+            std::string,
+            bool,
+            std::stop_token) override {
             co_return std::expected<void, harness::FileError>{};
         }
         boost::asio::awaitable<std::expected<void, harness::FileError>> remove(
-            std::string, bool) override {
+            std::string,
+            bool,
+            std::stop_token) override {
             co_return std::expected<void, harness::FileError>{};
         }
         boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempDir(
-            std::optional<std::string>) override {
+            std::optional<std::string>,
+            std::stop_token) override {
             co_return std::string{"/tmp/ws/tmp"};
         }
         boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempFile(
-            std::optional<std::string>, std::optional<std::string>) override {
+            std::optional<std::string>,
+            std::optional<std::string>,
+            std::stop_token) override {
             co_return std::string{"/tmp/ws/tmp-file"};
         }
 
@@ -384,11 +538,11 @@ TEST_CASE("focused fake implements the complete pi-shaped surface", "[harness][u
     FocusedFake fake;
     CHECK(fake.workspace() == "/tmp/ws");
 
-    auto read = run_awaitable_pi(fake.readTextFile("x"));
+    auto read = run_awaitable_pi(fake.readTextFile("x", std::stop_token{}));
     REQUIRE(read);
     CHECK(*read == "fake");
 
-    auto info = run_awaitable_pi(fake.fileInfo("x"));
+    auto info = run_awaitable_pi(fake.fileInfo("x", std::stop_token{}));
     REQUIRE(info);
     CHECK(info->name == "x");
 
@@ -417,63 +571,84 @@ TEST_CASE("complete fake can override full pi-shaped capability surface", "[harn
         const std::filesystem::path& workspace() const override { return ws; }
 
         boost::asio::awaitable<std::expected<std::string, harness::FileError>> absolutePath(
-            std::string path) override {
+            std::string path,
+            std::stop_token) override {
             co_return path;
         }
         boost::asio::awaitable<std::expected<std::string, harness::FileError>> joinPath(
-            std::vector<std::string>) override {
+            std::vector<std::string>,
+            std::stop_token) override {
             co_return std::string{"/joined"};
         }
         boost::asio::awaitable<std::expected<std::string, harness::FileError>> readTextFile(
-            std::string path) override {
+            std::string path,
+            std::stop_token) override {
             co_return path + "-content";
         }
         boost::asio::awaitable<std::expected<std::vector<std::string>, harness::FileError>> readTextLines(
-            std::string, std::optional<int>) override {
+            std::string,
+            std::optional<int>,
+            std::stop_token) override {
             co_return std::vector<std::string>{};
         }
         boost::asio::awaitable<std::expected<harness::BinaryData, harness::FileError>> readBinaryFile(
-            std::string) override {
+            std::string,
+            std::stop_token) override {
             co_return harness::BinaryData{};
         }
         boost::asio::awaitable<std::expected<void, harness::FileError>> writeFile(
-            std::string, harness::WriteContent) override {
+            std::string,
+            harness::WriteContent,
+            std::stop_token) override {
             co_return std::expected<void, harness::FileError>{};
         }
         boost::asio::awaitable<std::expected<void, harness::FileError>> appendFile(
-            std::string, harness::WriteContent) override {
+            std::string,
+            harness::WriteContent,
+            std::stop_token) override {
             co_return std::expected<void, harness::FileError>{};
         }
         boost::asio::awaitable<std::expected<harness::FileInfo, harness::FileError>> fileInfo(
-            std::string path) override {
+            std::string path,
+            std::stop_token) override {
             co_return harness::FileInfo{.name = path, .path = "/ws/" + path, .kind = harness::FileKind::File};
         }
         boost::asio::awaitable<std::expected<std::vector<harness::FileInfo>, harness::FileError>> listDir(
-            std::string) override {
+            std::string,
+            std::stop_token) override {
             co_return std::vector<harness::FileInfo>{};
         }
         boost::asio::awaitable<std::expected<std::string, harness::FileError>> canonicalPath(
-            std::string path) override {
+            std::string path,
+            std::stop_token) override {
             co_return path;
         }
         boost::asio::awaitable<std::expected<bool, harness::FileError>> exists(
-            std::string) override {
+            std::string,
+            std::stop_token) override {
             co_return true;
         }
         boost::asio::awaitable<std::expected<void, harness::FileError>> createDir(
-            std::string, bool) override {
+            std::string,
+            bool,
+            std::stop_token) override {
             co_return std::expected<void, harness::FileError>{};
         }
         boost::asio::awaitable<std::expected<void, harness::FileError>> remove(
-            std::string, bool) override {
+            std::string,
+            bool,
+            std::stop_token) override {
             co_return std::expected<void, harness::FileError>{};
         }
         boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempDir(
-            std::optional<std::string>) override {
+            std::optional<std::string>,
+            std::stop_token) override {
             co_return std::string{"/ws/tmp"};
         }
         boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempFile(
-            std::optional<std::string>, std::optional<std::string>) override {
+            std::optional<std::string>,
+            std::optional<std::string>,
+            std::stop_token) override {
             co_return std::string{"/ws/tmp-file"};
         }
 
@@ -485,12 +660,12 @@ TEST_CASE("complete fake can override full pi-shaped capability surface", "[harn
 
     CompleteFake fake;
 
-    auto info = run_awaitable_pi(fake.fileInfo("readme.md"));
+    auto info = run_awaitable_pi(fake.fileInfo("readme.md", std::stop_token{}));
     REQUIRE(info);
     CHECK(info->name == "readme.md");
     CHECK(info->kind == harness::FileKind::File);
 
-    auto text = run_awaitable_pi(fake.readTextFile("f"));
+    auto text = run_awaitable_pi(fake.readTextFile("f", std::stop_token{}));
     REQUIRE(text);
     CHECK(*text == "f-content");
 

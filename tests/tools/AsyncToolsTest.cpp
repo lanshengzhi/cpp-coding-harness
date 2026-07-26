@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <utility>
 
 using namespace cch;
@@ -29,28 +30,38 @@ public:
     const std::filesystem::path& workspace() const override { return workspace_path_; }
 
     boost::asio::awaitable<std::expected<std::string, harness::FileError>> absolutePath(
-        std::string path) override {
+        std::string path,
+        std::stop_token) override {
         co_return path;
     }
     boost::asio::awaitable<std::expected<std::string, harness::FileError>> joinPath(
-        std::vector<std::string>) override {
+        std::vector<std::string>,
+        std::stop_token) override {
         co_return std::string{};
     }
     boost::asio::awaitable<std::expected<std::string, harness::FileError>> readTextFile(
-        std::string) override {
+        std::string,
+        std::stop_token stop_token) override {
+        last_stop_token = stop_token;
         co_return std::string{};
     }
     boost::asio::awaitable<std::expected<std::vector<std::string>, harness::FileError>> readTextLines(
-        std::string, std::optional<int>) override {
+        std::string,
+        std::optional<int>,
+        std::stop_token stop_token) override {
+        last_stop_token = stop_token;
         co_return std::vector<std::string>{};
     }
     boost::asio::awaitable<std::expected<harness::BinaryData, harness::FileError>> readBinaryFile(
-        std::string) override {
+        std::string,
+        std::stop_token) override {
         co_return harness::BinaryData{};
     }
     boost::asio::awaitable<std::expected<void, harness::FileError>> writeFile(
         std::string path,
-        harness::WriteContent content) override {
+        harness::WriteContent content,
+        std::stop_token stop_token) override {
+        last_stop_token = stop_token;
         last_write_path = std::move(path);
         if (const auto* text = std::get_if<std::string>(&content)) {
             last_write_content = *text;
@@ -58,39 +69,52 @@ public:
         co_return std::expected<void, harness::FileError>{};
     }
     boost::asio::awaitable<std::expected<void, harness::FileError>> appendFile(
-        std::string, harness::WriteContent) override {
+        std::string,
+        harness::WriteContent,
+        std::stop_token) override {
         co_return std::expected<void, harness::FileError>{};
     }
     boost::asio::awaitable<std::expected<harness::FileInfo, harness::FileError>> fileInfo(
-        std::string) override {
+        std::string,
+        std::stop_token) override {
         co_return harness::FileInfo{};
     }
     boost::asio::awaitable<std::expected<std::vector<harness::FileInfo>, harness::FileError>> listDir(
-        std::string) override {
+        std::string,
+        std::stop_token) override {
         co_return std::vector<harness::FileInfo>{};
     }
     boost::asio::awaitable<std::expected<std::string, harness::FileError>> canonicalPath(
-        std::string path) override {
+        std::string path,
+        std::stop_token) override {
         co_return path;
     }
     boost::asio::awaitable<std::expected<bool, harness::FileError>> exists(
-        std::string) override {
+        std::string,
+        std::stop_token) override {
         co_return true;
     }
     boost::asio::awaitable<std::expected<void, harness::FileError>> createDir(
-        std::string, bool) override {
+        std::string,
+        bool,
+        std::stop_token) override {
         co_return std::expected<void, harness::FileError>{};
     }
     boost::asio::awaitable<std::expected<void, harness::FileError>> remove(
-        std::string, bool) override {
+        std::string,
+        bool,
+        std::stop_token) override {
         co_return std::expected<void, harness::FileError>{};
     }
     boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempDir(
-        std::optional<std::string>) override {
+        std::optional<std::string>,
+        std::stop_token) override {
         co_return std::string{};
     }
     boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempFile(
-        std::optional<std::string>, std::optional<std::string>) override {
+        std::optional<std::string>,
+        std::optional<std::string>,
+        std::stop_token) override {
         co_return std::string{};
     }
 
@@ -99,6 +123,7 @@ public:
         harness::ExecOptions options) override {
         last_command = std::move(command);
         last_timeout = options.timeout.value_or(std::chrono::milliseconds{0});
+        last_stop_token = options.stop_token;
         if (options.onStdout && !streamed_stdout.empty()) {
             (*options.onStdout)(streamed_stdout);
         }
@@ -110,6 +135,7 @@ public:
 
     std::string last_command;
     std::chrono::milliseconds last_timeout{0};
+    std::stop_token last_stop_token;
     std::string streamed_stdout;
     std::string streamed_stderr;
     harness::ShellExecResult next_shell_result{
@@ -170,7 +196,9 @@ TEST_CASE("async read_file tool uses Glaze typed args and workspace guard", "[to
     auto tool = tools::make_async_read_file_tool(env);
 
     auto result = run_tool([&]() {
-        return tool->execute(invocation("read_file", R"({"path":"note.txt","offset":2,"limit":1})"));
+        return tool->execute(
+            invocation("read_file", R"({"path":"note.txt","offset":2,"limit":1})"),
+            std::stop_token{});
     });
 
     REQUIRE(result);
@@ -186,7 +214,7 @@ TEST_CASE("async edit_file tool returns error for duplicate oldText matches", "[
 
     auto result = run_tool([&]() {
         return tool->execute(invocation("edit_file",
-            R"({"path":"note.txt","edits":[{"oldText":"same","newText":"new"}]})"));
+            R"({"path":"note.txt","edits":[{"oldText":"same","newText":"new"}]})"), std::stop_token{});
     });
 
     REQUIRE(result);
@@ -202,8 +230,11 @@ TEST_CASE("async edit_file tool supports edits[] array with multiple replacement
     auto tool = tools::make_async_edit_file_tool(env);
 
     auto result = run_tool([&]() {
-        return tool->execute(invocation("edit_file",
-            R"({"path":"note.txt","edits":[{"oldText":"hello","newText":"hi"},{"oldText":"baz","newText":"zip"}]})"));
+        return tool->execute(
+            invocation("edit_file",
+                R"({"path":"note.txt","edits":[{"oldText":"hello","newText":"hi"},)"
+                R"({"oldText":"baz","newText":"zip"}]})"),
+            std::stop_token{});
     });
 
     REQUIRE(result);
@@ -222,7 +253,7 @@ TEST_CASE("async edit_file tool rejects empty edits array", "[tools][async]") {
 
     auto result = run_tool([&]() {
         return tool->execute(invocation("edit_file",
-            R"({"path":"note.txt","edits":[]})"));
+            R"({"path":"note.txt","edits":[]})"), std::stop_token{});
     });
 
     REQUIRE(result);
@@ -238,7 +269,7 @@ TEST_CASE("async edit_file tool rejects oldText not found", "[tools][async]") {
 
     auto result = run_tool([&]() {
         return tool->execute(invocation("edit_file",
-            R"({"path":"note.txt","edits":[{"oldText":"nonexistent","newText":"x"}]})"));
+            R"({"path":"note.txt","edits":[{"oldText":"nonexistent","newText":"x"}]})"), std::stop_token{});
     });
 
     REQUIRE(result);
@@ -266,7 +297,9 @@ TEST_CASE("edit_file declared contract validation and execution acceptance agree
         return agent::prepare_tool_arguments(tool->definition(), call).has_value();
     };
     auto execution_accepts = [&](const std::string& json) {
-        auto result = run_tool([&]() { return tool->execute(invocation("edit_file", json)); });
+        auto result = run_tool([&]() {
+            return tool->execute(invocation("edit_file", json), std::stop_token{});
+        });
         REQUIRE(result);
         return !result->is_error;
     };
@@ -311,7 +344,7 @@ TEST_CASE("async tools prefer structured arguments over raw provider text", "[to
     agent::ToolInvocation call{"call-1", "read_file", *structured, R"({"path":"raw.txt"})"};
 
     auto result = run_tool([&]() {
-        return tool->execute(std::move(call));
+        return tool->execute(std::move(call), std::stop_token{});
     });
 
     REQUIRE(result);
@@ -319,19 +352,23 @@ TEST_CASE("async tools prefer structured arguments over raw provider text", "[to
     CHECK(ai::text_from_content(result->content) == "from-structured");
 }
 
-TEST_CASE("async bash tool uses timeout in seconds", "[tools][async]") {
+TEST_CASE("async bash tool carries the active token through exec options", "[tools][async][issue40]") {
     tests::TempWorkspace workspace;
     auto env = std::make_shared<CapturingEnv>(workspace.path());
     auto tool = tools::make_async_bash_tool(env);
+    std::stop_source stop_source;
 
     auto result = run_tool([&]() {
-        return tool->execute(invocation("bash", R"({"command":"echo hi","timeout":5})"));
+        return tool->execute(
+            invocation("bash", R"({"command":"echo hi","timeout":5})"),
+            stop_source.get_token());
     });
 
     REQUIRE(result);
     CHECK_FALSE(result->is_error);
     CHECK(env->last_command == "echo hi");
     CHECK(env->last_timeout == std::chrono::milliseconds(5000));
+    CHECK(env->last_stop_token == stop_source.get_token());
 }
 
 TEST_CASE("async bash tool spill file contains complete output beyond the visible limit", "[tools][async][issue73]") {
@@ -344,7 +381,9 @@ TEST_CASE("async bash tool spill file contains complete output beyond the visibl
     auto tool = tools::make_async_bash_tool(env);
 
     auto result = run_tool([&]() {
-        return tool->execute(invocation("bash", R"({"command":"emit-large-output"})"));
+        return tool->execute(
+            invocation("bash", R"({"command":"emit-large-output"})"),
+            std::stop_token{});
     });
 
     REQUIRE(result);
@@ -372,7 +411,9 @@ TEST_CASE("async bash tool without streamed output reports capping at the execut
     auto tool = tools::make_async_bash_tool(env);
 
     auto result = run_tool([&]() {
-        return tool->execute(invocation("bash", R"({"command":"emit-large-output"})"));
+        return tool->execute(
+            invocation("bash", R"({"command":"emit-large-output"})"),
+            std::stop_token{});
     });
 
     REQUIRE(result);
@@ -397,7 +438,9 @@ TEST_CASE("async bash tool strips ANSI escape sequences", "[tools][async]") {
     auto tool = tools::make_async_bash_tool(env);
 
     auto result = run_tool([&]() {
-        return tool->execute(invocation("bash", R"({"command":"echo hi"})"));
+        return tool->execute(
+            invocation("bash", R"({"command":"echo hi"})"),
+            std::stop_token{});
     });
 
     REQUIRE(result);
@@ -413,7 +456,9 @@ TEST_CASE("async bash tool is disabled unless env explicitly enables it", "[tool
     auto tool = tools::make_async_bash_tool(env);
 
     auto result = run_tool([&]() {
-        return tool->execute(invocation("bash", R"({"command":"echo blocked"})"));
+        return tool->execute(
+            invocation("bash", R"({"command":"echo blocked"})"),
+            std::stop_token{});
     });
 
     REQUIRE(result);

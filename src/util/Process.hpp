@@ -10,6 +10,7 @@
 #include <functional>
 #include <map>
 #include <optional>
+#include <stop_token>
 #include <string>
 
 namespace cch::util {
@@ -21,6 +22,7 @@ struct ProcessRequest {
     std::map<std::string, std::string> environment;
     bool use_explicit_environment{false};
     OutputLimit output_limit;
+    std::stop_token stop_token;
 
     /// Called with stdout chunks as they are produced.
     std::optional<std::move_only_function<void(std::string_view)>> on_stdout;

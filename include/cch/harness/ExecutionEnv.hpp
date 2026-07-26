@@ -12,6 +12,7 @@
 #include <functional>
 #include <map>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <variant>
 #include <vector>
@@ -93,6 +94,8 @@ struct ExecOptions {
     std::optional<std::map<std::string, std::string>> env;
     /// Wall-clock timeout. Zero / unset means no timeout.
     std::optional<std::chrono::milliseconds> timeout;
+    /// Active prompt cancellation token.
+    std::stop_token stop_token{};
     /// Called with stdout chunks as they are produced.
     std::optional<std::move_only_function<void(std::string_view)>> onStdout;
     /// Called with stderr chunks as they are produced.
@@ -183,69 +186,84 @@ public:
 
     /// Return an absolute addressed path without requiring it to exist and without following symlinks.
     [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::string, FileError>> absolutePath(
-        std::string path) = 0;
+        std::string path,
+        std::stop_token stop_token) = 0;
 
     /// Join path segments without requiring the result to exist.
     [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::string, FileError>> joinPath(
-        std::vector<std::string> parts) = 0;
+        std::vector<std::string> parts,
+        std::stop_token stop_token) = 0;
 
     /// Read entire UTF-8 text file.
     [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::string, FileError>> readTextFile(
-        std::string path) = 0;
+        std::string path,
+        std::stop_token stop_token) = 0;
 
     /// Read UTF-8 text lines. Stops after maxLines if set.
     [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::vector<std::string>, FileError>> readTextLines(
         std::string path,
-        std::optional<int> maxLines = std::nullopt) = 0;
+        std::optional<int> maxLines,
+        std::stop_token stop_token) = 0;
 
     /// Read entire binary file.
     [[nodiscard]] virtual boost::asio::awaitable<std::expected<BinaryData, FileError>> readBinaryFile(
-        std::string path) = 0;
+        std::string path,
+        std::stop_token stop_token) = 0;
 
     /// Create or overwrite a file, creating parent directories.
     [[nodiscard]] virtual boost::asio::awaitable<std::expected<void, FileError>> writeFile(
         std::string path,
-        WriteContent content) = 0;
+        WriteContent content,
+        std::stop_token stop_token) = 0;
 
     /// Create or append to a file, creating parent directories.
     [[nodiscard]] virtual boost::asio::awaitable<std::expected<void, FileError>> appendFile(
         std::string path,
-        WriteContent content) = 0;
+        WriteContent content,
+        std::stop_token stop_token) = 0;
 
     /// Return metadata for the addressed path without following symlinks.
     [[nodiscard]] virtual boost::asio::awaitable<std::expected<FileInfo, FileError>> fileInfo(
-        std::string path) = 0;
+        std::string path,
+        std::stop_token stop_token) = 0;
 
     /// List direct children of a directory without following symlinks.
     [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::vector<FileInfo>, FileError>> listDir(
-        std::string path) = 0;
+        std::string path,
+        std::stop_token stop_token) = 0;
 
     /// Return canonical path for an existing path, resolving symlinks.
     [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::string, FileError>> canonicalPath(
-        std::string path) = 0;
+        std::string path,
+        std::stop_token stop_token) = 0;
 
     /// Return false for missing paths. Other errors return FileError.
     [[nodiscard]] virtual boost::asio::awaitable<std::expected<bool, FileError>> exists(
-        std::string path) = 0;
+        std::string path,
+        std::stop_token stop_token) = 0;
 
-    /// Create a directory. Defaults: recursive=true.
+    /// Create a directory, recursively when requested.
     [[nodiscard]] virtual boost::asio::awaitable<std::expected<void, FileError>> createDir(
         std::string path,
-        bool recursive = true) = 0;
+        bool recursive,
+        std::stop_token stop_token) = 0;
 
-    /// Remove a file or directory. Default: non-recursive.
+    /// Remove a file or directory, recursively when requested.
     [[nodiscard]] virtual boost::asio::awaitable<std::expected<void, FileError>> remove(
         std::string path,
-        bool recursive = false) = 0;
+        bool recursive,
+        std::stop_token stop_token) = 0;
 
     /// Create a workspace-contained temporary directory and return its addressed path.
     [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::string, FileError>> createTempDir(
-        std::optional<std::string> prefix = std::nullopt) = 0;
+        std::optional<std::string> prefix,
+        std::stop_token stop_token) = 0;
 
     /// Create a workspace-contained temporary file and return its addressed path.
     [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::string, FileError>> createTempFile(
-        std::optional<std::string> prefix = std::nullopt,
-        std::optional<std::string> suffix = std::nullopt) = 0;
+        std::optional<std::string> prefix,
+        std::optional<std::string> suffix,
+        std::stop_token stop_token) = 0;
 
     /// Release owned resources. Must be best-effort and must not throw.
     virtual boost::asio::awaitable<void> cleanup() {

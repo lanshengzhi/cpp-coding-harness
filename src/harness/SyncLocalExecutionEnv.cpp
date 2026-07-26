@@ -150,6 +150,11 @@ std::expected<std::string, FileError> SyncLocalExecutionEnv::createTempFile(
 util::Expected<util::ProcessRequest> SyncLocalExecutionEnv::make_exec_request(
     std::string command,
     ExecOptions options) const {
+    if (options.stop_token.stop_requested()) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Cancelled,
+            "Operation aborted"));
+    }
     if (!bash_enabled_) {
         return std::unexpected(process_error("bash is disabled by default; rerun with explicit bash enablement"));
     }
@@ -184,6 +189,7 @@ util::Expected<util::ProcessRequest> SyncLocalExecutionEnv::make_exec_request(
 
     util::ProcessRequest request;
     request.command = std::move(command);
+    request.stop_token = options.stop_token;
     request.working_directory = working_dir;
     request.timeout = options.timeout.value_or(std::chrono::milliseconds{30000});
     request.environment = std::move(base_env);

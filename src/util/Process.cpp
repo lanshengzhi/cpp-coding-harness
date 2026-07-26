@@ -101,10 +101,16 @@ public:
         : child_(child), group_(group) {}
 
     ~ChildGuard() {
-        if (!released_ && child_.running()) {
-            boost::system::error_code ignored;
+        if (released_) {
+            return;
+        }
+        boost::system::error_code ignored;
+        if (child_.running()) {
             group_.terminate(ignored);
             child_.terminate(ignored);
+        }
+        if (child_.joinable()) {
+            child_.wait(ignored);
         }
     }
 
@@ -121,6 +127,21 @@ private:
     bool released_{false};
 };
 
+void request_supported_termination(
+    boost::process::v1::child& child,
+    boost::process::v1::group& process_group) {
+#if defined(__unix__) || defined(__APPLE__)
+    if (process_group.valid()) {
+        (void)::killpg(process_group.native_handle(), SIGTERM);
+    }
+#else
+    boost::system::error_code ignored;
+    process_group.terminate(ignored);
+    child.terminate(ignored);
+#endif
+    (void)child;
+}
+
 constexpr std::chrono::milliseconds poll_interval{100};
 constexpr std::chrono::milliseconds sigkill_grace_period{100};
 
@@ -129,6 +150,10 @@ constexpr std::chrono::milliseconds sigkill_grace_period{100};
 boost::asio::awaitable<Expected<ProcessResult>> DefaultAsyncProcessRunner::run(ProcessRequest request) {
     namespace bp = boost::process::v1;
     try {
+        if (request.stop_token.stop_requested()) {
+            co_return std::unexpected(make_error(ErrorCode::Cancelled, "Operation aborted"));
+        }
+
         auto executor = co_await boost::asio::this_coro::executor;
         auto& io = io_context_from_executor(executor);
 
@@ -166,20 +191,27 @@ boost::asio::awaitable<Expected<ProcessResult>> DefaultAsyncProcessRunner::run(P
             boost::asio::deferred);
 
         ProcessResult result;
+        bool cancelled = false;
         const auto timeout_enabled = request.timeout.count() > 0;
         const auto start = std::chrono::steady_clock::now();
         const auto deadline = start + request.timeout;
         boost::asio::steady_timer timer(executor);
 
         while (child.running()) {
+            if (request.stop_token.stop_requested()) {
+                cancelled = true;
+                stdout_pipe.cancel();
+                stderr_pipe.cancel();
+                request_supported_termination(child, process_group);
+                break;
+            }
+
             auto now = std::chrono::steady_clock::now();
             if (timeout_enabled && now >= deadline) {
                 result.timed_out = true;
-                boost::system::error_code ignored;
                 stdout_pipe.cancel();
                 stderr_pipe.cancel();
-                process_group.terminate(ignored);
-                child.terminate(ignored);
+                request_supported_termination(child, process_group);
                 break;
             }
 
@@ -193,18 +225,25 @@ boost::asio::awaitable<Expected<ProcessResult>> DefaultAsyncProcessRunner::run(P
             }
         }
 
-        if (result.timed_out) {
+        if (!cancelled && request.stop_token.stop_requested()) {
+            cancelled = true;
+            stdout_pipe.cancel();
+            stderr_pipe.cancel();
+            if (child.running()) {
+                request_supported_termination(child, process_group);
+            }
+        }
+
+        if (cancelled || result.timed_out) {
             timer.expires_after(sigkill_grace_period);
             auto [ec] = co_await timer.async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
             (void)ec;
-            if (child.running()) {
-#if defined(__unix__) || defined(__APPLE__)
-                ::kill(child.id(), SIGKILL);
-#else
-                boost::system::error_code ignored;
+            boost::system::error_code ignored;
+            if (process_group.valid()) {
                 process_group.terminate(ignored);
+            }
+            if (child.running()) {
                 child.terminate(ignored);
-#endif
             }
         }
 
@@ -234,6 +273,9 @@ boost::asio::awaitable<Expected<ProcessResult>> DefaultAsyncProcessRunner::run(P
 
         guard.release();
 
+        if (cancelled || request.stop_token.stop_requested()) {
+            co_return std::unexpected(make_error(ErrorCode::Cancelled, "Operation aborted"));
+        }
         if (callback_error) {
             co_return std::unexpected(make_error(ErrorCode::Process, "process execution failed", "callback threw an exception"));
         }
