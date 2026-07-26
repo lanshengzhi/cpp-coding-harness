@@ -47,11 +47,23 @@ using SyncConvertToLlmPolicy = std::move_only_function<
 [[nodiscard]] ConvertToLlmHook adapt_sync_convert_to_llm(
     SyncConvertToLlmPolicy policy);
 
-using GetSteeringMessagesHook = std::move_only_function<
-    util::Expected<std::vector<ai::MessageVariant>>()>;
+/// pi-compatible policy for draining one pending input queue.
+enum class InputQueueMode { OneAtATime, All };
 
-using GetFollowUpMessagesHook = std::move_only_function<
-    util::Expected<std::vector<ai::MessageVariant>>()>;
+/// Passive configuration and pending contents for one Agent-owned input queue.
+struct AgentInputQueue {
+    InputQueueMode mode{InputQueueMode::OneAtATime};
+    std::vector<ai::MessageVariant> messages;
+};
+
+/// Passive observation of both Agent-owned input queues and their shared
+/// per-queue admission limits.
+struct AgentInputQueues {
+    std::size_t max_messages{256};
+    std::size_t max_bytes{16 * 1024 * 1024};
+    AgentInputQueue steering;
+    AgentInputQueue follow_up;
+};
 
 struct PrepareNextTurnContext {
     ai::AssistantMessage assistant_message;
@@ -118,19 +130,18 @@ struct AsyncAgentOptions {
     /// once the budget is exhausted; exhaustion is never reported as a
     /// provider error.
     std::optional<int> max_turns{std::nullopt};
-    /// Admission bounds applied to each steering/follow-up queue validation
-    /// pass (ADR 0022). Defaults: 256 messages and 16 MiB of approximate
-    /// message content.
+    /// Per-queue admission limits (ADR 0022). Defaults: 256 messages and
+    /// 16 MiB of approximate message content.
     std::size_t max_queued_messages{256};
     std::size_t max_queued_bytes{16 * 1024 * 1024};
+    InputQueueMode steering_mode{InputQueueMode::OneAtATime};
+    InputQueueMode follow_up_mode{InputQueueMode::OneAtATime};
     ai::Model model;
     std::string thinking_level;
     std::optional<BeforeToolCallHook> before_tool_call;
     std::optional<AfterToolCallHook> after_tool_call;
     std::optional<TransformContextHook> transform_context;
     std::optional<ConvertToLlmHook> convert_to_llm;
-    std::optional<GetSteeringMessagesHook> get_steering_messages;
-    std::optional<GetFollowUpMessagesHook> get_follow_up_messages;
     std::optional<PrepareNextTurnHook> prepare_next_turn;
     std::optional<ShouldStopAfterTurnHook> should_stop_after_turn;
     std::optional<ValidateTurnUpdateHook> validate_turn_update;
@@ -143,11 +154,11 @@ struct AgentState {
     std::optional<ai::AssistantMessage> streaming_message;
     std::vector<std::string> active_tool_names;
     std::vector<std::string> pending_tool_call_ids;
+    AgentInputQueues input_queues;
     ai::Model model;
     std::string thinking_level;
     // Bounded observations reported without vetoing run progress: redacted
-    // weak-subscriber failures and rejected steering/follow-up queue
-    // admissions (ADR 0022).
+    // weak-subscriber failures (ADR 0017).
     std::vector<util::Error> diagnostics;
 };
 

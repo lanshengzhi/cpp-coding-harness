@@ -1,6 +1,7 @@
 .pi-subagents/
 .qoder/
 build/
+build-validation/
 .deps/
 .cpp-harness/sessions/*.jsonl
 vcpkg_installed/

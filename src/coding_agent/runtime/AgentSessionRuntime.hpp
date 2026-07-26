@@ -58,6 +58,22 @@ public:
     [[nodiscard]] util::Expected<agent::AgentEventSubscription> subscribe(
         agent::AgentEventSink sink);
 
+    // ── Input queues ───────────────────────────────────────────────────────
+
+    [[nodiscard]] util::ExpectedVoid steer(
+        std::string text,
+        std::vector<ai::ImageContent> images,
+        bool expand_prompt_templates);
+    [[nodiscard]] util::ExpectedVoid follow_up(
+        std::string text,
+        std::vector<ai::ImageContent> images,
+        bool expand_prompt_templates);
+    [[nodiscard]] util::ExpectedVoid set_steering_mode(agent::InputQueueMode mode);
+    [[nodiscard]] util::ExpectedVoid set_follow_up_mode(agent::InputQueueMode mode);
+    [[nodiscard]] util::ExpectedVoid clear_steering_queue();
+    [[nodiscard]] util::ExpectedVoid clear_follow_up_queue();
+    [[nodiscard]] util::ExpectedVoid clear_input_queues();
+
     // ── State accessors ────────────────────────────────────────────────────
 
     [[nodiscard]] AgentSessionSnapshot snapshot(

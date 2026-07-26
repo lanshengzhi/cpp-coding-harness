@@ -83,6 +83,29 @@ public:
     /// assistant `aborted` lifecycle; this method adds no result channel.
     void abort();
 
+    /// Admit an Agent Message for injection after the current assistant turn.
+    /// The configured queue capacity is checked before the queue is mutated.
+    [[nodiscard]] util::ExpectedVoid steer(ai::MessageVariant message);
+
+    /// Admit an Agent Message to run when the Agent would otherwise stop.
+    /// The configured queue capacity is checked before the queue is mutated.
+    [[nodiscard]] util::ExpectedVoid follow_up(ai::MessageVariant message);
+
+    /// Change the drain policy for queued steering messages.
+    [[nodiscard]] util::ExpectedVoid set_steering_mode(InputQueueMode mode);
+
+    /// Change the drain policy for queued follow-up messages.
+    [[nodiscard]] util::ExpectedVoid set_follow_up_mode(InputQueueMode mode);
+
+    /// Remove all pending steering messages.
+    [[nodiscard]] util::ExpectedVoid clear_steering_queue();
+
+    /// Remove all pending follow-up messages.
+    [[nodiscard]] util::ExpectedVoid clear_follow_up_queue();
+
+    /// Remove all pending steering and follow-up messages.
+    [[nodiscard]] util::ExpectedVoid clear_input_queues();
+
     /// Return an independent passive snapshot of current live Agent state.
     [[nodiscard]] AgentState state() const;
 

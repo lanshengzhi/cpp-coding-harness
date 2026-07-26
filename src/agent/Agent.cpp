@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <stop_token>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -28,6 +29,80 @@ std::vector<std::string> tool_names(const std::vector<ai::Tool>& definitions) {
         names.push_back(definition.name);
     }
     return names;
+}
+
+[[nodiscard]] std::size_t approximate_content_size(const ai::Content& block) {
+    return std::visit(
+        [](const auto& content) -> std::size_t {
+            if constexpr (std::is_same_v<std::decay_t<decltype(content)>, ai::TextContent>) {
+                return content.text.size();
+            } else if constexpr (std::is_same_v<std::decay_t<decltype(content)>, ai::ImageContent>) {
+                return content.data.size() + content.mime_type.size();
+            } else if constexpr (std::is_same_v<std::decay_t<decltype(content)>, ai::ThinkingContent>) {
+                return content.thinking.size();
+            }
+            return 0;
+        },
+        block);
+}
+
+[[nodiscard]] std::size_t approximate_message_size(const ai::MessageVariant& message) {
+    return std::visit(
+        [](const auto& current) -> std::size_t {
+            if constexpr (std::is_same_v<std::decay_t<decltype(current)>, ai::UserMessage>) {
+                std::size_t size = 0;
+                for (const auto& block : current.content) {
+                    size += approximate_content_size(block);
+                }
+                return size;
+            } else if constexpr (std::is_same_v<std::decay_t<decltype(current)>, ai::AssistantMessage>) {
+                std::size_t size = 0;
+                for (const auto& block : current.content) {
+                    if (const auto* text = std::get_if<ai::TextContent>(&block)) {
+                        size += text->text.size();
+                    } else if (const auto* thinking = std::get_if<ai::ThinkingContent>(&block)) {
+                        size += thinking->thinking.size();
+                    } else if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
+                        size += call->raw_arguments.size();
+                    }
+                }
+                return size;
+            } else if constexpr (std::is_same_v<std::decay_t<decltype(current)>, ai::ToolResultMessage>) {
+                return ai::text_from_content(current.content).size();
+            } else if constexpr (std::is_same_v<std::decay_t<decltype(current)>, ai::SystemMessage>) {
+                return current.content.size();
+            }
+            return 0;
+        },
+        message);
+}
+
+[[nodiscard]] util::ExpectedVoid admit_queued_message(
+    AgentInputQueues& queues,
+    AgentInputQueue& queue,
+    ai::MessageVariant message,
+    std::string_view queue_name) {
+    const std::size_t message_bytes = approximate_message_size(message);
+    if (queue.messages.size() + 1 > queues.max_messages) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "too many queued messages",
+            std::string{queue_name} + " message count exceeds " + std::to_string(queues.max_messages)));
+    }
+
+    std::size_t queued_bytes = message_bytes;
+    for (const auto& queued : queue.messages) {
+        queued_bytes += approximate_message_size(queued);
+    }
+    if (queued_bytes > queues.max_bytes) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "queued messages too large",
+            std::string{queue_name} + " message byte size exceeds " + std::to_string(queues.max_bytes)));
+    }
+
+    queue.messages.push_back(std::move(message));
+    return {};
 }
 
 } // namespace
@@ -54,6 +129,10 @@ struct Agent::Impl {
         : loop(client, std::move(tools), std::move(options)) {
         state.messages = std::move(initial_state.messages);
         state.thinking_level = std::move(initial_state.thinking_level);
+        state.input_queues.max_messages = loop.max_queued_messages();
+        state.input_queues.max_bytes = loop.max_queued_bytes();
+        state.input_queues.steering.mode = loop.steering_mode();
+        state.input_queues.follow_up.mode = loop.follow_up_mode();
         // Every definition came from the registry now owned by the loop.
         state.active_tool_names = tool_names(definitions);
     }
@@ -363,7 +442,27 @@ boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
                 return impl->process_event(
                     event, run_subscribers, commitment, commitment_failure);
             },
-            impl->active_stop_source->get_token());
+            impl->active_stop_source->get_token(),
+            [impl](AsyncAgentLoop::InputQueueKind queue_kind) {
+                auto& queue = queue_kind == AsyncAgentLoop::InputQueueKind::Steering
+                    ? impl->state.input_queues.steering.messages
+                    : impl->state.input_queues.follow_up.messages;
+                const auto mode = queue_kind == AsyncAgentLoop::InputQueueKind::Steering
+                    ? impl->state.input_queues.steering.mode
+                    : impl->state.input_queues.follow_up.mode;
+                if (queue.empty()) {
+                    return std::vector<ai::MessageVariant>{};
+                }
+                if (mode == InputQueueMode::All) {
+                    auto drained = std::move(queue);
+                    queue.clear();
+                    return drained;
+                }
+                std::vector<ai::MessageVariant> drained;
+                drained.push_back(std::move(queue.front()));
+                queue.erase(queue.begin());
+                return drained;
+            });
     } catch (const std::exception& exception) {
         finish_run();
         co_return std::unexpected(util::make_error(
@@ -399,6 +498,75 @@ void Agent::abort() {
     if (impl_ && impl_->active_stop_source) {
         (void)impl_->active_stop_source->request_stop();
     }
+}
+
+util::ExpectedVoid Agent::steer(ai::MessageVariant message) {
+    if (!impl_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "agent is not initialized"));
+    }
+    auto& queues = impl_->state.input_queues;
+    return admit_queued_message(
+        queues, queues.steering, std::move(message), "steering");
+}
+
+util::ExpectedVoid Agent::follow_up(ai::MessageVariant message) {
+    if (!impl_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "agent is not initialized"));
+    }
+    auto& queues = impl_->state.input_queues;
+    return admit_queued_message(
+        queues, queues.follow_up, std::move(message), "follow-up");
+}
+
+util::ExpectedVoid Agent::set_steering_mode(InputQueueMode mode) {
+    if (!impl_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "agent is not initialized"));
+    }
+    impl_->state.input_queues.steering.mode = mode;
+    return {};
+}
+
+util::ExpectedVoid Agent::set_follow_up_mode(InputQueueMode mode) {
+    if (!impl_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "agent is not initialized"));
+    }
+    impl_->state.input_queues.follow_up.mode = mode;
+    return {};
+}
+
+util::ExpectedVoid Agent::clear_steering_queue() {
+    if (!impl_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "agent is not initialized"));
+    }
+    impl_->state.input_queues.steering.messages.clear();
+    return {};
+}
+
+util::ExpectedVoid Agent::clear_follow_up_queue() {
+    if (!impl_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "agent is not initialized"));
+    }
+    impl_->state.input_queues.follow_up.messages.clear();
+    return {};
+}
+
+util::ExpectedVoid Agent::clear_input_queues() {
+    if (auto cleared = clear_steering_queue(); !cleared) {
+        return cleared;
+    }
+    return clear_follow_up_queue();
 }
 
 AgentState Agent::state() const {

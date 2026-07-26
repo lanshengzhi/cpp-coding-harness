@@ -46,87 +46,6 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
     return emit_agent_event(sink, MessageEndEvent{context.messages.back()});
 }
 
-[[nodiscard]] std::size_t approximate_content_size(const ai::Content& block) {
-    return std::visit(
-        [](const auto& c) -> std::size_t {
-            if constexpr (std::is_same_v<std::decay_t<decltype(c)>, ai::TextContent>) {
-                return c.text.size();
-            } else if constexpr (std::is_same_v<std::decay_t<decltype(c)>, ai::ImageContent>) {
-                return c.data.size() + c.mime_type.size();
-            } else if constexpr (std::is_same_v<std::decay_t<decltype(c)>, ai::ThinkingContent>) {
-                return c.thinking.size();
-            }
-            return 0;
-        },
-        block);
-}
-
-[[nodiscard]] std::size_t approximate_message_size(const ai::MessageVariant& message) {
-    return std::visit(
-        [](const auto& m) -> std::size_t {
-            if constexpr (std::is_same_v<std::decay_t<decltype(m)>, ai::UserMessage>) {
-                std::size_t size = 0;
-                for (const auto& block : m.content) {
-                    size += approximate_content_size(block);
-                }
-                return size;
-            } else if constexpr (std::is_same_v<std::decay_t<decltype(m)>, ai::AssistantMessage>) {
-                std::size_t size = 0;
-                for (const auto& block : m.content) {
-                    if (const auto* text = std::get_if<ai::TextContent>(&block)) {
-                        size += text->text.size();
-                    } else if (const auto* thinking = std::get_if<ai::ThinkingContent>(&block)) {
-                        size += thinking->thinking.size();
-                    } else if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
-                        size += call->raw_arguments.size();
-                    }
-                }
-                return size;
-            } else if constexpr (std::is_same_v<std::decay_t<decltype(m)>, ai::ToolResultMessage>) {
-                return ai::text_from_content(m.content).size();
-            } else if constexpr (std::is_same_v<std::decay_t<decltype(m)>, ai::SystemMessage>) {
-                return m.content.size();
-            }
-            return 0;
-        },
-        message);
-}
-
-// A rejected steering/follow-up admission never aborts the active run and
-// never modifies already-queued messages (ADR 0022): the batch is not
-// admitted and the rejection is reported as a bounded diagnostic instead.
-void record_queue_rejection(AgentState& state, util::Error error) {
-    constexpr std::size_t kMaxQueueRejectionDiagnostics = 16;
-    if (state.diagnostics.size() == kMaxQueueRejectionDiagnostics) {
-        state.diagnostics.erase(state.diagnostics.begin());
-    }
-    state.diagnostics.push_back(std::move(error));
-}
-
-[[nodiscard]] util::ExpectedVoid validate_queued_messages(
-    const std::vector<ai::MessageVariant>& messages,
-    std::size_t max_queued_messages,
-    std::size_t max_queued_bytes) {
-    if (messages.size() > max_queued_messages) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "too many queued messages",
-            "steering/follow-up message count exceeds " + std::to_string(max_queued_messages)));
-    }
-
-    std::size_t total = 0;
-    for (const auto& message : messages) {
-        total += approximate_message_size(message);
-    }
-    if (total > max_queued_bytes) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "queued messages too large",
-            "steering/follow-up message byte size exceeds " + std::to_string(max_queued_bytes)));
-    }
-    return {};
-}
-
 [[nodiscard]] bool is_valid_thinking_level(std::string_view level) {
     static const std::vector<std::string> allowed{
         "off", "minimal", "low", "medium", "high", "xhigh"};
@@ -192,7 +111,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         std::move(history),
         ai::user_text_message(std::move(user_prompt)),
         std::move(sink),
-        stop_token);
+        stop_token,
+        {});
 }
 
 boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::continue_with(
@@ -200,6 +120,20 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
     ai::UserMessage user_message,
     AgentEventSink sink,
     std::stop_token stop_token) {
+    co_return co_await continue_with(
+        std::move(history),
+        std::move(user_message),
+        std::move(sink),
+        stop_token,
+        {});
+}
+
+boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::continue_with(
+    std::vector<ai::MessageVariant> history,
+    ai::UserMessage user_message,
+    AgentEventSink sink,
+    std::stop_token stop_token,
+    InputQueueDrainer drain_queued_messages) {
     ai::AiContext context;
     context.tools = registry_.definitions();
     context.messages = std::move(history);
@@ -232,20 +166,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             new_messages.push_back(context.messages.back());
         }
 
-        if (turn == 1 && options_.get_steering_messages) {
-            auto steering = invoke_sync_agent_hook(
-                "getSteeringMessages", *options_.get_steering_messages);
-            if (!steering) {
-                CCH_TRY_VOID(emit_agent_end());
-                co_return std::unexpected(steering.error());
-            }
-            if (auto validated = validate_queued_messages(
-                    *steering, options_.max_queued_messages, options_.max_queued_bytes);
-                !validated) {
-                record_queue_rejection(state, validated.error());
-            } else {
-                pending_messages = std::move(*steering);
-            }
+        if (turn == 1 && drain_queued_messages) {
+            pending_messages = drain_queued_messages(InputQueueKind::Steering);
         }
 
         if (!pending_messages.empty()) {
@@ -527,39 +449,15 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             }
         }
 
-        if (!stop_token.stop_requested() && options_.get_steering_messages) {
-            auto steering = invoke_sync_agent_hook(
-                "getSteeringMessages", *options_.get_steering_messages);
-            if (!steering) {
-                CCH_TRY_VOID(emit_agent_end());
-                co_return std::unexpected(steering.error());
-            }
-            if (auto validated = validate_queued_messages(
-                    *steering, options_.max_queued_messages, options_.max_queued_bytes);
-                !validated) {
-                record_queue_rejection(state, validated.error());
-            } else {
-                pending_messages = std::move(*steering);
-            }
+        if (!stop_token.stop_requested() && drain_queued_messages) {
+            pending_messages = drain_queued_messages(InputQueueKind::Steering);
         }
 
         if (!stop_token.stop_requested() &&
             !has_more_tool_calls &&
             pending_messages.empty() &&
-            options_.get_follow_up_messages) {
-            auto follow_up = invoke_sync_agent_hook(
-                "getFollowUpMessages", *options_.get_follow_up_messages);
-            if (!follow_up) {
-                CCH_TRY_VOID(emit_agent_end());
-                co_return std::unexpected(follow_up.error());
-            }
-            if (auto validated = validate_queued_messages(
-                    *follow_up, options_.max_queued_messages, options_.max_queued_bytes);
-                !validated) {
-                record_queue_rejection(state, validated.error());
-            } else {
-                pending_messages = std::move(*follow_up);
-            }
+            drain_queued_messages) {
+            pending_messages = drain_queued_messages(InputQueueKind::FollowUp);
         }
 
         if (!has_more_tool_calls && pending_messages.empty()) {

@@ -1076,6 +1076,96 @@ TEST_CASE("AgentSession is move-only", "[sdk][u1]") {
 }
 
 TEST_CASE(
+    "SDK AgentSession drains observed steering before follow-up input",
+    "[coding_agent][queue][issue44]") {
+    TestPaths paths;
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = paths.workspace.path();
+    options.chat_client = ai::providers::make_scripted_fake_chat_client();
+
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created.has_value());
+
+    REQUIRE(created->session->set_steering_mode(agent::InputQueueMode::All));
+    REQUIRE(created->session->steer("steer-one"));
+    REQUIRE(created->session->steer("steer-two"));
+    REQUIRE(created->session->follow_up("follow-up"));
+
+    const auto queued = created->session->snapshot();
+    CHECK(queued.agent_state.input_queues.steering.mode == agent::InputQueueMode::All);
+    REQUIRE(queued.agent_state.input_queues.steering.messages.size() == 2);
+    REQUIRE(queued.agent_state.input_queues.follow_up.messages.size() == 1);
+
+    REQUIRE(created->session->prompt_blocking("prompt"));
+
+    const auto completed = created->session->snapshot();
+    CHECK(completed.agent_state.input_queues.steering.messages.empty());
+    CHECK(completed.agent_state.input_queues.follow_up.messages.empty());
+    REQUIRE(completed.agent_state.messages.size() == 6);
+    CHECK(ai::text_from_content(
+              std::get<ai::UserMessage>(completed.agent_state.messages[0]).content) == "prompt");
+    CHECK(ai::text_from_content(
+              std::get<ai::UserMessage>(completed.agent_state.messages[1]).content) == "steer-one");
+    CHECK(ai::text_from_content(
+              std::get<ai::UserMessage>(completed.agent_state.messages[2]).content) == "steer-two");
+    CHECK(ai::text_from_content(
+              std::get<ai::UserMessage>(completed.agent_state.messages[4]).content) == "follow-up");
+
+    created->session->close();
+    auto rejected = created->session->steer("after close");
+    REQUIRE_FALSE(rejected);
+    CHECK(rejected.error().message == "session is closed");
+}
+
+TEST_CASE(
+    "SDK AgentSession accepts and clears queued input while a prompt is streaming",
+    "[coding_agent][queue][issue44]") {
+    TestPaths paths;
+    auto client = std::make_unique<GatedSdkChatClient>();
+    auto* client_ptr = client.get();
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = paths.workspace.path();
+    options.chat_client = std::move(client);
+
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created.has_value());
+
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> prompt_result;
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            prompt_result = co_await created->session->prompt("prompt");
+            co_return;
+        },
+        boost::asio::detached);
+    while (!client_ptr->started) {
+        REQUIRE(io.poll_one() == 1);
+    }
+
+    REQUIRE(created->session->steer("steer"));
+    REQUIRE(created->session->follow_up("follow-up"));
+    REQUIRE(created->session->clear_input_queues());
+    const auto cleared = created->session->snapshot();
+    CHECK(cleared.agent_state.is_running);
+    CHECK(cleared.agent_state.input_queues.steering.messages.empty());
+    CHECK(cleared.agent_state.input_queues.follow_up.messages.empty());
+
+    client_ptr->release();
+    if (io.stopped()) {
+        io.restart();
+    }
+    io.run();
+
+    REQUIRE(prompt_result.has_value());
+    REQUIRE(*prompt_result);
+    CHECK_FALSE(created->session->snapshot().agent_state.is_running);
+    created->session->close();
+}
+
+TEST_CASE(
     "AgentSession close is a synchronous non-throwing request",
     "[sdk][u1][lifecycle][issue41]") {
     static_assert(std::is_same_v<
@@ -3059,6 +3149,9 @@ TEST_CASE(
     CHECK_FALSE(prompt_result.has_value());
     CHECK_FALSE(created->session->is_open());
     CHECK(created->session->is_busy());
+    auto rejected_while_closing = created->session->steer("too late");
+    REQUIRE_FALSE(rejected_while_closing);
+    CHECK(rejected_while_closing.error().message == "session is closed");
     CHECK_FALSE(created->session->subscribe(
         [](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid { return {}; }).has_value());
     CHECK_FALSE(created->session->prompt_blocking("too late").has_value());
@@ -3276,17 +3369,24 @@ TEST_CASE(
 
     created->session->abort();
     events.clear();
+    REQUIRE(created->session->steer("recover steering"));
+    REQUIRE(created->session->snapshot().agent_state.input_queues.steering.messages.size() == 1);
     auto recovered = created->session->prompt_blocking("recover");
     REQUIRE(recovered.has_value());
     CHECK(client_ptr->request_count == 2);
     CHECK_FALSE(client_ptr->recovery_stop_requested);
     CHECK(client_ptr->recovery_uses_fresh_token);
-    CHECK(created->session->message_count() == 4);
+    CHECK(created->session->message_count() == 5);
+    const auto recovered_snapshot = created->session->snapshot();
+    CHECK(recovered_snapshot.agent_state.input_queues.steering.messages.empty());
+    CHECK(ai::text_from_content(
+              std::get<ai::UserMessage>(recovered_snapshot.agent_state.messages[3]).content) ==
+          "recover steering");
     REQUIRE(created->session->last_assistant_text().has_value());
     CHECK(*created->session->last_assistant_text() == "recovered after abort");
     durable = harness::session::JsonlSessionStore::load(paths.session_file);
     REQUIRE(durable.has_value());
-    CHECK(durable->messages.size() == 4);
+    CHECK(durable->messages.size() == 5);
 
     created->session->close();
     CHECK_FALSE(created->session->is_open());
@@ -5116,4 +5216,3 @@ TEST_CASE("SDK resume with explicit model override alone reports diagnostic", "[
         result->session->close();
     }
 }
-

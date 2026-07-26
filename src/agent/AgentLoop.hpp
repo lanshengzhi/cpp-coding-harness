@@ -7,6 +7,7 @@
 
 #include <boost/asio/awaitable.hpp>
 
+#include <functional>
 #include <stop_token>
 #include <string>
 #include <vector>
@@ -46,11 +47,34 @@ public:
 private:
     friend class Agent;
 
+    enum class InputQueueKind { Steering, FollowUp };
+    using InputQueueDrainer = std::move_only_function<
+        std::vector<ai::MessageVariant>(InputQueueKind queue_kind)>;
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> continue_with(
+        std::vector<ai::MessageVariant> history,
+        ai::UserMessage user_message,
+        AgentEventSink sink,
+        std::stop_token stop_token,
+        InputQueueDrainer drain_queued_messages);
+
     [[nodiscard]] const ai::Model& current_model() const noexcept {
         return options_.model;
     }
     [[nodiscard]] const std::string& current_thinking_level() const noexcept {
         return options_.thinking_level;
+    }
+    [[nodiscard]] std::size_t max_queued_messages() const noexcept {
+        return options_.max_queued_messages;
+    }
+    [[nodiscard]] std::size_t max_queued_bytes() const noexcept {
+        return options_.max_queued_bytes;
+    }
+    [[nodiscard]] InputQueueMode steering_mode() const noexcept {
+        return options_.steering_mode;
+    }
+    [[nodiscard]] InputQueueMode follow_up_mode() const noexcept {
+        return options_.follow_up_mode;
     }
 
     ai::StreamingChatClient& client_; // must outlive every run coroutine

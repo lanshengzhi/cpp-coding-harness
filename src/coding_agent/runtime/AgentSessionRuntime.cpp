@@ -215,6 +215,100 @@ util::Expected<agent::AgentEventSubscription> AgentSessionRuntime::subscribe(
     return agent_->subscribe(std::move(sink));
 }
 
+namespace {
+
+[[nodiscard]] util::Expected<ai::UserMessage> make_queued_user_message(
+    std::optional<prompt::PromptProcessor>& prompt_processor,
+    std::string text,
+    std::vector<ai::ImageContent> images,
+    bool expand_prompt_templates) {
+    if (!prompt_processor) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is closed"));
+    }
+    auto expanded = prompt_processor->process(
+        std::move(text), expand_prompt_templates);
+    auto message = ai::user_text_message(std::move(expanded.text));
+    message.content.reserve(message.content.size() + images.size());
+    for (auto& image : images) {
+        message.content.emplace_back(std::move(image));
+    }
+    return message;
+}
+
+} // namespace
+
+util::ExpectedVoid AgentSessionRuntime::steer(
+    std::string text,
+    std::vector<ai::ImageContent> images,
+    bool expand_prompt_templates) {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        return rejected;
+    }
+    auto message = make_queued_user_message(
+        prompt_processor_, std::move(text), std::move(images), expand_prompt_templates);
+    if (!message) {
+        return std::unexpected(message.error());
+    }
+    return agent_->steer(ai::MessageVariant{std::move(*message)});
+}
+
+util::ExpectedVoid AgentSessionRuntime::follow_up(
+    std::string text,
+    std::vector<ai::ImageContent> images,
+    bool expand_prompt_templates) {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        return rejected;
+    }
+    auto message = make_queued_user_message(
+        prompt_processor_, std::move(text), std::move(images), expand_prompt_templates);
+    if (!message) {
+        return std::unexpected(message.error());
+    }
+    return agent_->follow_up(ai::MessageVariant{std::move(*message)});
+}
+
+util::ExpectedVoid AgentSessionRuntime::set_steering_mode(agent::InputQueueMode mode) {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        return rejected;
+    }
+    return agent_ ? agent_->set_steering_mode(mode) : std::unexpected(util::make_error(
+        util::ErrorCode::Validation, "session is closed"));
+}
+
+util::ExpectedVoid AgentSessionRuntime::set_follow_up_mode(agent::InputQueueMode mode) {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        return rejected;
+    }
+    return agent_ ? agent_->set_follow_up_mode(mode) : std::unexpected(util::make_error(
+        util::ErrorCode::Validation, "session is closed"));
+}
+
+util::ExpectedVoid AgentSessionRuntime::clear_steering_queue() {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        return rejected;
+    }
+    return agent_ ? agent_->clear_steering_queue() : std::unexpected(util::make_error(
+        util::ErrorCode::Validation, "session is closed"));
+}
+
+util::ExpectedVoid AgentSessionRuntime::clear_follow_up_queue() {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        return rejected;
+    }
+    return agent_ ? agent_->clear_follow_up_queue() : std::unexpected(util::make_error(
+        util::ErrorCode::Validation, "session is closed"));
+}
+
+util::ExpectedVoid AgentSessionRuntime::clear_input_queues() {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        return rejected;
+    }
+    return agent_ ? agent_->clear_input_queues() : std::unexpected(util::make_error(
+        util::ErrorCode::Validation, "session is closed"));
+}
+
 AgentSessionSnapshot AgentSessionRuntime::snapshot(
     const std::optional<std::filesystem::path>& session_path) const {
     return AgentSessionSnapshot{

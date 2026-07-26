@@ -144,6 +144,79 @@ util::ExpectedVoid AgentSession::prompt_blocking(
         {});
 }
 
+util::ExpectedVoid AgentSession::steer(
+    std::string text,
+    PromptOptions options) {
+    if (!impl_ || !impl_->runtime) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    return impl_->runtime->steer(
+        std::move(text),
+        std::move(options.images),
+        options.expand_prompt_templates);
+}
+
+util::ExpectedVoid AgentSession::follow_up(
+    std::string text,
+    PromptOptions options) {
+    if (!impl_ || !impl_->runtime) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    return impl_->runtime->follow_up(
+        std::move(text),
+        std::move(options.images),
+        options.expand_prompt_templates);
+}
+
+util::ExpectedVoid AgentSession::set_steering_mode(agent::InputQueueMode mode) {
+    if (!impl_ || !impl_->runtime) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    return impl_->runtime->set_steering_mode(mode);
+}
+
+util::ExpectedVoid AgentSession::set_follow_up_mode(agent::InputQueueMode mode) {
+    if (!impl_ || !impl_->runtime) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    return impl_->runtime->set_follow_up_mode(mode);
+}
+
+util::ExpectedVoid AgentSession::clear_steering_queue() {
+    if (!impl_ || !impl_->runtime) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    return impl_->runtime->clear_steering_queue();
+}
+
+util::ExpectedVoid AgentSession::clear_follow_up_queue() {
+    if (!impl_ || !impl_->runtime) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    return impl_->runtime->clear_follow_up_queue();
+}
+
+util::ExpectedVoid AgentSession::clear_input_queues() {
+    if (!impl_ || !impl_->runtime) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    return impl_->runtime->clear_input_queues();
+}
+
 boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::prompt(
     AgentSession& session,
     std::string text,

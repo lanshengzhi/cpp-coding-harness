@@ -299,6 +299,35 @@ public:
         std::string text,
         PromptOptions options = {});
 
+    // ── Input queues ─────────────────────────────────────────────────────
+
+    /// Queue input after the current assistant turn. Admission is synchronous
+    /// and rejects before mutation when the Agent-owned queue is full.
+    [[nodiscard]] util::ExpectedVoid steer(
+        std::string text,
+        PromptOptions options = {});
+
+    /// Queue input only when the Agent would otherwise stop. Admission is
+    /// synchronous and rejects before mutation when the Agent-owned queue is full.
+    [[nodiscard]] util::ExpectedVoid follow_up(
+        std::string text,
+        PromptOptions options = {});
+
+    /// Change the pi-compatible drain policy for steering input.
+    [[nodiscard]] util::ExpectedVoid set_steering_mode(agent::InputQueueMode mode);
+
+    /// Change the pi-compatible drain policy for follow-up input.
+    [[nodiscard]] util::ExpectedVoid set_follow_up_mode(agent::InputQueueMode mode);
+
+    /// Remove all pending steering input.
+    [[nodiscard]] util::ExpectedVoid clear_steering_queue();
+
+    /// Remove all pending follow-up input.
+    [[nodiscard]] util::ExpectedVoid clear_follow_up_queue();
+
+    /// Remove all pending steering and follow-up input.
+    [[nodiscard]] util::ExpectedVoid clear_input_queues();
+
     // ── Event subscriptions ──────────────────────────────────────────────
 
     /// Subscribe to agent lifecycle events. The sink is called for every
