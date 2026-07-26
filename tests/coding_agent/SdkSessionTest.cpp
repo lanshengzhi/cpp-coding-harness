@@ -106,10 +106,13 @@ class LifetimeTrackedChatClient final : public ai::StreamingChatClient {
 public:
     explicit LifetimeTrackedChatClient(std::shared_ptr<SdkOwnedLifetimeCounts> counts)
         : counts_(std::move(counts)) {}
-
+    LifetimeTrackedChatClient(LifetimeTrackedChatClient&&) = delete;
+    LifetimeTrackedChatClient& operator=(LifetimeTrackedChatClient&&) = delete;
     ~LifetimeTrackedChatClient() override {
         ++counts_->destroyed_clients;
     }
+    LifetimeTrackedChatClient(const LifetimeTrackedChatClient&) = delete;
+    LifetimeTrackedChatClient& operator=(const LifetimeTrackedChatClient&) = delete;
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
         const ai::StreamChatRequest& request,
@@ -136,10 +139,13 @@ public:
             {"additionalProperties", false},
         };
     }
-
+    LifetimeTrackedTool(LifetimeTrackedTool&&) = delete;
+    LifetimeTrackedTool& operator=(LifetimeTrackedTool&&) = delete;
     ~LifetimeTrackedTool() override {
         ++counts_->destroyed_tools;
     }
+    LifetimeTrackedTool(const LifetimeTrackedTool&) = delete;
+    LifetimeTrackedTool& operator=(const LifetimeTrackedTool&) = delete;
 
     [[nodiscard]] const ai::Tool& definition() const override {
         return definition_;
@@ -456,6 +462,11 @@ public:
     explicit PreflightCancellationChatClient(
         std::shared_ptr<PreflightCancellationObservation> observation)
         : observation_(std::move(observation)) {}
+    PreflightCancellationChatClient(PreflightCancellationChatClient&&) = delete;
+    PreflightCancellationChatClient& operator=(PreflightCancellationChatClient&&) = delete;
+    ~PreflightCancellationChatClient() override = default;
+    PreflightCancellationChatClient(const PreflightCancellationChatClient&) = delete;
+    PreflightCancellationChatClient& operator=(const PreflightCancellationChatClient&) = delete;
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
         const ai::StreamChatRequest& request,
@@ -470,12 +481,24 @@ public:
             response.stop_reason = ai::AssistantStopReason::Aborted;
             response.error_message = "prompt aborted";
             if (sink) {
-                if (auto emitted = sink(ai::AssistantErrorEvent{
-                        .reason = ai::AssistantStopReason::Aborted,
-                        .error = response,
-                    });
-                    !emitted) {
-                    co_return std::unexpected(emitted.error());
+                try {
+                    if (auto emitted = sink(ai::AssistantErrorEvent{
+                            .reason = ai::AssistantStopReason::Aborted,
+                            .error = response,
+                        });
+                        !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                } catch (const std::exception& exception) {
+                    co_return std::unexpected(util::make_error(
+                        util::ErrorCode::Unknown,
+                        "fake provider event sink failed",
+                        exception.what()));
+                } catch (...) {
+                    co_return std::unexpected(util::make_error(
+                        util::ErrorCode::Unknown,
+                        "fake provider event sink failed",
+                        "unknown exception"));
                 }
             }
         }
@@ -549,12 +572,15 @@ public:
         std::shared_ptr<SdkOwnedLifetimeCounts> lifetime_counts = {})
         : emit_partial_(emit_partial),
           lifetime_counts_(std::move(lifetime_counts)) {}
-
+    AbortAwareSdkChatClient(AbortAwareSdkChatClient&&) = delete;
+    AbortAwareSdkChatClient& operator=(AbortAwareSdkChatClient&&) = delete;
     ~AbortAwareSdkChatClient() override {
         if (lifetime_counts_) {
             ++lifetime_counts_->destroyed_clients;
         }
     }
+    AbortAwareSdkChatClient(const AbortAwareSdkChatClient&) = delete;
+    AbortAwareSdkChatClient& operator=(const AbortAwareSdkChatClient&) = delete;
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
         const ai::StreamChatRequest& request,
@@ -2878,16 +2904,18 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "SDK close immediately after abort quiescence is safe and idempotent",
+    "SDK close immediately after abort defers teardown until prompt quiescence",
     "[sdk][u3][async][abort][lifecycle][issue41]") {
     TestPaths paths;
-    auto client = std::make_unique<AbortAwareSdkChatClient>(false);
+    auto counts = std::make_shared<SdkOwnedLifetimeCounts>();
+    auto client = std::make_unique<AbortAwareSdkChatClient>(false, counts);
     auto* client_ptr = client.get();
 
     coding_agent::CreateAgentSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
     opts.chat_client = std::move(client);
+    opts.custom_tools.push_back(std::make_unique<LifetimeTrackedTool>(counts));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -2906,6 +2934,13 @@ TEST_CASE(
     }
 
     created->session->abort();
+    created->session->close();
+    CHECK_FALSE(created->session->is_open());
+    CHECK(created->session->is_busy());
+    CHECK_FALSE(prompt_result.has_value());
+    CHECK(counts->destroyed_clients == 0);
+    CHECK(counts->destroyed_tools == 0);
+
     if (host_io.stopped()) {
         host_io.restart();
     }
@@ -2913,13 +2948,14 @@ TEST_CASE(
 
     REQUIRE(prompt_result.has_value());
     REQUIRE(prompt_result->has_value());
-    CHECK(created->session->is_open());
-    CHECK_FALSE(created->session->is_busy());
-
-    created->session->close();
     CHECK_FALSE(created->session->is_open());
     CHECK_FALSE(created->session->is_busy());
+    CHECK(counts->destroyed_clients == 1);
+    CHECK(counts->destroyed_tools == 1);
+
     created->session->close();
+    CHECK(counts->destroyed_clients == 1);
+    CHECK(counts->destroyed_tools == 1);
 }
 
 TEST_CASE(

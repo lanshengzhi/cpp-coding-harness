@@ -95,6 +95,8 @@ private:
     [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> run_agent_loop(
         std::string prompt,
         std::stop_source stop_source);
+    [[nodiscard]] boost::asio::awaitable<void> finalize_close_after_prompt();
+    [[nodiscard]] std::shared_ptr<harness::AsyncExecutionEnv> release_close_resources() noexcept;
     void finalize_close() noexcept;
 
     RuntimeServices services_;
