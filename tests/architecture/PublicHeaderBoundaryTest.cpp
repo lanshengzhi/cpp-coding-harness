@@ -25,6 +25,7 @@
 #include <cch/tools/ToolFactories.hpp>
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Container.hpp>
+#include <cch/tui/Editor.hpp>
 #include <cch/tui/Input.hpp>
 #include <cch/tui/Terminal.hpp>
 #include <cch/tui/Text.hpp>
@@ -98,6 +99,13 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_abstract_v<tui::Component>);
     static_assert(std::is_aggregate_v<tui::KeyEvent>);
     static_assert(std::is_aggregate_v<tui::PasteEvent>);
+    static_assert(std::is_aggregate_v<tui::EditorCursor>);
+    static_assert(std::is_aggregate_v<tui::AutocompleteItem>);
+    static_assert(std::is_aggregate_v<tui::AutocompleteRequest>);
+    static_assert(std::is_aggregate_v<tui::AutocompleteSuggestions>);
+    static_assert(std::is_move_constructible_v<tui::AutocompleteProvider>);
+    static_assert(!std::is_copy_constructible_v<tui::AutocompleteProvider>);
+    static_assert(std::is_final_v<tui::Editor>);
     static_assert(std::variant_size_v<tui::InputEventVariant> == 2);
     static_assert(std::is_abstract_v<tui::InputHandler>);
     static_assert(std::is_abstract_v<tui::Focusable>);

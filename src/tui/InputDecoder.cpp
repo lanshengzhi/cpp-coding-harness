@@ -329,6 +329,19 @@ std::optional<KeyEvent> parse_raw_sequence(std::string_view sequence) {
         if (value >= 128) return KeyEvent{.key = std::string(sequence)};
     }
 
+    if (sequence.size() > 1 && sequence.front() != '\x1b') {
+        const auto lead = static_cast<unsigned char>(sequence.front());
+        const auto expected_length = (lead & 0xe0) == 0xc0 ? 2U :
+            (lead & 0xf0) == 0xe0 ? 3U : (lead & 0xf8) == 0xf0 ? 4U : 0U;
+        if (expected_length == sequence.size()) {
+            bool valid = true;
+            for (std::size_t index = 1; index < sequence.size(); ++index) {
+                if ((static_cast<unsigned char>(sequence[index]) & 0xc0) != 0x80) valid = false;
+            }
+            if (valid) return KeyEvent{.key = std::string(sequence)};
+        }
+    }
+
     if (sequence.size() >= 2 && sequence.front() == '\x1b') {
         const auto key = parse_raw_sequence(sequence.substr(1));
         if (!key) return std::nullopt;

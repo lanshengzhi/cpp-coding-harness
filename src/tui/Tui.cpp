@@ -83,6 +83,9 @@ util::ExpectedVoid Tui::render() {
 
     std::vector<std::string> lines;
     for (const auto& child : children_) {
+        if (auto* viewport_aware = dynamic_cast<ViewportAware*>(child.get())) {
+            viewport_aware->set_available_height(dimensions.rows);
+        }
         auto rendered = child->render(dimensions.columns);
         if (!rendered) {
             return std::unexpected(rendered.error());

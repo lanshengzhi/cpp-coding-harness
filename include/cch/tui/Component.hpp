@@ -39,4 +39,12 @@ public:
     [[nodiscard]] virtual bool focused() const = 0;
 };
 
+/// An optional Component capability for adapting presentation to its viewport.
+class ViewportAware {
+public:
+    virtual ~ViewportAware() = default;
+
+    virtual void set_available_height(std::size_t rows) = 0;
+};
+
 } // namespace cch::tui

@@ -54,6 +54,7 @@ target_link_libraries(cch_util
 
 add_library(cch_tui
     src/tui/Container.cpp
+    src/tui/Editor.cpp
     src/tui/Input.cpp
     src/tui/InputDecoder.cpp
     src/tui/Text.cpp
@@ -244,6 +245,7 @@ if(CCH_BUILD_TESTS)
         tests/harness/session/SessionTreeTest.cpp
         tests/tools/AsyncToolsTest.cpp
         tests/tui/ContainerTest.cpp
+        tests/tui/EditorTest.cpp
         tests/tui/InputTest.cpp
         tests/tui/TruncatedTextTest.cpp
         tests/tui/TuiTest.cpp
