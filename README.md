@@ -23,6 +23,7 @@ This is a learning and experimentation harness, not a production sandbox or comp
 The project is CMake-based and requires a C++23-capable compiler. CMake 3.25 or newer is expected.
 
 - Glaze is used only at typed JSON serialization/deserialization boundaries.
+- utf8proc provides versioned Unicode grapheme segmentation and width properties inside the private TUI implementation.
 - Boost.Beast/Asio + OpenSSL provide the HTTPS transport implementation.
 - Boost.Process is used behind the process-execution capability boundary.
 - CLI11 and Catch2 are declared in `vcpkg.json`; this repository also carries a tiny Catch-compatible fallback test header so the default suite can run in minimal environments.
@@ -59,7 +60,7 @@ ctest --preset vcpkg
 
 ### Using system packages
 
-If you prefer system-installed dependencies, install Boost, OpenSSL, Glaze, and CLI11 yourself, then use the system preset:
+If you prefer system-installed dependencies, install Boost, OpenSSL, Glaze, CLI11, and utf8proc yourself, then use the system preset:
 
 ```bash
 cmake --preset system

@@ -11,12 +11,15 @@
 namespace cch::tui {
 
 /// A container that composes child components without padding or background.
-///
-/// Children are rendered at the available width and stacked vertically.
-/// Styling from one child does not leak into adjacent children or padding.
 class Container final : public Component {
 public:
     Container() = default;
+    Container(Container&&) noexcept;
+    Container& operator=(Container&&) noexcept;
+    ~Container() override;
+
+    Container(const Container&) = delete;
+    Container& operator=(const Container&) = delete;
 
     [[nodiscard]] util::Expected<std::reference_wrapper<Component>> add_child(
         std::unique_ptr<Component> component);
@@ -28,15 +31,19 @@ private:
     std::vector<std::unique_ptr<Component>> children_;
 };
 
-/// A Box is a Container with padding and optional background color.
-///
-/// Children are rendered inside the content area (width minus padding)
-/// and the box applies uniform padding and background to the full width.
+/// A Container with padding and an optional background hook.
 class Box final : public Component {
 public:
-    explicit Box(std::size_t padding_x = 1,
-                 std::size_t padding_y = 1,
-                 std::function<std::string(std::string)> bg_fn = {});
+    explicit Box(
+        std::size_t padding_x = 1,
+        std::size_t padding_y = 1,
+        BackgroundHook background_hook = {});
+    Box(Box&&) noexcept;
+    Box& operator=(Box&&) noexcept;
+    ~Box() override;
+
+    Box(const Box&) = delete;
+    Box& operator=(const Box&) = delete;
 
     [[nodiscard]] util::Expected<std::reference_wrapper<Component>> add_child(
         std::unique_ptr<Component> component);
@@ -49,7 +56,7 @@ private:
     std::vector<std::unique_ptr<Component>> children_;
     std::size_t padding_x_;
     std::size_t padding_y_;
-    std::function<std::string(std::string)> bg_fn_;
+    BackgroundHook background_hook_;
 };
 
 /// A Spacer renders empty lines.

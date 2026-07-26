@@ -1,8 +1,9 @@
 #include <cch/tui/Tui.hpp>
 
+#include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
-#include <format>
+#include <algorithm>
 #include <utility>
 
 namespace cch::tui {
@@ -15,15 +16,7 @@ Tui::~Tui() {
 }
 
 util::Expected<std::reference_wrapper<Component>> Tui::add_child(std::unique_ptr<Component> component) {
-    if (!component) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "TUI cannot attach a null Component"));
-    }
-
-    auto& child = *component;
-    children_.push_back(std::move(component));
-    return child;
+    return detail::attach_child(children_, std::move(component), "");
 }
 
 util::ExpectedVoid Tui::start() {
@@ -86,17 +79,9 @@ util::ExpectedVoid Tui::render() {
             return std::unexpected(rendered.error());
         }
         for (auto& line : *rendered) {
-            const auto line_vis = detail::visible_width(line);
-            if (line_vis > static_cast<int>(dimensions.columns)) {
-                return std::unexpected(util::make_error(
-                    util::ErrorCode::Validation,
-                    "TUI component rendered a line wider than its width bound",
-                    std::format(
-                        "line width {} exceeds visible width {}",
-                        line_vis,
-                        dimensions.columns)));
-            }
-            lines.push_back(std::move(line));
+            auto prepared = detail::prepare_rendered_line(line, dimensions.columns);
+            if (!prepared) return std::unexpected(prepared.error());
+            lines.push_back(std::move(*prepared));
         }
     }
 

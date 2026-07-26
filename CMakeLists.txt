@@ -17,6 +17,16 @@ find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(CLI11 CONFIG REQUIRED)
 find_package(glaze CONFIG REQUIRED)
+find_package(utf8proc CONFIG QUIET)
+if(NOT TARGET utf8proc::utf8proc)
+    find_path(UTF8PROC_INCLUDE_DIR NAMES utf8proc.h REQUIRED)
+    find_library(UTF8PROC_LIBRARY NAMES utf8proc REQUIRED)
+    add_library(utf8proc::utf8proc UNKNOWN IMPORTED)
+    set_target_properties(utf8proc::utf8proc PROPERTIES
+        IMPORTED_LOCATION "${UTF8PROC_LIBRARY}"
+        INTERFACE_INCLUDE_DIRECTORIES "${UTF8PROC_INCLUDE_DIR}"
+    )
+endif()
 
 set(CCH_WARNING_OPTIONS -Wall -Wextra -Wpedantic)
 
@@ -54,6 +64,7 @@ cch_target_defaults(cch_tui)
 target_link_libraries(cch_tui
     PRIVATE
         cch_util
+        utf8proc::utf8proc
 )
 
 add_library(cch_ai

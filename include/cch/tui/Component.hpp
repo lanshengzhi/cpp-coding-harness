@@ -3,11 +3,14 @@
 #include <cch/util/Error.hpp>
 
 #include <cstddef>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace cch::tui {
+
+using BackgroundHook = std::move_only_function<std::string(std::string)>;
 
 /// A width-bounded piece of terminal presentation.
 class Component {

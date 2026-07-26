@@ -2,6 +2,7 @@
 
 #include <cch/tui/Terminal.hpp>
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -11,6 +12,31 @@ namespace cch::tui {
 struct VirtualTerminalOptions {
     std::size_t columns{80};
     std::size_t rows{24};
+};
+
+struct VirtualTerminalStyle {
+    bool bold{false};
+    bool dim{false};
+    bool italic{false};
+    bool underline{false};
+    bool blink{false};
+    bool inverse{false};
+    bool hidden{false};
+    bool strikethrough{false};
+    std::string fg_color;
+    std::string bg_color;
+    std::string hyperlink;
+    std::string hyperlink_params;
+
+    bool operator==(const VirtualTerminalStyle&) const = default;
+};
+
+struct VirtualTerminalCell {
+    std::string grapheme;
+    bool continuation{false};
+    VirtualTerminalStyle style;
+
+    bool operator==(const VirtualTerminalCell&) const = default;
 };
 
 class VirtualTerminal final : public Terminal {
@@ -37,6 +63,8 @@ public:
     [[nodiscard]] util::ExpectedVoid inject_resize(TerminalDimensions dimensions);
     [[nodiscard]] const std::vector<std::string>& output() const;
     [[nodiscard]] const std::vector<std::string>& screen() const;
+    [[nodiscard]] const std::vector<std::vector<VirtualTerminalCell>>& cells() const;
+    [[nodiscard]] VirtualTerminalStyle final_style() const;
     [[nodiscard]] CursorPosition cursor() const;
 
 private:

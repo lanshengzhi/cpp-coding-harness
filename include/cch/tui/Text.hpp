@@ -2,9 +2,10 @@
 
 #include <cch/tui/Component.hpp>
 
-#include <functional>
+#include <cstddef>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace cch::tui {
 
@@ -14,21 +15,24 @@ namespace cch::tui {
 /// are preserved and do not count toward visible width.
 class Text final : public Component {
 public:
-    /// @param text        Initial text content
-    /// @param padding_x   Left/right padding in columns (default 1)
-    /// @param padding_y   Top/bottom padding in lines (default 1)
-    /// @param bg_fn       Optional background color function
-    explicit Text(std::string text = {},
-                  std::size_t padding_x = 1,
-                  std::size_t padding_y = 1,
-                  std::function<std::string(std::string)> bg_fn = {});
+    explicit Text(
+        std::string text = {},
+        std::size_t padding_x = 1,
+        std::size_t padding_y = 1,
+        BackgroundHook background_hook = {});
+    Text(Text&&) noexcept;
+    Text& operator=(Text&&) noexcept;
+    ~Text() override;
+
+    Text(const Text&) = delete;
+    Text& operator=(const Text&) = delete;
 
     void set_text(std::string text);
     [[nodiscard]] std::string_view text() const;
 
     void set_padding_x(std::size_t padding_x);
     void set_padding_y(std::size_t padding_y);
-    void set_bg_fn(std::function<std::string(std::string)> bg_fn);
+    void set_background_hook(BackgroundHook background_hook);
 
     [[nodiscard]] util::Expected<std::vector<std::string>> render(std::size_t width) override;
     void invalidate() override;
@@ -37,9 +41,7 @@ private:
     std::string text_;
     std::size_t padding_x_;
     std::size_t padding_y_;
-    std::function<std::string(std::string)> bg_fn_;
-
-    // Cache
+    BackgroundHook background_hook_;
     std::string cached_text_;
     std::size_t cached_width_{0};
     std::vector<std::string> cached_lines_;

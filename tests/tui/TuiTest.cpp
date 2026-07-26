@@ -74,11 +74,26 @@ TEST_CASE("Tui renders attached Text through the VirtualTerminal seam", "[tui][i
     CHECK(terminal.output() == expected_output);
     const cch::tui::CursorPosition expected_cursor{.column = 8, .row = 0};
     CHECK(terminal.cursor() == expected_cursor);
+    CHECK(terminal.final_style() == cch::tui::VirtualTerminalStyle{});
     CHECK_FALSE(terminal.modes().cursor_visible);
 
     REQUIRE(tui.stop());
     CHECK_FALSE(terminal.modes().started);
     CHECK(terminal.modes().cursor_visible);
+}
+
+TEST_CASE("Tui exposes styled Text cells with a default final style", "[tui][issue46][unicode]") {
+    cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("\x1b[31mA", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    REQUIRE(terminal.cells().size() == 1);
+    REQUIRE(terminal.cells()[0].size() == 4);
+    CHECK(terminal.cells()[0][0].grapheme == "A");
+    CHECK(terminal.cells()[0][0].style.fg_color == "31");
+    CHECK(terminal.final_style() == cch::tui::VirtualTerminalStyle{});
 }
 
 TEST_CASE("Tui rejects a null Component attachment", "[tui][issue45]") {
@@ -97,7 +112,7 @@ TEST_CASE("Text accepts Unicode characters", "[tui][issue46][unicode]") {
 
     const auto result = text.render(2);
     REQUIRE(result);
-    CHECK(result->size() == 1);
+    REQUIRE(result->size() == 1);
     CHECK(cch::tui::detail::visible_width((*result)[0]) >= 1);
 }
 
@@ -185,6 +200,41 @@ TEST_CASE("VirtualTerminal accepts Unicode output", "[tui][issue46][unicode]") {
     REQUIRE(result);
     CHECK(terminal.screen().size() == 1);
     CHECK_FALSE(terminal.output().empty());
+}
+
+TEST_CASE("VirtualTerminal exposes visible cells and final style", "[tui][issue46][unicode]") {
+    cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
+    REQUIRE(terminal.start(
+        [](std::string) {},
+        [](cch::tui::TerminalDimensions) {}));
+
+    REQUIRE(terminal.write("\x1b[31mA"));
+
+    REQUIRE(terminal.cells().size() == 1);
+    REQUIRE(terminal.cells()[0].size() == 4);
+    CHECK(terminal.cells()[0][0].grapheme == "A");
+    CHECK(terminal.cells()[0][0].style.fg_color == "31");
+    CHECK(terminal.final_style().fg_color == "31");
+    const std::vector<std::string> expected_screen{"A"};
+    CHECK(terminal.screen() == expected_screen);
+}
+
+TEST_CASE("VirtualTerminal clears complete wide graphemes on overwrite", "[tui][issue46][unicode]") {
+    cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
+    REQUIRE(terminal.start(
+        [](std::string) {},
+        [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.write("\xe4\xb8\xad"));
+    REQUIRE(terminal.cells()[0][1].continuation);
+
+    REQUIRE(terminal.set_cursor({.column = 1, .row = 0}));
+    REQUIRE(terminal.write("x"));
+
+    CHECK(terminal.cells()[0][0].grapheme.empty());
+    CHECK_FALSE(terminal.cells()[0][1].continuation);
+    CHECK(terminal.cells()[0][1].grapheme == "x");
+    const std::vector<std::string> expected_screen{" x"};
+    CHECK(terminal.screen() == expected_screen);
 }
 
 TEST_CASE("VirtualTerminal bounds callback failures", "[tui][issue45]") {

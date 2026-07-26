@@ -26,8 +26,10 @@
 #include <cch/harness/session/SessionStore.hpp>
 #include <cch/tools/ToolFactories.hpp>
 #include <cch/tui/Component.hpp>
+#include <cch/tui/Container.hpp>
 #include <cch/tui/Terminal.hpp>
 #include <cch/tui/Text.hpp>
+#include <cch/tui/TruncatedText.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 #include <cch/util/Error.hpp>
@@ -96,8 +98,22 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_abstract_v<tui::InputHandler>);
     static_assert(std::is_abstract_v<tui::Focusable>);
     static_assert(std::is_abstract_v<tui::Terminal>);
+    static_assert(std::is_move_constructible_v<tui::BackgroundHook>);
+    static_assert(!std::is_copy_constructible_v<tui::BackgroundHook>);
+    static_assert(std::is_move_constructible_v<tui::Container>);
+    static_assert(!std::is_copy_constructible_v<tui::Container>);
+    static_assert(std::is_move_constructible_v<tui::Box>);
+    static_assert(!std::is_copy_constructible_v<tui::Box>);
+    static_assert(std::is_move_constructible_v<tui::Text>);
+    static_assert(!std::is_copy_constructible_v<tui::Text>);
+    static_assert(std::is_final_v<tui::Container>);
+    static_assert(std::is_final_v<tui::Box>);
+    static_assert(std::is_final_v<tui::Spacer>);
     static_assert(std::is_final_v<tui::Text>);
+    static_assert(std::is_final_v<tui::TruncatedText>);
     static_assert(std::is_final_v<tui::Tui>);
+    static_assert(std::is_aggregate_v<tui::VirtualTerminalStyle>);
+    static_assert(std::is_aggregate_v<tui::VirtualTerminalCell>);
     static_assert(std::is_final_v<tui::VirtualTerminal>);
     // ADR 0006: the local environment uniquely owns its synchronous state, so
     // environment copies cannot alias live state.
