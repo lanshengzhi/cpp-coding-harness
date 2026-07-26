@@ -3,6 +3,7 @@
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/agent/AgentTool.hpp>
 #include <cch/ai/ChatClient.hpp>
+#include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
@@ -303,6 +304,13 @@ public:
         agent::AgentEventSink sink);
 
     // ── State accessors ──────────────────────────────────────────────────
+
+    /// Copy one independent snapshot of authoritative Agent state plus Session
+    /// metadata and active-path topology. Like prompt() and other state access,
+    /// snapshot() is confined to the executor driving this session; it performs
+    /// no dispatch, callback, persistence, or Agent reentry and is safe to call
+    /// from a lifecycle subscriber on that executor, including during a run.
+    [[nodiscard]] AgentSessionSnapshot snapshot() const;
 
     /// Number of messages in live history.
     [[nodiscard]] std::size_t message_count() const;

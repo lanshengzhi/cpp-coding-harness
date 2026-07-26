@@ -209,6 +209,16 @@ util::Expected<agent::AgentEventSubscription> AgentSessionRuntime::subscribe(
     return agent_->subscribe(std::move(sink));
 }
 
+AgentSessionSnapshot AgentSessionRuntime::snapshot(
+    const std::optional<std::filesystem::path>& session_path) const {
+    return AgentSessionSnapshot{
+        .agent_state = agent_ ? agent_->state() : agent::AgentState{},
+        .metadata = session_.metadata,
+        .topology = session_.topology,
+        .session_path = session_path,
+    };
+}
+
 std::size_t AgentSessionRuntime::message_count() const {
     return agent_ ? agent_->state().messages.size() : 0;
 }

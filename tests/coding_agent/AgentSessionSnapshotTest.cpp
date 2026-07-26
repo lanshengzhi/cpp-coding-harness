@@ -1,0 +1,369 @@
+#include "../../third_party/catch2/catch_test_macros.hpp"
+
+#include <cch/agent/AgentEvent.hpp>
+#include <cch/ai/Content.hpp>
+#include <cch/ai/Message.hpp>
+#include <cch/coding_agent/Sdk.hpp>
+#include <cch/harness/session/JsonlSessionStore.hpp>
+
+#include "ai/providers/FakeChatClient.hpp"
+#include "coding_agent/AgentSessionBridge.hpp"
+#include "coding_agent/runtime/SessionFactory.hpp"
+#include "harness/session/SessionJournalTestHooks.hpp"
+#include "support/TempWorkspace.hpp"
+
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_awaitable.hpp>
+
+#include <chrono>
+#include <filesystem>
+#include <memory>
+#include <optional>
+#include <stop_token>
+#include <string>
+#include <utility>
+#include <variant>
+
+using namespace cch;
+
+namespace {
+
+struct TestPaths {
+    tests::TempWorkspace workspace;
+    std::filesystem::path session_file{workspace.path() / "snapshot-session.jsonl"};
+};
+
+[[nodiscard]] harness::session::SessionMetadata test_metadata(const TestPaths& paths) {
+    return {
+        .session_id = "snapshot-session",
+        .created_at = "2026-07-10T00:00:00Z",
+        .workspace = paths.workspace.path(),
+        .provider = "fake",
+        .model = "fake-model",
+    };
+}
+
+[[nodiscard]] ai::MessageVariant user_message(std::string text) {
+    return ai::MessageVariant{ai::user_text_message(std::move(text))};
+}
+
+[[nodiscard]] coding_agent::CreateAgentSessionOptions new_session_options(
+    const TestPaths& paths,
+    coding_agent::SessionTarget target,
+    std::unique_ptr<ai::StreamingChatClient> client =
+        ai::providers::make_scripted_fake_chat_client()) {
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = std::move(target);
+    options.workspace = paths.workspace.path();
+    options.provider_config = coding_agent::SdkProviderConfig{
+        .provider = "fake",
+        .model = "fake-model",
+        .base_url = std::nullopt,
+        .api_key_env = std::nullopt,
+    };
+    options.chat_client = std::move(client);
+    return options;
+}
+
+[[nodiscard]] util::Expected<coding_agent::CreateAgentSessionResult> resume_for_frontend(
+    const TestPaths& paths) {
+    coding_agent::runtime::AgentSessionCreationRequest request;
+    request.fake = true;
+    request.disable_project_skills = true;
+    request.disable_prompt_templates = true;
+    request.workspace = paths.workspace.path();
+    request.workspace_explicit = true;
+    request.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
+    return coding_agent::create_agent_session(std::move(request));
+}
+
+class GatedSnapshotChatClient final : public ai::StreamingChatClient {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        auto partial = ai::assistant_text_message("");
+        partial.provider = "snapshot-fake";
+        partial.api = "fake";
+        partial.model = request.model->id;
+        partial.content.clear();
+        if (sink) {
+            if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
+                co_return std::unexpected(emitted.error());
+            }
+        }
+
+        auto executor = co_await boost::asio::this_coro::executor;
+        gate_.emplace(executor);
+        gate_->expires_at(std::chrono::steady_clock::time_point::max());
+        started = true;
+
+        boost::system::error_code error;
+        co_await gate_->async_wait(
+            boost::asio::redirect_error(boost::asio::use_awaitable, error));
+
+        auto response = ai::assistant_text_message("released");
+        response.provider = "snapshot-fake";
+        response.api = "fake";
+        response.model = request.model->id;
+        co_return response;
+    }
+
+    void release() {
+        if (gate_) {
+            gate_->cancel();
+        }
+    }
+
+    bool started{false};
+
+private:
+    std::optional<boost::asio::steady_timer> gate_;
+};
+
+class CapturingSnapshotChatClient final : public ai::StreamingChatClient {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink) override {
+        auto response = ai::assistant_text_message("captured");
+        response.provider = "snapshot-fake";
+        response.api = "fake";
+        response.model = request.model->id;
+        co_return response;
+    }
+};
+
+} // namespace
+
+TEST_CASE(
+    "SDK fresh persisted snapshot is passive session and Agent state",
+    "[sdk][snapshot][issue42]") {
+    TestPaths paths;
+    auto created = coding_agent::create_agent_session(new_session_options(
+        paths,
+        coding_agent::ExplicitNewSessionTarget{paths.session_file}));
+    REQUIRE(created.has_value());
+
+    auto snapshot = created->session->snapshot();
+    CHECK(snapshot.agent_state.messages.empty());
+    CHECK_FALSE(snapshot.agent_state.is_running);
+    CHECK(snapshot.agent_state.model.id == "fake-model");
+    CHECK(snapshot.agent_state.thinking_level == "off");
+    CHECK(snapshot.agent_state.active_tool_names.size() == 3);
+    CHECK(snapshot.metadata.session_id == created->session_id);
+    CHECK(snapshot.metadata.workspace == paths.workspace.path());
+    CHECK(snapshot.topology == harness::session::SessionTopology::Linear);
+    REQUIRE(snapshot.session_path.has_value());
+    CHECK(*snapshot.session_path == paths.session_file);
+
+    snapshot.agent_state.messages.push_back(user_message("mutated copy"));
+    snapshot.agent_state.active_tool_names.clear();
+    snapshot.metadata.session_id = "mutated copy";
+    snapshot.session_path.reset();
+
+    const auto unchanged = created->session->snapshot();
+    CHECK(unchanged.agent_state.messages.empty());
+    CHECK(unchanged.agent_state.active_tool_names.size() == 3);
+    CHECK(unchanged.metadata.session_id == created->session_id);
+    CHECK(unchanged.session_path.has_value());
+    created->session->close();
+}
+
+TEST_CASE(
+    "SDK in-memory snapshot retains metadata without inventing a session file",
+    "[sdk][snapshot][issue42]") {
+    TestPaths paths;
+    auto created = coding_agent::create_agent_session(new_session_options(
+        paths,
+        coding_agent::InMemorySessionTarget{}));
+    REQUIRE(created.has_value());
+
+    const auto snapshot = created->session->snapshot();
+    CHECK(snapshot.metadata.session_id == created->session_id);
+    CHECK(snapshot.metadata.provider == "fake");
+    CHECK(snapshot.metadata.model == "fake-model");
+    CHECK(snapshot.metadata.workspace == paths.workspace.path());
+    CHECK_FALSE(snapshot.session_path.has_value());
+    CHECK(snapshot.topology == harness::session::SessionTopology::Linear);
+    CHECK(snapshot.agent_state.messages.empty());
+    created->session->close();
+}
+
+TEST_CASE(
+    "SDK active snapshot copies running and streaming state on the prompt executor",
+    "[sdk][snapshot][async][issue42]") {
+    TestPaths paths;
+    auto client = std::make_unique<GatedSnapshotChatClient>();
+    auto* client_ptr = client.get(); // options/session owns it until this test closes the session
+
+    auto created = coding_agent::create_agent_session(new_session_options(
+        paths,
+        coding_agent::InMemorySessionTarget{},
+        std::move(client)));
+    REQUIRE(created.has_value());
+
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> prompt_result;
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            prompt_result = co_await created->session->prompt("active snapshot");
+            co_return;
+        },
+        boost::asio::detached);
+
+    while (!client_ptr->started) {
+        REQUIRE(io.poll_one() == 1);
+    }
+
+    const auto active = created->session->snapshot();
+    CHECK(active.agent_state.is_running);
+    REQUIRE(active.agent_state.messages.size() == 1);
+    CHECK(std::holds_alternative<ai::UserMessage>(active.agent_state.messages[0]));
+    REQUIRE(active.agent_state.streaming_message.has_value());
+    CHECK(active.agent_state.streaming_message->model == "fake-model");
+    CHECK(active.agent_state.model.id == "fake-model");
+    CHECK(active.agent_state.thinking_level == "off");
+    CHECK(active.agent_state.active_tool_names.size() == 3);
+    CHECK(active.agent_state.pending_tool_call_ids.empty());
+
+    client_ptr->release();
+    if (io.stopped()) {
+        io.restart();
+    }
+    io.run();
+    REQUIRE(prompt_result.has_value());
+    CHECK(prompt_result->has_value());
+    created->session->close();
+}
+
+TEST_CASE(
+    "SDK snapshot retains live messages and diagnostics after subscriber failure",
+    "[sdk][snapshot][subscriber-failure][issue42]") {
+    TestPaths paths;
+    auto created = coding_agent::create_agent_session(new_session_options(
+        paths,
+        coding_agent::InMemorySessionTarget{}));
+    REQUIRE(created.has_value());
+
+    auto failing = created->session->subscribe(
+        [](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Unknown,
+                "snapshot subscriber failed"));
+        });
+    REQUIRE(failing.has_value());
+    REQUIRE(created->session->prompt_blocking("subscriber failure").has_value());
+
+    const auto snapshot = created->session->snapshot();
+    CHECK(snapshot.agent_state.messages.size() == 2);
+    REQUIRE(snapshot.agent_state.diagnostics.size() == 1);
+    CHECK(snapshot.agent_state.diagnostics[0].message == "agent event observer failed");
+    CHECK(snapshot.agent_state.diagnostics[0].detail.find("snapshot subscriber failed") !=
+          std::string::npos);
+    CHECK_FALSE(static_cast<bool>(*failing));
+    created->session->close();
+}
+
+TEST_CASE(
+    "SDK snapshot retains Live Session State after persistence failure",
+    "[sdk][snapshot][persistence-failure][issue42]") {
+    TestPaths paths;
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    options.workspace = paths.workspace.path();
+    options.chat_client = std::make_unique<CapturingSnapshotChatClient>();
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created.has_value());
+
+    harness::session::testing::fail_nth_append_for_test(paths.session_file, 2);
+    auto prompted = created->session->prompt_blocking("persistence failure");
+    REQUIRE_FALSE(prompted.has_value());
+
+    const auto snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.messages.size() == 2);
+    CHECK(std::holds_alternative<ai::UserMessage>(snapshot.agent_state.messages[0]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(snapshot.agent_state.messages[1]));
+
+    auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable.has_value());
+    CHECK(durable->messages.size() == 1);
+    created->session->close();
+}
+
+TEST_CASE(
+    "Frontend resumed snapshot reflects compacted active-path context",
+    "[sdk][snapshot][resume][issue42]") {
+    TestPaths paths;
+    auto store = harness::session::JsonlSessionStore::create_new(
+        paths.session_file,
+        test_metadata(paths));
+    REQUIRE(store.has_value());
+    REQUIRE(store->append(user_message("before compaction")));
+    REQUIRE(store->append(user_message("kept")));
+
+    auto loaded = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->entries.size() >= 3);
+    const auto kept_id = loaded->entries[2].entry_id;
+
+    auto resumed_store = harness::session::JsonlSessionStore::open_existing(paths.session_file);
+    REQUIRE(resumed_store.has_value());
+    REQUIRE(resumed_store->append_compaction(
+        std::nullopt,
+        "summary of prior work",
+        kept_id,
+        1000,
+        std::nullopt,
+        std::nullopt));
+    REQUIRE(resumed_store->append(user_message("after compaction")));
+
+    auto resumed = resume_for_frontend(paths);
+    REQUIRE(resumed.has_value());
+    const auto snapshot = resumed->session->snapshot();
+    CHECK(snapshot.topology == harness::session::SessionTopology::Compacted);
+    CHECK(snapshot.metadata.session_id == "snapshot-session");
+    REQUIRE(snapshot.agent_state.messages.size() == 3);
+    REQUIRE(std::holds_alternative<ai::CompactionSummaryMessage>(
+        snapshot.agent_state.messages[0]));
+    CHECK(std::get<ai::CompactionSummaryMessage>(snapshot.agent_state.messages[0]).summary ==
+          "summary of prior work");
+    CHECK(std::holds_alternative<ai::UserMessage>(snapshot.agent_state.messages[1]));
+    CHECK(std::holds_alternative<ai::UserMessage>(snapshot.agent_state.messages[2]));
+    resumed->session->close();
+}
+
+TEST_CASE(
+    "Frontend resumed snapshot preserves branch-summary active-path meaning",
+    "[sdk][snapshot][resume][issue42]") {
+    TestPaths paths;
+    auto store = harness::session::JsonlSessionStore::create_new(
+        paths.session_file,
+        test_metadata(paths));
+    REQUIRE(store.has_value());
+    REQUIRE(store->append(user_message("branch root")));
+    REQUIRE(store->append_branch_summary(
+        std::nullopt,
+        "abandoned-leaf",
+        "summary of abandoned branch",
+        std::nullopt,
+        std::nullopt));
+
+    auto resumed = resume_for_frontend(paths);
+    REQUIRE(resumed.has_value());
+    const auto snapshot = resumed->session->snapshot();
+    CHECK(snapshot.topology == harness::session::SessionTopology::Branched);
+    REQUIRE(snapshot.agent_state.messages.size() == 2);
+    CHECK(std::holds_alternative<ai::UserMessage>(snapshot.agent_state.messages[0]));
+    REQUIRE(std::holds_alternative<ai::BranchSummaryMessage>(
+        snapshot.agent_state.messages[1]));
+    CHECK(std::get<ai::BranchSummaryMessage>(snapshot.agent_state.messages[1]).summary ==
+          "summary of abandoned branch");
+    resumed->session->close();
+}

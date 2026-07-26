@@ -16,6 +16,7 @@
 #include <cch/ai/providers/OpenAIChatClient.hpp>
 #include <cch/ai/providers/StreamTransport.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
+#include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/coding_agent/Sdk.hpp>
 #include <cch/harness/ExecutionEnv.hpp>
@@ -64,6 +65,11 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_same_v<
                   decltype(std::declval<const agent::Agent&>().state()),
                   agent::AgentState>);
+    static_assert(std::is_aggregate_v<coding_agent::AgentSessionSnapshot>);
+    static_assert(std::is_copy_constructible_v<coding_agent::AgentSessionSnapshot>);
+    static_assert(std::is_same_v<
+                  decltype(std::declval<const coding_agent::AgentSession&>().snapshot()),
+                  coding_agent::AgentSessionSnapshot>);
     static_assert(std::is_move_constructible_v<ai::MessageVariant>);
     static_assert(std::is_move_constructible_v<ai::Content>);
     static_assert(std::is_abstract_v<ai::StreamingChatClient>);

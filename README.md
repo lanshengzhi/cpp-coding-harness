@@ -303,6 +303,14 @@ if (auto prompted = co_await session->prompt("hello"); !prompted) {
 auto last_text = session->last_assistant_text();
 auto message_count = session->message_count();
 
+// Copy one passive presentation snapshot. The nested AgentState is the
+// authoritative live history, running/streaming/tool/model/thinking state,
+// and diagnostics; metadata/topology/path describe the assembled session.
+auto snapshot = session->snapshot();
+for (const auto& message : snapshot.agent_state.messages) {
+    // render the ordered Agent Message history
+}
+
 // Close (idempotent — repeated close is safe)
 session->close();
 ```
@@ -353,6 +361,11 @@ session->close();
 - Custom tool registration via existing `agent::AsyncAgentTool` contracts; duplicate tool names fail creation.
 - Programmatic skills and prompt templates; host resources take precedence over project-discovered duplicates.
 - Per-prompt `PromptOptions::expand_prompt_templates` (default `true`); `false` bypasses skill and prompt-template expansion and sends raw text to the agent loop. Resulting message count and last assistant text are queried through `AgentSession` state accessors.
+- `AgentSession::snapshot()` returns one independent passive `AgentSessionSnapshot`: an exact copy of authoritative
+  `AgentState` plus Session metadata, reconstructed active-path topology, and an optional persisted path. Snapshot access
+  is executor-confined like other Session state access, performs no callbacks, persistence, dispatch, or Agent reentry,
+  and may be used by a lifecycle subscriber during an active run. A snapshot can be mutated freely without changing live
+  or durable state.
 - Optional project resource discovery (`.cpp-harness/skills/`, `.cpp-harness/prompts/`) behind explicit trust/resource controls.
 - Optional absolute external `trust_store_path` for SDK project-resource trust decisions; workspace-local trust-store paths are rejected.
 - Bounded resource diagnostics with stable codes returned as `CreateAgentSessionResult::diagnostics` values — no stdout/stderr output from the SDK path.
@@ -426,6 +439,7 @@ Useful default validation slices:
 ./build/cpp_harness_tests "[tools][async]"
 ./build/cpp_harness_tests "[harness][session]"
 ./build/cpp_harness_tests "[sdk][live-state]"
+./build/cpp_harness_tests "[sdk][snapshot]"
 ./build/cpp_harness_tests "[sdk][incremental-persistence]"
 ./build/cpp_harness_tests "[coding-agent][json-events]"
 ./build/cpp_harness_tests "[coding-agent][runtime][rpc]"
@@ -441,7 +455,7 @@ These cover:
 - move-only event sinks can capture unique state and propagate errors;
 - provider-specific OpenAI/SSE/Glaze wire mapping stays isolated from the agent loop;
 - JSONL resume reconstructs typed message ordering for the next request;
-- AgentSession tests protect live-state-before-subscriber-before-persistence ordering and failure recovery;
+- AgentSession tests protect live-state-before-subscriber-before-persistence ordering, passive fresh/in-memory/active/resumed snapshots, and failure recovery;
 - JSON/RPC transcript tests protect direct events, prompt preflight acknowledgement, response correlation, and terminal-record absence;
 - CLI fake-provider smoke tests demonstrate the current event/subscriber path without compatibility-only flags.
 

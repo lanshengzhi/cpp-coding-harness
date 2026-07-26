@@ -205,6 +205,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/SkillLoaderTest.cpp
         tests/coding_agent/PromptTemplateLoaderTest.cpp
         tests/coding_agent/SdkSessionTest.cpp
+        tests/coding_agent/AgentSessionSnapshotTest.cpp
         tests/coding_agent/SkillIntegrationTest.cpp
         tests/coding_agent/runtime/JsonEventPrinterTest.cpp
         tests/coding_agent/runtime/RpcModeTest.cpp

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/agent/Agent.hpp>
+#include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
 #include <cch/coding_agent/Skill.hpp>
 #include <cch/util/Error.hpp>
@@ -58,6 +59,8 @@ public:
 
     // ── State accessors ────────────────────────────────────────────────────
 
+    [[nodiscard]] AgentSessionSnapshot snapshot(
+        const std::optional<std::filesystem::path>& session_path) const;
     [[nodiscard]] std::size_t message_count() const;
     [[nodiscard]] std::optional<std::string> last_assistant_text() const;
     [[nodiscard]] const std::string& session_id() const { return session_.metadata.session_id; }

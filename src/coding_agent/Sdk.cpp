@@ -240,6 +240,13 @@ util::Expected<EventSubscription> AgentSession::subscribe(agent::AgentEventSink 
     return sub;
 }
 
+AgentSessionSnapshot AgentSession::snapshot() const {
+    if (!impl_ || !impl_->runtime) {
+        return {};
+    }
+    return impl_->runtime->snapshot(impl_->session_path);
+}
+
 std::size_t AgentSession::message_count() const {
     return impl_ && impl_->runtime ? impl_->runtime->message_count() : 0;
 }
