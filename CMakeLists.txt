@@ -43,8 +43,11 @@ target_link_libraries(cch_util
 )
 
 add_library(cch_tui
+    src/tui/Container.cpp
     src/tui/Text.cpp
+    src/tui/TruncatedText.cpp
     src/tui/Tui.cpp
+    src/tui/UnicodeWidth.cpp
     src/tui/VirtualTerminal.cpp
 )
 cch_target_defaults(cch_tui)
@@ -227,7 +230,10 @@ if(CCH_BUILD_TESTS)
         tests/harness/session/JsonlSessionStoreTest.cpp
         tests/harness/session/SessionTreeTest.cpp
         tests/tools/AsyncToolsTest.cpp
+        tests/tui/ContainerTest.cpp
+        tests/tui/TruncatedTextTest.cpp
         tests/tui/TuiTest.cpp
+        tests/tui/UnicodeWidthTest.cpp
         tests/harness/WorkspaceFileSystemTest.cpp
         tests/util/BoundedTextTest.cpp
         tests/util/ExpectedErrorTest.cpp

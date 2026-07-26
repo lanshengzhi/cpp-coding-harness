@@ -2,22 +2,48 @@
 
 #include <cch/tui/Component.hpp>
 
+#include <functional>
 #include <string>
 #include <string_view>
 
 namespace cch::tui {
 
+/// A Unicode-aware text component with padding and optional background.
+///
+/// Renders multi-line text with word wrapping. ANSI escape sequences
+/// are preserved and do not count toward visible width.
 class Text final : public Component {
 public:
-    explicit Text(std::string text = {});
+    /// @param text        Initial text content
+    /// @param padding_x   Left/right padding in columns (default 1)
+    /// @param padding_y   Top/bottom padding in lines (default 1)
+    /// @param bg_fn       Optional background color function
+    explicit Text(std::string text = {},
+                  std::size_t padding_x = 1,
+                  std::size_t padding_y = 1,
+                  std::function<std::string(std::string)> bg_fn = {});
 
     void set_text(std::string text);
     [[nodiscard]] std::string_view text() const;
+
+    void set_padding_x(std::size_t padding_x);
+    void set_padding_y(std::size_t padding_y);
+    void set_bg_fn(std::function<std::string(std::string)> bg_fn);
+
     [[nodiscard]] util::Expected<std::vector<std::string>> render(std::size_t width) override;
     void invalidate() override;
 
 private:
     std::string text_;
+    std::size_t padding_x_;
+    std::size_t padding_y_;
+    std::function<std::string(std::string)> bg_fn_;
+
+    // Cache
+    std::string cached_text_;
+    std::size_t cached_width_{0};
+    std::vector<std::string> cached_lines_;
+    bool cache_valid_{false};
 };
 
 } // namespace cch::tui

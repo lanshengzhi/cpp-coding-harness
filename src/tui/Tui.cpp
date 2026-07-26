@@ -1,6 +1,6 @@
 #include <cch/tui/Tui.hpp>
 
-#include "tui/TextValidation.hpp"
+#include "tui/UnicodeWidth.hpp"
 
 #include <format>
 #include <utility>
@@ -86,16 +86,14 @@ util::ExpectedVoid Tui::render() {
             return std::unexpected(rendered.error());
         }
         for (auto& line : *rendered) {
-            if (auto result = detail::validate_ascii_text(line); !result) {
-                return std::unexpected(result.error());
-            }
-            if (line.size() > dimensions.columns) {
+            const auto line_vis = detail::visible_width(line);
+            if (line_vis > static_cast<int>(dimensions.columns)) {
                 return std::unexpected(util::make_error(
                     util::ErrorCode::Validation,
                     "TUI component rendered a line wider than its width bound",
                     std::format(
                         "line width {} exceeds visible width {}",
-                        line.size(),
+                        line_vis,
                         dimensions.columns)));
             }
             lines.push_back(std::move(line));

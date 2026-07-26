@@ -1,9 +1,11 @@
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include "tui/TextValidation.hpp"
+#include "tui/UnicodeWidth.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <exception>
+#include <string>
 #include <utility>
 
 namespace cch::tui {
@@ -20,12 +22,56 @@ struct VirtualTerminal::Impl {
 
 namespace {
 
+/// Find the byte offset in a string corresponding to a given visible column position.
+[[nodiscard]] std::size_t byte_offset_at_column(std::string_view line, std::size_t column) {
+    std::size_t col = 0;
+    std::size_t byte_pos = 0;
+
+    while (byte_pos < line.size() && col < column) {
+        // Skip ANSI codes
+        auto ansi = detail::extract_ansi_code(line, byte_pos);
+        if (ansi) {
+            byte_pos += ansi->length;
+            continue;
+        }
+
+        auto [cp, bytes] = detail::decode_utf8(line, byte_pos);
+        if (bytes == 0) break;
+
+        auto cw = detail::codepoint_width(cp);
+        // If this character would exceed the target column, stop
+        if (col + static_cast<std::size_t>(cw) > column) {
+            break;
+        }
+
+        col += static_cast<std::size_t>(cw);
+        byte_pos += bytes;
+
+        // Skip following combining marks (they don't advance column)
+        while (byte_pos < line.size()) {
+            auto [next_cp, next_bytes] = detail::decode_utf8(line, byte_pos);
+            if (next_bytes == 0) break;
+            if (detail::codepoint_width(next_cp) > 0) break; // not a combining mark
+            byte_pos += next_bytes;
+        }
+    }
+
+    return byte_pos;
+}
+
+/// Get the visible width of a line stored in the screen buffer.
+[[nodiscard]] std::size_t screen_line_width(std::string_view line) {
+    return static_cast<std::size_t>(detail::visible_width(line));
+}
+
 template <typename T>
 void resize_screen(T& impl) {
     impl.screen.resize(impl.dimensions.rows);
     for (auto& line : impl.screen) {
-        if (line.size() > impl.dimensions.columns) {
-            line.resize(impl.dimensions.columns);
+        const auto line_vis = screen_line_width(line);
+        if (line_vis > impl.dimensions.columns) {
+            // Truncate the string to fit within the column count
+            line = line.substr(0, byte_offset_at_column(line, impl.dimensions.columns));
         }
     }
     if (impl.dimensions.rows == 0) {
@@ -33,6 +79,7 @@ void resize_screen(T& impl) {
         return;
     }
     impl.cursor.row = std::min(impl.cursor.row, impl.dimensions.rows - 1);
+    // Truncate cursor column to new width
     impl.cursor.column = std::min(impl.cursor.column, impl.dimensions.columns);
 }
 
@@ -120,32 +167,52 @@ util::ExpectedVoid VirtualTerminal::write(std::string_view output) {
     if (auto result = require_started(*impl_); !result) {
         return std::unexpected(result.error());
     }
-    if (auto result = detail::validate_ascii_text(output); !result) {
-        return std::unexpected(result.error());
+
+    // Normalize and validate the output
+    auto normalized = detail::normalize_terminal_output(output);
+    if (!normalized) {
+        return std::unexpected(normalized.error());
     }
-    const auto visible_width = impl_->dimensions.columns - impl_->cursor.column;
-    if (output.size() > visible_width) {
+
+    const auto output_vis_width = static_cast<std::size_t>(detail::visible_width(*normalized));
+    const auto remaining = impl_->dimensions.columns - impl_->cursor.column;
+
+    if (output_vis_width > remaining) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "TUI component rendered a line wider than its width bound",
-            "line width " + std::to_string(output.size()) +
-                " exceeds visible width " + std::to_string(visible_width)));
+            "line width " + std::to_string(output_vis_width) +
+                " exceeds visible width " + std::to_string(remaining)));
     }
 
-    impl_->output.emplace_back(output);
+    impl_->output.emplace_back(*normalized);
+
     if (impl_->cursor.row >= impl_->screen.size()) {
+        impl_->cursor.column += output_vis_width;
         return {};
     }
 
     auto& line = impl_->screen[impl_->cursor.row];
-    if (line.size() < impl_->cursor.column) {
-        line.resize(impl_->cursor.column, ' ');
+
+    // Pad line to reach cursor column if needed
+    const auto current_vis_width = screen_line_width(line);
+    if (impl_->cursor.column > current_vis_width) {
+        // Need to pad the line with spaces to reach cursor position
+        const auto pad_cols = impl_->cursor.column - current_vis_width;
+        line.append(std::string(pad_cols, ' '));
     }
-    if (line.size() < impl_->cursor.column + output.size()) {
-        line.resize(impl_->cursor.column + output.size(), ' ');
+
+    // Find byte offset at cursor column
+    const auto target_byte = byte_offset_at_column(line, impl_->cursor.column);
+    if (line.size() < target_byte) {
+        line.resize(target_byte, ' ');
     }
-    line.replace(impl_->cursor.column, output.size(), output);
-    impl_->cursor.column += output.size();
+
+    // Replace content
+    line.replace(target_byte, normalized->size(), *normalized);
+
+    // Advance cursor by visible width
+    impl_->cursor.column += output_vis_width;
     return {};
 }
 

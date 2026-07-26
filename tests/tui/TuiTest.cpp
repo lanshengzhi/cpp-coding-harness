@@ -4,6 +4,8 @@
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
+#include "tui/UnicodeWidth.hpp"
+
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -59,16 +61,18 @@ private:
 TEST_CASE("Tui renders attached Text through the VirtualTerminal seam", "[tui][issue45]") {
     cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 2});
     cch::tui::Tui tui(terminal);
-    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("hello")));
+    // Use zero padding so the rendered output is just the text
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("hello", 0, 0)));
 
     REQUIRE(tui.start());
     REQUIRE(tui.render());
 
-    const std::vector<std::string> expected_screen{"hello", ""};
+    // Text pads content to full width
+    const std::vector<std::string> expected_screen{"hello   ", ""};
     CHECK(terminal.screen() == expected_screen);
-    const std::vector<std::string> expected_output{"hello"};
+    const std::vector<std::string> expected_output{"hello   "};
     CHECK(terminal.output() == expected_output);
-    const cch::tui::CursorPosition expected_cursor{.column = 5, .row = 0};
+    const cch::tui::CursorPosition expected_cursor{.column = 8, .row = 0};
     CHECK(terminal.cursor() == expected_cursor);
     CHECK_FALSE(terminal.modes().cursor_visible);
 
@@ -88,15 +92,13 @@ TEST_CASE("Tui rejects a null Component attachment", "[tui][issue45]") {
     CHECK(result.error().message == "TUI cannot attach a null Component");
 }
 
-TEST_CASE("Text rejects Unicode until display-width layout is available", "[tui][issue45]") {
-    cch::tui::Text text("é");
+TEST_CASE("Text accepts Unicode characters", "[tui][issue46][unicode]") {
+    cch::tui::Text text("\xc3\xa9", 0, 0); // é in UTF-8
 
-    const auto result = text.render(1);
-
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == cch::util::ErrorCode::Validation);
-    CHECK(result.error().message == "TUI text layout does not support non-ASCII input");
-    CHECK(result.error().detail == "Unicode display-width handling is unavailable");
+    const auto result = text.render(2);
+    REQUIRE(result);
+    CHECK(result->size() == 1);
+    CHECK(cch::tui::detail::visible_width((*result)[0]) >= 1);
 }
 
 TEST_CASE("Tui rejects a Component line wider than its visible width", "[tui][issue45]") {
@@ -172,19 +174,17 @@ TEST_CASE("VirtualTerminal preserves cursor-positioned writes and rejects overfl
     CHECK(terminal.output() == expected_output);
 }
 
-TEST_CASE("VirtualTerminal rejects Unicode output before it mutates the screen", "[tui][issue45]") {
+TEST_CASE("VirtualTerminal accepts Unicode output", "[tui][issue46][unicode]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
     REQUIRE(terminal.start(
         [](std::string) {},
         [](cch::tui::TerminalDimensions) {}));
 
-    const auto result = terminal.write("é");
+    const auto result = terminal.write("\xc3\xa9"); // é
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == cch::util::ErrorCode::Validation);
-    const std::vector<std::string> expected_screen{""};
-    CHECK(terminal.screen() == expected_screen);
-    CHECK(terminal.output().empty());
+    REQUIRE(result);
+    CHECK(terminal.screen().size() == 1);
+    CHECK_FALSE(terminal.output().empty());
 }
 
 TEST_CASE("VirtualTerminal bounds callback failures", "[tui][issue45]") {
