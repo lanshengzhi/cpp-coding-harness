@@ -56,6 +56,11 @@ TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake]") {
     const auto cmake = read_text(std::filesystem::path(CCH_SOURCE_DIR) / "CMakeLists.txt");
 
     CHECK(block_mentions(cmake, "add_library(cch_util"));
+    CHECK(block_mentions(cmake, "add_library(cch_tui"));
+    const auto tui_sources = cmake_command_block(cmake, "add_library(cch_tui");
+    CHECK(block_mentions(tui_sources, "src/tui/Text.cpp"));
+    CHECK(block_mentions(tui_sources, "src/tui/Tui.cpp"));
+    CHECK(block_mentions(tui_sources, "src/tui/VirtualTerminal.cpp"));
     CHECK(block_mentions(cmake, "add_library(cch_ai"));
     CHECK(block_mentions(cmake, "add_library(cch_agent"));
     const auto agent_sources = cmake_command_block(cmake, "add_library(cch_agent");
@@ -75,6 +80,14 @@ TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake]") {
 
 TEST_CASE("CMake target links follow the package dependency direction", "[architecture][cmake]") {
     const auto cmake = read_text(std::filesystem::path(CCH_SOURCE_DIR) / "CMakeLists.txt");
+
+    const auto tui_links = cmake_command_block(cmake, "target_link_libraries(cch_tui");
+    CHECK(block_mentions(tui_links, "cch_util"));
+    CHECK_FALSE(block_mentions(tui_links, "cch_ai"));
+    CHECK_FALSE(block_mentions(tui_links, "cch_agent"));
+    CHECK_FALSE(block_mentions(tui_links, "cch_harness"));
+    CHECK_FALSE(block_mentions(tui_links, "cch_tools"));
+    CHECK_FALSE(block_mentions(tui_links, "cch_coding_agent_runtime"));
 
     const auto ai_links = cmake_command_block(cmake, "target_link_libraries(cch_ai");
     CHECK(block_mentions(ai_links, "cch_util"));

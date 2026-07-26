@@ -59,6 +59,29 @@ TEST_CASE("library publishes include as contract surface and keeps src private",
     CHECK(cmake.find("PUBLIC\n        ${CMAKE_CURRENT_SOURCE_DIR}/include\n        ${CMAKE_CURRENT_SOURCE_DIR}/src") == std::string::npos);
 }
 
+TEST_CASE("reusable TUI stays independent of coding-agent implementation modules", "[architecture][tui][issue45]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto files = files_under({"include/cch/tui", "src/tui"});
+    REQUIRE_FALSE(files.empty());
+
+    const std::vector<std::string> forbidden_dependencies{
+        "cch/agent",
+        "cch/ai",
+        "cch/coding_agent",
+        "cch/harness",
+        "cch/tools",
+        "CLI11",
+        "boost/",
+        "glaze/",
+    };
+    for (const auto& file : files) {
+        const auto text = read_text(file);
+        for (const auto& forbidden : forbidden_dependencies) {
+            CHECK(text.find(forbidden) == std::string::npos);
+        }
+    }
+}
+
 TEST_CASE("public headers do not include private src paths", "[architecture][u1]") {
     const auto headers = public_headers();
     REQUIRE_FALSE(headers.empty());

@@ -25,6 +25,11 @@
 #include <cch/harness/session/SessionEntry.hpp>
 #include <cch/harness/session/SessionStore.hpp>
 #include <cch/tools/ToolFactories.hpp>
+#include <cch/tui/Component.hpp>
+#include <cch/tui/Terminal.hpp>
+#include <cch/tui/Text.hpp>
+#include <cch/tui/Tui.hpp>
+#include <cch/tui/VirtualTerminal.hpp>
 #include <cch/util/Error.hpp>
 
 #include <filesystem>
@@ -87,6 +92,13 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_same_v<decltype(&agent::AsyncAgentTool::execute), ToolExecuteMethod>);
     static_assert(std::is_abstract_v<agent::AsyncAgentTool>);
     static_assert(std::is_abstract_v<harness::session::SessionStore>);
+    static_assert(std::is_abstract_v<tui::Component>);
+    static_assert(std::is_abstract_v<tui::InputHandler>);
+    static_assert(std::is_abstract_v<tui::Focusable>);
+    static_assert(std::is_abstract_v<tui::Terminal>);
+    static_assert(std::is_final_v<tui::Text>);
+    static_assert(std::is_final_v<tui::Tui>);
+    static_assert(std::is_final_v<tui::VirtualTerminal>);
     // ADR 0006: the local environment uniquely owns its synchronous state, so
     // environment copies cannot alias live state.
     static_assert(!std::is_copy_constructible_v<harness::AsyncLocalExecutionEnv>);

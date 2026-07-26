@@ -42,6 +42,17 @@ target_link_libraries(cch_util
         glaze::glaze
 )
 
+add_library(cch_tui
+    src/tui/Text.cpp
+    src/tui/Tui.cpp
+    src/tui/VirtualTerminal.cpp
+)
+cch_target_defaults(cch_tui)
+target_link_libraries(cch_tui
+    PRIVATE
+        cch_util
+)
+
 add_library(cch_ai
     src/ai/ProviderRegistry.cpp
     src/ai/providers/BoostBeastStreamTransport.cpp
@@ -216,6 +227,7 @@ if(CCH_BUILD_TESTS)
         tests/harness/session/JsonlSessionStoreTest.cpp
         tests/harness/session/SessionTreeTest.cpp
         tests/tools/AsyncToolsTest.cpp
+        tests/tui/TuiTest.cpp
         tests/harness/WorkspaceFileSystemTest.cpp
         tests/util/BoundedTextTest.cpp
         tests/util/ExpectedErrorTest.cpp
@@ -229,7 +241,7 @@ if(CCH_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests
         third_party
     )
-    target_link_libraries(cpp_harness_tests PRIVATE cpp_harness_lib CLI11::CLI11)
+    target_link_libraries(cpp_harness_tests PRIVATE cpp_harness_lib cch_tui CLI11::CLI11)
     target_sources(cpp_harness_tests PRIVATE
         src/cli/CliParse.cpp
     )

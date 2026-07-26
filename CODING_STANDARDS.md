@@ -170,7 +170,7 @@ This section is the checkable form of AGENTS.md guardrail 5.
 
 ## 12. CMake
 
-12.1. Compiled architecture packages map to `cch_util`, `cch_ai`, `cch_agent`, `cch_harness`, `cch_tools`, and `cch_coding_agent_runtime`. The runtime target owns the coding-agent implementation and the interactive/rendering CLI sources; the `cpp_harness` executable owns `src/cli/CliParse.cpp`. The dependency direction stays `util < ai < {agent, harness} < tools < runtime` (enforced by `CMakeDependencyTest`).
+12.1. Compiled architecture packages map to `cch_util`, `cch_tui`, `cch_ai`, `cch_agent`, `cch_harness`, `cch_tools`, and `cch_coding_agent_runtime`. The runtime target owns the coding-agent implementation and the interactive/rendering CLI sources; the `cpp_harness` executable owns `src/cli/CliParse.cpp`. The dependency direction stays `util < {tui, ai} < {agent, harness} < tools < runtime`; `cch_tui` has no reverse dependency on coding-agent, Agent, provider, tool, session, or CLI implementation modules (enforced by `CMakeDependencyTest`).
 
 12.2. Every compiled `cch_*` library target applies `cch_target_defaults()`, which publishes `include/` as `PUBLIC`, keeps `src/` `PRIVATE`, and sets `-Wall -Wextra -Wpedantic`.
 
