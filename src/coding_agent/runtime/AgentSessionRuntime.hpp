@@ -69,6 +69,10 @@ public:
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
+    /// Request cancellation of the active Agent prompt. Idempotent and a
+    /// no-op while idle.
+    void abort();
+
     [[nodiscard]] bool is_open() const {
         return state_ == State::Open || state_ == State::RunningPrompt;
     }

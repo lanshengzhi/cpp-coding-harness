@@ -1,8 +1,8 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include "../support/EnvVarGuard.hpp"
-#include "../support/TempWorkspace.hpp"
-#include "../support/UsageAssertions.hpp"
+#include "support/EnvVarGuard.hpp"
+#include "support/TempWorkspace.hpp"
+#include "support/UsageAssertions.hpp"
 
 #include <cch/coding_agent/Sdk.hpp>
 #include <cch/agent/AgentEvent.hpp>
@@ -42,6 +42,7 @@
 #include <regex>
 #include <sstream>
 #include <stdexcept>
+#include <stop_token>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -411,6 +412,117 @@ public:
     std::optional<boost::asio::steady_timer> gate;
 };
 
+/// A controllable conforming fake that retains optional partial output and
+/// completes a stopped provider request through one aborted terminal event.
+class AbortAwareSdkChatClient final : public ai::StreamingChatClient {
+public:
+    explicit AbortAwareSdkChatClient(bool emit_partial)
+        : emit_partial_(emit_partial) {}
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        ++request_count;
+        stop_possible = request.stop_token.stop_possible();
+        if (request_count > 1) {
+            recovery_stop_requested = request.stop_token.stop_requested();
+            recovery_uses_fresh_token =
+                first_stop_token && request.stop_token != *first_stop_token;
+            auto recovered = ai::assistant_text_message("recovered after abort");
+            recovered.provider = "abort-aware-fake";
+            recovered.api = "fake";
+            recovered.model = request.model->id;
+            recovered.timestamp = 1718000000123;
+            co_return recovered;
+        }
+
+        first_stop_token = request.stop_token;
+        auto partial = ai::assistant_text_message("");
+        partial.provider = "abort-aware-fake";
+        partial.api = "fake";
+        partial.model = request.model->id;
+        partial.timestamp = 1718000000123;
+        partial.content.clear();
+        if (sink) {
+            if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
+                co_return std::unexpected(emitted.error());
+            }
+        }
+        if (emit_partial_) {
+            partial.content.emplace_back(ai::text_content(""));
+            if (sink) {
+                if (auto emitted = sink(ai::TextStartEvent{
+                        .content_index = 0,
+                        .partial = partial,
+                    });
+                    !emitted) {
+                    co_return std::unexpected(emitted.error());
+                }
+            }
+            std::get<ai::TextContent>(partial.content[0]).text = "partial";
+            if (sink) {
+                if (auto emitted = sink(ai::TextDeltaEvent{
+                        .content_index = 0,
+                        .delta = "partial",
+                        .partial = partial,
+                    });
+                    !emitted) {
+                    co_return std::unexpected(emitted.error());
+                }
+            }
+            partial_emitted = true;
+        }
+
+        auto executor = co_await boost::asio::this_coro::executor;
+        gate.emplace(executor);
+        gate->expires_at(std::chrono::steady_clock::time_point::max());
+        started = true;
+        std::stop_callback cancellation{request.stop_token, [this] {
+            if (gate) {
+                gate->cancel();
+            }
+        }};
+
+        boost::system::error_code error;
+        co_await gate->async_wait(
+            boost::asio::redirect_error(boost::asio::use_awaitable, error));
+
+        if (request.stop_token.stop_requested()) {
+            partial.stop_reason = ai::AssistantStopReason::Aborted;
+            partial.error_message = "prompt aborted";
+            if (sink) {
+                if (auto emitted = sink(ai::AssistantErrorEvent{
+                        .reason = ai::AssistantStopReason::Aborted,
+                        .error = partial,
+                    });
+                    !emitted) {
+                    co_return std::unexpected(emitted.error());
+                }
+            }
+            co_return partial;
+        }
+
+        auto released = ai::assistant_text_message("released without abort");
+        released.provider = "abort-aware-fake";
+        released.api = "fake";
+        released.model = request.model->id;
+        released.timestamp = 1718000000123;
+        co_return released;
+    }
+
+    bool started{false};
+    bool partial_emitted{false};
+    bool stop_possible{false};
+    bool recovery_stop_requested{true};
+    bool recovery_uses_fresh_token{false};
+    int request_count{0};
+    std::optional<std::stop_token> first_stop_token;
+    std::optional<boost::asio::steady_timer> gate;
+
+private:
+    bool emit_partial_{false};
+};
+
 /// A conforming host-provided client whose accepted call emits one terminal
 /// error event before any assistant start event and returns the same final
 /// AssistantMessage through the value alternative.
@@ -598,10 +710,13 @@ TEST_CASE("SDK prompt contract exposes success-or-error and separate state", "[s
         std::declval<coding_agent::AgentSession&>().prompt(std::declval<std::string>()));
     using BlockingPromptCompletion = decltype(
         std::declval<coding_agent::AgentSession&>().prompt_blocking(std::declval<std::string>()));
+    using AbortCompletion = decltype(
+        std::declval<coding_agent::AgentSession&>().abort());
     static_assert(std::is_same_v<
                   PromptCompletion,
                   boost::asio::awaitable<util::ExpectedVoid>>);
     static_assert(std::is_same_v<BlockingPromptCompletion, util::ExpectedVoid>);
+    static_assert(std::is_same_v<AbortCompletion, void>);
     static_assert(!std::is_constructible_v<coding_agent::PromptOptions, agent::AgentEventSink>);
 }
 
@@ -2457,6 +2572,187 @@ TEST_CASE("SDK async prompt rejects overlap before session mutation", "[sdk][u3]
     REQUIRE(first_result->has_value());
     CHECK_FALSE(created->session->is_busy());
     CHECK(created->session->message_count() == 2);
+}
+
+TEST_CASE(
+    "SDK abort before the first delta is idempotent and leaves the session reusable",
+    "[sdk][u3][async][abort][issue39]") {
+    TestPaths paths;
+
+    auto client = std::make_unique<AbortAwareSdkChatClient>(false);
+    auto* client_ptr = client.get();
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::move(client);
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+    created->session->abort();
+
+    std::vector<agent::AgentLifecycleEvent> events;
+    auto subscription = created->session->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            events.push_back(event);
+            return {};
+        });
+    REQUIRE(subscription.has_value());
+
+    boost::asio::io_context host_io;
+    std::optional<util::ExpectedVoid> prompt_result;
+    boost::asio::co_spawn(
+        host_io,
+        [&]() -> boost::asio::awaitable<void> {
+            prompt_result = co_await created->session->prompt("abort me");
+            co_return;
+        },
+        boost::asio::detached);
+
+    while (!client_ptr->started) {
+        REQUIRE(host_io.poll_one() == 1);
+    }
+    REQUIRE(created->session->is_busy());
+    CHECK(client_ptr->stop_possible);
+    created->session->abort();
+    created->session->abort();
+    if (host_io.stopped()) {
+        host_io.restart();
+    }
+    host_io.run();
+
+    REQUIRE(prompt_result.has_value());
+    REQUIRE(prompt_result->has_value());
+    CHECK_FALSE(created->session->is_busy());
+    CHECK(created->session->is_open());
+    CHECK(client_ptr->request_count == 1);
+    CHECK_FALSE(client_ptr->partial_emitted);
+    CHECK(created->session->message_count() == 2);
+    REQUIRE(created->session->last_assistant_text().has_value());
+    CHECK(created->session->last_assistant_text()->empty());
+
+    REQUIRE(events.size() == 8);
+    CHECK(std::holds_alternative<agent::AgentStartEvent>(events[0]));
+    CHECK(std::holds_alternative<agent::TurnStartEvent>(events[1]));
+    const auto* user_start = std::get_if<agent::MessageStartEvent>(&events[2]);
+    REQUIRE(user_start != nullptr);
+    CHECK(std::holds_alternative<ai::UserMessage>(user_start->message));
+    const auto* user_end = std::get_if<agent::MessageEndEvent>(&events[3]);
+    REQUIRE(user_end != nullptr);
+    CHECK(std::holds_alternative<ai::UserMessage>(user_end->message));
+    const auto* assistant_start = std::get_if<agent::MessageStartEvent>(&events[4]);
+    REQUIRE(assistant_start != nullptr);
+    CHECK(std::holds_alternative<ai::AssistantMessage>(assistant_start->message));
+    const auto* assistant_end = std::get_if<agent::MessageEndEvent>(&events[5]);
+    REQUIRE(assistant_end != nullptr);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(assistant_end->message));
+    const auto& terminal = std::get<ai::AssistantMessage>(assistant_end->message);
+    CHECK(terminal.stop_reason == ai::AssistantStopReason::Aborted);
+    REQUIRE(terminal.error_message.has_value());
+    CHECK(*terminal.error_message == "prompt aborted");
+    const auto* turn_end = std::get_if<agent::TurnEndEvent>(&events[6]);
+    REQUIRE(turn_end != nullptr);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(turn_end->message));
+    CHECK(std::get<ai::AssistantMessage>(turn_end->message).stop_reason ==
+          ai::AssistantStopReason::Aborted);
+    const auto* agent_end = std::get_if<agent::AgentEndEvent>(&events[7]);
+    REQUIRE(agent_end != nullptr);
+    REQUIRE(agent_end->messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(agent_end->messages[1]));
+    CHECK(std::get<ai::AssistantMessage>(agent_end->messages[1]).stop_reason ==
+          ai::AssistantStopReason::Aborted);
+
+    auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable.has_value());
+    REQUIRE(durable->messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(durable->messages[1]));
+    CHECK(std::get<ai::AssistantMessage>(durable->messages[1]).stop_reason ==
+          ai::AssistantStopReason::Aborted);
+
+    created->session->abort();
+    events.clear();
+    auto recovered = created->session->prompt_blocking("recover");
+    REQUIRE(recovered.has_value());
+    CHECK(client_ptr->request_count == 2);
+    CHECK_FALSE(client_ptr->recovery_stop_requested);
+    CHECK(client_ptr->recovery_uses_fresh_token);
+    CHECK(created->session->message_count() == 4);
+    REQUIRE(created->session->last_assistant_text().has_value());
+    CHECK(*created->session->last_assistant_text() == "recovered after abort");
+    durable = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable.has_value());
+    CHECK(durable->messages.size() == 4);
+}
+
+TEST_CASE(
+    "SDK abort after partial output retains the partial aborted assistant",
+    "[sdk][u3][async][abort][issue39]") {
+    TestPaths paths;
+
+    auto client = std::make_unique<AbortAwareSdkChatClient>(true);
+    auto* client_ptr = client.get();
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::InMemorySessionTarget{};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = std::move(client);
+
+    auto created = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(created.has_value());
+    std::vector<agent::AgentLifecycleEvent> events;
+    auto subscription = created->session->subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            events.push_back(event);
+            return {};
+        });
+    REQUIRE(subscription.has_value());
+
+    boost::asio::io_context host_io;
+    std::optional<util::ExpectedVoid> prompt_result;
+    boost::asio::co_spawn(
+        host_io,
+        [&]() -> boost::asio::awaitable<void> {
+            prompt_result = co_await created->session->prompt("abort after partial");
+            co_return;
+        },
+        boost::asio::detached);
+
+    while (!client_ptr->partial_emitted || !client_ptr->started) {
+        REQUIRE(host_io.poll_one() == 1);
+    }
+    created->session->abort();
+    if (host_io.stopped()) {
+        host_io.restart();
+    }
+    host_io.run();
+
+    REQUIRE(prompt_result.has_value());
+    REQUIRE(prompt_result->has_value());
+    CHECK_FALSE(created->session->is_busy());
+    CHECK(created->session->message_count() == 2);
+    REQUIRE(created->session->last_assistant_text().has_value());
+    CHECK(*created->session->last_assistant_text() == "partial");
+
+    REQUIRE(events.size() == 10);
+    CHECK(std::holds_alternative<agent::MessageUpdateEvent>(events[5]));
+    CHECK(std::holds_alternative<agent::MessageUpdateEvent>(events[6]));
+    const auto* assistant_end = std::get_if<agent::MessageEndEvent>(&events[7]);
+    REQUIRE(assistant_end != nullptr);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(assistant_end->message));
+    const auto& terminal = std::get<ai::AssistantMessage>(assistant_end->message);
+    CHECK(terminal.stop_reason == ai::AssistantStopReason::Aborted);
+    CHECK(ai::text_from_assistant_content(terminal.content) == "partial");
+    const auto* turn_end = std::get_if<agent::TurnEndEvent>(&events[8]);
+    REQUIRE(turn_end != nullptr);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(turn_end->message));
+    CHECK(std::get<ai::AssistantMessage>(turn_end->message).stop_reason ==
+          ai::AssistantStopReason::Aborted);
+    const auto* agent_end = std::get_if<agent::AgentEndEvent>(&events[9]);
+    REQUIRE(agent_end != nullptr);
+    REQUIRE(agent_end->messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(agent_end->messages[1]));
+    CHECK(std::get<ai::AssistantMessage>(agent_end->messages[1]).stop_reason ==
+          ai::AssistantStopReason::Aborted);
 }
 
 TEST_CASE("SDK async prompt returns fake provider failure as an expected value", "[sdk][u3][async]") {

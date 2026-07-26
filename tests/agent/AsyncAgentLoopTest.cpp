@@ -1,12 +1,11 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include "../../src/util/ExpectedMacros.hpp"
-
-#include "../support/ToolArgumentContracts.hpp"
-#include "../../src/agent/AgentLoop.hpp"
-#include "../../include/cch/ai/Content.hpp"
-#include "../../include/cch/util/Error.hpp"
-#include "../../src/util/Json.hpp"
+#include <cch/ai/Content.hpp>
+#include <cch/util/Error.hpp>
+#include "agent/AgentLoop.hpp"
+#include "support/ToolArgumentContracts.hpp"
+#include "util/ExpectedMacros.hpp"
+#include "util/Json.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -66,6 +65,60 @@ public:
 
     std::deque<ai::AssistantMessage> responses;
     std::optional<util::Error> failure;
+    std::vector<ai::StreamChatRequest> requests;
+};
+
+class CancellationAwarePolicyClient final : public ai::StreamingChatClient {
+public:
+    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        requests.push_back(request);
+        if (request.stop_token.stop_requested()) {
+            auto terminal = ai::assistant_text_message("");
+            terminal.stop_reason = ai::AssistantStopReason::Aborted;
+            terminal.error_message = "prompt aborted by policy";
+            CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
+                .reason = ai::AssistantStopReason::Aborted,
+                .error = terminal,
+            }));
+            co_return terminal;
+        }
+
+        if (responses.empty()) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Provider,
+                "no scripted policy response"));
+        }
+        auto response = responses.front();
+        responses.pop_front();
+        CCH_TRY_VOID(sink(ai::AssistantStartEvent{.partial = response}));
+        for (std::size_t index = 0; index < response.content.size(); ++index) {
+            if (const auto* call = std::get_if<ai::ToolCallContent>(&response.content[index])) {
+                CCH_TRY_VOID(sink(ai::ToolCallStartEvent{
+                    .content_index = index,
+                    .partial = response,
+                }));
+                CCH_TRY_VOID(sink(ai::ToolCallDeltaEvent{
+                    .content_index = index,
+                    .delta = call->raw_arguments,
+                    .partial = response,
+                }));
+                CCH_TRY_VOID(sink(ai::ToolCallEndEvent{
+                    .content_index = index,
+                    .tool_call = *call,
+                    .partial = response,
+                }));
+            }
+        }
+        CCH_TRY_VOID(sink(ai::AssistantDoneEvent{
+            .reason = response.stop_reason,
+            .message = response,
+        }));
+        co_return response;
+    }
+
+    std::deque<ai::AssistantMessage> responses;
     std::vector<ai::StreamChatRequest> requests;
 };
 
@@ -1920,7 +1973,7 @@ TEST_CASE(
 
 TEST_CASE(
     "awaitable signal-bearing policies receive the active run stop token",
-    "[agent][async][issue82]") {
+    "[agent][async][issue39][issue82]") {
     FakeStreamingClient client;
     client.responses.push_back(tool_call_response());
     client.responses.push_back(ai::assistant_text_message("done"));
@@ -1928,31 +1981,31 @@ TEST_CASE(
     options.max_turns = 4;
     options.model = ai::Model{"gpt-test"};
 
-    bool transform_stopped = false;
-    bool before_stopped = false;
-    bool after_stopped = false;
+    bool transform_stop_possible = false;
+    bool before_stop_possible = false;
+    bool after_stop_possible = false;
     options.transform_context =
         agent::adapt_sync_transform_context(
-            [&transform_stopped](std::vector<ai::MessageVariant> messages,
-                                 std::stop_token stop_token)
+            [&transform_stop_possible](std::vector<ai::MessageVariant> messages,
+                                       std::stop_token stop_token)
                 -> util::Expected<std::vector<ai::MessageVariant>> {
-                transform_stopped = stop_token.stop_requested();
+                transform_stop_possible = stop_token.stop_possible();
                 return messages;
             });
     options.before_tool_call =
         agent::adapt_sync_before_tool_call(
-            [&before_stopped](agent::BeforeToolCallContext,
-                              std::stop_token stop_token)
+            [&before_stop_possible](agent::BeforeToolCallContext,
+                                    std::stop_token stop_token)
                 -> util::Expected<agent::BeforeToolCallResult> {
-                before_stopped = stop_token.stop_requested();
+                before_stop_possible = stop_token.stop_possible();
                 return agent::BeforeToolCallResult{};
             });
     options.after_tool_call =
         agent::adapt_sync_after_tool_call(
-            [&after_stopped](agent::AfterToolCallContext,
-                             std::stop_token stop_token)
+            [&after_stop_possible](agent::AfterToolCallContext,
+                                   std::stop_token stop_token)
                 -> util::Expected<agent::AfterToolCallResult> {
-                after_stopped = stop_token.stop_requested();
+                after_stop_possible = stop_token.stop_possible();
                 return agent::AfterToolCallResult{};
             });
 
@@ -1961,14 +2014,117 @@ TEST_CASE(
         "read_file", "Read", test::permissive_object_tool_argument_contract()})));
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
     std::stop_source stop_source;
-    REQUIRE(stop_source.request_stop());
     auto run = run_loop(loop, "read", {}, stop_source.get_token());
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
-    CHECK(transform_stopped);
-    CHECK(before_stopped);
-    CHECK(after_stopped);
+    CHECK(transform_stop_possible);
+    CHECK(before_stop_possible);
+    CHECK(after_stop_possible);
+    CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+}
+
+TEST_CASE(
+    "transform policy cancellation completes through an aborted provider turn",
+    "[agent][async][abort][issue39]") {
+    CancellationAwarePolicyClient client;
+    agent::AsyncAgentOptions options;
+    options.model = ai::Model{"gpt-test"};
+    std::stop_source stop_source;
+    options.transform_context = [&stop_source](
+                                    std::vector<ai::MessageVariant>,
+                                    std::stop_token)
+        -> boost::asio::awaitable<util::Expected<std::vector<ai::MessageVariant>>> {
+        (void)stop_source.request_stop();
+        throw std::runtime_error("transform policy cancelled");
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Cancelled,
+            "unreachable transform result"));
+    };
+
+    agent::AsyncAgentLoop loop(client, agent::AsyncToolRegistry{}, std::move(options));
+    auto run = run_loop(loop, "cancel transform", {}, stop_source.get_token());
+
+    REQUIRE(run.result.has_value());
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Aborted);
+    REQUIRE(client.requests.size() == 1);
+    CHECK(client.requests[0].stop_token.stop_requested());
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
+    CHECK(count_events<agent::TurnEndEvent>(run.events) == 1);
+    CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+}
+
+TEST_CASE(
+    "before-tool policy cancellation skips the tool and reaches an aborted provider turn",
+    "[agent][async][abort][issue39]") {
+    CancellationAwarePolicyClient client;
+    client.responses.push_back(tool_call_response());
+    std::stop_source stop_source;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 1;
+    options.model = ai::Model{"gpt-test"};
+    options.before_tool_call = [&stop_source](agent::BeforeToolCallContext, std::stop_token)
+        -> boost::asio::awaitable<util::Expected<agent::BeforeToolCallResult>> {
+        (void)stop_source.request_stop();
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Cancelled,
+            "before-tool policy cancelled"));
+    };
+
+    auto tool = std::make_unique<FakeTool>(ai::Tool{
+        .name = "read_file",
+        .description = "Read",
+        .parameters = test::permissive_object_tool_argument_contract(),
+    });
+    auto* tool_ptr = tool.get();
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::move(tool)));
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "cancel before tool", {}, stop_source.get_token());
+
+    REQUIRE(run.result.has_value());
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Aborted);
+    CHECK(run.result->turns == 2);
+    CHECK(tool_ptr->invocations.empty());
+    REQUIRE(client.requests.size() == 2);
+    CHECK(client.requests[1].stop_token.stop_requested());
+    CHECK(count_events<agent::TurnEndEvent>(run.events) == 2);
+    CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+}
+
+TEST_CASE(
+    "after-tool policy cancellation keeps the tool result and reaches an aborted provider turn",
+    "[agent][async][abort][issue39]") {
+    CancellationAwarePolicyClient client;
+    client.responses.push_back(tool_call_response());
+    std::stop_source stop_source;
+    agent::AsyncAgentOptions options;
+    options.model = ai::Model{"gpt-test"};
+    options.after_tool_call = [&stop_source](agent::AfterToolCallContext, std::stop_token)
+        -> boost::asio::awaitable<util::Expected<agent::AfterToolCallResult>> {
+        (void)stop_source.request_stop();
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Cancelled,
+            "after-tool policy cancelled"));
+    };
+
+    auto tool = std::make_unique<FakeTool>(ai::Tool{
+        .name = "read_file",
+        .description = "Read",
+        .parameters = test::permissive_object_tool_argument_contract(),
+    });
+    auto* tool_ptr = tool.get();
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::move(tool)));
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "cancel after tool", {}, stop_source.get_token());
+
+    REQUIRE(run.result.has_value());
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Aborted);
+    REQUIRE(tool_ptr->invocations.size() == 1);
+    REQUIRE(client.requests.size() == 2);
+    CHECK(client.requests[1].stop_token.stop_requested());
+    CHECK(count_events<agent::TurnEndEvent>(run.events) == 2);
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }
 

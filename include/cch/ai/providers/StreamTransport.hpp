@@ -1,12 +1,13 @@
 #pragma once
 
-#include "../../util/Error.hpp"
+#include <cch/util/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
 #include <chrono>
 #include <functional>
 #include <map>
+#include <stop_token>
 #include <string>
 #include <string_view>
 
@@ -18,6 +19,10 @@ struct StreamRequest {
     std::map<std::string, std::string> headers;
     std::string body;
     std::chrono::milliseconds timeout{30000};
+    /// Active provider-request cancellation token. Transports return a
+    /// Cancelled error when the request is stopped so the provider can produce
+    /// the ordinary assistant `aborted` terminal outcome.
+    std::stop_token stop_token{};
 };
 
 struct StreamResponseHead {

@@ -1,9 +1,9 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include "../../include/cch/agent/Agent.hpp"
-#include "../../include/cch/ai/Content.hpp"
-#include "../../src/ai/providers/FakeChatClient.hpp"
-#include "../support/ToolArgumentContracts.hpp"
+#include <cch/agent/Agent.hpp>
+#include <cch/ai/Content.hpp>
+#include "ai/providers/FakeChatClient.hpp"
+#include "support/ToolArgumentContracts.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -171,23 +171,50 @@ public:
 class GatedStreamingClient final : public ai::StreamingChatClient {
 public:
     boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest&,
+        const ai::StreamChatRequest& request,
         ai::AssistantEventSink sink) override {
         auto executor = co_await boost::asio::this_coro::executor;
         gate.emplace(executor);
         gate->expires_at(std::chrono::steady_clock::time_point::max());
+        request_stop_token = request.stop_token;
         started = true;
+        std::stop_callback cancellation{request.stop_token, [this] {
+            if (gate) {
+                gate->cancel();
+            }
+        }};
 
         boost::system::error_code error;
         co_await gate->async_wait(
             boost::asio::redirect_error(boost::asio::use_awaitable, error));
 
-        auto response = ai::assistant_text_message("released");
+        auto response = request.stop_token.stop_requested()
+            ? ai::assistant_text_message("")
+            : ai::assistant_text_message("released");
+        if (request.stop_token.stop_requested()) {
+            response.stop_reason = ai::AssistantStopReason::Aborted;
+            response.error_message = "prompt aborted";
+            if (sink) {
+                if (auto emitted = sink(ai::AssistantErrorEvent{
+                        .reason = ai::AssistantStopReason::Aborted,
+                        .error = response,
+                    });
+                    !emitted) {
+                    co_return std::unexpected(emitted.error());
+                }
+            }
+            co_return response;
+        }
         if (sink) {
             if (auto emitted = sink(ai::AssistantStartEvent{response}); !emitted) {
                 co_return std::unexpected(emitted.error());
             }
-            if (auto emitted = sink(ai::TextDeltaEvent{0, "released", response}); !emitted) {
+            if (auto emitted = sink(ai::TextDeltaEvent{
+                    .content_index = 0,
+                    .delta = "released",
+                    .partial = response,
+                });
+                !emitted) {
                 co_return std::unexpected(emitted.error());
             }
         }
@@ -201,6 +228,7 @@ public:
     }
 
     bool started{false};
+    std::stop_token request_stop_token;
     std::optional<boost::asio::steady_timer> gate;
 };
 
@@ -256,6 +284,58 @@ TEST_CASE(
     REQUIRE(run_prompt(subject, "hello"));
     CHECK(stop_possible);
     CHECK_FALSE(stop_requested);
+}
+
+TEST_CASE(
+    "stateful Agent abort requests the same token observed by policies and provider",
+    "[agent][stateful][abort][issue39]") {
+    boost::asio::io_context io;
+    GatedStreamingClient client;
+    std::optional<std::stop_token> transform_stop_token;
+    agent::AsyncAgentOptions options;
+    options.model = ai::Model{"fake-model"};
+    options.transform_context = [&transform_stop_token](
+                                    std::vector<ai::MessageVariant> messages,
+                                    std::stop_token stop_token)
+        -> boost::asio::awaitable<util::Expected<std::vector<ai::MessageVariant>>> {
+        transform_stop_token = stop_token;
+        co_return messages;
+    };
+    agent::Agent subject(client, agent::AsyncToolRegistry{}, std::move(options));
+
+    subject.abort();
+    std::optional<util::ExpectedVoid> result;
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            result = co_await subject.prompt("abort me");
+            co_return;
+        },
+        boost::asio::detached);
+
+    while (!client.started) {
+        REQUIRE(io.poll_one() == 1);
+    }
+    REQUIRE(transform_stop_token.has_value());
+    CHECK(*transform_stop_token == client.request_stop_token);
+    CHECK_FALSE(transform_stop_token->stop_requested());
+    subject.abort();
+    subject.abort();
+    if (io.stopped()) {
+        io.restart();
+    }
+    io.run();
+
+    REQUIRE(result.has_value());
+    REQUIRE(result->has_value());
+    CHECK(transform_stop_token->stop_requested());
+    CHECK(client.request_stop_token.stop_requested());
+    CHECK_FALSE(subject.state().is_running);
+    REQUIRE(subject.state().messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(subject.state().messages[1]));
+    CHECK(std::get<ai::AssistantMessage>(subject.state().messages[1]).stop_reason ==
+          ai::AssistantStopReason::Aborted);
+    subject.abort();
 }
 
 TEST_CASE("stateful Agent reduces lifecycle state before ordered move-only observers", "[agent][stateful][issue35]") {

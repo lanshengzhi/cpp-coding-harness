@@ -2,13 +2,11 @@
 
 #include "ExecutionShared.hpp"
 #include "ToolCallExecutor.hpp"
-
-#include "../../src/util/ExpectedMacros.hpp"
-
-#include "../../include/cch/ai/Content.hpp"
-#include "../../include/cch/ai/Usage.hpp"
-#include "../../include/cch/ai/Tool.hpp"
+#include "util/ExpectedMacros.hpp"
 #include "util/Json.hpp"
+#include <cch/ai/Content.hpp>
+#include <cch/ai/Tool.hpp>
+#include <cch/ai/Usage.hpp>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -207,8 +205,13 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
     ai::MessageVariant user_message = ai::user_text_message(std::move(user_prompt));
 
     std::vector<ai::MessageVariant> pending_messages;
+    bool cancellation_completion_attempted = false;
 
-    for (int turn = 1; !options_.max_turns || turn <= *options_.max_turns; ++turn) {
+    for (int turn = 1;
+         !options_.max_turns ||
+             turn <= *options_.max_turns ||
+             (stop_token.stop_requested() && !cancellation_completion_attempted);
+         ++turn) {
         CCH_TRY_VOID(emit_agent_event(sink, TurnStartEvent{}));
 
         if (turn == 1) {
@@ -241,10 +244,12 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         }
 
         ai::StreamChatRequest request;
+        request.stop_token = stop_token;
         request.model = options_.model;
 
         {
             ai::AiContext request_context = context;
+            bool transform_cancelled = false;
             if (options_.transform_context) {
                 auto transformed = co_await invoke_agent_hook(
                     "transformContext",
@@ -252,12 +257,21 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                     std::move(request_context.messages),
                     stop_token);
                 if (!transformed) {
-                    CCH_TRY_VOID(emit_agent_end());
-                    co_return std::unexpected(transformed.error());
+                    if (!stop_token.stop_requested()) {
+                        CCH_TRY_VOID(emit_agent_end());
+                        co_return std::unexpected(transformed.error());
+                    }
+                    // A signal-aware transform may settle its own cancellation
+                    // through the hook error value. Keep cancellation on the
+                    // ordinary provider path so it can produce the one
+                    // authoritative aborted Assistant Message.
+                    request_context = context;
+                    transform_cancelled = true;
+                } else {
+                    request_context.messages = std::move(*transformed);
                 }
-                request_context.messages = std::move(*transformed);
             }
-            if (options_.convert_to_llm) {
+            if (!transform_cancelled && options_.convert_to_llm) {
                 auto converted = co_await invoke_agent_hook(
                     "convertToLlm",
                     *options_.convert_to_llm,
@@ -283,6 +297,9 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         // this response, so a terminal-before-start sequence can be recovered
         // with one synthesized start (matching pi's addedPartial rule).
         bool assistant_start_emitted = false;
+        if (stop_token.stop_requested()) {
+            cancellation_completion_attempted = true;
+        }
         auto assistant = co_await client_.stream(
             request,
             [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
@@ -438,7 +455,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
 
         CCH_TRY_VOID(emit_agent_event(sink, TurnEndEvent{ai::MessageVariant{*assistant}, tool_results}));
 
-        const bool has_more_tool_calls = !calls.empty() && !terminate_batch;
+        const bool has_more_tool_calls =
+            !calls.empty() && (!terminate_batch || stop_token.stop_requested());
 
         PrepareNextTurnContext next_turn_context;
         next_turn_context.assistant_message = *assistant;
@@ -446,7 +464,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         next_turn_context.context = context;
         next_turn_context.new_messages = new_messages;
 
-        if (options_.prepare_next_turn) {
+        if (!stop_token.stop_requested() && options_.prepare_next_turn) {
             auto update = co_await invoke_agent_hook(
                 "prepareNextTurn", *options_.prepare_next_turn, next_turn_context);
             if (!update) {
@@ -480,7 +498,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         }
 
         next_turn_context.context = context;
-        if (options_.should_stop_after_turn) {
+        if (!stop_token.stop_requested() && options_.should_stop_after_turn) {
             auto should_stop = co_await invoke_agent_hook(
                 "shouldStopAfterTurn", *options_.should_stop_after_turn, next_turn_context);
             if (!should_stop) {
@@ -496,7 +514,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             }
         }
 
-        if (options_.get_steering_messages) {
+        if (!stop_token.stop_requested() && options_.get_steering_messages) {
             auto steering = invoke_sync_agent_hook(
                 "getSteeringMessages", *options_.get_steering_messages);
             if (!steering) {
@@ -512,7 +530,10 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             }
         }
 
-        if (!has_more_tool_calls && pending_messages.empty() && options_.get_follow_up_messages) {
+        if (!stop_token.stop_requested() &&
+            !has_more_tool_calls &&
+            pending_messages.empty() &&
+            options_.get_follow_up_messages) {
             auto follow_up = invoke_sync_agent_hook(
                 "getFollowUpMessages", *options_.get_follow_up_messages);
             if (!follow_up) {

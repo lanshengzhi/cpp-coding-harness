@@ -1,9 +1,12 @@
-#include "ai/providers/BoostBeastStreamTransport.hpp"
+#include "BoostBeastStreamTransport.hpp"
 
 #include "ai/providers/ProviderError.hpp"
 
+#include <boost/asio/bind_cancellation_slot.hpp>
+#include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/post.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/host_name_verification.hpp>
@@ -12,14 +15,18 @@
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/ssl.hpp>
+#include <boost/system/system_error.hpp>
 
 #include <openssl/ssl.h>
 
 #include <array>
 #include <cstdint>
 #include <limits>
+#include <memory>
+#include <stop_token>
 #include <stdexcept>
 #include <string_view>
+#include <utility>
 
 namespace cch::ai::providers {
 namespace {
@@ -80,6 +87,13 @@ struct ParsedUrl {
     return util::make_error(code, std::move(message), std::move(detail));
 }
 
+[[nodiscard]] util::Error cancelled_error() {
+    return util::make_error(
+        util::ErrorCode::Cancelled,
+        "stream transport cancelled",
+        "transport operation was cancelled");
+}
+
 [[nodiscard]] util::Error exception_error(const std::exception& error) {
     std::string detail = error.what();
     auto code = detail.find("timeout") != std::string::npos || detail.find("timed out") != std::string::npos
@@ -114,6 +128,21 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
         }
 
         auto executor = co_await asio::this_coro::executor;
+        if (request.stop_token.stop_requested()) {
+            co_return std::unexpected(cancelled_error());
+        }
+
+        auto cancellation_signal = std::make_shared<asio::cancellation_signal>();
+        std::stop_callback cancellation{request.stop_token, [executor, cancellation_signal] {
+            asio::post(executor, [cancellation_signal] {
+                cancellation_signal->emit(asio::cancellation_type::all);
+            });
+        }};
+        const auto cancellable = [&cancellation_signal](auto completion_token) {
+            return asio::bind_cancellation_slot(
+                cancellation_signal->slot(),
+                std::move(completion_token));
+        };
 
         ssl::context ctx(ssl::context::tls_client);
         boost::system::error_code ec;
@@ -135,9 +164,16 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
         stream.set_verify_mode(ssl::verify_peer);
         stream.set_verify_callback(ssl::host_name_verification(parsed->host));
 
-        auto results = co_await resolver.async_resolve(parsed->host, parsed->port, asio::use_awaitable);
-        co_await beast::get_lowest_layer(stream).async_connect(results, asio::use_awaitable);
-        co_await stream.async_handshake(ssl::stream_base::client, asio::use_awaitable);
+        auto results = co_await resolver.async_resolve(
+            parsed->host,
+            parsed->port,
+            cancellable(asio::use_awaitable));
+        co_await beast::get_lowest_layer(stream).async_connect(
+            results,
+            cancellable(asio::use_awaitable));
+        co_await stream.async_handshake(
+            ssl::stream_base::client,
+            cancellable(asio::use_awaitable));
 
         http::request<http::string_body> http_request{verb, parsed->target, 11};
         http_request.set(http::field::host, parsed->host);
@@ -148,12 +184,19 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
         http_request.body() = request.body;
         http_request.prepare_payload();
 
-        co_await http::async_write(stream, http_request, asio::use_awaitable);
+        co_await http::async_write(
+            stream,
+            http_request,
+            cancellable(asio::use_awaitable));
 
         beast::flat_buffer buffer;
         http::response_parser<http::buffer_body> parser;
         parser.body_limit(16 * 1024 * 1024); // 16 MiB
-        co_await http::async_read_header(stream, buffer, parser, asio::use_awaitable);
+        co_await http::async_read_header(
+            stream,
+            buffer,
+            parser,
+            cancellable(asio::use_awaitable));
 
         StreamResponse response;
         response.head.status_code = static_cast<int>(parser.get().result_int());
@@ -169,7 +212,10 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
                 parser.get().body().size = err_chunk.size();
                 boost::system::error_code read_ec;
                 co_await http::async_read_some(
-                    stream, buffer, parser, asio::redirect_error(asio::use_awaitable, read_ec));
+                    stream,
+                    buffer,
+                    parser,
+                    asio::redirect_error(cancellable(asio::use_awaitable), read_ec));
                 const auto remaining = parser.get().body().size;
                 const auto produced = err_chunk.size() - remaining;
                 if (produced != 0) {
@@ -178,9 +224,16 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
                 if (read_ec == http::error::need_buffer) {
                     continue;
                 }
+                if (read_ec == asio::error::operation_aborted ||
+                    request.stop_token.stop_requested()) {
+                    co_return std::unexpected(cancelled_error());
+                }
                 if (read_ec) {
                     break;
                 }
+            }
+            if (request.stop_token.stop_requested()) {
+                co_return std::unexpected(cancelled_error());
             }
             std::string detail = std::to_string(response.head.status_code);
             if (!error_body.empty()) {
@@ -204,7 +257,7 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
                 stream,
                 buffer,
                 parser,
-                asio::redirect_error(asio::use_awaitable, read_ec));
+                asio::redirect_error(cancellable(asio::use_awaitable), read_ec));
 
             const auto remaining = parser.get().body().size;
             const auto produced = chunk.size() - remaining;
@@ -230,15 +283,23 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
         }
 
         boost::system::error_code shutdown_ec;
-        co_await stream.async_shutdown(asio::redirect_error(asio::use_awaitable, shutdown_ec));
+        co_await stream.async_shutdown(
+            asio::redirect_error(cancellable(asio::use_awaitable), shutdown_ec));
         if (shutdown_ec == asio::error::eof || shutdown_ec == ssl::error::stream_truncated) {
             shutdown_ec = {};
         }
         if (shutdown_ec) {
             co_return std::unexpected(network_error("TLS shutdown failure", shutdown_ec));
         }
+        if (request.stop_token.stop_requested()) {
+            co_return std::unexpected(cancelled_error());
+        }
 
         co_return response;
+    } catch (const boost::system::system_error& error) {
+        co_return std::unexpected(network_error(
+            "stream transport failure",
+            error.code()));
     } catch (const std::exception& error) {
         co_return std::unexpected(exception_error(error));
     }

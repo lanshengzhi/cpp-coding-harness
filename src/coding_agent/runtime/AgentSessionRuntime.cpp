@@ -169,6 +169,12 @@ std::optional<std::string> AgentSessionRuntime::last_assistant_text() const {
     return agent_ ? last_assistant_text_from(agent_->state().messages) : std::nullopt;
 }
 
+void AgentSessionRuntime::abort() {
+    if (state_ == State::RunningPrompt && agent_) {
+        agent_->abort();
+    }
+}
+
 void AgentSessionRuntime::close() {
     if (state_ == State::Closing || state_ == State::Closed) {
         return;

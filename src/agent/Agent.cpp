@@ -385,6 +385,12 @@ boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
     co_return util::ExpectedVoid{};
 }
 
+void Agent::abort() {
+    if (impl_ && impl_->active_stop_source) {
+        (void)impl_->active_stop_source->request_stop();
+    }
+}
+
 AgentState Agent::state() const {
     return impl_ ? impl_->state : AgentState{};
 }

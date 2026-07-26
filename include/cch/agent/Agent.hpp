@@ -75,6 +75,11 @@ public:
         std::string user_prompt,
         AgentEventCommitter commitment);
 
+    /// Request cancellation of the active run. Idempotent and a no-op while
+    /// idle. The provider completes an accepted request through the ordinary
+    /// assistant `aborted` lifecycle; this method adds no result channel.
+    void abort();
+
     /// Return an independent passive snapshot of current live Agent state.
     [[nodiscard]] AgentState state() const;
 

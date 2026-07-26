@@ -196,7 +196,7 @@ The code is split into value contracts, capability seams, implementation adapter
 Package targets and responsibilities:
 
 - `cch_util` (`include/cch/util`, `src/util`): project error/expected contracts, move-only callback vocabulary, passive `JsonValue`, the Glaze-backed JSON adapter in `src/util/Json.hpp`, and async process execution.
-- `cch_ai` (`include/cch/ai`, `src/ai`): passive message/content/tool/context contracts, provider-neutral stream events, provider registry, OpenAICompletionsCompat flags, OpenAI-compatible provider, scripted fake provider; SSE and Glaze provider mapping live under `src/ai/`.
+- `cch_ai` (`include/cch/ai`, `src/ai`): passive message/content/tool/context contracts, provider-neutral stream events, provider registry, OpenAICompletionsCompat flags, OpenAI-compatible provider, scripted fake provider, and prompt cancellation propagation through provider transport; SSE and Glaze provider mapping live under `src/ai/`.
 - `cch_agent` (`include/cch/agent`, `src/agent`): public stateful `Agent` ownership of live message history, model/thinking/tool state, weak move-only subscriptions with bounded diagnostics, passive state snapshots, one active run, and the strong per-run commitment seam used by Agent Session persistence. The package also owns async tool registration, private Tool Argument Contract preparation, expected-style tool execution, pi-ordered prepare/stop/steering/follow-up policy seams, and sequential/bounded-parallel tool execution policy.
 - `cch_harness` (`include/cch/harness`, `src/harness`): pi-shaped filesystem and shell execution capability contracts (`FileSystem`/`Shell`), local implementation with workspace containment, symlink safety, atomic writes, split-stream process execution, secret environment filtering, and JSONL/in-memory Session Store implementations.
 - `cch_tools` (`include/cch/tools`, `src/tools`): built-in read/write/edit/bash tool factories bridging agent tool contracts to harness capabilities.
@@ -343,6 +343,7 @@ session->close();
 - `CreateAgentSessionResult::session_path` and `AgentSession::session_path()` use `std::optional<std::filesystem::path>`. Persisted targets return the actual path; in-memory sessions return no value, never an empty-path sentinel.
 - The old experimental `session_path` / `resume_path` option fields were intentionally removed without aliases or compatibility adapters. Explicit targets now look like `opts.session_target = coding_agent::ExplicitNewSessionTarget{"/tmp/my-session.jsonl"};` or `ExplicitResumeSessionTarget{"/tmp/my-session.jsonl"}`.
 - Async-first `prompt()` — an awaitable, serial, single-prompt-at-a-time operation that runs on the host's Asio executor without a session-owned thread or nested prompt loop. Provider rejection before runtime transport, failures reported by the provider event sink, and persistence failures return an explicit `util::Error`; accepted provider `error` and `aborted` outcomes complete successfully and expose their final Assistant Message through ordinary lifecycle events and Live Session State.
+- Synchronous `abort()` requests cancellation of the one active prompt through its prompt-scoped `std::stop_token`. Repeated calls and idle calls are no-ops. An accepted abort completes the ordinary assistant message, turn, and agent lifecycle with stop reason `aborted`; after the prompt awaitable quiesces, the same session accepts another prompt. Like other session operations, `abort()` is confined to the executor driving the prompt and is not an unrelated-thread synchronization API.
 - `prompt_blocking()` is a separately named convenience facade over the async path. It owns a temporary executor for the call and rejects same-session callback reentry that would recursively wait on itself.
 - One persistent event-subscription path via move-only `agent::AgentEventSink`; prompt progress is not returned or delivered through per-prompt sinks.
 - Host-provided chat clients and execution environments. Chat clients and custom tools passed by `unique_ptr` transfer ownership to the session; `shared_ptr` execution environments remain host-owned and are not cleaned up by session close.
@@ -361,7 +362,7 @@ session->close();
 - ABI-stable binary distribution, plugin ABI, or package-manager integration.
 - Full pi `AgentSessionRuntime` replacement APIs (`newSession`, `switchSession`, `fork`, `clone`, import/export).
 - Public branch/tree navigation or SDK append support for non-linear session topologies (SDK v1 returns `unsupported_session_topology` for branched/compacted sessions).
-- Concurrent prompts, cancellation, `abort`, `steer`, `followUp`, or queueing.
+- Concurrent prompts, `steer`, `followUp`, or queueing.
 - Dynamic TypeScript/JavaScript extensions, extension UI, hot reload, MCP, or package installation.
 - TUI run modes, themes, keybindings, widgets, OAuth/subscription providers, or model catalogs.
 
@@ -433,6 +434,7 @@ These cover:
 - public headers compile from the include contract surface without `src`, legacy sync contracts, Boost.JSON, or raw Glaze generic values in domain contracts;
 - stateful Agent prompts retain live history, expose passive snapshots, reject overlapping runs, and notify weak move-only observers in lifecycle order;
 - fake model/tool loops route through provider-neutral value contracts and owned tool capabilities;
+- SDK abort propagates one prompt-scoped stop token through Agent policies and provider transport, completes the ordinary aborted lifecycle, and leaves the session reusable;
 - move-only event sinks can capture unique state and propagate errors;
 - provider-specific OpenAI/SSE/Glaze wire mapping stays isolated from the agent loop;
 - JSONL resume reconstructs typed message ordering for the next request;

@@ -16,10 +16,15 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_awaitable.hpp>
 
 #include <chrono>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -55,6 +60,39 @@ public:
     std::vector<std::string> chunks;
     std::optional<util::Error> failure;
     std::vector<ai::providers::StreamRequest> requests;
+};
+
+class CancellableFakeStreamTransport final : public ai::providers::StreamTransport {
+public:
+    boost::asio::awaitable<util::Expected<ai::providers::StreamResponse>> async_stream(
+        const ai::providers::StreamRequest& request,
+        ai::providers::BodyChunkHandler /*on_body_chunk*/) override {
+        stop_possible = request.stop_token.stop_possible();
+        auto executor = co_await boost::asio::this_coro::executor;
+        gate.emplace(executor);
+        gate->expires_at(std::chrono::steady_clock::time_point::max());
+        started = true;
+        std::stop_callback cancellation{request.stop_token, [this] {
+            if (gate) {
+                gate->cancel();
+            }
+        }};
+
+        boost::system::error_code error;
+        co_await gate->async_wait(
+            boost::asio::redirect_error(boost::asio::use_awaitable, error));
+        if (request.stop_token.stop_requested()) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Cancelled,
+                "provider request cancelled",
+                "transport operation was cancelled"));
+        }
+        co_return ai::providers::StreamResponse{};
+    }
+
+    bool started{false};
+    bool stop_possible{false};
+    std::optional<boost::asio::steady_timer> gate;
 };
 
 struct RunResult {
@@ -1670,6 +1708,57 @@ TEST_CASE(
     CHECK(run.result->error_message->size() <= 4096);
     const auto& terminal = matching_terminal_error(run);
     CHECK(terminal.error.error_message == run.result->error_message);
+}
+
+TEST_CASE(
+    "streaming OpenAI client propagates prompt cancellation through its transport",
+    "[ai][provider][stream][abort][issue39]") {
+    auto transport = std::make_shared<CancellableFakeStreamTransport>();
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "sk-test-api-key";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    std::stop_source stop_source;
+    ai::StreamChatRequest request;
+    request.model = ai::Model{"gpt-test"};
+    request.stop_token = stop_source.get_token();
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+
+    boost::asio::io_context io;
+    std::optional<util::Expected<ai::AssistantMessage>> result;
+    std::vector<ai::AssistantStreamEvent> events;
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            result = co_await client.stream(
+                request,
+                [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+                    events.push_back(event);
+                    return {};
+                });
+            co_return;
+        },
+        boost::asio::detached);
+
+    while (!transport->started) {
+        REQUIRE(io.poll_one() == 1);
+    }
+    CHECK(transport->stop_possible);
+    CHECK(stop_source.request_stop());
+    if (io.stopped()) {
+        io.restart();
+    }
+    io.run();
+
+    REQUIRE(result.has_value());
+    REQUIRE(result->has_value());
+    CHECK((*result)->stop_reason == ai::AssistantStopReason::Aborted);
+    REQUIRE((*result)->error_message.has_value());
+    CHECK(*(*result)->error_message == "transport operation was cancelled");
+    CHECK(count_events<ai::AssistantStartEvent>(events) == 1);
+    CHECK(count_events<ai::AssistantErrorEvent>(events) == 1);
+    CHECK(count_events<ai::AssistantDoneEvent>(events) == 0);
 }
 
 TEST_CASE(

@@ -7,6 +7,7 @@
 #include <boost/asio/io_context.hpp>
 
 #include <optional>
+#include <stop_token>
 #include <string>
 
 using namespace cch;
@@ -53,6 +54,23 @@ TEST_CASE("stream transport rejects missing host before network", "[ai][provider
     REQUIRE_FALSE(response);
     CHECK(response.error().code == util::ErrorCode::Validation);
     CHECK(response.error().detail.find("host") != std::string::npos);
+}
+
+TEST_CASE(
+    "stream transport observes cancellation before network work",
+    "[ai][provider][transport][abort][issue39]") {
+    std::stop_source stop_source;
+    CHECK(stop_source.request_stop());
+
+    ai::providers::StreamRequest request;
+    request.url = "https://example.com/v1/chat/completions";
+    request.stop_token = stop_source.get_token();
+
+    auto response = run_stream(std::move(request));
+
+    REQUIRE_FALSE(response);
+    CHECK(response.error().code == util::ErrorCode::Cancelled);
+    CHECK(response.error().message == "stream transport cancelled");
 }
 
 TEST_CASE("stream transport rejects unsupported HTTP methods before network", "[ai][provider][transport][u3]") {

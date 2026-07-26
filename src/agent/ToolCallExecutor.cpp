@@ -145,13 +145,22 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                         std::move(hook_context),
                         options_.stop_token);
                     if (!before_result) {
-                        co_return std::unexpected(before_result.error());
+                        if (!options_.stop_token.stop_requested()) {
+                            co_return std::unexpected(before_result.error());
+                        }
+                        blocked = true;
+                        tool_result = error_tool_result(call, "Operation aborted");
                     }
-                    if (before_result->block) {
+                    if (before_result && before_result->block) {
                         blocked = true;
                         tool_result = error_tool_result(
                             call, before_result->reason.value_or("Tool execution was blocked"));
                     }
+                }
+
+                if (!blocked && options_.stop_token.stop_requested()) {
+                    blocked = true;
+                    tool_result = error_tool_result(call, "Operation aborted");
                 }
 
                 if (!blocked) {
@@ -190,13 +199,21 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                                     std::move(hook_context),
                                     options_.stop_token);
                                 if (!after_result) {
-                                    co_return std::unexpected(after_result.error());
+                                    if (!options_.stop_token.stop_requested()) {
+                                        co_return std::unexpected(after_result.error());
+                                    }
+                                    // Preserve the completed tool result. The
+                                    // next provider request observes the same
+                                    // stopped token and owns the aborted
+                                    // assistant terminal outcome.
+                                    call_terminate = (*executed)->terminate;
+                                } else {
+                                    apply_after_result(
+                                        tool_result,
+                                        call_terminate,
+                                        std::move(*after_result),
+                                        (*executed)->terminate);
                                 }
-                                apply_after_result(
-                                    tool_result,
-                                    call_terminate,
-                                    std::move(*after_result),
-                                    (*executed)->terminate);
                             } else {
                                 call_terminate = (*executed)->terminate;
                             }
@@ -292,7 +309,14 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                 std::move(hook_context),
                 options_.stop_token);
             if (!before_result) {
-                co_return std::unexpected(before_result.error());
+                if (!options_.stop_token.stop_requested()) {
+                    co_return std::unexpected(before_result.error());
+                }
+                CCH_TRY_VOID(complete_immediate(
+                    source_index,
+                    call,
+                    error_tool_result(call, "Operation aborted")));
+                continue;
             }
             if (before_result->block) {
                 CCH_TRY_VOID(complete_immediate(
@@ -302,6 +326,14 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                         call, before_result->reason.value_or("Tool execution was blocked"))));
                 continue;
             }
+        }
+
+        if (options_.stop_token.stop_requested()) {
+            CCH_TRY_VOID(complete_immediate(
+                source_index,
+                call,
+                error_tool_result(call, "Operation aborted")));
+            continue;
         }
 
         prepared.push_back({source_index, call, tool, std::move(*arguments)});
@@ -439,7 +471,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                                         prepared_call.tool_call,
                                         "afterToolCall hook failed");
                                     outcome.call_terminate = false;
-                                } else if (!after_result) {
+                                } else if (!after_result && !stop_token.stop_requested()) {
                                     std::lock_guard error_lock(state->error_mutex);
                                     if (!state->fatal_error) {
                                         state->fatal_error = after_result.error();
@@ -448,7 +480,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                                         prepared_call.tool_call,
                                         "afterToolCall hook failed");
                                     outcome.call_terminate = false;
-                                } else {
+                                } else if (after_result) {
                                     apply_after_result(
                                         outcome.result,
                                         outcome.call_terminate,

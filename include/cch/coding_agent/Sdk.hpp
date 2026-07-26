@@ -244,6 +244,8 @@ private:
 ///
 /// Lifecycle: Open → (prompt)* → Closed.
 ///   - prompt() is awaitable and serial; reentrant calls return an error.
+///   - abort() idempotently requests cancellation of the active prompt and is
+///     a no-op while idle; the session remains reusable after quiescence.
 ///   - close() is idempotent; prompts after close return an error.
 ///   - subscribers are cleared on close.
 ///
@@ -322,6 +324,13 @@ public:
     [[nodiscard]] const std::filesystem::path& workspace() const;
 
     // ── Lifecycle ────────────────────────────────────────────────────────
+
+    /// Request cancellation of the active prompt. Idempotent and a no-op when
+    /// no prompt is active. Cancellation completes through the ordinary
+    /// assistant `aborted` message, turn, and agent lifecycle; prompt() does
+    /// not gain a second terminal-result channel. Calls are executor-confined
+    /// under the same contract as prompt() and state access.
+    void abort();
 
     /// Close the session. Idempotent. Clears all subscribers. Releases
     /// tools, resources, and SDK-owned execution environment.

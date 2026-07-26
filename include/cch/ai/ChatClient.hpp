@@ -5,18 +5,23 @@
 #include "Model.hpp"
 #include "StreamEvent.hpp"
 
-#include "../util/Error.hpp"
+#include <cch/util/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
 #include <functional>
 #include <optional>
+#include <stop_token>
 #include <string>
 
 namespace cch::ai {
 
 struct StreamChatRequest {
     AiContext context;
+    /// Active prompt cancellation token. Provider implementations propagate
+    /// this token through their transport and normalize accepted cancellation
+    /// into one Assistant Message with stop reason `aborted`.
+    std::stop_token stop_token{};
     /// Model identity requested for this call (ADR 0019). Precedence rule:
     /// when present, this value is authoritative; when std::nullopt, the
     /// provider client's configured Model applies. A call with neither is

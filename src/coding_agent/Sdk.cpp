@@ -1,4 +1,4 @@
-#include "../../include/cch/coding_agent/Sdk.hpp"
+#include <cch/coding_agent/Sdk.hpp>
 
 #include "coding_agent/ScopeExit.hpp"
 #include "coding_agent/runtime/AgentSessionPromptAccess.hpp"
@@ -321,6 +321,13 @@ const std::string& AgentSession::model() const {
 const std::filesystem::path& AgentSession::workspace() const {
     static const std::filesystem::path empty;
     return impl_ && impl_->runtime ? impl_->runtime->workspace() : empty;
+}
+
+void AgentSession::abort() {
+    if (impl_ && impl_->runtime &&
+        impl_->state == AgentSession::Impl::State::RunningPrompt) {
+        impl_->runtime->abort();
+    }
 }
 
 util::ExpectedVoid AgentSession::close() {

@@ -1,12 +1,12 @@
-#include "../../../include/cch/ai/providers/OpenAIChatClient.hpp"
+#include <cch/ai/providers/OpenAIChatClient.hpp>
 
-#include "../../../src/util/ExpectedMacros.hpp"
-#include "../glaze/ProviderDtos.hpp"
+#include <cch/ai/providers/OpenAICompletionsCompat.hpp>
 #include "ai/glaze/AiJson.hpp"
-#include "../../../include/cch/ai/providers/OpenAICompletionsCompat.hpp"
+#include "ai/glaze/ProviderDtos.hpp"
 #include "ai/providers/ProviderError.hpp"
 #include "ai/providers/SseParser.hpp"
 #include "ai/providers/StreamEmit.hpp"
+#include "util/ExpectedMacros.hpp"
 #include "util/Json.hpp"
 
 #include <algorithm>
@@ -637,6 +637,7 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
     http.method = "POST";
     http.url = completions_url();
     http.timeout = config_.timeout;
+    http.stop_token = request.stop_token;
     http.headers["Authorization"] = "Bearer " + api_key;
     http.headers["Content-Type"] = "application/json";
     http.headers["Accept"] = "text/event-stream";
