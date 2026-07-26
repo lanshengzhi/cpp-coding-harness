@@ -36,6 +36,8 @@ struct TerminalCapabilities {
     bool synchronized_output{false};
 };
 
+/// Delivers raw input bytes. An empty value flushes an incomplete escape sequence
+/// after the terminal's ambiguity timeout.
 using TerminalInputSink = std::move_only_function<void(std::string)>;
 using TerminalResizeSink = std::move_only_function<void(TerminalDimensions)>;
 

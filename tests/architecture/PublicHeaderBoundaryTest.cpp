@@ -1,5 +1,3 @@
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
 #include <cch/agent/Agent.hpp>
 #include <cch/agent/AgentContext.hpp>
 #include <cch/agent/AgentEvent.hpp>
@@ -27,12 +25,15 @@
 #include <cch/tools/ToolFactories.hpp>
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Container.hpp>
+#include <cch/tui/Input.hpp>
 #include <cch/tui/Terminal.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/TruncatedText.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 #include <cch/util/Error.hpp>
+
+#include "../../third_party/catch2/catch_test_macros.hpp"
 
 #include <filesystem>
 #include <optional>
@@ -95,6 +96,9 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_abstract_v<agent::AsyncAgentTool>);
     static_assert(std::is_abstract_v<harness::session::SessionStore>);
     static_assert(std::is_abstract_v<tui::Component>);
+    static_assert(std::is_aggregate_v<tui::KeyEvent>);
+    static_assert(std::is_aggregate_v<tui::PasteEvent>);
+    static_assert(std::variant_size_v<tui::InputEventVariant> == 2);
     static_assert(std::is_abstract_v<tui::InputHandler>);
     static_assert(std::is_abstract_v<tui::Focusable>);
     static_assert(std::is_abstract_v<tui::Terminal>);

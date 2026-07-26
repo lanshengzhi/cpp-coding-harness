@@ -1,15 +1,23 @@
 #include <cch/tui/Tui.hpp>
 
+#include "tui/InputDecoder.hpp"
 #include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
 #include <algorithm>
+#include <string_view>
 #include <utility>
 
 namespace cch::tui {
+namespace {
+
+constexpr std::size_t kInputDecodeChunkBytes = 4096;
+
+} // namespace
 
 Tui::Tui(Terminal& terminal)
-    : terminal_(terminal) {}
+    : terminal_(terminal),
+      input_decoder_(std::make_unique<detail::InputDecoder>()) {}
 
 Tui::~Tui() {
     (void)stop();
@@ -47,6 +55,7 @@ util::ExpectedVoid Tui::stop() {
 
     const auto cursor_result = terminal_.set_cursor_visible(true);
     const auto stop_result = terminal_.stop();
+    input_decoder_->reset();
     started_ = false;
 
     if (!cursor_result) {
@@ -144,9 +153,25 @@ bool Tui::owns(const Component* component) const {
 }
 
 void Tui::handle_input(std::string input) {
-    if (auto* input_handler = dynamic_cast<InputHandler*>(focused_)) {
-        input_handler->handle_input(input);
+    if (input.empty()) {
+        for (const auto& event : input_decoder_->flush()) dispatch_input(event);
+        return;
     }
+
+    for (std::size_t offset = 0; offset < input.size(); offset += kInputDecodeChunkBytes) {
+        const auto chunk = std::string_view(input).substr(offset, kInputDecodeChunkBytes);
+        for (const auto& event : input_decoder_->feed(chunk)) dispatch_input(event);
+    }
+}
+
+void Tui::dispatch_input(const InputEventVariant& event) {
+    auto* input_handler = dynamic_cast<InputHandler*>(focused_);
+    if (input_handler == nullptr) return;
+    if (const auto* key = std::get_if<KeyEvent>(&event);
+        key != nullptr && key->type == KeyEventType::Release && !input_handler->accepts_key_releases()) {
+        return;
+    }
+    input_handler->handle_input(event);
 }
 
 void Tui::handle_resize(TerminalDimensions) {

@@ -60,6 +60,7 @@ public:
     [[nodiscard]] util::ExpectedVoid set_cursor_visible(bool visible) override;
 
     [[nodiscard]] util::ExpectedVoid inject_input(std::string input);
+    [[nodiscard]] util::ExpectedVoid flush_input();
     [[nodiscard]] util::ExpectedVoid inject_resize(TerminalDimensions dimensions);
     [[nodiscard]] const std::vector<std::string>& output() const;
     [[nodiscard]] const std::vector<std::string>& screen() const;

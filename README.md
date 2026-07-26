@@ -197,7 +197,7 @@ The code is split into value contracts, capability seams, implementation adapter
 Package targets and responsibilities:
 
 - `cch_util` (`include/cch/util`, `src/util`): project error/expected contracts, move-only callback vocabulary, passive `JsonValue`, the Glaze-backed JSON adapter in `src/util/Json.hpp`, and async process execution.
-- `cch_tui` (`include/cch/tui`, `src/tui`): reusable source-level terminal UI contracts, a width-bounded Component seam, TUI root, Text, and deterministic Virtual Terminal. It depends only on project utility contracts, exposes no third-party types, has no coding-agent dependency, and makes no ABI-stability promise.
+- `cch_tui` (`include/cch/tui`, `src/tui`): reusable source-level terminal UI contracts, a width-bounded Component seam, TUI root, semantic key and bracketed-paste input, Text, and deterministic Virtual Terminal. It depends only on project utility contracts, exposes no third-party types, has no coding-agent dependency, and makes no ABI-stability promise.
 - `cch_ai` (`include/cch/ai`, `src/ai`): passive message/content/tool/context contracts, provider-neutral stream events, provider registry, OpenAICompletionsCompat flags, OpenAI-compatible provider, scripted fake provider, and prompt cancellation propagation through provider transport; SSE and Glaze provider mapping live under `src/ai/`.
 - `cch_agent` (`include/cch/agent`, `src/agent`): public stateful `Agent` ownership of live message history, model/thinking/tool state, weak move-only subscriptions with bounded diagnostics, passive state snapshots, one active run, and the strong per-run commitment seam used by Agent Session persistence. The package also owns async tool registration, private Tool Argument Contract preparation, expected-style tool execution, pi-ordered prepare/stop/steering/follow-up policy seams, and sequential/bounded-parallel tool execution policy.
 - `cch_harness` (`include/cch/harness`, `src/harness`): pi-shaped filesystem and shell execution capability contracts (`FileSystem`/`Shell`), local implementation with workspace containment, symlink safety, atomic writes, split-stream process execution, secret environment filtering, and JSONL/in-memory Session Store implementations.
@@ -463,6 +463,6 @@ These cover:
 
 ## Deferred
 
-Not included yet: rich TUI, extensions, packages, global/config-driven skill directories, live skill reload, OAuth, full pi RPC command parity, MCP integration, permission prompts, native Windows shell process-tree termination semantics, tool execution streaming updates, subagents, C++26 reflection-generated schema, `std::execution` senders/receivers, ABI-stable binary distribution, or OS-level sandboxing.
+Not included yet: a rich interactive TUI frontend, extensions, packages, global/config-driven skill directories, live skill reload, OAuth, full pi RPC command parity, MCP integration, permission prompts, native Windows shell process-tree termination semantics, tool execution streaming updates, subagents, C++26 reflection-generated schema, `std::execution` senders/receivers, ABI-stable binary distribution, or OS-level sandboxing.
 
 An experimental same-process embeddable C++ SDK surface is available (see Embeddable C++ SDK section above). Full pi SDK parity (session replacement runtime, concurrent prompts, compaction, ABI stability) is deferred.

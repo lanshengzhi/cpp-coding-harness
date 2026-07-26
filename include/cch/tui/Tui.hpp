@@ -9,6 +9,10 @@
 
 namespace cch::tui {
 
+namespace detail {
+class InputDecoder;
+} // namespace detail
+
 class Tui final {
 public:
     explicit Tui(Terminal& terminal);
@@ -30,9 +34,11 @@ public:
 private:
     [[nodiscard]] bool owns(const Component* component) const;
     void handle_input(std::string input);
+    void dispatch_input(const InputEventVariant& event);
     void handle_resize(TerminalDimensions dimensions);
 
     Terminal& terminal_; // must outlive this Tui.
+    std::unique_ptr<detail::InputDecoder> input_decoder_;
     std::vector<std::unique_ptr<Component>> children_;
     Component* focused_{nullptr}; // Null or aliases an element owned by children_.
     bool started_{false};

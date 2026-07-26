@@ -1,15 +1,18 @@
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
+#include <cch/tui/Input.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "tui/UnicodeWidth.hpp"
 
+#include "../../third_party/catch2/catch_test_macros.hpp"
+
+#include <array>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -37,8 +40,12 @@ public:
         ++invalidation_count;
     }
 
-    void handle_input(std::string_view input) override {
-        received_input = input;
+    void handle_input(const cch::tui::InputEventVariant& input) override {
+        received_input.push_back(input);
+    }
+
+    [[nodiscard]] bool accepts_key_releases() const override {
+        return accept_key_releases;
     }
 
     void set_focused(bool focused) override {
@@ -50,7 +57,8 @@ public:
     }
 
     std::size_t invalidation_count{0};
-    std::string received_input;
+    std::vector<cch::tui::InputEventVariant> received_input;
+    bool accept_key_releases{false};
 
 private:
     bool focused_{false};
@@ -146,8 +154,275 @@ TEST_CASE("Tui routes focus, input, and invalidation through Component capabilit
     tui.invalidate();
 
     CHECK(component_pointer->focused());
-    CHECK(component_pointer->received_input == "q");
+    REQUIRE(component_pointer->received_input.size() == 1);
+    CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[0]).key == "q");
     CHECK(component_pointer->invalidation_count == 1);
+}
+
+TEST_CASE("Tui resolves a lone Escape key when the terminal flushes ambiguity", "[tui][input][issue47]") {
+    cch::tui::VirtualTerminal terminal;
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<FocusableInputComponent>();
+    auto* component_pointer = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(component_pointer));
+
+    REQUIRE(terminal.inject_input("\x1b"));
+    CHECK(component_pointer->received_input.empty());
+    REQUIRE(terminal.flush_input());
+
+    REQUIRE(component_pointer->received_input.size() == 1);
+    CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[0]).key == "escape");
+}
+
+TEST_CASE("Tui maps baseline terminal protocols to the same semantic key", "[tui][input][issue47]") {
+    cch::tui::VirtualTerminal terminal;
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<FocusableInputComponent>();
+    auto* component_pointer = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(component_pointer));
+
+    REQUIRE(terminal.inject_input("\x03\x1b[99;5u\x1b[27;5;99~"));
+
+    REQUIRE(component_pointer->received_input.size() == 3);
+    const cch::tui::KeyEvent expected{
+        .key = "c",
+        .ctrl = true,
+    };
+    for (const auto& input : component_pointer->received_input) {
+        CHECK(std::get<cch::tui::KeyEvent>(input) == expected);
+    }
+}
+
+TEST_CASE("Tui decodes the supported legacy special key vocabulary", "[tui][input][issue47]") {
+    struct RawKey {
+        std::string_view raw;
+        std::string_view identifier;
+    };
+    constexpr std::array<RawKey, 25> kKeys{{
+        {"\t", "tab"}, {"\r", "enter"}, {" ", "space"}, {"\x7f", "backspace"},
+        {"\x1b[A", "up"}, {"\x1b[B", "down"}, {"\x1b[C", "right"}, {"\x1b[D", "left"},
+        {"\x1b[H", "home"}, {"\x1b[F", "end"}, {"\x1b[2~", "insert"}, {"\x1b[3~", "delete"},
+        {"\x1b[5~", "pageUp"}, {"\x1b[6~", "pageDown"}, {"\x1b[E", "clear"},
+        {"\x1bOP", "f1"}, {"\x1b[24~", "f12"}, {"\x1b[Z", "shift+tab"},
+        {"\x1b[2^", "ctrl+insert"}, {"\x1b[e", "shift+clear"}, {"\x1bOe", "ctrl+clear"},
+        {"\x1b" "B", "alt+left"}, {"\x1b" "F", "alt+right"},
+        {"\x1b" "b", "alt+left"}, {"A", "shift+a"},
+    }};
+
+    cch::tui::VirtualTerminal terminal;
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<FocusableInputComponent>();
+    auto* component_pointer = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(component_pointer));
+
+    for (const auto& key : kKeys) REQUIRE(terminal.inject_input(std::string(key.raw)));
+
+    REQUIRE(component_pointer->received_input.size() == kKeys.size());
+    for (std::size_t index = 0; index < kKeys.size(); ++index) {
+        CHECK(cch::tui::matches_key(
+            std::get<cch::tui::KeyEvent>(component_pointer->received_input[index]),
+            kKeys[index].identifier));
+    }
+}
+
+TEST_CASE("Tui decodes Kitty alternate keys keypad and modified navigation", "[tui][input][issue47]") {
+    cch::tui::VirtualTerminal terminal;
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<FocusableInputComponent>();
+    component->accept_key_releases = true;
+    auto* component_pointer = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(component_pointer));
+
+    REQUIRE(terminal.inject_input(
+        "\x1b[1089::99;5u"
+        "\x1b[57400u"
+        "\x1b[1;6:2D"
+        "\x1b[3;3:3~"));
+
+    REQUIRE(component_pointer->received_input.size() == 4);
+    CHECK(cch::tui::matches_key(std::get<cch::tui::KeyEvent>(component_pointer->received_input[0]), "ctrl+c"));
+    CHECK(cch::tui::matches_key(std::get<cch::tui::KeyEvent>(component_pointer->received_input[1]), "1"));
+    const auto& repeated_left = std::get<cch::tui::KeyEvent>(component_pointer->received_input[2]);
+    CHECK(cch::tui::matches_key(repeated_left, "shift+ctrl+left"));
+    CHECK(repeated_left.type == cch::tui::KeyEventType::Repeat);
+    const auto& released_delete = std::get<cch::tui::KeyEvent>(component_pointer->received_input[3]);
+    CHECK(cch::tui::matches_key(released_delete, "alt+delete"));
+    CHECK(released_delete.type == cch::tui::KeyEventType::Release);
+}
+
+TEST_CASE("Tui buffers split input and separates batched terminal sequences", "[tui][input][issue47]") {
+    cch::tui::VirtualTerminal terminal;
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<FocusableInputComponent>();
+    auto* component_pointer = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(component_pointer));
+
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.inject_input("[1;"));
+    CHECK(component_pointer->received_input.empty());
+    REQUIRE(terminal.inject_input("5C\x1b[A\x1b[B"));
+
+    REQUIRE(component_pointer->received_input.size() == 3);
+    const cch::tui::KeyEvent expected_right{.key = "right", .ctrl = true};
+    CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[0]) == expected_right);
+    CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[1]).key == "up");
+    CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[2]).key == "down");
+}
+
+TEST_CASE("Tui preserves large batches without dropping semantic keys", "[tui][input][issue47]") {
+    cch::tui::VirtualTerminal terminal;
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<FocusableInputComponent>();
+    auto* component_pointer = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(component_pointer));
+
+    REQUIRE(terminal.inject_input(std::string(5000, 'x')));
+
+    REQUIRE(component_pointer->received_input.size() == 5000);
+    CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input.front()).key == "x");
+    CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input.back()).key == "x");
+}
+
+TEST_CASE("Tui filters key releases unless the focused Component opts in", "[tui][input][issue47]") {
+    cch::tui::VirtualTerminal terminal;
+    cch::tui::Tui tui(terminal);
+    auto default_component = std::make_unique<FocusableInputComponent>();
+    auto* default_pointer = default_component.get();
+    REQUIRE(tui.add_child(std::move(default_component)));
+    auto release_component = std::make_unique<FocusableInputComponent>();
+    release_component->accept_key_releases = true;
+    auto* release_pointer = release_component.get();
+    REQUIRE(tui.add_child(std::move(release_component)));
+    REQUIRE(tui.start());
+
+    REQUIRE(tui.set_focus(default_pointer));
+    REQUIRE(terminal.inject_input("\x1b[97u\x1b[97;1:3u"));
+    REQUIRE(default_pointer->received_input.size() == 1);
+    CHECK(std::get<cch::tui::KeyEvent>(default_pointer->received_input[0]).type ==
+        cch::tui::KeyEventType::Press);
+
+    REQUIRE(tui.set_focus(release_pointer));
+    REQUIRE(terminal.inject_input("\x1b[97;1:3u"));
+    REQUIRE(release_pointer->received_input.size() == 1);
+    CHECK(std::get<cch::tui::KeyEvent>(release_pointer->received_input[0]).type ==
+        cch::tui::KeyEventType::Release);
+}
+
+TEST_CASE("Tui delivers bracketed paste atomically with opaque control-looking content", "[tui][input][issue47]") {
+    cch::tui::VirtualTerminal terminal;
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<FocusableInputComponent>();
+    auto* component_pointer = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(component_pointer));
+
+    REQUIRE(terminal.inject_input("a\x1b[20"));
+    REQUIRE(terminal.inject_input("0~line 1\n\x1b[A\x1b[13;5u"));
+    REQUIRE(terminal.inject_input("\x1b[20"));
+    REQUIRE(terminal.inject_input("1~b"));
+
+    REQUIRE(component_pointer->received_input.size() == 3);
+    CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[0]).key == "a");
+    const auto& paste = std::get<cch::tui::PasteEvent>(component_pointer->received_input[1]);
+    CHECK(paste.text == "line 1\n\x1b[A\x1b[13;5u");
+    CHECK(paste.original_bytes == paste.text.size());
+    CHECK(paste.lines == 2);
+    CHECK_FALSE(paste.truncated);
+    CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[2]).key == "b");
+}
+
+TEST_CASE("Tui bounds large paste payloads and preserves deterministic metadata", "[tui][input][issue47]") {
+    cch::tui::VirtualTerminal terminal;
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<FocusableInputComponent>();
+    auto* component_pointer = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(component_pointer));
+
+    std::string content(cch::tui::kMaxPasteBytes + 5, 'x');
+    content[10] = '\n';
+    REQUIRE(terminal.inject_input("\x1b[200~" + content + "\x1b[201~q"));
+
+    REQUIRE(component_pointer->received_input.size() == 2);
+    const auto& paste = std::get<cch::tui::PasteEvent>(component_pointer->received_input[0]);
+    CHECK(paste.text.size() == cch::tui::kMaxPasteBytes);
+    CHECK(paste.original_bytes == content.size());
+    CHECK(paste.lines == 2);
+    CHECK(paste.truncated);
+    CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[1]).key == "q");
+}
+
+TEST_CASE("Tui abandons incomplete paste safely when the terminal flushes input", "[tui][input][issue47]") {
+    cch::tui::VirtualTerminal terminal;
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<FocusableInputComponent>();
+    auto* component_pointer = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(component_pointer));
+
+    REQUIRE(terminal.inject_input("\x1b[200~unfinished\n\x1b[A"));
+    CHECK(component_pointer->received_input.empty());
+    REQUIRE(terminal.flush_input());
+    REQUIRE(terminal.inject_input("q"));
+
+    REQUIRE(component_pointer->received_input.size() == 1);
+    CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[0]).key == "q");
+}
+
+TEST_CASE("Tui discards overlong terminal control payloads through their terminators", "[tui][input][issue47]") {
+    cch::tui::VirtualTerminal terminal;
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<FocusableInputComponent>();
+    auto* component_pointer = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(component_pointer));
+
+    REQUIRE(terminal.inject_input("\x1b]" + std::string(300, 'x') + "payload"));
+    CHECK(component_pointer->received_input.empty());
+    REQUIRE(terminal.inject_input("\x1b\\q"));
+    REQUIRE(terminal.inject_input("\x1bP" + std::string(300, 'y') + "payload"));
+    REQUIRE(terminal.inject_input("\x1b\\r"));
+
+    REQUIRE(component_pointer->received_input.size() == 2);
+    CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[0]).key == "q");
+    CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[1]).key == "r");
+}
+
+TEST_CASE("Tui recovers after invalid unsupported and overlong input", "[tui][input][issue47]") {
+    cch::tui::VirtualTerminal terminal;
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<FocusableInputComponent>();
+    auto* component_pointer = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(component_pointer));
+
+    REQUIRE(terminal.inject_input("\x1b[999999999999999999999;5u\x1b[99;9u"));
+    REQUIRE(terminal.inject_input("\x1b[" + std::string(300, '1')));
+    REQUIRE(terminal.inject_input("\x1b[A"));
+    REQUIRE(terminal.inject_input("\xc3"));
+    REQUIRE(terminal.flush_input());
+    REQUIRE(terminal.inject_input("q"));
+
+    REQUIRE(component_pointer->received_input.size() == 2);
+    CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[0]).key == "up");
+    CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[1]).key == "q");
 }
 
 TEST_CASE("VirtualTerminal injects input and resize events deterministically", "[tui][issue45]") {

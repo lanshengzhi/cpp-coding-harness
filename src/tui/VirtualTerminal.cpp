@@ -286,6 +286,10 @@ util::ExpectedVoid VirtualTerminal::inject_input(std::string input) {
     return {};
 }
 
+util::ExpectedVoid VirtualTerminal::flush_input() {
+    return inject_input({});
+}
+
 util::ExpectedVoid VirtualTerminal::inject_resize(TerminalDimensions dimensions) {
     resize_cells(*impl_, dimensions);
     if (!impl_->modes.started || !impl_->resize_sink) return {};

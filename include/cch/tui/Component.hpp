@@ -1,11 +1,11 @@
 #pragma once
 
+#include <cch/tui/Input.hpp>
 #include <cch/util/Error.hpp>
 
 #include <cstddef>
 #include <functional>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace cch::tui {
@@ -26,7 +26,8 @@ class InputHandler {
 public:
     virtual ~InputHandler() = default;
 
-    virtual void handle_input(std::string_view input) = 0;
+    virtual void handle_input(const InputEventVariant& input) = 0;
+    [[nodiscard]] virtual bool accepts_key_releases() const = 0;
 };
 
 /// An optional Component capability for receiving TUI focus.
