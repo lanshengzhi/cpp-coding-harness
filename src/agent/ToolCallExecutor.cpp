@@ -2,15 +2,18 @@
 
 #include "ExecutionShared.hpp"
 #include "ToolArgumentPreparation.hpp"
-#include "../../include/cch/ai/Content.hpp"
-#include "../../include/cch/util/Error.hpp"
 #include "util/ExpectedMacros.hpp"
+#include <cch/ai/Content.hpp>
+#include <cch/util/Error.hpp>
 
+#include <boost/asio/as_tuple.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/deferred.hpp>
+#include <boost/asio/experimental/concurrent_channel.hpp>
 #include <boost/asio/experimental/parallel_group.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
+#include <boost/system/error_code.hpp>
 
 #include <algorithm>
 #include <atomic>
@@ -136,7 +139,11 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                 if (options_.before_tool_call) {
                     BeforeToolCallContext hook_context{
                         request.assistant_message, call, invocation.arguments, request.context};
-                    auto before_result = invoke_agent_hook("beforeToolCall", *options_.before_tool_call, hook_context);
+                    auto before_result = co_await invoke_agent_hook(
+                        "beforeToolCall",
+                        *options_.before_tool_call,
+                        std::move(hook_context),
+                        options_.stop_token);
                     if (!before_result) {
                         co_return std::unexpected(before_result.error());
                     }
@@ -177,7 +184,11 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                                     **executed,
                                     false,
                                     request.context};
-                                auto after_result = invoke_agent_hook("afterToolCall", *options_.after_tool_call, hook_context);
+                                auto after_result = co_await invoke_agent_hook(
+                                    "afterToolCall",
+                                    *options_.after_tool_call,
+                                    std::move(hook_context),
+                                    options_.stop_token);
                                 if (!after_result) {
                                     co_return std::unexpected(after_result.error());
                                 }
@@ -275,7 +286,11 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
         if (options_.before_tool_call) {
             BeforeToolCallContext hook_context{
                 request.assistant_message, call, *arguments, request.context};
-            auto before_result = invoke_agent_hook("beforeToolCall", *options_.before_tool_call, hook_context);
+            auto before_result = co_await invoke_agent_hook(
+                "beforeToolCall",
+                *options_.before_tool_call,
+                std::move(hook_context),
+                options_.stop_token);
             if (!before_result) {
                 co_return std::unexpected(before_result.error());
             }
@@ -300,6 +315,18 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
     };
 
     auto executor = co_await boost::asio::this_coro::executor;
+    using HookPermitChannel = boost::asio::experimental::concurrent_channel<
+        void(boost::system::error_code)>;
+    std::shared_ptr<HookPermitChannel> after_hook_permits;
+    if (options_.after_tool_call) {
+        after_hook_permits = std::make_shared<HookPermitChannel>(executor, 1);
+        if (!after_hook_permits->try_send(boost::system::error_code{})) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Tool,
+                "afterToolCall hook serialization failed"));
+        }
+    }
+
     auto state = std::make_shared<ParallelState>();
     auto prepared_calls = std::make_shared<std::vector<PreparedToolCall>>(std::move(prepared));
     auto assistant_snapshot = std::make_shared<ai::AssistantMessage>(request.assistant_message);
@@ -328,8 +355,11 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
     };
 
     AfterToolCallHook* const after_hook = options_.after_tool_call;
+    const std::stop_token stop_token = options_.stop_token;
 
     auto worker_body = [after_hook,
+                        after_hook_permits,
+                        stop_token,
                         prepared_calls,
                         assistant_snapshot,
                         context_snapshot,
@@ -369,32 +399,62 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                         outcome.call_terminate = executed->terminate;
 
                         if (!executed->is_error && after_hook) {
-                            AfterToolCallContext hook_context{
-                                *assistant_snapshot,
-                                prepared_call.tool_call,
-                                invocation.arguments,
-                                *executed,
-                                false,
-                                *context_snapshot};
-                            auto after_result = [&]() {
-                                std::lock_guard callback_lock(state->callback_mutex);
-                                return invoke_agent_hook("afterToolCall", *after_hook, hook_context);
-                            }();
-                            if (!after_result) {
+                            const auto [permit_error] = co_await after_hook_permits->async_receive(
+                                boost::asio::as_tuple(boost::asio::use_awaitable));
+                            if (permit_error) {
                                 std::lock_guard error_lock(state->error_mutex);
                                 if (!state->fatal_error) {
-                                    state->fatal_error = after_result.error();
+                                    state->fatal_error = util::make_error(
+                                        util::ErrorCode::Tool,
+                                        "afterToolCall hook serialization failed",
+                                        permit_error.message());
                                 }
                                 outcome.result = error_tool_result(
                                     prepared_call.tool_call,
                                     "afterToolCall hook failed");
                                 outcome.call_terminate = false;
                             } else {
-                                apply_after_result(
-                                    outcome.result,
-                                    outcome.call_terminate,
-                                    std::move(*after_result),
-                                    executed->terminate);
+                                AfterToolCallContext hook_context{
+                                    *assistant_snapshot,
+                                    prepared_call.tool_call,
+                                    invocation.arguments,
+                                    *executed,
+                                    false,
+                                    *context_snapshot};
+                                auto after_result = co_await invoke_agent_hook(
+                                    "afterToolCall",
+                                    *after_hook,
+                                    std::move(hook_context),
+                                    stop_token);
+                                const bool released = after_hook_permits->try_send(
+                                    boost::system::error_code{});
+                                if (!released) {
+                                    std::lock_guard error_lock(state->error_mutex);
+                                    if (!state->fatal_error) {
+                                        state->fatal_error = util::make_error(
+                                            util::ErrorCode::Tool,
+                                            "afterToolCall hook serialization failed");
+                                    }
+                                    outcome.result = error_tool_result(
+                                        prepared_call.tool_call,
+                                        "afterToolCall hook failed");
+                                    outcome.call_terminate = false;
+                                } else if (!after_result) {
+                                    std::lock_guard error_lock(state->error_mutex);
+                                    if (!state->fatal_error) {
+                                        state->fatal_error = after_result.error();
+                                    }
+                                    outcome.result = error_tool_result(
+                                        prepared_call.tool_call,
+                                        "afterToolCall hook failed");
+                                    outcome.call_terminate = false;
+                                } else {
+                                    apply_after_result(
+                                        outcome.result,
+                                        outcome.call_terminate,
+                                        std::move(*after_result),
+                                        executed->terminate);
+                                }
                             }
                         }
                     }

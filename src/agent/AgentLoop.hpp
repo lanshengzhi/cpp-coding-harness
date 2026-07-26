@@ -7,6 +7,7 @@
 
 #include <boost/asio/awaitable.hpp>
 
+#include <stop_token>
 #include <string>
 #include <vector>
 
@@ -27,12 +28,14 @@ public:
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> run(
         std::string user_prompt,
-        AgentEventSink sink = {});
+        AgentEventSink sink = {},
+        std::stop_token stop_token = {});
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> continue_with(
         std::vector<ai::MessageVariant> history,
         std::string user_prompt,
-        AgentEventSink sink = {});
+        AgentEventSink sink = {},
+        std::stop_token stop_token = {});
 
 private:
     friend class Agent;

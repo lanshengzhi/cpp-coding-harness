@@ -179,14 +179,17 @@ AsyncAgentLoop::AsyncAgentLoop(ai::StreamingChatClient& client, AsyncToolRegistr
 
 boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::run(
     std::string user_prompt,
-    AgentEventSink sink) {
-    co_return co_await continue_with({}, std::move(user_prompt), std::move(sink));
+    AgentEventSink sink,
+    std::stop_token stop_token) {
+    co_return co_await continue_with(
+        {}, std::move(user_prompt), std::move(sink), stop_token);
 }
 
 boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::continue_with(
     std::vector<ai::MessageVariant> history,
     std::string user_prompt,
-    AgentEventSink sink) {
+    AgentEventSink sink,
+    std::stop_token stop_token) {
     ai::AiContext context;
     context.tools = registry_.definitions();
     context.messages = std::move(history);
@@ -214,7 +217,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         }
 
         if (turn == 1 && options_.get_steering_messages) {
-            auto steering = invoke_agent_hook("getSteeringMessages", *options_.get_steering_messages);
+            auto steering = invoke_sync_agent_hook(
+                "getSteeringMessages", *options_.get_steering_messages);
             if (!steering) {
                 CCH_TRY_VOID(emit_agent_end());
                 co_return std::unexpected(steering.error());
@@ -242,8 +246,11 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         {
             ai::AiContext request_context = context;
             if (options_.transform_context) {
-                auto transformed = invoke_agent_hook(
-                    "transformContext", *options_.transform_context, request_context.messages);
+                auto transformed = co_await invoke_agent_hook(
+                    "transformContext",
+                    *options_.transform_context,
+                    std::move(request_context.messages),
+                    stop_token);
                 if (!transformed) {
                     CCH_TRY_VOID(emit_agent_end());
                     co_return std::unexpected(transformed.error());
@@ -251,8 +258,10 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                 request_context.messages = std::move(*transformed);
             }
             if (options_.convert_to_llm) {
-                auto converted = invoke_agent_hook(
-                    "convertToLlm", *options_.convert_to_llm, request_context.messages);
+                auto converted = co_await invoke_agent_hook(
+                    "convertToLlm",
+                    *options_.convert_to_llm,
+                    std::move(request_context.messages));
                 if (!converted) {
                     CCH_TRY_VOID(emit_agent_end());
                     co_return std::unexpected(converted.error());
@@ -401,6 +410,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                 options_.before_tool_call ? &*options_.before_tool_call : nullptr;
             executor_options.after_tool_call =
                 options_.after_tool_call ? &*options_.after_tool_call : nullptr;
+            executor_options.stop_token = stop_token;
             executor_options.execution = options_.tool_execution;
             agent::ToolCallExecutor executor{registry_, std::move(executor_options)};
 
@@ -437,7 +447,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         next_turn_context.new_messages = new_messages;
 
         if (options_.prepare_next_turn) {
-            auto update = invoke_agent_hook(
+            auto update = co_await invoke_agent_hook(
                 "prepareNextTurn", *options_.prepare_next_turn, next_turn_context);
             if (!update) {
                 CCH_TRY_VOID(emit_agent_end());
@@ -453,7 +463,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                     co_return std::unexpected(error);
                 }
                 if (options_.validate_turn_update) {
-                    auto validated = invoke_agent_hook(
+                    auto validated = co_await invoke_agent_hook(
                         "validateTurnUpdate", *options_.validate_turn_update, **update);
                     if (!validated) {
                         CCH_TRY_VOID(emit_agent_end());
@@ -471,7 +481,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
 
         next_turn_context.context = context;
         if (options_.should_stop_after_turn) {
-            auto should_stop = invoke_agent_hook(
+            auto should_stop = co_await invoke_agent_hook(
                 "shouldStopAfterTurn", *options_.should_stop_after_turn, next_turn_context);
             if (!should_stop) {
                 CCH_TRY_VOID(emit_agent_end());
@@ -487,7 +497,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         }
 
         if (options_.get_steering_messages) {
-            auto steering = invoke_agent_hook("getSteeringMessages", *options_.get_steering_messages);
+            auto steering = invoke_sync_agent_hook(
+                "getSteeringMessages", *options_.get_steering_messages);
             if (!steering) {
                 CCH_TRY_VOID(emit_agent_end());
                 co_return std::unexpected(steering.error());
@@ -502,7 +513,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         }
 
         if (!has_more_tool_calls && pending_messages.empty() && options_.get_follow_up_messages) {
-            auto follow_up = invoke_agent_hook("getFollowUpMessages", *options_.get_follow_up_messages);
+            auto follow_up = invoke_sync_agent_hook(
+                "getFollowUpMessages", *options_.get_follow_up_messages);
             if (!follow_up) {
                 CCH_TRY_VOID(emit_agent_end());
                 co_return std::unexpected(follow_up.error());

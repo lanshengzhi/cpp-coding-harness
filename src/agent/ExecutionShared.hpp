@@ -4,6 +4,8 @@
 #include <cch/ai/Message.hpp>
 #include <cch/util/Error.hpp>
 
+#include <boost/asio/awaitable.hpp>
+
 #include <exception>
 #include <string>
 #include <string_view>
@@ -60,10 +62,11 @@ namespace cch::agent {
     return calls;
 }
 
-/// Invoke one agent policy hook with exception containment. hook_name is the
-/// pi wire vocabulary name reported in the failure diagnostic.
+/// Queue-drain callbacks remain synchronous until #44 replaces them with
+/// private Agent-owned queues. Keep their legacy exception boundary separate
+/// from the awaitable policy-hook contract.
 template <typename Hook, typename... Args>
-[[nodiscard]] std::invoke_result_t<Hook&, Args&&...> invoke_agent_hook(
+[[nodiscard]] std::invoke_result_t<Hook&, Args&&...> invoke_sync_agent_hook(
     std::string_view hook_name,
     Hook& hook,
     Args&&... args) {
@@ -77,6 +80,40 @@ template <typename Hook, typename... Args>
             e.what())));
     } catch (...) {
         return Result(std::unexpected(util::make_error(
+            util::ErrorCode::Tool,
+            std::string(hook_name) + " hook failed",
+            "unknown exception")));
+    }
+}
+
+template <typename T>
+struct AwaitableResult;
+
+template <typename T, typename Executor>
+struct AwaitableResult<boost::asio::awaitable<T, Executor>> {
+    using type = T;
+};
+
+/// Invoke one awaitable Agent policy hook with exception containment. The
+/// caller awaits the hook on its Agent executor; hook_name is the pi wire
+/// vocabulary reported in the failure diagnostic.
+template <typename Hook, typename... Args>
+[[nodiscard]] boost::asio::awaitable<
+    typename AwaitableResult<std::invoke_result_t<Hook&, Args...>>::type>
+invoke_agent_hook(
+    std::string_view hook_name,
+    Hook& hook,
+    Args&&... args) {
+    using Result = typename AwaitableResult<std::invoke_result_t<Hook&, Args...>>::type;
+    try {
+        co_return co_await hook(std::forward<Args>(args)...);
+    } catch (const std::exception& e) {
+        co_return Result(std::unexpected(util::make_error(
+            util::ErrorCode::Tool,
+            std::string(hook_name) + " hook failed",
+            e.what())));
+    } catch (...) {
+        co_return Result(std::unexpected(util::make_error(
             util::ErrorCode::Tool,
             std::string(hook_name) + " hook failed",
             "unknown exception")));

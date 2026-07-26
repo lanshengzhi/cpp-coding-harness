@@ -10,6 +10,7 @@
 
 #include <boost/asio/awaitable.hpp>
 
+#include <stop_token>
 #include <vector>
 
 namespace cch::agent {
@@ -19,6 +20,7 @@ struct ToolCallExecutorOptions {
     // must outlive the ToolCallExecutor built from these options.
     BeforeToolCallHook* before_tool_call{nullptr};
     AfterToolCallHook* after_tool_call{nullptr};
+    std::stop_token stop_token;
     ToolExecutionPolicy execution{SequentialToolExecution{}};
 };
 

@@ -6,9 +6,12 @@
 #include <cch/ai/Tool.hpp>
 #include <cch/util/Error.hpp>
 
+#include <boost/asio/awaitable.hpp>
+
 #include <cstddef>
 #include <functional>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <variant>
 #include <vector>
@@ -16,10 +19,33 @@
 namespace cch::agent {
 
 using TransformContextHook = std::move_only_function<
-    util::Expected<std::vector<ai::MessageVariant>>(const std::vector<ai::MessageVariant>&)>;
+    boost::asio::awaitable<util::Expected<std::vector<ai::MessageVariant>>>(
+        std::vector<ai::MessageVariant>,
+        std::stop_token)>;
 
+/// pi's conversion policy does not receive an abort signal, but it still uses
+/// the same awaitable move-only execution contract as every Agent policy.
 using ConvertToLlmHook = std::move_only_function<
-    util::Expected<std::vector<ai::MessageVariant>>(const std::vector<ai::MessageVariant>&)>;
+    boost::asio::awaitable<util::Expected<std::vector<ai::MessageVariant>>>(
+        std::vector<ai::MessageVariant>)>;
+
+using SyncTransformContextPolicy = std::move_only_function<
+    util::Expected<std::vector<ai::MessageVariant>>(
+        std::vector<ai::MessageVariant>)>;
+using CancellableSyncTransformContextPolicy = std::move_only_function<
+    util::Expected<std::vector<ai::MessageVariant>>(
+        std::vector<ai::MessageVariant>,
+        std::stop_token)>;
+using SyncConvertToLlmPolicy = std::move_only_function<
+    util::Expected<std::vector<ai::MessageVariant>>(
+        std::vector<ai::MessageVariant>)>;
+
+[[nodiscard]] TransformContextHook adapt_sync_transform_context(
+    SyncTransformContextPolicy policy);
+[[nodiscard]] TransformContextHook adapt_sync_transform_context(
+    CancellableSyncTransformContextPolicy policy);
+[[nodiscard]] ConvertToLlmHook adapt_sync_convert_to_llm(
+    SyncConvertToLlmPolicy policy);
 
 using GetSteeringMessagesHook = std::move_only_function<
     util::Expected<std::vector<ai::MessageVariant>>()>;
@@ -48,16 +74,31 @@ struct AgentLoopTurnUpdate {
 };
 
 using PrepareNextTurnHook = std::move_only_function<
-    util::Expected<std::optional<AgentLoopTurnUpdate>>(const PrepareNextTurnContext&)>;
+    boost::asio::awaitable<util::Expected<std::optional<AgentLoopTurnUpdate>>>(
+        PrepareNextTurnContext)>;
 
 using ShouldStopAfterTurnHook = std::move_only_function<
-    util::Expected<bool>(const PrepareNextTurnContext&)>;
+    boost::asio::awaitable<util::Expected<bool>>(PrepareNextTurnContext)>;
 
 // Validates high-privilege turn updates before they are applied. Model changes
 // require this hook until a provider/model registry validator is wired directly
 // into the agent loop.
 using ValidateTurnUpdateHook = std::move_only_function<
-    util::ExpectedVoid(const AgentLoopTurnUpdate&)>;
+    boost::asio::awaitable<util::ExpectedVoid>(AgentLoopTurnUpdate)>;
+
+using SyncPrepareNextTurnPolicy = std::move_only_function<
+    util::Expected<std::optional<AgentLoopTurnUpdate>>(PrepareNextTurnContext)>;
+using SyncShouldStopAfterTurnPolicy = std::move_only_function<
+    util::Expected<bool>(PrepareNextTurnContext)>;
+using SyncValidateTurnUpdatePolicy = std::move_only_function<
+    util::ExpectedVoid(AgentLoopTurnUpdate)>;
+
+[[nodiscard]] PrepareNextTurnHook adapt_sync_prepare_next_turn(
+    SyncPrepareNextTurnPolicy policy);
+[[nodiscard]] ShouldStopAfterTurnHook adapt_sync_should_stop_after_turn(
+    SyncShouldStopAfterTurnPolicy policy);
+[[nodiscard]] ValidateTurnUpdateHook adapt_sync_validate_turn_update(
+    SyncValidateTurnUpdatePolicy policy);
 
 struct SequentialToolExecution {};
 

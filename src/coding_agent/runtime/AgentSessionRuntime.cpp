@@ -5,11 +5,13 @@
 #include "coding_agent/ScopeExit.hpp"
 #include "coding_agent/SkillFormatting.hpp"
 
+#include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
 
 #include <optional>
+#include <stop_token>
 #include <utility>
 
 namespace cch::coding_agent::runtime {
@@ -48,23 +50,24 @@ AgentSessionRuntime::AgentSessionRuntime(
         auto existing_transform = std::move(options.transform_context);
         options.transform_context = [block = std::move(skills_block),
                                      existing = std::move(existing_transform)](
-                                        const std::vector<ai::MessageVariant>& messages) mutable
-            -> util::Expected<std::vector<ai::MessageVariant>> {
+                                        std::vector<ai::MessageVariant> messages,
+                                        std::stop_token stop_token) mutable
+            -> boost::asio::awaitable<util::Expected<std::vector<ai::MessageVariant>>> {
             std::vector<ai::MessageVariant> transformed;
             if (existing) {
-                auto prior = (*existing)(messages);
+                auto prior = co_await (*existing)(std::move(messages), stop_token);
                 if (!prior) {
-                    return std::unexpected(prior.error());
+                    co_return std::unexpected(prior.error());
                 }
                 transformed = std::move(*prior);
             } else {
-                transformed = messages;
+                transformed = std::move(messages);
             }
 
             ai::SystemMessage msg;
             msg.content = block;
             transformed.insert(transformed.begin(), ai::MessageVariant{std::move(msg)});
-            return transformed;
+            co_return transformed;
         };
     }
 

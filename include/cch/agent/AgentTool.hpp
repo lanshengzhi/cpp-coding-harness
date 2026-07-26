@@ -1,16 +1,17 @@
 #pragma once
 
-#include "../ai/Content.hpp"
-#include "../ai/Context.hpp"
-#include "../ai/Message.hpp"
-#include "../ai/Tool.hpp"
-#include "../util/Error.hpp"
-#include "../util/JsonValue.hpp"
+#include <cch/ai/Content.hpp>
+#include <cch/ai/Context.hpp>
+#include <cch/ai/Message.hpp>
+#include <cch/ai/Tool.hpp>
+#include <cch/util/Error.hpp>
+#include <cch/util/JsonValue.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
 #include <functional>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <vector>
 
@@ -58,8 +59,38 @@ struct AfterToolCallResult {
     std::optional<bool> terminate;
 };
 
-using BeforeToolCallHook = std::move_only_function<util::Expected<BeforeToolCallResult>(const BeforeToolCallContext&)>;
-using AfterToolCallHook = std::move_only_function<util::Expected<AfterToolCallResult>(const AfterToolCallContext&)>;
+/// Core policy contracts are move-only awaitable callables. Context values
+/// deliberately cross this suspension boundary by value, so a hook cannot
+/// retain a reference to run-owned state after the invocation finishes.
+using BeforeToolCallHook = std::move_only_function<
+    boost::asio::awaitable<util::Expected<BeforeToolCallResult>>(
+        BeforeToolCallContext,
+        std::stop_token)>;
+using AfterToolCallHook = std::move_only_function<
+    boost::asio::awaitable<util::Expected<AfterToolCallResult>>(
+        AfterToolCallContext,
+        std::stop_token)>;
+
+/// Named adapters retain ergonomic synchronous policy setup without adding a
+/// synchronous Agent execution path. Cancellable forms receive the active
+/// run's stop token; non-cancellable forms explicitly ignore it.
+using SyncBeforeToolCallPolicy = std::move_only_function<
+    util::Expected<BeforeToolCallResult>(BeforeToolCallContext)>;
+using CancellableSyncBeforeToolCallPolicy = std::move_only_function<
+    util::Expected<BeforeToolCallResult>(BeforeToolCallContext, std::stop_token)>;
+using SyncAfterToolCallPolicy = std::move_only_function<
+    util::Expected<AfterToolCallResult>(AfterToolCallContext)>;
+using CancellableSyncAfterToolCallPolicy = std::move_only_function<
+    util::Expected<AfterToolCallResult>(AfterToolCallContext, std::stop_token)>;
+
+[[nodiscard]] BeforeToolCallHook adapt_sync_before_tool_call(
+    SyncBeforeToolCallPolicy policy);
+[[nodiscard]] BeforeToolCallHook adapt_sync_before_tool_call(
+    CancellableSyncBeforeToolCallPolicy policy);
+[[nodiscard]] AfterToolCallHook adapt_sync_after_tool_call(
+    SyncAfterToolCallPolicy policy);
+[[nodiscard]] AfterToolCallHook adapt_sync_after_tool_call(
+    CancellableSyncAfterToolCallPolicy policy);
 
 enum class ToolConcurrency {
     Exclusive,

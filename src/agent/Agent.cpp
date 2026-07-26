@@ -9,6 +9,7 @@
 #include <exception>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -223,6 +224,7 @@ struct Agent::Impl {
     AsyncAgentLoop loop;
     AgentState state;
     bool active_run{false};
+    std::optional<std::stop_source> active_stop_source;
     std::size_t invocation_message_offset{};
     std::size_t next_subscriber_id{1};
     std::vector<std::shared_ptr<Subscriber>> subscribers;
@@ -320,6 +322,7 @@ boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
     }
 
     impl->active_run = true;
+    impl->active_stop_source.emplace();
     impl->state.is_running = true;
     impl->state.streaming_message.reset();
     impl->state.pending_tool_call_ids.clear();
@@ -334,6 +337,7 @@ boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
         impl->state.streaming_message.reset();
         impl->state.pending_tool_call_ids.clear();
         impl->state.is_running = false;
+        impl->active_stop_source.reset();
         impl->active_run = false;
         impl->remove_unregistered_subscribers();
     };
@@ -348,7 +352,8 @@ boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
                 const AgentLifecycleEvent& event) {
                 return impl->process_event(
                     event, run_subscribers, commitment, commitment_failure);
-            });
+            },
+            impl->active_stop_source->get_token());
     } catch (const std::exception& exception) {
         finish_run();
         co_return std::unexpected(util::make_error(

@@ -18,6 +18,7 @@
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <stop_token>
 #include <string>
 #include <variant>
 #include <vector>
@@ -230,6 +231,31 @@ TEST_CASE("stateful Agent retains a scripted fake-provider prompt in its passive
 
     snapshot.messages.clear();
     CHECK(subject.state().messages.size() == 2);
+}
+
+TEST_CASE(
+    "stateful Agent gives awaitable policies its active run stop token",
+    "[agent][stateful][issue82]") {
+    auto client = ai::providers::make_scripted_fake_chat_client();
+    agent::AsyncAgentOptions options;
+    options.max_turns = 3;
+    options.model = ai::Model{"fake-model"};
+
+    bool stop_possible = false;
+    bool stop_requested = true;
+    options.transform_context = [&stop_possible, &stop_requested](
+                                    std::vector<ai::MessageVariant> messages,
+                                    std::stop_token stop_token)
+        -> boost::asio::awaitable<util::Expected<std::vector<ai::MessageVariant>>> {
+        stop_possible = stop_token.stop_possible();
+        stop_requested = stop_token.stop_requested();
+        co_return messages;
+    };
+
+    agent::Agent subject(*client, agent::AsyncToolRegistry{}, std::move(options));
+    REQUIRE(run_prompt(subject, "hello"));
+    CHECK(stop_possible);
+    CHECK_FALSE(stop_requested);
 }
 
 TEST_CASE("stateful Agent reduces lifecycle state before ordered move-only observers", "[agent][stateful][issue35]") {
@@ -638,7 +664,9 @@ TEST_CASE("stateful Agent retains applied run-state updates after a later policy
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = ai::Model{"model-old"};
-    options.prepare_next_turn = [&prepared_turns](const agent::PrepareNextTurnContext&)
+    options.prepare_next_turn =
+        agent::adapt_sync_prepare_next_turn(
+            [&prepared_turns](const agent::PrepareNextTurnContext&)
         -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> {
         ++prepared_turns;
         if (prepared_turns == 1) {
@@ -646,10 +674,14 @@ TEST_CASE("stateful Agent retains applied run-state updates after a later policy
                 std::nullopt, ai::Model{"model-new"}, std::string{"high"}};
         }
         return std::nullopt;
-    };
-    options.validate_turn_update = [](const agent::AgentLoopTurnUpdate&)
-        -> util::ExpectedVoid { return {}; };
-    options.should_stop_after_turn = [&stop_decisions](const agent::PrepareNextTurnContext&)
+    });
+    options.validate_turn_update =
+        agent::adapt_sync_validate_turn_update(
+            [](const agent::AgentLoopTurnUpdate&)
+        -> util::ExpectedVoid { return {}; });
+    options.should_stop_after_turn =
+        agent::adapt_sync_should_stop_after_turn(
+            [&stop_decisions](const agent::PrepareNextTurnContext&)
         -> util::Expected<bool> {
         ++stop_decisions;
         if (stop_decisions == 2) {
@@ -658,7 +690,7 @@ TEST_CASE("stateful Agent retains applied run-state updates after a later policy
                 "stop policy failed"));
         }
         return false;
-    };
+    });
 
     agent::Agent subject(client, std::move(tools), std::move(options));
 
