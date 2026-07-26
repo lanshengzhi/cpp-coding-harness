@@ -37,6 +37,12 @@ public:
         AgentEventSink sink = {},
         std::stop_token stop_token = {});
 
+    [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> continue_with(
+        std::vector<ai::MessageVariant> history,
+        ai::UserMessage user_message,
+        AgentEventSink sink = {},
+        std::stop_token stop_token = {});
+
 private:
     friend class Agent;
 

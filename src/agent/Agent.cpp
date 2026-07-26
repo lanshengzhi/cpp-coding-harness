@@ -310,13 +310,13 @@ boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
     std::string user_prompt,
     AgentEventCommitter commitment) {
     co_return co_await prompt(
-        std::move(user_prompt),
+        ai::user_text_message(std::move(user_prompt)),
         std::move(commitment),
         std::stop_source{});
 }
 
 boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
-    std::string user_prompt,
+    ai::UserMessage user_message,
     AgentEventCommitter commitment,
     std::stop_source stop_source) {
     auto impl = impl_;
@@ -357,7 +357,7 @@ boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
     try {
         result = co_await impl->loop.continue_with(
             impl->state.messages,
-            std::move(user_prompt),
+            std::move(user_message),
             [impl, run_subscribers, &commitment, &commitment_failure](
                 const AgentLifecycleEvent& event) {
                 return impl->process_event(

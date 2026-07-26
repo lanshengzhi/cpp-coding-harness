@@ -124,6 +124,7 @@ util::ExpectedVoid AgentSessionRuntime::reject_if_busy() const {
 
 boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
     std::string prompt,
+    std::vector<ai::ImageContent> images,
     bool expand_prompt_templates,
     std::move_only_function<util::ExpectedVoid()> on_preflight_accepted) {
     if (auto rejected = reject_if_closed(); !rejected) {
@@ -158,8 +159,13 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
             }
         }
         if (run_agent) {
+            auto user_message = ai::user_text_message(std::move(expanded_prompt));
+            user_message.content.reserve(user_message.content.size() + images.size());
+            for (auto& image : images) {
+                user_message.content.emplace_back(std::move(image));
+            }
             result = co_await run_agent_loop(
-                std::move(expanded_prompt),
+                std::move(user_message),
                 *active_stop_source_);
         }
     } catch (...) {
@@ -178,7 +184,7 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
 }
 
 boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
-    std::string prompt,
+    ai::UserMessage prompt,
     std::stop_source stop_source) {
     if (!agent_) {
         co_return std::unexpected(util::make_error(

@@ -3,6 +3,7 @@
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/agent/AgentTool.hpp>
 #include <cch/ai/ChatClient.hpp>
+#include <cch/ai/Content.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
@@ -208,6 +209,9 @@ struct PromptOptions {
     /// When false, bypass skill and prompt-template expansion and send the raw
     /// text to the agent loop.
     bool expand_prompt_templates{true};
+    /// Image content appended after the prompt text in the resulting user
+    /// message. Values pass through unchanged to the selected provider.
+    std::vector<ai::ImageContent> images;
 };
 
 // ── EventSubscription ────────────────────────────────────────────────────────
@@ -274,7 +278,8 @@ public:
 
     // ── Prompt execution ─────────────────────────────────────────────────
 
-    /// Run a prompt to completion on the awaiting coroutine's Asio executor.
+    /// Run a text prompt with optional image content to completion on the
+    /// awaiting coroutine's Asio executor.
     /// Progress is delivered through persistent subscriptions, and resulting
     /// state is queried separately. Provider rejection before runtime transport
     /// and infrastructure failures such as a provider event sink or persistence

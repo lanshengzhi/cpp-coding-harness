@@ -16,11 +16,11 @@ class AgentPromptAccess {
 public:
     [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> prompt(
         Agent& agent,
-        std::string user_prompt,
+        ai::UserMessage user_message,
         AgentEventCommitter commitment,
         std::stop_source stop_source) {
         return agent.prompt(
-            std::move(user_prompt),
+            std::move(user_message),
             std::move(commitment),
             std::move(stop_source));
     }

@@ -128,6 +128,7 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSession::prompt(
     return detail::AgentSessionPromptAccess::prompt(
         *this,
         std::move(text),
+        std::move(options.images),
         options.expand_prompt_templates,
         {});
 }
@@ -138,6 +139,7 @@ util::ExpectedVoid AgentSession::prompt_blocking(
     return detail::AgentSessionPromptAccess::prompt_blocking(
         *this,
         std::move(text),
+        std::move(options.images),
         options.expand_prompt_templates,
         {});
 }
@@ -145,11 +147,13 @@ util::ExpectedVoid AgentSession::prompt_blocking(
 boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::prompt(
     AgentSession& session,
     std::string text,
+    std::vector<ai::ImageContent> images,
     bool expand_prompt_templates,
     std::move_only_function<util::ExpectedVoid()> on_preflight_accepted) {
     return prompt_impl(
         session.impl_,
         std::move(text),
+        std::move(images),
         expand_prompt_templates,
         std::move(on_preflight_accepted));
 }
@@ -157,6 +161,7 @@ boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::pro
 boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::prompt_impl(
     std::shared_ptr<AgentSession::Impl> impl,
     std::string text,
+    std::vector<ai::ImageContent> images,
     bool expand_prompt_templates,
     std::move_only_function<util::ExpectedVoid()> on_preflight_accepted) {
     if (!impl || !impl->runtime) {
@@ -167,6 +172,7 @@ boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::pro
     try {
         co_return co_await impl->runtime->run_prompt(
             std::move(text),
+            std::move(images),
             expand_prompt_templates,
             std::move(on_preflight_accepted));
     } catch (...) {
@@ -177,6 +183,7 @@ boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::pro
 util::ExpectedVoid detail::AgentSessionPromptAccess::prompt_blocking(
     AgentSession& session,
     std::string text,
+    std::vector<ai::ImageContent> images,
     bool expand_prompt_templates,
     std::move_only_function<util::ExpectedVoid()> on_preflight_accepted) {
     const auto impl = session.impl_;
@@ -200,6 +207,7 @@ util::ExpectedVoid detail::AgentSessionPromptAccess::prompt_blocking(
         prompt(
             session,
             std::move(text),
+            std::move(images),
             expand_prompt_templates,
             std::move(on_preflight_accepted)),
         [&](std::exception_ptr completion_exception, util::ExpectedVoid completion) {

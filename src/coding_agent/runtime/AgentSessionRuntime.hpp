@@ -48,6 +48,7 @@ public:
     /// interpretation, the stateful Agent, persistence, and event fanout.
     [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> run_prompt(
         std::string prompt,
+        std::vector<ai::ImageContent> images,
         bool expand_prompt_templates,
         std::move_only_function<util::ExpectedVoid()> on_preflight_accepted = {});
 
@@ -96,7 +97,7 @@ private:
     [[nodiscard]] util::ExpectedVoid reject_if_busy() const;
 
     [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> run_agent_loop(
-        std::string prompt,
+        ai::UserMessage prompt,
         std::stop_source stop_source);
     [[nodiscard]] boost::asio::awaitable<void> finalize_close_after_prompt();
     [[nodiscard]] std::shared_ptr<harness::AsyncExecutionEnv> release_close_resources() noexcept;

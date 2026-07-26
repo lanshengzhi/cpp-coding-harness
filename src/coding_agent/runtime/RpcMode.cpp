@@ -203,6 +203,7 @@ int run_rpc_mode(RpcModeConfig config) {
             auto result = detail::AgentSessionPromptAccess::prompt_blocking(
                 config.session,
                 std::move(*message),
+                {},
                 true,
                 [&]() -> util::ExpectedVoid {
                     auto written = write_response(

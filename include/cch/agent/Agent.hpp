@@ -106,7 +106,7 @@ private:
     /// source. Copies of the source share one stop state, allowing an admission
     /// owner to request cancellation before the Agent coroutine starts.
     [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> prompt(
-        std::string user_prompt,
+        ai::UserMessage user_message,
         AgentEventCommitter commitment,
         std::stop_source stop_source);
 

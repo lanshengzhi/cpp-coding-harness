@@ -188,6 +188,18 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
     std::string user_prompt,
     AgentEventSink sink,
     std::stop_token stop_token) {
+    co_return co_await continue_with(
+        std::move(history),
+        ai::user_text_message(std::move(user_prompt)),
+        std::move(sink),
+        stop_token);
+}
+
+boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::continue_with(
+    std::vector<ai::MessageVariant> history,
+    ai::UserMessage user_message,
+    AgentEventSink sink,
+    std::stop_token stop_token) {
     ai::AiContext context;
     context.tools = registry_.definitions();
     context.messages = std::move(history);
@@ -202,7 +214,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
 
     CCH_TRY_VOID(emit_agent_event(sink, AgentStartEvent{}));
 
-    ai::MessageVariant user_message = ai::user_text_message(std::move(user_prompt));
+    ai::MessageVariant initial_user_message{std::move(user_message)};
 
     std::vector<ai::MessageVariant> pending_messages;
     bool cancellation_completion_attempted = false;
@@ -215,7 +227,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         CCH_TRY_VOID(emit_agent_event(sink, TurnStartEvent{}));
 
         if (turn == 1) {
-            CCH_TRY_VOID(append_message_with_lifecycle(state, context, sink, std::move(user_message)));
+            CCH_TRY_VOID(append_message_with_lifecycle(
+                state, context, sink, std::move(initial_user_message)));
             new_messages.push_back(context.messages.back());
         }
 

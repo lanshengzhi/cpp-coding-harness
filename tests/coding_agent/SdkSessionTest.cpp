@@ -389,6 +389,38 @@ public:
     }
 };
 
+class ImageRejectingChatClient final : public ai::StreamingChatClient {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink /*sink*/) override {
+        ++request_count;
+        const bool has_image = std::ranges::any_of(
+            request.context.messages,
+            [](const ai::MessageVariant& message) {
+                const auto* user = std::get_if<ai::UserMessage>(&message);
+                return user != nullptr && std::ranges::any_of(
+                    user->content,
+                    [](const ai::Content& content) {
+                        return std::holds_alternative<ai::ImageContent>(content);
+                    });
+            });
+        if (has_image) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Provider,
+                "image input is not supported"));
+        }
+
+        auto response = ai::assistant_text_message("text accepted");
+        response.provider = "image-rejecting-fake";
+        response.api = "fake";
+        response.model = request.model->id;
+        co_return response;
+    }
+
+    int request_count{0};
+};
+
 class MalformedArgumentsChatClient final : public ai::StreamingChatClient {
 public:
     explicit MalformedArgumentsChatClient(std::string secret)
@@ -886,6 +918,14 @@ TEST_CASE("SDK prompt contract exposes success-or-error and separate state", "[s
     static_assert(!std::is_constructible_v<coding_agent::PromptOptions, agent::AgentEventSink>);
 }
 
+TEST_CASE("SDK AgentSession prompt accepts zero or more image values", "[sdk][u1][issue43]") {
+    using PromptImages = decltype(std::declval<coding_agent::PromptOptions>().images);
+    static_assert(std::is_same_v<PromptImages, std::vector<ai::ImageContent>>);
+
+    coding_agent::PromptOptions options;
+    CHECK(options.images.empty());
+}
+
 TEST_CASE("SDK session options default to no turn cap", "[sdk][u1][issue68]") {
     const coding_agent::CreateAgentSessionOptions opts;
     CHECK_FALSE(opts.max_turns.has_value());
@@ -894,6 +934,139 @@ TEST_CASE("SDK session options default to no turn cap", "[sdk][u1][issue68]") {
     capped.max_turns = 10;
     REQUIRE(capped.max_turns.has_value());
     CHECK(*capped.max_turns == 10);
+}
+
+TEST_CASE(
+    "SDK AgentSession preserves image prompts through live state persistence and resume",
+    "[sdk][live-state][incremental-persistence][issue43]") {
+    TestPaths paths;
+    auto capture = std::make_unique<CaptureChatClient>();
+    auto* capture_ptr = capture.get();
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    options.workspace = paths.workspace.path();
+    options.chat_client = std::move(capture);
+
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created.has_value());
+
+    coding_agent::PromptOptions one_image;
+    one_image.images.push_back(ai::ImageContent{
+        .data = "cG5nLWxpdGVyYWw=",
+        .mime_type = "image/png",
+    });
+    REQUIRE(created->session->prompt_blocking("inspect one", std::move(one_image)).has_value());
+    REQUIRE(capture_ptr->captured_request.has_value());
+    const auto& first_request_user = std::get<ai::UserMessage>(
+        capture_ptr->captured_request->context.messages.front());
+    REQUIRE(first_request_user.content.size() == 2);
+    CHECK(std::get<ai::TextContent>(first_request_user.content[0]).text == "inspect one");
+    CHECK(std::get<ai::ImageContent>(first_request_user.content[1]).data == "cG5nLWxpdGVyYWw=");
+    CHECK(std::get<ai::ImageContent>(first_request_user.content[1]).mime_type == "image/png");
+
+    coding_agent::PromptOptions multiple_images;
+    multiple_images.images = {
+        ai::ImageContent{
+            .data = "d2VicC1saXRlcmFs",
+            .mime_type = "image/webp",
+        },
+        ai::ImageContent{
+            .data = "Z2lmLWxpdGVyYWw=",
+            .mime_type = "image/gif",
+        },
+    };
+    REQUIRE(created->session->prompt_blocking("compare both", std::move(multiple_images)).has_value());
+    REQUIRE(capture_ptr->captured_request.has_value());
+    const auto& second_request_user = std::get<ai::UserMessage>(
+        capture_ptr->captured_request->context.messages[2]);
+    REQUIRE(second_request_user.content.size() == 3);
+    CHECK(std::get<ai::TextContent>(second_request_user.content[0]).text == "compare both");
+    CHECK(std::get<ai::ImageContent>(second_request_user.content[1]).mime_type == "image/webp");
+    CHECK(std::get<ai::ImageContent>(second_request_user.content[1]).data == "d2VicC1saXRlcmFs");
+    CHECK(std::get<ai::ImageContent>(second_request_user.content[2]).mime_type == "image/gif");
+    CHECK(std::get<ai::ImageContent>(second_request_user.content[2]).data == "Z2lmLWxpdGVyYWw=");
+
+    const auto snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.messages.size() == 4);
+    const auto& live_user = std::get<ai::UserMessage>(snapshot.agent_state.messages[2]);
+    REQUIRE(live_user.content.size() == 3);
+    CHECK(std::get<ai::ImageContent>(live_user.content[1]).data == "d2VicC1saXRlcmFs");
+    CHECK(std::get<ai::ImageContent>(live_user.content[2]).data == "Z2lmLWxpdGVyYWw=");
+
+    auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable.has_value());
+    REQUIRE(durable->messages.size() == 4);
+    const auto& persisted_user = std::get<ai::UserMessage>(durable->messages[2]);
+    REQUIRE(persisted_user.content.size() == 3);
+    CHECK(std::get<ai::ImageContent>(persisted_user.content[1]).mime_type == "image/webp");
+    CHECK(std::get<ai::ImageContent>(persisted_user.content[2]).mime_type == "image/gif");
+    created->session->close();
+
+    auto resumed_capture = std::make_unique<CaptureChatClient>();
+    auto* resumed_capture_ptr = resumed_capture.get();
+    coding_agent::CreateAgentSessionOptions resume_options;
+    resume_options.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
+    resume_options.workspace = paths.workspace.path();
+    resume_options.chat_client = std::move(resumed_capture);
+    auto resumed = coding_agent::create_agent_session(std::move(resume_options));
+    REQUIRE(resumed.has_value());
+    REQUIRE(resumed->session->prompt_blocking("continue").has_value());
+    REQUIRE(resumed_capture_ptr->captured_request.has_value());
+    const auto& resumed_user = std::get<ai::UserMessage>(
+        resumed_capture_ptr->captured_request->context.messages[2]);
+    REQUIRE(resumed_user.content.size() == 3);
+    CHECK(std::get<ai::ImageContent>(resumed_user.content[1]).data == "d2VicC1saXRlcmFs");
+    CHECK(std::get<ai::ImageContent>(resumed_user.content[2]).data == "Z2lmLWxpdGVyYWw=");
+    resumed->session->close();
+}
+
+TEST_CASE("SDK AgentSession keeps text-only prompts as the zero-image case", "[sdk][issue43]") {
+    TestPaths paths;
+    auto capture = std::make_unique<CaptureChatClient>();
+    auto* capture_ptr = capture.get();
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = paths.workspace.path();
+    options.chat_client = std::move(capture);
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created.has_value());
+
+    REQUIRE(created->session->prompt_blocking("text only").has_value());
+    REQUIRE(capture_ptr->captured_request.has_value());
+    const auto& user = std::get<ai::UserMessage>(capture_ptr->captured_request->context.messages.front());
+    REQUIRE(user.content.size() == 1);
+    CHECK(std::get<ai::TextContent>(user.content.front()).text == "text only");
+    created->session->close();
+}
+
+TEST_CASE("SDK AgentSession exposes incompatible image destinations as provider failures", "[sdk][issue43]") {
+    TestPaths paths;
+    auto rejecting_client = std::make_unique<ImageRejectingChatClient>();
+    auto* rejecting_client_ptr = rejecting_client.get();
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = paths.workspace.path();
+    options.chat_client = std::move(rejecting_client);
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created.has_value());
+
+    coding_agent::PromptOptions prompt_options;
+    prompt_options.images.push_back(ai::ImageContent{
+        .data = "cmVqZWN0LW1l",
+        .mime_type = "image/png",
+    });
+    auto rejected = created->session->prompt_blocking("inspect", std::move(prompt_options));
+    REQUIRE_FALSE(rejected.has_value());
+    CHECK(rejected.error().code == util::ErrorCode::Provider);
+    CHECK(rejected.error().message == "image input is not supported");
+    CHECK(rejecting_client_ptr->request_count == 1);
+    const auto snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.messages.size() == 1);
+    const auto& user = std::get<ai::UserMessage>(snapshot.agent_state.messages.front());
+    REQUIRE(user.content.size() == 2);
+    CHECK(std::get<ai::ImageContent>(user.content[1]).data == "cmVqZWN0LW1l");
+    created->session->close();
 }
 
 TEST_CASE("AgentSession is move-only", "[sdk][u1]") {
@@ -2778,6 +2951,7 @@ TEST_CASE(
     auto result = coding_agent::detail::AgentSessionPromptAccess::prompt_blocking(
         *created->session,
         "close during preflight",
+        {},
         true,
         [&]() -> util::ExpectedVoid {
             preflight_accepted = true;
