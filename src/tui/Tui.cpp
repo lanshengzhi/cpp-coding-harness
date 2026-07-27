@@ -6,9 +6,11 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace cch::tui {
 namespace {
@@ -35,6 +37,20 @@ constexpr std::size_t kInputDecodeChunkBytes = 4096;
     return terminal.write(std::string(columns, ' '));
 }
 
+/// Sort overlays by z_index ascending for rendering draw order.
+[[nodiscard]] std::vector<Overlay*> sorted_visible_overlays(
+    std::vector<std::unique_ptr<Overlay>>& overlays,
+    TerminalDimensions viewport) {
+    std::vector<Overlay*> visible;
+    for (const auto& overlay : overlays) {
+        if (overlay->visible_at(viewport)) visible.push_back(overlay.get());
+    }
+    std::sort(visible.begin(), visible.end(), [](const Overlay* a, const Overlay* b) {
+        return a->options().z_index < b->options().z_index;
+    });
+    return visible;
+}
+
 } // namespace
 
 Tui::Tui(Terminal& terminal)
@@ -47,6 +63,78 @@ Tui::~Tui() {
 
 util::Expected<std::reference_wrapper<Component>> Tui::add_child(std::unique_ptr<Component> component) {
     return detail::attach_child(children_, std::move(component), "");
+}
+
+util::Expected<std::reference_wrapper<Overlay>> Tui::add_overlay(std::unique_ptr<Overlay> overlay) {
+    if (!overlay) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "TUI cannot attach a null Overlay"));
+    }
+    auto& ref = *overlay;
+    overlays_.push_back(std::move(overlay));
+    return ref;
+}
+
+util::ExpectedVoid Tui::remove_overlay(Overlay* overlay) {
+    if (overlay == nullptr) return {};
+    if (!owns_overlay(overlay)) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "Overlay is not attached to this TUI"));
+    }
+
+    // Remember if this overlay was focused before we remove it.
+    const bool was_focused = (focused_ == static_cast<Component*>(overlay));
+
+    const auto before = overlays_.size();
+    std::erase_if(overlays_, [overlay](const auto& ptr) { return ptr.get() == overlay; });
+    if (overlays_.size() == before) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "Overlay not found in TUI"));
+    }
+
+    // Fallback focus after removal so we don't target the removed overlay.
+    if (was_focused) {
+        focused_ = nullptr;
+        fallback_focus();
+    }
+    return {};
+}
+
+util::ExpectedVoid Tui::hide_overlay(Overlay* overlay) {
+    if (overlay == nullptr) return {};
+    if (!owns_overlay(overlay)) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "Overlay is not attached to this TUI"));
+    }
+
+    overlay->set_visible(false);
+
+    // If the hidden overlay was focused, find a fallback
+    auto* as_component = static_cast<Component*>(overlay);
+    if (focused_ == as_component) {
+        focused_ = nullptr;
+        fallback_focus();
+    }
+
+    invalidate();
+    return {};
+}
+
+util::ExpectedVoid Tui::restore_overlay(Overlay* overlay) {
+    if (overlay == nullptr) return {};
+    if (!owns_overlay(overlay)) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "Overlay is not attached to this TUI"));
+    }
+
+    overlay->set_visible(true);
+    invalidate();
+    return {};
 }
 
 util::ExpectedVoid Tui::start() {
@@ -79,6 +167,12 @@ util::ExpectedVoid Tui::stop() {
     if (!started_) {
         return {};
     }
+
+    // Unfocus everything before stopping
+    if (auto* focusable = dynamic_cast<Focusable*>(focused_)) {
+        focusable->set_focused(false);
+    }
+    focused_ = nullptr;
 
     const auto cursor_result = terminal_.set_cursor_visible(true);
     const auto stop_result = terminal_.stop();
@@ -139,7 +233,6 @@ util::ExpectedVoid Tui::render() {
     auto render_result = [&]() -> util::ExpectedVoid {
         if (first_render) {
             // First render: write full viewport content without clearing scrollback.
-            // Hide cursor was already called in start().
             for (std::size_t row = 0; row < new_lines.size(); ++row) {
                 if (auto result = write_line(terminal_, row, new_lines[row]); !result) {
                     return std::unexpected(result.error());
@@ -148,7 +241,7 @@ util::ExpectedVoid Tui::render() {
             // Place cursor at the end of written content so the terminal advances
             // its scrollback past the rendered content.
             if (auto result = terminal_.set_cursor(
-                    CursorPosition{.column = 0, .row = new_lines.empty() ? 0U : new_lines.size() - 1});
+                    CursorPosition{.column = 0, .row = new_lines.empty() ? 0U : std::min(new_lines.size(), dimensions.rows) - 1});
                 !result) {
                 return std::unexpected(result.error());
             }
@@ -207,6 +300,26 @@ util::ExpectedVoid Tui::render() {
         return {};
     }();
 
+    // Render overlays on top of base content
+    if (render_result) {
+        if (auto overlay_result = render_overlays(dimensions); !overlay_result) {
+            render_result = std::unexpected(overlay_result.error());
+        }
+    }
+
+    // Position IME cursor based on focused component
+    if (render_result) {
+        auto cursor_loc = resolve_cursor_location();
+        if (cursor_loc) {
+            // Position the hardware cursor at the focused component's cursor location
+            // for IME composition without making it visible by default
+            // We position but keep invisible so the IME knows where the cursor is
+            if (auto cursor_result = terminal_.set_cursor(*cursor_loc); !cursor_result) {
+                render_result = std::unexpected(cursor_result.error());
+            }
+        }
+    }
+
     if (supports_sync) {
         if (auto end_result = terminal_.end_synchronized_update(); !end_result) {
             if (!render_result) return std::unexpected(render_result.error());
@@ -243,11 +356,75 @@ util::Expected<std::vector<std::string>> Tui::render_children(TerminalDimensions
     return lines;
 }
 
+util::ExpectedVoid Tui::render_overlays(TerminalDimensions dimensions) {
+    auto visible_overlays = sorted_visible_overlays(overlays_, dimensions);
+
+    for (auto* overlay : visible_overlays) {
+        // Render the overlay content
+        auto rendered = overlay->render(dimensions.columns);
+        if (!rendered) return std::unexpected(rendered.error());
+
+        if (rendered->empty()) continue;
+
+        // Compute content dimensions
+        std::size_t content_width = 0;
+        for (const auto& line : *rendered) {
+            content_width = std::max(content_width, detail::visible_width(line));
+        }
+        const auto content_height = rendered->size();
+
+        // Compute layout position
+        const auto [offset_col, offset_row] = overlay->layout_position(
+            dimensions.columns, dimensions.rows, content_width, content_height);
+
+        // Apply margins
+        const auto& margins = overlay->options().margins;
+        const auto final_col = offset_col + margins.left;
+        const auto final_row = offset_row + margins.top;
+
+        // Write each line at its position, clipping to viewport
+        for (std::size_t row = 0; row < content_height; ++row) {
+            const auto target_row = final_row + row;
+            if (target_row >= dimensions.rows) break;
+
+            const auto& line = (*rendered)[row];
+            // Clip horizontally
+            const auto target_col = std::min(final_col, dimensions.columns - 1);
+            const auto visible_width = std::min(
+                static_cast<std::size_t>(line.size()),
+                dimensions.columns - target_col);
+
+            if (visible_width == 0) continue;
+
+            auto display_line = line.substr(0, visible_width);
+            if (display_line.size() < dimensions.columns) {
+                display_line.append(dimensions.columns - display_line.size(), ' ');
+            }
+
+            if (auto result = write_line(terminal_, target_row, display_line); !result) {
+                return std::unexpected(result.error());
+            }
+        }
+    }
+
+    return {};
+}
+
 util::ExpectedVoid Tui::set_focus(Component* component) {
     if (component != nullptr && !owns(component)) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "TUI focus target is not attached to this root"));
+        // Check if component is inside an overlay
+        bool found_in_overlay = false;
+        for (const auto& overlay : overlays_) {
+            if (static_cast<Component*>(overlay.get()) == component) {
+                found_in_overlay = true;
+                break;
+            }
+        }
+        if (!found_in_overlay) {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Validation,
+                "TUI focus target is not attached to this root"));
+        }
     }
     if (component != nullptr && dynamic_cast<Focusable*>(component) == nullptr) {
         return std::unexpected(util::make_error(
@@ -270,6 +447,9 @@ void Tui::invalidate() {
     for (const auto& child : children_) {
         child->invalidate();
     }
+    for (const auto& overlay : overlays_) {
+        overlay->invalidate();
+    }
 }
 
 bool Tui::owns(const Component* component) const {
@@ -277,6 +457,13 @@ bool Tui::owns(const Component* component) const {
         if (child.get() == component) {
             return true;
         }
+    }
+    return false;
+}
+
+bool Tui::owns_overlay(const Overlay* overlay) const {
+    for (const auto& owned : overlays_) {
+        if (owned.get() == overlay) return true;
     }
     return false;
 }
@@ -294,8 +481,31 @@ void Tui::handle_input(std::string input) {
 }
 
 void Tui::dispatch_input(const InputEventVariant& event) {
+    // Try overlays first (in reverse z-order, topmost first)
+    auto visible = sorted_visible_overlays(overlays_, previous_dimensions_);
+    for (auto it = visible.rbegin(); it != visible.rend(); ++it) {
+        auto* overlay = *it;
+        // Non-capturing overlays pass input through
+        if (overlay->options().non_capturing) continue;
+
+        if (auto* input_handler = dynamic_cast<InputHandler*>(overlay)) {
+            if (const auto* key = std::get_if<KeyEvent>(&event);
+                key != nullptr && key->type == KeyEventType::Release && !input_handler->accepts_key_releases()) {
+                continue;
+            }
+            input_handler->handle_input(event);
+            return;
+        }
+    }
+
+    // Fallback to focused base component
     auto* input_handler = dynamic_cast<InputHandler*>(focused_);
-    if (input_handler == nullptr) return;
+    if (input_handler == nullptr) {
+        // Try first focusable for initial dispatch
+        fallback_focus();
+        input_handler = dynamic_cast<InputHandler*>(focused_);
+        if (input_handler == nullptr) return;
+    }
     if (const auto* key = std::get_if<KeyEvent>(&event);
         key != nullptr && key->type == KeyEventType::Release && !input_handler->accepts_key_releases()) {
         return;
@@ -305,6 +515,43 @@ void Tui::dispatch_input(const InputEventVariant& event) {
 
 void Tui::handle_resize(TerminalDimensions) {
     invalidate();
+}
+
+void Tui::fallback_focus() {
+    if (auto* target = find_focusable_target()) {
+        auto* as_component = dynamic_cast<Component*>(target);
+        if (as_component != focused_) {
+            if (auto* previous = dynamic_cast<Focusable*>(focused_)) {
+                previous->set_focused(false);
+            }
+            focused_ = as_component;
+            target->set_focused(true);
+        }
+    }
+}
+
+Focusable* Tui::find_focusable_target() {
+    // Look in visible overlays first (topmost first)
+    auto visible = sorted_visible_overlays(overlays_, previous_dimensions_);
+    for (auto it = visible.rbegin(); it != visible.rend(); ++it) {
+        auto* focusable = dynamic_cast<Focusable*>(*it);
+        if (focusable != nullptr && !(*it)->options().non_capturing) return focusable;
+    }
+
+    // Fallback to first focusable base child
+    for (const auto& child : children_) {
+        auto* focusable = dynamic_cast<Focusable*>(child.get());
+        if (focusable != nullptr) return focusable;
+    }
+    return nullptr;
+}
+
+std::optional<CursorPosition> Tui::resolve_cursor_location() const {
+    if (focused_ == nullptr) return std::nullopt;
+    auto* focusable = dynamic_cast<Focusable*>(focused_);
+    if (focusable == nullptr) return std::nullopt;
+    if (!focusable->focused()) return std::nullopt;
+    return focusable->cursor_location();
 }
 
 } // namespace cch::tui

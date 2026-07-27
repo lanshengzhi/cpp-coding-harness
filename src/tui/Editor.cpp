@@ -961,6 +961,57 @@ bool Editor::focused() const {
     return impl_->focused;
 }
 
+std::optional<CursorPosition> Editor::cursor_location() const {
+    if (!impl_->focused || impl_->layout_width == 0) return std::nullopt;
+    // Compute visual row/column for the cursor position
+    const auto visual = impl_->visual_lines(impl_->layout_width);
+    if (visual.empty()) return std::nullopt;
+
+    std::size_t visual_row = 0;
+    bool found = false;
+    for (std::size_t index = 0; index < visual.size(); ++index) {
+        if (visual[index].logical_line == impl_->cursor.line &&
+            impl_->cursor.column >= visual[index].start &&
+            impl_->cursor.column <= visual[index].end) {
+            visual_row = index;
+            found = true;
+            break;
+        }
+    }
+    if (!found) return std::nullopt;
+
+    // Account for scroll offset
+    const auto visible_count = std::max<std::size_t>(
+        1,
+        std::min(impl_->options.max_visible_lines, impl_->available_height));
+    if (visual_row < impl_->scroll_offset) return std::nullopt;
+    if (visual_row >= impl_->scroll_offset + visible_count) return std::nullopt;
+
+    const auto display_row = visual_row - impl_->scroll_offset;
+
+    // The column within the visual line is based on the actual rendered text
+    // of the visual line, mapped from the cursor's logical column position.
+    // Since visual lines may split single wide segments, we use the visual
+    // line's text width from its start to the cursor's proportional position.
+    const auto& vl = visual[visual_row];
+    const auto vl_text_width = detail::visible_width(vl.text);
+    // Compute the column as the cursor's position within this visual line,
+    // relative to the visual line's segment range.
+    const auto cursor_in_line = impl_->cursor.column - vl.start;
+    const auto segs_in_line = vl.end - vl.start;
+    std::size_t col = 0;
+    if (segs_in_line > 0 && cursor_in_line <= segs_in_line) {
+        // Sum visible widths of segments that are fully within this visual line
+        const auto seg_end = vl.start + cursor_in_line;
+        for (std::size_t i = vl.start; i < seg_end && i < impl_->document[vl.logical_line].size(); ++i) {
+            col += detail::visible_width(impl_->document[vl.logical_line][i].text);
+        }
+        // Cap at the visual line's text width
+        col = std::min(col, vl_text_width);
+    }
+    return CursorPosition{.column = col, .row = display_row};
+}
+
 void Editor::set_available_height(std::size_t rows) {
     impl_->available_height = std::max<std::size_t>(1, rows);
 }

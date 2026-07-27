@@ -1,10 +1,12 @@
 #pragma once
 
 #include <cch/tui/Input.hpp>
+#include <cch/tui/Terminal.hpp>
 #include <cch/util/Error.hpp>
 
 #include <cstddef>
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -37,6 +39,10 @@ public:
 
     virtual void set_focused(bool focused) = 0;
     [[nodiscard]] virtual bool focused() const = 0;
+
+    /// Render-time cursor location for IME cursor positioning.
+    /// Returns std::nullopt when no cursor should be shown.
+    [[nodiscard]] virtual std::optional<CursorPosition> cursor_location() const { return std::nullopt; }
 };
 
 /// An optional Component capability for adapting presentation to its viewport.

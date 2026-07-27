@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/tui/Component.hpp>
+#include <cch/tui/Overlay.hpp>
 #include <cch/tui/Terminal.hpp>
 
 #include <functional>
@@ -32,17 +33,38 @@ public:
     [[nodiscard]] util::ExpectedVoid set_focus(Component* component);
     void invalidate();
 
+    /// Add an overlay. Overlays are rendered on top of base children
+    /// and support position strategies, stacking, and focus isolation.
+    [[nodiscard]] util::Expected<std::reference_wrapper<Overlay>> add_overlay(
+        std::unique_ptr<Overlay> overlay);
+
+    /// Remove (dispose) an overlay. Focus falls back to the next
+    /// available overlay or base component.
+    [[nodiscard]] util::ExpectedVoid remove_overlay(Overlay* overlay);
+
+    /// Hide an overlay. Focus falls back to the next available target.
+    [[nodiscard]] util::ExpectedVoid hide_overlay(Overlay* overlay);
+
+    /// Restore (show) a previously hidden overlay.
+    [[nodiscard]] util::ExpectedVoid restore_overlay(Overlay* overlay);
+
 private:
     [[nodiscard]] bool owns(const Component* component) const;
+    [[nodiscard]] bool owns_overlay(const Overlay* overlay) const;
     [[nodiscard]] util::Expected<std::vector<std::string>> render_children(TerminalDimensions dimensions);
+    [[nodiscard]] util::ExpectedVoid render_overlays(TerminalDimensions dimensions);
     void handle_input(std::string input);
     void dispatch_input(const InputEventVariant& event);
     void handle_resize(TerminalDimensions dimensions);
+    void fallback_focus();
+    [[nodiscard]] Focusable* find_focusable_target();
+    [[nodiscard]] std::optional<CursorPosition> resolve_cursor_location() const;
 
     Terminal& terminal_; // must outlive this Tui.
     std::unique_ptr<detail::InputDecoder> input_decoder_;
     std::vector<std::unique_ptr<Component>> children_;
-    Component* focused_{nullptr}; // Null or aliases an element owned by children_.
+    std::vector<std::unique_ptr<Overlay>> overlays_;
+    Component* focused_{nullptr}; // Null or aliases an element owned by children_ or overlays_.
     bool started_{false};
     bool first_render_{true};
     bool pending_render_{false};

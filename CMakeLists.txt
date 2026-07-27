@@ -57,6 +57,7 @@ add_library(cch_tui
     src/tui/Editor.cpp
     src/tui/Input.cpp
     src/tui/InputDecoder.cpp
+    src/tui/Overlay.cpp
     src/tui/Text.cpp
     src/tui/TruncatedText.cpp
     src/tui/Tui.cpp
@@ -247,6 +248,7 @@ if(CCH_BUILD_TESTS)
         tests/tui/ContainerTest.cpp
         tests/tui/EditorTest.cpp
         tests/tui/InputTest.cpp
+        tests/tui/OverlayTest.cpp
         tests/tui/RenderDifferentialTest.cpp
         tests/tui/TruncatedTextTest.cpp
         tests/tui/TuiTest.cpp

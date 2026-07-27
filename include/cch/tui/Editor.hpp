@@ -84,6 +84,7 @@ public:
     [[nodiscard]] bool accepts_key_releases() const override;
     void set_focused(bool focused) override;
     [[nodiscard]] bool focused() const override;
+    [[nodiscard]] std::optional<CursorPosition> cursor_location() const override;
     void set_available_height(std::size_t rows) override;
 
 private:
