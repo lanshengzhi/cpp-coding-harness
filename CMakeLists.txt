@@ -17,6 +17,7 @@ find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(CLI11 CONFIG REQUIRED)
 find_package(glaze CONFIG REQUIRED)
+find_package(md4c CONFIG REQUIRED)
 find_package(utf8proc CONFIG QUIET)
 if(NOT TARGET utf8proc::utf8proc)
     find_path(UTF8PROC_INCLUDE_DIR NAMES utf8proc.h REQUIRED)
@@ -57,6 +58,7 @@ add_library(cch_tui
     src/tui/Editor.cpp
     src/tui/Input.cpp
     src/tui/InputDecoder.cpp
+    src/tui/Markdown.cpp
     src/tui/Overlay.cpp
     src/tui/Text.cpp
     src/tui/TruncatedText.cpp
@@ -68,6 +70,7 @@ cch_target_defaults(cch_tui)
 target_link_libraries(cch_tui
     PRIVATE
         cch_util
+        md4c::md4c
         utf8proc::utf8proc
 )
 
@@ -248,6 +251,7 @@ if(CCH_BUILD_TESTS)
         tests/tui/ContainerTest.cpp
         tests/tui/EditorTest.cpp
         tests/tui/InputTest.cpp
+        tests/tui/MarkdownTest.cpp
         tests/tui/OverlayTest.cpp
         tests/tui/RenderDifferentialTest.cpp
         tests/tui/TruncatedTextTest.cpp

@@ -24,13 +24,14 @@ The project is CMake-based and requires a C++23-capable compiler. CMake 3.25 or 
 
 - Glaze is used only at typed JSON serialization/deserialization boundaries.
 - utf8proc provides versioned Unicode grapheme segmentation and width properties inside the private TUI implementation.
+- MD4C provides tolerant Markdown parsing behind the public TUI component boundary.
 - Boost.Beast/Asio + OpenSSL provide the HTTPS transport implementation.
 - Boost.Process is used behind the process-execution capability boundary.
 - CLI11 and Catch2 are declared in `vcpkg.json`; this repository also carries a tiny Catch-compatible fallback test header so the default suite can run in minimal environments.
 
 ### Bootstrap with vcpkg (recommended)
 
-All dependencies are declared in `vcpkg.json`. The bootstrap scripts create a local `.deps/vcpkg` checkout when `VCPKG_ROOT` is not already set, bootstrap vcpkg, and configure CMake in manifest mode so dependencies such as CLI11, Glaze, Boost, and OpenSSL are installed automatically.
+All dependencies are declared in `vcpkg.json`. The bootstrap scripts create a local `.deps/vcpkg` checkout when `VCPKG_ROOT` is not already set, bootstrap vcpkg, and configure CMake in manifest mode so dependencies such as CLI11, Glaze, MD4C, Boost, and OpenSSL are installed automatically.
 
 Linux/macOS:
 
@@ -60,7 +61,7 @@ ctest --preset vcpkg
 
 ### Using system packages
 
-If you prefer system-installed dependencies, install Boost, OpenSSL, Glaze, CLI11, and utf8proc yourself, then use the system preset:
+If you prefer system-installed dependencies, install Boost, OpenSSL, Glaze, MD4C, CLI11, and utf8proc yourself, then use the system preset:
 
 ```bash
 cmake --preset system
@@ -197,7 +198,7 @@ The code is split into value contracts, capability seams, implementation adapter
 Package targets and responsibilities:
 
 - `cch_util` (`include/cch/util`, `src/util`): project error/expected contracts, move-only callback vocabulary, passive `JsonValue`, the Glaze-backed JSON adapter in `src/util/Json.hpp`, and async process execution.
-- `cch_tui` (`include/cch/tui`, `src/tui`): reusable source-level terminal UI contracts, a width-bounded Component seam, TUI root, semantic key and bracketed-paste input, a Unicode Editor with caller-supplied autocomplete, Text, and deterministic Virtual Terminal. It depends only on project utility contracts, exposes no third-party types, has no coding-agent dependency, and makes no ABI-stability promise.
+- `cch_tui` (`include/cch/tui`, `src/tui`): reusable source-level terminal UI contracts, a width-bounded Component seam, TUI root, semantic key and bracketed-paste input, a Unicode Editor with caller-supplied autocomplete, Text, injected-style Markdown with optional syntax highlighting, and deterministic Virtual Terminal. It depends only on project utility contracts, exposes no third-party types, has no coding-agent dependency, and makes no ABI-stability promise.
 - `cch_ai` (`include/cch/ai`, `src/ai`): passive message/content/tool/context contracts, provider-neutral stream events, provider registry, OpenAICompletionsCompat flags, OpenAI-compatible provider, scripted fake provider, and prompt cancellation propagation through provider transport; SSE and Glaze provider mapping live under `src/ai/`.
 - `cch_agent` (`include/cch/agent`, `src/agent`): public stateful `Agent` ownership of live message history, model/thinking/tool state, weak move-only subscriptions with bounded diagnostics, passive state snapshots, one active run, and the strong per-run commitment seam used by Agent Session persistence. The package also owns async tool registration, private Tool Argument Contract preparation, expected-style tool execution, pi-ordered prepare/stop/steering/follow-up policy seams, and sequential/bounded-parallel tool execution policy.
 - `cch_harness` (`include/cch/harness`, `src/harness`): pi-shaped filesystem and shell execution capability contracts (`FileSystem`/`Shell`), local implementation with workspace containment, symlink safety, atomic writes, split-stream process execution, secret environment filtering, and JSONL/in-memory Session Store implementations.

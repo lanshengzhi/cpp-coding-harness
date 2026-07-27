@@ -27,6 +27,7 @@
 #include <cch/tui/Container.hpp>
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Input.hpp>
+#include <cch/tui/Markdown.hpp>
 #include <cch/tui/Terminal.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/TruncatedText.hpp>
@@ -112,6 +113,13 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_abstract_v<tui::Terminal>);
     static_assert(std::is_move_constructible_v<tui::BackgroundHook>);
     static_assert(!std::is_copy_constructible_v<tui::BackgroundHook>);
+    static_assert(std::is_aggregate_v<tui::MarkdownStyleConfig>);
+    static_assert(std::is_move_constructible_v<tui::MarkdownStyleHook>);
+    static_assert(!std::is_copy_constructible_v<tui::MarkdownStyleHook>);
+    static_assert(std::is_move_constructible_v<tui::SyntaxHighlightHook>);
+    static_assert(!std::is_copy_constructible_v<tui::SyntaxHighlightHook>);
+    static_assert(std::is_move_constructible_v<tui::Markdown>);
+    static_assert(!std::is_copy_constructible_v<tui::Markdown>);
     static_assert(std::is_move_constructible_v<tui::Container>);
     static_assert(!std::is_copy_constructible_v<tui::Container>);
     static_assert(std::is_move_constructible_v<tui::Box>);
@@ -123,6 +131,7 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_final_v<tui::Spacer>);
     static_assert(std::is_final_v<tui::Text>);
     static_assert(std::is_final_v<tui::TruncatedText>);
+    static_assert(std::is_final_v<tui::Markdown>);
     static_assert(std::is_final_v<tui::Tui>);
     static_assert(std::is_aggregate_v<tui::VirtualTerminalStyle>);
     static_assert(std::is_aggregate_v<tui::VirtualTerminalCell>);
