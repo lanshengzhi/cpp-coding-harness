@@ -32,7 +32,7 @@ void TruncatedText::set_ellipsis(std::string ellipsis) {
     ellipsis_ = std::move(ellipsis);
 }
 
-util::Expected<std::vector<std::string>> TruncatedText::render(std::size_t width) {
+util::Expected<RenderResult> TruncatedText::render(std::size_t width) {
     if (width == 0) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
@@ -69,7 +69,7 @@ util::Expected<std::vector<std::string>> TruncatedText::render(std::size_t width
     for (std::size_t index = 0; index < padding_y_; ++index) {
         result.emplace_back(width, ' ');
     }
-    return result;
+    return RenderResult{.lines = std::move(result)};
 }
 
 void TruncatedText::invalidate() {}

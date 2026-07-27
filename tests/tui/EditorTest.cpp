@@ -149,15 +149,15 @@ TEST_CASE("Editor keeps its active cursor in a narrow virtual terminal viewport"
     editor.insert_text_at_cursor("abcdefgh\nijklmnop\nqrstuvwx\nyz");
     auto lines = editor.render(4);
     REQUIRE(lines);
-    CHECK(lines->size() <= 3);
-    CHECK_FALSE(lines->empty());
-    CHECK(lines->back().find("yz") != std::string::npos);
+    CHECK(lines->lines.size() <= 3);
+    CHECK_FALSE(lines->lines.empty());
+    CHECK(lines->lines.back().find("yz") != std::string::npos);
 
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 3});
     REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
-    for (std::size_t row = 0; row < lines->size(); ++row) {
+    for (std::size_t row = 0; row < lines->lines.size(); ++row) {
         REQUIRE(terminal.set_cursor({.column = 0, .row = row}));
-        REQUIRE(terminal.write((*lines)[row]));
+        REQUIRE(terminal.write(lines->lines[row]));
     }
     CHECK(terminal.screen().back().find("yz") != std::string::npos);
 }

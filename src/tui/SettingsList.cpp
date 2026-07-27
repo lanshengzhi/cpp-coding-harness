@@ -328,7 +328,7 @@ bool SettingsList::submenu_open() const {
     return static_cast<bool>(impl_->submenu);
 }
 
-util::Expected<std::vector<std::string>> SettingsList::render(std::size_t width) {
+util::Expected<RenderResult> SettingsList::render(std::size_t width) {
     auto impl = impl_;
     if (width == 0) {
         return std::unexpected(util::make_error(
@@ -434,7 +434,7 @@ util::Expected<std::vector<std::string>> SettingsList::render(std::size_t width)
         if (!hint) return std::unexpected(hint.error());
         lines.push_back(std::move(*hint));
     }
-    return lines;
+    return RenderResult{.lines = std::move(lines)};
 }
 
 void SettingsList::invalidate() {

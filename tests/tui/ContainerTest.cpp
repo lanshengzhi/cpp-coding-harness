@@ -15,8 +15,8 @@ public:
     explicit RawLineComponent(std::string line)
         : line_(std::move(line)) {}
 
-    [[nodiscard]] cch::util::Expected<std::vector<std::string>> render(std::size_t) override {
-        return std::vector<std::string>{line_};
+    [[nodiscard]] cch::util::Expected<cch::tui::RenderResult> render(std::size_t) override {
+        return cch::tui::RenderResult{.lines = {line_}};
     }
 
     void invalidate() override {}
@@ -36,9 +36,9 @@ TEST_CASE("Container renders children stacked vertically", "[tui][issue46][conta
 
     auto result = container.render(10);
     REQUIRE(result);
-    REQUIRE(result->size() >= 2);
-    CHECK((*result)[0].find("hello") != std::string::npos);
-    CHECK((*result)[1].find("world") != std::string::npos);
+    REQUIRE(result->lines.size() >= 2);
+    CHECK(result->lines[0].find("hello") != std::string::npos);
+    CHECK(result->lines[1].find("world") != std::string::npos);
 }
 
 TEST_CASE("Container terminates child styling at its line boundary", "[tui][issue46][container]") {
@@ -48,9 +48,9 @@ TEST_CASE("Container terminates child styling at its line boundary", "[tui][issu
 
     const auto result = container.render(8);
     REQUIRE(result);
-    REQUIRE(result->size() == 2);
-    CHECK((*result)[0] == "\x1b[31mred\x1b[0m");
-    CHECK((*result)[1] == "plain");
+    REQUIRE(result->lines.size() == 2);
+    CHECK(result->lines[0] == "\x1b[31mred\x1b[0m");
+    CHECK(result->lines[1] == "plain");
 }
 
 TEST_CASE("Container rejects unsafe or overwide child lines", "[tui][issue46][container]") {
@@ -84,9 +84,9 @@ TEST_CASE("Box renders with padding and background", "[tui][issue46][container]"
     auto result = box.render(10);
     REQUIRE(result);
     // 1 top padding + 1 content + 1 bottom padding = 3 lines
-    CHECK(result->size() == 3);
+    CHECK(result->lines.size() == 3);
     // Each line should be width 10
-    for (const auto& line : *result) {
+    for (const auto& line : result->lines) {
         CHECK(line.size() == 10);
     }
 }
@@ -114,8 +114,8 @@ TEST_CASE("Box owns a move-only background hook", "[tui][issue46][container]") {
 
     const auto result = box.render(2);
     REQUIRE(result);
-    REQUIRE(result->size() == 1);
-    CHECK((*result)[0].ends_with("\x1b[0m"));
+    REQUIRE(result->lines.size() == 1);
+    CHECK(result->lines[0].ends_with("\x1b[0m"));
 }
 
 TEST_CASE("Box rejects null child", "[tui][issue46][container]") {
@@ -142,15 +142,15 @@ TEST_CASE("Box clear removes all children", "[tui][issue46][container]") {
 
     auto result = box.render(10);
     REQUIRE(result);
-    CHECK(result->empty());
+    CHECK(result->lines.empty());
 }
 
 TEST_CASE("Spacer renders empty lines", "[tui][issue46][container]") {
     cch::tui::Spacer spacer(3);
     auto result = spacer.render(10);
     REQUIRE(result);
-    CHECK(result->size() == 3);
-    for (const auto& line : *result) {
+    CHECK(result->lines.size() == 3);
+    for (const auto& line : result->lines) {
         CHECK(line.empty());
     }
 }
@@ -160,5 +160,5 @@ TEST_CASE("Spacer can have lines updated", "[tui][issue46][container]") {
     spacer.set_lines(5);
     auto result = spacer.render(10);
     REQUIRE(result);
-    CHECK(result->size() == 5);
+    CHECK(result->lines.size() == 5);
 }

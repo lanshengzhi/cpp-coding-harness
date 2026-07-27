@@ -110,8 +110,8 @@ TEST_CASE("grapheme width counts trailing Thai and Lao AM vowels", "[tui][issue4
     REQUIRE_FALSE(text.render(1));
     const auto rendered = text.render(2);
     REQUIRE(rendered);
-    REQUIRE(rendered->size() == 1);
-    CHECK(visible_width((*rendered)[0]) == 2);
+    REQUIRE(rendered->lines.size() == 1);
+    CHECK(visible_width(rendered->lines[0]) == 2);
 
     cch::tui::VirtualTerminal narrow_terminal({.columns = 1, .rows = 1});
     REQUIRE(narrow_terminal.start(

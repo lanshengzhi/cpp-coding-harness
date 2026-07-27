@@ -931,9 +931,9 @@ void Markdown::set_background_hook(BackgroundHook background_hook) {
     invalidate();
 }
 
-util::Expected<std::vector<std::string>> Markdown::render(std::size_t width) {
+util::Expected<RenderResult> Markdown::render(std::size_t width) {
     if (impl_->cache_valid && impl_->cached_text == impl_->text && impl_->cached_width == width) {
-        return impl_->cached_lines;
+        return RenderResult{.lines = impl_->cached_lines};
     }
     if (width == 0) {
         return std::unexpected(util::make_error(
@@ -945,7 +945,7 @@ util::Expected<std::vector<std::string>> Markdown::render(std::size_t width) {
         impl_->cached_width = width;
         impl_->cached_lines.clear();
         impl_->cache_valid = true;
-        return impl_->cached_lines;
+        return RenderResult{.lines = impl_->cached_lines};
     }
     if (impl_->padding_x >= width || impl_->padding_x >= width - impl_->padding_x) {
         return std::unexpected(util::make_error(
@@ -1023,7 +1023,7 @@ util::Expected<std::vector<std::string>> Markdown::render(std::size_t width) {
     impl_->cached_width = width;
     impl_->cached_lines = result;
     impl_->cache_valid = true;
-    return result;
+    return RenderResult{.lines = std::move(result)};
 }
 
 void Markdown::invalidate() {

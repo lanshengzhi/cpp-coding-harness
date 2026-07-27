@@ -1,5 +1,6 @@
 #include <cch/tui/VirtualTerminal.hpp>
 
+#include "tui/TerminalImage.hpp"
 #include "tui/UnicodeWidth.hpp"
 
 #include <algorithm>
@@ -14,15 +15,18 @@ namespace cch::tui {
 
 struct VirtualTerminal::Impl {
     TerminalDimensions dimensions;
+    TerminalCapabilities capabilities;
     TerminalModeState modes;
     TerminalInputSink input_sink;
     TerminalResizeSink resize_sink;
     std::vector<std::string> output;
     std::vector<std::string> screen;
     std::vector<std::vector<VirtualTerminalCell>> cells;
+    std::vector<VirtualTerminalImage> images;
     detail::AnsiStyleState style;
     CursorPosition cursor;
     std::size_t sync_depth{0};
+    std::uint64_t next_image_handle{1};
     bool clear_screen_called{false};
 };
 
@@ -30,10 +34,6 @@ namespace {
 
 constexpr std::string_view kBeginSync = "\x1b[?2026h";
 constexpr std::string_view kEndSync = "\x1b[?2026l";
-
-} // anonymous namespace
-
-namespace {
 
 [[nodiscard]] VirtualTerminalStyle public_style(const detail::AnsiStyleState& style) {
     return {
@@ -98,6 +98,10 @@ void resize_cells(T& impl, TerminalDimensions dimensions) {
     }
     impl.dimensions = dimensions;
     impl.cells = std::move(resized);
+    std::erase_if(impl.images, [&](const auto& image) {
+        return image.region.column + image.region.columns > dimensions.columns ||
+            image.region.row + image.region.rows > dimensions.rows;
+    });
     if (dimensions.rows == 0) {
         impl.cursor = {};
     } else {
@@ -132,6 +136,7 @@ util::ExpectedVoid require_started(const T& impl) {
 
 VirtualTerminal::VirtualTerminal(VirtualTerminalOptions options)
     : impl_(std::make_unique<Impl>()) {
+    impl_->capabilities = options.capabilities;
     resize_cells(*impl_, {.columns = options.columns, .rows = options.rows});
 }
 
@@ -168,6 +173,7 @@ util::ExpectedVoid VirtualTerminal::stop() {
     impl_->modes.raw_input = false;
     impl_->modes.bracketed_paste = false;
     impl_->modes.cursor_visible = true;
+    impl_->images.clear();
     return {};
 }
 
@@ -176,7 +182,7 @@ TerminalDimensions VirtualTerminal::dimensions() const {
 }
 
 TerminalCapabilities VirtualTerminal::capabilities() const {
-    return {.synchronized_output = true};
+    return impl_->capabilities;
 }
 
 TerminalModeState VirtualTerminal::modes() const {
@@ -189,6 +195,7 @@ util::ExpectedVoid VirtualTerminal::clear_screen() {
     impl_->cells.assign(
         impl_->dimensions.rows,
         std::vector<VirtualTerminalCell>(impl_->dimensions.columns));
+    impl_->images.clear();
     impl_->cursor = {};
     refresh_screen(*impl_);
     return {};
@@ -240,6 +247,18 @@ util::ExpectedVoid VirtualTerminal::write(std::string_view output) {
                 "line width {} exceeds visible width {}",
                 output_width,
                 remaining)));
+    }
+
+    if (output_width > 0) {
+        const CellRegion written{
+            .column = impl_->cursor.column,
+            .row = impl_->cursor.row,
+            .columns = output_width,
+            .rows = 1,
+        };
+        std::erase_if(impl_->images, [&](const auto& image) {
+            return detail::cell_regions_intersect(image.region, written);
+        });
     }
 
     std::string normalized;
@@ -301,6 +320,78 @@ util::ExpectedVoid VirtualTerminal::set_cursor_visible(bool visible) {
     return {};
 }
 
+util::Expected<TerminalImageHandle> VirtualTerminal::place_image(const TerminalImage& image) {
+    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (impl_->capabilities.inline_images == InlineImageProtocol::None) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "Virtual Terminal does not support inline images"));
+    }
+    if (!detail::protocol_supports_mime(
+            impl_->capabilities.inline_images,
+            image.mime_type)) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "Inline image format is unsupported by the Virtual Terminal protocol"));
+    }
+    if (image.region.columns == 0 || image.region.rows == 0 ||
+        image.region.column >= impl_->dimensions.columns ||
+        image.region.row >= impl_->dimensions.rows ||
+        image.region.columns > impl_->dimensions.columns - image.region.column ||
+        image.region.rows > impl_->dimensions.rows - image.region.row) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "Inline image region is outside Virtual Terminal dimensions"));
+    }
+    for (const auto& visible : impl_->images) {
+        if (detail::cell_regions_intersect(visible.region, image.region)) {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Validation,
+                "Inline image regions cannot overlap"));
+        }
+    }
+
+    const TerminalImageHandle handle{.value = impl_->next_image_handle++};
+    impl_->images.push_back({
+        .handle = handle,
+        .resource_id = image.resource_id,
+        .revision = image.revision,
+        .region = image.region,
+        .protocol = impl_->capabilities.inline_images,
+        .mime_type = std::string(image.mime_type),
+        .filename = image.filename ? std::optional<std::string>(*image.filename) : std::nullopt,
+        .pixel_width = image.pixel_width,
+        .pixel_height = image.pixel_height,
+    });
+    return handle;
+}
+
+util::ExpectedVoid VirtualTerminal::remove_image(
+    TerminalImageHandle handle,
+    const CellRegion& region) {
+    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    const auto found = std::find_if(impl_->images.begin(), impl_->images.end(), [&](const auto& image) {
+        return image.handle == handle;
+    });
+    if (found == impl_->images.end()) return {};
+    if (found->region != region) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "Inline image removal region does not match its owned region"));
+    }
+    const auto owned_region = found->region;
+    impl_->images.erase(found);
+    const auto end_row = std::min(impl_->dimensions.rows, owned_region.row + owned_region.rows);
+    const auto end_column = std::min(impl_->dimensions.columns, owned_region.column + owned_region.columns);
+    for (auto row = owned_region.row; row < end_row; ++row) {
+        for (auto column = owned_region.column; column < end_column; ++column) {
+            clear_grapheme(impl_->cells[row], column);
+        }
+    }
+    refresh_screen(*impl_);
+    return {};
+}
+
 util::ExpectedVoid VirtualTerminal::inject_input(std::string input) {
     if (!impl_->modes.started || !impl_->input_sink) return {};
     try {
@@ -352,6 +443,10 @@ const std::vector<std::string>& VirtualTerminal::screen() const {
 
 const std::vector<std::vector<VirtualTerminalCell>>& VirtualTerminal::cells() const {
     return impl_->cells;
+}
+
+const std::vector<VirtualTerminalImage>& VirtualTerminal::images() const {
+    return impl_->images;
 }
 
 VirtualTerminalStyle VirtualTerminal::final_style() const {

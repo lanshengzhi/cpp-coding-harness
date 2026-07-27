@@ -34,7 +34,7 @@ public:
     void set_padding_y(std::size_t padding_y);
     void set_background_hook(BackgroundHook background_hook);
 
-    [[nodiscard]] util::Expected<std::vector<std::string>> render(std::size_t width) override;
+    [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
 
 private:

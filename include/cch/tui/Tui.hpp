@@ -4,6 +4,7 @@
 #include <cch/tui/Overlay.hpp>
 #include <cch/tui/Terminal.hpp>
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -54,10 +55,31 @@ private:
         Component* previous; // null or aliases an element owned by children_ or overlays_.
     };
 
+    struct ActiveImage {
+        TerminalImageHandle handle;
+        CellRegion region;
+        std::uint64_t resource_id{0};
+        std::uint64_t revision{0};
+    };
+
     [[nodiscard]] bool owns(const Component* component) const;
     [[nodiscard]] bool owns_overlay(const Overlay* overlay) const;
-    [[nodiscard]] util::Expected<std::vector<std::string>> render_children(TerminalDimensions dimensions);
-    [[nodiscard]] util::ExpectedVoid render_overlays(TerminalDimensions dimensions);
+    [[nodiscard]] util::Expected<RenderResult> render_children(TerminalDimensions dimensions);
+    [[nodiscard]] RenderResult materialize_images(
+        RenderResult output,
+        const TerminalCapabilities& capabilities,
+        std::size_t width,
+        std::size_t available_rows) const;
+    [[nodiscard]] util::ExpectedVoid composite_overlays(
+        TerminalDimensions dimensions,
+        const TerminalCapabilities& capabilities,
+        RenderResult& output);
+    [[nodiscard]] util::ExpectedVoid remove_active_images();
+    [[nodiscard]] util::ExpectedVoid remove_images_intersecting(const CellRegion& region);
+    [[nodiscard]] util::ExpectedVoid remove_stale_images(
+        const std::vector<InlineImageRenderRegion>& desired_images);
+    [[nodiscard]] util::ExpectedVoid place_images(
+        const std::vector<InlineImageRenderRegion>& desired_images);
     void handle_input(std::string input);
     void dispatch_input(const InputEventVariant& event);
     void handle_resize(TerminalDimensions dimensions);
@@ -80,6 +102,7 @@ private:
     bool first_render_{true};
     bool pending_render_{false};
     std::vector<std::string> previous_lines_;
+    std::vector<ActiveImage> active_images_;
     TerminalDimensions previous_dimensions_{};
 };
 

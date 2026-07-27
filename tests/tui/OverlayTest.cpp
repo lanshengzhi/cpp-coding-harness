@@ -20,10 +20,10 @@ public:
     explicit FocusableInputComponent(std::string label = "x")
         : label_(std::move(label)) {}
 
-    [[nodiscard]] cch::util::Expected<std::vector<std::string>> render(std::size_t width) override {
+    [[nodiscard]] cch::util::Expected<cch::tui::RenderResult> render(std::size_t width) override {
         auto line = label_;
         if (line.size() < width) line.append(width - line.size(), ' ');
-        return std::vector<std::string>{line};
+        return cch::tui::RenderResult{.lines = {std::move(line)}};
     }
 
     void invalidate() override {
@@ -70,14 +70,14 @@ TEST_CASE("Overlay renders children and reports visibility", "[tui][overlay][iss
     REQUIRE(overlay.visible());
     auto rendered = overlay.render(10);
     REQUIRE(rendered);
-    REQUIRE_FALSE(rendered->empty());
-    CHECK((*rendered)[0].find("hello") != std::string::npos);
+    REQUIRE_FALSE(rendered->lines.empty());
+    CHECK(rendered->lines[0].find("hello") != std::string::npos);
 
     overlay.set_visible(false);
     CHECK_FALSE(overlay.visible());
     rendered = overlay.render(10);
     REQUIRE(rendered);
-    CHECK(rendered->empty());
+    CHECK(rendered->lines.empty());
 }
 
 TEST_CASE("Overlay supports position strategies", "[tui][overlay][issue50]") {
@@ -92,7 +92,7 @@ TEST_CASE("Overlay supports position strategies", "[tui][overlay][issue50]") {
 
     auto rendered = overlay.render(10);
     REQUIRE(rendered);
-    REQUIRE_FALSE(rendered->empty());
+    REQUIRE_FALSE(rendered->lines.empty());
 
     const auto [col, row] = overlay.layout_position(80, 24, 1, 1);
     CHECK(col == 5);
@@ -185,10 +185,10 @@ TEST_CASE("Overlay size constraints limit rendered dimensions", "[tui][overlay][
     auto rendered = overlay.render(10);
     REQUIRE(rendered);
     // Width should be at least min_width=20
-    CHECK(rendered->front().size() >= 20);
+    CHECK(rendered->lines.front().size() >= 20);
     // Height should be at least 3, at most 5
-    CHECK(rendered->size() >= 3);
-    CHECK(rendered->size() <= 5);
+    CHECK(rendered->lines.size() >= 3);
+    CHECK(rendered->lines.size() <= 5);
 }
 
 TEST_CASE("Tui routes semantic input to exactly one focused target", "[tui][overlay][issue50]") {

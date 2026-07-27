@@ -48,8 +48,10 @@ void Text::set_background_hook(BackgroundHook background_hook) {
     cache_valid_ = false;
 }
 
-util::Expected<std::vector<std::string>> Text::render(std::size_t width) {
-    if (cache_valid_ && cached_text_ == text_ && cached_width_ == width) return cached_lines_;
+util::Expected<RenderResult> Text::render(std::size_t width) {
+    if (cache_valid_ && cached_text_ == text_ && cached_width_ == width) {
+        return RenderResult{.lines = cached_lines_};
+    }
     if (width == 0) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
@@ -60,7 +62,7 @@ util::Expected<std::vector<std::string>> Text::render(std::size_t width) {
         cached_width_ = width;
         cached_lines_.clear();
         cache_valid_ = true;
-        return cached_lines_;
+        return RenderResult{.lines = cached_lines_};
     }
     if (padding_x_ >= width || padding_x_ >= width - padding_x_) {
         return std::unexpected(util::make_error(
@@ -99,7 +101,7 @@ util::Expected<std::vector<std::string>> Text::render(std::size_t width) {
     cached_width_ = width;
     cached_lines_ = result;
     cache_valid_ = true;
-    return result;
+    return RenderResult{.lines = std::move(result)};
 }
 
 void Text::invalidate() {

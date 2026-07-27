@@ -106,8 +106,8 @@ TEST_CASE("Loader safely replaces its indicator and handles an empty frame list"
     });
     auto rendered = loader.render(20);
     REQUIRE(rendered);
-    REQUIRE(rendered->size() == 2);
-    CHECK((*rendered)[1] == " Loading");
+    REQUIRE(rendered->lines.size() == 2);
+    CHECK(rendered->lines[1] == " Loading");
     CHECK(timer_ptr->starts == 1);
 
     loader.set_indicator(cch::tui::LoaderIndicatorOptions{
@@ -116,7 +116,7 @@ TEST_CASE("Loader safely replaces its indicator and handles an empty frame list"
     });
     rendered = loader.render(20);
     REQUIRE(rendered);
-    CHECK((*rendered)[1] == " - Loading");
+    CHECK(rendered->lines[1] == " - Loading");
     CHECK(timer_ptr->starts == 1);
 }
 

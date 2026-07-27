@@ -66,7 +66,7 @@ public:
     void set_selected_index(std::size_t index);
     [[nodiscard]] std::optional<SelectItem> selected_item() const;
 
-    [[nodiscard]] util::Expected<std::vector<std::string>> render(std::size_t width) override;
+    [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
     void handle_input(const InputEventVariant& input) override;
     [[nodiscard]] bool accepts_key_releases() const override;

@@ -35,15 +35,15 @@ namespace {
     return style;
 }
 
-void write_lines(tui::VirtualTerminal& terminal, const std::vector<std::string>& lines) {
-    for (std::size_t row = 0; row < lines.size(); ++row) {
+void write_lines(tui::VirtualTerminal& terminal, const tui::RenderResult& lines) {
+    for (std::size_t row = 0; row < lines.lines.size(); ++row) {
         REQUIRE(terminal.set_cursor({.column = 0, .row = row}));
-        REQUIRE(terminal.write(lines[row]));
+        REQUIRE(terminal.write(lines.lines[row]));
     }
 }
 
-[[nodiscard]] std::string rendered_text(const std::vector<std::string>& lines, std::size_t width) {
-    tui::VirtualTerminal terminal({.columns = width, .rows = lines.size() + 1});
+[[nodiscard]] std::string rendered_text(const tui::RenderResult& lines, std::size_t width) {
+    tui::VirtualTerminal terminal({.columns = width, .rows = lines.lines.size() + 1});
     if (auto started = terminal.start(
             [](std::string) {},
             [](tui::TerminalDimensions) {});
@@ -59,8 +59,8 @@ void write_lines(tui::VirtualTerminal& terminal, const std::vector<std::string>&
     return result;
 }
 
-void require_virtual_terminal_accepts(const std::vector<std::string>& lines, std::size_t width) {
-    tui::VirtualTerminal terminal({.columns = width, .rows = lines.size() + 1});
+void require_virtual_terminal_accepts(const tui::RenderResult& lines, std::size_t width) {
+    tui::VirtualTerminal terminal({.columns = width, .rows = lines.lines.size() + 1});
     REQUIRE(terminal.start(
         [](std::string) {},
         [](tui::TerminalDimensions) {}));
@@ -89,7 +89,7 @@ TEST_CASE("Markdown wraps plain text within terminal width", "[tui][markdown][is
 
     REQUIRE(lines);
     const std::vector<std::string> expected{"alpha beta", "gamma     "};
-    CHECK(*lines == expected);
+    CHECK(lines->lines == expected);
 }
 
 TEST_CASE("Markdown renders common response constructs in semantic order", "[tui][markdown][issue51]") {
@@ -143,7 +143,7 @@ TEST_CASE(
     const auto lines = markdown.render(12);
 
     REQUIRE(lines);
-    REQUIRE(lines->size() > 1);
+    REQUIRE(lines->lines.size() > 1);
     require_virtual_terminal_accepts(*lines, 12);
     const auto text = rendered_text(*lines, 12);
     CHECK(text.find("Cafe\xcc\x81") != std::string::npos);
@@ -151,7 +151,7 @@ TEST_CASE(
     CHECK(text.find("\xf0\x9f\x99\x82") != std::string::npos);
     CHECK(text.find("linked") != std::string::npos);
 
-    tui::VirtualTerminal terminal({.columns = 12, .rows = lines->size() + 1});
+    tui::VirtualTerminal terminal({.columns = 12, .rows = lines->lines.size() + 1});
     REQUIRE(terminal.start(
         [](std::string) {},
         [](tui::TerminalDimensions) {}));
@@ -181,7 +181,7 @@ TEST_CASE("Markdown injects syntax highlighting and falls back for unknown langu
     REQUIRE(highlighted);
     CHECK(received_code == "value");
     CHECK(received_language == "cpp");
-    tui::VirtualTerminal terminal({.columns = 16, .rows = highlighted->size() + 1});
+    tui::VirtualTerminal terminal({.columns = 16, .rows = highlighted->lines.size() + 1});
     REQUIRE(terminal.start(
         [](std::string) {},
         [](tui::TerminalDimensions) {}));
@@ -196,7 +196,7 @@ TEST_CASE("Markdown injects syntax highlighting and falls back for unknown langu
     REQUIRE(fallback);
     CHECK(received_language == "unknown");
     CHECK(rendered_text(*fallback, 16).find("plain") != std::string::npos);
-    CHECK(fallback->at(1).find("\x1b[32m") != std::string::npos);
+    CHECK(fallback->lines.at(1).find("\x1b[32m") != std::string::npos);
 }
 
 TEST_CASE("Markdown keeps partial and invalid input readable", "[tui][markdown][issue51]") {
@@ -225,7 +225,7 @@ TEST_CASE("Markdown degrades semantic prefixes at extremely narrow widths", "[tu
         const auto lines = markdown.render(1);
 
         REQUIRE(lines);
-        REQUIRE_FALSE(lines->empty());
+        REQUIRE_FALSE(lines->lines.empty());
         require_virtual_terminal_accepts(*lines, 1);
     }
 }
@@ -240,7 +240,7 @@ TEST_CASE("Markdown follows strict strikethrough delimiter semantics", "[tui][ma
     const auto lines = markdown.render(50);
 
     REQUIRE(lines);
-    CHECK(lines->front().find("\x1b[9m") != std::string::npos);
+    CHECK(lines->lines.front().find("\x1b[9m") != std::string::npos);
     const auto text = rendered_text(*lines, 50);
     CHECK(text.find("~~invalid ~~") != std::string::npos);
     CHECK(text.find("~~a ") == std::string::npos);
@@ -256,14 +256,14 @@ TEST_CASE("Markdown preserves loose list paragraph structure", "[tui][markdown][
     const auto lines = markdown.render(30);
 
     REQUIRE(lines);
-    const auto first = std::find_if(lines->begin(), lines->end(), [](const auto& line) {
+    const auto first = std::find_if(lines->lines.begin(), lines->lines.end(), [](const auto& line) {
         return line.find("first paragraph") != std::string::npos;
     });
-    const auto second = std::find_if(lines->begin(), lines->end(), [](const auto& line) {
+    const auto second = std::find_if(lines->lines.begin(), lines->lines.end(), [](const auto& line) {
         return line.find("second paragraph") != std::string::npos;
     });
-    REQUIRE(first != lines->end());
-    REQUIRE(second != lines->end());
+    REQUIRE(first != lines->lines.end());
+    REQUIRE(second != lines->lines.end());
     CHECK(std::distance(first, second) >= 2);
 }
 
@@ -282,7 +282,7 @@ TEST_CASE("Markdown stabilizes streamed partial closing fences", "[tui][markdown
 
         REQUIRE(partial_lines);
         REQUIRE(complete_lines);
-        CHECK(partial_lines->size() == complete_lines->size());
+        CHECK(partial_lines->lines.size() == complete_lines->lines.size());
         CHECK(rendered_text(*partial_lines, 20).find("value") != std::string::npos);
         require_virtual_terminal_accepts(*partial_lines, 20);
     }
@@ -306,7 +306,7 @@ TEST_CASE("Markdown invalidates content style and highlighter caches", "[tui][ma
     tui::Markdown markdown("**old**", 0, 0, std::move(style));
     const auto first = markdown.render(12);
     REQUIRE(first);
-    CHECK(first->front().find("\x1b[31m") != std::string::npos);
+    CHECK(first->lines.front().find("\x1b[31m") != std::string::npos);
 
     markdown.set_text("**new**");
     auto replacement = ansi_style();
@@ -323,12 +323,12 @@ TEST_CASE("Markdown invalidates content style and highlighter caches", "[tui][ma
     REQUIRE(second);
     CHECK(rendered_text(*second, 12).find("new") != std::string::npos);
     CHECK(rendered_text(*second, 12).find("old") == std::string::npos);
-    CHECK(second->front().find("\x1b[34m") != std::string::npos);
-    CHECK(second->front().find("\x1b[31m") == std::string::npos);
+    CHECK(second->lines.front().find("\x1b[34m") != std::string::npos);
+    CHECK(second->lines.front().find("\x1b[31m") == std::string::npos);
 
     tui::VirtualTerminal update_terminal({
         .columns = 12,
-        .rows = std::max(first->size(), second->size()),
+        .rows = std::max(first->lines.size(), second->lines.size()),
     });
     REQUIRE(update_terminal.start(
         [](std::string) {},
@@ -345,7 +345,7 @@ TEST_CASE("Markdown invalidates content style and highlighter caches", "[tui][ma
     markdown.set_text("```cpp\ncache\n```");
     const auto first_highlight = markdown.render(12);
     REQUIRE(first_highlight);
-    CHECK(first_highlight->at(1).find("\x1b[36m") != std::string::npos);
+    CHECK(first_highlight->lines.at(1).find("\x1b[36m") != std::string::npos);
     markdown.set_syntax_highlighter([](std::string_view code, std::string_view)
         -> std::optional<std::vector<std::string>> {
         return std::vector<std::string>{"\x1b[35m" + std::string(code) + "\x1b[39m"};
@@ -355,8 +355,8 @@ TEST_CASE("Markdown invalidates content style and highlighter caches", "[tui][ma
 
     REQUIRE(second_highlight);
     CHECK(rendered_text(*second_highlight, 12).find("cache") != std::string::npos);
-    CHECK(second_highlight->at(1).find("\x1b[35m") != std::string::npos);
-    CHECK(second_highlight->at(1).find("\x1b[36m") == std::string::npos);
+    CHECK(second_highlight->lines.at(1).find("\x1b[35m") != std::string::npos);
+    CHECK(second_highlight->lines.at(1).find("\x1b[36m") == std::string::npos);
 }
 
 TEST_CASE("Markdown applies configured padding and background to every cell", "[tui][markdown][issue51]") {
@@ -366,7 +366,7 @@ TEST_CASE("Markdown applies configured padding and background to every cell", "[
     const auto lines = markdown.render(8);
 
     REQUIRE(lines);
-    REQUIRE(lines->size() == 3);
+    REQUIRE(lines->lines.size() == 3);
     tui::VirtualTerminal terminal({.columns = 8, .rows = 3});
     REQUIRE(terminal.start(
         [](std::string) {},

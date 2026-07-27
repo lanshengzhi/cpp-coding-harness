@@ -118,15 +118,15 @@ TEST_CASE("SelectList normalizes and aligns descriptions within configured colum
 
     const auto rendered = list.render(80);
     REQUIRE(rendered);
-    REQUIRE(rendered->size() == 2);
-    CHECK((*rendered)[0].find('\n') == std::string::npos);
-    CHECK((*rendered)[0].find("line one line two") != std::string::npos);
-    const auto first_description = (*rendered)[0].find("line one");
-    const auto second_description = (*rendered)[1].find("second description");
+    REQUIRE(rendered->lines.size() == 2);
+    CHECK(rendered->lines[0].find('\n') == std::string::npos);
+    CHECK(rendered->lines[0].find("line one line two") != std::string::npos);
+    const auto first_description = rendered->lines[0].find("line one");
+    const auto second_description = rendered->lines[1].find("second description");
     REQUIRE(first_description != std::string::npos);
     REQUIRE(second_description != std::string::npos);
-    CHECK(cch::tui::detail::visible_width((*rendered)[0].substr(0, first_description)) ==
-          cch::tui::detail::visible_width((*rendered)[1].substr(0, second_description)));
+    CHECK(cch::tui::detail::visible_width(rendered->lines[0].substr(0, first_description)) ==
+          cch::tui::detail::visible_width(rendered->lines[1].substr(0, second_description)));
 }
 
 TEST_CASE("SelectList renders descriptions in an overlay with bounded rows", "[tui][select-list][overlay][issue52]") {

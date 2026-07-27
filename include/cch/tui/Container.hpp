@@ -24,7 +24,7 @@ public:
     [[nodiscard]] util::Expected<std::reference_wrapper<Component>> add_child(
         std::unique_ptr<Component> component);
 
-    [[nodiscard]] util::Expected<std::vector<std::string>> render(std::size_t width) override;
+    [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
 
 private:
@@ -49,7 +49,7 @@ public:
         std::unique_ptr<Component> component);
     void clear();
 
-    [[nodiscard]] util::Expected<std::vector<std::string>> render(std::size_t width) override;
+    [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
 
 private:
@@ -66,7 +66,7 @@ public:
 
     void set_lines(std::size_t lines);
 
-    [[nodiscard]] util::Expected<std::vector<std::string>> render(std::size_t width) override;
+    [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
 
 private:

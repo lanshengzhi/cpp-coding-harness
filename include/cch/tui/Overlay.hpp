@@ -134,7 +134,7 @@ public:
 
     /// Render the overlay content (without position offset).
     /// The caller (Tui) uses layout information to position output.
-    [[nodiscard]] util::Expected<std::vector<std::string>> render(std::size_t width) override;
+    [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
 
     // InputHandler (forwards to focused child)

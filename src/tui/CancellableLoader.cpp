@@ -120,7 +120,7 @@ void CancellableLoader::set_indicator(std::optional<LoaderIndicatorOptions> indi
     if (!still_active) impl->loader.stop();
 }
 
-util::Expected<std::vector<std::string>> CancellableLoader::render(std::size_t width) {
+util::Expected<RenderResult> CancellableLoader::render(std::size_t width) {
     auto impl = impl_;
     {
         std::lock_guard lock(impl->mutex);

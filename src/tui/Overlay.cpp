@@ -109,10 +109,9 @@ util::ExpectedVoid Overlay::focus_first() {
     return {};
 }
 
-util::Expected<std::vector<std::string>> Overlay::render(std::size_t width) {
-    if (!impl_->visible_) return std::vector<std::string>{};
+util::Expected<RenderResult> Overlay::render(std::size_t width) {
+    if (!impl_->visible_) return RenderResult{};
 
-    // Apply width constraint
     std::size_t effective_width = width;
     if (impl_->options.size_constraints.min_width) {
         effective_width = std::max(effective_width, *impl_->options.size_constraints.min_width);
@@ -121,25 +120,33 @@ util::Expected<std::vector<std::string>> Overlay::render(std::size_t width) {
         effective_width = std::min(effective_width, *impl_->options.size_constraints.max_width);
     }
 
-    std::vector<std::string> result;
+    RenderResult result;
     for (const auto& child : impl_->children_) {
         auto rendered = child->render(effective_width);
         if (!rendered) return std::unexpected(rendered.error());
-        for (auto& line : *rendered) {
+        const auto row_offset = result.lines.size();
+        for (auto& line : rendered->lines) {
             auto prepared = detail::prepare_rendered_line(line, effective_width);
             if (!prepared) return std::unexpected(prepared.error());
-            result.push_back(std::move(*prepared));
+            result.lines.push_back(std::move(*prepared));
+        }
+        for (auto& image : rendered->images) {
+            image.region.row += row_offset;
+            result.images.push_back(std::move(image));
         }
     }
 
-    // Apply height constraint
     if (impl_->options.size_constraints.min_height) {
-        while (result.size() < *impl_->options.size_constraints.min_height) {
-            result.emplace_back(effective_width, ' ');
+        while (result.lines.size() < *impl_->options.size_constraints.min_height) {
+            result.lines.emplace_back(effective_width, ' ');
         }
     }
-    if (impl_->options.size_constraints.max_height && result.size() > *impl_->options.size_constraints.max_height) {
-        result.resize(*impl_->options.size_constraints.max_height);
+    if (impl_->options.size_constraints.max_height &&
+        result.lines.size() > *impl_->options.size_constraints.max_height) {
+        result.lines.resize(*impl_->options.size_constraints.max_height);
+        std::erase_if(result.images, [&](const auto& image) {
+            return image.region.row >= result.lines.size();
+        });
     }
 
     return result;

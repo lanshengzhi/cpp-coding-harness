@@ -21,11 +21,11 @@ public:
         cache_valid_ = false;
     }
 
-    [[nodiscard]] cch::util::Expected<std::vector<std::string>> render(std::size_t) override {
-        if (cache_valid_) return cached_;
+    [[nodiscard]] cch::util::Expected<cch::tui::RenderResult> render(std::size_t) override {
+        if (cache_valid_) return cch::tui::RenderResult{.lines = cached_};
         cached_ = lines_;
         cache_valid_ = true;
-        return lines_;
+        return cch::tui::RenderResult{.lines = lines_};
     }
 
     void invalidate() override {

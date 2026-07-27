@@ -238,7 +238,7 @@ std::optional<SelectItem> SelectList::selected_item() const {
     return item == nullptr ? std::nullopt : std::optional<SelectItem>(*item);
 }
 
-util::Expected<std::vector<std::string>> SelectList::render(std::size_t width) {
+util::Expected<RenderResult> SelectList::render(std::size_t width) {
     auto impl = impl_;
     if (width == 0) {
         return std::unexpected(util::make_error(
@@ -251,7 +251,7 @@ util::Expected<std::vector<std::string>> SelectList::render(std::size_t width) {
         if (!message) return std::unexpected(message.error());
         auto styled = detail::apply_text_style(impl->theme.no_match, std::move(*message), "SelectList no match");
         if (!styled) return std::unexpected(styled.error());
-        return std::vector<std::string>{std::move(*styled)};
+        return RenderResult{.lines = {std::move(*styled)}};
     }
 
     const auto range = detail::centered_visible_range(
@@ -277,7 +277,7 @@ util::Expected<std::vector<std::string>> SelectList::render(std::size_t width) {
         if (!styled) return std::unexpected(styled.error());
         lines.push_back(std::move(*styled));
     }
-    return lines;
+    return RenderResult{.lines = std::move(lines)};
 }
 
 void SelectList::invalidate() {}

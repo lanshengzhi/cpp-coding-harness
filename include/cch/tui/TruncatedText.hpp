@@ -27,7 +27,7 @@ public:
     [[nodiscard]] std::string_view text() const;
     void set_ellipsis(std::string ellipsis);
 
-    [[nodiscard]] util::Expected<std::vector<std::string>> render(std::size_t width) override;
+    [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
 
 private:

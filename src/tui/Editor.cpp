@@ -765,7 +765,7 @@ std::vector<AutocompleteItem> Editor::autocomplete_items() const {
     return impl_->autocomplete;
 }
 
-util::Expected<std::vector<std::string>> Editor::render(std::size_t width) {
+util::Expected<RenderResult> Editor::render(std::size_t width) {
     if (impl_->callback_error) return std::unexpected(*impl_->callback_error);
     if (width == 0) {
         return std::unexpected(util::make_error(util::ErrorCode::Validation, "Editor requires a positive visible width"));
@@ -805,7 +805,7 @@ util::Expected<std::vector<std::string>> Editor::render(std::size_t width) {
         result.push_back(std::move(line));
     }
     if (result.empty()) result.emplace_back(width, ' ');
-    return result;
+    return RenderResult{.lines = std::move(result)};
 }
 
 void Editor::invalidate() {}

@@ -57,6 +57,7 @@ add_library(cch_tui
     src/tui/CancellableLoader.cpp
     src/tui/Container.cpp
     src/tui/Editor.cpp
+    src/tui/Image.cpp
     src/tui/Input.cpp
     src/tui/InputDecoder.cpp
     src/tui/Loader.cpp
@@ -64,6 +65,7 @@ add_library(cch_tui
     src/tui/Overlay.cpp
     src/tui/SelectList.cpp
     src/tui/SettingsList.cpp
+    src/tui/TerminalImage.cpp
     src/tui/Text.cpp
     src/tui/TruncatedText.cpp
     src/tui/Tui.cpp
@@ -254,6 +256,7 @@ if(CCH_BUILD_TESTS)
         tests/tools/AsyncToolsTest.cpp
         tests/tui/ContainerTest.cpp
         tests/tui/EditorTest.cpp
+        tests/tui/ImageTest.cpp
         tests/tui/InputTest.cpp
         tests/tui/LoaderTest.cpp
         tests/tui/MarkdownTest.cpp

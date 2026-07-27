@@ -269,7 +269,7 @@ void Loader::set_indicator(std::optional<LoaderIndicatorOptions> indicator) {
     impl->restart();
 }
 
-util::Expected<std::vector<std::string>> Loader::render(std::size_t width) {
+util::Expected<RenderResult> Loader::render(std::size_t width) {
     auto impl = impl_;
     if (width == 0) {
         return std::unexpected(util::make_error(
@@ -303,7 +303,7 @@ util::Expected<std::vector<std::string>> Loader::render(std::size_t width) {
     line += *styled_message;
     auto bounded = detail::truncate_text(line, width, "");
     if (!bounded) return std::unexpected(bounded.error());
-    return std::vector<std::string>{"", std::move(*bounded)};
+    return RenderResult{.lines = {"", std::move(*bounded)}};
 }
 
 void Loader::invalidate() {}

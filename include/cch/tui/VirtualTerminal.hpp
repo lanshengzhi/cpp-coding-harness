@@ -3,7 +3,9 @@
 #include <cch/tui/Terminal.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -12,6 +14,7 @@ namespace cch::tui {
 struct VirtualTerminalOptions {
     std::size_t columns{80};
     std::size_t rows{24};
+    TerminalCapabilities capabilities{.synchronized_output = true};
 };
 
 struct VirtualTerminalStyle {
@@ -39,6 +42,20 @@ struct VirtualTerminalCell {
     bool operator==(const VirtualTerminalCell&) const = default;
 };
 
+struct VirtualTerminalImage {
+    TerminalImageHandle handle;
+    std::uint64_t resource_id{0};
+    std::uint64_t revision{0};
+    CellRegion region{};
+    InlineImageProtocol protocol{InlineImageProtocol::None};
+    std::string mime_type{};
+    std::optional<std::string> filename{std::nullopt};
+    std::size_t pixel_width{0};
+    std::size_t pixel_height{0};
+
+    bool operator==(const VirtualTerminalImage&) const = default;
+};
+
 class VirtualTerminal final : public Terminal {
 public:
     explicit VirtualTerminal(VirtualTerminalOptions options = {});
@@ -58,6 +75,10 @@ public:
     [[nodiscard]] util::ExpectedVoid write(std::string_view output) override;
     [[nodiscard]] util::ExpectedVoid set_cursor(CursorPosition position) override;
     [[nodiscard]] util::ExpectedVoid set_cursor_visible(bool visible) override;
+    [[nodiscard]] util::Expected<TerminalImageHandle> place_image(const TerminalImage& image) override;
+    [[nodiscard]] util::ExpectedVoid remove_image(
+        TerminalImageHandle handle,
+        const CellRegion& region) override;
     [[nodiscard]] util::ExpectedVoid begin_synchronized_update() override;
     [[nodiscard]] util::ExpectedVoid end_synchronized_update() override;
 
@@ -67,6 +88,7 @@ public:
     [[nodiscard]] const std::vector<std::string>& output() const;
     [[nodiscard]] const std::vector<std::string>& screen() const;
     [[nodiscard]] const std::vector<std::vector<VirtualTerminalCell>>& cells() const;
+    [[nodiscard]] const std::vector<VirtualTerminalImage>& images() const;
     [[nodiscard]] VirtualTerminalStyle final_style() const;
     [[nodiscard]] CursorPosition cursor() const;
     /// Returns true if clear_screen() was called since the last check.

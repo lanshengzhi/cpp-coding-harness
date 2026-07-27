@@ -28,6 +28,7 @@
 #include <cch/tui/Container.hpp>
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Input.hpp>
+#include <cch/tui/Image.hpp>
 #include <cch/tui/Loader.hpp>
 #include <cch/tui/Markdown.hpp>
 #include <cch/tui/SelectList.hpp>
@@ -103,6 +104,16 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_abstract_v<agent::AsyncAgentTool>);
     static_assert(std::is_abstract_v<harness::session::SessionStore>);
     static_assert(std::is_abstract_v<tui::Component>);
+    static_assert(std::is_aggregate_v<tui::RenderResult>);
+    static_assert(std::is_aggregate_v<tui::InlineImageRenderRegion>);
+    static_assert(std::is_aggregate_v<tui::ImageContent>);
+    static_assert(std::is_aggregate_v<tui::ImageCellConstraints>);
+    static_assert(std::is_aggregate_v<tui::ImageOptions>);
+    static_assert(std::is_aggregate_v<tui::CellRegion>);
+    static_assert(std::is_aggregate_v<tui::CellPixelDimensions>);
+    static_assert(std::is_aggregate_v<tui::TerminalCapabilities>);
+    static_assert(std::is_aggregate_v<tui::TerminalImage>);
+    static_assert(std::is_enum_v<tui::InlineImageProtocol>);
     static_assert(std::is_aggregate_v<tui::KeyEvent>);
     static_assert(std::is_aggregate_v<tui::PasteEvent>);
     static_assert(std::is_aggregate_v<tui::EditorCursor>);
@@ -153,10 +164,14 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_final_v<tui::Spacer>);
     static_assert(std::is_final_v<tui::Text>);
     static_assert(std::is_final_v<tui::TruncatedText>);
+    static_assert(std::is_final_v<tui::Image>);
+    static_assert(std::is_move_constructible_v<tui::Image>);
+    static_assert(!std::is_copy_constructible_v<tui::Image>);
     static_assert(std::is_final_v<tui::Markdown>);
     static_assert(std::is_final_v<tui::Tui>);
     static_assert(std::is_aggregate_v<tui::VirtualTerminalStyle>);
     static_assert(std::is_aggregate_v<tui::VirtualTerminalCell>);
+    static_assert(std::is_aggregate_v<tui::VirtualTerminalImage>);
     static_assert(std::is_final_v<tui::VirtualTerminal>);
     // ADR 0006: the local environment uniquely owns its synchronous state, so
     // environment copies cannot alias live state.

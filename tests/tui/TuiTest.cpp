@@ -20,8 +20,8 @@ namespace {
 
 class OverwideComponent final : public cch::tui::Component {
 public:
-    [[nodiscard]] cch::util::Expected<std::vector<std::string>> render(std::size_t) override {
-        return std::vector<std::string>{"too wide"};
+    [[nodiscard]] cch::util::Expected<cch::tui::RenderResult> render(std::size_t) override {
+        return cch::tui::RenderResult{.lines = {"too wide"}};
     }
 
     void invalidate() override {}
@@ -32,8 +32,8 @@ class FocusableInputComponent final
       public cch::tui::InputHandler,
       public cch::tui::Focusable {
 public:
-    [[nodiscard]] cch::util::Expected<std::vector<std::string>> render(std::size_t) override {
-        return std::vector<std::string>{"x"};
+    [[nodiscard]] cch::util::Expected<cch::tui::RenderResult> render(std::size_t) override {
+        return cch::tui::RenderResult{.lines = {"x"}};
     }
 
     void invalidate() override {
@@ -123,8 +123,8 @@ TEST_CASE("Text accepts Unicode characters", "[tui][issue46][unicode]") {
 
     const auto result = text.render(2);
     REQUIRE(result);
-    REQUIRE(result->size() == 1);
-    CHECK(cch::tui::detail::visible_width((*result)[0]) >= 1);
+    REQUIRE(result->lines.size() == 1);
+    CHECK(cch::tui::detail::visible_width(result->lines[0]) >= 1);
 }
 
 TEST_CASE("Tui rejects a Component line wider than its visible width", "[tui][issue45]") {
