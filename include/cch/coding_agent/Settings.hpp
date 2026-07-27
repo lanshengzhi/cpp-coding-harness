@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace cch::coding_agent {
@@ -27,6 +28,10 @@ struct UserSettings {
     std::optional<DefaultProjectTrust> default_project_trust;
     /// User-controlled project skill resource enablement.
     std::optional<ResourceEnablement> project_skills;
+    /// User-controlled Native TUI project theme resource enablement.
+    std::optional<ResourceEnablement> project_themes{std::nullopt};
+    /// Native TUI theme selected by name.
+    std::optional<std::string> theme{std::nullopt};
     /// CLI session-storage preference (pi: `sessionDir`, same format as the
     /// `--session-dir` flag). Consumed only by CLI automatic-directory
     /// resolution; SDK default persistence never reads it.
@@ -40,6 +45,12 @@ public:
     /// (all fields nullopt) if the file does not exist or is unreadable.
     /// Returns an error only if the file exists but is malformed JSON.
     [[nodiscard]] static util::Expected<UserSettings> load(const std::filesystem::path& settings_path);
+
+    /// Persist one Native TUI theme selection while preserving every other
+    /// settings member, including members unknown to this build.
+    [[nodiscard]] static util::ExpectedVoid save_theme_selection(
+        const std::filesystem::path& settings_path,
+        std::string_view theme_name);
 
     /// Resolve an API key from an env var chain. Returns the value of the first
     /// environment variable that is set and non-empty. Returns nullopt if none are set.

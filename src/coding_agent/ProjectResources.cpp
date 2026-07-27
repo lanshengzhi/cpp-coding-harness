@@ -15,14 +15,47 @@ struct MarkerSpec {
     harness::FileKind expected_kind;
 };
 
-constexpr std::array<MarkerSpec, 7> kMarkers{{
-    {ProjectResourceKind::ProjectSettings, ".cpp-harness/settings.json", harness::FileKind::File},
-    {ProjectResourceKind::ProjectSkills, ".cpp-harness/skills", harness::FileKind::Directory},
-    {ProjectResourceKind::ProjectPrompts, ".cpp-harness/prompts", harness::FileKind::Directory},
-    {ProjectResourceKind::ProjectExtensions, ".cpp-harness/extensions", harness::FileKind::Directory},
-    {ProjectResourceKind::ProjectPackages, ".cpp-harness/packages", harness::FileKind::Directory},
-    {ProjectResourceKind::ProjectSystemPrompt, ".cpp-harness/SYSTEM.md", harness::FileKind::File},
-    {ProjectResourceKind::ProjectAppendSystemPrompt, ".cpp-harness/APPEND_SYSTEM.md", harness::FileKind::File},
+constexpr std::array<MarkerSpec, 8> kMarkers{{
+    {
+        .kind = ProjectResourceKind::ProjectSettings,
+        .path = ".cpp-harness/settings.json",
+        .expected_kind = harness::FileKind::File,
+    },
+    {
+        .kind = ProjectResourceKind::ProjectSkills,
+        .path = ".cpp-harness/skills",
+        .expected_kind = harness::FileKind::Directory,
+    },
+    {
+        .kind = ProjectResourceKind::ProjectPrompts,
+        .path = ".cpp-harness/prompts",
+        .expected_kind = harness::FileKind::Directory,
+    },
+    {
+        .kind = ProjectResourceKind::ProjectThemes,
+        .path = ".cpp-harness/themes",
+        .expected_kind = harness::FileKind::Directory,
+    },
+    {
+        .kind = ProjectResourceKind::ProjectExtensions,
+        .path = ".cpp-harness/extensions",
+        .expected_kind = harness::FileKind::Directory,
+    },
+    {
+        .kind = ProjectResourceKind::ProjectPackages,
+        .path = ".cpp-harness/packages",
+        .expected_kind = harness::FileKind::Directory,
+    },
+    {
+        .kind = ProjectResourceKind::ProjectSystemPrompt,
+        .path = ".cpp-harness/SYSTEM.md",
+        .expected_kind = harness::FileKind::File,
+    },
+    {
+        .kind = ProjectResourceKind::ProjectAppendSystemPrompt,
+        .path = ".cpp-harness/APPEND_SYSTEM.md",
+        .expected_kind = harness::FileKind::File,
+    },
 }};
 
 [[nodiscard]] bool kind_matches(harness::FileKind actual, harness::FileKind expected) {
@@ -74,6 +107,8 @@ constexpr std::array<MarkerSpec, 7> kMarkers{{
             return ResourceEnablement::On;
         }
         return policy.project_skills;
+    case ProjectResourceKind::ProjectThemes:
+        return policy.project_themes;
     case ProjectResourceKind::ProjectSettings:
     case ProjectResourceKind::ProjectExtensions:
     case ProjectResourceKind::ProjectPackages:
@@ -86,7 +121,8 @@ constexpr std::array<MarkerSpec, 7> kMarkers{{
 
 [[nodiscard]] bool has_implemented_loader(ProjectResourceKind kind) {
     return kind == ProjectResourceKind::ProjectSkills ||
-           kind == ProjectResourceKind::ProjectPrompts;
+           kind == ProjectResourceKind::ProjectPrompts ||
+           kind == ProjectResourceKind::ProjectThemes;
 }
 
 } // namespace
@@ -99,6 +135,8 @@ std::string to_string(ProjectResourceKind kind) {
         return "project_skills";
     case ProjectResourceKind::ProjectPrompts:
         return "project_prompts";
+    case ProjectResourceKind::ProjectThemes:
+        return "project_themes";
     case ProjectResourceKind::ProjectExtensions:
         return "project_extensions";
     case ProjectResourceKind::ProjectPackages:
@@ -296,6 +334,15 @@ bool project_skills_allowed(const ProjectResourceLoadPlan& plan) {
 bool project_prompts_allowed(const ProjectResourceLoadPlan& plan) {
     for (const auto& decision : plan.decisions) {
         if (decision.kind == ProjectResourceKind::ProjectPrompts && decision.allowed) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool project_themes_allowed(const ProjectResourceLoadPlan& plan) {
+    for (const auto& decision : plan.decisions) {
+        if (decision.kind == ProjectResourceKind::ProjectThemes && decision.allowed) {
             return true;
         }
     }

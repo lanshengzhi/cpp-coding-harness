@@ -1,9 +1,9 @@
 #include "coding_agent/ProjectResourceLoader.hpp"
 
 #include "coding_agent/PromptTemplateLoader.hpp"
+#include "coding_agent/ResourceDiagnosticPolicy.hpp"
 #include "coding_agent/SkillLoader.hpp"
 #include "../harness/WorkspaceFileSystem.hpp"
-#include "util/BoundedText.hpp"
 
 #include <algorithm>
 #include <array>
@@ -16,9 +16,6 @@
 
 namespace cch::coding_agent {
 namespace {
-
-constexpr std::size_t kMaxResourceDiagnostics = 64;
-constexpr std::size_t kMaxResourceDiagnosticTextBytes = 1024;
 
 struct LoadedResourceNames {
     std::set<std::string> skill_names;
@@ -254,7 +251,45 @@ void load_project_prompts_adapter(
         ProjectResourceKind::ProjectPrompts);
 }
 
-constexpr std::array<ProjectResourceAdapter, 2> kProjectResourceAdapters{{
+void load_project_themes_adapter(
+    const harness::WorkspaceFileSystem& fs,
+    ProjectResourceLoadingResult& result,
+    LoadedResourceNames& names) {
+    (void)names;
+    if (auto listed = fs.listDir(".cpp-harness/themes"); !listed) {
+        result.diagnostics.push_back(loading_diagnostic(
+            ResourceDiagnosticSeverity::Warning,
+            ProjectResourceLoadingDiagnosticCategory::ThemeAdapter,
+            "list_failed",
+            listed.error().message,
+            ".cpp-harness/themes",
+            ProjectResourceKind::ProjectThemes));
+    } else {
+        std::sort(listed->begin(), listed->end(), [](const auto& left, const auto& right) {
+            return left.name < right.name;
+        });
+        for (const auto& entry : *listed) {
+            if (entry.kind != harness::FileKind::File || !entry.name.ends_with(".json")) continue;
+            const auto path = ".cpp-harness/themes/" + entry.name;
+            if (auto content = fs.readTextFile(path); !content) {
+                result.diagnostics.push_back(loading_diagnostic(
+                    ResourceDiagnosticSeverity::Warning,
+                    ProjectResourceLoadingDiagnosticCategory::ThemeAdapter,
+                    "read_failed",
+                    content.error().message,
+                    path,
+                    ProjectResourceKind::ProjectThemes));
+            } else {
+                result.resources.project_themes.push_back({
+                    .path = path,
+                    .json = std::move(*content),
+                });
+            }
+        }
+    }
+}
+
+constexpr std::array<ProjectResourceAdapter, 3> kProjectResourceAdapters{{
     {
         .kind = ProjectResourceKind::ProjectSkills,
         .marker_path = ".cpp-harness/skills",
@@ -267,6 +302,12 @@ constexpr std::array<ProjectResourceAdapter, 2> kProjectResourceAdapters{{
         .plan_allows = project_prompts_allowed,
         .load = load_project_prompts_adapter,
     },
+    {
+        .kind = ProjectResourceKind::ProjectThemes,
+        .marker_path = ".cpp-harness/themes",
+        .plan_allows = project_themes_allowed,
+        .load = load_project_themes_adapter,
+    },
 }};
 
 [[nodiscard]] ProjectResourcePolicy effective_policy_for(
@@ -275,29 +316,27 @@ constexpr std::array<ProjectResourceAdapter, 2> kProjectResourceAdapters{{
     if (!request.prompt_templates_enabled) {
         policy.project_prompts = ResourceEnablement::Off;
     }
+    if (!request.theme_resources_enabled) {
+        policy.project_themes = ResourceEnablement::Off;
+    }
     return policy;
 }
 
-void bound_text(std::string& text) {
-    text = util::bounded_redacted_text(
-        std::move(text),
-        kMaxResourceDiagnosticTextBytes,
-        "...[truncated]");
-}
-
 void bound_diagnostics(ProjectResourceLoadingResult& result) {
-    for (auto& diagnostic : result.diagnostics) {
-        bound_text(diagnostic.message);
-        if (diagnostic.path) {
-            bound_text(*diagnostic.path);
+    const auto bound = [](auto& diagnostics) {
+        for (auto& diagnostic : diagnostics) {
+            detail::bound_resource_diagnostic_text(diagnostic.message);
+            if (diagnostic.path) detail::bound_resource_diagnostic_text(*diagnostic.path);
         }
-    }
+    };
+    bound(result.diagnostics);
+    bound(result.fatal_errors);
 
-    if (result.diagnostics.size() <= kMaxResourceDiagnostics) {
+    if (result.diagnostics.size() <= detail::kMaxResourceDiagnostics) {
         return;
     }
 
-    result.diagnostics.resize(kMaxResourceDiagnostics - 1);
+    result.diagnostics.resize(detail::kMaxResourceDiagnostics - 1);
     result.diagnostics.push_back(loading_diagnostic(
         ResourceDiagnosticSeverity::Warning,
         ProjectResourceLoadingDiagnosticCategory::LoadPlan,
@@ -429,6 +468,8 @@ std::string_view project_resource_loading_diagnostic_category_name(
         return "skill";
     case ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter:
         return "template";
+    case ProjectResourceLoadingDiagnosticCategory::ThemeAdapter:
+        return "theme";
     case ProjectResourceLoadingDiagnosticCategory::Duplicate:
         return "duplicate";
     }

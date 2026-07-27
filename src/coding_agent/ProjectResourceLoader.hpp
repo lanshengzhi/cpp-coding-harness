@@ -22,6 +22,7 @@ enum class ProjectResourceLoadingDiagnosticCategory {
     LoadPlan,
     SkillAdapter,
     PromptTemplateAdapter,
+    ThemeAdapter,
     Duplicate,
 };
 
@@ -39,9 +40,17 @@ struct ExplicitPromptTemplateInput {
     bool is_file{true};
 };
 
+struct LoadedProjectThemeResource {
+    std::string path;
+    std::string json;
+};
+
 struct LoadedProjectResources {
     std::vector<Skill> skills;
     std::vector<PromptTemplate> prompt_templates;
+    /// Trusted, contained project theme documents. Parsing stays in the
+    /// physically separate coding-agent TUI package.
+    std::vector<LoadedProjectThemeResource> project_themes;
 };
 
 struct ProjectResourceLoadingRequest {
@@ -50,6 +59,9 @@ struct ProjectResourceLoadingRequest {
     DefaultProjectTrust default_project_trust{DefaultProjectTrust::Ask};
     std::optional<bool> project_trust_override;
     bool prompt_templates_enabled{true};
+    /// False for every existing non-TUI assembly. A Native TUI assembly opts
+    /// in only after it has decided to consume theme resources.
+    bool theme_resources_enabled{false};
     std::vector<Skill> host_skills;
     std::vector<PromptTemplate> host_prompt_templates;
     std::vector<ExplicitPromptTemplateInput> explicit_prompt_templates;

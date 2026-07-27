@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <string_view>
 
@@ -50,6 +52,13 @@ void write_valid_project_prompt(const LoaderFixture& fix, std::string name = "re
         "description: Project prompt.\n"
         "---\n"
         "Project prompt body.\n");
+}
+
+[[nodiscard]] std::string valid_theme_json() {
+    std::ifstream input(std::filesystem::path(CCH_SOURCE_DIR) / "tests" / "fixtures" / "themes" / "dark.json");
+    std::ostringstream content;
+    content << input.rdbuf();
+    return content.str();
 }
 
 const coding_agent::ResourceLoadDecision* find_decision(
@@ -124,6 +133,40 @@ TEST_CASE("project resource loader loads trusted skills and prompts", "[coding_a
     REQUIRE(result.resources.prompt_templates.size() == 1);
     CHECK(result.resources.prompt_templates[0].name == "review");
     CHECK(result.diagnostics.empty());
+}
+
+TEST_CASE(
+    "project resource loader returns raw themes only when the TUI requests trusted resources",
+    "[coding_agent][project-resource-loader][theme][issue56]") {
+    LoaderFixture fix;
+    fix.write(".cpp-harness/themes/project.json", valid_theme_json());
+
+    coding_agent::ProjectResourceLoadingRequest default_request;
+    default_request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    const auto disabled = fix.load(std::move(default_request));
+    CHECK(disabled.resources.project_themes.empty());
+    CHECK(disabled.trust.source == coding_agent::ProjectTrustSource::NoProjectResources);
+
+    coding_agent::ProjectResourceLoadingRequest untrusted_request;
+    untrusted_request.theme_resources_enabled = true;
+    const auto untrusted = fix.load(std::move(untrusted_request));
+    CHECK(untrusted.resources.project_themes.empty());
+    require_decision_reason(
+        untrusted.load_plan,
+        coding_agent::ProjectResourceKind::ProjectThemes,
+        coding_agent::ResourceSkipReason::Untrusted);
+    CHECK_FALSE(has_diag_source(
+        untrusted,
+        coding_agent::ProjectResourceLoadingDiagnosticCategory::ThemeAdapter));
+
+    coding_agent::ProjectResourceLoadingRequest trusted_request;
+    trusted_request.theme_resources_enabled = true;
+    trusted_request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    const auto trusted = fix.load(std::move(trusted_request));
+    REQUIRE(trusted.resources.project_themes.size() == 1);
+    CHECK(trusted.resources.project_themes[0].path == ".cpp-harness/themes/project.json");
+    CHECK(trusted.resources.project_themes[0].json == valid_theme_json());
+    CHECK(coding_agent::project_themes_allowed(trusted.load_plan));
 }
 
 TEST_CASE("project resource loader skips untrusted resources before parsing adapters", "[coding_agent][project-resource-loader]") {

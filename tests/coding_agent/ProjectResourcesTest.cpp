@@ -43,11 +43,14 @@ TEST_CASE("project resource detection ignores empty harness and sessions", "[cod
     CHECK(result.diagnostics.empty());
 }
 
-TEST_CASE("project resource detection maps protected markers", "[coding_agent][project-resources]") {
+TEST_CASE(
+    "project resource detection maps protected markers",
+    "[coding_agent][project-resources][issue56]") {
     tests::TempWorkspace workspace;
     workspace.write(".cpp-harness/settings.json", "{}");
     std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "skills");
     std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "prompts");
+    std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "themes");
     std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "extensions");
     std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "packages");
     workspace.write(".cpp-harness/SYSTEM.md", "system");
@@ -58,6 +61,7 @@ TEST_CASE("project resource detection maps protected markers", "[coding_agent][p
     CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectSettings));
     CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectSkills));
     CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectPrompts));
+    CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectThemes));
     CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectExtensions));
     CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectPackages));
     CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectSystemPrompt));
@@ -112,6 +116,34 @@ TEST_CASE("project resource load plan gates skills by trust and enablement", "[c
     CHECK_FALSE(coding_agent::project_skills_allowed(disabled_plan));
     REQUIRE(disabled_plan.decisions.size() == 1);
     CHECK(disabled_plan.decisions[0].reason == coding_agent::ResourceSkipReason::Disabled);
+}
+
+TEST_CASE(
+    "project resource load plan gates themes independently",
+    "[coding_agent][project-resources][theme][issue56]") {
+    tests::TempWorkspace workspace;
+    std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "themes");
+    const auto detection = coding_agent::detect_project_resources(fs_for(workspace));
+
+    coding_agent::ProjectResourcePolicy policy{};
+    CHECK(coding_agent::needs_project_trust_resolution(detection, policy));
+    const auto trusted_plan = coding_agent::build_project_resource_load_plan(
+        detection,
+        policy,
+        trust_resolution(
+            coding_agent::ProjectTrustDecision::Trusted,
+            coding_agent::ProjectTrustSource::CliOverride));
+    CHECK(coding_agent::project_themes_allowed(trusted_plan));
+
+    policy.project_themes = coding_agent::ResourceEnablement::Off;
+    CHECK_FALSE(coding_agent::needs_project_trust_resolution(detection, policy));
+    const auto disabled_plan = coding_agent::build_project_resource_load_plan(
+        detection,
+        policy,
+        trust_resolution(
+            coding_agent::ProjectTrustDecision::Trusted,
+            coding_agent::ProjectTrustSource::CliOverride));
+    CHECK_FALSE(coding_agent::project_themes_allowed(disabled_plan));
 }
 
 TEST_CASE("project resource load plan does not force trust for unsupported future markers", "[coding_agent][project-resources]") {

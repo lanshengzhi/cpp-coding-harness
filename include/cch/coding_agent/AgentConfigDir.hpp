@@ -27,6 +27,11 @@ namespace cch::coding_agent {
 /// creates the directory.
 [[nodiscard]] std::filesystem::path sessions_root_path();
 
+/// `agent_config_dir()/themes` — global Native TUI theme resources.
+/// Returns an empty path when no user-level root can be resolved and never
+/// creates or scans any pi state directory.
+[[nodiscard]] std::filesystem::path themes_root_path();
+
 /// `agent_config_dir()/auth.json` — user authentication entries (pi: `auth.json`).
 [[nodiscard]] std::filesystem::path auth_file_path();
 

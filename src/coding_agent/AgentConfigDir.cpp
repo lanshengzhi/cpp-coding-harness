@@ -41,6 +41,10 @@ std::filesystem::path sessions_root_path() {
     return in_agent_config_dir("sessions");
 }
 
+std::filesystem::path themes_root_path() {
+    return in_agent_config_dir("themes");
+}
+
 std::filesystem::path auth_file_path() {
     return in_agent_config_dir("auth.json");
 }

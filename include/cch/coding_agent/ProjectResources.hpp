@@ -16,6 +16,7 @@ enum class ProjectResourceKind {
     ProjectSettings,
     ProjectSkills,
     ProjectPrompts,
+    ProjectThemes,
     ProjectExtensions,
     ProjectPackages,
     ProjectSystemPrompt,
@@ -74,6 +75,7 @@ struct ResourceLoadDecision {
 struct ProjectResourcePolicy {
     ResourceEnablement project_skills{ResourceEnablement::Auto};
     ResourceEnablement project_prompts{ResourceEnablement::Auto};
+    ResourceEnablement project_themes{ResourceEnablement::Auto};
 };
 
 struct ProjectResourceLoadPlan {
@@ -108,5 +110,7 @@ struct ProjectResourceLoadPlan {
 [[nodiscard]] bool project_skills_allowed(const ProjectResourceLoadPlan& plan);
 
 [[nodiscard]] bool project_prompts_allowed(const ProjectResourceLoadPlan& plan);
+
+[[nodiscard]] bool project_themes_allowed(const ProjectResourceLoadPlan& plan);
 
 } // namespace cch::coding_agent

@@ -52,7 +52,7 @@ std::vector<std::filesystem::path> files_under(const std::filesystem::path& root
 
 } // namespace
 
-TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake]") {
+TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issue56]") {
     const auto cmake = read_text(std::filesystem::path(CCH_SOURCE_DIR) / "CMakeLists.txt");
 
     CHECK(block_mentions(cmake, "add_library(cch_util"));
@@ -73,6 +73,8 @@ TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake]") {
     CHECK(block_mentions(cmake, "add_library(cch_coding_agent_tui"));
     const auto coding_agent_tui_sources = cmake_command_block(cmake, "add_library(cch_coding_agent_tui");
     CHECK(block_mentions(coding_agent_tui_sources, "src/coding_agent/tui/Theme.cpp"));
+    CHECK(block_mentions(coding_agent_tui_sources, "src/coding_agent/tui/ThemeCatalog.cpp"));
+    CHECK(block_mentions(coding_agent_tui_sources, "src/coding_agent/tui/ThemeSettings.cpp"));
     CHECK(block_mentions(cmake, "add_library(cch_ai"));
     CHECK(block_mentions(cmake, "add_library(cch_agent"));
     const auto agent_sources = cmake_command_block(cmake, "add_library(cch_agent");

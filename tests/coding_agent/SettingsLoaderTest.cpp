@@ -3,6 +3,7 @@
 #include "../support/TempWorkspace.hpp"
 
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <string>
 
@@ -157,3 +158,49 @@ TEST_CASE("SettingsLoader defaults sessionDir to absent", "[settings][session-di
     REQUIRE(settings);
     CHECK_FALSE(settings->session_dir.has_value());
 }
+
+TEST_CASE("SettingsLoader loads theme selection and project theme policy", "[coding_agent][settings][theme][issue56]") {
+    tests::TempWorkspace workspace;
+    const auto settings_path = workspace.path() / "settings.json";
+    std::ofstream(settings_path) << R"({"theme":"solarized","project_resources":{"themes":"off"}})";
+
+    const auto settings = coding_agent::SettingsLoader::load(settings_path);
+
+    REQUIRE(settings);
+    CHECK(settings->theme == "solarized");
+    REQUIRE(settings->project_themes.has_value());
+    CHECK(*settings->project_themes == coding_agent::ResourceEnablement::Off);
+}
+
+TEST_CASE(
+    "SettingsLoader saves only theme selection and preserves unknown settings",
+    "[coding_agent][settings][theme][issue56]") {
+    tests::TempWorkspace workspace;
+    const auto settings_path = workspace.path() / "settings.json";
+    std::ofstream(settings_path) << R"({"provider":"custom","future":{"enabled":true},"theme":"dark"})";
+
+    REQUIRE(coding_agent::SettingsLoader::save_theme_selection(settings_path, "light"));
+    const auto settings = coding_agent::SettingsLoader::load(settings_path);
+
+    REQUIRE(settings);
+    CHECK(settings->provider == "custom");
+    CHECK(settings->theme == "light");
+    const auto content = workspace.read("settings.json");
+    CHECK(content.find("future") != std::string::npos);
+    CHECK(content.find("enabled") != std::string::npos);
+}
+
+#if defined(__unix__) || defined(__APPLE__)
+TEST_CASE("SettingsLoader refuses a symlinked temporary settings path", "[coding_agent][settings][theme][issue56]") {
+    tests::TempWorkspace workspace;
+    const auto settings_path = workspace.path() / "settings.json";
+    const auto victim_path = workspace.path() / "victim.json";
+    std::ofstream(victim_path) << R"({"untouched":true})";
+    std::filesystem::create_symlink(victim_path, workspace.path() / "settings.json.tmp");
+
+    const auto saved = coding_agent::SettingsLoader::save_theme_selection(settings_path, "light");
+
+    REQUIRE_FALSE(saved);
+    CHECK(workspace.read("victim.json") == R"({"untouched":true})");
+}
+#endif
