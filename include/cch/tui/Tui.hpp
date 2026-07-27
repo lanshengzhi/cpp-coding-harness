@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -93,6 +94,7 @@ private:
     [[nodiscard]] std::optional<CursorPosition> resolve_cursor_location() const;
 
     Terminal& terminal_; // must outlive this Tui.
+    std::recursive_mutex mutex_;
     std::unique_ptr<detail::InputDecoder> input_decoder_;
     std::vector<std::unique_ptr<Component>> children_;
     std::vector<std::unique_ptr<Overlay>> overlays_;

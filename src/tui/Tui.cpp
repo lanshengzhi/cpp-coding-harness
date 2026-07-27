@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -117,10 +118,12 @@ Tui::~Tui() {
 }
 
 util::Expected<std::reference_wrapper<Component>> Tui::add_child(std::unique_ptr<Component> component) {
+    std::lock_guard lock(mutex_);
     return detail::attach_child(children_, std::move(component), "");
 }
 
 util::Expected<std::reference_wrapper<Overlay>> Tui::add_overlay(std::unique_ptr<Overlay> overlay) {
+    std::lock_guard lock(mutex_);
     if (!overlay) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
@@ -132,6 +135,7 @@ util::Expected<std::reference_wrapper<Overlay>> Tui::add_overlay(std::unique_ptr
 }
 
 util::ExpectedVoid Tui::remove_overlay(Overlay* overlay) {
+    std::lock_guard lock(mutex_);
     if (overlay == nullptr) return {};
     if (!owns_overlay(overlay)) {
         return std::unexpected(util::make_error(
@@ -160,6 +164,7 @@ util::ExpectedVoid Tui::remove_overlay(Overlay* overlay) {
 }
 
 util::ExpectedVoid Tui::hide_overlay(Overlay* overlay) {
+    std::lock_guard lock(mutex_);
     if (overlay == nullptr) return {};
     if (!owns_overlay(overlay)) {
         return std::unexpected(util::make_error(
@@ -182,6 +187,7 @@ util::ExpectedVoid Tui::hide_overlay(Overlay* overlay) {
 }
 
 util::ExpectedVoid Tui::restore_overlay(Overlay* overlay) {
+    std::lock_guard lock(mutex_);
     if (overlay == nullptr) return {};
     if (!owns_overlay(overlay)) {
         return std::unexpected(util::make_error(
@@ -195,6 +201,7 @@ util::ExpectedVoid Tui::restore_overlay(Overlay* overlay) {
 }
 
 util::ExpectedVoid Tui::start() {
+    std::unique_lock lock(mutex_);
     if (started_) {
         return {};
     }
@@ -208,8 +215,9 @@ util::ExpectedVoid Tui::start() {
     started_ = true;
 
     if (auto result = terminal_.set_cursor_visible(false); !result) {
-        (void)terminal_.stop();
         started_ = false;
+        lock.unlock();
+        (void)terminal_.stop();
         return std::unexpected(result.error());
     }
 
@@ -221,11 +229,10 @@ util::ExpectedVoid Tui::start() {
 }
 
 util::ExpectedVoid Tui::stop() {
-    if (!started_) {
-        return {};
-    }
+    std::unique_lock lock(mutex_);
+    if (!started_) return {};
 
-    // Unfocus everything before stopping
+    started_ = false;
     if (auto* focusable = dynamic_cast<Focusable*>(focused_)) {
         focusable->set_focused(false);
     }
@@ -234,26 +241,24 @@ util::ExpectedVoid Tui::stop() {
 
     const auto image_result = remove_active_images();
     const auto cursor_result = terminal_.set_cursor_visible(true);
-    const auto stop_result = terminal_.stop();
     active_images_.clear();
     input_decoder_->reset();
-    started_ = false;
     first_render_ = true;
     pending_render_ = false;
 
-    if (!image_result) {
-        return std::unexpected(image_result.error());
-    }
-    if (!cursor_result) {
-        return std::unexpected(cursor_result.error());
-    }
-    if (!stop_result) {
-        return std::unexpected(stop_result.error());
-    }
+    // Let an already-delivered Process Terminal callback observe stopped state
+    // before the terminal joins its delivery worker.
+    lock.unlock();
+    const auto stop_result = terminal_.stop();
+
+    if (!image_result) return std::unexpected(image_result.error());
+    if (!cursor_result) return std::unexpected(cursor_result.error());
+    if (!stop_result) return std::unexpected(stop_result.error());
     return {};
 }
 
 util::ExpectedVoid Tui::render() {
+    std::lock_guard lock(mutex_);
     if (!started_) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
@@ -707,6 +712,7 @@ util::ExpectedVoid Tui::place_images(
 }
 
 util::ExpectedVoid Tui::set_focus(Component* component) {
+    std::lock_guard lock(mutex_);
     if (component != nullptr && !owns(component)) {
         // Check if component is inside an overlay
         bool found_in_overlay = false;
@@ -736,6 +742,7 @@ util::ExpectedVoid Tui::set_focus(Component* component) {
 }
 
 void Tui::invalidate() {
+    std::lock_guard lock(mutex_);
     pending_render_ = true;
     for (const auto& child : children_) {
         child->invalidate();
@@ -762,6 +769,8 @@ bool Tui::owns_overlay(const Overlay* overlay) const {
 }
 
 void Tui::handle_input(std::string input) {
+    std::lock_guard lock(mutex_);
+    if (!started_) return;
     if (input.empty()) {
         for (const auto& event : input_decoder_->flush()) dispatch_input(event);
         return;
@@ -807,6 +816,8 @@ void Tui::dispatch_input(const InputEventVariant& event) {
 }
 
 void Tui::handle_resize(TerminalDimensions) {
+    std::lock_guard lock(mutex_);
+    if (!started_) return;
     invalidate();
 }
 

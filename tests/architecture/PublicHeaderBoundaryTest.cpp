@@ -31,6 +31,7 @@
 #include <cch/tui/Image.hpp>
 #include <cch/tui/Loader.hpp>
 #include <cch/tui/Markdown.hpp>
+#include <cch/tui/ProcessTerminal.hpp>
 #include <cch/tui/SelectList.hpp>
 #include <cch/tui/SettingsList.hpp>
 #include <cch/tui/Style.hpp>
@@ -113,7 +114,10 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_aggregate_v<tui::CellPixelDimensions>);
     static_assert(std::is_aggregate_v<tui::TerminalCapabilities>);
     static_assert(std::is_aggregate_v<tui::TerminalImage>);
+    static_assert(std::is_aggregate_v<tui::ProcessTerminalOptions>);
     static_assert(std::is_enum_v<tui::InlineImageProtocol>);
+    static_assert(std::is_enum_v<tui::KeyboardProtocol>);
+    static_assert(std::is_final_v<tui::ProcessTerminal>);
     static_assert(std::is_aggregate_v<tui::KeyEvent>);
     static_assert(std::is_aggregate_v<tui::PasteEvent>);
     static_assert(std::is_aggregate_v<tui::EditorCursor>);

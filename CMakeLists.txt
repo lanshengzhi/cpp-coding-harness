@@ -60,9 +60,11 @@ add_library(cch_tui
     src/tui/Image.cpp
     src/tui/Input.cpp
     src/tui/InputDecoder.cpp
+    src/tui/KeyboardProtocol.cpp
     src/tui/Loader.cpp
     src/tui/Markdown.cpp
     src/tui/Overlay.cpp
+    src/tui/ProcessTerminal.cpp
     src/tui/SelectList.cpp
     src/tui/SettingsList.cpp
     src/tui/TerminalImage.cpp
@@ -261,6 +263,7 @@ if(CCH_BUILD_TESTS)
         tests/tui/LoaderTest.cpp
         tests/tui/MarkdownTest.cpp
         tests/tui/OverlayTest.cpp
+        tests/tui/ProcessTerminalTest.cpp
         tests/tui/RenderDifferentialTest.cpp
         tests/tui/SelectListTest.cpp
         tests/tui/SettingsListTest.cpp
