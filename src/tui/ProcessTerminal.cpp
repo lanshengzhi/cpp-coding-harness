@@ -4,7 +4,11 @@
 
 #include <array>
 #include <cerrno>
+#include <charconv>
+#include <chrono>
+#include <cmath>
 #include <condition_variable>
+#include <cctype>
 #include <cstdlib>
 #include <exception>
 #include <format>
@@ -37,6 +41,8 @@ constexpr std::string_view kEndSynchronizedUpdate = "\x1b[?2026l";
 constexpr std::string_view kKeyboardProtocolPush = "\x1b[>7u";
 constexpr std::string_view kKeyboardProtocolQuery = "\x1b[?u\x1b[c";
 constexpr std::string_view kKeyboardProtocolPop = "\x1b[<u";
+constexpr std::string_view kColorSchemeQuery = "\x1b[?996n";
+constexpr std::string_view kBackgroundColorQuery = "\x1b]11;?\x07";
 constexpr std::string_view kModifyOtherKeysEnable = "\x1b[>4;2m";
 constexpr std::string_view kModifyOtherKeysDisable = "\x1b[>4;0m";
 
@@ -79,15 +85,333 @@ struct WriteAttempt {
     return attempt_write_all(descriptor, output).result;
 }
 
+[[nodiscard]] std::string lowercase_environment(std::string_view name) {
+    const auto* value = std::getenv(std::string(name).c_str());
+    std::string result = value == nullptr ? "" : value;
+    std::transform(result.begin(), result.end(), result.begin(), [](unsigned char character) {
+        return static_cast<char>(std::tolower(character));
+    });
+    return result;
+}
+
+[[nodiscard]] std::string_view environment(std::string_view name) {
+    const auto* value = std::getenv(std::string(name).c_str());
+    return value == nullptr ? std::string_view{} : std::string_view{value};
+}
+
 [[nodiscard]] bool supports_synchronized_output() {
-    const auto* terminal_value = std::getenv("TERM");
-    const auto* program_value = std::getenv("TERM_PROGRAM");
-    const std::string_view terminal = terminal_value == nullptr ? "" : terminal_value;
-    const std::string_view program = program_value == nullptr ? "" : program_value;
+    const auto terminal = environment("TERM");
+    const auto program = environment("TERM_PROGRAM");
     return terminal == "xterm-kitty" || terminal == "alacritty" ||
         terminal == "foot" || terminal == "foot-extra" || terminal == "wezterm" ||
         terminal == "ghostty" || program == "iTerm.app" || program == "WezTerm" ||
         program == "ghostty";
+}
+
+[[nodiscard]] TerminalColorCapability detect_color_capability() {
+    const auto color_terminal = lowercase_environment("COLORTERM");
+    const bool has_true_color_hint = color_terminal == "truecolor" || color_terminal == "24bit";
+    const auto terminal = lowercase_environment("TERM");
+    if (!environment("TMUX").empty() || terminal.starts_with("tmux") || terminal.starts_with("screen")) {
+        return has_true_color_hint ? TerminalColorCapability::TrueColor : TerminalColorCapability::Xterm256;
+    }
+
+    const auto program = lowercase_environment("TERM_PROGRAM");
+    const auto emulator = lowercase_environment("TERMINAL_EMULATOR");
+    const bool known_true_color = !environment("KITTY_WINDOW_ID").empty() || program == "kitty" ||
+        program == "ghostty" || terminal.find("ghostty") != std::string::npos ||
+        !environment("GHOSTTY_RESOURCES_DIR").empty() || !environment("WEZTERM_PANE").empty() ||
+        program == "wezterm" || program == "warpterminal" || !environment("WARP_SESSION_ID").empty() ||
+        !environment("WARP_TERMINAL_SESSION_UUID").empty() || !environment("ITERM_SESSION_ID").empty() ||
+        program == "iterm.app" || !environment("WT_SESSION").empty() || program == "vscode" ||
+        program == "alacritty" || emulator == "jetbrains-jediterm";
+    return known_true_color || has_true_color_hint
+        ? TerminalColorCapability::TrueColor
+        : TerminalColorCapability::Xterm256;
+}
+
+struct EnvironmentRgb {
+    int red{0};
+    int green{0};
+    int blue{0};
+};
+
+[[nodiscard]] EnvironmentRgb xterm_index_to_rgb(int index) {
+    constexpr std::array<EnvironmentRgb, 16> basic{{
+        {0, 0, 0}, {128, 0, 0}, {0, 128, 0}, {128, 128, 0},
+        {0, 0, 128}, {128, 0, 128}, {0, 128, 128}, {192, 192, 192},
+        {128, 128, 128}, {255, 0, 0}, {0, 255, 0}, {255, 255, 0},
+        {0, 0, 255}, {255, 0, 255}, {0, 255, 255}, {255, 255, 255},
+    }};
+    if (index < 16) return basic[static_cast<std::size_t>(index)];
+    if (index < 232) {
+        const auto cube = index - 16;
+        const auto channel = [](int value) { return value == 0 ? 0 : 55 + value * 40; };
+        return {
+            .red = channel(cube / 36),
+            .green = channel((cube % 36) / 6),
+            .blue = channel(cube % 6),
+        };
+    }
+    const auto gray = 8 + (index - 232) * 10;
+    return {.red = gray, .green = gray, .blue = gray};
+}
+
+[[nodiscard]] double linear_channel(int channel) {
+    const auto value = static_cast<double>(channel) / 255.0;
+    return value <= 0.03928 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
+}
+
+[[nodiscard]] TerminalAppearance appearance_for_index(int index) {
+    const auto rgb = xterm_index_to_rgb(index);
+    const auto luminance = 0.2126 * linear_channel(rgb.red) +
+        0.7152 * linear_channel(rgb.green) + 0.0722 * linear_channel(rgb.blue);
+    return luminance >= 0.5 ? TerminalAppearance::Light : TerminalAppearance::Dark;
+}
+
+[[nodiscard]] TerminalAppearance detect_terminal_appearance() {
+    const auto value = environment("COLORFGBG");
+    std::optional<int> background;
+    std::size_t start = 0;
+    while (start <= value.size()) {
+        const auto separator = value.find(';', start);
+        const auto end = separator == std::string_view::npos ? value.size() : separator;
+        auto part = value.substr(start, end - start);
+        const auto first = part.find_first_not_of(" \t\r\n");
+        if (first == std::string_view::npos) {
+            part = {};
+        } else {
+            const auto last = part.find_last_not_of(" \t\r\n");
+            part = part.substr(first, last - first + 1);
+        }
+        if (part.starts_with('+')) part.remove_prefix(1);
+        if (!part.empty()) {
+            int parsed = 0;
+            const auto [pointer, error] = std::from_chars(part.data(), part.data() + part.size(), parsed);
+            (void)pointer; // pi baseline parseInt semantics intentionally accept a valid numeric prefix.
+            if (error == std::errc{} && parsed >= 0 && parsed <= 255) background = parsed;
+        }
+        if (separator == std::string_view::npos) break;
+        start = separator + 1;
+    }
+    return background ? appearance_for_index(*background) : TerminalAppearance::Unknown;
+}
+
+[[nodiscard]] TerminalAppearance appearance_for_rgb(const EnvironmentRgb& rgb) {
+    const auto luminance = 0.2126 * linear_channel(rgb.red) +
+        0.7152 * linear_channel(rgb.green) + 0.0722 * linear_channel(rgb.blue);
+    return luminance >= 0.5 ? TerminalAppearance::Light : TerminalAppearance::Dark;
+}
+
+[[nodiscard]] std::optional<int> parse_osc_hex_channel(std::string_view channel) {
+    if (channel.empty() || channel.size() > 8) return std::nullopt;
+    std::uint64_t value = 0;
+    std::uint64_t maximum = 0;
+    for (const auto character : channel) {
+        int digit = 0;
+        if (character >= '0' && character <= '9') {
+            digit = character - '0';
+        } else if (character >= 'a' && character <= 'f') {
+            digit = 10 + character - 'a';
+        } else if (character >= 'A' && character <= 'F') {
+            digit = 10 + character - 'A';
+        } else {
+            return std::nullopt;
+        }
+        value = value * 16 + static_cast<std::uint64_t>(digit);
+        maximum = maximum * 16 + 15;
+    }
+    if (maximum == 0) return std::nullopt;
+    return static_cast<int>(std::round(static_cast<double>(value) / static_cast<double>(maximum) * 255.0));
+}
+
+[[nodiscard]] std::optional<EnvironmentRgb> parse_osc_background(std::string_view value) {
+    const auto first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string_view::npos) return std::nullopt;
+    const auto last = value.find_last_not_of(" \t\r\n");
+    value = value.substr(first, last - first + 1);
+    if (value.starts_with('#')) {
+        value.remove_prefix(1);
+        if (value.size() != 6 && value.size() != 12) return std::nullopt;
+        const auto channel_width = value.size() / 3;
+        const auto red = parse_osc_hex_channel(value.substr(0, channel_width));
+        const auto green = parse_osc_hex_channel(value.substr(channel_width, channel_width));
+        const auto blue = parse_osc_hex_channel(value.substr(channel_width * 2, channel_width));
+        if (!red || !green || !blue) return std::nullopt;
+        return EnvironmentRgb{.red = *red, .green = *green, .blue = *blue};
+    }
+
+    auto lower = std::string(value.substr(0, std::min<std::size_t>(5, value.size())));
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char character) {
+        return static_cast<char>(std::tolower(character));
+    });
+    if (lower.starts_with("rgba:")) {
+        value.remove_prefix(5);
+    } else if (lower.starts_with("rgb:")) {
+        value.remove_prefix(4);
+    } else {
+        return std::nullopt;
+    }
+    const auto first_separator = value.find('/');
+    if (first_separator == std::string_view::npos) return std::nullopt;
+    const auto second_separator = value.find('/', first_separator + 1);
+    if (second_separator == std::string_view::npos) return std::nullopt;
+    const auto third_separator = value.find('/', second_separator + 1);
+    const auto red = parse_osc_hex_channel(value.substr(0, first_separator));
+    const auto green = parse_osc_hex_channel(value.substr(
+        first_separator + 1,
+        second_separator - first_separator - 1));
+    const auto blue = parse_osc_hex_channel(value.substr(
+        second_separator + 1,
+        third_separator == std::string_view::npos
+            ? std::string_view::npos
+            : third_separator - second_separator - 1));
+    if (!red || !green || !blue) return std::nullopt;
+    return EnvironmentRgb{.red = *red, .green = *green, .blue = *blue};
+}
+
+constexpr std::size_t kAppearanceResponseMaxBytes{4096};
+constexpr std::string_view kColorSchemeResponsePrefix{"\x1b[?997;"};
+constexpr std::string_view kOscBackgroundResponsePrefix{"\x1b]11;"};
+
+enum class AppearanceDiscardKind {
+    None,
+    ColorScheme,
+    OscBackground,
+};
+
+struct AppearanceInputState {
+    std::string pending;
+    AppearanceDiscardKind discard{AppearanceDiscardKind::None};
+    std::optional<TerminalAppearance> color_scheme{std::nullopt};
+    std::optional<TerminalAppearance> background{std::nullopt};
+};
+
+[[nodiscard]] bool partial_response_prefix(std::string_view input) {
+    return kColorSchemeResponsePrefix.starts_with(input) ||
+        kOscBackgroundResponsePrefix.starts_with(input);
+}
+
+[[nodiscard]] std::optional<std::size_t> osc_terminator(std::string_view input) {
+    const auto bell = input.find('\x07');
+    const auto string_terminator = input.find("\x1b\\");
+    if (bell == std::string_view::npos && string_terminator == std::string_view::npos) {
+        return std::nullopt;
+    }
+    if (bell == std::string_view::npos) return string_terminator;
+    if (string_terminator == std::string_view::npos) return bell;
+    return std::min(bell, string_terminator);
+}
+
+[[nodiscard]] std::string consume_appearance_input(
+    AppearanceInputState& state,
+    std::string_view input) {
+    state.pending.append(input);
+    std::string forwarded;
+    for (std::size_t index = 0; index < state.pending.size();) {
+        auto remaining = std::string_view(state.pending).substr(index);
+        if (state.discard == AppearanceDiscardKind::ColorScheme) {
+            const auto end = remaining.find('n');
+            if (end == std::string_view::npos) {
+                state.pending.clear();
+                return forwarded;
+            }
+            state.discard = AppearanceDiscardKind::None;
+            index += end + 1;
+            continue;
+        }
+        if (state.discard == AppearanceDiscardKind::OscBackground) {
+            const auto end = osc_terminator(remaining);
+            if (!end) {
+                state.pending.clear();
+                return forwarded;
+            }
+            const bool string_terminated = remaining.substr(*end).starts_with("\x1b\\");
+            state.discard = AppearanceDiscardKind::None;
+            index += *end + (string_terminated ? 2 : 1);
+            continue;
+        }
+        if (remaining.starts_with(kColorSchemeResponsePrefix)) {
+            const auto end = remaining.find('n', kColorSchemeResponsePrefix.size());
+            if (end == std::string_view::npos) {
+                if (remaining.size() > kAppearanceResponseMaxBytes) {
+                    state.discard = AppearanceDiscardKind::ColorScheme;
+                    state.pending.clear();
+                    return forwarded;
+                }
+                state.pending.erase(0, index);
+                return forwarded;
+            }
+            const auto value = remaining.substr(
+                kColorSchemeResponsePrefix.size(),
+                end - kColorSchemeResponsePrefix.size());
+            if (value == "1") state.color_scheme = TerminalAppearance::Dark;
+            if (value == "2") state.color_scheme = TerminalAppearance::Light;
+            index += end + 1;
+            continue;
+        }
+        if (remaining.starts_with(kOscBackgroundResponsePrefix)) {
+            const auto body = remaining.substr(kOscBackgroundResponsePrefix.size());
+            const auto end = osc_terminator(body);
+            if (!end) {
+                if (remaining.size() > kAppearanceResponseMaxBytes) {
+                    state.discard = AppearanceDiscardKind::OscBackground;
+                    state.pending.clear();
+                    return forwarded;
+                }
+                state.pending.erase(0, index);
+                return forwarded;
+            }
+            const auto rgb = parse_osc_background(body.substr(0, *end));
+            if (rgb) state.background = appearance_for_rgb(*rgb);
+            const bool string_terminated = body.substr(*end).starts_with("\x1b\\");
+            index += kOscBackgroundResponsePrefix.size() + *end + (string_terminated ? 2 : 1);
+            continue;
+        }
+        if (remaining.front() == '\x1b' && partial_response_prefix(remaining)) {
+            state.pending.erase(0, index);
+            return forwarded;
+        }
+        forwarded.push_back(remaining.front());
+        ++index;
+    }
+    state.pending.clear();
+    return forwarded;
+}
+
+struct AppearanceProbeResult {
+    AppearanceInputState state;
+    std::string forwarded_input;
+};
+
+[[nodiscard]] AppearanceProbeResult probe_terminal_appearance(int descriptor) {
+    constexpr auto kProbeTimeout = std::chrono::milliseconds(100);
+    const auto deadline = std::chrono::steady_clock::now() + kProbeTimeout;
+    AppearanceProbeResult result;
+    while (true) {
+        const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+            deadline - std::chrono::steady_clock::now());
+        if (remaining.count() <= 0) break;
+        pollfd item{.fd = descriptor, .events = POLLIN, .revents = 0};
+        const auto ready = ::poll(&item, 1, static_cast<int>(remaining.count()));
+        if (ready < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (ready == 0) break;
+        if ((item.revents & POLLIN) == 0) break;
+        std::array<char, kAppearanceResponseMaxBytes> buffer{};
+        const auto count = ::read(descriptor, buffer.data(), buffer.size());
+        if (count < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (count == 0) break;
+        result.forwarded_input += consume_appearance_input(
+            result.state,
+            std::string_view(buffer.data(), static_cast<std::size_t>(count)));
+    }
+    return result;
 }
 #endif
 
@@ -107,6 +431,10 @@ struct ProcessTerminal::Impl {
     TerminalModeState modes;
     std::shared_ptr<TerminalInputSink> input_sink;
     std::shared_ptr<TerminalResizeSink> resize_sink;
+    std::string startup_input;
+#if defined(__linux__) || defined(__APPLE__)
+    AppearanceInputState startup_appearance;
+#endif
     std::jthread worker;
     std::optional<util::Error> worker_error;
     bool keyboard_protocol_pushed{false};
@@ -362,10 +690,39 @@ struct WorkerEvent {
 }
 
 struct WorkerInputState {
+    AppearanceInputState appearance;
     std::string keyboard_pending;
     bool needs_input_flush{false};
+    int appearance_idle_polls{0};
     int negotiation_idle_polls{0};
 };
+
+template <typename T>
+void apply_detected_appearance(T& impl, const AppearanceInputState& appearance) {
+    const auto detected = appearance.color_scheme
+        ? appearance.color_scheme
+        : appearance.background;
+    if (!detected) return;
+    std::lock_guard lock(impl.mutex);
+    impl.capabilities.appearance = *detected;
+}
+
+template <typename T>
+void handle_forwarded_input(
+    T& impl,
+    WorkerInputState& state,
+    std::string input) {
+    auto parsed = detail::parse_keyboard_protocol_input(
+        std::move(state.keyboard_pending),
+        input);
+    state.keyboard_pending = std::move(parsed.pending);
+    state.negotiation_idle_polls = 0;
+    for (const auto& response : parsed.responses) apply_keyboard_response(impl, response);
+    if (!parsed.forwarded_input.empty()) {
+        invoke_input(impl, std::move(parsed.forwarded_input));
+        state.needs_input_flush = true;
+    }
+}
 
 template <typename T>
 [[nodiscard]] bool handle_worker_event(
@@ -379,19 +736,28 @@ template <typename T>
         return false;
     }
     if (event.kind == WorkerEventKind::Input) {
-        auto parsed = detail::parse_keyboard_protocol_input(
-            std::move(state.keyboard_pending),
-            event.input);
-        state.keyboard_pending = std::move(parsed.pending);
-        state.negotiation_idle_polls = 0;
-        for (const auto& response : parsed.responses) apply_keyboard_response(impl, response);
-        if (!parsed.forwarded_input.empty()) {
-            invoke_input(impl, std::move(parsed.forwarded_input));
-            state.needs_input_flush = true;
-        }
+        state.appearance_idle_polls = 0;
+        auto forwarded = consume_appearance_input(state.appearance, event.input);
+        apply_detected_appearance(impl, state.appearance);
+        if (!forwarded.empty()) handle_forwarded_input(impl, state, std::move(forwarded));
         return true;
     }
 
+    ++state.appearance_idle_polls;
+    if (state.appearance_idle_polls >= kNegotiationTimeoutPolls) {
+        const bool terminal_response_pending =
+            state.appearance.discard != AppearanceDiscardKind::None ||
+            state.appearance.pending.starts_with(kColorSchemeResponsePrefix) ||
+            state.appearance.pending.starts_with(kOscBackgroundResponsePrefix);
+        if (terminal_response_pending) {
+            state.appearance.pending.clear();
+            state.appearance.discard = AppearanceDiscardKind::None;
+        } else if (!state.appearance.pending.empty()) {
+            handle_forwarded_input(impl, state, std::move(state.appearance.pending));
+            state.appearance.pending.clear();
+        }
+        state.appearance_idle_polls = 0;
+    }
     ++state.negotiation_idle_polls;
     if (!state.keyboard_pending.empty() &&
         state.negotiation_idle_polls >= kNegotiationTimeoutPolls) {
@@ -409,6 +775,15 @@ template <typename T>
 template <typename T>
 void run_terminal_worker(T& impl, std::stop_token stop_token) {
     WorkerInputState input_state;
+    std::string startup_input;
+    {
+        std::lock_guard lock(impl.mutex);
+        startup_input = std::move(impl.startup_input);
+        input_state.appearance = std::move(impl.startup_appearance);
+    }
+    if (!startup_input.empty()) {
+        handle_forwarded_input(impl, input_state, std::move(startup_input));
+    }
     while (!stop_token.stop_requested()) {
         if (!handle_worker_event(
                 impl,
@@ -529,8 +904,13 @@ util::ExpectedVoid ProcessTerminal::start(
     }
     auto dimensions = read_dimensions(impl_->options.output_fd);
     if (!dimensions) return std::unexpected(dimensions.error());
+    impl_->startup_input.clear();
+    impl_->startup_appearance = {};
+    const auto environment_appearance = detect_terminal_appearance();
     impl_->capabilities = TerminalCapabilities{
         .synchronized_output = supports_synchronized_output(),
+        .color = detect_color_capability(),
+        .appearance = environment_appearance,
     };
     auto owned_input_sink = std::make_shared<TerminalInputSink>(std::move(input_sink));
     auto owned_resize_sink = std::make_shared<TerminalResizeSink>(std::move(resize_sink));
@@ -553,6 +933,19 @@ util::ExpectedVoid ProcessTerminal::start(
         return std::unexpected(startup_failure(paste_attempt.result.error(), rollback));
     }
     impl_->modes.bracketed_paste = true;
+
+    auto appearance_query = attempt_write_all(
+        impl_->options.output_fd,
+        std::string(kColorSchemeQuery) + std::string(kBackgroundColorQuery));
+    if (!appearance_query.result) {
+        auto rollback = restore_terminal_modes(*impl_);
+        return std::unexpected(startup_failure(appearance_query.result.error(), rollback));
+    }
+    auto appearance = probe_terminal_appearance(impl_->options.input_fd);
+    impl_->capabilities.appearance = appearance.state.color_scheme.value_or(
+        appearance.state.background.value_or(environment_appearance));
+    impl_->startup_appearance = std::move(appearance.state);
+    impl_->startup_input = std::move(appearance.forwarded_input);
 
     auto keyboard_push = attempt_write_all(impl_->options.output_fd, kKeyboardProtocolPush);
     if (!keyboard_push.result) {

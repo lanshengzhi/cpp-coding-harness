@@ -70,6 +70,9 @@ TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake]") {
     CHECK(block_mentions(tui_sources, "src/tui/Text.cpp"));
     CHECK(block_mentions(tui_sources, "src/tui/Tui.cpp"));
     CHECK(block_mentions(tui_sources, "src/tui/VirtualTerminal.cpp"));
+    CHECK(block_mentions(cmake, "add_library(cch_coding_agent_tui"));
+    const auto coding_agent_tui_sources = cmake_command_block(cmake, "add_library(cch_coding_agent_tui");
+    CHECK(block_mentions(coding_agent_tui_sources, "src/coding_agent/tui/Theme.cpp"));
     CHECK(block_mentions(cmake, "add_library(cch_ai"));
     CHECK(block_mentions(cmake, "add_library(cch_agent"));
     const auto agent_sources = cmake_command_block(cmake, "add_library(cch_agent");
@@ -97,6 +100,14 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
     CHECK_FALSE(block_mentions(tui_links, "cch_harness"));
     CHECK_FALSE(block_mentions(tui_links, "cch_tools"));
     CHECK_FALSE(block_mentions(tui_links, "cch_coding_agent_runtime"));
+
+    const auto coding_agent_tui_links = cmake_command_block(cmake, "target_link_libraries(cch_coding_agent_tui");
+    CHECK(block_mentions(coding_agent_tui_links, "cch_tui"));
+    CHECK(block_mentions(coding_agent_tui_links, "cch_util"));
+    CHECK_FALSE(block_mentions(coding_agent_tui_links, "cch_agent"));
+    CHECK_FALSE(block_mentions(coding_agent_tui_links, "cch_harness"));
+    CHECK_FALSE(block_mentions(coding_agent_tui_links, "cch_tools"));
+    CHECK_FALSE(block_mentions(coding_agent_tui_links, "cch_coding_agent_runtime"));
 
     const auto ai_links = cmake_command_block(cmake, "target_link_libraries(cch_ai");
     CHECK(block_mentions(ai_links, "cch_util"));
@@ -129,6 +140,8 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
     CHECK(block_mentions(runtime_links, "cch_harness"));
     CHECK(block_mentions(runtime_links, "cch_tools"));
     CHECK(block_mentions(runtime_links, "cch_ai"));
+    CHECK_FALSE(block_mentions(runtime_links, "cch_tui"));
+    CHECK_FALSE(block_mentions(runtime_links, "cch_coding_agent_tui"));
 }
 
 TEST_CASE("provider implementations stay below the AI package boundary", "[architecture][cmake]") {

@@ -82,6 +82,22 @@ TEST_CASE("reusable TUI stays independent of coding-agent implementation modules
     }
 }
 
+TEST_CASE("coding-agent themes stay outside reusable TUI vocabulary and pi directories", "[architecture][tui][issue55]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto tui_files = files_under({"include/cch/tui", "src/tui"});
+    REQUIRE_FALSE(tui_files.empty());
+    for (const auto& file : tui_files) {
+        const auto text = read_text(file);
+        CHECK(text.find("ThemeToken") == std::string::npos);
+        CHECK(text.find("thinkingXhigh") == std::string::npos);
+    }
+
+    const auto theme_source = read_text(source_root / "src" / "coding_agent" / "tui" / "Theme.cpp");
+    CHECK(theme_source.find("/.pi") == std::string::npos);
+    CHECK(theme_source.find("../pi") == std::string::npos);
+    CHECK(theme_source.find("getCustomThemesDir") == std::string::npos);
+}
+
 TEST_CASE("public headers do not include private src paths", "[architecture][u1]") {
     const auto headers = public_headers();
     REQUIRE_FALSE(headers.empty());

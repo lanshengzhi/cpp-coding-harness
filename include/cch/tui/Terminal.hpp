@@ -46,6 +46,17 @@ enum class KeyboardProtocol {
     Kitty,
 };
 
+enum class TerminalColorCapability {
+    Xterm256,
+    TrueColor,
+};
+
+enum class TerminalAppearance {
+    Unknown,
+    Dark,
+    Light,
+};
+
 struct CellPixelDimensions {
     std::size_t width{9};
     std::size_t height{18};
@@ -67,6 +78,8 @@ struct TerminalCapabilities {
     InlineImageProtocol inline_images{InlineImageProtocol::None};
     std::optional<CellPixelDimensions> cell_pixels{std::nullopt};
     KeyboardProtocol keyboard_protocol{KeyboardProtocol::Legacy};
+    TerminalColorCapability color{TerminalColorCapability::Xterm256};
+    TerminalAppearance appearance{TerminalAppearance::Unknown};
 };
 
 struct TerminalImageHandle {

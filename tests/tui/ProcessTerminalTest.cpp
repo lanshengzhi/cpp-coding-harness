@@ -147,6 +147,32 @@ template <typename Predicate>
     return predicate();
 }
 
+[[nodiscard]] bool answer_appearance_query(
+    int descriptor,
+    std::string_view response) {
+    constexpr std::string_view kColorSchemeQuery = "\x1b[?996n";
+    constexpr std::string_view kBackgroundQuery = "\x1b]11;?\x07";
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+    std::string output;
+    std::array<char, 4096> buffer{};
+    while (std::chrono::steady_clock::now() < deadline) {
+        pollfd item{.fd = descriptor, .events = POLLIN, .revents = 0};
+        const auto ready = ::poll(&item, 1, 10);
+        if (ready < 0) return false;
+        if (ready == 0 || (item.revents & POLLIN) == 0) continue;
+        const auto count = ::read(descriptor, buffer.data(), buffer.size());
+        if (count <= 0) return false;
+        output.append(buffer.data(), static_cast<std::size_t>(count));
+        if (output.find(kColorSchemeQuery) == std::string::npos ||
+            output.find(kBackgroundQuery) == std::string::npos) {
+            continue;
+        }
+        return ::write(descriptor, response.data(), response.size()) ==
+            static_cast<ssize_t>(response.size());
+    }
+    return false;
+}
+
 [[nodiscard]] std::string read_available(
     int descriptor,
     std::chrono::milliseconds timeout = std::chrono::milliseconds(100)) {
@@ -503,4 +529,224 @@ TEST_CASE("Process Terminal reports unsupported platforms without acquisition", 
     CHECK(terminal.modes() == cch::tui::TerminalModeState{});
 }
 
+#endif
+
+#if defined(__linux__) || defined(__APPLE__)
+TEST_CASE(
+    "Process Terminal reports conservative color and appearance observations",
+    "[tui][terminal][theme][issue55]") {
+    auto pty = open_pty();
+    REQUIRE(pty);
+    ScopedEnvironmentVariable terminal_environment("TERM");
+    ScopedEnvironmentVariable program_environment("TERM_PROGRAM");
+    ScopedEnvironmentVariable color_terminal_environment("COLORTERM");
+    ScopedEnvironmentVariable foreground_background_environment("COLORFGBG");
+    ScopedEnvironmentVariable terminal_emulator_environment("TERMINAL_EMULATOR");
+    ScopedEnvironmentVariable tmux_environment("TMUX");
+    ScopedEnvironmentVariable kitty_environment("KITTY_WINDOW_ID");
+    ScopedEnvironmentVariable ghostty_environment("GHOSTTY_RESOURCES_DIR");
+    ScopedEnvironmentVariable wezterm_environment("WEZTERM_PANE");
+    ScopedEnvironmentVariable warp_environment("WARP_SESSION_ID");
+    ScopedEnvironmentVariable warp_uuid_environment("WARP_TERMINAL_SESSION_UUID");
+    ScopedEnvironmentVariable iterm_environment("ITERM_SESSION_ID");
+    ScopedEnvironmentVariable windows_terminal_environment("WT_SESSION");
+    terminal_environment.set("xterm-unknown");
+    program_environment.unset();
+    color_terminal_environment.unset();
+    foreground_background_environment.unset();
+    terminal_emulator_environment.unset();
+    tmux_environment.unset();
+    kitty_environment.unset();
+    ghostty_environment.unset();
+    wezterm_environment.unset();
+    warp_environment.unset();
+    warp_uuid_environment.unset();
+    iterm_environment.unset();
+    windows_terminal_environment.unset();
+
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    const auto probe_started = std::chrono::steady_clock::now();
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    CHECK(std::chrono::steady_clock::now() - probe_started < std::chrono::milliseconds(500));
+    CHECK(terminal.capabilities().color == cch::tui::TerminalColorCapability::Xterm256);
+    CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Unknown);
+    REQUIRE(terminal.stop());
+    (void)read_available(pty->master.get());
+
+    color_terminal_environment.set("24BIT");
+    foreground_background_environment.set("0; +15ignored ");
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    CHECK(terminal.capabilities().color == cch::tui::TerminalColorCapability::TrueColor);
+    CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Light);
+    REQUIRE(terminal.stop());
+    (void)read_available(pty->master.get());
+
+    color_terminal_environment.unset();
+    foreground_background_environment.set("15;0");
+    terminal_environment.set("tmux-256color");
+    program_environment.set("WezTerm");
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    CHECK(terminal.capabilities().color == cch::tui::TerminalColorCapability::Xterm256);
+    CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Dark);
+    REQUIRE(terminal.stop());
+    (void)read_available(pty->master.get());
+
+    terminal_environment.set("xterm-unknown");
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    CHECK(terminal.capabilities().color == cch::tui::TerminalColorCapability::TrueColor);
+    CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Dark);
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE(
+    "Process Terminal probes color scheme and OSC background without consuming user input",
+    "[tui][terminal][theme][issue55]") {
+    struct ProbeCase {
+        std::string response;
+        cch::tui::TerminalAppearance expected{cch::tui::TerminalAppearance::Unknown};
+        bool expects_input{false};
+    };
+    const std::array cases{
+        ProbeCase{
+            .response = "\x1b]11;#000000\x07\x1b[?997;2ntyped",
+            .expected = cch::tui::TerminalAppearance::Light,
+            .expects_input = true,
+        },
+        ProbeCase{
+            .response = "\x1b]11;#000000\x07",
+            .expected = cch::tui::TerminalAppearance::Dark,
+        },
+        ProbeCase{
+            .response = "\x1b]11;#ffffffffffff\x1b\\",
+            .expected = cch::tui::TerminalAppearance::Light,
+        },
+        ProbeCase{
+            .response = "\x1b]11;rgba:f/0/0/f\x07",
+            .expected = cch::tui::TerminalAppearance::Dark,
+        },
+        ProbeCase{
+            .response = "\x1b[?997;1n\x1b]11;rgb:ffff/ffff/ffff\x07",
+            .expected = cch::tui::TerminalAppearance::Dark,
+        },
+    };
+    ScopedEnvironmentVariable foreground_background_environment("COLORFGBG");
+    foreground_background_environment.set("0;15");
+
+    for (const auto& probe_case : cases) {
+        auto pty = open_pty();
+        REQUIRE(pty);
+        std::atomic<bool> answered{false};
+        std::atomic<bool> delivered_input{false};
+        std::jthread responder([&] {
+            answered = answer_appearance_query(pty->master.get(), probe_case.response);
+        });
+        cch::tui::ProcessTerminal terminal({
+            .input_fd = pty->slave.get(),
+            .output_fd = pty->slave.get(),
+        });
+
+        REQUIRE(terminal.start(
+            [&](std::string input) {
+                if (input.find("typed") != std::string::npos) delivered_input = true;
+            },
+            [](cch::tui::TerminalDimensions) {}));
+        responder.join();
+        REQUIRE(answered.load());
+        CHECK(terminal.capabilities().appearance == probe_case.expected);
+        if (probe_case.expects_input) {
+            CHECK(wait_until([&] { return delivered_input.load(); }));
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            CHECK_FALSE(delivered_input.load());
+        }
+        REQUIRE(terminal.stop());
+    }
+}
+
+TEST_CASE(
+    "Process Terminal consumes malformed fragmented and late appearance replies",
+    "[tui][terminal][theme][issue55]") {
+    auto pty = open_pty();
+    REQUIRE(pty);
+    ScopedEnvironmentVariable foreground_background_environment("COLORFGBG");
+    foreground_background_environment.set("15;0");
+    std::mutex input_mutex;
+    std::string delivered;
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    REQUIRE(terminal.start(
+        [&](std::string input) {
+            std::lock_guard lock(input_mutex);
+            delivered += input;
+        },
+        [](cch::tui::TerminalDimensions) {}));
+    (void)read_available(pty->master.get());
+    CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Dark);
+
+    constexpr std::string_view kMalformedStart = "\x1b]11;not-a-color";
+    constexpr std::string_view kMalformedEnd = "\x07typed\x1b[?997;9n";
+    REQUIRE(::write(pty->master.get(), kMalformedStart.data(), kMalformedStart.size()) ==
+        static_cast<ssize_t>(kMalformedStart.size()));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    REQUIRE(::write(pty->master.get(), kMalformedEnd.data(), kMalformedEnd.size()) ==
+        static_cast<ssize_t>(kMalformedEnd.size()));
+    REQUIRE(wait_until([&] {
+        std::lock_guard lock(input_mutex);
+        return delivered.find("typed") != std::string::npos;
+    }));
+    {
+        std::lock_guard lock(input_mutex);
+        CHECK(delivered.find("not-a-color") == std::string::npos);
+        CHECK(delivered.find("997") == std::string::npos);
+    }
+    CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Dark);
+
+    constexpr std::string_view kLateStart = "\x1b[?997;";
+    constexpr std::string_view kLateEnd = "2nlate";
+    REQUIRE(::write(pty->master.get(), kLateStart.data(), kLateStart.size()) ==
+        static_cast<ssize_t>(kLateStart.size()));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    REQUIRE(::write(pty->master.get(), kLateEnd.data(), kLateEnd.size()) ==
+        static_cast<ssize_t>(kLateEnd.size()));
+    REQUIRE(wait_until([&] {
+        std::lock_guard lock(input_mutex);
+        return delivered.find("late") != std::string::npos;
+    }));
+    REQUIRE(wait_until([&] {
+        return terminal.capabilities().appearance == cch::tui::TerminalAppearance::Light;
+    }));
+    {
+        std::lock_guard lock(input_mutex);
+        CHECK(delivered.find("997") == std::string::npos);
+    }
+
+    constexpr std::string_view kUnterminated = "\x1b]11;unterminated";
+    REQUIRE(::write(pty->master.get(), kUnterminated.data(), kUnterminated.size()) ==
+        static_cast<ssize_t>(kUnterminated.size()));
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    constexpr std::string_view kAfterUnterminated = "after-unterminated";
+    REQUIRE(::write(pty->master.get(), kAfterUnterminated.data(), kAfterUnterminated.size()) ==
+        static_cast<ssize_t>(kAfterUnterminated.size()));
+    REQUIRE(wait_until([&] {
+        std::lock_guard lock(input_mutex);
+        return delivered.find(kAfterUnterminated) != std::string::npos;
+    }));
+    {
+        std::lock_guard lock(input_mutex);
+        CHECK(delivered.find("11;unterminated") == std::string::npos);
+    }
+
+    constexpr char kEscape = '\x1b';
+    REQUIRE(::write(pty->master.get(), &kEscape, 1) == 1);
+    REQUIRE(wait_until([&] {
+        std::lock_guard lock(input_mutex);
+        return delivered.find(kEscape) != std::string::npos;
+    }));
+    REQUIRE(terminal.stop());
+}
 #endif

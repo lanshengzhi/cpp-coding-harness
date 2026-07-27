@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/tui/Component.hpp>
+#include <cch/tui/Style.hpp>
 
 #include <cstddef>
 #include <functional>
@@ -54,6 +55,10 @@ struct EditorOptions {
     std::size_t max_visible_lines{5};
 };
 
+struct EditorTheme {
+    TextStyleHook text{};
+};
+
 /// A reusable multiline Unicode editor controlled through semantic input.
 class Editor final : public Component, public InputHandler, public Focusable, public ViewportAware {
 public:
@@ -74,6 +79,7 @@ public:
     [[nodiscard]] EditorCursor cursor() const;
     void set_text(std::string text);
     void insert_text_at_cursor(std::string text);
+    void set_theme(EditorTheme theme);
     void set_autocomplete_provider(AutocompleteProvider provider);
     [[nodiscard]] bool autocomplete_open() const;
     [[nodiscard]] std::vector<AutocompleteItem> autocomplete_items() const;

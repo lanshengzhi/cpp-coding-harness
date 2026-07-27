@@ -113,6 +113,8 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_aggregate_v<tui::CellRegion>);
     static_assert(std::is_aggregate_v<tui::CellPixelDimensions>);
     static_assert(std::is_aggregate_v<tui::TerminalCapabilities>);
+    static_assert(std::is_enum_v<tui::TerminalColorCapability>);
+    static_assert(std::is_enum_v<tui::TerminalAppearance>);
     static_assert(std::is_aggregate_v<tui::TerminalImage>);
     static_assert(std::is_aggregate_v<tui::ProcessTerminalOptions>);
     static_assert(std::is_enum_v<tui::InlineImageProtocol>);
@@ -124,6 +126,7 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_aggregate_v<tui::AutocompleteItem>);
     static_assert(std::is_aggregate_v<tui::AutocompleteRequest>);
     static_assert(std::is_aggregate_v<tui::AutocompleteSuggestions>);
+    static_assert(std::is_aggregate_v<tui::EditorTheme>);
     static_assert(std::is_move_constructible_v<tui::AutocompleteProvider>);
     static_assert(!std::is_copy_constructible_v<tui::AutocompleteProvider>);
     static_assert(std::is_aggregate_v<tui::SelectItem>);

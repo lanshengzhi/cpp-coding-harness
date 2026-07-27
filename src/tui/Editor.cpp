@@ -1,5 +1,6 @@
 #include <cch/tui/Editor.hpp>
 
+#include "tui/InteractionUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
 #include <utf8proc.h>
@@ -131,6 +132,7 @@ struct Editor::Impl {
     EditorOptions options;
     EditorChangeSink on_change;
     EditorSubmitSink on_submit;
+    EditorTheme theme;
     Document document{1};
     EditorCursor cursor;
     std::map<std::size_t, std::string> pastes;
@@ -752,6 +754,11 @@ void Editor::insert_text_at_cursor(std::string text) {
     impl_->insert_text(std::move(text), true, false);
 }
 
+void Editor::set_theme(EditorTheme theme) {
+    impl_->theme = std::move(theme);
+    invalidate();
+}
+
 void Editor::set_autocomplete_provider(AutocompleteProvider provider) {
     impl_->autocomplete_provider = std::move(provider);
     impl_->close_autocomplete();
@@ -805,6 +812,11 @@ util::Expected<RenderResult> Editor::render(std::size_t width) {
         result.push_back(std::move(line));
     }
     if (result.empty()) result.emplace_back(width, ' ');
+    for (auto& line : result) {
+        auto styled = detail::apply_text_style(impl_->theme.text, std::move(line), "Editor text");
+        if (!styled) return std::unexpected(styled.error());
+        line = std::move(*styled);
+    }
     return RenderResult{.lines = std::move(result)};
 }
 

@@ -50,6 +50,7 @@ enum class StyleRole {
     Strong,
     Strikethrough,
     InlineCode,
+    Link,
 };
 
 struct InlineNode {
@@ -369,6 +370,8 @@ int append_text(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userd
             return &style.strikethrough;
         case StyleRole::InlineCode:
             return &style.inline_code;
+        case StyleRole::Link:
+            return &style.link_text;
     }
     return nullptr;
 }
@@ -385,12 +388,11 @@ int append_text(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userd
     std::string text,
     const std::vector<StyleRole>& roles,
     MarkdownStyleConfig& style) {
-    text = apply_style_hook(style.text, std::move(text));
     for (auto iterator = roles.rbegin(); iterator != roles.rend(); ++iterator) {
         auto* hook = role_hook(*iterator, style);
         if (hook != nullptr) text = apply_style_hook(*hook, std::move(text));
     }
-    return text;
+    return apply_style_hook(style.text, std::move(text));
 }
 
 [[nodiscard]] std::string plain_inline_text(const InlineNode& node) {
@@ -416,15 +418,19 @@ int append_text(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userd
 
 [[nodiscard]] std::string render_link(
     const InlineNode& node,
-    const std::vector<StyleRole>& roles,
+    std::vector<StyleRole> roles,
     MarkdownStyleConfig& style) {
+    roles.push_back(StyleRole::Link);
     auto label = render_inline_children(node.children, roles, style);
     const auto plain_label = plain_inline_text(node);
     if (style.link) return style.link(std::move(label), node.destination);
     auto comparable_destination = node.destination;
     if (comparable_destination.starts_with("mailto:")) comparable_destination.erase(0, 7);
     if (node.autolink || plain_label == node.destination || plain_label == comparable_destination) return label;
-    return std::format("{} ({})", label, node.destination);
+    auto destination = std::format(" ({})", node.destination);
+    destination = apply_style_hook(style.link_url, std::move(destination));
+    destination = apply_style_hook(style.text, std::move(destination));
+    return label + destination;
 }
 
 [[nodiscard]] std::string render_inline_node(

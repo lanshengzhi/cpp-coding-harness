@@ -82,6 +82,17 @@ target_link_libraries(cch_tui
         utf8proc::utf8proc
 )
 
+add_library(cch_coding_agent_tui
+    src/coding_agent/tui/Theme.cpp
+)
+cch_target_defaults(cch_coding_agent_tui)
+target_link_libraries(cch_coding_agent_tui
+    PRIVATE
+        cch_tui
+        cch_util
+        glaze::glaze
+)
+
 add_library(cch_ai
     src/ai/ProviderRegistry.cpp
     src/ai/providers/BoostBeastStreamTransport.cpp
@@ -244,6 +255,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/SkillFrontmatterParserTest.cpp
         tests/coding_agent/SkillLoaderTest.cpp
         tests/coding_agent/PromptTemplateLoaderTest.cpp
+        tests/coding_agent/tui/ThemeTest.cpp
         tests/coding_agent/SdkSessionTest.cpp
         tests/coding_agent/AgentSessionSnapshotTest.cpp
         tests/coding_agent/SkillIntegrationTest.cpp
@@ -283,7 +295,7 @@ if(CCH_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests
         third_party
     )
-    target_link_libraries(cpp_harness_tests PRIVATE cpp_harness_lib cch_tui CLI11::CLI11)
+    target_link_libraries(cpp_harness_tests PRIVATE cpp_harness_lib cch_coding_agent_tui cch_tui CLI11::CLI11)
     target_sources(cpp_harness_tests PRIVATE
         src/cli/CliParse.cpp
     )

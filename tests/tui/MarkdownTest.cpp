@@ -131,6 +131,28 @@ TEST_CASE("Markdown renders common response constructs in semantic order", "[tui
     CHECK(text.find("─") != std::string::npos);
 }
 
+TEST_CASE("Markdown styles link labels and visible URL fallbacks independently", "[tui][markdown][theme][issue55]") {
+    tui::MarkdownStyleConfig style;
+    style.link_text = [](std::string text) { return "\x1b[31m" + text + "\x1b[39m"; };
+    style.link_url = [](std::string text) { return "\x1b[2m" + text + "\x1b[22m"; };
+    tui::Markdown markdown(
+        "[site](https://example.com) <https://example.org> <mail@example.com>",
+        0,
+        0,
+        std::move(style));
+
+    const auto lines = markdown.render(100);
+
+    REQUIRE(lines);
+    REQUIRE(lines->lines.size() == 1);
+    const auto& line = lines->lines.front();
+    CHECK(line.find("\x1b[31msite\x1b[39m") != std::string::npos);
+    CHECK(line.find("\x1b[2m (https://example.com)\x1b[22m") != std::string::npos);
+    CHECK(line.find("(https://example.org)") == std::string::npos);
+    CHECK(line.find("mailto:") == std::string::npos);
+    CHECK(std::count(line.begin(), line.end(), '@') == 1);
+}
+
 TEST_CASE(
     "Markdown preserves nested styles Unicode and link termination at narrow widths",
     "[tui][markdown][issue51]") {

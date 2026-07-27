@@ -34,6 +34,8 @@ struct MarkdownStyleConfig {
     MarkdownStyleHook quote{};
     MarkdownStyleHook quote_border{};
     MarkdownStyleHook horizontal_rule{};
+    MarkdownStyleHook link_text{};
+    MarkdownStyleHook link_url{};
     MarkdownLinkHook link{};
     std::string code_block_indent{"  "};
 };

@@ -5,6 +5,7 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -224,4 +225,50 @@ TEST_CASE("Editor submits and resets repeatedly with configured newline operatio
     REQUIRE(submitted.size() == 2);
     CHECK(submitted[1] == "next");
     CHECK(changes.back().empty());
+}
+
+TEST_CASE(
+    "Editor applies replaceable generic styling without changing visible width",
+    "[tui][editor][theme][issue55]") {
+    cch::tui::Editor editor;
+    cch::tui::EditorTheme first;
+    first.text = [](std::string text) { return "\x1b[31m" + text + "\x1b[39m"; };
+    editor.set_theme(std::move(first));
+    editor.set_text("hello");
+
+    const auto red = editor.render(8);
+
+    REQUIRE(red);
+    REQUIRE(red->lines.size() == 1);
+    CHECK(red->lines[0].find("\x1b[31m") != std::string::npos);
+
+    cch::tui::EditorTheme second;
+    second.text = [](std::string text) { return "\x1b[34m" + text + "\x1b[39m"; };
+    editor.set_theme(std::move(second));
+    const auto blue = editor.render(8);
+
+    REQUIRE(blue);
+    CHECK(blue->lines[0].find("\x1b[34m") != std::string::npos);
+    CHECK(blue->lines[0].find("\x1b[31m") == std::string::npos);
+}
+
+TEST_CASE("Editor rejects failing or width-changing generic styling", "[tui][editor][theme][issue55]") {
+    cch::tui::Editor editor;
+    cch::tui::EditorTheme wider;
+    wider.text = [](std::string text) { return text + "x"; };
+    editor.set_theme(std::move(wider));
+
+    const auto width_failure = editor.render(8);
+
+    REQUIRE_FALSE(width_failure);
+    CHECK(width_failure.error().code == cch::util::ErrorCode::Validation);
+    CHECK(width_failure.error().message.find("changed visible width") != std::string::npos);
+
+    cch::tui::EditorTheme throwing;
+    throwing.text = [](std::string) -> std::string { throw std::runtime_error("style failed"); };
+    editor.set_theme(std::move(throwing));
+    const auto callback_failure = editor.render(8);
+
+    REQUIRE_FALSE(callback_failure);
+    CHECK(callback_failure.error().message.find("style hook failed") != std::string::npos);
 }
