@@ -49,6 +49,11 @@ public:
     [[nodiscard]] util::ExpectedVoid restore_overlay(Overlay* overlay);
 
 private:
+    struct OverlayFocusEntry {
+        Overlay* overlay; // aliases an element owned by overlays_.
+        Component* previous; // null or aliases an element owned by children_ or overlays_.
+    };
+
     [[nodiscard]] bool owns(const Component* component) const;
     [[nodiscard]] bool owns_overlay(const Overlay* overlay) const;
     [[nodiscard]] util::Expected<std::vector<std::string>> render_children(TerminalDimensions dimensions);
@@ -56,6 +61,11 @@ private:
     void handle_input(std::string input);
     void dispatch_input(const InputEventVariant& event);
     void handle_resize(TerminalDimensions dimensions);
+    void apply_focus(Component* component);
+    void remember_overlay_focus(Overlay* overlay);
+    [[nodiscard]] Component* overlay_return_focus(const Overlay* overlay) const;
+    void forget_overlay_focus(Overlay* overlay, Component* replacement);
+    [[nodiscard]] bool focus_target_available(Component* component) const;
     void fallback_focus();
     [[nodiscard]] Focusable* find_focusable_target();
     [[nodiscard]] std::optional<CursorPosition> resolve_cursor_location() const;
@@ -64,6 +74,7 @@ private:
     std::unique_ptr<detail::InputDecoder> input_decoder_;
     std::vector<std::unique_ptr<Component>> children_;
     std::vector<std::unique_ptr<Overlay>> overlays_;
+    std::vector<OverlayFocusEntry> overlay_focus_history_;
     Component* focused_{nullptr}; // Null or aliases an element owned by children_ or overlays_.
     bool started_{false};
     bool first_render_{true};

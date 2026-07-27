@@ -54,12 +54,16 @@ target_link_libraries(cch_util
 )
 
 add_library(cch_tui
+    src/tui/CancellableLoader.cpp
     src/tui/Container.cpp
     src/tui/Editor.cpp
     src/tui/Input.cpp
     src/tui/InputDecoder.cpp
+    src/tui/Loader.cpp
     src/tui/Markdown.cpp
     src/tui/Overlay.cpp
+    src/tui/SelectList.cpp
+    src/tui/SettingsList.cpp
     src/tui/Text.cpp
     src/tui/TruncatedText.cpp
     src/tui/Tui.cpp
@@ -251,9 +255,12 @@ if(CCH_BUILD_TESTS)
         tests/tui/ContainerTest.cpp
         tests/tui/EditorTest.cpp
         tests/tui/InputTest.cpp
+        tests/tui/LoaderTest.cpp
         tests/tui/MarkdownTest.cpp
         tests/tui/OverlayTest.cpp
         tests/tui/RenderDifferentialTest.cpp
+        tests/tui/SelectListTest.cpp
+        tests/tui/SettingsListTest.cpp
         tests/tui/TruncatedTextTest.cpp
         tests/tui/TuiTest.cpp
         tests/tui/UnicodeWidthTest.cpp

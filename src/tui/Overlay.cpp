@@ -77,11 +77,8 @@ const OverlayOptions& Overlay::options() const {
 void Overlay::set_visible(bool visible) {
     impl_->visible_ = visible;
     if (!visible) {
-        // Unfocus all children when hiding
-        if (impl_->focused_child_ != nullptr) {
-            impl_->focused_child_->set_focused(false);
-            impl_->focused_child_ = nullptr;
-        }
+        impl_->focused_ = false;
+        if (impl_->focused_child_ != nullptr) impl_->focused_child_->set_focused(false);
     }
 }
 
@@ -179,10 +176,10 @@ bool Overlay::accepts_key_releases() const {
 
 void Overlay::set_focused(bool focused) {
     impl_->focused_ = focused;
-    if (!focused && impl_->focused_child_ != nullptr) {
-        impl_->focused_child_->set_focused(false);
-        impl_->focused_child_ = nullptr;
+    if (focused && impl_->focused_child_ == nullptr) {
+        impl_->focused_child_ = impl_->first_focusable();
     }
+    if (impl_->focused_child_ != nullptr) impl_->focused_child_->set_focused(focused);
 }
 
 bool Overlay::focused() const {

@@ -84,8 +84,10 @@ util::ExpectedVoid Tui::remove_overlay(Overlay* overlay) {
             "Overlay is not attached to this TUI"));
     }
 
-    // Remember if this overlay was focused before we remove it.
-    const bool was_focused = (focused_ == static_cast<Component*>(overlay));
+    const bool was_focused = focused_ == static_cast<Component*>(overlay);
+    auto* return_focus = overlay_return_focus(overlay);
+    if (was_focused) apply_focus(nullptr);
+    forget_overlay_focus(overlay, return_focus);
 
     const auto before = overlays_.size();
     std::erase_if(overlays_, [overlay](const auto& ptr) { return ptr.get() == overlay; });
@@ -95,10 +97,9 @@ util::ExpectedVoid Tui::remove_overlay(Overlay* overlay) {
             "Overlay not found in TUI"));
     }
 
-    // Fallback focus after removal so we don't target the removed overlay.
     if (was_focused) {
-        focused_ = nullptr;
-        fallback_focus();
+        if (focus_target_available(return_focus)) apply_focus(return_focus);
+        else fallback_focus();
     }
     return {};
 }
@@ -111,13 +112,14 @@ util::ExpectedVoid Tui::hide_overlay(Overlay* overlay) {
             "Overlay is not attached to this TUI"));
     }
 
+    auto* return_focus = overlay_return_focus(overlay);
+    const auto was_focused = focused_ == static_cast<Component*>(overlay);
     overlay->set_visible(false);
 
-    // If the hidden overlay was focused, find a fallback
-    auto* as_component = static_cast<Component*>(overlay);
-    if (focused_ == as_component) {
-        focused_ = nullptr;
-        fallback_focus();
+    if (was_focused) {
+        apply_focus(nullptr);
+        if (focus_target_available(return_focus)) apply_focus(return_focus);
+        else fallback_focus();
     }
 
     invalidate();
@@ -173,6 +175,7 @@ util::ExpectedVoid Tui::stop() {
         focusable->set_focused(false);
     }
     focused_ = nullptr;
+    overlay_focus_history_.clear();
 
     const auto cursor_result = terminal_.set_cursor_visible(true);
     const auto stop_result = terminal_.stop();
@@ -432,13 +435,10 @@ util::ExpectedVoid Tui::set_focus(Component* component) {
             "TUI focus target does not participate in focus"));
     }
 
-    if (auto* previous = dynamic_cast<Focusable*>(focused_)) {
-        previous->set_focused(false);
+    if (auto* overlay = dynamic_cast<Overlay*>(component); overlay != nullptr && component != focused_) {
+        remember_overlay_focus(overlay);
     }
-    focused_ = component;
-    if (auto* next = dynamic_cast<Focusable*>(focused_)) {
-        next->set_focused(true);
-    }
+    apply_focus(component);
     return {};
 }
 
@@ -517,16 +517,53 @@ void Tui::handle_resize(TerminalDimensions) {
     invalidate();
 }
 
+void Tui::apply_focus(Component* component) {
+    if (auto* previous = dynamic_cast<Focusable*>(focused_)) previous->set_focused(false);
+    focused_ = component;
+    if (auto* next = dynamic_cast<Focusable*>(focused_)) next->set_focused(true);
+}
+
+void Tui::remember_overlay_focus(Overlay* overlay) {
+    const auto found = std::find_if(
+        overlay_focus_history_.begin(),
+        overlay_focus_history_.end(),
+        [overlay](const auto& entry) { return entry.overlay == overlay; });
+    if (found == overlay_focus_history_.end()) {
+        overlay_focus_history_.push_back({.overlay = overlay, .previous = focused_});
+    } else {
+        found->previous = focused_;
+    }
+}
+
+Component* Tui::overlay_return_focus(const Overlay* overlay) const {
+    const auto found = std::find_if(
+        overlay_focus_history_.begin(),
+        overlay_focus_history_.end(),
+        [overlay](const auto& entry) { return entry.overlay == overlay; });
+    return found == overlay_focus_history_.end() ? nullptr : found->previous;
+}
+
+void Tui::forget_overlay_focus(Overlay* overlay, Component* replacement) {
+    for (auto& entry : overlay_focus_history_) {
+        if (entry.previous == static_cast<Component*>(overlay)) entry.previous = replacement;
+    }
+    std::erase_if(overlay_focus_history_, [overlay](const auto& entry) {
+        return entry.overlay == overlay;
+    });
+}
+
+bool Tui::focus_target_available(Component* component) const {
+    if (component == nullptr) return false;
+    if (owns(component)) return dynamic_cast<Focusable*>(component) != nullptr;
+    auto* overlay = dynamic_cast<Overlay*>(component);
+    return overlay != nullptr && owns_overlay(overlay) &&
+        overlay->visible_at(previous_dimensions_) && !overlay->options().non_capturing;
+}
+
 void Tui::fallback_focus() {
     if (auto* target = find_focusable_target()) {
         auto* as_component = dynamic_cast<Component*>(target);
-        if (as_component != focused_) {
-            if (auto* previous = dynamic_cast<Focusable*>(focused_)) {
-                previous->set_focused(false);
-            }
-            focused_ = as_component;
-            target->set_focused(true);
-        }
+        if (as_component != focused_) apply_focus(as_component);
     }
 }
 

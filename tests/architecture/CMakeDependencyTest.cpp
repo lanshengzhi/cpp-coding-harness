@@ -58,9 +58,13 @@ TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake]") {
     CHECK(block_mentions(cmake, "add_library(cch_util"));
     CHECK(block_mentions(cmake, "add_library(cch_tui"));
     const auto tui_sources = cmake_command_block(cmake, "add_library(cch_tui");
+    CHECK(block_mentions(tui_sources, "src/tui/CancellableLoader.cpp"));
     CHECK(block_mentions(tui_sources, "src/tui/Input.cpp"));
     CHECK(block_mentions(tui_sources, "src/tui/InputDecoder.cpp"));
+    CHECK(block_mentions(tui_sources, "src/tui/Loader.cpp"));
     CHECK(block_mentions(tui_sources, "src/tui/Markdown.cpp"));
+    CHECK(block_mentions(tui_sources, "src/tui/SelectList.cpp"));
+    CHECK(block_mentions(tui_sources, "src/tui/SettingsList.cpp"));
     CHECK(block_mentions(tui_sources, "src/tui/Text.cpp"));
     CHECK(block_mentions(tui_sources, "src/tui/Tui.cpp"));
     CHECK(block_mentions(tui_sources, "src/tui/VirtualTerminal.cpp"));

@@ -23,11 +23,16 @@
 #include <cch/harness/session/SessionEntry.hpp>
 #include <cch/harness/session/SessionStore.hpp>
 #include <cch/tools/ToolFactories.hpp>
+#include <cch/tui/CancellableLoader.hpp>
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Container.hpp>
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Input.hpp>
+#include <cch/tui/Loader.hpp>
 #include <cch/tui/Markdown.hpp>
+#include <cch/tui/SelectList.hpp>
+#include <cch/tui/SettingsList.hpp>
+#include <cch/tui/Style.hpp>
 #include <cch/tui/Terminal.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/TruncatedText.hpp>
@@ -106,7 +111,24 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_aggregate_v<tui::AutocompleteSuggestions>);
     static_assert(std::is_move_constructible_v<tui::AutocompleteProvider>);
     static_assert(!std::is_copy_constructible_v<tui::AutocompleteProvider>);
+    static_assert(std::is_aggregate_v<tui::SelectItem>);
+    static_assert(std::is_aggregate_v<tui::SelectListOptions>);
+    static_assert(std::is_aggregate_v<tui::SettingItem>);
+    static_assert(std::is_aggregate_v<tui::SettingsListOptions>);
+    static_assert(std::variant_size_v<tui::SettingControlVariant> == 3);
+    static_assert(std::is_aggregate_v<tui::LoaderIndicatorOptions>);
+    static_assert(std::is_aggregate_v<tui::LoaderOptions>);
+    static_assert(std::is_aggregate_v<tui::CancellableLoaderOptions>);
+    static_assert(std::is_abstract_v<tui::AnimationTimer>);
+    static_assert(std::is_move_constructible_v<tui::TextStyleHook>);
+    static_assert(!std::is_copy_constructible_v<tui::TextStyleHook>);
+    static_assert(std::is_move_constructible_v<tui::SettingsChangeSink>);
+    static_assert(!std::is_copy_constructible_v<tui::SettingsChangeSink>);
     static_assert(std::is_final_v<tui::Editor>);
+    static_assert(std::is_final_v<tui::SelectList>);
+    static_assert(std::is_final_v<tui::SettingsList>);
+    static_assert(std::is_final_v<tui::Loader>);
+    static_assert(std::is_final_v<tui::CancellableLoader>);
     static_assert(std::variant_size_v<tui::InputEventVariant> == 2);
     static_assert(std::is_abstract_v<tui::InputHandler>);
     static_assert(std::is_abstract_v<tui::Focusable>);
