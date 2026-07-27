@@ -58,6 +58,8 @@ public:
     [[nodiscard]] util::ExpectedVoid write(std::string_view output) override;
     [[nodiscard]] util::ExpectedVoid set_cursor(CursorPosition position) override;
     [[nodiscard]] util::ExpectedVoid set_cursor_visible(bool visible) override;
+    [[nodiscard]] util::ExpectedVoid begin_synchronized_update() override;
+    [[nodiscard]] util::ExpectedVoid end_synchronized_update() override;
 
     [[nodiscard]] util::ExpectedVoid inject_input(std::string input);
     [[nodiscard]] util::ExpectedVoid flush_input();
@@ -67,6 +69,9 @@ public:
     [[nodiscard]] const std::vector<std::vector<VirtualTerminalCell>>& cells() const;
     [[nodiscard]] VirtualTerminalStyle final_style() const;
     [[nodiscard]] CursorPosition cursor() const;
+    /// Returns true if clear_screen() was called since the last check.
+    /// Resets the flag on read.
+    [[nodiscard]] bool check_clear_screen_called();
 
 private:
     struct Impl;

@@ -56,6 +56,12 @@ public:
     [[nodiscard]] virtual util::ExpectedVoid write(std::string_view output) = 0;
     [[nodiscard]] virtual util::ExpectedVoid set_cursor(CursorPosition position) = 0;
     [[nodiscard]] virtual util::ExpectedVoid set_cursor_visible(bool visible) = 0;
+
+    /// Begin a synchronized update region. Intermediate writes are not displayed
+    /// until end_synchronized_update(). Terminals that do not support this
+    /// capability may ignore the start/end markers.
+    [[nodiscard]] virtual util::ExpectedVoid begin_synchronized_update() = 0;
+    [[nodiscard]] virtual util::ExpectedVoid end_synchronized_update() = 0;
 };
 
 } // namespace cch::tui

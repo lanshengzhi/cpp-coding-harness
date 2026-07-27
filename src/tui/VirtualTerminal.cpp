@@ -22,7 +22,16 @@ struct VirtualTerminal::Impl {
     std::vector<std::vector<VirtualTerminalCell>> cells;
     detail::AnsiStyleState style;
     CursorPosition cursor;
+    std::size_t sync_depth{0};
+    bool clear_screen_called{false};
 };
+
+namespace {
+
+constexpr std::string_view kBeginSync = "\x1b[?2026h";
+constexpr std::string_view kEndSync = "\x1b[?2026l";
+
+} // anonymous namespace
 
 namespace {
 
@@ -176,11 +185,35 @@ TerminalModeState VirtualTerminal::modes() const {
 
 util::ExpectedVoid VirtualTerminal::clear_screen() {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    impl_->clear_screen_called = true;
     impl_->cells.assign(
         impl_->dimensions.rows,
         std::vector<VirtualTerminalCell>(impl_->dimensions.columns));
     impl_->cursor = {};
     refresh_screen(*impl_);
+    return {};
+}
+
+util::ExpectedVoid VirtualTerminal::begin_synchronized_update() {
+    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (impl_->sync_depth == 0) {
+        impl_->output.push_back(std::string(kBeginSync));
+    }
+    ++impl_->sync_depth;
+    return {};
+}
+
+util::ExpectedVoid VirtualTerminal::end_synchronized_update() {
+    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (impl_->sync_depth == 0) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "Virtual Terminal synchronized update is not active"));
+    }
+    --impl_->sync_depth;
+    if (impl_->sync_depth == 0) {
+        impl_->output.push_back(std::string(kEndSync));
+    }
     return {};
 }
 
@@ -327,6 +360,12 @@ VirtualTerminalStyle VirtualTerminal::final_style() const {
 
 CursorPosition VirtualTerminal::cursor() const {
     return impl_->cursor;
+}
+
+bool VirtualTerminal::check_clear_screen_called() {
+    const auto result = impl_->clear_screen_called;
+    impl_->clear_screen_called = false;
+    return result;
 }
 
 } // namespace cch::tui

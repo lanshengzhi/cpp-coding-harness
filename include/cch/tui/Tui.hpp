@@ -5,6 +5,7 @@
 
 #include <functional>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace cch::tui {
@@ -33,6 +34,7 @@ public:
 
 private:
     [[nodiscard]] bool owns(const Component* component) const;
+    [[nodiscard]] util::Expected<std::vector<std::string>> render_children(TerminalDimensions dimensions);
     void handle_input(std::string input);
     void dispatch_input(const InputEventVariant& event);
     void handle_resize(TerminalDimensions dimensions);
@@ -42,6 +44,10 @@ private:
     std::vector<std::unique_ptr<Component>> children_;
     Component* focused_{nullptr}; // Null or aliases an element owned by children_.
     bool started_{false};
+    bool first_render_{true};
+    bool pending_render_{false};
+    std::vector<std::string> previous_lines_;
+    TerminalDimensions previous_dimensions_{};
 };
 
 } // namespace cch::tui

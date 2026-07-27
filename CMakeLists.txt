@@ -247,6 +247,7 @@ if(CCH_BUILD_TESTS)
         tests/tui/ContainerTest.cpp
         tests/tui/EditorTest.cpp
         tests/tui/InputTest.cpp
+        tests/tui/RenderDifferentialTest.cpp
         tests/tui/TruncatedTextTest.cpp
         tests/tui/TuiTest.cpp
         tests/tui/UnicodeWidthTest.cpp
