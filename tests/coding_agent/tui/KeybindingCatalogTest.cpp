@@ -173,7 +173,7 @@ TEST_CASE(
     std::string json = "{";
     for (int index = 0; index < 70; ++index) {
         if (index != 0) json += ',';
-        json += "\"unknown." + std::to_string(index) + "\":\"sk-abcdefghijklmnopqrstuvwxyz123456\"";
+        json += "\"unknown.sk-abcdefghijklmnopqrstuvwxyz123456-" + std::to_string(index) + "\":\"f1\"";
     }
     json += '}';
     config.write("keybindings.json", json);

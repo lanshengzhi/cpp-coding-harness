@@ -52,7 +52,7 @@ std::vector<std::filesystem::path> files_under(const std::filesystem::path& root
 
 } // namespace
 
-TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issue57]") {
+TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issue56][issue57]") {
     const auto cmake = read_text(std::filesystem::path(CCH_SOURCE_DIR) / "CMakeLists.txt");
 
     CHECK(block_mentions(cmake, "add_library(cch_util"));

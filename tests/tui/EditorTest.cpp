@@ -27,7 +27,9 @@ void type(cch::tui::Editor& editor, std::string text) {
 
 } // namespace
 
-TEST_CASE("Editor edits Unicode text through semantic cursor and deletion operations", "[tui][editor][issue48]") {
+TEST_CASE(
+    "Editor edits Unicode text through semantic cursor and deletion operations",
+    "[tui][editor][issue48][issue57]") {
     cch::tui::Editor editor;
     type(editor, "A\xc3\xa9\xf0\x9f\x98\x80");
     key(editor, "left");
