@@ -1,5 +1,6 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
+#include "../support/ImageFixture.hpp"
 #include "../support/ShellQuoting.hpp"
 #include "../support/TempWorkspace.hpp"
 #include "../support/TextHelpers.hpp"
@@ -17,6 +18,7 @@
 #include <regex>
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #if defined(__unix__) || defined(__APPLE__)
@@ -96,6 +98,14 @@ SplitCommandResult run_command_split_with_input(const std::string& command, cons
 }
 
 std::string bin() { return shell_quote(CCH_BINARY); }
+
+void write_tiny_gif(const std::filesystem::path& path) {
+    const auto bytes = cch::tests::decode_base64(cch::tests::kTinyGifBase64);
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    output.write(
+        reinterpret_cast<const char*>(bytes.data()),
+        static_cast<std::streamsize>(bytes.size()));
+}
 
 std::vector<std::string> non_empty_lines(const std::string& text) {
     std::vector<std::string> result;
@@ -253,6 +263,51 @@ AutomaticSessionFile require_single_session_in_directory(
     return verify_automatic_session_file(files.front(), canonical_workspace);
 }
 
+}
+
+TEST_CASE(
+    "CLI initial image arguments persist text before image with or without positional text",
+    "[cli][smoke][issue63]") {
+    cch::tests::TempWorkspace workspace;
+    const auto image = workspace.path() / "misleading.data";
+    write_tiny_gif(image);
+
+    const auto described_session = workspace.path() / "described.jsonl";
+    const auto described = run_command(
+        bin() + " --fake --workspace " + shell_quote(workspace.path().string()) +
+        " --session " + shell_quote(described_session.string()) + " " +
+        shell_quote("@" + image.string()) + " describe");
+    REQUIRE(described.exit_code == 0);
+    const auto described_jsonl = read_file(described_session);
+    const auto wrapper = "<file name=\\\"" + image.string() + "\\\"></file>\\ndescribe";
+    const auto text_position = described_jsonl.find(wrapper);
+    const auto image_position = described_jsonl.find("\"type\":\"image\"");
+    REQUIRE(text_position != std::string::npos);
+    REQUIRE(image_position != std::string::npos);
+    CHECK(text_position < image_position);
+    CHECK(described_jsonl.find("\"mimeType\":\"image/gif\"") != std::string::npos);
+
+    const auto lone_session = workspace.path() / "lone.jsonl";
+    const auto lone = run_command(
+        bin() + " --fake --workspace " + shell_quote(workspace.path().string()) +
+        " --session " + shell_quote(lone_session.string()) + " " +
+        shell_quote("@" + image.string()));
+    REQUIRE(lone.exit_code == 0);
+    const auto lone_jsonl = read_file(lone_session);
+    CHECK(lone_jsonl.find("<file name=\\\"" + image.string() +
+        "\\\"></file>") != std::string::npos);
+    CHECK(lone_jsonl.find("\"mimeType\":\"image/gif\"") != std::string::npos);
+
+    const auto missing_session = workspace.path() / "missing.jsonl";
+    const auto missing = run_command(
+        bin() + " --fake --workspace " + shell_quote(workspace.path().string()) +
+        " --session " + shell_quote(missing_session.string()) + " " +
+        shell_quote("@" + (workspace.path() / "missing.png").string()));
+    CHECK(missing.exit_code == 2);
+    CHECK(missing.output.find("initial file not found") != std::string::npos);
+    std::error_code exists_error;
+    CHECK_FALSE(std::filesystem::exists(missing_session, exists_error));
+    CHECK_FALSE(exists_error);
 }
 
 TEST_CASE("CLI fake one-shot prints transcript and writes session", "[cli][u6]") {

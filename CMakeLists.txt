@@ -18,6 +18,16 @@ find_package(OpenSSL REQUIRED)
 find_package(CLI11 CONFIG REQUIRED)
 find_package(glaze CONFIG REQUIRED)
 find_package(md4c CONFIG REQUIRED)
+find_package(WebP CONFIG QUIET)
+if(NOT TARGET WebP::webpdecoder)
+    find_path(WEBP_INCLUDE_DIR NAMES webp/decode.h REQUIRED)
+    find_library(WEBP_DECODER_LIBRARY NAMES webpdecoder webp REQUIRED)
+    add_library(WebP::webpdecoder UNKNOWN IMPORTED)
+    set_target_properties(WebP::webpdecoder PROPERTIES
+        IMPORTED_LOCATION "${WEBP_DECODER_LIBRARY}"
+        INTERFACE_INCLUDE_DIRECTORIES "${WEBP_INCLUDE_DIR}"
+    )
+endif()
 find_package(utf8proc CONFIG QUIET)
 if(NOT TARGET utf8proc::utf8proc)
     find_path(UTF8PROC_INCLUDE_DIR NAMES utf8proc.h REQUIRED)
@@ -164,6 +174,8 @@ target_link_libraries(cch_tools
 
 add_library(cch_coding_agent_runtime
     src/coding_agent/runtime/AsyncCliRuntime.cpp
+    src/coding_agent/ImageInput.cpp
+    src/cli/InitialPrompt.cpp
     src/coding_agent/AgentConfigDir.cpp
     src/coding_agent/AuthLoader.cpp
     src/coding_agent/CommandRegistry.cpp
@@ -197,6 +209,7 @@ cch_target_defaults(cch_coding_agent_runtime)
 target_include_directories(cch_coding_agent_runtime
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb
 )
 target_link_libraries(cch_coding_agent_runtime
     PUBLIC
@@ -205,6 +218,8 @@ target_link_libraries(cch_coding_agent_runtime
         cch_tools
         cch_ai
         cch_util
+    PRIVATE
+        WebP::webpdecoder
 )
 
 add_library(cch_coding_agent_interactive
@@ -237,6 +252,7 @@ if(CCH_BUILD_TESTS)
     add_executable(cpp_harness_tests
         tests/TestMain.cpp
         tests/support/ComplexToolSchemaFixture.hpp
+        tests/support/ImageFixture.hpp
         tests/support/PseudoTerminal.hpp
         tests/support/ToolArgumentCompatibilityFixture.hpp
         tests/architecture/ArchitectureSurfaceScanTest.cpp
@@ -257,8 +273,10 @@ if(CCH_BUILD_TESTS)
         tests/cli/CliSmokeTest.cpp
         tests/cli/CliParseTest.cpp
         tests/cli/InteractiveCliFrontendTest.cpp
+        tests/cli/InitialPromptTest.cpp
         tests/coding_agent/BuiltinCommandsTest.cpp
         tests/coding_agent/CommandRegistryTest.cpp
+        tests/coding_agent/ImageInputTest.cpp
         tests/coding_agent/PromptProcessorTest.cpp
         tests/coding_agent/PromptTemplateProcessingTest.cpp
         tests/coding_agent/AuthLoaderTest.cpp

@@ -154,6 +154,59 @@ TEST_CASE("parse_args defaults empty text-mode prompt to repl", "[cli][parse]") 
     CHECK(parsed->prompt.empty());
 }
 
+TEST_CASE("parse_args retains positional file arguments separately from prompt text", "[cli][parse][issue63]") {
+    std::vector<std::string> args{
+        "cpp-harness",
+        "--fake",
+        "@first.png",
+        "describe",
+        "@second.webp",
+        "these",
+    };
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+
+    REQUIRE(parsed);
+    CHECK(parsed->prompt == "describe these");
+    REQUIRE(parsed->file_arguments.size() == 2);
+    CHECK(parsed->file_arguments[0] == "first.png");
+    CHECK(parsed->file_arguments[1] == "second.webp");
+}
+
+TEST_CASE("parse_args treats a lone positional file as initial input", "[cli][parse][issue63]") {
+    std::vector<std::string> args{"cpp-harness", "--fake", "@only.gif"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+
+    REQUIRE(parsed);
+    CHECK_FALSE(parsed->repl);
+    CHECK(parsed->prompt.empty());
+    REQUIRE(parsed->file_arguments.size() == 1);
+    CHECK(parsed->file_arguments[0] == "only.gif");
+}
+
+TEST_CASE("parse_args accepts a lone positional file in json mode", "[cli][parse][issue63]") {
+    std::vector<std::string> args{
+        "cpp-harness", "--fake", "--mode", "json", "@image.webp"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+
+    REQUIRE(parsed);
+    CHECK(parsed->output_mode == cch::cli::OutputMode::Json);
+    CHECK(parsed->prompt.empty());
+    REQUIRE(parsed->file_arguments.size() == 1);
+    CHECK(parsed->file_arguments[0] == "image.webp");
+}
+
+TEST_CASE("parse_args rejects positional files in rpc mode", "[cli][parse][issue63]") {
+    std::vector<std::string> args{"cpp-harness", "--fake", "--mode", "rpc", "@image.png"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+
+    REQUIRE_FALSE(parsed);
+    CHECK(parsed.error().message.find("positional prompt is not allowed") != std::string::npos);
+}
+
 TEST_CASE("parse_args represents an omitted session target as default persisted creation", "[cli][parse][session-target]") {
     std::vector<std::string> args{"cpp-harness", "--fake", "hello"};
     auto argv = argv_from_strings(args);

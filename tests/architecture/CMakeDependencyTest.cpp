@@ -154,8 +154,33 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
     CHECK(block_mentions(runtime_links, "cch_harness"));
     CHECK(block_mentions(runtime_links, "cch_tools"));
     CHECK(block_mentions(runtime_links, "cch_ai"));
+    CHECK(block_mentions(runtime_links, "WebP::webpdecoder"));
     CHECK_FALSE(block_mentions(runtime_links, "cch_tui"));
     CHECK_FALSE(block_mentions(runtime_links, "cch_coding_agent_tui"));
+}
+
+TEST_CASE(
+    "image input and transcript composition stay in their owning private packages",
+    "[architecture][cmake][issue63]") {
+    const auto cmake = read_text(std::filesystem::path(CCH_SOURCE_DIR) / "CMakeLists.txt");
+    const auto tui_sources = cmake_command_block(cmake, "add_library(cch_tui");
+    const auto runtime_sources = cmake_command_block(
+        cmake, "add_library(cch_coding_agent_runtime");
+    const auto interactive_sources = cmake_command_block(
+        cmake, "add_library(cch_coding_agent_interactive");
+
+    CHECK(block_mentions(runtime_sources, "src/coding_agent/ImageInput.cpp"));
+    CHECK(block_mentions(runtime_sources, "src/cli/InitialPrompt.cpp"));
+    CHECK(block_mentions(interactive_sources, "src/coding_agent/tui/InteractiveMode.cpp"));
+    CHECK(block_mentions(interactive_sources, "src/coding_agent/tui/Transcript.cpp"));
+    CHECK_FALSE(block_mentions(tui_sources, "ImageInput"));
+    CHECK_FALSE(block_mentions(tui_sources, "ClipboardReader"));
+    CHECK_FALSE(block_mentions(tui_sources, "Transcript.cpp"));
+    const auto runtime_links = cmake_command_block(
+        cmake, "target_link_libraries(cch_coding_agent_runtime");
+    const auto tui_links = cmake_command_block(cmake, "target_link_libraries(cch_tui");
+    CHECK(block_mentions(runtime_links, "WebP::webpdecoder"));
+    CHECK_FALSE(block_mentions(tui_links, "WebP::webpdecoder"));
 }
 
 TEST_CASE("provider implementations stay below the AI package boundary", "[architecture][cmake]") {

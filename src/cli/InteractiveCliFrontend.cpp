@@ -44,11 +44,13 @@ InteractiveCliFrontend::InteractiveCliFrontend(
     coding_agent::AgentSession& session,
     CliRenderer& renderer,
     const harness::session::SessionMetadata& session_metadata,
-    InteractiveCliFrontendConfig config)
+    InteractiveCliFrontendConfig config,
+    coding_agent::PromptOptions initial_prompt_options)
     : session_(session),
       renderer_(renderer),
       session_metadata_(session_metadata),
-      config_(std::move(config)) {}
+      config_(std::move(config)),
+      initial_prompt_options_(std::move(initial_prompt_options)) {}
 
 InteractiveCliOutcome InteractiveCliFrontend::run() {
     coding_agent::CommandRegistry commands;
@@ -99,14 +101,18 @@ InteractiveCliOutcome InteractiveCliFrontend::run() {
         return InteractiveCliOutcome::Success;
     }
 
-    const auto outcome = run_prompt(config_.prompt, commands);
+    const auto outcome = run_prompt(
+        config_.prompt,
+        commands,
+        std::move(initial_prompt_options_));
     return outcome == InteractiveCliOutcome::RuntimeError ? InteractiveCliOutcome::RuntimeError
                                                           : InteractiveCliOutcome::Success;
 }
 
 InteractiveCliOutcome InteractiveCliFrontend::run_prompt(
     const std::string& prompt,
-    coding_agent::CommandRegistry& commands) {
+    coding_agent::CommandRegistry& commands,
+    coding_agent::PromptOptions options) {
     // Frontend commands are resolved by the CLI adapter before ordinary
     // input reaches AgentSession.
     if (auto command_result = dispatch_cli_command(commands, prompt, make_command_context())) {
@@ -121,7 +127,7 @@ InteractiveCliOutcome InteractiveCliFrontend::run_prompt(
     }
 
     // Unmatched slash input reaches AgentSession via ordinary prompt.
-    auto prompt_result = session_.prompt_blocking(prompt);
+    auto prompt_result = session_.prompt_blocking(prompt, std::move(options));
 
     config_.output.flush();
 

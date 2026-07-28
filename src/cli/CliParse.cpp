@@ -193,21 +193,31 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
         config.output_mode = OutputMode::Text;
     }
 
-    config.prompt = join_prompt(prompt_parts);
+    std::vector<std::string> prompt_text_parts;
+    prompt_text_parts.reserve(prompt_parts.size());
+    for (auto& part : prompt_parts) {
+        if (part.starts_with('@')) {
+            config.file_arguments.push_back(part.substr(1));
+        } else {
+            prompt_text_parts.push_back(std::move(part));
+        }
+    }
+    config.prompt = join_prompt(prompt_text_parts);
+    const bool has_initial_input = !config.prompt.empty() || !config.file_arguments.empty();
     if (config.output_mode == OutputMode::Json && config.repl) {
         return std::unexpected(cli_error("--mode json cannot be combined with --repl"));
     }
     if (config.output_mode == OutputMode::Rpc && config.repl) {
         return std::unexpected(cli_error("--mode rpc cannot be combined with --repl"));
     }
-    if (config.output_mode == OutputMode::Rpc && !config.prompt.empty()) {
+    if (config.output_mode == OutputMode::Rpc && has_initial_input) {
         return std::unexpected(cli_error("--mode rpc reads prompts from stdin; positional prompt is not allowed"));
     }
-    if (config.output_mode == OutputMode::Text && !config.repl && config.prompt.empty()) {
+    if (config.output_mode == OutputMode::Text && !config.repl && !has_initial_input) {
         // No prompt in text mode defaults to an interactive REPL, matching pi's no-argument behavior.
         config.repl = true;
     }
-    if (config.output_mode == OutputMode::Json && !config.repl && config.prompt.empty()) {
+    if (config.output_mode == OutputMode::Json && !config.repl && !has_initial_input) {
         return std::unexpected(cli_error("prompt is required for --mode json"));
     }
     return config;

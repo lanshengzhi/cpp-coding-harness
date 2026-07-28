@@ -1,4 +1,5 @@
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "support/ImageFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/ai/ChatClient.hpp>
@@ -23,10 +24,15 @@
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <array>
 #include <chrono>
+#include <cstdint>
 #include <format>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -76,6 +82,41 @@ void drain_ready(boost::asio::io_context& io) {
     }
     return count;
 }
+
+[[nodiscard]] std::string read_binary_file(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+}
+
+class FakeClipboardReader final : public coding_agent::tui::AsyncClipboardReader {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<coding_agent::tui::ClipboardImage>>>
+    read_image() override {
+        if (image_error) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Process,
+                "clipboard image unavailable"));
+        }
+        if (next_image >= images.size()) co_return std::nullopt;
+        co_return std::optional<coding_agent::tui::ClipboardImage>{images[next_image++]};
+    }
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<std::string>>>
+    read_text() override {
+        if (text_error) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Process,
+                "clipboard text unavailable"));
+        }
+        co_return text;
+    }
+
+    std::vector<coding_agent::tui::ClipboardImage> images;
+    std::optional<std::string> text{std::nullopt};
+    std::size_t next_image{0};
+    bool image_error{false};
+    bool text_error{false};
+};
 
 class FailOnceChatClient final : public ai::StreamingChatClient {
 public:
@@ -540,6 +581,36 @@ private:
     std::optional<agent::ToolUpdateSink> late_update_sink_;
 };
 
+class ImageReadTool final : public agent::AsyncAgentTool {
+public:
+    explicit ImageReadTool(std::string image_data)
+        : image_data_(std::move(image_data)) {
+        definition_.name = "read";
+        definition_.description = "Return deterministic text and image content";
+        definition_.parameters = util::JsonValue::object_t{{"type", "object"}};
+    }
+
+    [[nodiscard]] const ai::Tool& definition() const override {
+        return definition_;
+    }
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
+        agent::ToolInvocation,
+        std::stop_token) override {
+        agent::AsyncToolExecutionResult result;
+        result.content = {
+            ai::text_content("live tool before"),
+            ai::image_content(image_data_, "image/png"),
+            ai::text_content("live tool after"),
+        };
+        co_return result;
+    }
+
+private:
+    ai::Tool definition_;
+    std::string image_data_;
+};
+
 class DelayedCancellationTool final : public agent::AsyncAgentTool {
 public:
     DelayedCancellationTool() {
@@ -796,6 +867,526 @@ private:
 };
 
 } // namespace
+
+TEST_CASE(
+    "Native TUI renders resumed and live message images in source order without mutating content",
+    "[coding_agent][tui][image][issue63]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    const auto session_file = workspace.path() / "image-session.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(
+        session_file,
+        {
+            .session_id = "image-session",
+            .created_at = "2026-07-28T00:00:00Z",
+            .workspace = workspace.path(),
+            .provider = "fake",
+            .model = "fake-model",
+        });
+    REQUIRE(store);
+
+    const auto png_data = std::string{tests::kTinyPngBase64};
+    ai::UserMessage user;
+    user.timestamp = 1'700'000'000'000;
+    user.content = {
+        ai::text_content("user before"),
+        ai::image_content(png_data, "image/png"),
+        ai::text_content("user after"),
+    };
+    REQUIRE(store->append(ai::MessageVariant{user}));
+
+    ai::AssistantMessage assistant;
+    assistant.provider = "fake";
+    assistant.api = "fake";
+    assistant.model = "fake-model";
+    assistant.stop_reason = ai::AssistantStopReason::ToolUse;
+    assistant.timestamp = 1'700'000'000'001;
+    assistant.content.emplace_back(ai::tool_call_content("image-call", "read", "{}"));
+    REQUIRE(store->append(ai::MessageVariant{assistant}));
+
+    ai::ToolResultMessage tool_result;
+    tool_result.tool_call_id = "image-call";
+    tool_result.tool_name = "read";
+    tool_result.timestamp = 1'700'000'000'002;
+    tool_result.content = {
+        ai::text_content("tool before"),
+        ai::image_content(png_data, "image/png"),
+        ai::text_content("tool after"),
+    };
+    REQUIRE(store->append(ai::MessageVariant{tool_result}));
+
+    ai::CustomMessage custom;
+    custom.custom_type = "image-notice";
+    custom.timestamp = 1'700'000'000'003;
+    custom.content = {
+        ai::text_content("custom before"),
+        ai::image_content(png_data, "image/png"),
+        ai::text_content("after png"),
+        ai::image_content(std::string{tests::kTinyJpegBase64}, "image/jpeg"),
+        ai::text_content("after jpeg"),
+        ai::image_content(std::string{tests::kTinyGifBase64}, "image/gif"),
+        ai::text_content("after gif"),
+        ai::image_content(std::string{tests::kTinyWebpBase64}, "image/webp"),
+        ai::text_content("custom after"),
+    };
+    REQUIRE(store->append(ai::MessageVariant{custom}));
+
+    coding_agent::CreateAgentSessionOptions resume_options;
+    resume_options.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
+    resume_options.workspace = workspace.path();
+    resume_options.chat_client = ai::providers::make_scripted_fake_chat_client();
+    resume_options.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto resumed = coding_agent::create_agent_session(std::move(resume_options));
+    REQUIRE(resumed);
+    const auto authoritative_before = resumed->session->snapshot().agent_state.messages;
+
+    tui::VirtualTerminal terminal({
+        .columns = 72,
+        .rows = 300,
+        .capabilities = {
+            .synchronized_output = true,
+            .inline_images = tui::InlineImageProtocol::ITerm2,
+            .cell_pixels = tui::CellPixelDimensions{.width = 9, .height = 18},
+        },
+    });
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *resumed->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.images().size() == 6);
+    std::array<std::uint64_t, 6> resumed_resource_ids{};
+    for (std::size_t index = 0; index < resumed_resource_ids.size(); ++index) {
+        resumed_resource_ids[index] = terminal.images()[index].resource_id;
+        if (index > 0) {
+            CHECK(terminal.images()[index - 1].region.row < terminal.images()[index].region.row);
+        }
+    }
+    const std::array<std::string_view, 6> resumed_mime_types{
+        "image/png", "image/png", "image/png", "image/jpeg", "image/gif", "image/webp"};
+    for (std::size_t index = 0; index < resumed_mime_types.size(); ++index) {
+        CHECK(terminal.images()[index].mime_type == resumed_mime_types[index]);
+    }
+    const auto resumed_screen = visible_screen(terminal);
+    CHECK(resumed_screen.find("user before") < resumed_screen.find("user after"));
+    CHECK(resumed_screen.find("tool before") < resumed_screen.find("tool after"));
+    CHECK(resumed_screen.find("custom before") < resumed_screen.find("custom after"));
+
+    coding_agent::PromptOptions live_options;
+    live_options.images.push_back(ai::image_content(png_data, "image/png"));
+    std::optional<util::ExpectedVoid> prompt_result;
+    boost::asio::co_spawn(
+        io,
+        resumed->session->prompt("live user text", std::move(live_options)),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            prompt_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+    REQUIRE(prompt_result);
+    CHECK(*prompt_result);
+    REQUIRE(terminal.images().size() == 7);
+    for (std::size_t index = 0; index < resumed_resource_ids.size(); ++index) {
+        CHECK(terminal.images()[index].resource_id == resumed_resource_ids[index]);
+    }
+    CHECK(visible_screen(terminal).find("live user text") != std::string::npos);
+
+    const auto authoritative_after = resumed->session->snapshot().agent_state.messages;
+    REQUIRE(authoritative_after.size() == authoritative_before.size() + 2);
+    const auto* live_user = std::get_if<ai::UserMessage>(
+        &authoritative_after[authoritative_before.size()]);
+    REQUIRE(live_user != nullptr);
+    REQUIRE(live_user->content.size() == 2);
+    CHECK(std::get<ai::ImageContent>(live_user->content[1]).data == png_data);
+    CHECK(std::get<ai::ImageContent>(
+        std::get<ai::UserMessage>(authoritative_after[0]).content[1]).data == png_data);
+    CHECK(std::get<ai::ImageContent>(
+        std::get<ai::ToolResultMessage>(authoritative_after[2]).content[1]).data == png_data);
+    CHECK(std::get<ai::ImageContent>(
+        std::get<ai::CustomMessage>(authoritative_after[3]).content[1]).data == png_data);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+
+    coding_agent::CreateAgentSessionOptions fallback_resume;
+    fallback_resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
+    fallback_resume.workspace = workspace.path();
+    fallback_resume.chat_client = ai::providers::make_scripted_fake_chat_client();
+    fallback_resume.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto fallback_session = coding_agent::create_agent_session(std::move(fallback_resume));
+    REQUIRE(fallback_session);
+    const auto fallback_before = fallback_session->session->snapshot().agent_state.messages;
+    tui::VirtualTerminal fallback_terminal({.columns = 72, .rows = 50});
+    boost::asio::io_context fallback_io;
+    std::optional<util::ExpectedVoid> fallback_result;
+    boost::asio::co_spawn(
+        fallback_io,
+        coding_agent::tui::run_interactive_mode(
+            *fallback_session->session,
+            fallback_terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            fallback_result.emplace(std::move(result));
+        });
+    drain_ready(fallback_io);
+
+    const auto fallback_screen = visible_screen(fallback_terminal);
+    CHECK(count_text(fallback_screen, "[Image:") == 7);
+    CHECK(fallback_screen.find("[image/png]") != std::string::npos);
+    CHECK(fallback_screen.find("[image/jpeg]") != std::string::npos);
+    CHECK(fallback_screen.find("[image/gif]") != std::string::npos);
+    CHECK(fallback_screen.find("[image/webp]") != std::string::npos);
+    CHECK(fallback_terminal.images().empty());
+    const auto fallback_after = fallback_session->session->snapshot().agent_state.messages;
+    REQUIRE(fallback_after.size() == fallback_before.size());
+    CHECK(std::get<ai::ImageContent>(
+        std::get<ai::UserMessage>(fallback_after[0]).content[1]).data == png_data);
+
+    REQUIRE(fallback_terminal.inject_input("\x04"));
+    drain_ready(fallback_io);
+    REQUIRE(fallback_result);
+    CHECK(*fallback_result);
+}
+
+TEST_CASE(
+    "Native TUI renders a live image-bearing tool result through the transcript path",
+    "[coding_agent][tui][image][tool][issue63]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config_directory;
+    auto options = session_options(
+        workspace,
+        std::make_unique<RepeatedReadCallChatClient>());
+    options.custom_tools.push_back(std::make_unique<ImageReadTool>(
+        std::string{tests::kTinyPngBase64}));
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({
+        .columns = 80,
+        .rows = 80,
+        .capabilities = {
+            .synchronized_output = true,
+            .inline_images = tui::InlineImageProtocol::ITerm2,
+            .cell_pixels = tui::CellPixelDimensions{.width = 9, .height = 18},
+        },
+    });
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config_directory.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("read live.png\r"));
+    drain_ready(io);
+
+    REQUIRE(terminal.images().size() == 1);
+    CHECK(terminal.images()[0].mime_type == "image/png");
+    const auto screen = visible_screen(terminal);
+    CHECK(screen.find("live tool before") < screen.find("live tool after"));
+    const auto snapshot = created->session->snapshot();
+    const auto result = std::find_if(
+        snapshot.agent_state.messages.begin(),
+        snapshot.agent_state.messages.end(),
+        [](const ai::MessageVariant& message) {
+            return std::holds_alternative<ai::ToolResultMessage>(message);
+        });
+    REQUIRE(result != snapshot.agent_state.messages.end());
+    const auto& tool_result = std::get<ai::ToolResultMessage>(*result);
+    REQUIRE(tool_result.content.size() == 3);
+    CHECK(std::get<ai::ImageContent>(tool_result.content[1]).data ==
+        tests::kTinyPngBase64);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI keeps tail image sidecars inside a cropped transcript viewport",
+    "[coding_agent][tui][image][viewport][issue63]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config_directory;
+    const auto session_file = workspace.path() / "viewport-images.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(
+        session_file,
+        {
+            .session_id = "viewport-images",
+            .created_at = "2026-07-28T00:00:00Z",
+            .workspace = workspace.path(),
+            .provider = "fake",
+            .model = "fake-model",
+        });
+    REQUIRE(store);
+    for (std::size_t index = 0; index < 30; ++index) {
+        REQUIRE(store->append(ai::MessageVariant{
+            ai::user_text_message("old transcript line " + std::to_string(index),
+                1'700'000'000'000 + static_cast<ai::TimestampMs>(index))}));
+    }
+    ai::CustomMessage tail;
+    tail.custom_type = "tail";
+    tail.content = {
+        ai::text_content("tail before"),
+        ai::image_content(std::string{tests::kTinyPngBase64}, "image/png"),
+        ai::text_content("tail after"),
+    };
+    tail.timestamp = 1'700'000'000'100;
+    REQUIRE(store->append(ai::MessageVariant{tail}));
+
+    coding_agent::CreateAgentSessionOptions resume;
+    resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
+    resume.workspace = workspace.path();
+    resume.chat_client = ai::providers::make_scripted_fake_chat_client();
+    resume.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(std::move(resume));
+    REQUIRE(created);
+    tui::VirtualTerminal terminal({
+        .columns = 72,
+        .rows = 36,
+        .capabilities = {
+            .synchronized_output = true,
+            .inline_images = tui::InlineImageProtocol::ITerm2,
+            .cell_pixels = tui::CellPixelDimensions{.width = 9, .height = 18},
+        },
+    });
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config_directory.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.images().size() == 1);
+    const auto& image = terminal.images()[0];
+    CHECK(image.region.row + image.region.rows < terminal.dimensions().rows);
+    const auto screen = visible_screen(terminal);
+    CHECK(screen.find("tail before") < screen.find("tail after"));
+    CHECK(screen.find("old transcript line 0") == std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI clipboard images become distinct supported temporary paths",
+    "[coding_agent][tui][clipboard][issue63]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config_directory;
+    auto options = session_options(
+        workspace,
+        ai::providers::make_scripted_fake_chat_client());
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created);
+
+    auto reader = std::make_unique<FakeClipboardReader>();
+    const std::array source_bytes{
+        tests::decode_base64(tests::kTinyPngBase64),
+        tests::decode_base64(tests::kTinyJpegBase64),
+        tests::decode_base64(tests::kTinyGifBase64),
+        tests::decode_base64(tests::kTinyWebpBase64),
+    };
+    for (const auto& bytes : source_bytes) {
+        reader->images.push_back({
+            .bytes = bytes,
+            .mime_type = "application/octet-stream",
+        });
+    }
+
+    coding_agent::tui::InteractiveModeConfig config;
+    config.agent_config_directory = config_directory.path();
+    config.clipboard_reader = std::move(reader);
+    tui::VirtualTerminal terminal({.columns = 120, .rows = 16});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            std::move(config)),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    for (std::size_t index = 0; index < source_bytes.size(); ++index) {
+        REQUIRE(terminal.inject_input("\x16"));
+        drain_ready(io);
+        if (index + 1 < source_bytes.size()) {
+            REQUIRE(terminal.inject_input(" "));
+            drain_ready(io);
+        }
+    }
+    REQUIRE(terminal.inject_input("\r"));
+    drain_ready(io);
+
+    const auto snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.messages.size() >= 2);
+    const auto* user = std::get_if<ai::UserMessage>(&snapshot.agent_state.messages[0]);
+    REQUIRE(user != nullptr);
+    std::istringstream paths{ai::text_from_content(user->content)};
+    std::vector<std::filesystem::path> inserted_paths;
+    for (std::filesystem::path path; paths >> path;) inserted_paths.push_back(std::move(path));
+    REQUIRE(inserted_paths.size() == 4);
+    const std::array<std::string_view, 4> extensions{".png", ".jpg", ".gif", ".webp"};
+    for (std::size_t index = 0; index < inserted_paths.size(); ++index) {
+        CHECK(inserted_paths[index].extension() == extensions[index]);
+        CHECK(read_binary_file(inserted_paths[index]) == std::string(
+            reinterpret_cast<const char*>(source_bytes[index].data()),
+            source_bytes[index].size()));
+        if (index > 0) CHECK(inserted_paths[index] != inserted_paths[index - 1]);
+    }
+
+    REQUIRE(terminal.inject_input("/hotkeys\r"));
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("app.clipboard.pasteImage") != std::string::npos);
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+
+    for (const auto& path : inserted_paths) {
+        std::error_code remove_error;
+        CHECK(std::filesystem::remove(path, remove_error));
+        CHECK_FALSE(remove_error);
+    }
+}
+
+TEST_CASE(
+    "Native TUI clipboard falls back to text at the cursor and ignores read failures",
+    "[coding_agent][tui][clipboard][issue63]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config_directory;
+    auto options = session_options(
+        workspace,
+        ai::providers::make_scripted_fake_chat_client());
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created);
+
+    auto reader = std::make_unique<FakeClipboardReader>();
+    reader->images.push_back({
+        .bytes = {0x01, 0x02, 0x03},
+        .mime_type = "image/png",
+    });
+    reader->text = "clipboard text";
+    coding_agent::tui::InteractiveModeConfig config;
+    config.agent_config_directory = config_directory.path();
+    config.clipboard_reader = std::move(reader);
+
+    tui::VirtualTerminal terminal({.columns = 80, .rows = 12});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            std::move(config)),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("AB\x1b[D\x16"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\r"));
+    drain_ready(io);
+
+    const auto snapshot = created->session->snapshot();
+    const auto& user = std::get<ai::UserMessage>(snapshot.agent_state.messages[0]);
+    const auto pasted_text = ai::text_from_content(user.content);
+    CHECK(pasted_text == "aclipboard textb");
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+
+    auto failed_options = session_options(
+        workspace,
+        ai::providers::make_scripted_fake_chat_client());
+    auto failed_session = coding_agent::create_agent_session(std::move(failed_options));
+    REQUIRE(failed_session);
+    auto failed_reader = std::make_unique<FakeClipboardReader>();
+    failed_reader->image_error = true;
+    failed_reader->text_error = true;
+    coding_agent::tui::InteractiveModeConfig failed_config;
+    failed_config.agent_config_directory = config_directory.path();
+    failed_config.clipboard_reader = std::move(failed_reader);
+    tui::VirtualTerminal failed_terminal({.columns = 80, .rows = 12});
+    boost::asio::io_context failed_io;
+    std::optional<util::ExpectedVoid> failed_result;
+    boost::asio::co_spawn(
+        failed_io,
+        coding_agent::tui::run_interactive_mode(
+            *failed_session->session,
+            failed_terminal,
+            std::move(failed_config)),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            failed_result.emplace(std::move(result));
+        });
+    drain_ready(failed_io);
+    REQUIRE(failed_terminal.inject_input("unchanged\x16"));
+    drain_ready(failed_io);
+    REQUIRE(failed_terminal.inject_input("\r"));
+    drain_ready(failed_io);
+    const auto failed_snapshot = failed_session->session->snapshot();
+    CHECK(ai::text_from_content(
+        std::get<ai::UserMessage>(failed_snapshot.agent_state.messages[0]).content) ==
+        "unchanged");
+    CHECK(visible_screen(failed_terminal).find("clipboard image unavailable") == std::string::npos);
+    REQUIRE(failed_terminal.inject_input("\x04"));
+    drain_ready(failed_io);
+    REQUIRE(failed_result);
+    CHECK(*failed_result);
+}
 
 TEST_CASE(
     "Native TUI renders a resumed rich transcript before accepting continued input",

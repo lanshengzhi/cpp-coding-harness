@@ -45,6 +45,7 @@ struct CliConfig {
     /// and resume targets keep their exact paths.
     std::optional<std::string> session_dir;
     coding_agent::CliProviderOverrides provider_overrides;
+    std::vector<std::string> file_arguments;
     std::string prompt;
     std::string help_text;
 };

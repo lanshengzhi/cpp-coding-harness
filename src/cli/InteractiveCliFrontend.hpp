@@ -1,7 +1,7 @@
 #pragma once
 
 #include "coding_agent/CommandRegistry.hpp"
-
+#include <cch/coding_agent/Sdk.hpp>
 #include "../../include/cch/harness/session/SessionEntry.hpp"
 
 #include <iosfwd>
@@ -60,7 +60,8 @@ public:
         coding_agent::AgentSession& session,
         CliRenderer& renderer,
         const harness::session::SessionMetadata& session_metadata,
-        InteractiveCliFrontendConfig config);
+        InteractiveCliFrontendConfig config,
+        coding_agent::PromptOptions initial_prompt_options = {});
 
     /// Run to completion and report the typed outcome; callers convert it to
     /// a process exit code with exit_code_for (observable CLI exit behavior).
@@ -69,13 +70,15 @@ public:
 private:
     [[nodiscard]] InteractiveCliOutcome run_prompt(
         const std::string& prompt,
-        coding_agent::CommandRegistry& commands);
+        coding_agent::CommandRegistry& commands,
+        coding_agent::PromptOptions options = {});
     [[nodiscard]] coding_agent::CommandContext make_command_context() const;
 
     coding_agent::AgentSession& session_;
     CliRenderer& renderer_;
     const harness::session::SessionMetadata& session_metadata_;
     InteractiveCliFrontendConfig config_;
+    coding_agent::PromptOptions initial_prompt_options_;
 };
 
 } // namespace cch::cli

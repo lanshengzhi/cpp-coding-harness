@@ -1,5 +1,6 @@
 #include "coding_agent/runtime/AsyncCliRuntime.hpp"
 
+#include "cli/InitialPrompt.hpp"
 #include "cli/InteractiveCliFrontend.hpp"
 #include "cli/JsonCliRenderer.hpp"
 #include "cli/TextCliRenderer.hpp"
@@ -13,6 +14,21 @@
 namespace cch::cli {
 
 int run_async_cli(const CliConfig& config) {
+    auto initial_prompt = prepare_initial_prompt(
+        config.prompt,
+        config.file_arguments,
+        config.workspace);
+    if (!initial_prompt) {
+        std::cerr << "could not prepare initial prompt: "
+                  << initial_prompt.error().message;
+        if (!initial_prompt.error().detail.empty() &&
+            initial_prompt.error().detail != initial_prompt.error().message) {
+            std::cerr << ": " << initial_prompt.error().detail;
+        }
+        std::cerr << '\n';
+        return 2;
+    }
+
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.fake = config.fake;
     request.enable_bash = config.enable_bash;
@@ -90,7 +106,7 @@ int run_async_cli(const CliConfig& config) {
         .output = std::cout,
         .error = std::cerr,
         .repl = config.repl,
-        .prompt = config.prompt,
+        .prompt = std::move(initial_prompt->text),
     };
 
     auto run_frontend = [&](CliRenderer& renderer) {
@@ -98,7 +114,11 @@ int run_async_cli(const CliConfig& config) {
             session,
             renderer,
             created->metadata,
-            std::move(frontend_config)};
+            std::move(frontend_config),
+            coding_agent::PromptOptions{
+                .expand_prompt_templates = true,
+                .images = std::move(initial_prompt->images),
+            }};
         return exit_code_for(frontend.run());
     };
 

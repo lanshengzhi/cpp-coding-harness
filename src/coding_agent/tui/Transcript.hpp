@@ -2,6 +2,7 @@
 
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
+#include <cch/tui/Component.hpp>
 #include <cch/util/Error.hpp>
 
 #include <cstddef>
@@ -41,7 +42,7 @@ public:
     void toggle_tool_output();
     void toggle_thinking();
 
-    [[nodiscard]] util::Expected<std::vector<std::string>> render(std::size_t width) const;
+    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) const;
 
 private:
     struct Impl;

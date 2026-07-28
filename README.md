@@ -25,13 +25,14 @@ The project is CMake-based and requires a C++23-capable compiler. CMake 3.25 or 
 - Glaze is used only at typed JSON serialization/deserialization boundaries.
 - utf8proc provides versioned Unicode grapheme segmentation and width properties inside the private TUI implementation.
 - MD4C provides tolerant Markdown parsing behind the public TUI component boundary.
+- Pinned stb image decode/resize/write headers are vendored under `third_party/stb` and compiled only by the private initial-image processor; their upstream license notices remain in each header. libwebp supplies private WebP validation/decoding for the same processor.
 - Boost.Beast/Asio + OpenSSL provide the HTTPS transport implementation.
 - Boost.Process is used behind the process-execution capability boundary.
 - CLI11 and Catch2 are declared in `vcpkg.json`; this repository also carries a tiny Catch-compatible fallback test header so the default suite can run in minimal environments.
 
 ### Bootstrap with vcpkg (recommended)
 
-All dependencies are declared in `vcpkg.json`. The bootstrap scripts create a local `.deps/vcpkg` checkout when `VCPKG_ROOT` is not already set, bootstrap vcpkg, and configure CMake in manifest mode so dependencies such as CLI11, Glaze, MD4C, Boost, and OpenSSL are installed automatically.
+All dependencies are declared in `vcpkg.json`. The bootstrap scripts create a local `.deps/vcpkg` checkout when `VCPKG_ROOT` is not already set, bootstrap vcpkg, and configure CMake in manifest mode so dependencies such as CLI11, Glaze, MD4C, libwebp, Boost, and OpenSSL are installed automatically.
 
 Linux/macOS:
 
@@ -61,7 +62,7 @@ ctest --preset vcpkg
 
 ### Using system packages
 
-If you prefer system-installed dependencies, install Boost, OpenSSL, Glaze, MD4C, CLI11, and utf8proc yourself, then use the system preset:
+If you prefer system-installed dependencies, install Boost, OpenSSL, Glaze, MD4C, libwebp, CLI11, and utf8proc yourself, then use the system preset:
 
 ```bash
 cmake --preset system
@@ -77,7 +78,13 @@ Run the binary with the deterministic fake provider. With no `--session`, `--res
 ./build/cpp_harness --fake --mode json "hello" | jq -c 'select(.type == "message_update")'
 printf '{"type":"get_state"}\n{"type":"shutdown"}\n' | ./build/cpp_harness --fake --mode rpc
 ./build/cpp_harness --fake --repl
+./build/cpp_harness --fake @screenshot.png "describe this image"
+./build/cpp_harness --fake @notes.txt @diagram.webp "compare these files"
 ```
+
+Positional `@path` arguments are content-sniffed rather than classified by extension. PNG, JPEG, GIF, and WebP image bytes contribute an absolute `<file name="…"></file>` reference to the initial text and an ordinary `ai::ImageContent` block after that complete text block. Non-image files contribute their text inside the same absolute-path wrapper. A lone image still creates the wrapper text and therefore uses the existing text-plus-images Agent Session operation; there is no image-only prompt API.
+
+Provider-bound images are preserved unchanged while dimensions are at most 2000×2000 and the base64 payload is strictly below 4.5 MiB. Larger decodable PNG, JPEG, GIF, and WebP inputs are aspect-ratio resized and carry the baseline coordinate-mapping hint in their `<file>` reference; an input that cannot be safely reduced is represented by an omission note rather than malformed image content. Empty files are skipped, while a missing or unreadable initial file fails before Session Publication.
 
 Pass `--no-session` to run any frontend in memory with no transcript left behind:
 
@@ -200,7 +207,7 @@ Package targets and responsibilities:
 - `cch_util` (`include/cch/util`, `src/util`): project error/expected contracts, move-only callback vocabulary, passive `JsonValue`, the Glaze-backed JSON adapter in `src/util/Json.hpp`, and async process execution.
 - `cch_tui` (`include/cch/tui`, `src/tui`): reusable source-level terminal UI contracts, a width-bounded structured Component seam, TUI root, semantic key and bracketed-paste input, a Unicode Editor with caller-supplied autocomplete and generic injected styling, Text, injected-style Markdown with optional syntax highlighting, filterable Select List and Settings List interactions, Loader and exactly-once Cancellable Loader lifecycles, structured inline Image placement with bounded fallback and private Kitty/iTerm2 protocol fixtures, a deterministic Virtual Terminal, and a transactional Linux/macOS Process Terminal with conservative appearance/color-capability observations and pseudo-terminal smoke coverage. The Process Terminal is not selected by the production CLI until the Native TUI frontend is promoted. The package depends only on project utility contracts, exposes no third-party types, has no coding-agent dependency, and makes no ABI-stability promise.
 - `cch_coding_agent_tui` (`src/coding_agent/tui`): the physically separate coding-agent Native TUI presentation layer. Its current supported slices provide baseline-pinned themes and keybindings: pi-compatible theme/keybinding parsing, deterministic Agent Config Directory discovery, bounded diagnostics, capability-aware theme mapping, an immutable effective binding registry shared by dispatch/help/hints, and settings/help presentation adapters. Known application actions are registered only when a frontend concretely assembles them, so deferred actions never become no-op bindings. Discovery is a one-shot startup operation with no generalized hot reload. This target remains independent of the Agent Session runtime.
-- `cch_coding_agent_interactive` (`src/coding_agent/tui/InteractiveMode.*`): the private Native TUI composition that connects a real Agent Session to the reusable TUI, Editor, themes, and effective keybindings. It renders the initial Agent Session snapshot before focusing input; reduces user, assistant text/thinking, correlated tool, custom, and summary lifecycle state into one coherent Markdown-capable transcript; keeps thinking/tool expansion as local presentation state; dispatches one effective command registry before prompt interpretation; derives command autocomplete and help from that registry; opens the supported theme-settings and effective-hotkeys overlays; submits unmatched idle input asynchronously; routes active-run Enter and Alt+Enter directly to Agent Session steering and follow-up admission; visibly presents Agent-owned pending queues and restores them to the editor through the baseline dequeue action; routes the effective interrupt binding to one idempotent Agent Session abort request after editor/autocomplete handling; waits for abort quiescence before accepting another prompt or restoring the terminal; and restores Virtual or Process Terminals on exit. It is exercised directly by fake-provider and persisted-session integration tests but is not selected by the public CLI before #64; SDK, text, JSON, and RPC paths do not link it.
+- `cch_coding_agent_interactive` (`src/coding_agent/tui/InteractiveMode.*`): the private Native TUI composition that connects a real Agent Session to the reusable TUI, Editor, themes, and effective keybindings. It renders the initial Agent Session snapshot before focusing input; reduces user, assistant text/thinking, correlated tool, custom, and summary lifecycle state into one coherent Markdown-capable transcript; composes shared message images through stable reusable `cch::tui::Image` instances in source order; keeps thinking/tool expansion as local presentation state; dispatches one effective command registry before prompt interpretation; derives command autocomplete and help from that registry; opens the supported theme-settings and effective-hotkeys overlays; submits unmatched idle input asynchronously; routes active-run Enter and Alt+Enter directly to Agent Session steering and follow-up admission; visibly presents Agent-owned pending queues and restores them to the editor through the baseline dequeue action; routes the effective interrupt binding to one idempotent Agent Session abort request after editor/autocomplete handling; waits for abort quiescence before accepting another prompt or restoring the terminal; and restores Virtual or Process Terminals on exit. When an asynchronous clipboard reader is injected, its paste action writes sniffed PNG/JPEG/GIF/WebP bytes to a unique `pi-clipboard-<UUID>.<ext>` file under the OS temporary directory and inserts only that path at the editor cursor, falling back silently to clipboard text. The paste handler intentionally does not delete successful files or create attachment preview/removal state. The composition is exercised directly by fake-provider and persisted-session integration tests but is not selected by the public CLI before #64; SDK, text, JSON, and RPC paths do not link it.
 - `cch_ai` (`include/cch/ai`, `src/ai`): passive message/content/tool/context contracts, provider-neutral stream events, provider registry, OpenAICompletionsCompat flags, OpenAI-compatible provider, scripted fake provider, and prompt cancellation propagation through provider transport; SSE and Glaze provider mapping live under `src/ai/`.
 - `cch_agent` (`include/cch/agent`, `src/agent`): public stateful `Agent` ownership of live message history, model/thinking/tool state, weak move-only subscriptions with bounded diagnostics, passive state snapshots, one active run, and the strong per-run commitment seam used by Agent Session persistence. The package also owns async tool registration, private Tool Argument Contract preparation, expected-style tool execution, pi-ordered prepare/stop/steering/follow-up policy seams, and sequential/bounded-parallel tool execution policy.
 - `cch_harness` (`include/cch/harness`, `src/harness`): pi-shaped filesystem and shell execution capability contracts (`FileSystem`/`Shell`), local implementation with workspace containment, symlink safety, atomic writes, split-stream process execution, secret environment filtering, and JSONL/in-memory Session Store implementations.
@@ -481,6 +488,6 @@ These cover:
 
 ## Deferred
 
-Not included yet: public Native TUI frontend selection and its later image-input and production-promotion slices; extensions; packages; global/config-driven skill directories; live skill reload; OAuth; full pi RPC command parity; MCP integration; permission prompts; native Windows shell process-tree termination semantics; subagents; C++26 reflection-generated schema; `std::execution` senders/receivers; ABI-stable binary distribution; or OS-level sandboxing.
+Not included yet: public Native TUI frontend selection and its production-promotion slice; extensions; packages; global/config-driven skill directories; live skill reload; OAuth; full pi RPC command parity; MCP integration; permission prompts; native Windows shell process-tree termination semantics; subagents; C++26 reflection-generated schema; `std::execution` senders/receivers; ABI-stable binary distribution; or OS-level sandboxing.
 
 An experimental same-process embeddable C++ SDK surface is available (see Embeddable C++ SDK section above). Full pi SDK parity (session replacement runtime, concurrent prompts, compaction, ABI stability) is deferred.

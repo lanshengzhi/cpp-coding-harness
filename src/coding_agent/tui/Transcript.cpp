@@ -2,6 +2,7 @@
 
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
+#include <cch/tui/Image.hpp>
 #include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Markdown.hpp>
 #include <cch/tui/Text.hpp>
@@ -57,22 +58,6 @@ using TranscriptItemVariant = std::variant<MessageItem, ToolItem, FrontendItem, 
 
 [[nodiscard]] std::string safe_text(std::string text) {
     return bounded_redacted_presentation(std::move(text));
-}
-
-[[nodiscard]] std::string content_text(const std::vector<ai::Content>& content) {
-    std::string text;
-    for (const auto& block : content) {
-        if (!text.empty()) text.push_back('\n');
-        if (const auto* value = std::get_if<ai::TextContent>(&block)) {
-            text += value->text;
-        } else if (const auto* image = std::get_if<ai::ImageContent>(&block)) {
-            text += std::format("[Image: {}]", image->mime_type);
-        } else {
-            const auto& thinking = std::get<ai::ThinkingContent>(block);
-            text += thinking.redacted ? "[Redacted thinking]" : thinking.thinking;
-        }
-    }
-    return safe_text(std::move(text));
 }
 
 [[nodiscard]] std::string preserve_markdown_line_breaks(std::string text) {
@@ -190,6 +175,21 @@ void append_lines(std::vector<std::string>& destination, std::vector<std::string
         std::make_move_iterator(lines.end()));
 }
 
+void append_render_result(
+    cch::tui::RenderResult& destination,
+    cch::tui::RenderResult source) {
+    const auto row_offset = destination.lines.size();
+    for (auto& image : source.images) {
+        image.region.row += row_offset;
+        destination.images.push_back(std::move(image));
+    }
+    append_lines(destination.lines, std::move(source.lines));
+}
+
+[[nodiscard]] cch::tui::RenderResult lines_result(std::vector<std::string> lines) {
+    return cch::tui::RenderResult{.lines = std::move(lines), .images = {}};
+}
+
 [[nodiscard]] std::string provider_outcome(const ai::AssistantMessage& message) {
     const bool has_tool_calls = std::ranges::any_of(
         message.content,
@@ -234,6 +234,12 @@ void append_lines(std::vector<std::string>& destination, std::vector<std::string
 } // namespace
 
 struct Transcript::Impl {
+    struct ImageSlot {
+        std::unique_ptr<cch::tui::Image> component;
+        std::string data;
+        std::string mime_type;
+    };
+
     Impl(
         const LiveTheme& configured_theme,
         const cch::tui::KeybindingRegistry& configured_keybindings)
@@ -247,6 +253,7 @@ struct Transcript::Impl {
     void clear() {
         items.clear();
         tool_items.clear();
+        image_slots.clear();
         active_assistant_item.reset();
     }
 
@@ -362,37 +369,136 @@ struct Transcript::Impl {
         if (finalize) active_assistant_item.reset();
     }
 
-    [[nodiscard]] util::Expected<std::vector<std::string>> render_message(
+    [[nodiscard]] util::Expected<cch::tui::RenderResult> render_image(
+        std::string key,
+        const ai::ImageContent& image,
+        std::size_t width,
+        ThemeToken fallback_token) const {
+        auto found = image_slots.find(key);
+        if (found == image_slots.end()) {
+            auto component = std::make_unique<cch::tui::Image>(
+                cch::tui::ImageContent{
+                    .encoded_data = image.data,
+                    .mime_type = image.mime_type,
+                    .filename = std::nullopt,
+                },
+                cch::tui::ImageOptions{
+                    .constraints = {
+                        .max_width = 60,
+                        .max_height = std::nullopt,
+                    },
+                    .fallback_style = theme.foreground_hook(fallback_token),
+                });
+            auto slot = std::make_unique<ImageSlot>(ImageSlot{
+                .component = std::move(component),
+                .data = image.data,
+                .mime_type = image.mime_type,
+            });
+            found = image_slots.emplace(std::move(key), std::move(slot)).first;
+        } else if (found->second->data != image.data ||
+            found->second->mime_type != image.mime_type) {
+            found->second->component->set_content(cch::tui::ImageContent{
+                .encoded_data = image.data,
+                .mime_type = image.mime_type,
+                .filename = std::nullopt,
+            });
+            found->second->data = image.data;
+            found->second->mime_type = image.mime_type;
+        }
+        return found->second->component->render(width);
+    }
+
+    [[nodiscard]] util::Expected<cch::tui::RenderResult> render_content(
+        const std::vector<ai::Content>& content,
+        std::string label,
+        std::size_t width,
+        ThemeToken text_token,
+        std::optional<ThemeToken> background,
+        const std::string& key_prefix) const {
+        cch::tui::RenderResult result;
+        bool label_rendered = false;
+        for (std::size_t index = 0; index < content.size(); ++index) {
+            const auto& block = content[index];
+            if (const auto* image = std::get_if<ai::ImageContent>(&block)) {
+                if (!label_rendered) {
+                    auto rendered_label = render_markdown(
+                        theme, label, width, text_token, background);
+                    if (!rendered_label) return std::unexpected(rendered_label.error());
+                    append_lines(result.lines, std::move(*rendered_label));
+                    label_rendered = true;
+                }
+                auto rendered_image = render_image(
+                    std::format("{}/image/{}", key_prefix, index),
+                    *image,
+                    width,
+                    text_token);
+                if (!rendered_image) return std::unexpected(rendered_image.error());
+                append_render_result(result, std::move(*rendered_image));
+                continue;
+            }
+
+            std::string text;
+            if (const auto* value = std::get_if<ai::TextContent>(&block)) {
+                text = value->text;
+            } else {
+                const auto& thinking = std::get<ai::ThinkingContent>(block);
+                text = thinking.redacted ? "[Redacted thinking]" : thinking.thinking;
+            }
+            if (text.empty()) continue;
+            if (!label_rendered) {
+                text = label + " " + text;
+                label_rendered = true;
+            }
+            auto rendered = render_markdown(
+                theme,
+                preserve_markdown_line_breaks(std::move(text)),
+                width,
+                text_token,
+                background);
+            if (!rendered) return std::unexpected(rendered.error());
+            append_lines(result.lines, std::move(*rendered));
+        }
+        if (!label_rendered) {
+            auto rendered = render_markdown(theme, std::move(label), width, text_token, background);
+            if (!rendered) return std::unexpected(rendered.error());
+            append_lines(result.lines, std::move(*rendered));
+        }
+        return result;
+    }
+
+    [[nodiscard]] util::Expected<cch::tui::RenderResult> render_message(
         const MessageItem& message_item,
-        std::size_t width) const {
+        std::size_t width,
+        const std::string& key_prefix) const {
         const auto& message = message_item.message;
         if (const auto* system = std::get_if<ai::SystemMessage>(&message)) {
-            return render_markdown(theme, "**System:** " + system->content, width, ThemeToken::Dim);
+            auto rendered = render_markdown(
+                theme, "**System:** " + system->content, width, ThemeToken::Dim);
+            if (!rendered) return std::unexpected(rendered.error());
+            return lines_result(std::move(*rendered));
         }
         if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
-            return render_markdown(
-                theme,
-                "**You:** " + content_text(user->content),
+            return render_content(
+                user->content,
+                "**You:**",
                 width,
                 ThemeToken::UserMessageText,
-                ThemeToken::UserMessageBg);
+                ThemeToken::UserMessageBg,
+                key_prefix);
         }
         if (const auto* assistant = std::get_if<ai::AssistantMessage>(&message)) {
-            std::vector<std::string> lines;
+            cch::tui::RenderResult result;
             std::size_t tool_position = 0;
             for (const auto& block : assistant->content) {
                 if (const auto* text = std::get_if<ai::TextContent>(&block);
                     text != nullptr && !text->text.empty()) {
-                    if (auto rendered = render_markdown(
-                            theme,
-                            "**Assistant:** " + preserve_markdown_line_breaks(text->text),
-                            width,
-                            ThemeToken::Text);
-                        !rendered) {
-                        return std::unexpected(rendered.error());
-                    } else {
-                        append_lines(lines, std::move(*rendered));
-                    }
+                    auto rendered = render_markdown(
+                        theme,
+                        "**Assistant:** " + preserve_markdown_line_breaks(text->text),
+                        width,
+                        ThemeToken::Text);
+                    if (!rendered) return std::unexpected(rendered.error());
+                    append_lines(result.lines, std::move(*rendered));
                 } else if (const auto* thinking = std::get_if<ai::ThinkingContent>(&block);
                     thinking != nullptr && (thinking->redacted || !thinking->thinking.empty())) {
                     const auto thinking_key = key_hint("app.thinking.toggle");
@@ -400,47 +506,37 @@ struct Transcript::Impl {
                         ? "[Redacted thinking]"
                         : thinking_expanded
                             ? safe_text(thinking->thinking)
-                            : std::format(
-                                "(collapsed; {} to expand)",
-                                thinking_key);
-                    if (auto rendered = render_markdown(
-                            theme,
-                            "**Thinking:** " + preserve_markdown_line_breaks(body),
-                            width,
-                            ThemeToken::ThinkingText);
-                        !rendered) {
-                        return std::unexpected(rendered.error());
-                    } else {
-                        append_lines(lines, std::move(*rendered));
-                    }
+                            : std::format("(collapsed; {} to expand)", thinking_key);
+                    auto rendered = render_markdown(
+                        theme,
+                        "**Thinking:** " + preserve_markdown_line_breaks(body),
+                        width,
+                        ThemeToken::ThinkingText);
+                    if (!rendered) return std::unexpected(rendered.error());
+                    append_lines(result.lines, std::move(*rendered));
                 } else if (std::holds_alternative<ai::ToolCallContent>(block) &&
                     tool_position < message_item.tools.size()) {
-                    if (auto rendered = render_tool(
-                            *message_item.tools[tool_position++],
-                            width);
-                        !rendered) {
-                        return std::unexpected(rendered.error());
-                    } else {
-                        append_lines(lines, std::move(*rendered));
-                    }
+                    auto rendered = render_tool(
+                        *message_item.tools[tool_position++],
+                        width,
+                        key_prefix + "/tool");
+                    if (!rendered) return std::unexpected(rendered.error());
+                    append_render_result(result, std::move(*rendered));
                 }
             }
             const auto outcome = provider_outcome(*assistant);
             if (!outcome.empty()) {
-                if (auto rendered = render_plain(theme, outcome, width, ThemeToken::Error);
-                    !rendered) {
-                    return std::unexpected(rendered.error());
-                } else {
-                    append_lines(lines, std::move(*rendered));
-                }
+                auto rendered = render_plain(theme, outcome, width, ThemeToken::Error);
+                if (!rendered) return std::unexpected(rendered.error());
+                append_lines(result.lines, std::move(*rendered));
             }
-            return lines;
+            return result;
         }
         if (const auto* bash = std::get_if<ai::BashExecutionMessage>(&message)) {
             auto output = tools_expanded
                 ? safe_text(bash->output)
                 : collapsed_text(bash->output, key_hint("app.tools.expand"));
-            return render_plain(
+            auto rendered = render_plain(
                 theme,
                 std::format(
                     "Bash {}: {}\n{}",
@@ -454,34 +550,36 @@ struct Transcript::Impl {
                 bash->cancelled || (bash->exit_code && *bash->exit_code != 0)
                     ? ThemeToken::ToolErrorBg
                     : ThemeToken::ToolSuccessBg);
+            if (!rendered) return std::unexpected(rendered.error());
+            return lines_result(std::move(*rendered));
         }
         if (const auto* custom = std::get_if<ai::CustomMessage>(&message)) {
-            return render_markdown(
-                theme,
-                std::format(
-                    "**Custom {}:** {}",
-                    custom->custom_type,
-                    content_text(custom->content)),
+            return render_content(
+                custom->content,
+                std::format("**Custom {}:**", custom->custom_type),
                 width,
                 ThemeToken::CustomMessageText,
-                ThemeToken::CustomMessageBg);
+                ThemeToken::CustomMessageBg,
+                key_prefix);
         }
         if (const auto* branch = std::get_if<ai::BranchSummaryMessage>(&message)) {
             auto summary = tools_expanded
                 ? safe_text(branch->summary)
                 : collapsed_text(branch->summary, key_hint("app.tools.expand"));
-            return render_markdown(
+            auto rendered = render_markdown(
                 theme,
                 "**Branch summary:** " + summary,
                 width,
                 ThemeToken::CustomMessageText,
                 ThemeToken::CustomMessageBg);
+            if (!rendered) return std::unexpected(rendered.error());
+            return lines_result(std::move(*rendered));
         }
         const auto& compaction = std::get<ai::CompactionSummaryMessage>(message);
         auto summary = tools_expanded
             ? safe_text(compaction.summary)
             : collapsed_text(compaction.summary, key_hint("app.tools.expand"));
-        return render_markdown(
+        auto rendered = render_markdown(
             theme,
             std::format(
                 "**Compaction summary:** {} tokens\n{}",
@@ -490,11 +588,14 @@ struct Transcript::Impl {
             width,
             ThemeToken::CustomMessageText,
             ThemeToken::CustomMessageBg);
+        if (!rendered) return std::unexpected(rendered.error());
+        return lines_result(std::move(*rendered));
     }
 
-    [[nodiscard]] util::Expected<std::vector<std::string>> render_tool(
+    [[nodiscard]] util::Expected<cch::tui::RenderResult> render_tool(
         const ToolItem& item,
-        std::size_t width) const {
+        std::size_t width,
+        const std::string& key_prefix) const {
         const auto status = item.status == ToolStatus::Pending
             ? "pending"
             : item.status == ToolStatus::Success ? "success" : "failed";
@@ -503,49 +604,92 @@ struct Transcript::Impl {
             : item.status == ToolStatus::Success
                 ? ThemeToken::ToolSuccessBg
                 : ThemeToken::ToolErrorBg;
-        std::string text = std::format("Tool {}: {}#{}", status, item.name, item.call_id);
+        std::string header = std::format("Tool {}: {}#{}", status, item.name, item.call_id);
         if (!item.arguments.empty()) {
             const auto arguments = tools_expanded
                 ? safe_text(item.arguments)
                 : collapsed_text(item.arguments, key_hint("app.tools.expand"));
-            text += "\nTool arguments: " + arguments;
+            header += "\nTool arguments: " + arguments;
         }
-        if (!item.result.empty()) {
-            auto result = content_text(item.result);
-            if (!tools_expanded) {
-                result = collapsed_text(
-                    std::move(result),
-                    key_hint("app.tools.expand"));
+
+        auto rendered_header = render_plain(
+            theme, std::move(header), width, ThemeToken::ToolOutput, background);
+        if (!rendered_header) return std::unexpected(rendered_header.error());
+        cch::tui::RenderResult result = lines_result(std::move(*rendered_header));
+        bool result_label_rendered = false;
+        for (std::size_t index = 0; index < item.result.size(); ++index) {
+            const auto& block = item.result[index];
+            if (const auto* image = std::get_if<ai::ImageContent>(&block)) {
+                if (!result_label_rendered) {
+                    auto label = render_plain(
+                        theme, "Tool result:", width, ThemeToken::ToolOutput, background);
+                    if (!label) return std::unexpected(label.error());
+                    append_lines(result.lines, std::move(*label));
+                    result_label_rendered = true;
+                }
+                auto rendered_image = render_image(
+                    std::format("{}/{}/image/{}", key_prefix, item.call_id, index),
+                    *image,
+                    width,
+                    ThemeToken::ToolOutput);
+                if (!rendered_image) return std::unexpected(rendered_image.error());
+                append_render_result(result, std::move(*rendered_image));
+                continue;
             }
-            text += "\nTool result: " + result;
+
+            std::string text;
+            if (const auto* value = std::get_if<ai::TextContent>(&block)) {
+                text = value->text;
+            } else {
+                const auto& thinking = std::get<ai::ThinkingContent>(block);
+                text = thinking.redacted ? "[Redacted thinking]" : thinking.thinking;
+            }
+            if (!tools_expanded) {
+                text = collapsed_text(std::move(text), key_hint("app.tools.expand"));
+            }
+            if (!result_label_rendered) {
+                text = "Tool result: " + text;
+                result_label_rendered = true;
+            }
+            auto rendered = render_plain(
+                theme, std::move(text), width, ThemeToken::ToolOutput, background);
+            if (!rendered) return std::unexpected(rendered.error());
+            append_lines(result.lines, std::move(*rendered));
         }
-        return render_plain(theme, std::move(text), width, ThemeToken::ToolOutput, background);
+        return result;
     }
 
-    [[nodiscard]] util::Expected<std::vector<std::string>> render_item(
+    [[nodiscard]] util::Expected<cch::tui::RenderResult> render_item(
         const TranscriptItemVariant& item,
-        std::size_t width) const {
+        std::size_t width,
+        std::size_t item_index) const {
+        const auto key_prefix = std::format("item/{}", item_index);
         if (const auto* message = std::get_if<MessageItem>(&item)) {
-            return render_message(*message, width);
+            return render_message(*message, width, key_prefix);
         }
         if (const auto* tool = std::get_if<ToolItem>(&item)) {
-            if (tool->embedded) return std::vector<std::string>{};
-            return render_tool(*tool, width);
+            if (tool->embedded) return cch::tui::RenderResult{};
+            return render_tool(*tool, width, key_prefix + "/tool");
         }
         if (const auto* frontend = std::get_if<FrontendItem>(&item)) {
-            return render_plain(theme, frontend->text, width, ThemeToken::Text);
+            auto rendered = render_plain(theme, frontend->text, width, ThemeToken::Text);
+            if (!rendered) return std::unexpected(rendered.error());
+            return lines_result(std::move(*rendered));
         }
-        return render_plain(
+        auto rendered = render_plain(
             theme,
             "Error: " + std::get<DiagnosticItem>(item).text,
             width,
             ThemeToken::Error);
+        if (!rendered) return std::unexpected(rendered.error());
+        return lines_result(std::move(*rendered));
     }
 
     const LiveTheme& theme; // must outlive this presentation reducer.
     const cch::tui::KeybindingRegistry& keybindings; // must outlive this presentation reducer.
     std::deque<TranscriptItemVariant> items;
     std::unordered_map<std::string, std::size_t> tool_items;
+    mutable std::unordered_map<std::string, std::unique_ptr<ImageSlot>> image_slots;
     std::optional<std::size_t> active_assistant_item;
     bool tools_expanded{false};
     bool thinking_expanded{true};
@@ -639,16 +783,14 @@ void Transcript::toggle_thinking() {
     impl_->thinking_expanded = !impl_->thinking_expanded;
 }
 
-util::Expected<std::vector<std::string>> Transcript::render(std::size_t width) const {
-    std::vector<std::string> lines;
-    for (const auto& item : impl_->items) {
-        if (auto rendered = impl_->render_item(item, width); !rendered) {
-            return std::unexpected(rendered.error());
-        } else {
-            append_lines(lines, std::move(*rendered));
-        }
+util::Expected<cch::tui::RenderResult> Transcript::render(std::size_t width) const {
+    cch::tui::RenderResult result;
+    for (std::size_t index = 0; index < impl_->items.size(); ++index) {
+        auto rendered = impl_->render_item(impl_->items[index], width, index);
+        if (!rendered) return std::unexpected(rendered.error());
+        append_render_result(result, std::move(*rendered));
     }
-    return lines;
+    return result;
 }
 
 } // namespace cch::coding_agent::tui

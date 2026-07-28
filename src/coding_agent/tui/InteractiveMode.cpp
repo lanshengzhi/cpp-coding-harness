@@ -12,11 +12,13 @@
 
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/CommandRegistry.hpp"
+#include "coding_agent/ImageInput.hpp"
 #include "coding_agent/prompt/SlashCommandParser.hpp"
 #include "coding_agent/tui/KeybindingCatalog.hpp"
 #include "coding_agent/tui/KeybindingHelp.hpp"
 #include "coding_agent/tui/ThemeCatalog.hpp"
 #include "coding_agent/tui/Transcript.hpp"
+#include "harness/UniqueFd.hpp"
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -31,19 +33,29 @@
 #include <atomic>
 #include <chrono>
 #include <cctype>
+#include <cmath>
 #include <exception>
+#include <filesystem>
 #include <format>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <random>
 #include <set>
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <variant>
 #include <vector>
+
+#if defined(__unix__) || defined(__APPLE__)
+#include <cerrno>
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 namespace cch::coding_agent::tui {
 namespace {
@@ -88,6 +100,146 @@ struct InteractiveStartupDiagnostics {
     }).base();
     if (first >= last) return {};
     return {first, last};
+}
+
+[[nodiscard]] std::string clipboard_uuid() {
+    std::random_device random;
+    std::array<std::uint8_t, 16> bytes{};
+    for (auto& byte : bytes) byte = static_cast<std::uint8_t>(random());
+    bytes[6] = static_cast<std::uint8_t>((bytes[6] & 0x0fU) | 0x40U);
+    bytes[8] = static_cast<std::uint8_t>((bytes[8] & 0x3fU) | 0x80U);
+
+    std::string value;
+    for (std::size_t index = 0; index < bytes.size(); ++index) {
+        if (index == 4 || index == 6 || index == 8 || index == 10) value.push_back('-');
+        value += std::format("{:02x}", bytes[index]);
+    }
+    return value;
+}
+
+[[nodiscard]] util::Expected<std::filesystem::path> write_clipboard_image(
+    std::span<const std::uint8_t> bytes,
+    std::string_view extension) {
+#if defined(__unix__) || defined(__APPLE__)
+    std::error_code temp_error;
+    const auto temp_directory = std::filesystem::temp_directory_path(temp_error);
+    if (temp_error || temp_directory.empty()) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Process,
+            "clipboard temporary directory is unavailable",
+            temp_error.message()));
+    }
+
+    for (std::size_t attempt = 0; attempt < 16; ++attempt) {
+        std::filesystem::path path;
+        try {
+            path = temp_directory /
+                std::format("pi-clipboard-{}{}", clipboard_uuid(), extension);
+        } catch (const std::exception& error) {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Process,
+                "could not generate a clipboard image path",
+                error.what()));
+        } catch (...) {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Process,
+                "could not generate a clipboard image path"));
+        }
+        harness::UniqueFd fd(::open(
+            path.c_str(),
+            O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
+            0600));
+        if (!fd) {
+            if (errno == EEXIST) continue;
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Process,
+                "could not create clipboard image file",
+                std::error_code(errno, std::generic_category()).message()));
+        }
+
+        std::size_t written = 0;
+        while (written < bytes.size()) {
+            const auto count = ::write(
+                fd.get(),
+                bytes.data() + written,
+                bytes.size() - written);
+            if (count < 0 && errno == EINTR) continue;
+            if (count <= 0) {
+                const auto write_error = errno;
+                (void)fd.close();
+                std::error_code remove_error;
+                std::filesystem::remove(path, remove_error);
+                return std::unexpected(util::make_error(
+                    util::ErrorCode::Process,
+                    "could not write clipboard image file",
+                    std::error_code(write_error, std::generic_category()).message()));
+            }
+            written += static_cast<std::size_t>(count);
+        }
+        if (fd.close() != 0) {
+            const auto close_error = errno;
+            std::error_code remove_error;
+            std::filesystem::remove(path, remove_error);
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Process,
+                "could not finish clipboard image file",
+                std::error_code(close_error, std::generic_category()).message()));
+        }
+        return path;
+    }
+    return std::unexpected(util::make_error(
+        util::ErrorCode::Process,
+        "could not allocate a unique clipboard image path"));
+#else
+    (void)bytes;
+    (void)extension;
+    return std::unexpected(util::make_error(
+        util::ErrorCode::Process,
+        "clipboard image files are unavailable on this platform"));
+#endif
+}
+
+[[nodiscard]] bool protocol_supports_image(
+    cch::tui::InlineImageProtocol protocol,
+    std::string_view mime_type) {
+    if (protocol == cch::tui::InlineImageProtocol::Kitty) return mime_type == "image/png";
+    if (protocol == cch::tui::InlineImageProtocol::ITerm2) {
+        return mime_type == "image/png" || mime_type == "image/jpeg" ||
+            mime_type == "image/gif" || mime_type == "image/webp";
+    }
+    return false;
+}
+
+[[nodiscard]] std::size_t estimated_image_rows(
+    const cch::tui::InlineImageRenderRegion& image,
+    const cch::tui::TerminalCapabilities& capabilities,
+    std::size_t width) {
+    if (!capabilities.cell_pixels || capabilities.cell_pixels->width == 0 ||
+        capabilities.cell_pixels->height == 0 ||
+        !protocol_supports_image(capabilities.inline_images, image.mime_type) ||
+        image.pixel_width == 0 || image.pixel_height == 0 || image.region.column >= width) {
+        return 1;
+    }
+    const auto available_width = width - image.region.column;
+    const auto default_width = std::min<std::size_t>(width > 2 ? width - 2 : 1, 60);
+    const auto max_width = std::max<std::size_t>(
+        1,
+        std::min(available_width, image.max_width.value_or(default_width)));
+    const auto& cells = *capabilities.cell_pixels;
+    const auto default_height = std::max<std::size_t>(
+        1,
+        (max_width * cells.width + cells.height - 1) / cells.height);
+    const auto max_height = std::max<std::size_t>(
+        1, image.max_height.value_or(default_height));
+    const auto width_scale =
+        static_cast<long double>(max_width * cells.width) / image.pixel_width;
+    const auto height_scale =
+        static_cast<long double>(max_height * cells.height) / image.pixel_height;
+    const auto scale = std::min(width_scale, height_scale);
+    return std::max<std::size_t>(
+        1,
+        std::min(max_height, static_cast<std::size_t>(std::ceil(
+            static_cast<long double>(image.pixel_height) * scale / cells.height))));
 }
 
 [[nodiscard]] std::optional<std::string> queued_editor_text(
@@ -285,16 +437,20 @@ public:
         ActionSink on_invalidate,
         SubmitSink on_submit,
         SubmitSink on_follow_up,
+        ActionSink on_clipboard_paste,
         ActionSink on_dequeue,
         ActionSink on_interrupt,
         ActionSink on_exit,
         PromptActiveHook prompt_active,
         std::vector<cch::tui::AutocompleteItem> autocomplete_items,
+        cch::tui::TerminalCapabilities terminal_capabilities,
         const LiveTheme& theme)
         : keybindings_(std::move(keybindings)),
+          terminal_capabilities_(std::move(terminal_capabilities)),
           on_invalidate_(std::move(on_invalidate)),
           on_submit_(std::move(on_submit)),
           on_follow_up_(std::move(on_follow_up)),
+          on_clipboard_paste_(std::move(on_clipboard_paste)),
           on_dequeue_(std::move(on_dequeue)),
           on_interrupt_(std::move(on_interrupt)),
           on_exit_(std::move(on_exit)),
@@ -345,6 +501,11 @@ public:
     void restore_submitted_text(const std::string& text) {
         std::lock_guard lock(mutex_);
         restore_editor_text({text});
+    }
+
+    void insert_editor_text(std::string text) {
+        std::lock_guard lock(mutex_);
+        editor_.insert_text_at_cursor(std::move(text));
     }
 
     void restore_queued_text(const std::vector<std::string>& messages) {
@@ -451,34 +612,64 @@ public:
                 pending_lines.end() - static_cast<std::ptrdiff_t>(pending_capacity));
         }
 
-        std::vector<std::string> transcript_lines;
+        cch::tui::RenderResult transcript_result;
         const auto occupied_rows = editor_occupied_rows + pending_lines.size();
         if (available_rows_ > occupied_rows) {
             const auto capacity = available_rows_ - occupied_rows;
-            if (auto rendered = transcript_.render(width); !rendered) {
-                return std::unexpected(rendered.error());
-            } else {
-                const auto take = std::min(capacity, rendered->size());
-                transcript_lines.assign(
-                    rendered->end() - static_cast<std::ptrdiff_t>(take),
-                    rendered->end());
+            auto rendered = transcript_.render(width);
+            if (!rendered) return std::unexpected(rendered.error());
+
+            std::vector<std::size_t> materialized_rows(rendered->lines.size(), 1);
+            for (const auto& image : rendered->images) {
+                if (image.region.row >= materialized_rows.size()) continue;
+                materialized_rows[image.region.row] +=
+                    estimated_image_rows(image, terminal_capabilities_, width) - 1;
+            }
+
+            auto first_row = rendered->lines.size();
+            std::size_t used_rows = 0;
+            std::optional<std::size_t> fallback_only_row;
+            while (first_row > 0) {
+                const auto candidate_row = first_row - 1;
+                const auto row_cost = materialized_rows[candidate_row];
+                if (row_cost > capacity - used_rows) {
+                    if (used_rows < capacity) {
+                        first_row = candidate_row;
+                        fallback_only_row = candidate_row;
+                    }
+                    break;
+                }
+                first_row = candidate_row;
+                used_rows += row_cost;
+            }
+            transcript_result.lines.assign(
+                rendered->lines.begin() + static_cast<std::ptrdiff_t>(first_row),
+                rendered->lines.end());
+            for (auto& image : rendered->images) {
+                const auto image_end = image.region.row + image.region.rows;
+                if (image.region.row < first_row || image_end > rendered->lines.size() ||
+                    (fallback_only_row && image.region.row == *fallback_only_row)) {
+                    continue;
+                }
+                image.region.row -= first_row;
+                transcript_result.images.push_back(std::move(image));
             }
         }
 
-        transcript_lines.insert(
-            transcript_lines.end(),
+        transcript_result.lines.insert(
+            transcript_result.lines.end(),
             std::make_move_iterator(pending_lines.begin()),
             std::make_move_iterator(pending_lines.end()));
-        editor_row_offset_ = transcript_lines.size();
-        transcript_lines.insert(
-            transcript_lines.end(),
+        editor_row_offset_ = transcript_result.lines.size();
+        transcript_result.lines.insert(
+            transcript_result.lines.end(),
             std::make_move_iterator(editor_lines.begin()),
             std::make_move_iterator(editor_lines.end()));
-        transcript_lines.insert(
-            transcript_lines.end(),
+        transcript_result.lines.insert(
+            transcript_result.lines.end(),
             std::make_move_iterator(autocomplete_lines.begin()),
             std::make_move_iterator(autocomplete_lines.end()));
-        return cch::tui::RenderResult{.lines = std::move(transcript_lines)};
+        return transcript_result;
     }
 
     void invalidate() override {
@@ -505,6 +696,12 @@ public:
             }
             if (keybindings_->matches(*key, "app.message.followUp")) {
                 invoke_follow_up();
+                return;
+            }
+            if (keybindings_->matches(*key, "app.clipboard.pasteImage")) {
+                invoke_action(
+                    on_clipboard_paste_,
+                    "Native TUI clipboard callback failed");
                 return;
             }
             if (keybindings_->matches(*key, "app.message.dequeue")) {
@@ -638,9 +835,11 @@ private:
     }
 
     std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings_;
+    cch::tui::TerminalCapabilities terminal_capabilities_;
     ActionSink on_invalidate_;
     SubmitSink on_submit_;
     SubmitSink on_follow_up_;
+    ActionSink on_clipboard_paste_;
     ActionSink on_dequeue_;
     ActionSink on_interrupt_;
     ActionSink on_exit_;
@@ -675,6 +874,7 @@ public:
     InteractiveState& operator=(const InteractiveState&) = delete;
 
     [[nodiscard]] util::ExpectedVoid start(InteractiveModeConfig config) {
+        clipboard_reader_ = std::move(config.clipboard_reader);
         if (auto registered = register_commands(); !registered) {
             return fail_start(registered.error());
         }
@@ -749,7 +949,7 @@ private:
     [[nodiscard]] util::Expected<InteractiveStartupDiagnostics> load_startup_resources(
         const InteractiveModeConfig& config) {
         InteractiveStartupDiagnostics diagnostics;
-        constexpr std::array<std::string_view, 7> kActions{
+        std::vector<std::string_view> actions{
             "app.interrupt",
             "app.clear",
             "app.exit",
@@ -758,7 +958,8 @@ private:
             "app.message.followUp",
             "app.message.dequeue",
         };
-        if (auto definitions = baseline_application_keybindings(kActions, config.platform); !definitions) {
+        if (clipboard_reader_) actions.push_back("app.clipboard.pasteImage");
+        if (auto definitions = baseline_application_keybindings(actions, config.platform); !definitions) {
             return std::unexpected(definitions.error());
         } else {
             KeybindingCatalogRequest request;
@@ -822,6 +1023,9 @@ private:
                 }
             },
             [weak] {
+                if (const auto self = weak.lock()) self->post_clipboard_paste();
+            },
+            [weak] {
                 if (const auto self = weak.lock()) self->post_dequeue();
             },
             [weak] {
@@ -835,6 +1039,7 @@ private:
                 return false;
             },
             command_autocomplete_items(commands_, session_.templates(), session_.skills()),
+            terminal_.capabilities(),
             theme_controller_->live_theme());
     }
 
@@ -898,6 +1103,98 @@ private:
         boost::asio::post(executor_, [weak, text = std::move(text), submission]() mutable {
             if (const auto self = weak.lock()) self->submit(std::move(text), submission);
         });
+    }
+
+    void post_clipboard_paste() {
+        const auto weak = weak_from_this();
+        boost::asio::post(executor_, [weak] {
+            const auto self = weak.lock();
+            if (!self || !self->running_ || self->clipboard_reader_ == nullptr ||
+                self->clipboard_read_active_) {
+                return;
+            }
+            self->clipboard_read_active_ = true;
+            boost::asio::co_spawn(
+                self->executor_,
+                self->paste_from_clipboard(),
+                [weak](std::exception_ptr exception, util::ExpectedVoid result) {
+                    const auto state = weak.lock();
+                    if (!state) return;
+                    state->clipboard_read_active_ = false;
+                    std::optional<util::Error> ignored_failure;
+                    if (exception) {
+                        try {
+                            std::rethrow_exception(exception);
+                        } catch (const std::exception& error) {
+                            ignored_failure = util::make_error(
+                                util::ErrorCode::Unknown,
+                                "clipboard paste failed",
+                                error.what());
+                        } catch (...) {
+                            ignored_failure = util::make_error(
+                                util::ErrorCode::Unknown,
+                                "clipboard paste failed");
+                        }
+                    } else if (!result) {
+                        ignored_failure = std::move(result.error());
+                    }
+                    // Baseline clipboard failures are intentionally silent.
+                    (void)ignored_failure;
+                });
+        });
+    }
+
+    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> paste_from_clipboard() {
+        try {
+            auto image = co_await clipboard_reader_->read_image();
+            if (image && *image && !(*image)->bytes.empty()) {
+                const auto mime_type = sniff_supported_image_mime_type((*image)->bytes);
+                const auto extension = mime_type
+                    ? extension_for_image_mime_type(*mime_type)
+                    : std::nullopt;
+                if (extension) {
+                    const auto path = write_clipboard_image((*image)->bytes, *extension);
+                    if (path) {
+                        if (running_ && view_ != nullptr) {
+                            view_->insert_editor_text(path->string());
+                            tui_.invalidate();
+                        }
+                        co_return util::ExpectedVoid{};
+                    }
+                }
+            }
+        } catch (const std::exception& error) {
+            const auto ignored = util::make_error(
+                util::ErrorCode::Unknown,
+                "clipboard image read failed",
+                error.what());
+            (void)ignored;
+        } catch (...) {
+            const auto ignored = util::make_error(
+                util::ErrorCode::Unknown,
+                "clipboard image read failed");
+            (void)ignored;
+        }
+
+        try {
+            auto text = co_await clipboard_reader_->read_text();
+            if (text && *text && !(*text)->empty() && running_ && view_ != nullptr) {
+                view_->insert_editor_text(std::move(**text));
+                tui_.invalidate();
+            }
+        } catch (const std::exception& error) {
+            const auto ignored = util::make_error(
+                util::ErrorCode::Unknown,
+                "clipboard text read failed",
+                error.what());
+            (void)ignored;
+        } catch (...) {
+            const auto ignored = util::make_error(
+                util::ErrorCode::Unknown,
+                "clipboard text read failed");
+            (void)ignored;
+        }
+        co_return util::ExpectedVoid{};
     }
 
     void post_dequeue() {
@@ -1288,6 +1585,7 @@ private:
     CommandRegistry commands_;
     std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings_;
     std::optional<ThemeController> theme_controller_;
+    std::unique_ptr<AsyncClipboardReader> clipboard_reader_;
     boost::asio::any_io_executor executor_;
     boost::asio::steady_timer exit_wait_;
     std::optional<EventSubscription> subscription_;
@@ -1300,6 +1598,7 @@ private:
     std::vector<std::string> displayed_agent_diagnostics_;
     bool tui_started_{false};
     bool exit_requested_{false};
+    bool clipboard_read_active_{false};
     std::optional<util::ExpectedVoid> completion_result_;
 };
 

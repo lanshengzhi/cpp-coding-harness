@@ -68,6 +68,32 @@ private:
     std::string partial_;
 };
 
+class CapturingChatClient final : public ai::StreamingChatClient {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        messages = request.context.messages;
+        ai::AssistantMessage message;
+        message.provider = "host";
+        message.api = "host";
+        message.model = request.model->id;
+        message.stop_reason = ai::AssistantStopReason::Stop;
+        message.content.emplace_back(ai::text_content("captured"));
+        if (sink) {
+            if (auto started = sink(ai::AssistantStartEvent{message}); !started) {
+                co_return std::unexpected(started.error());
+            }
+            if (auto done = sink(ai::AssistantDoneEvent{message.stop_reason, message}); !done) {
+                co_return std::unexpected(done.error());
+            }
+        }
+        co_return message;
+    }
+
+    std::vector<ai::MessageVariant> messages;
+};
+
 /// A host client whose first accepted call terminates with an error outcome
 /// while later calls answer normally, so tests can verify the Agent Session
 /// remains usable after a terminal outcome.
@@ -300,6 +326,54 @@ TEST_CASE(
     CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
     CHECK(output.str().find("fake: hello") != std::string::npos);
     CHECK(error.str().empty());
+}
+
+TEST_CASE(
+    "interactive frontend sends initial CLI images after the complete text block",
+    "[cli][frontend][issue63]") {
+    tests::TempWorkspace workspace;
+    auto client = std::make_unique<CapturingChatClient>();
+    auto* probe = client.get();
+    auto session = make_session(workspace, std::move(client));
+
+    std::istringstream input;
+    std::ostringstream output;
+    std::ostringstream error;
+    cli::TextCliRenderer renderer{output, error};
+    coding_agent::PromptOptions options;
+    options.images = {
+        ai::ImageContent{.data = "first-data", .mime_type = "image/png"},
+        ai::ImageContent{.data = "second-data", .mime_type = "image/webp"},
+    };
+    cli::InteractiveCliFrontend frontend{
+        *session.created.session,
+        renderer,
+        session.created.metadata,
+        cli::InteractiveCliFrontendConfig{
+            .input = input, .output = output, .error = error,
+            .repl = false, .prompt = "<file name=\"/tmp/first\"></file>\ndescribe"},
+        std::move(options)};
+
+    REQUIRE(frontend.run() == cli::InteractiveCliOutcome::Success);
+    REQUIRE_FALSE(probe->messages.empty());
+    const auto* user = std::get_if<ai::UserMessage>(&probe->messages.back());
+    REQUIRE(user != nullptr);
+    REQUIRE(user->content.size() == 3);
+    CHECK(std::get<ai::TextContent>(user->content[0]).text ==
+        "<file name=\"/tmp/first\"></file>\ndescribe");
+    CHECK(std::get<ai::ImageContent>(user->content[1]).data == "first-data");
+    CHECK(std::get<ai::ImageContent>(user->content[2]).data == "second-data");
+
+    const auto snapshot = session.created.session->snapshot();
+    REQUIRE(snapshot.agent_state.messages.size() >= 2);
+    const auto* persisted_user = std::get_if<ai::UserMessage>(
+        &snapshot.agent_state.messages.front());
+    REQUIRE(persisted_user != nullptr);
+    REQUIRE(persisted_user->content.size() == 3);
+    CHECK(std::get<ai::TextContent>(persisted_user->content[0]).text ==
+        std::get<ai::TextContent>(user->content[0]).text);
+    CHECK(std::get<ai::ImageContent>(persisted_user->content[1]).data == "first-data");
+    CHECK(std::get<ai::ImageContent>(persisted_user->content[2]).mime_type == "image/webp");
 }
 
 TEST_CASE(

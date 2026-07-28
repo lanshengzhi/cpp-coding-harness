@@ -1,0 +1,3 @@
+# Preserve pinned third-party sources byte-for-byte while excluding upstream
+# whitespace from repository diff checks.
+third_party/stb/*.h whitespace=-trailing-space
