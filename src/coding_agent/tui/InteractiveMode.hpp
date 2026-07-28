@@ -2,6 +2,7 @@
 
 #include "coding_agent/tui/ClipboardReader.hpp"
 
+#include <cch/coding_agent/Sdk.hpp>
 #include <cch/tui/Keybindings.hpp>
 #include <cch/util/Error.hpp>
 
@@ -9,6 +10,8 @@
 
 #include <filesystem>
 #include <memory>
+#include <optional>
+#include <string>
 
 namespace cch::coding_agent {
 class AgentSession;
@@ -24,6 +27,8 @@ struct InteractiveModeConfig {
     std::filesystem::path agent_config_directory;
     cch::tui::KeybindingPlatform platform{cch::tui::native_keybinding_platform()};
     std::unique_ptr<AsyncClipboardReader> clipboard_reader{nullptr};
+    std::optional<std::string> initial_prompt{std::nullopt};
+    PromptOptions initial_prompt_options{};
 };
 
 /// Run the private Native TUI composition until its exit binding is received.

@@ -907,6 +907,12 @@ public:
         if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
         if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
         if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
+        if (config.initial_prompt) {
+            submit(
+                std::move(*config.initial_prompt),
+                InputSubmission::Ordinary,
+                std::move(config.initial_prompt_options));
+        }
         return {};
     }
 
@@ -1397,7 +1403,10 @@ private:
         session_.abort();
     }
 
-    void submit(std::string text, InputSubmission submission) {
+    void submit(
+        std::string text,
+        InputSubmission submission,
+        PromptOptions options = {}) {
         if (!running_ || view_ == nullptr || text.empty()) return;
         if (dispatch_command(text)) return;
         if (prompt_active_ &&
@@ -1428,10 +1437,12 @@ private:
         const auto self = shared_from_this();
         boost::asio::co_spawn(
             executor_,
-            [self, text = std::move(text)]() mutable -> boost::asio::awaitable<void> {
+            [self,
+             text = std::move(text),
+             options = std::move(options)]() mutable -> boost::asio::awaitable<void> {
                 util::ExpectedVoid result;
                 try {
-                    result = co_await self->session_.prompt(text);
+                    result = co_await self->session_.prompt(text, std::move(options));
                 } catch (const std::exception& error) {
                     result = std::unexpected(util::make_error(
                         util::ErrorCode::Unknown,

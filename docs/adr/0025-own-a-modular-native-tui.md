@@ -4,7 +4,7 @@ status: accepted
 
 # Own a modular native TUI
 
-A Native TUI belongs in this product's long-term boundary rather than being left permanently to JSON/RPC or SDK clients. It will follow pi's modular shape: a public, reusable source-level C++ TUI module that does not depend on coding-agent types, plus a separate interactive-mode module that assembles TUI and Agent Session capabilities; line-oriented CLI, JSON/RPC, and SDK paths remain independent of the TUI.
+A Native TUI belongs in this product's boundary rather than being left to JSON/RPC or SDK clients. It follows pi's modular shape: a public, reusable source-level C++ TUI module that does not depend on coding-agent types, plus a separate interactive-mode module that assembles TUI and Agent Session capabilities; print, JSON/RPC, and SDK paths remain independent of the TUI. The earlier requirement to preserve an explicit line-oriented frontend was superseded by the Native TUI promotion decision in #34 and #64.
 
 ## Considered options
 
@@ -14,10 +14,10 @@ A Native TUI belongs in this product's long-term boundary rather than being left
 
 ## Consequences
 
-- The Native TUI, themes, keybindings, and interactive components remain Deferred Capabilities until separately specified, implemented, and tested; no placeholder APIs, flags, menus, or actions are exposed in the meantime.
+- The Native TUI, themes, keybindings, and assembled interactive components are Supported Capabilities on Linux/macOS at the recorded baseline. Capabilities not implemented end to end remain absent rather than appearing as placeholder APIs, flags, menus, or actions.
 - TUI Semantic Parity covers user-observable interaction outcomes, state transitions, lifecycle, and explicitly supported configuration formats at the recorded pi baseline. It does not require byte-identical ANSI output, pixel-identical layout, or TypeScript API shape.
 - Theme and keybinding files use compatible baseline formats, but discovery remains rooted in this product's Agent Config Directory and trusted `.cpp-harness` resources rather than implicitly reading pi's state directories.
 - Supported TUI platforms may be promoted in stages, beginning with Linux and macOS; unsupported platforms retain the non-TUI surfaces without acquiring a TUI parity obligation.
-- Once the TUI meets its Supported Capability bar, it becomes the default frontend only for supported interactive terminals. Explicit line-oriented, print, JSON, and RPC modes remain available and non-TTY execution never gains implicit ANSI output.
+- On supported Linux/macOS, the Native TUI is the default for interactive stdin/stdout. `--mode rpc` and `--mode json` take precedence; otherwise `--print` or either non-TTY stream selects one-shot text output, while `--mode text` leaves selection unchanged. The line-oriented frontend and `--repl` are not retained, and non-TTY execution never gains implicit ANSI output.
 - The public C++ TUI contract does not promise ABI stability and does not expose a chosen third-party terminal library. Terminal resources and restoration follow RAII, and a replaceable terminal seam supports deterministic virtual-terminal tests.
 - The interactive frontend exposes only capabilities actually assembled as Supported Capabilities. Deferred session, model, extension-UI, authentication, or other features do not appear as inert TUI affordances.

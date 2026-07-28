@@ -1,4 +1,5 @@
 #include "cli/CliParse.hpp"
+#include "cli/FrontendSelection.hpp"
 #include "coding_agent/runtime/AsyncCliRuntime.hpp"
 
 #include <iostream>
@@ -16,5 +17,17 @@ int main(int argc, char** argv) {
         std::cout << config.help_text;
         return 0;
     }
-    return cch::cli::run_async_cli(config);
+
+    const auto environment = cch::cli::detect_frontend_environment();
+    if (auto frontend = cch::cli::select_frontend(config, environment); !frontend) {
+        const auto& error = frontend.error();
+        std::cerr << error.message;
+        if (!error.detail.empty() && error.detail != error.message) {
+            std::cerr << ": " << error.detail;
+        }
+        std::cerr << '\n';
+        return 2;
+    } else {
+        return cch::cli::run_async_cli(config, *frontend, environment);
+    }
 }

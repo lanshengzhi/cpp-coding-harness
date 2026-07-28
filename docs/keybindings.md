@@ -7,8 +7,9 @@ The Native TUI keybinding format is compatible with pi parity baseline
 Agent Config Directory. Discovery never reads `~/.pi`, `.pi`, or any other pi
 state directory.
 
-The production CLI does not select the Native TUI yet; this configuration slice
-is assembled by the Native TUI integration work.
+On supported Linux/macOS, the production CLI loads this file when interactive
+stdin/stdout selects the Native TUI. Print, JSON, RPC, SDK, and unsupported-platform
+startup do not load a Native TUI keybinding registry.
 
 ## Format
 
@@ -85,8 +86,16 @@ baseline application actions:
 | Action ID | Default keys | Active-run behavior |
 |---|---|---|
 | `app.interrupt` | `escape` | Restore pending input, then request one ordinary abort lifecycle. |
+| `app.clear` | `ctrl+c` | Clear the editor. |
+| `app.exit` | `ctrl+d` | Exit when the editor is empty and restore the terminal. |
+| `app.tools.expand` | `ctrl+o` | Toggle expanded tool output. |
+| `app.thinking.toggle` | `ctrl+t` | Toggle expanded thinking blocks. |
 | `app.message.followUp` | `alt+enter` | Admit editor text to the Agent Session follow-up queue. |
 | `app.message.dequeue` | `alt+up` | Restore steering, then follow-up, then unsent editor text. |
+
+`app.clipboard.pasteImage` (`ctrl+v`, or `alt+v` on native Windows) is registered
+only when the assembling host injects an asynchronous clipboard reader; the
+production CLI does not advertise an unassembled clipboard action.
 
 Ordinary `tui.input.submit` starts a prompt while idle and admits steering input
 while a run is active. Alt+Enter acts like ordinary submit while idle. The

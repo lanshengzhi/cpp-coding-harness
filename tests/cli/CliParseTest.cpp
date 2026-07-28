@@ -74,12 +74,26 @@ TEST_CASE("parse_args defaults to no turn cap and records an explicit --max-turn
     CHECK(*capped_parsed->max_turns == 12);
 }
 
-TEST_CASE("parse_args rejects json mode with repl", "[cli][parse]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "--mode", "json", "--repl"};
+TEST_CASE("parse_args rejects the removed repl option", "[cli][parse][issue64]") {
+    std::vector<std::string> args{"cpp-harness", "--fake", "--repl"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE_FALSE(parsed);
-    CHECK(parsed.error().message.find("--mode json cannot be combined with --repl") != std::string::npos);
+    CHECK(parsed.error().message.find("unknown option: --repl") != std::string::npos);
+}
+
+TEST_CASE("parse_args exposes no temporary TUI selector", "[cli][parse][issue64]") {
+    std::vector<std::string> args{"cpp-harness", "--fake", "--tui"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE_FALSE(parsed);
+    CHECK(parsed.error().message.find("unknown option: --tui") != std::string::npos);
+
+    std::vector<std::string> mode_args{"cpp-harness", "--fake", "--mode", "tui"};
+    auto mode_argv = argv_from_strings(mode_args);
+    parsed = cch::cli::parse_args(static_cast<int>(mode_argv.size()), mode_argv.data());
+    REQUIRE_FALSE(parsed);
+    CHECK(parsed.error().message.find("unsupported --mode: tui") != std::string::npos);
 }
 
 TEST_CASE("parse_args rejects rpc mode with positional prompt", "[cli][parse]") {
@@ -145,12 +159,12 @@ TEST_CASE("parse_args defaults output mode to text", "[cli][parse]") {
     CHECK(parsed->output_mode == cch::cli::OutputMode::Text);
 }
 
-TEST_CASE("parse_args defaults empty text-mode prompt to repl", "[cli][parse]") {
-    std::vector<std::string> args{"cpp-harness", "--fake"};
+TEST_CASE("parse_args records print intent without requiring positional input", "[cli][parse][issue64]") {
+    std::vector<std::string> args{"cpp-harness", "--fake", "--print"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
-    CHECK(parsed->repl);
+    CHECK(parsed->print);
     CHECK(parsed->prompt.empty());
 }
 
@@ -179,7 +193,6 @@ TEST_CASE("parse_args treats a lone positional file as initial input", "[cli][pa
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
 
     REQUIRE(parsed);
-    CHECK_FALSE(parsed->repl);
     CHECK(parsed->prompt.empty());
     REQUIRE(parsed->file_arguments.size() == 1);
     CHECK(parsed->file_arguments[0] == "only.gif");

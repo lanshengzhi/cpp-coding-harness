@@ -22,7 +22,7 @@ enum class OutputMode {
 /// targets, Session Resume compatibility).
 struct CliConfig {
     bool fake{false};
-    bool repl{false};
+    bool print{false};
     bool enable_bash{false};
     std::optional<bool> project_trust_override;
     bool no_skills{false};

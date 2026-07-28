@@ -349,12 +349,12 @@ TEST_CASE("CLI text one-shot unknown /help target does not invoke the model", "[
     CHECK(result.output.find("[assistant]") == std::string::npos);
 }
 
-TEST_CASE("CLI text REPL dispatches /commands as /help", "[cli][commands]") {
+TEST_CASE("CLI text one-shot dispatches /commands as /help", "[cli][commands][issue64]") {
     cch::tests::TempWorkspace workspace;
-    auto session = workspace.path() / "commands-repl.jsonl";
+    auto session = workspace.path() / "commands.jsonl";
     auto result = run_command(
-        "printf '/commands\\nquit\\n' | " + bin() + " --fake --repl --workspace " +
-        shell_quote(workspace.path()) + " --session " + shell_quote(session));
+        bin() + " --fake --print --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) + " /commands");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.output.find("Available commands:") != std::string::npos);
@@ -373,18 +373,7 @@ TEST_CASE("CLI text one-shot sends unmatched slash input to the model", "[cli][c
     CHECK(result.output.find("Unknown command") == std::string::npos);
 }
 
-TEST_CASE("CLI text REPL temporarily intercepts user bash while one-shot does not", "[cli][commands][user-bash]") {
-    cch::tests::TempWorkspace repl_workspace;
-    auto repl_session = repl_workspace.path() / "repl-user-bash.jsonl";
-    auto repl = run_command(
-        "printf '!echo hi\\n!!echo hidden\\nquit\\n' | " + bin() + " --fake --repl --workspace " +
-        shell_quote(repl_workspace.path()) + " --session " + shell_quote(repl_session));
-
-    REQUIRE(repl.exit_code == 0);
-    CHECK(count_occurrences(repl.output, "Shell passthrough (!) is not yet implemented.") == 2);
-    CHECK(repl.output.find("fake: !echo hi") == std::string::npos);
-    CHECK(repl.output.find("fake: !!echo hidden") == std::string::npos);
-
+TEST_CASE("CLI text one-shot treats user bash syntax as an ordinary prompt", "[cli][commands][user-bash][issue64]") {
     cch::tests::TempWorkspace one_shot_workspace;
     auto one_shot_session = one_shot_workspace.path() / "oneshot-user-bash.jsonl";
     auto one_shot = run_command(
@@ -404,7 +393,7 @@ TEST_CASE("CLI text REPL temporarily intercepts user bash while one-shot does no
     CHECK(double_bang.output.find("fake: !!echo hidden") != std::string::npos);
 }
 
-TEST_CASE("CLI text one-shot /clear emits terminal controls without invoking the model", "[cli][commands]") {
+TEST_CASE("CLI non-TTY /clear emits no ANSI and does not invoke the model", "[cli][commands][issue64]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "clear-one-shot.jsonl";
     auto result = run_command_split(
@@ -412,22 +401,8 @@ TEST_CASE("CLI text one-shot /clear emits terminal controls without invoking the
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.empty());
-    CHECK(result.stdout_text == "\033[2J\033[H");
+    CHECK(result.stdout_text.empty());
     CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
-}
-
-TEST_CASE("CLI text REPL /clear stays in the frontend and /exit displays shutdown text", "[cli][commands]") {
-    cch::tests::TempWorkspace workspace;
-    auto session = workspace.path() / "clear-exit-repl.jsonl";
-    auto result = run_command(
-        "printf '/clear\\n/exit\\nignored\\n' | " + bin() + " --fake --repl --workspace " +
-        shell_quote(workspace.path()) + " --session " + shell_quote(session));
-
-    REQUIRE(result.exit_code == 0);
-    CHECK(result.output.find("\033[2J\033[H") != std::string::npos);
-    CHECK(result.output.find("Shutting down.") != std::string::npos);
-    CHECK(result.output.find("fake: ignored") == std::string::npos);
-    CHECK(result.output.find("[model-request]") == std::string::npos);
 }
 
 TEST_CASE("CLI text one-shot /exit displays shutdown text", "[cli][commands]") {
@@ -489,14 +464,14 @@ TEST_CASE("CLI help no longer advertises compatibility-only async flag", "[cli][
     CHECK(result.output.find("--mode") != std::string::npos);
 }
 
-TEST_CASE("CLI rejects unsupported JSON mode combinations before model request", "[cli][json]") {
+TEST_CASE("CLI rejects removed repl with JSON before session creation", "[cli][json][issue64]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "json-repl.jsonl";
     auto result = run_command_split(bin() + " --fake --mode json --repl --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session));
 
     REQUIRE(result.exit_code != 0);
     CHECK(result.stdout_text.empty());
-    CHECK(result.stderr_text.find("--mode json cannot be combined with --repl") != std::string::npos);
+    CHECK(result.stderr_text.find("unknown option: --repl") != std::string::npos);
     CHECK_FALSE(std::filesystem::exists(session));
 }
 
@@ -511,15 +486,35 @@ TEST_CASE("CLI rejects RPC positional prompt before session creation", "[cli][rp
     CHECK_FALSE(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI rejects RPC repl before session creation", "[cli][rpc]") {
+TEST_CASE("CLI rejects removed repl with RPC before session creation", "[cli][rpc][issue64]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "rpc-repl.jsonl";
     auto result = run_command_split(bin() + " --fake --mode rpc --repl --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session));
 
     REQUIRE(result.exit_code != 0);
     CHECK(result.stdout_text.empty());
-    CHECK(result.stderr_text.find("--mode rpc cannot be combined with --repl") != std::string::npos);
+    CHECK(result.stderr_text.find("unknown option: --repl") != std::string::npos);
     CHECK_FALSE(std::filesystem::exists(session));
+}
+
+TEST_CASE("CLI JSON and RPC modes take precedence over print intent", "[cli][selection][issue64]") {
+    cch::tests::TempWorkspace workspace;
+    auto json = run_command_split(
+        bin() + " --fake --print --mode json --no-session --workspace " +
+        shell_quote(workspace.path()) + " hello");
+    REQUIRE(json.exit_code == 0);
+    CHECK(json.stderr_text.empty());
+    CHECK(json.stdout_text.find("\033[") == std::string::npos);
+    CHECK(json_string_at(parse_json_objects(json.stdout_text).front(), "type") == "session");
+
+    auto rpc = run_command_split_with_input(
+        bin() + " --fake --print --mode rpc --no-session --workspace " +
+        shell_quote(workspace.path()),
+        "{\"id\":\"q1\",\"type\":\"shutdown\"}\n");
+    REQUIRE(rpc.exit_code == 0);
+    CHECK(rpc.stderr_text.empty());
+    CHECK(rpc.stdout_text.find("\033[") == std::string::npos);
+    CHECK(find_response(parse_json_objects(rpc.stdout_text), "shutdown") != nullptr);
 }
 
 TEST_CASE("CLI JSON fake one-shot emits a header followed by direct session events", "[cli][json]") {
@@ -727,15 +722,15 @@ TEST_CASE("CLI rejects an unresolvable workspace before model request", "[cli][a
     CHECK_FALSE(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI fake REPL preserves process history for two prompts", "[cli][u6]") {
+TEST_CASE("CLI non-TTY stdin becomes one print prompt", "[cli][selection][issue64]") {
     cch::tests::TempWorkspace workspace;
-    auto session = workspace.path() / "repl.jsonl";
-    auto command = "printf 'one\\ntwo\\nexit\\n' | " + bin() + " --fake --repl --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session);
+    auto session = workspace.path() / "piped.jsonl";
+    auto command = "printf 'one\\ntwo' | " + bin() + " --fake --workspace " +
+        shell_quote(workspace.path()) + " --session " + shell_quote(session);
     auto result = run_command(command);
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.output.find("[assistant] fake: one") != std::string::npos);
-    CHECK(result.output.find("[assistant] fake: two") != std::string::npos);
+    CHECK(result.output.find("[assistant] fake: one\ntwo") != std::string::npos);
 }
 
 TEST_CASE("CLI resume appends to an existing redacted session", "[cli][u6]") {
@@ -826,14 +821,17 @@ TEST_CASE("CLI rejects session and resume together before model request", "[cli]
     CHECK(result.output.find("[model-request]") == std::string::npos);
 }
 
-TEST_CASE("CLI text mode without prompt defaults to REPL", "[cli][u6]") {
+TEST_CASE("CLI empty non-TTY input fails before session creation", "[cli][selection][issue64]") {
     cch::tests::TempWorkspace workspace;
-    auto session = workspace.path() / "default-repl.jsonl";
-    auto result = run_command("printf '' | " + bin() + " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(session));
+    auto session = workspace.path() / "empty-print.jsonl";
+    auto result = run_command_split(
+        "printf '' | " + bin() + " --fake --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session));
 
-    REQUIRE(result.exit_code == 0);
-    CHECK(result.output.find("prompt is required") == std::string::npos);
-    CHECK(std::filesystem::exists(session));
+    REQUIRE(result.exit_code == 2);
+    CHECK(result.stdout_text.empty());
+    CHECK(result.stderr_text.find("prompt is required") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(session));
 }
 
 TEST_CASE("CLI blocks existing session path without resume before model request", "[cli][u6]") {
@@ -1552,15 +1550,15 @@ TEST_CASE("CLI RPC mode propagates the same default persisted target", "[cli][de
     require_single_automatic_session(agent_dir / "sessions", canonical_workspace);
 }
 
-TEST_CASE("CLI text REPL propagates the same default persisted target", "[cli][default-session]") {
+TEST_CASE("CLI piped print propagates the same default persisted target", "[cli][default-session][issue64]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
 
     auto result = run_command_split(
-        "printf 'hello\\nexit\\n' | CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
-        " --fake --repl --workspace " + shell_quote(workspace.path()));
+        "printf 'hello' | CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()));
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
@@ -1753,17 +1751,18 @@ TEST_CASE("CLI --no-session RPC mode propagates the in-memory target", "[cli][no
     require_no_session_filesystem_state(agent_dir, workspace.path());
 }
 
-TEST_CASE("CLI --no-session text REPL propagates the in-memory target", "[cli][no-session]") {
+TEST_CASE("CLI --no-session command reports the in-memory target", "[cli][no-session][issue64]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
 
     auto result = run_command_split(
-        "printf 'hello\\n/session\\nexit\\n' | CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
-        " --fake --no-session --repl --workspace " + shell_quote(workspace.path()));
+        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " --fake --no-session --print --workspace " + shell_quote(workspace.path()) +
+        " /session");
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
+    CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
     // /session names the in-memory state instead of an ambiguous empty path.
     CHECK(result.stdout_text.find("File: In-memory") != std::string::npos);
     require_no_session_filesystem_state(agent_dir, workspace.path());

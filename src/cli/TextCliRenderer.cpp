@@ -4,8 +4,13 @@
 
 namespace cch::cli {
 
-TextCliRenderer::TextCliRenderer(std::ostream& output, std::ostream& error)
-    : output_(output), error_(error) {}
+TextCliRenderer::TextCliRenderer(
+    std::ostream& output,
+    std::ostream& error,
+    bool allow_terminal_control)
+    : output_(output),
+      error_(error),
+      allow_terminal_control_(allow_terminal_control) {}
 
 util::ExpectedVoid TextCliRenderer::on_session_start(
     const harness::session::SessionMetadata& /*metadata*/) {
@@ -21,6 +26,7 @@ util::ExpectedVoid TextCliRenderer::on_command_result(
     std::string_view input,
     std::string_view display_text) {
     if (input == "/clear") {
+        if (!allow_terminal_control_) return {};
         output_ << "\033[2J\033[H";
         output_.flush();
         if (!output_) {

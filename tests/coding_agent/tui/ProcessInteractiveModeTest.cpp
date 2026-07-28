@@ -106,7 +106,13 @@ TEST_CASE(
         cch::coding_agent::tui::run_interactive_mode(
             *created->session,
             terminal,
-            {.agent_config_directory = config.path()}),
+            {
+                .agent_config_directory = config.path(),
+                .initial_prompt = "pty prompt",
+                .initial_prompt_options = {
+                    .images = {cch::ai::image_content("cG5n", "image/png")},
+                },
+            }),
         [&](std::exception_ptr exception, cch::util::ExpectedVoid result) {
             run_exception = exception;
             run_result.emplace(std::move(result));
@@ -124,9 +130,6 @@ TEST_CASE(
         std::chrono::seconds(2)));
     auto output = cch::tests::read_available(pty->master.get());
 
-    constexpr std::string_view kPrompt = "pty prompt\r";
-    REQUIRE(::write(pty->master.get(), kPrompt.data(), kPrompt.size()) ==
-        static_cast<ssize_t>(kPrompt.size()));
     REQUIRE(cch::tests::wait_until(
         [&] {
             output.append(cch::tests::read_available(
@@ -135,6 +138,12 @@ TEST_CASE(
             return output.find("fake: pty prompt") != std::string::npos;
         },
         std::chrono::seconds(2)));
+    const auto snapshot = created->session->snapshot();
+    REQUIRE_FALSE(snapshot.agent_state.messages.empty());
+    const auto* user = std::get_if<cch::ai::UserMessage>(&snapshot.agent_state.messages.front());
+    REQUIRE(user != nullptr);
+    REQUIRE(user->content.size() == 2);
+    CHECK(std::holds_alternative<cch::ai::ImageContent>(user->content[1]));
 
     constexpr char kExit = '\x04';
     REQUIRE(::write(pty->master.get(), &kExit, 1) == 1);

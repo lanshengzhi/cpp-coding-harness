@@ -1,11 +1,9 @@
-#include "InteractiveCliFrontend.hpp"
+#include "OneShotCliFrontend.hpp"
 
 #include "CliRenderer.hpp"
-
-#include "../../include/cch/coding_agent/Sdk.hpp"
 #include "coding_agent/prompt/SlashCommandParser.hpp"
+#include <cch/coding_agent/Sdk.hpp>
 
-#include <istream>
 #include <optional>
 #include <ostream>
 #include <string_view>
@@ -34,17 +32,13 @@ namespace {
     }
 }
 
-[[nodiscard]] bool is_user_bash(std::string_view input) {
-    return !input.empty() && input.front() == '!';
-}
-
 } // namespace
 
-InteractiveCliFrontend::InteractiveCliFrontend(
+OneShotCliFrontend::OneShotCliFrontend(
     coding_agent::AgentSession& session,
     CliRenderer& renderer,
     const harness::session::SessionMetadata& session_metadata,
-    InteractiveCliFrontendConfig config,
+    OneShotCliFrontendConfig config,
     coding_agent::PromptOptions initial_prompt_options)
     : session_(session),
       renderer_(renderer),
@@ -52,17 +46,17 @@ InteractiveCliFrontend::InteractiveCliFrontend(
       config_(std::move(config)),
       initial_prompt_options_(std::move(initial_prompt_options)) {}
 
-InteractiveCliOutcome InteractiveCliFrontend::run() {
+OneShotCliOutcome OneShotCliFrontend::run() {
     coding_agent::CommandRegistry commands;
     if (auto registered = coding_agent::register_builtin_commands(commands); !registered) {
         config_.error << "could not register built-in command: "
                       << registered.error().message << '\n';
-        return InteractiveCliOutcome::RuntimeError;
+        return OneShotCliOutcome::RuntimeError;
     }
 
     if (auto started = renderer_.on_session_start(session_metadata_); !started) {
         config_.error << "event printer failed: " << started.error().message << '\n';
-        return InteractiveCliOutcome::StartupFailure;
+        return OneShotCliOutcome::StartupFailure;
     }
 
     auto subscribed = session_.subscribe(
@@ -72,44 +66,19 @@ InteractiveCliOutcome InteractiveCliFrontend::run() {
     if (!subscribed) {
         config_.error << "could not subscribe event renderer: "
                       << subscribed.error().message << '\n';
-        return InteractiveCliOutcome::StartupFailure;
+        return OneShotCliOutcome::StartupFailure;
     }
     coding_agent::EventSubscription event_subscription{std::move(*subscribed)};
-
-    if (config_.repl) {
-        std::string line;
-        while (config_.output << "> " && std::getline(config_.input, line)) {
-            if (line == "exit" || line == "quit") {
-                break;
-            }
-            if (line.empty()) {
-                continue;
-            }
-            if (is_user_bash(line)) {
-                config_.output << "Shell passthrough (!) is not yet implemented.\n";
-                continue;
-            }
-
-            const auto outcome = run_prompt(line, commands);
-            if (outcome == InteractiveCliOutcome::RuntimeError) {
-                return InteractiveCliOutcome::RuntimeError;
-            }
-            if (outcome == InteractiveCliOutcome::ShutdownRequested) {
-                return InteractiveCliOutcome::Success;
-            }
-        }
-        return InteractiveCliOutcome::Success;
-    }
 
     const auto outcome = run_prompt(
         config_.prompt,
         commands,
         std::move(initial_prompt_options_));
-    return outcome == InteractiveCliOutcome::RuntimeError ? InteractiveCliOutcome::RuntimeError
-                                                          : InteractiveCliOutcome::Success;
+    return outcome == OneShotCliOutcome::RuntimeError ? OneShotCliOutcome::RuntimeError
+                                                          : OneShotCliOutcome::Success;
 }
 
-InteractiveCliOutcome InteractiveCliFrontend::run_prompt(
+OneShotCliOutcome OneShotCliFrontend::run_prompt(
     const std::string& prompt,
     coding_agent::CommandRegistry& commands,
     coding_agent::PromptOptions options) {
@@ -119,11 +88,11 @@ InteractiveCliOutcome InteractiveCliFrontend::run_prompt(
         if (auto presented = renderer_.on_command_result(prompt, command_result->display_text);
             !presented) {
             config_.error << presented.error().message << '\n';
-            return InteractiveCliOutcome::RuntimeError;
+            return OneShotCliOutcome::RuntimeError;
         }
         return command_result->effect == coding_agent::CommandEffect::Shutdown
-            ? InteractiveCliOutcome::ShutdownRequested
-            : InteractiveCliOutcome::Success;
+            ? OneShotCliOutcome::ShutdownRequested
+            : OneShotCliOutcome::Success;
     }
 
     // Unmatched slash input reaches AgentSession via ordinary prompt.
@@ -133,15 +102,15 @@ InteractiveCliOutcome InteractiveCliFrontend::run_prompt(
 
     if (!prompt_result) {
         renderer_.on_prompt_error(prompt_result.error().message);
-        return InteractiveCliOutcome::RuntimeError;
+        return OneShotCliOutcome::RuntimeError;
     }
 
     // Responses and tool activity have already been rendered by the
     // persistent subscription; do not present session state a second time.
-    return InteractiveCliOutcome::Success;
+    return OneShotCliOutcome::Success;
 }
 
-coding_agent::CommandContext InteractiveCliFrontend::make_command_context() const {
+coding_agent::CommandContext OneShotCliFrontend::make_command_context() const {
     const auto& session_path = session_.session_path();
     return coding_agent::CommandContext{
         .session_id = session_.session_id(),

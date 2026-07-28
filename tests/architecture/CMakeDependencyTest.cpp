@@ -157,6 +157,13 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
     CHECK(block_mentions(runtime_links, "WebP::webpdecoder"));
     CHECK_FALSE(block_mentions(runtime_links, "cch_tui"));
     CHECK_FALSE(block_mentions(runtime_links, "cch_coding_agent_tui"));
+    CHECK_FALSE(block_mentions(runtime_links, "cch_coding_agent_interactive"));
+
+    const auto executable_sources = cmake_command_block(cmake, "add_executable(cpp_harness");
+    const auto executable_links = cmake_command_block(cmake, "target_link_libraries(\n    cpp_harness");
+    CHECK(block_mentions(executable_sources, "src/cli/FrontendSelection.cpp"));
+    CHECK(block_mentions(executable_sources, "src/coding_agent/runtime/AsyncCliRuntime.cpp"));
+    CHECK(block_mentions(executable_links, "cch_coding_agent_interactive"));
 }
 
 TEST_CASE(

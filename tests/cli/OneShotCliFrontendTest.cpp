@@ -1,6 +1,6 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
-#include "cli/InteractiveCliFrontend.hpp"
+#include "cli/OneShotCliFrontend.hpp"
 #include "cli/JsonCliRenderer.hpp"
 #include "cli/TextCliRenderer.hpp"
 
@@ -92,49 +92,6 @@ public:
     }
 
     std::vector<ai::MessageVariant> messages;
-};
-
-/// A host client whose first accepted call terminates with an error outcome
-/// while later calls answer normally, so tests can verify the Agent Session
-/// remains usable after a terminal outcome.
-class RecoveringChatClient final : public ai::StreamingChatClient {
-public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
-        ai::AssistantEventSink sink) override {
-        ++request_count;
-        ai::AssistantMessage message;
-        message.provider = "host";
-        message.api = "host";
-        message.model = request.model->id;
-        if (request_count == 1) {
-            message.stop_reason = ai::AssistantStopReason::Error;
-            message.error_message = "first transport lost";
-            if (sink) {
-                if (auto ended = sink(ai::AssistantErrorEvent{message.stop_reason, message});
-                    !ended) {
-                    co_return std::unexpected(ended.error());
-                }
-            }
-            co_return message;
-        }
-        message.stop_reason = ai::AssistantStopReason::Stop;
-        message.content.emplace_back(ai::text_content("recovered answer"));
-        if (sink) {
-            if (auto started = sink(ai::AssistantStartEvent{message}); !started) {
-                co_return std::unexpected(started.error());
-            }
-            if (auto delta = sink(ai::TextDeltaEvent{0, "recovered answer", message}); !delta) {
-                co_return std::unexpected(delta.error());
-            }
-            if (auto done = sink(ai::AssistantDoneEvent{message.stop_reason, message}); !done) {
-                co_return std::unexpected(done.error());
-            }
-        }
-        co_return message;
-    }
-
-    int request_count{0};
 };
 
 coding_agent::CreateAgentSessionOptions fake_in_memory_options(
@@ -237,7 +194,7 @@ CreatedSession make_session(
 } // namespace
 
 TEST_CASE(
-    "interactive json frontend exits 2 when the session header cannot be written",
+    "one-shot JSON frontend exits 2 when the session header cannot be written",
     "[cli][frontend]") {
     tests::TempWorkspace workspace;
     auto session = make_session(workspace);
@@ -247,20 +204,20 @@ TEST_CASE(
     std::istringstream input;
     std::ostringstream error;
     cli::JsonCliRenderer renderer{broken_output, error};
-    cli::InteractiveCliFrontend frontend{
+    cli::OneShotCliFrontend frontend{
         *session.created.session,
         renderer,
         session.created.metadata,
-        cli::InteractiveCliFrontendConfig{
-            .input = input, .output = broken_output, .error = error,
-            .repl = false, .prompt = "hello"}};
+        cli::OneShotCliFrontendConfig{
+            .output = broken_output, .error = error,
+            .prompt = "hello"}};
 
-    CHECK(frontend.run() == cli::InteractiveCliOutcome::StartupFailure);
+    CHECK(frontend.run() == cli::OneShotCliOutcome::StartupFailure);
     CHECK(error.str().find("event printer failed: ") != std::string::npos);
 }
 
 TEST_CASE(
-    "interactive frontend exits 2 when event subscription fails",
+    "one-shot frontend exits 2 when event subscription fails",
     "[cli][frontend]") {
     tests::TempWorkspace workspace;
     auto session = make_session(workspace);
@@ -270,20 +227,20 @@ TEST_CASE(
     std::ostringstream output;
     std::ostringstream error;
     cli::TextCliRenderer renderer{output, error};
-    cli::InteractiveCliFrontend frontend{
+    cli::OneShotCliFrontend frontend{
         *session.created.session,
         renderer,
         session.created.metadata,
-        cli::InteractiveCliFrontendConfig{
-            .input = input, .output = output, .error = error,
-            .repl = false, .prompt = "hello"}};
+        cli::OneShotCliFrontendConfig{
+            .output = output, .error = error,
+            .prompt = "hello"}};
 
-    CHECK(frontend.run() == cli::InteractiveCliOutcome::StartupFailure);
+    CHECK(frontend.run() == cli::OneShotCliOutcome::StartupFailure);
     CHECK(error.str().find("could not subscribe event renderer: ") != std::string::npos);
 }
 
 TEST_CASE(
-    "interactive text frontend reports a /clear stream failure",
+    "one-shot text frontend reports a /clear stream failure",
     "[cli][frontend]") {
     tests::TempWorkspace workspace;
     auto session = make_session(workspace);
@@ -293,20 +250,20 @@ TEST_CASE(
     std::istringstream input;
     std::ostringstream error;
     cli::TextCliRenderer renderer{broken_output, error};
-    cli::InteractiveCliFrontend frontend{
+    cli::OneShotCliFrontend frontend{
         *session.created.session,
         renderer,
         session.created.metadata,
-        cli::InteractiveCliFrontendConfig{
-            .input = input, .output = broken_output, .error = error,
-            .repl = false, .prompt = "/clear"}};
+        cli::OneShotCliFrontendConfig{
+            .output = broken_output, .error = error,
+            .prompt = "/clear"}};
 
-    CHECK(frontend.run() == cli::InteractiveCliOutcome::RuntimeError);
+    CHECK(frontend.run() == cli::OneShotCliOutcome::RuntimeError);
     CHECK(error.str().find("failed to clear terminal") != std::string::npos);
 }
 
 TEST_CASE(
-    "interactive text frontend renders one prompt through the event subscription",
+    "one-shot text frontend renders one prompt through the event subscription",
     "[cli][frontend]") {
     tests::TempWorkspace workspace;
     auto session = make_session(workspace);
@@ -315,21 +272,21 @@ TEST_CASE(
     std::ostringstream output;
     std::ostringstream error;
     cli::TextCliRenderer renderer{output, error};
-    cli::InteractiveCliFrontend frontend{
+    cli::OneShotCliFrontend frontend{
         *session.created.session,
         renderer,
         session.created.metadata,
-        cli::InteractiveCliFrontendConfig{
-            .input = input, .output = output, .error = error,
-            .repl = false, .prompt = "hello"}};
+        cli::OneShotCliFrontendConfig{
+            .output = output, .error = error,
+            .prompt = "hello"}};
 
-    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
+    CHECK(frontend.run() == cli::OneShotCliOutcome::Success);
     CHECK(output.str().find("fake: hello") != std::string::npos);
     CHECK(error.str().empty());
 }
 
 TEST_CASE(
-    "interactive frontend sends initial CLI images after the complete text block",
+    "one-shot frontend sends initial CLI images after the complete text block",
     "[cli][frontend][issue63]") {
     tests::TempWorkspace workspace;
     auto client = std::make_unique<CapturingChatClient>();
@@ -345,16 +302,16 @@ TEST_CASE(
         ai::ImageContent{.data = "first-data", .mime_type = "image/png"},
         ai::ImageContent{.data = "second-data", .mime_type = "image/webp"},
     };
-    cli::InteractiveCliFrontend frontend{
+    cli::OneShotCliFrontend frontend{
         *session.created.session,
         renderer,
         session.created.metadata,
-        cli::InteractiveCliFrontendConfig{
-            .input = input, .output = output, .error = error,
-            .repl = false, .prompt = "<file name=\"/tmp/first\"></file>\ndescribe"},
+        cli::OneShotCliFrontendConfig{
+            .output = output, .error = error,
+            .prompt = "<file name=\"/tmp/first\"></file>\ndescribe"},
         std::move(options)};
 
-    REQUIRE(frontend.run() == cli::InteractiveCliOutcome::Success);
+    REQUIRE(frontend.run() == cli::OneShotCliOutcome::Success);
     REQUIRE_FALSE(probe->messages.empty());
     const auto* user = std::get_if<ai::UserMessage>(&probe->messages.back());
     REQUIRE(user != nullptr);
@@ -377,7 +334,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "interactive text frontend presents an accepted error terminal outcome once",
+    "one-shot text frontend presents an accepted error terminal outcome once",
     "[cli][frontend][issue16]") {
     tests::TempWorkspace workspace;
     auto session = make_session(
@@ -389,15 +346,15 @@ TEST_CASE(
     std::ostringstream output;
     std::ostringstream error;
     cli::TextCliRenderer renderer{output, error};
-    cli::InteractiveCliFrontend frontend{
+    cli::OneShotCliFrontend frontend{
         *session.created.session,
         renderer,
         session.created.metadata,
-        cli::InteractiveCliFrontendConfig{
-            .input = input, .output = output, .error = error,
-            .repl = false, .prompt = "hello"}};
+        cli::OneShotCliFrontendConfig{
+            .output = output, .error = error,
+            .prompt = "hello"}};
 
-    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
+    CHECK(frontend.run() == cli::OneShotCliOutcome::Success);
     CHECK(output.str().find("[assistant] partial draft") != std::string::npos);
     CHECK(tests::count_occurrences(output.str(), "[error] host transport lost") == 1);
     CHECK(output.str().find("[completed]") != std::string::npos);
@@ -405,7 +362,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "interactive text frontend presents an accepted aborted terminal outcome once",
+    "one-shot text frontend presents an accepted aborted terminal outcome once",
     "[cli][frontend][issue16]") {
     tests::TempWorkspace workspace;
     auto session = make_session(
@@ -417,15 +374,15 @@ TEST_CASE(
     std::ostringstream output;
     std::ostringstream error;
     cli::TextCliRenderer renderer{output, error};
-    cli::InteractiveCliFrontend frontend{
+    cli::OneShotCliFrontend frontend{
         *session.created.session,
         renderer,
         session.created.metadata,
-        cli::InteractiveCliFrontendConfig{
-            .input = input, .output = output, .error = error,
-            .repl = false, .prompt = "hello"}};
+        cli::OneShotCliFrontendConfig{
+            .output = output, .error = error,
+            .prompt = "hello"}};
 
-    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
+    CHECK(frontend.run() == cli::OneShotCliOutcome::Success);
     CHECK(tests::count_occurrences(output.str(), "[aborted] host cancelled the request") == 1);
     CHECK(output.str().find("[completed]") != std::string::npos);
     CHECK(output.str().find("[error]") == std::string::npos);
@@ -433,7 +390,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "interactive text frontend redacts and bounds terminal diagnostics",
+    "one-shot text frontend redacts and bounds terminal diagnostics",
     "[cli][frontend][issue16]") {
     tests::TempWorkspace workspace;
     const std::string secret = "sk-hostsecret123456789";
@@ -448,15 +405,15 @@ TEST_CASE(
     std::ostringstream output;
     std::ostringstream error;
     cli::TextCliRenderer renderer{output, error};
-    cli::InteractiveCliFrontend frontend{
+    cli::OneShotCliFrontend frontend{
         *session.created.session,
         renderer,
         session.created.metadata,
-        cli::InteractiveCliFrontendConfig{
-            .input = input, .output = output, .error = error,
-            .repl = false, .prompt = "hello"}};
+        cli::OneShotCliFrontendConfig{
+            .output = output, .error = error,
+            .prompt = "hello"}};
 
-    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
+    CHECK(frontend.run() == cli::OneShotCliOutcome::Success);
     CHECK(output.str().find(secret) == std::string::npos);
     CHECK(output.str().find("[REDACTED]") != std::string::npos);
     // The presented diagnostic stays inside the bounded-output budget even
@@ -466,7 +423,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "interactive text frontend redacts and bounds partial terminal output",
+    "one-shot text frontend redacts and bounds partial terminal output",
     "[cli][frontend][issue16]") {
     tests::TempWorkspace workspace;
     const std::string secret = "sk-partialsecret123456789";
@@ -483,15 +440,15 @@ TEST_CASE(
     std::ostringstream output;
     std::ostringstream error;
     cli::TextCliRenderer renderer{output, error};
-    cli::InteractiveCliFrontend frontend{
+    cli::OneShotCliFrontend frontend{
         *session.created.session,
         renderer,
         session.created.metadata,
-        cli::InteractiveCliFrontendConfig{
-            .input = input, .output = output, .error = error,
-            .repl = false, .prompt = "hello"}};
+        cli::OneShotCliFrontendConfig{
+            .output = output, .error = error,
+            .prompt = "hello"}};
 
-    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
+    CHECK(frontend.run() == cli::OneShotCliOutcome::Success);
     CHECK(output.str().find(secret) == std::string::npos);
     CHECK(output.str().find("[assistant] draft contains [REDACTED]") != std::string::npos);
     CHECK(output.str().size() < partial.size());
@@ -500,79 +457,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "interactive text REPL stays usable after an accepted terminal outcome",
-    "[cli][frontend][issue16]") {
-    tests::TempWorkspace workspace;
-    auto client = std::make_unique<RecoveringChatClient>();
-    auto* probe = client.get();
-    auto session = make_session(workspace, std::move(client));
-
-    std::istringstream input{"first\nsecond\nexit\n"};
-    std::ostringstream output;
-    std::ostringstream error;
-    cli::TextCliRenderer renderer{output, error};
-    cli::InteractiveCliFrontend frontend{
-        *session.created.session,
-        renderer,
-        session.created.metadata,
-        cli::InteractiveCliFrontendConfig{
-            .input = input, .output = output, .error = error,
-            .repl = true, .prompt = {}}};
-
-    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
-    CHECK(probe->request_count == 2);
-    CHECK(tests::count_occurrences(output.str(), "[error] first transport lost") == 1);
-    CHECK(output.str().find("[assistant] recovered answer") != std::string::npos);
-    CHECK(error.str().empty());
-}
-
-TEST_CASE(
-    "interactive text frontend presents slash command results and shutdown",
-    "[cli][frontend]") {
-    tests::TempWorkspace workspace;
-    auto session = make_session(workspace);
-
-    std::istringstream input{"/session\n/quit\n"};
-    std::ostringstream output;
-    std::ostringstream error;
-    cli::TextCliRenderer renderer{output, error};
-    cli::InteractiveCliFrontend frontend{
-        *session.created.session,
-        renderer,
-        session.created.metadata,
-        cli::InteractiveCliFrontendConfig{
-            .input = input, .output = output, .error = error,
-            .repl = true, .prompt = {}}};
-
-    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
-    CHECK(output.str().find("Session: ") != std::string::npos);
-    CHECK(output.str().find("Shutting down.") != std::string::npos);
-}
-
-TEST_CASE(
-    "interactive text frontend clears the terminal for /clear",
-    "[cli][frontend]") {
-    tests::TempWorkspace workspace;
-    auto session = make_session(workspace);
-
-    std::istringstream input{"/clear\nexit\n"};
-    std::ostringstream output;
-    std::ostringstream error;
-    cli::TextCliRenderer renderer{output, error};
-    cli::InteractiveCliFrontend frontend{
-        *session.created.session,
-        renderer,
-        session.created.metadata,
-        cli::InteractiveCliFrontendConfig{
-            .input = input, .output = output, .error = error,
-            .repl = true, .prompt = {}}};
-
-    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
-    CHECK(output.str().find("\033[2J\033[H") != std::string::npos);
-}
-
-TEST_CASE(
-    "interactive text frontend continues after a weak subscriber failure",
+    "one-shot text frontend continues after a weak subscriber failure",
     "[cli][frontend][issue36]") {
     tests::TempWorkspace workspace;
     auto session = make_session(workspace);
@@ -592,15 +477,15 @@ TEST_CASE(
     std::ostringstream output;
     std::ostringstream error;
     cli::TextCliRenderer renderer{output, error};
-    cli::InteractiveCliFrontend frontend{
+    cli::OneShotCliFrontend frontend{
         *session.created.session,
         renderer,
         session.created.metadata,
-        cli::InteractiveCliFrontendConfig{
-            .input = input, .output = output, .error = error,
-            .repl = false, .prompt = "hello"}};
+        cli::OneShotCliFrontendConfig{
+            .output = output, .error = error,
+            .prompt = "hello"}};
 
-    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
+    CHECK(frontend.run() == cli::OneShotCliOutcome::Success);
     CHECK(error.str().empty());
     CHECK(output.str().find("[model-request]") != std::string::npos);
     CHECK(output.str().find("[assistant]") != std::string::npos);
@@ -609,31 +494,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "interactive text frontend repl skips empty lines and user bash",
-    "[cli][frontend]") {
-    tests::TempWorkspace workspace;
-    auto session = make_session(workspace);
-
-    std::istringstream input{"\n!ls\nexit\n"};
-    std::ostringstream output;
-    std::ostringstream error;
-    cli::TextCliRenderer renderer{output, error};
-    cli::InteractiveCliFrontend frontend{
-        *session.created.session,
-        renderer,
-        session.created.metadata,
-        cli::InteractiveCliFrontendConfig{
-            .input = input, .output = output, .error = error,
-            .repl = true, .prompt = {}}};
-
-    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
-    CHECK(output.str().find("Shell passthrough (!) is not yet implemented.") != std::string::npos);
-    CHECK(output.str().find("> ") != std::string::npos);
-    CHECK(error.str().empty());
-}
-
-TEST_CASE(
-    "interactive json frontend emits a session header and event records",
+    "one-shot JSON frontend emits a session header and event records",
     "[cli][frontend]") {
     tests::TempWorkspace workspace;
     auto session = make_session(workspace);
@@ -642,15 +503,15 @@ TEST_CASE(
     std::ostringstream output;
     std::ostringstream error;
     cli::JsonCliRenderer renderer{output, error};
-    cli::InteractiveCliFrontend frontend{
+    cli::OneShotCliFrontend frontend{
         *session.created.session,
         renderer,
         session.created.metadata,
-        cli::InteractiveCliFrontendConfig{
-            .input = input, .output = output, .error = error,
-            .repl = false, .prompt = "hello"}};
+        cli::OneShotCliFrontendConfig{
+            .output = output, .error = error,
+            .prompt = "hello"}};
 
-    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
+    CHECK(frontend.run() == cli::OneShotCliOutcome::Success);
 
     std::istringstream records{output.str()};
     std::string header_line;
@@ -667,7 +528,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "interactive json frontend carries the terminal outcome in ordinary lifecycle records",
+    "one-shot JSON frontend carries the terminal outcome in ordinary lifecycle records",
     "[cli][frontend][issue16]") {
     tests::TempWorkspace workspace;
     auto session = make_session(
@@ -679,15 +540,15 @@ TEST_CASE(
     std::ostringstream output;
     std::ostringstream error;
     cli::JsonCliRenderer renderer{output, error};
-    cli::InteractiveCliFrontend frontend{
+    cli::OneShotCliFrontend frontend{
         *session.created.session,
         renderer,
         session.created.metadata,
-        cli::InteractiveCliFrontendConfig{
-            .input = input, .output = output, .error = error,
-            .repl = false, .prompt = "hello"}};
+        cli::OneShotCliFrontendConfig{
+            .output = output, .error = error,
+            .prompt = "hello"}};
 
-    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
+    CHECK(frontend.run() == cli::OneShotCliOutcome::Success);
     CHECK(error.str().empty());
 
     const auto records = parse_json_lines(output.str());
@@ -724,7 +585,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "interactive json frontend suppresses frontend command output",
+    "one-shot JSON frontend suppresses frontend command output",
     "[cli][frontend]") {
     tests::TempWorkspace workspace;
     auto session = make_session(workspace);
@@ -733,15 +594,15 @@ TEST_CASE(
     std::ostringstream output;
     std::ostringstream error;
     cli::JsonCliRenderer renderer{output, error};
-    cli::InteractiveCliFrontend frontend{
+    cli::OneShotCliFrontend frontend{
         *session.created.session,
         renderer,
         session.created.metadata,
-        cli::InteractiveCliFrontendConfig{
-            .input = input, .output = output, .error = error,
-            .repl = false, .prompt = "/session"}};
+        cli::OneShotCliFrontendConfig{
+            .output = output, .error = error,
+            .prompt = "/session"}};
 
-    CHECK(frontend.run() == cli::InteractiveCliOutcome::Success);
+    CHECK(frontend.run() == cli::OneShotCliOutcome::Success);
     CHECK(output.str().find("Session: ") == std::string::npos);
     CHECK(output.str().find("\033[2J\033[H") == std::string::npos);
 

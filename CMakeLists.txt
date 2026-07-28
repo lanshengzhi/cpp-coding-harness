@@ -173,7 +173,6 @@ target_link_libraries(cch_tools
 )
 
 add_library(cch_coding_agent_runtime
-    src/coding_agent/runtime/AsyncCliRuntime.cpp
     src/coding_agent/ImageInput.cpp
     src/cli/InitialPrompt.cpp
     src/coding_agent/AgentConfigDir.cpp
@@ -196,7 +195,7 @@ add_library(cch_coding_agent_runtime
     src/coding_agent/runtime/AgentSessionRuntime.cpp
     src/coding_agent/runtime/EventPrinter.cpp
     src/coding_agent/runtime/SessionEventCommitment.cpp
-    src/cli/InteractiveCliFrontend.cpp
+    src/cli/OneShotCliFrontend.cpp
     src/cli/JsonCliRenderer.cpp
     src/cli/TextCliRenderer.cpp
     src/coding_agent/runtime/SessionFactory.cpp
@@ -242,8 +241,16 @@ target_link_libraries(cpp_harness_lib INTERFACE cch_coding_agent_runtime)
 add_executable(cpp_harness
     src/main.cpp
     src/cli/CliParse.cpp
+    src/cli/FrontendSelection.cpp
+    src/coding_agent/runtime/AsyncCliRuntime.cpp
 )
-target_link_libraries(cpp_harness PRIVATE cpp_harness_lib CLI11::CLI11)
+target_link_libraries(
+    cpp_harness
+    PRIVATE
+        cpp_harness_lib
+        cch_coding_agent_interactive
+        CLI11::CLI11
+)
 target_include_directories(cpp_harness PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_options(cpp_harness PRIVATE ${CCH_WARNING_OPTIONS})
 
@@ -272,7 +279,9 @@ if(CCH_BUILD_TESTS)
         tests/ai/providers/SseParserTest.cpp
         tests/cli/CliSmokeTest.cpp
         tests/cli/CliParseTest.cpp
-        tests/cli/InteractiveCliFrontendTest.cpp
+        tests/cli/FrontendSelectionTest.cpp
+        tests/cli/NativeTuiCliSmokeTest.cpp
+        tests/cli/OneShotCliFrontendTest.cpp
         tests/cli/InitialPromptTest.cpp
         tests/coding_agent/BuiltinCommandsTest.cpp
         tests/coding_agent/CommandRegistryTest.cpp
@@ -348,6 +357,7 @@ if(CCH_BUILD_TESTS)
     )
     target_sources(cpp_harness_tests PRIVATE
         src/cli/CliParse.cpp
+        src/cli/FrontendSelection.cpp
     )
     target_compile_definitions(cpp_harness_tests PRIVATE
         CCH_BINARY="$<TARGET_FILE:cpp_harness>"

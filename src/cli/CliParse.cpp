@@ -94,12 +94,15 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
         "--session-dir, CCH_CODING_AGENT_SESSION_DIR, settings.json sessionDir;\n"
         "relative values resolve against the final workspace. Explicit paths may\n"
         "live anywhere; --no-session runs in memory without a transcript.\n"
+        "Frontend: --mode rpc/json wins; otherwise --print or a non-TTY stream\n"
+        "selects one-shot text. Interactive Linux/macOS terminals use the Native TUI;\n"
+        "--mode text leaves this automatic selection unchanged.\n"
         "Safety: prompts, file contents, and command outputs may be sent to the configured provider.\n"
         "Sessions are local sensitive transcripts even after secret-looking text is redacted.");
     app.set_help_flag("-h,--help", "Print this help message and exit");
 
     app.add_flag("--fake", config.fake, "Use deterministic fake provider (no network)");
-    app.add_flag("--repl", config.repl, "Read prompts interactively until exit/quit");
+    app.add_flag("-p,--print", config.print, "Process one prompt and exit without the Native TUI");
     app.add_flag("--enable-bash", config.enable_bash, "Allow model-requested bash commands");
     auto* approve_option = app.add_flag("-a,--approve", approve_project, "Trust project resources for this run");
     auto* no_approve_option = app.add_flag("--no-approve", no_approve_project, "Do not trust project resources for this run");
@@ -126,7 +129,11 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     auto* api_key_env_option = app.add_option("--api-key-env", api_key_env_text, "Environment variable containing API key")
         ->default_str("OPENAI_API_KEY");
     app.add_option("--auth", auth_text, "Auth provider name in ~/.cpp-harness/agent/auth.json");
-    auto* mode_option = app.add_option("--mode", mode_text, "Output mode: text, json, or rpc")->default_str("text");
+    auto* mode_option = app.add_option(
+        "--mode",
+        mode_text,
+        "Protocol mode: json or rpc; text keeps automatic frontend selection")
+        ->default_str("text");
     app.add_option("prompt", prompt_parts, "Prompt")->expected(0, -1);
 
     try {
@@ -204,20 +211,10 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     }
     config.prompt = join_prompt(prompt_text_parts);
     const bool has_initial_input = !config.prompt.empty() || !config.file_arguments.empty();
-    if (config.output_mode == OutputMode::Json && config.repl) {
-        return std::unexpected(cli_error("--mode json cannot be combined with --repl"));
-    }
-    if (config.output_mode == OutputMode::Rpc && config.repl) {
-        return std::unexpected(cli_error("--mode rpc cannot be combined with --repl"));
-    }
     if (config.output_mode == OutputMode::Rpc && has_initial_input) {
         return std::unexpected(cli_error("--mode rpc reads prompts from stdin; positional prompt is not allowed"));
     }
-    if (config.output_mode == OutputMode::Text && !config.repl && !has_initial_input) {
-        // No prompt in text mode defaults to an interactive REPL, matching pi's no-argument behavior.
-        config.repl = true;
-    }
-    if (config.output_mode == OutputMode::Json && !config.repl && !has_initial_input) {
+    if (config.output_mode == OutputMode::Json && !has_initial_input) {
         return std::unexpected(cli_error("prompt is required for --mode json"));
     }
     return config;
