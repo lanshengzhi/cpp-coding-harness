@@ -50,6 +50,9 @@ using SyncConvertToLlmPolicy = std::move_only_function<
 /// pi-compatible policy for draining one pending input queue.
 enum class InputQueueMode { OneAtATime, All };
 
+inline constexpr std::size_t kDefaultMaxQueuedMessages = 256;
+inline constexpr std::size_t kDefaultMaxQueuedBytes = 16 * 1024 * 1024;
+
 /// Passive configuration and pending contents for one Agent-owned input queue.
 struct AgentInputQueue {
     InputQueueMode mode{InputQueueMode::OneAtATime};
@@ -59,8 +62,8 @@ struct AgentInputQueue {
 /// Passive observation of both Agent-owned input queues and their shared
 /// per-queue admission limits.
 struct AgentInputQueues {
-    std::size_t max_messages{256};
-    std::size_t max_bytes{16 * 1024 * 1024};
+    std::size_t max_messages{kDefaultMaxQueuedMessages};
+    std::size_t max_bytes{kDefaultMaxQueuedBytes};
     AgentInputQueue steering;
     AgentInputQueue follow_up;
 };
@@ -132,8 +135,8 @@ struct AsyncAgentOptions {
     std::optional<int> max_turns{std::nullopt};
     /// Per-queue admission limits (ADR 0022). Defaults: 256 messages and
     /// 16 MiB of approximate message content.
-    std::size_t max_queued_messages{256};
-    std::size_t max_queued_bytes{16 * 1024 * 1024};
+    std::size_t max_queued_messages{kDefaultMaxQueuedMessages};
+    std::size_t max_queued_bytes{kDefaultMaxQueuedBytes};
     InputQueueMode steering_mode{InputQueueMode::OneAtATime};
     InputQueueMode follow_up_mode{InputQueueMode::OneAtATime};
     ai::Model model;

@@ -60,6 +60,8 @@ AgentSessionRuntime::AgentSessionRuntime(
     // Build the <available_skills> block once from the same immutable snapshot
     // used for explicit /skill:name invocation.
     agent::AsyncAgentOptions options;
+    options.max_queued_messages = config_.max_queued_messages;
+    options.max_queued_bytes = config_.max_queued_bytes;
     options.max_turns = config_.max_turns;
     options.model = ai::Model{std::move(config_.model)};
 

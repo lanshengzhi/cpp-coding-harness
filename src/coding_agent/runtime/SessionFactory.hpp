@@ -5,6 +5,7 @@
 #include "coding_agent/runtime/AgentSessionRuntime.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -24,6 +25,8 @@ struct AgentSessionCreationRequest {
     bool disable_prompt_templates{false};
     std::vector<std::string> prompt_template_paths;
     bool workspace_explicit{false};
+    std::size_t max_queued_messages{agent::kDefaultMaxQueuedMessages};
+    std::size_t max_queued_bytes{agent::kDefaultMaxQueuedBytes};
     /// Explicit turn cap for the assembled session; std::nullopt (the default)
     /// imposes no cap (ADR 0015).
     std::optional<int> max_turns{std::nullopt};

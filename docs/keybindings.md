@@ -79,19 +79,33 @@ semantics rather than inventing a configurable action ID.
 reusable editor has no selection/copy capability.
 
 Application (`app.*`) actions are registered only by a frontend that assembles
-the corresponding capability. The Native TUI composition registers
-`app.interrupt` with the baseline `escape` default. While autocomplete is open,
-a key that is also the effective `tui.select.cancel` binding dismisses
-suggestions before interruption is eligible; a distinct configured interrupt
-key still aborts active work. While Agent Session work is active, repeated
-interrupt input coalesces into exactly one request for that run's ordinary abort
-lifecycle; while idle it falls through to the baseline editor behavior. A
-configured known-but-unassembled application ID is diagnosed and skipped; it
-never creates a no-op binding or help entry. Platform defaults are resolved at
-concrete registration: for
-example, `app.suspend` defaults to `ctrl+z` on Linux and macOS, while native
-Windows has no job-control binding and help reports `Unavailable on native
-Windows`.
+the corresponding capability. The Native TUI composition registers these
+baseline application actions:
+
+| Action ID | Default keys | Active-run behavior |
+|---|---|---|
+| `app.interrupt` | `escape` | Restore pending input, then request one ordinary abort lifecycle. |
+| `app.message.followUp` | `alt+enter` | Admit editor text to the Agent Session follow-up queue. |
+| `app.message.dequeue` | `alt+up` | Restore steering, then follow-up, then unsent editor text. |
+
+Ordinary `tui.input.submit` starts a prompt while idle and admits steering input
+while a run is active. Alt+Enter acts like ordinary submit while idle. The
+default queue bindings do not conflict with `shift+enter` or `ctrl+j`, which
+remain `tui.input.newLine`. Accepted queued input leaves the editor and appears
+in the pending display. Capacity rejection restores the submitted editor text,
+leaves both Agent-owned queues and active work unchanged, and presents a
+redact-before-bound diagnostic.
+
+While autocomplete is open, a key that is also the effective
+`tui.select.cancel` binding dismisses suggestions before interruption is
+eligible; a distinct configured interrupt key still aborts active work. While
+Agent Session work is active, repeated interrupt input coalesces into exactly
+one request for that run's ordinary abort lifecycle; while idle it falls through
+to the baseline editor behavior. A configured known-but-unassembled application
+ID is diagnosed and skipped; it never creates a no-op binding or help entry.
+Platform defaults are resolved at concrete registration: for example,
+`app.suspend` defaults to `ctrl+z` on Linux and macOS, while native Windows has
+no job-control binding and help reports `Unavailable on native Windows`.
 
 ## Deterministic resolution and diagnostics
 

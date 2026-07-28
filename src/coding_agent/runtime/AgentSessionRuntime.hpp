@@ -12,6 +12,7 @@
 
 #include <boost/asio/awaitable.hpp>
 
+#include <cstddef>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -23,6 +24,8 @@
 namespace cch::coding_agent::runtime {
 
 struct AgentSessionRuntimeConfig {
+    std::size_t max_queued_messages{agent::kDefaultMaxQueuedMessages};
+    std::size_t max_queued_bytes{agent::kDefaultMaxQueuedBytes};
     /// Explicit turn cap forwarded to the Agent; std::nullopt imposes no cap
     /// (ADR 0015).
     std::optional<int> max_turns{std::nullopt};

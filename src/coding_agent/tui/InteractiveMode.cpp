@@ -1,6 +1,7 @@
 #include "InteractiveMode.hpp"
 
 #include <cch/agent/AgentEvent.hpp>
+#include <cch/ai/Content.hpp>
 #include <cch/coding_agent/Sdk.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/tui/Editor.hpp>
@@ -29,6 +30,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cctype>
 #include <exception>
 #include <format>
 #include <functional>
@@ -49,6 +51,8 @@ namespace {
 using ActionSink = std::move_only_function<void()>;
 using SubmitSink = std::move_only_function<void(std::string)>;
 using PromptActiveHook = std::move_only_function<bool()>;
+
+enum class InputSubmission { Ordinary, FollowUp };
 
 struct InteractiveStartupDiagnostics {
     std::vector<KeybindingDiagnostic> keybindings;
@@ -73,6 +77,55 @@ struct InteractiveStartupDiagnostics {
         error.code,
         std::move(message),
         bounded_redacted_presentation(combined_error_text(error)));
+}
+
+[[nodiscard]] std::string trim_editor_submission(std::string text) {
+    const auto first = std::find_if_not(text.begin(), text.end(), [](unsigned char value) {
+        return std::isspace(value) != 0;
+    });
+    const auto last = std::find_if_not(text.rbegin(), text.rend(), [](unsigned char value) {
+        return std::isspace(value) != 0;
+    }).base();
+    if (first >= last) return {};
+    return {first, last};
+}
+
+[[nodiscard]] std::optional<std::string> queued_editor_text(
+    const ai::MessageVariant& message) {
+    const auto* user = std::get_if<ai::UserMessage>(&message);
+    if (user == nullptr ||
+        std::any_of(
+            user->content.begin(),
+            user->content.end(),
+            [](const auto& block) {
+                return !std::holds_alternative<ai::TextContent>(block);
+            })) {
+        return std::nullopt;
+    }
+    auto text = ai::text_from_content(user->content);
+    if (text.empty()) return std::nullopt;
+    return text;
+}
+
+[[nodiscard]] util::Expected<std::vector<std::string>> queued_editor_texts(
+    const agent::AgentInputQueues& queues) {
+    std::vector<std::string> restored;
+    restored.reserve(
+        queues.steering.messages.size() + queues.follow_up.messages.size());
+    const auto append = [&restored](const auto& messages) {
+        for (const auto& message : messages) {
+            auto text = queued_editor_text(message);
+            if (!text) return false;
+            restored.push_back(std::move(*text));
+        }
+        return true;
+    };
+    if (!append(queues.steering.messages) || !append(queues.follow_up.messages)) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "queued input contains content that the editor cannot restore"));
+    }
+    return restored;
 }
 
 [[nodiscard]] util::Error startup_error(const util::Error& error) {
@@ -231,6 +284,8 @@ public:
         std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
         ActionSink on_invalidate,
         SubmitSink on_submit,
+        SubmitSink on_follow_up,
+        ActionSink on_dequeue,
         ActionSink on_interrupt,
         ActionSink on_exit,
         PromptActiveHook prompt_active,
@@ -239,6 +294,8 @@ public:
         : keybindings_(std::move(keybindings)),
           on_invalidate_(std::move(on_invalidate)),
           on_submit_(std::move(on_submit)),
+          on_follow_up_(std::move(on_follow_up)),
+          on_dequeue_(std::move(on_dequeue)),
           on_interrupt_(std::move(on_interrupt)),
           on_exit_(std::move(on_exit)),
           prompt_active_(std::move(prompt_active)),
@@ -285,9 +342,28 @@ public:
         transcript_.append_diagnostic(std::move(text));
     }
 
-    void restore_text_if_empty(const std::string& text) {
+    void restore_submitted_text(const std::string& text) {
         std::lock_guard lock(mutex_);
-        if (editor_.expanded_text().empty()) editor_.set_text(text);
+        restore_editor_text({text});
+    }
+
+    void restore_queued_text(const std::vector<std::string>& messages) {
+        std::lock_guard lock(mutex_);
+        restore_editor_text(messages);
+    }
+
+    void set_pending_input(const agent::AgentInputQueues& queues) {
+        std::lock_guard lock(mutex_);
+        pending_steering_.clear();
+        pending_follow_up_.clear();
+        for (const auto& message : queues.steering.messages) {
+            pending_steering_.push_back(
+                queued_editor_text(message).value_or("[unsupported queued input]"));
+        }
+        for (const auto& message : queues.follow_up.messages) {
+            pending_follow_up_.push_back(
+                queued_editor_text(message).value_or("[unsupported queued input]"));
+        }
     }
 
     void set_editor_theme(cch::tui::EditorTheme theme) {
@@ -335,8 +411,48 @@ public:
             }
         }
 
+        std::vector<std::string> pending_lines;
+        pending_lines.reserve(pending_steering_.size() + pending_follow_up_.size() + 1);
+        for (const auto& message : pending_steering_) {
+            cch::tui::TruncatedText item{"Steering: " + message};
+            if (auto rendered = item.render(width); !rendered) {
+                return std::unexpected(rendered.error());
+            } else if (!rendered->lines.empty()) {
+                pending_lines.push_back(std::move(rendered->lines.front()));
+            }
+        }
+        for (const auto& message : pending_follow_up_) {
+            cch::tui::TruncatedText item{"Follow-up: " + message};
+            if (auto rendered = item.render(width); !rendered) {
+                return std::unexpected(rendered.error());
+            } else if (!rendered->lines.empty()) {
+                pending_lines.push_back(std::move(rendered->lines.front()));
+            }
+        }
+        if (!pending_lines.empty()) {
+            const auto hint = keybindings_->key_text("app.message.dequeue");
+            cch::tui::TruncatedText item{std::format(
+                "↳ {} to edit all queued messages",
+                hint.empty() ? "Unbound" : hint)};
+            if (auto rendered = item.render(width); !rendered) {
+                return std::unexpected(rendered.error());
+            } else if (!rendered->lines.empty()) {
+                pending_lines.push_back(std::move(rendered->lines.front()));
+            }
+        }
+
+        const auto editor_occupied_rows = editor_lines.size() + autocomplete_lines.size();
+        const auto pending_capacity = available_rows_ > editor_occupied_rows
+            ? available_rows_ - editor_occupied_rows
+            : 0;
+        if (pending_lines.size() > pending_capacity) {
+            pending_lines.erase(
+                pending_lines.begin(),
+                pending_lines.end() - static_cast<std::ptrdiff_t>(pending_capacity));
+        }
+
         std::vector<std::string> transcript_lines;
-        const auto occupied_rows = editor_lines.size() + autocomplete_lines.size();
+        const auto occupied_rows = editor_occupied_rows + pending_lines.size();
         if (available_rows_ > occupied_rows) {
             const auto capacity = available_rows_ - occupied_rows;
             if (auto rendered = transcript_.render(width); !rendered) {
@@ -349,6 +465,10 @@ public:
             }
         }
 
+        transcript_lines.insert(
+            transcript_lines.end(),
+            std::make_move_iterator(pending_lines.begin()),
+            std::make_move_iterator(pending_lines.end()));
         editor_row_offset_ = transcript_lines.size();
         transcript_lines.insert(
             transcript_lines.end(),
@@ -381,6 +501,14 @@ public:
                 prompt_is_active() &&
                 !editor_cancels_interrupt) {
                 invoke_action(on_interrupt_, "Native TUI interrupt callback failed");
+                return;
+            }
+            if (keybindings_->matches(*key, "app.message.followUp")) {
+                invoke_follow_up();
+                return;
+            }
+            if (keybindings_->matches(*key, "app.message.dequeue")) {
+                invoke_action(on_dequeue_, "Native TUI dequeue callback failed");
                 return;
             }
             if (keybindings_->matches(*key, "app.clear")) {
@@ -455,14 +583,46 @@ private:
     }
 
     void invoke_submit(std::string text) {
-        if (!on_submit_) return;
+        invoke_submission(on_submit_, std::move(text), "Native TUI submit callback failed");
+    }
+
+    void invoke_follow_up() {
+        auto text = trim_editor_submission(editor_.expanded_text());
+        if (text.empty()) return;
+        editor_.set_text({});
+        invoke_submission(
+            on_follow_up_,
+            std::move(text),
+            "Native TUI follow-up callback failed");
+    }
+
+    void invoke_submission(
+        SubmitSink& sink,
+        std::string text,
+        std::string_view failure_message) {
+        if (!sink) return;
         try {
-            on_submit_(std::move(text));
+            sink(std::move(text));
         } catch (const std::exception& error) {
-            record_callback_error("Native TUI submit callback failed", error.what());
+            record_callback_error(std::string(failure_message), error.what());
         } catch (...) {
-            record_callback_error("Native TUI submit callback failed");
+            record_callback_error(std::string(failure_message));
         }
+    }
+
+    void restore_editor_text(const std::vector<std::string>& messages) {
+        std::string restored;
+        for (const auto& message : messages) {
+            if (message.empty()) continue;
+            if (!restored.empty()) restored += "\n\n";
+            restored += message;
+        }
+        auto current = editor_.expanded_text();
+        if (!current.empty()) {
+            if (!restored.empty()) restored += "\n\n";
+            restored += current;
+        }
+        editor_.set_text(std::move(restored));
     }
 
     [[nodiscard]] bool prompt_is_active() {
@@ -480,6 +640,8 @@ private:
     std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings_;
     ActionSink on_invalidate_;
     SubmitSink on_submit_;
+    SubmitSink on_follow_up_;
+    ActionSink on_dequeue_;
     ActionSink on_interrupt_;
     ActionSink on_exit_;
     PromptActiveHook prompt_active_;
@@ -487,6 +649,8 @@ private:
     mutable std::mutex mutex_;
     Transcript transcript_;
     cch::tui::Editor editor_;
+    std::vector<std::string> pending_steering_;
+    std::vector<std::string> pending_follow_up_;
     std::size_t available_rows_{24};
     std::size_t editor_row_offset_{0};
 };
@@ -585,12 +749,14 @@ private:
     [[nodiscard]] util::Expected<InteractiveStartupDiagnostics> load_startup_resources(
         const InteractiveModeConfig& config) {
         InteractiveStartupDiagnostics diagnostics;
-        constexpr std::array<std::string_view, 5> kActions{
+        constexpr std::array<std::string_view, 7> kActions{
             "app.interrupt",
             "app.clear",
             "app.exit",
             "app.tools.expand",
             "app.thinking.toggle",
+            "app.message.followUp",
+            "app.message.dequeue",
         };
         if (auto definitions = baseline_application_keybindings(kActions, config.platform); !definitions) {
             return std::unexpected(definitions.error());
@@ -646,7 +812,17 @@ private:
                 if (const auto self = weak.lock()) self->post_invalidate();
             },
             [weak](std::string text) {
-                if (const auto self = weak.lock()) self->post_submit(std::move(text));
+                if (const auto self = weak.lock()) {
+                    self->post_submit(std::move(text), InputSubmission::Ordinary);
+                }
+            },
+            [weak](std::string text) {
+                if (const auto self = weak.lock()) {
+                    self->post_submit(std::move(text), InputSubmission::FollowUp);
+                }
+            },
+            [weak] {
+                if (const auto self = weak.lock()) self->post_dequeue();
             },
             [weak] {
                 if (const auto self = weak.lock()) self->post_interrupt();
@@ -681,6 +857,7 @@ private:
         view_->set_editor_theme(theme_controller_->live_theme().editor_theme());
         const auto snapshot = session_.snapshot();
         view_->initialize(snapshot);
+        view_->set_pending_input(snapshot.agent_state.input_queues);
         for (const auto& diagnostic : snapshot.agent_state.diagnostics) {
             auto text = combined_error_text(diagnostic);
             view_->append_diagnostic(text);
@@ -716,10 +893,17 @@ private:
         });
     }
 
-    void post_submit(std::string text) {
+    void post_submit(std::string text, InputSubmission submission) {
         const auto weak = weak_from_this();
-        boost::asio::post(executor_, [weak, text = std::move(text)]() mutable {
-            if (const auto self = weak.lock()) self->submit(std::move(text));
+        boost::asio::post(executor_, [weak, text = std::move(text), submission]() mutable {
+            if (const auto self = weak.lock()) self->submit(std::move(text), submission);
+        });
+    }
+
+    void post_dequeue() {
+        const auto weak = weak_from_this();
+        boost::asio::post(executor_, [weak] {
+            if (const auto self = weak.lock()) self->dequeue_pending_input(true);
         });
     }
 
@@ -912,15 +1096,32 @@ private:
             return;
         }
         interrupt_requested_generation_ = prompt_generation;
+        dequeue_pending_input(false);
         session_.abort();
     }
 
-    void submit(std::string text) {
+    void submit(std::string text, InputSubmission submission) {
         if (!running_ || view_ == nullptr || text.empty()) return;
         if (dispatch_command(text)) return;
-        if (prompt_active_) {
-            view_->restore_text_if_empty(text);
+        if (prompt_active_ &&
+            interrupt_requested_generation_ == prompt_generation_.load()) {
+            view_->restore_submitted_text(text);
             view_->append_diagnostic("A prompt is already in flight");
+            tui_.invalidate();
+            return;
+        }
+        if (prompt_active_) {
+            if (auto admitted = submission == InputSubmission::FollowUp
+                    ? session_.follow_up(text)
+                    : session_.steer(text);
+                !admitted) {
+                view_->restore_submitted_text(text);
+                view_->append_diagnostic(bounded_redacted_presentation(std::format(
+                    "Unable to queue {} input: {}",
+                    submission == InputSubmission::FollowUp ? "follow-up" : "steering",
+                    combined_error_text(admitted.error()))));
+            }
+            sync_pending_input();
             tui_.invalidate();
             return;
         }
@@ -954,6 +1155,43 @@ private:
             });
     }
 
+    void dequeue_pending_input(bool announce) {
+        if (!running_ || view_ == nullptr || !session_.is_open()) return;
+        const auto snapshot = session_.snapshot();
+        std::vector<std::string> restored;
+        if (auto collected = queued_editor_texts(snapshot.agent_state.input_queues);
+            !collected) {
+            view_->append_diagnostic(collected.error().message);
+            tui_.invalidate();
+            return;
+        } else {
+            restored = std::move(*collected);
+        }
+        if (restored.empty()) {
+            if (announce) view_->append_frontend_message("No queued messages to restore");
+            sync_pending_input();
+            tui_.invalidate();
+            return;
+        }
+        if (auto cleared = session_.clear_input_queues(); !cleared) {
+            view_->append_diagnostic(bounded_redacted_presentation(std::format(
+                "Unable to restore queued input: {}",
+                combined_error_text(cleared.error()))));
+            sync_pending_input();
+            tui_.invalidate();
+            return;
+        }
+        view_->restore_queued_text(restored);
+        if (announce) {
+            view_->append_frontend_message(std::format(
+                "Restored {} queued message{} to editor",
+                restored.size(),
+                restored.size() == 1 ? "" : "s"));
+        }
+        sync_pending_input();
+        tui_.invalidate();
+    }
+
     void prompt_launch_failed(std::exception_ptr exception) {
         prompt_active_ = false;
         std::string detail = "unknown exception";
@@ -972,18 +1210,25 @@ private:
 
     void prompt_finished(util::ExpectedVoid result, const std::string& submitted_text) {
         prompt_active_ = false;
-        sync_agent_diagnostics();
+        sync_session_observations();
         if (!result && view_ != nullptr && running_) {
             view_->append_diagnostic(combined_error_text(result.error()));
-            view_->restore_text_if_empty(submitted_text);
+            view_->restore_submitted_text(submitted_text);
             tui_.invalidate();
         }
         if (exit_requested_) signal_exit();
     }
 
-    void sync_agent_diagnostics() {
+    void sync_pending_input() {
+        if (!running_ || view_ == nullptr || !session_.is_open()) return;
+        view_->set_pending_input(session_.snapshot().agent_state.input_queues);
+    }
+
+    void sync_session_observations() {
         if (!running_ || view_ == nullptr || !session_.is_open()) return;
         const auto snapshot = session_.snapshot();
+        view_->set_pending_input(snapshot.agent_state.input_queues);
+
         std::vector<std::string> current;
         current.reserve(snapshot.agent_state.diagnostics.size());
         for (const auto& diagnostic : snapshot.agent_state.diagnostics) {
@@ -1006,7 +1251,7 @@ private:
     void on_event(const agent::AgentLifecycleEvent& event) {
         if (!running_ || view_ == nullptr) return;
         view_->apply_event(event);
-        sync_agent_diagnostics();
+        sync_session_observations();
         tui_.invalidate();
     }
 

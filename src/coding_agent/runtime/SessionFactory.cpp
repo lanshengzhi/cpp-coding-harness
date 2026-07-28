@@ -87,6 +87,8 @@ struct AssemblyPlan {
     bool prompt_templates_enabled{true};
     std::optional<std::filesystem::path> trust_store_path;
     std::optional<bool> project_trust_override;
+    std::size_t max_queued_messages{agent::kDefaultMaxQueuedMessages};
+    std::size_t max_queued_bytes{agent::kDefaultMaxQueuedBytes};
     /// Explicit turn cap carried into the runtime config; std::nullopt (the
     /// default) imposes no cap (ADR 0015).
     std::optional<int> max_turns{std::nullopt};
@@ -495,6 +497,8 @@ struct SessionTargetNormalizationOptions {
     }
     plan.prompt_templates_enabled = !request.disable_prompt_templates;
     plan.prompt_template_paths = request.prompt_template_paths;
+    plan.max_queued_messages = request.max_queued_messages;
+    plan.max_queued_bytes = request.max_queued_bytes;
     plan.max_turns = request.max_turns;
 
     return plan;
@@ -556,6 +560,8 @@ struct SessionTargetNormalizationOptions {
     plan.load_project_resources = options.load_project_resources;
     plan.default_project_trust = options.default_project_trust;
     plan.project_skills_enablement = options.project_skills_enablement;
+    plan.max_queued_messages = options.max_queued_messages;
+    plan.max_queued_bytes = options.max_queued_bytes;
     plan.max_turns = options.max_turns;
     plan.trust_store_path = options.trust_store_path;
 
@@ -875,6 +881,8 @@ struct SessionTargetNormalizationOptions {
     prompt::PromptProcessor prompt_processor{std::move(skills), std::move(templates)};
 
     AgentSessionRuntimeConfig runtime_config;
+    runtime_config.max_queued_messages = plan.max_queued_messages;
+    runtime_config.max_queued_bytes = plan.max_queued_bytes;
     runtime_config.max_turns = plan.max_turns;
     runtime_config.model = resolved.model;
 

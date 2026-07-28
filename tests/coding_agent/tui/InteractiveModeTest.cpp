@@ -325,6 +325,57 @@ private:
     std::optional<boost::asio::steady_timer> gate_;
 };
 
+class TurnGatedChatClient final : public ai::StreamingChatClient {
+public:
+    TurnGatedChatClient() = default;
+    TurnGatedChatClient(TurnGatedChatClient&&) = delete;
+    TurnGatedChatClient& operator=(TurnGatedChatClient&&) = delete;
+    ~TurnGatedChatClient() override = default;
+    TurnGatedChatClient(const TurnGatedChatClient&) = delete;
+    TurnGatedChatClient& operator=(const TurnGatedChatClient&) = delete;
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink) override {
+        ++request_count;
+        std::vector<std::string> users;
+        for (const auto& message : request.context.messages) {
+            if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
+                users.push_back(ai::text_from_content(user->content));
+            }
+        }
+        observed_users.push_back(std::move(users));
+
+        const auto executor = co_await boost::asio::this_coro::executor;
+        gate_.emplace(executor);
+        gate_->expires_at(std::chrono::steady_clock::time_point::max());
+        boost::system::error_code error;
+        co_await gate_->async_wait(
+            boost::asio::redirect_error(boost::asio::use_awaitable, error));
+
+        auto response = ai::assistant_text_message(std::format("turn {}", request_count));
+        response.provider = "turn-gated-fake";
+        response.api = "fake";
+        response.model = request.model->id;
+        if (first_request_errors && request_count == 1) {
+            response.stop_reason = ai::AssistantStopReason::Error;
+            response.error_message = "accepted queued error";
+        }
+        co_return response;
+    }
+
+    void release() {
+        if (gate_) (void)gate_->cancel();
+    }
+
+    bool first_request_errors{false};
+    std::size_t request_count{0};
+    std::vector<std::vector<std::string>> observed_users;
+
+private:
+    std::optional<boost::asio::steady_timer> gate_;
+};
+
 class RepeatedReadCallChatClient final : public ai::StreamingChatClient {
 public:
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
@@ -1559,8 +1610,338 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Native TUI preserves batched submissions across deferred prompt dispatch",
-    "[coding_agent][tui][async][issue58]") {
+    "Native TUI steers and follows up in pi-compatible turn order",
+    "[coding_agent][tui][queues][issue62]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto client = std::make_unique<TurnGatedChatClient>();
+    auto* client_pointer = client.get();
+    auto options = session_options(workspace, std::move(client));
+    options.max_queued_messages = 3;
+    options.max_queued_bytes = 64;
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("initial\x1b[13;3u"));
+    drain_ready(io);
+    CHECK(client_pointer->request_count == 1);
+
+    REQUIRE(terminal.inject_input("steer one\rsteer two\r"));
+    REQUIRE(terminal.inject_input("follow one\x1b[13;3u"));
+    drain_ready(io);
+
+    auto snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 2);
+    REQUIRE(snapshot.agent_state.input_queues.follow_up.messages.size() == 1);
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("Steering: steer one") != std::string::npos);
+    CHECK(screen.find("Steering: steer two") != std::string::npos);
+    CHECK(screen.find("Follow-up: follow one") != std::string::npos);
+    CHECK(screen.find("alt+up to edit all queued messages") != std::string::npos);
+
+    client_pointer->release();
+    drain_ready(io);
+    CHECK(client_pointer->request_count == 2);
+    REQUIRE(client_pointer->observed_users.size() == 2);
+    CHECK((client_pointer->observed_users[1] ==
+        std::vector<std::string>{"initial", "steer one"}));
+
+    client_pointer->release();
+    drain_ready(io);
+    CHECK(client_pointer->request_count == 3);
+    REQUIRE(client_pointer->observed_users.size() == 3);
+    CHECK((client_pointer->observed_users[2] ==
+        std::vector<std::string>{"initial", "steer one", "steer two"}));
+
+    client_pointer->release();
+    drain_ready(io);
+    CHECK(client_pointer->request_count == 4);
+    REQUIRE(client_pointer->observed_users.size() == 4);
+    CHECK((client_pointer->observed_users[3] ==
+        std::vector<std::string>{"initial", "steer one", "steer two", "follow one"}));
+
+    client_pointer->release();
+    drain_ready(io);
+    CHECK_FALSE(created->session->is_busy());
+    CHECK(created->session->snapshot().agent_state.input_queues.steering.messages.empty());
+    CHECK(created->session->snapshot().agent_state.input_queues.follow_up.messages.empty());
+
+    REQUIRE(terminal.inject_input("continued\r"));
+    drain_ready(io);
+    CHECK(client_pointer->request_count == 5);
+    client_pointer->release();
+    drain_ready(io);
+    CHECK_FALSE(created->session->is_busy());
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI preserves bounded rejected input and dequeues pending text",
+    "[coding_agent][tui][queues][limits][issue62]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto client = std::make_unique<TurnGatedChatClient>();
+    auto* client_pointer = client.get();
+    auto options = session_options(workspace, std::move(client));
+    options.max_queued_messages = 2;
+    options.max_queued_bytes = 4;
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("initial\r"));
+    drain_ready(io);
+    CHECK(client_pointer->request_count == 1);
+
+    REQUIRE(terminal.inject_input("line one\x1b[13;2uline two"));
+    drain_ready(io);
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("line one") != std::string::npos);
+    CHECK(screen.find("line two") != std::string::npos);
+    CHECK(created->session->snapshot().agent_state.input_queues.steering.messages.empty());
+    REQUIRE(terminal.inject_input("\x03"));
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("é\ré\rx\r"));
+    drain_ready(io);
+    auto snapshot = created->session->snapshot();
+    CHECK(snapshot.agent_state.input_queues.max_messages == 2);
+    CHECK(snapshot.agent_state.input_queues.max_bytes == 4);
+    REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 2);
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(
+        snapshot.agent_state.input_queues.steering.messages[0]).content) == "é");
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(
+        snapshot.agent_state.input_queues.steering.messages[1]).content) == "é");
+    screen = visible_screen(terminal);
+    CHECK(screen.find("Unable to queue steering input: too many queued messages") !=
+        std::string::npos);
+    CHECK(screen.find("Steering: é") != std::string::npos);
+    CHECK(screen.find("x") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("\r"));
+    drain_ready(io);
+    snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 2);
+    CHECK(visible_screen(terminal).find("Unable to queue steering input") !=
+        std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x1b[1;3A"));
+    drain_ready(io);
+    snapshot = created->session->snapshot();
+    CHECK(snapshot.agent_state.input_queues.steering.messages.empty());
+    screen = visible_screen(terminal);
+    const auto first = screen.find("é");
+    const auto second = screen.find("é", first + 1);
+    const auto draft = screen.find("x", second + 1);
+    REQUIRE(first != std::string::npos);
+    REQUIRE(second != std::string::npos);
+    REQUIRE(draft != std::string::npos);
+    CHECK(first < second);
+    CHECK(second < draft);
+    CHECK(screen.find("Restored 2 queued messages to editor") != std::string::npos);
+    CHECK(screen.find("Steering: é") == std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x03éé\rx\r"));
+    drain_ready(io);
+    snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 1);
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(
+        snapshot.agent_state.input_queues.steering.messages[0]).content) == "éé");
+    screen = visible_screen(terminal);
+    CHECK(screen.find("Unable to queue steering input: queued messages too large") !=
+        std::string::npos);
+    CHECK(screen.find("x") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x1b[1;3A"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\x03ok\r"));
+    drain_ready(io);
+    snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 1);
+    CHECK(ai::text_from_content(std::get<ai::UserMessage>(
+        snapshot.agent_state.input_queues.steering.messages[0]).content) == "ok");
+
+    client_pointer->release();
+    drain_ready(io);
+    CHECK(client_pointer->request_count == 2);
+    client_pointer->release();
+    drain_ready(io);
+    CHECK_FALSE(created->session->is_busy());
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI preserves follow-up after an accepted error and remains usable",
+    "[coding_agent][tui][queues][error][issue62]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto client = std::make_unique<TurnGatedChatClient>();
+    auto* client_pointer = client.get();
+    client_pointer->first_request_errors = true;
+    auto created = coding_agent::create_agent_session(session_options(
+        workspace,
+        std::move(client)));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 16});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("initial\rfollow after error\x1b[13;3u"));
+    drain_ready(io);
+    CHECK(client_pointer->request_count == 1);
+    REQUIRE(created->session->snapshot().agent_state.input_queues.follow_up.messages.size() == 1);
+
+    client_pointer->release();
+    drain_ready(io);
+    CHECK(client_pointer->request_count == 1);
+    CHECK_FALSE(created->session->is_busy());
+    REQUIRE(created->session->snapshot().agent_state.input_queues.follow_up.messages.size() == 1);
+    auto screen = visible_screen(terminal);
+    CHECK(count_text(screen, "Provider error: accepted queued error") == 1);
+    CHECK(screen.find("Follow-up: follow after error") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x1b[1;3A"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\r"));
+    drain_ready(io);
+    CHECK(client_pointer->request_count == 2);
+    CHECK(created->session->snapshot().agent_state.input_queues.follow_up.messages.empty());
+    client_pointer->release();
+    drain_ready(io);
+    CHECK_FALSE(created->session->is_busy());
+    CHECK(visible_screen(terminal).find("Assistant: turn 2") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("continued\r"));
+    drain_ready(io);
+    CHECK(client_pointer->request_count == 3);
+    client_pointer->release();
+    drain_ready(io);
+    CHECK_FALSE(created->session->is_busy());
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI restores pending input before abort and accepts it after quiescence",
+    "[coding_agent][tui][queues][abort][issue62]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto client = std::make_unique<AbortAwareInteractiveChatClient>();
+    auto* client_pointer = client.get();
+    auto created = coding_agent::create_agent_session(session_options(
+        workspace,
+        std::move(client)));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("abort queues\rsteer later\rfollow later\x1b[13;3udraft"));
+    drain_ready(io);
+    REQUIRE(client_pointer->started);
+    auto snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 1);
+    REQUIRE(snapshot.agent_state.input_queues.follow_up.messages.size() == 1);
+
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    CHECK_FALSE(created->session->is_busy());
+    snapshot = created->session->snapshot();
+    CHECK(snapshot.agent_state.input_queues.steering.messages.empty());
+    CHECK(snapshot.agent_state.input_queues.follow_up.messages.empty());
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("Steering: steer later") == std::string::npos);
+    CHECK(screen.find("Follow-up: follow later") == std::string::npos);
+    const auto steering = screen.find("steer later");
+    const auto follow_up = screen.find("follow later", steering + 1);
+    const auto draft = screen.find("draft", follow_up + 1);
+    REQUIRE(steering != std::string::npos);
+    REQUIRE(follow_up != std::string::npos);
+    REQUIRE(draft != std::string::npos);
+    CHECK(steering < follow_up);
+    CHECK(follow_up < draft);
+    CHECK(count_text(screen, "Provider aborted: prompt aborted") == 1);
+
+    REQUIRE(terminal.inject_input("\x03recover\r"));
+    drain_ready(io);
+    CHECK_FALSE(created->session->is_busy());
+    CHECK(visible_screen(terminal).find("Assistant: recovered after TUI abort") !=
+        std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI queues batched submissions across deferred prompt dispatch",
+    "[coding_agent][tui][async][issue58][issue62]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto client = std::make_unique<GatedChatClient>();
@@ -1591,15 +1972,13 @@ TEST_CASE(
     CHECK(created->session->message_count() == 1);
     auto screen = visible_screen(terminal);
     CHECK(screen.find("You: first batched") != std::string::npos);
-    CHECK(screen.find("second batched") != std::string::npos);
-    CHECK(screen.find("A prompt is already in flight") != std::string::npos);
+    CHECK(screen.find("Steering: second batched") != std::string::npos);
+    REQUIRE(created->session->snapshot().agent_state.input_queues.steering.messages.size() == 1);
 
     client_pointer->release();
     drain_ready(io);
-    CHECK(created->session->message_count() == 2);
-    REQUIRE(terminal.inject_input("\r"));
-    drain_ready(io);
     CHECK(created->session->message_count() == 3);
+    CHECK(created->session->snapshot().agent_state.input_queues.steering.messages.empty());
     client_pointer->release();
     drain_ready(io);
     CHECK(created->session->message_count() == 4);

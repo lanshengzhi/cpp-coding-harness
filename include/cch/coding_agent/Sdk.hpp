@@ -15,6 +15,7 @@
 
 #include <boost/asio/awaitable.hpp>
 
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -171,7 +172,11 @@ struct CreateAgentSessionOptions {
     /// absolute and must not resolve to the workspace or any path inside it.
     std::optional<std::filesystem::path> trust_store_path;
 
-    // ── Reserved ─────────────────────────────────────────────────────────
+    // ── Agent execution policy ───────────────────────────────────────────
+    /// Per-queue admission limits forwarded to AsyncAgentOptions. The Agent
+    /// remains the sole owner of queue storage, bounds, and admission.
+    std::size_t max_queued_messages{agent::kDefaultMaxQueuedMessages};
+    std::size_t max_queued_bytes{agent::kDefaultMaxQueuedBytes};
     /// Optional explicit turn cap per prompt (passed through to
     /// AsyncAgentOptions). std::nullopt (the default) imposes no turn cap
     /// (ADR 0015).
