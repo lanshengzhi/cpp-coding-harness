@@ -11,6 +11,7 @@
 #include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "harness/session/SessionJournalTestHooks.hpp"
 
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
@@ -26,8 +27,10 @@
 #include <format>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
+#include <vector>
 
 using namespace cch;
 
@@ -181,6 +184,100 @@ public:
 
 private:
     tui::TerminalModeState modes_;
+};
+
+class AbortAwareInteractiveChatClient final : public ai::StreamingChatClient {
+public:
+    AbortAwareInteractiveChatClient() = default;
+    AbortAwareInteractiveChatClient(AbortAwareInteractiveChatClient&&) = delete;
+    AbortAwareInteractiveChatClient& operator=(AbortAwareInteractiveChatClient&&) = delete;
+    ~AbortAwareInteractiveChatClient() override = default;
+    AbortAwareInteractiveChatClient(const AbortAwareInteractiveChatClient&) = delete;
+    AbortAwareInteractiveChatClient& operator=(const AbortAwareInteractiveChatClient&) = delete;
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        ++request_count;
+        if (request_count > 1) {
+            recovery_uses_fresh_token = first_stop_token && request.stop_token != *first_stop_token;
+            recovery_stop_requested = request.stop_token.stop_requested();
+            auto recovered = ai::assistant_text_message("recovered after TUI abort");
+            recovered.provider = "abort-aware-fake";
+            recovered.api = "fake";
+            recovered.model = request.model->id;
+            co_return recovered;
+        }
+
+        const auto stop_token = request.stop_token;
+        first_stop_token = stop_token;
+        auto partial = ai::assistant_text_message("");
+        partial.provider = "abort-aware-fake";
+        partial.api = "fake";
+        partial.model = request.model->id;
+        partial.content.clear();
+        if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+        partial.content.emplace_back(ai::text_content(""));
+        if (auto emitted = sink(ai::TextStartEvent{
+                .content_index = 0,
+                .partial = partial,
+            });
+            !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+        std::get<ai::TextContent>(partial.content[0]).text = "partial assistant output";
+        if (auto emitted = sink(ai::TextDeltaEvent{
+                .content_index = 0,
+                .delta = "partial assistant output",
+                .partial = partial,
+            });
+            !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+
+        const auto executor = co_await boost::asio::this_coro::executor;
+        gate_.emplace(executor);
+        gate_->expires_at(std::chrono::steady_clock::time_point::max());
+        started = true;
+        std::stop_callback cancellation{stop_token, [this] {
+            ++stop_callback_count;
+            if (gate_) (void)gate_->cancel();
+        }};
+        boost::system::error_code error;
+        if (!stop_token.stop_requested()) {
+            co_await gate_->async_wait(
+                boost::asio::redirect_error(boost::asio::use_awaitable, error));
+        }
+
+        if (stop_token.stop_requested()) {
+            partial.stop_reason = ai::AssistantStopReason::Aborted;
+            partial.error_message = "prompt aborted";
+            if (auto emitted = sink(ai::AssistantErrorEvent{
+                    .reason = ai::AssistantStopReason::Aborted,
+                    .error = partial,
+                });
+                !emitted) {
+                co_return std::unexpected(emitted.error());
+            }
+            co_return partial;
+        }
+
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Unknown,
+            "abort-aware fake released without cancellation"));
+    }
+
+    bool started{false};
+    bool recovery_uses_fresh_token{false};
+    bool recovery_stop_requested{true};
+    std::size_t request_count{0};
+    std::size_t stop_callback_count{0};
+    std::optional<std::stop_token> first_stop_token;
+
+private:
+    std::optional<boost::asio::steady_timer> gate_;
 };
 
 class GatedChatClient final : public ai::StreamingChatClient {
@@ -390,6 +487,136 @@ private:
     ai::Tool definition_;
     std::optional<boost::asio::steady_timer> gate_;
     std::optional<agent::ToolUpdateSink> late_update_sink_;
+};
+
+class DelayedCancellationTool final : public agent::AsyncAgentTool {
+public:
+    DelayedCancellationTool() {
+        definition_.name = "delayed";
+        definition_.description = "Wait until cancellation is allowed to quiesce";
+        definition_.parameters = util::JsonValue::object_t{{"type", "object"}};
+    }
+    DelayedCancellationTool(DelayedCancellationTool&&) = delete;
+    DelayedCancellationTool& operator=(DelayedCancellationTool&&) = delete;
+    ~DelayedCancellationTool() override = default;
+    DelayedCancellationTool(const DelayedCancellationTool&) = delete;
+    DelayedCancellationTool& operator=(const DelayedCancellationTool&) = delete;
+
+    [[nodiscard]] const ai::Tool& definition() const override {
+        return definition_;
+    }
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
+        agent::ToolInvocation,
+        std::stop_token) override {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Tool,
+            "delayed tool requires the update path"));
+    }
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>>
+    execute_with_updates(
+        agent::ToolInvocation,
+        std::stop_token stop_token,
+        agent::ToolUpdateSink update_sink) override {
+        observed_stop_token = stop_token;
+        agent::AsyncToolExecutionResult partial;
+        partial.content.emplace_back(ai::text_content("partial tool output before abort"));
+        if (auto updated = update_sink(partial); !updated) {
+            co_return std::unexpected(updated.error());
+        }
+
+        const auto executor = co_await boost::asio::this_coro::executor;
+        gate_.emplace(executor);
+        gate_->expires_at(std::chrono::steady_clock::time_point::max());
+        started = true;
+        std::stop_callback cancellation{stop_token, [this] {
+            ++stop_callback_count;
+        }};
+        boost::system::error_code error;
+        co_await gate_->async_wait(
+            boost::asio::redirect_error(boost::asio::use_awaitable, error));
+
+        if (stop_token.stop_requested()) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Cancelled,
+                "delayed tool aborted"));
+        }
+        co_return agent::AsyncToolExecutionResult{};
+    }
+
+    void release() {
+        if (gate_) (void)gate_->cancel();
+    }
+
+    bool started{false};
+    std::size_t stop_callback_count{0};
+    std::optional<std::stop_token> observed_stop_token;
+
+private:
+    ai::Tool definition_;
+    std::optional<boost::asio::steady_timer> gate_;
+};
+
+class AbortThroughToolChatClient final : public ai::StreamingChatClient {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        ++request_count;
+        if (request.stop_token.stop_requested()) {
+            completion_stop_token = request.stop_token;
+            auto aborted = ai::assistant_text_message("");
+            aborted.provider = "tool-abort-fake";
+            aborted.api = "fake";
+            aborted.model = request.model->id;
+            aborted.stop_reason = ai::AssistantStopReason::Aborted;
+            aborted.error_message = "tool prompt aborted";
+            if (auto emitted = sink(ai::AssistantErrorEvent{
+                    .reason = ai::AssistantStopReason::Aborted,
+                    .error = aborted,
+                });
+                !emitted) {
+                co_return std::unexpected(emitted.error());
+            }
+            co_return aborted;
+        }
+
+        std::string prompt;
+        for (auto message = request.context.messages.rbegin();
+             message != request.context.messages.rend();
+             ++message) {
+            if (const auto* user = std::get_if<ai::UserMessage>(&*message)) {
+                prompt = ai::text_from_content(user->content);
+                break;
+            }
+        }
+        if (prompt == "recover after tool abort") {
+            auto recovered = ai::assistant_text_message("recovered after tool abort");
+            recovered.provider = "tool-abort-fake";
+            recovered.api = "fake";
+            recovered.model = request.model->id;
+            co_return recovered;
+        }
+
+        first_stop_token = request.stop_token;
+        auto response = ai::assistant_text_message("");
+        response.provider = "tool-abort-fake";
+        response.api = "fake";
+        response.model = request.model->id;
+        response.content.clear();
+        response.content.emplace_back(ai::tool_call_content(
+            "delayed-call",
+            "delayed",
+            "{}",
+            util::JsonValue::object_t{}));
+        response.stop_reason = ai::AssistantStopReason::ToolUse;
+        co_return response;
+    }
+
+    std::size_t request_count{0};
+    std::optional<std::stop_token> first_stop_token;
+    std::optional<std::stop_token> completion_stop_token;
 };
 
 class AcceptedOutcomeChatClient final : public ai::StreamingChatClient {
@@ -823,6 +1050,325 @@ TEST_CASE(
     CHECK(count_text(screen, "read#fake-read-1") == 2);
     CHECK(count_text(screen, "Tool success: read#fake-read-1") == 1);
     CHECK(count_text(screen, "Tool failed: read#fake-read-1") == 1);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI interrupt cancels autocomplete before aborting active work and recovers",
+    "[coding_agent][tui][abort][issue61]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto client = std::make_unique<AbortAwareInteractiveChatClient>();
+    auto* client_pointer = client.get();
+    auto created = coding_agent::create_agent_session(session_options(
+        workspace,
+        std::move(client)));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 16});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("cancel me\r"));
+    drain_ready(io);
+    REQUIRE(client_pointer->started);
+    CHECK(created->session->is_busy());
+    CHECK(visible_screen(terminal).find("partial assistant output") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("/"));
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("/clear") != std::string::npos);
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    CHECK(created->session->is_busy());
+    CHECK(client_pointer->stop_callback_count == 0);
+    CHECK(visible_screen(terminal).find("/clear") == std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+
+    CHECK_FALSE(created->session->is_busy());
+    CHECK(client_pointer->stop_callback_count == 1);
+    auto screen = visible_screen(terminal);
+    CHECK(count_text(screen, "partial assistant output") == 1);
+    CHECK(count_text(screen, "Provider aborted: prompt aborted") == 1);
+
+    REQUIRE(terminal.inject_input("\x03recover\r"));
+    drain_ready(io);
+    CHECK_FALSE(client_pointer->recovery_stop_requested);
+    CHECK(client_pointer->recovery_uses_fresh_token);
+    CHECK(visible_screen(terminal).find("Assistant: recovered after TUI abort") !=
+        std::string::npos);
+
+    REQUIRE(terminal.inject_input("draft"));
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("draft") != std::string::npos);
+    CHECK(created->session->message_count() == 4);
+
+    REQUIRE(terminal.inject_input("\x03\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+    CHECK_FALSE(terminal.modes().started);
+}
+
+TEST_CASE(
+    "Native TUI repeated interrupt and shutdown input restores the terminal once",
+    "[coding_agent][tui][abort][shutdown][issue61]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    config.write(
+        "keybindings.json",
+        R"({"app.interrupt":"f7","app.exit":"f6"})");
+    auto client = std::make_unique<AbortAwareInteractiveChatClient>();
+    auto* client_pointer = client.get();
+    auto created = coding_agent::create_agent_session(session_options(
+        workspace,
+        std::move(client)));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 12});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("stop and close\r"));
+    drain_ready(io);
+    REQUIRE(client_pointer->started);
+    REQUIRE(terminal.inject_input("\x1b[18~\x1b[18~\x1b[17~\x1b[17~"));
+    drain_ready(io);
+
+    REQUIRE(run_result);
+    CHECK(*run_result);
+    CHECK(client_pointer->stop_callback_count == 1);
+    CHECK(count_text(visible_screen(terminal), "Provider aborted: prompt aborted") == 1);
+    CHECK_FALSE(created->session->is_open());
+    CHECK_FALSE(created->session->is_busy());
+    CHECK_FALSE(terminal.modes().started);
+    CHECK(terminal.modes().cursor_visible);
+}
+
+TEST_CASE(
+    "Native TUI waits for cancelled tool quiescence before accepting the next prompt",
+    "[coding_agent][tui][abort][tools][issue61]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    config.write("keybindings.json", R"({"app.interrupt":"f7"})");
+    auto client = std::make_unique<AbortThroughToolChatClient>();
+    auto* client_pointer = client.get();
+    auto options = session_options(workspace, std::move(client));
+    auto tool = std::make_unique<DelayedCancellationTool>();
+    auto* tool_pointer = tool.get();
+    options.custom_tools.push_back(std::move(tool));
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("use delayed tool\r"));
+    drain_ready(io);
+    REQUIRE(tool_pointer->started);
+    REQUIRE(tool_pointer->observed_stop_token.has_value());
+    REQUIRE(client_pointer->first_stop_token.has_value());
+    CHECK(*tool_pointer->observed_stop_token == *client_pointer->first_stop_token);
+    CHECK(visible_screen(terminal).find("partial tool output before abort") !=
+        std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    CHECK(created->session->is_busy());
+    CHECK(tool_pointer->stop_callback_count == 0);
+
+    REQUIRE(terminal.inject_input("/"));
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("/clear") != std::string::npos);
+    REQUIRE(terminal.inject_input("\x1b[18~\x1b[18~"));
+    drain_ready(io);
+    CHECK(created->session->is_busy());
+    CHECK(tool_pointer->stop_callback_count == 1);
+    CHECK(tool_pointer->observed_stop_token->stop_requested());
+
+    REQUIRE(terminal.inject_input("\x03recover after tool abort\r"));
+    drain_ready(io);
+    CHECK(created->session->message_count() == 2);
+    CHECK(visible_screen(terminal).find("A prompt is already in flight") !=
+        std::string::npos);
+
+    tool_pointer->release();
+    drain_ready(io);
+    CHECK_FALSE(created->session->is_busy());
+    auto screen = visible_screen(terminal);
+    CHECK(count_text(screen, "Provider aborted: tool prompt aborted") == 1);
+    CHECK(count_text(screen, "Tool failed: delayed#delayed-call") == 1);
+    REQUIRE(client_pointer->completion_stop_token.has_value());
+    CHECK(*client_pointer->completion_stop_token == *client_pointer->first_stop_token);
+
+    REQUIRE(terminal.inject_input("\r"));
+    drain_ready(io);
+    CHECK(created->session->message_count() == 6);
+    CHECK(visible_screen(terminal).find("Assistant: recovered after tool abort") !=
+        std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI distinguishes subscriber diagnostics and remains usable",
+    "[coding_agent][tui][diagnostics][issue61]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto created = coding_agent::create_agent_session(session_options(
+        workspace,
+        ai::providers::make_scripted_fake_chat_client()));
+    REQUIRE(created);
+    std::vector<coding_agent::EventSubscription> failing_subscriptions;
+    for (std::size_t index = 0; index < 16; ++index) {
+        auto subscription = created->session->subscribe(
+            [index](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+                return std::unexpected(util::make_error(
+                    util::ErrorCode::Unknown,
+                    "subscriber failed",
+                    std::format(
+                        "api_key=sk-subscriber-secret-123456 initial subscriber {}",
+                        index)));
+            });
+        REQUIRE(subscription);
+        failing_subscriptions.push_back(std::move(*subscription));
+    }
+
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 40});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("survive subscriber failure\r"));
+    drain_ready(io);
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("Assistant: fake: survive subscriber failure") != std::string::npos);
+    CHECK(screen.find("agent event observer failed") != std::string::npos);
+    CHECK(screen.find("sk-subscriber-secret-123456") == std::string::npos);
+    CHECK(screen.find("[REDACTED]") != std::string::npos);
+
+    auto rollover_subscription = created->session->subscribe(
+        [](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Unknown,
+                "late subscriber rollover"));
+        });
+    REQUIRE(rollover_subscription);
+    REQUIRE(terminal.inject_input("recover subscriber\r"));
+    drain_ready(io);
+    CHECK(created->session->message_count() == 4);
+    CHECK(visible_screen(terminal).find("late subscriber rollover") !=
+        std::string::npos);
+    CHECK(visible_screen(terminal).find("Assistant: fake: recover subscriber") !=
+        std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI distinguishes persistence failures and remains usable",
+    "[coding_agent][tui][diagnostics][persistence][issue61]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    const auto session_file = workspace.path() / "persistence-recovery.jsonl";
+    auto options = session_options(
+        workspace,
+        ai::providers::make_scripted_fake_chat_client());
+    options.session_target = coding_agent::ExplicitNewSessionTarget{session_file};
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 18});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    harness::session::testing::fail_nth_append_for_test(session_file, 2);
+    REQUIRE(terminal.inject_input("fail persistence\r"));
+    drain_ready(io);
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("Assistant: fake: fail persistence") != std::string::npos);
+    CHECK(screen.find("could not persist session entry") != std::string::npos);
+    CHECK(screen.find("fail persistence") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x03recover persistence\r"));
+    drain_ready(io);
+    CHECK(created->session->message_count() == 4);
+    CHECK(visible_screen(terminal).find("Assistant: fake: recover persistence") !=
+        std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);

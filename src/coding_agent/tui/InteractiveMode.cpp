@@ -374,7 +374,12 @@ public:
                 invoke_action(on_exit_, "Native TUI exit callback failed");
                 return;
             }
-            if (keybindings_->matches(*key, "app.interrupt") && prompt_is_active()) {
+            const auto editor_cancels_interrupt =
+                editor_.autocomplete_open() &&
+                keybindings_->matches(*key, "tui.select.cancel");
+            if (keybindings_->matches(*key, "app.interrupt") &&
+                prompt_is_active() &&
+                !editor_cancels_interrupt) {
                 invoke_action(on_interrupt_, "Native TUI interrupt callback failed");
                 return;
             }
@@ -677,7 +682,9 @@ private:
         const auto snapshot = session_.snapshot();
         view_->initialize(snapshot);
         for (const auto& diagnostic : snapshot.agent_state.diagnostics) {
-            view_->append_diagnostic(combined_error_text(diagnostic));
+            auto text = combined_error_text(diagnostic);
+            view_->append_diagnostic(text);
+            displayed_agent_diagnostics_.push_back(std::move(text));
         }
         for (const auto& diagnostic : diagnostics.keybindings) {
             view_->append_diagnostic(diagnostic.message);
@@ -718,8 +725,9 @@ private:
 
     void post_interrupt() {
         const auto weak = weak_from_this();
-        boost::asio::post(executor_, [weak] {
-            if (const auto self = weak.lock(); self && self->running_) self->session_.abort();
+        const auto prompt_generation = prompt_generation_.load();
+        boost::asio::post(executor_, [weak, prompt_generation] {
+            if (const auto self = weak.lock()) self->request_interrupt(prompt_generation);
         });
     }
 
@@ -895,6 +903,18 @@ private:
         }
     }
 
+    void request_interrupt(std::size_t prompt_generation) {
+        if (!running_ ||
+            exit_requested_ ||
+            !prompt_active_ ||
+            prompt_generation != prompt_generation_.load() ||
+            interrupt_requested_generation_ == prompt_generation) {
+            return;
+        }
+        interrupt_requested_generation_ = prompt_generation;
+        session_.abort();
+    }
+
     void submit(std::string text) {
         if (!running_ || view_ == nullptr || text.empty()) return;
         if (dispatch_command(text)) return;
@@ -905,6 +925,7 @@ private:
             return;
         }
 
+        (void)prompt_generation_.fetch_add(1);
         prompt_active_ = true;
         const auto self = shared_from_this();
         boost::asio::co_spawn(
@@ -951,6 +972,7 @@ private:
 
     void prompt_finished(util::ExpectedVoid result, const std::string& submitted_text) {
         prompt_active_ = false;
+        sync_agent_diagnostics();
         if (!result && view_ != nullptr && running_) {
             view_->append_diagnostic(combined_error_text(result.error()));
             view_->restore_text_if_empty(submitted_text);
@@ -959,9 +981,32 @@ private:
         if (exit_requested_) signal_exit();
     }
 
+    void sync_agent_diagnostics() {
+        if (!running_ || view_ == nullptr || !session_.is_open()) return;
+        const auto snapshot = session_.snapshot();
+        std::vector<std::string> current;
+        current.reserve(snapshot.agent_state.diagnostics.size());
+        for (const auto& diagnostic : snapshot.agent_state.diagnostics) {
+            current.push_back(combined_error_text(diagnostic));
+        }
+
+        auto overlap = std::min(displayed_agent_diagnostics_.size(), current.size());
+        while (overlap > 0 && !std::equal(
+                displayed_agent_diagnostics_.end() - static_cast<std::ptrdiff_t>(overlap),
+                displayed_agent_diagnostics_.end(),
+                current.begin())) {
+            --overlap;
+        }
+        for (auto index = overlap; index < current.size(); ++index) {
+            view_->append_diagnostic(current[index]);
+        }
+        displayed_agent_diagnostics_ = std::move(current);
+    }
+
     void on_event(const agent::AgentLifecycleEvent& event) {
         if (!running_ || view_ == nullptr) return;
         view_->apply_event(event);
+        sync_agent_diagnostics();
         tui_.invalidate();
     }
 
@@ -1005,6 +1050,9 @@ private:
     cch::tui::Overlay* active_overlay_{nullptr}; // aliases an overlay owned by tui_.
     std::atomic<bool> running_{false};
     std::atomic<bool> prompt_active_{false};
+    std::atomic<std::size_t> prompt_generation_{0};
+    std::optional<std::size_t> interrupt_requested_generation_;
+    std::vector<std::string> displayed_agent_diagnostics_;
     bool tui_started_{false};
     bool exit_requested_{false};
     std::optional<util::ExpectedVoid> completion_result_;
