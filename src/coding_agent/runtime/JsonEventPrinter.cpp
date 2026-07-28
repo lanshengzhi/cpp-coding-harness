@@ -473,6 +473,16 @@ util::ExpectedVoid JsonEventPrinter::print_agent_event(const agent::AgentLifecyc
         record.emplace("toolCallId", util::JsonValue{bounded_redacted(start->tool_call_id)});
         record.emplace("toolName", util::JsonValue{bounded_redacted(start->tool_name)});
         record.emplace("args", safe_json_value(start->args));
+    } else if (const auto* update = std::get_if<agent::ToolExecutionUpdateEvent>(&event)) {
+        record.emplace("type", util::JsonValue{"tool_execution_update"});
+        record.emplace("toolCallId", util::JsonValue{bounded_redacted(update->tool_call_id)});
+        record.emplace("toolName", util::JsonValue{bounded_redacted(update->tool_name)});
+        record.emplace("args", safe_json_value(update->args));
+        if (auto result = tool_result_value(update->partial_result); !result) {
+            return std::unexpected(result.error());
+        } else {
+            record.emplace("partialResult", std::move(*result));
+        }
     } else if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
         record.emplace("type", util::JsonValue{"tool_execution_end"});
         record.emplace("toolCallId", util::JsonValue{bounded_redacted(end->tool_call_id)});

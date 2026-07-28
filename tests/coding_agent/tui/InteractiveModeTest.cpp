@@ -4,10 +4,13 @@
 #include <cch/ai/ChatClient.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/coding_agent/Sdk.hpp>
+#include <cch/harness/session/JsonlSessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "ai/providers/FakeChatClient.hpp"
+#include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/BoundedText.hpp"
+#include "coding_agent/runtime/SessionFactory.hpp"
 
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
@@ -225,6 +228,217 @@ private:
     std::optional<boost::asio::steady_timer> gate_;
 };
 
+class RepeatedReadCallChatClient final : public ai::StreamingChatClient {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        auto response = ai::assistant_text_message("tool cycle complete");
+        response.provider = "tool-fake";
+        response.api = "fake";
+        response.model = request.model->id;
+        if (!request.context.messages.empty() &&
+            std::holds_alternative<ai::ToolResultMessage>(request.context.messages.back())) {
+            co_return response;
+        }
+
+        std::string prompt;
+        for (auto message = request.context.messages.rbegin();
+             message != request.context.messages.rend();
+             ++message) {
+            if (const auto* user = std::get_if<ai::UserMessage>(&*message)) {
+                prompt = ai::text_from_content(user->content);
+                break;
+            }
+        }
+        const auto path = prompt.starts_with("read ") ? prompt.substr(5) : prompt;
+        util::JsonValue::object_t arguments;
+        arguments.emplace("path", util::JsonValue{path});
+        response.content.clear();
+        response.content.emplace_back(ai::text_content("reading " + path));
+        response.content.emplace_back(ai::tool_call_content(
+            "fake-read-1",
+            "read",
+            std::format(R"({{"path":"{}"}})", path),
+            util::JsonValue{std::move(arguments)}));
+        response.stop_reason = ai::AssistantStopReason::ToolUse;
+
+        auto partial = response;
+        partial.content.clear();
+        if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+        partial.content.emplace_back(ai::tool_call_content(
+            "fake-read-1",
+            "read",
+            {}));
+        if (auto emitted = sink(ai::ToolCallStartEvent{
+                .content_index = 0,
+                .partial = partial,
+            });
+            !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+        partial.content[0] = ai::tool_call_content(
+            "fake-read-1",
+            "read",
+            R"({"path":"STALE ARGUMENT"})");
+        if (auto emitted = sink(ai::ToolCallDeltaEvent{
+                .content_index = 0,
+                .delta = R"({"path":"STALE ARGUMENT"})",
+                .partial = partial,
+            });
+            !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+        partial.content[0] = response.content[1];
+        if (auto emitted = sink(ai::ToolCallDeltaEvent{
+                .content_index = 0,
+                .delta = std::get<ai::ToolCallContent>(response.content[1]).raw_arguments,
+                .partial = partial,
+            });
+            !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+        const auto& completed_call = std::get<ai::ToolCallContent>(response.content[1]);
+        if (auto emitted = sink(ai::ToolCallEndEvent{
+                .content_index = 0,
+                .tool_call = completed_call,
+                .partial = response,
+            });
+            !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+        co_return response;
+    }
+};
+
+class GatedPartialReadTool final : public agent::AsyncAgentTool {
+public:
+    GatedPartialReadTool() {
+        definition_.name = "read";
+        definition_.description = "Stream a deterministic read result";
+        definition_.parameters = util::JsonValue::object_t{{"type", "object"}};
+    }
+
+    [[nodiscard]] const ai::Tool& definition() const override {
+        return definition_;
+    }
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
+        agent::ToolInvocation invocation,
+        std::stop_token) override {
+        co_return final_result(invocation);
+    }
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>>
+    execute_with_updates(
+        agent::ToolInvocation invocation,
+        std::stop_token,
+        agent::ToolUpdateSink update_sink) override {
+        late_update_sink_.emplace(std::move(update_sink));
+        agent::AsyncToolExecutionResult partial;
+        partial.content.emplace_back(ai::text_content(
+            "partial tool output\nSTALE SNAPSHOT"));
+        if (auto updated = (*late_update_sink_)(partial); !updated) {
+            co_return std::unexpected(updated.error());
+        }
+        partial.content.clear();
+        partial.content.emplace_back(ai::text_content(
+            "partial tool output\nLATEST SNAPSHOT"));
+        if (auto updated = (*late_update_sink_)(partial); !updated) {
+            co_return std::unexpected(updated.error());
+        }
+
+        const auto executor = co_await boost::asio::this_coro::executor;
+        gate_.emplace(executor);
+        gate_->expires_at(std::chrono::steady_clock::time_point::max());
+        started = true;
+        boost::system::error_code error;
+        co_await gate_->async_wait(
+            boost::asio::redirect_error(boost::asio::use_awaitable, error));
+        co_return final_result(invocation);
+    }
+
+    void release() {
+        if (gate_) (void)gate_->cancel();
+    }
+
+    [[nodiscard]] util::ExpectedVoid emit_late_update() {
+        if (!late_update_sink_) return {};
+        agent::AsyncToolExecutionResult late;
+        late.content.emplace_back(ai::text_content("LATE TOOL UPDATE"));
+        return (*late_update_sink_)(late);
+    }
+
+    bool started{false};
+
+private:
+    [[nodiscard]] static agent::AsyncToolExecutionResult final_result(
+        const agent::ToolInvocation& invocation) {
+        agent::AsyncToolExecutionResult result;
+        if (invocation.raw_arguments.find("missing.txt") != std::string::npos) {
+            result.content.emplace_back(ai::text_content("final tool failure"));
+            result.is_error = true;
+            return result;
+        }
+        result.content.emplace_back(ai::text_content(
+            "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nTOOL OUTPUT END\n"));
+        return result;
+    }
+
+    ai::Tool definition_;
+    std::optional<boost::asio::steady_timer> gate_;
+    std::optional<agent::ToolUpdateSink> late_update_sink_;
+};
+
+class AcceptedOutcomeChatClient final : public ai::StreamingChatClient {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink) override {
+        std::string prompt;
+        for (auto message = request.context.messages.rbegin();
+             message != request.context.messages.rend();
+             ++message) {
+            if (const auto* user = std::get_if<ai::UserMessage>(&*message)) {
+                prompt = ai::text_from_content(user->content);
+                break;
+            }
+        }
+
+        auto response = ai::assistant_text_message(
+            prompt == "recover" ? "recovered after accepted outcomes" : "partial response");
+        response.provider = "outcome-fake";
+        response.api = "fake";
+        response.model = request.model->id;
+        if (prompt == "provider error") {
+            response.stop_reason = ai::AssistantStopReason::Error;
+            response.error_message = "accepted provider failure";
+        } else if (prompt == "provider tool error") {
+            response.content.clear();
+            response.content.emplace_back(ai::tool_call_content(
+                "failed-before-execution",
+                "read",
+                R"({"path":"never.txt"})"));
+            response.stop_reason = ai::AssistantStopReason::Error;
+            response.error_message = "accepted tool-call provider failure";
+        } else if (prompt == "provider abort") {
+            response.stop_reason = ai::AssistantStopReason::Aborted;
+            response.error_message = "Request was aborted";
+        } else if (prompt == "provider tool abort") {
+            response.content.clear();
+            response.content.emplace_back(ai::tool_call_content(
+                "aborted-before-execution",
+                "read",
+                R"({"path":"never.txt"})"));
+            response.stop_reason = ai::AssistantStopReason::Aborted;
+            response.error_message = "custom provider abort detail";
+        }
+        co_return response;
+    }
+};
+
 class IncrementalGatedChatClient final : public ai::StreamingChatClient {
 public:
     IncrementalGatedChatClient() = default;
@@ -304,6 +518,379 @@ private:
 };
 
 } // namespace
+
+TEST_CASE(
+    "Native TUI renders a resumed rich transcript before accepting continued input",
+    "[coding_agent][tui][resume][issue59]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    config.write(
+        "keybindings.json",
+        R"({"app.thinking.toggle":"f8","app.tools.expand":[]})");
+    const auto session_file = workspace.path() / "rich-session.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(
+        session_file,
+        {
+            .session_id = "rich-session",
+            .created_at = "2026-07-28T00:00:00Z",
+            .workspace = workspace.path(),
+            .provider = "fake",
+            .model = "fake-model",
+        });
+    REQUIRE(store);
+    REQUIRE(store->append(ai::MessageVariant{
+        ai::user_text_message("before compaction", 1'700'000'000'000)}));
+    REQUIRE(store->append(ai::MessageVariant{
+        ai::user_text_message("resume request", 1'700'000'000'001)}));
+    auto loaded = harness::session::JsonlSessionStore::load(session_file);
+    REQUIRE(loaded);
+    REQUIRE(loaded->entries.size() >= 3);
+    const auto kept_entry_id = loaded->entries[2].entry_id;
+    REQUIRE(store->append_compaction(
+        std::nullopt,
+        "compacted persisted context",
+        kept_entry_id,
+        1200,
+        std::nullopt,
+        std::nullopt));
+
+    ai::AssistantMessage assistant;
+    assistant.provider = "fake";
+    assistant.api = "fake";
+    assistant.model = "fake-model";
+    assistant.stop_reason = ai::AssistantStopReason::ToolUse;
+    assistant.timestamp = 1'700'000'000'002;
+    const std::string thinking_text =
+        "inspect the saved state\n"
+        "compare the active path\n"
+        "retain every correlation\n"
+        "THINKING END";
+    assistant.content.emplace_back(ai::thinking_content(thinking_text));
+    assistant.content.emplace_back(ai::text_content("I will read the persisted file."));
+    const auto persisted_arguments = std::format(
+        R"({{"path":"saved.txt","padding":"{}"}})",
+        std::string(700, 'A'));
+    assistant.content.emplace_back(ai::tool_call_content(
+        "resume-call-7",
+        "read",
+        persisted_arguments));
+    assistant.content.emplace_back(ai::text_content("I will continue after the tool."));
+    REQUIRE(store->append(ai::MessageVariant{assistant}));
+    REQUIRE(store->append(ai::MessageVariant{ai::tool_result_message(
+        "resume-call-7",
+        "read",
+        "persisted tool output",
+        false,
+        1'700'000'000'003)}));
+
+    ai::CustomMessage custom;
+    custom.custom_type = "notice";
+    custom.content.emplace_back(ai::text_content("custom persisted content"));
+    custom.timestamp = 1'700'000'000'004;
+    REQUIRE(store->append(ai::MessageVariant{custom}));
+    REQUIRE(store->append(ai::MessageVariant{ai::BranchSummaryMessage{
+        .summary = "abandoned branch context",
+        .from_id = "branch-entry",
+        .timestamp = 1'700'000'000'006,
+    }}));
+
+    coding_agent::runtime::AgentSessionCreationRequest resume;
+    resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
+    resume.workspace = workspace.path();
+    resume.workspace_explicit = true;
+    resume.fake = true;
+    resume.disable_project_skills = true;
+    resume.disable_prompt_templates = true;
+    auto resumed = coding_agent::create_agent_session(std::move(resume));
+    REQUIRE(resumed);
+
+    const auto authoritative_before = resumed->session->snapshot().agent_state.messages;
+    REQUIRE(authoritative_before.size() == 6);
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *resumed->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    const auto screen = visible_screen(terminal);
+    const auto user_position = screen.find("You: resume request");
+    const auto thinking_position = screen.find("Thinking: inspect the saved state");
+    const auto assistant_position = screen.find("Assistant: I will read the persisted file.");
+    const auto tool_position = screen.find("Tool success: read#resume-call-7");
+    const auto result_position = screen.find("Tool result: persisted tool output");
+    const auto followup_position = screen.find("Assistant: I will continue after the tool.");
+    const auto custom_position = screen.find("Custom notice: custom persisted content");
+    const auto compaction_position = screen.find("Compaction summary: 1200 tokens");
+    const auto branch_position = screen.find("Branch summary: abandoned branch context");
+    REQUIRE(user_position != std::string::npos);
+    REQUIRE(thinking_position != std::string::npos);
+    REQUIRE(assistant_position != std::string::npos);
+    REQUIRE(tool_position != std::string::npos);
+    REQUIRE(result_position != std::string::npos);
+    REQUIRE(followup_position != std::string::npos);
+    REQUIRE(custom_position != std::string::npos);
+    REQUIRE(compaction_position != std::string::npos);
+    REQUIRE(branch_position != std::string::npos);
+    CHECK(screen.find("Unbound to expand") != std::string::npos);
+    CHECK(compaction_position < user_position);
+    CHECK(user_position < thinking_position);
+    CHECK(thinking_position < assistant_position);
+    CHECK(assistant_position < tool_position);
+    CHECK(tool_position < result_position);
+    CHECK(result_position < followup_position);
+    CHECK(followup_position < custom_position);
+    CHECK(custom_position < branch_position);
+    REQUIRE(terminal.inject_input("\x1b[19~"));
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("inspect the saved state") == std::string::npos);
+    CHECK(visible_screen(terminal).find("THINKING END") == std::string::npos);
+    CHECK(visible_screen(terminal).find("Thinking: (collapsed; f8 to expand)") !=
+        std::string::npos);
+    REQUIRE(terminal.inject_input("\x1b[19~"));
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("Thinking: inspect the saved state") !=
+        std::string::npos);
+
+    const auto unchanged = resumed->session->snapshot().agent_state.messages;
+    REQUIRE(unchanged.size() == authoritative_before.size());
+    CHECK(std::get<ai::ThinkingContent>(
+        std::get<ai::AssistantMessage>(unchanged[2]).content[0]).thinking ==
+        thinking_text);
+    CHECK(std::get<ai::ToolResultMessage>(unchanged[3]).tool_call_id == "resume-call-7");
+    CHECK(std::get<ai::CompactionSummaryMessage>(unchanged[0]).summary ==
+        "compacted persisted context");
+
+    REQUIRE(terminal.inject_input("continue here\r"));
+    drain_ready(io);
+    CHECK(resumed->session->message_count() == authoritative_before.size() + 2);
+    CHECK(visible_screen(terminal).find("Assistant: fake: continue here") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI presents fresh and resumed persisted history equivalently",
+    "[coding_agent][tui][persistence][issue59]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    const auto session_file = workspace.path() / "equivalent-session.jsonl";
+
+    auto create = session_options(
+        workspace,
+        ai::providers::make_scripted_fake_chat_client());
+    create.session_target = coding_agent::ExplicitNewSessionTarget{session_file};
+    auto fresh = coding_agent::create_agent_session(std::move(create));
+    REQUIRE(fresh);
+    REQUIRE(fresh->session->prompt_blocking("equivalent prompt"));
+
+    tui::VirtualTerminal fresh_terminal({.columns = 64, .rows = 10});
+    boost::asio::io_context fresh_io;
+    std::optional<util::ExpectedVoid> fresh_result;
+    boost::asio::co_spawn(
+        fresh_io,
+        coding_agent::tui::run_interactive_mode(
+            *fresh->session,
+            fresh_terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            fresh_result.emplace(std::move(result));
+        });
+    drain_ready(fresh_io);
+    const auto fresh_screen = visible_screen(fresh_terminal);
+    REQUIRE(fresh_terminal.inject_input("\x04"));
+    drain_ready(fresh_io);
+    REQUIRE(fresh_result);
+    CHECK(*fresh_result);
+
+    coding_agent::CreateAgentSessionOptions resume;
+    resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
+    resume.workspace = workspace.path();
+    resume.chat_client = ai::providers::make_scripted_fake_chat_client();
+    resume.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto resumed = coding_agent::create_agent_session(std::move(resume));
+    REQUIRE(resumed);
+
+    tui::VirtualTerminal resumed_terminal({.columns = 64, .rows = 10});
+    boost::asio::io_context resumed_io;
+    std::optional<util::ExpectedVoid> resumed_result;
+    boost::asio::co_spawn(
+        resumed_io,
+        coding_agent::tui::run_interactive_mode(
+            *resumed->session,
+            resumed_terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            resumed_result.emplace(std::move(result));
+        });
+    drain_ready(resumed_io);
+    CHECK(visible_screen(resumed_terminal) == fresh_screen);
+
+    REQUIRE(resumed_terminal.inject_input("\x04"));
+    drain_ready(resumed_io);
+    REQUIRE(resumed_result);
+    CHECK(*resumed_result);
+}
+
+TEST_CASE(
+    "Native TUI correlates repeated Tool Call IDs and locally expands long output",
+    "[coding_agent][tui][tools][issue59]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto options = session_options(
+        workspace,
+        std::make_unique<RepeatedReadCallChatClient>());
+    auto tool = std::make_unique<GatedPartialReadTool>();
+    auto* tool_pointer = tool.get();
+    options.custom_tools.push_back(std::move(tool));
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 32});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("read large.txt\r"));
+    drain_ready(io);
+    REQUIRE(tool_pointer->started);
+    auto screen = visible_screen(terminal);
+    CHECK(count_text(screen, "Tool pending: read#fake-read-1") == 1);
+    CHECK(count_text(screen, "Tool result: partial tool output") == 1);
+    CHECK(screen.find("STALE ARGUMENT") == std::string::npos);
+    CHECK(screen.find(R"(Tool arguments: {"path":"large.txt"})") != std::string::npos);
+    CHECK(screen.find("STALE SNAPSHOT") == std::string::npos);
+    CHECK(count_text(screen, "LATEST SNAPSHOT") == 1);
+
+    tool_pointer->release();
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(count_text(screen, "Tool success: read#fake-read-1") == 1);
+    CHECK(screen.find("Tool result: line 1") != std::string::npos);
+    CHECK(screen.find("TOOL OUTPUT END") == std::string::npos);
+    REQUIRE(tool_pointer->emit_late_update());
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(count_text(screen, "Tool success: read#fake-read-1") == 1);
+    CHECK(screen.find("LATE TOOL UPDATE") == std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x0f"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("TOOL OUTPUT END") != std::string::npos);
+
+    tool_pointer->started = false;
+    REQUIRE(terminal.inject_input("read missing.txt\r"));
+    drain_ready(io);
+    REQUIRE(tool_pointer->started);
+    screen = visible_screen(terminal);
+    CHECK(count_text(screen, "Tool pending: read#fake-read-1") == 1);
+    CHECK(count_text(screen, "Tool result: partial tool output") == 1);
+    CHECK(screen.find("STALE SNAPSHOT") == std::string::npos);
+    CHECK(count_text(screen, "LATEST SNAPSHOT") == 1);
+
+    tool_pointer->release();
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(count_text(screen, "read#fake-read-1") == 2);
+    CHECK(count_text(screen, "Tool success: read#fake-read-1") == 1);
+    CHECK(count_text(screen, "Tool failed: read#fake-read-1") == 1);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI renders accepted provider outcomes once and remains usable",
+    "[coding_agent][tui][provider-outcome][issue59]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto created = coding_agent::create_agent_session(session_options(
+        workspace,
+        std::make_unique<AcceptedOutcomeChatClient>()));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 20});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("provider error\r"));
+    drain_ready(io);
+    auto screen = visible_screen(terminal);
+    CHECK(count_text(screen, "Provider error: accepted provider failure") == 1);
+
+    REQUIRE(terminal.inject_input("provider abort\r"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(count_text(screen, "Provider error: accepted provider failure") == 1);
+    CHECK(count_text(screen, "Provider aborted: Operation aborted") == 1);
+
+    REQUIRE(terminal.inject_input("provider tool error\r"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(count_text(screen, "accepted tool-call provider failure") == 1);
+    CHECK(count_text(screen, "Provider error: accepted tool-call provider failure") == 0);
+    CHECK(count_text(screen, "Tool failed: read#failed-before-execution") == 1);
+
+    REQUIRE(terminal.inject_input("provider tool abort\r"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(count_text(screen, "custom provider abort detail") == 1);
+    CHECK(count_text(screen, "Provider aborted: custom provider abort detail") == 0);
+    CHECK(count_text(screen, "Tool failed: read#aborted-before-execution") == 1);
+
+    REQUIRE(terminal.inject_input("recover\r"));
+    drain_ready(io);
+    CHECK(created->session->message_count() == 10);
+    CHECK(visible_screen(terminal).find("Assistant: recovered after accepted outcomes") !=
+        std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
 
 TEST_CASE(
     "Native TUI redacts startup failures and leaves the Session closed",

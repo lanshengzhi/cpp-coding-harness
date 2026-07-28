@@ -231,7 +231,7 @@ TEST_CASE("SDK targets remain one passive variant with optional path results", "
 }
 
 TEST_CASE("agent lifecycle advertises only the supported pi event alternatives", "[architecture][agent]") {
-    static_assert(std::variant_size_v<agent::AgentLifecycleEvent> == 9);
+    static_assert(std::variant_size_v<agent::AgentLifecycleEvent> == 10);
     static_assert(std::is_same_v<std::variant_alternative_t<0, agent::AgentLifecycleEvent>, agent::AgentStartEvent>);
     static_assert(std::is_same_v<std::variant_alternative_t<1, agent::AgentLifecycleEvent>, agent::AgentEndEvent>);
     static_assert(std::is_same_v<std::variant_alternative_t<2, agent::AgentLifecycleEvent>, agent::TurnStartEvent>);
@@ -240,5 +240,6 @@ TEST_CASE("agent lifecycle advertises only the supported pi event alternatives",
     static_assert(std::is_same_v<std::variant_alternative_t<5, agent::AgentLifecycleEvent>, agent::MessageUpdateEvent>);
     static_assert(std::is_same_v<std::variant_alternative_t<6, agent::AgentLifecycleEvent>, agent::MessageEndEvent>);
     static_assert(std::is_same_v<std::variant_alternative_t<7, agent::AgentLifecycleEvent>, agent::ToolExecutionStartEvent>);
-    static_assert(std::is_same_v<std::variant_alternative_t<8, agent::AgentLifecycleEvent>, agent::ToolExecutionEndEvent>);
+    static_assert(std::is_same_v<std::variant_alternative_t<8, agent::AgentLifecycleEvent>, agent::ToolExecutionUpdateEvent>);
+    static_assert(std::is_same_v<std::variant_alternative_t<9, agent::AgentLifecycleEvent>, agent::ToolExecutionEndEvent>);
 }

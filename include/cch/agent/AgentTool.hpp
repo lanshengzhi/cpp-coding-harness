@@ -13,6 +13,7 @@
 #include <optional>
 #include <stop_token>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace cch::agent {
@@ -30,6 +31,11 @@ struct AsyncToolExecutionResult {
     bool is_error{false};
     bool terminate{false};
 };
+
+/// Synchronous publication of one cumulative partial tool execution result.
+/// A failure asks the tool to stop producing updates and propagate the error.
+using ToolUpdateSink = std::move_only_function<
+    util::ExpectedVoid(const AsyncToolExecutionResult&)>;
 
 struct BeforeToolCallContext {
     ai::AssistantMessage assistant_message;
@@ -105,6 +111,19 @@ public:
     [[nodiscard]] virtual boost::asio::awaitable<util::Expected<AsyncToolExecutionResult>> execute(
         ToolInvocation invocation,
         std::stop_token stop_token) = 0;
+
+    /// Execute with cumulative partial-result observation. Ordinary tools may
+    /// keep implementing execute(); streaming tools override this method and
+    /// propagate update-sink failures through the normal expected channel.
+    /// Updates published after the returned awaitable completes are ignored.
+    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<AsyncToolExecutionResult>>
+    execute_with_updates(
+        ToolInvocation invocation,
+        std::stop_token stop_token,
+        ToolUpdateSink update_sink) {
+        (void)update_sink;
+        co_return co_await execute(std::move(invocation), stop_token);
+    }
 
     /** Ordinary tools are exclusive until their adapter proves concurrent execution is safe. */
     [[nodiscard]] virtual ToolConcurrency concurrency() const noexcept {

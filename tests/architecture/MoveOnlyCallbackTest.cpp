@@ -25,6 +25,9 @@ TEST_CASE("event sink contracts are move-only", "[architecture][u5]") {
     static_assert(!std::is_copy_constructible_v<agent::AgentEventSink>);
     static_assert(!std::is_copy_assignable_v<agent::AgentEventSink>);
     static_assert(std::is_move_constructible_v<agent::AgentEventSink>);
+    static_assert(!std::is_copy_constructible_v<agent::ToolUpdateSink>);
+    static_assert(!std::is_copy_assignable_v<agent::ToolUpdateSink>);
+    static_assert(std::is_move_constructible_v<agent::ToolUpdateSink>);
 
     static_assert(!std::is_copy_constructible_v<agent::AsyncAgentOptions>);
     static_assert(!std::is_copy_assignable_v<agent::AsyncAgentOptions>);

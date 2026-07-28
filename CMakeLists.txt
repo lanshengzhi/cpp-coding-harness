@@ -209,6 +209,7 @@ target_link_libraries(cch_coding_agent_runtime
 
 add_library(cch_coding_agent_interactive
     src/coding_agent/tui/InteractiveMode.cpp
+    src/coding_agent/tui/Transcript.cpp
 )
 cch_target_defaults(cch_coding_agent_interactive)
 target_link_libraries(cch_coding_agent_interactive

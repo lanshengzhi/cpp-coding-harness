@@ -1,17 +1,15 @@
 #include "InteractiveMode.hpp"
 
 #include <cch/agent/AgentEvent.hpp>
-#include <cch/ai/Content.hpp>
-#include <cch/ai/Message.hpp>
 #include <cch/coding_agent/Sdk.hpp>
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Terminal.hpp>
-#include <cch/tui/Text.hpp>
 #include <cch/tui/Tui.hpp>
 
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/tui/KeybindingCatalog.hpp"
 #include "coding_agent/tui/Theme.hpp"
+#include "coding_agent/tui/Transcript.hpp"
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -81,28 +79,6 @@ using PromptActiveHook = std::move_only_function<bool()>;
             combined_error_text(restoration))));
 }
 
-[[nodiscard]] std::string assistant_text(const ai::AssistantMessage& message) {
-    auto text = ai::text_from_assistant_content(message.content);
-    if (message.error_message && !message.error_message->empty()) {
-        text = text.empty()
-            ? *message.error_message
-            : std::format("{}\n{}", text, *message.error_message);
-    }
-    return bounded_redacted_presentation(std::move(text));
-}
-
-[[nodiscard]] std::optional<std::string> transcript_row(const ai::MessageVariant& message) {
-    if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
-        return std::format(
-            "You: {}",
-            bounded_redacted_presentation(ai::text_from_content(user->content)));
-    }
-    if (const auto* assistant = std::get_if<ai::AssistantMessage>(&message)) {
-        return std::format("Assistant: {}", assistant_text(*assistant));
-    }
-    return std::nullopt;
-}
-
 class InteractiveView final
     : public cch::tui::Component,
       public cch::tui::InputHandler,
@@ -115,13 +91,15 @@ public:
         SubmitSink on_submit,
         ActionSink on_interrupt,
         ActionSink on_exit,
-        PromptActiveHook prompt_active)
+        PromptActiveHook prompt_active,
+        const LiveTheme& theme)
         : keybindings_(std::move(keybindings)),
           on_invalidate_(std::move(on_invalidate)),
           on_submit_(std::move(on_submit)),
           on_interrupt_(std::move(on_interrupt)),
           on_exit_(std::move(on_exit)),
           prompt_active_(std::move(prompt_active)),
+          transcript_(theme, *keybindings_),
           editor_(
               cch::tui::EditorOptions{.keybindings = keybindings_},
               [this](std::string) {
@@ -138,46 +116,17 @@ public:
 
     void initialize(const AgentSessionSnapshot& snapshot) {
         std::lock_guard lock(mutex_);
-        rows_.clear();
-        for (const auto& message : snapshot.agent_state.messages) {
-            if (auto row = transcript_row(message)) rows_.push_back(std::move(*row));
-        }
-        if (snapshot.agent_state.streaming_message) {
-            const ai::MessageVariant message{*snapshot.agent_state.streaming_message};
-            if (auto row = transcript_row(message)) {
-                rows_.push_back(std::move(*row));
-                active_assistant_row_ = rows_.size() - 1;
-            }
-        }
+        transcript_.initialize(snapshot);
     }
 
     void apply_event(const agent::AgentLifecycleEvent& event) {
         std::lock_guard lock(mutex_);
-        if (const auto* start = std::get_if<agent::MessageStartEvent>(&event)) {
-            if (auto row = transcript_row(start->message)) {
-                rows_.push_back(std::move(*row));
-                if (std::holds_alternative<ai::AssistantMessage>(start->message)) {
-                    active_assistant_row_ = rows_.size() - 1;
-                }
-            }
-            return;
-        }
-        if (const auto* update = std::get_if<agent::MessageUpdateEvent>(&event)) {
-            replace_assistant(update->message, false);
-            return;
-        }
-        if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
-            if (std::holds_alternative<ai::AssistantMessage>(end->message)) {
-                replace_assistant(end->message, true);
-            }
-        }
+        transcript_.apply_event(event);
     }
 
     void append_diagnostic(std::string text) {
         std::lock_guard lock(mutex_);
-        rows_.push_back(std::format(
-            "Error: {}",
-            bounded_redacted_presentation(std::move(text))));
+        transcript_.append_diagnostic(std::move(text));
     }
 
     void restore_text_if_empty(const std::string& text) {
@@ -193,49 +142,36 @@ public:
     [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override {
         std::lock_guard lock(mutex_);
         editor_.set_available_height(available_rows_);
-        auto editor = editor_.render(width);
-        if (!editor) return std::unexpected(editor.error());
+        std::vector<std::string> editor_lines;
+        if (auto editor = editor_.render(width); !editor) {
+            return std::unexpected(editor.error());
+        } else {
+            editor_lines = std::move(editor->lines);
+        }
 
         std::vector<std::string> transcript_lines;
-        if (!rows_.empty() && available_rows_ > editor->lines.size()) {
-            const auto capacity = available_rows_ - editor->lines.size();
-            std::vector<std::vector<std::string>> rendered_rows;
-            rendered_rows.reserve(rows_.size());
-            for (const auto& row : rows_) {
-                transcript_.set_text(row);
-                auto rendered = transcript_.render(width);
-                if (!rendered) return std::unexpected(rendered.error());
-                rendered_rows.push_back(std::move(rendered->lines));
-            }
-
-            const auto& latest = rendered_rows.back();
-            const auto latest_count = std::min(capacity, latest.size());
-            transcript_lines.assign(
-                latest.end() - static_cast<std::ptrdiff_t>(latest_count),
-                latest.end());
-            std::size_t remaining = capacity - latest_count;
-            for (std::size_t index = rendered_rows.size() - 1; index > 0 && remaining > 0; --index) {
-                const auto& prior = rendered_rows[index - 1];
-                const auto take = std::min(remaining, prior.size());
-                transcript_lines.insert(
-                    transcript_lines.begin(),
-                    prior.end() - static_cast<std::ptrdiff_t>(take),
-                    prior.end());
-                remaining -= take;
+        if (available_rows_ > editor_lines.size()) {
+            const auto capacity = available_rows_ - editor_lines.size();
+            if (auto rendered = transcript_.render(width); !rendered) {
+                return std::unexpected(rendered.error());
+            } else {
+                const auto take = std::min(capacity, rendered->size());
+                transcript_lines.assign(
+                    rendered->end() - static_cast<std::ptrdiff_t>(take),
+                    rendered->end());
             }
         }
 
         editor_row_offset_ = transcript_lines.size();
         transcript_lines.insert(
             transcript_lines.end(),
-            std::make_move_iterator(editor->lines.begin()),
-            std::make_move_iterator(editor->lines.end()));
+            std::make_move_iterator(editor_lines.begin()),
+            std::make_move_iterator(editor_lines.end()));
         return cch::tui::RenderResult{.lines = std::move(transcript_lines)};
     }
 
     void invalidate() override {
         std::lock_guard lock(mutex_);
-        transcript_.invalidate();
         editor_.invalidate();
     }
 
@@ -254,6 +190,16 @@ public:
             }
             if (keybindings_->matches(*key, "app.clear")) {
                 editor_.set_text({});
+                return;
+            }
+            if (keybindings_->matches(*key, "app.tools.expand")) {
+                transcript_.toggle_tool_output();
+                if (on_invalidate_) on_invalidate_();
+                return;
+            }
+            if (keybindings_->matches(*key, "app.thinking.toggle")) {
+                transcript_.toggle_thinking();
+                if (on_invalidate_) on_invalidate_();
                 return;
             }
         }
@@ -287,18 +233,6 @@ public:
     }
 
 private:
-    void replace_assistant(const ai::MessageVariant& message, bool finalize) {
-        auto row = transcript_row(message);
-        if (!row) return;
-        if (!active_assistant_row_ || *active_assistant_row_ >= rows_.size()) {
-            rows_.push_back(std::move(*row));
-            active_assistant_row_ = rows_.size() - 1;
-        } else {
-            rows_[*active_assistant_row_] = std::move(*row);
-        }
-        if (finalize) active_assistant_row_.reset();
-    }
-
     std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings_;
     ActionSink on_invalidate_;
     SubmitSink on_submit_;
@@ -306,9 +240,7 @@ private:
     ActionSink on_exit_;
     PromptActiveHook prompt_active_;
     mutable std::mutex mutex_;
-    std::vector<std::string> rows_;
-    std::optional<std::size_t> active_assistant_row_;
-    cch::tui::Text transcript_{"", 0, 0};
+    Transcript transcript_;
     cch::tui::Editor editor_;
     std::size_t available_rows_{24};
     std::size_t editor_row_offset_{0};
@@ -334,10 +266,12 @@ public:
     InteractiveState& operator=(const InteractiveState&) = delete;
 
     [[nodiscard]] util::ExpectedVoid start(InteractiveModeConfig config) {
-        constexpr std::array<std::string_view, 3> kActions{
+        constexpr std::array<std::string_view, 5> kActions{
             "app.interrupt",
             "app.clear",
             "app.exit",
+            "app.tools.expand",
+            "app.thinking.toggle",
         };
         auto application_definitions = baseline_application_keybindings(kActions, config.platform);
         if (!application_definitions) return fail_start(application_definitions.error());
@@ -348,6 +282,9 @@ public:
         catalog_request.platform = config.platform;
         auto catalog = load_keybinding_catalog(std::move(catalog_request));
         if (!catalog) return fail_start(catalog.error());
+
+        const auto capabilities = terminal_.capabilities();
+        theme_.emplace(select_builtin_theme(capabilities), capabilities.color);
 
         const auto weak = weak_from_this();
         auto view = std::make_unique<InteractiveView>(
@@ -367,7 +304,8 @@ public:
             [weak] {
                 if (const auto self = weak.lock()) return self->prompt_active_.load();
                 return false;
-            });
+            },
+            *theme_);
         view_ = view.get();
         if (auto attached = tui_.add_child(std::move(view)); !attached) {
             return fail_start(attached.error());
@@ -391,15 +329,16 @@ public:
         tui_started_ = true;
         running_ = true;
 
-        const auto capabilities = terminal_.capabilities();
-        LiveTheme theme{
-            select_builtin_theme(capabilities),
-            capabilities.color};
-        view_->set_editor_theme(theme.editor_theme());
-        view_->initialize(session_.snapshot());
+        view_->set_editor_theme(theme_->editor_theme());
+        const auto snapshot = session_.snapshot();
+        view_->initialize(snapshot);
+        for (const auto& diagnostic : snapshot.agent_state.diagnostics) {
+            view_->append_diagnostic(combined_error_text(diagnostic));
+        }
         for (const auto& diagnostic : catalog->diagnostics) {
             view_->append_diagnostic(diagnostic.message);
         }
+        if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
         if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
         if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
         return {};
@@ -582,6 +521,7 @@ private:
 
     AgentSession& session_; // must outlive this interactive run.
     cch::tui::Terminal& terminal_; // must outlive this interactive run.
+    std::optional<LiveTheme> theme_;
     cch::tui::Tui tui_;
     boost::asio::any_io_executor executor_;
     boost::asio::steady_timer exit_wait_;

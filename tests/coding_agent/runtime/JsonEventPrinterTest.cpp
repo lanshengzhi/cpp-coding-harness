@@ -134,6 +134,17 @@ TEST_CASE(
         cch::ai::AssistantStreamEvent{cch::ai::TextDeltaEvent{0, "answer", assistant}}}).has_value());
     REQUIRE(printer.print_agent_event(cch::agent::ToolExecutionStartEvent{
         "call-1", "read", JsonValue{args}}).has_value());
+    REQUIRE(printer.print_agent_event(cch::agent::ToolExecutionUpdateEvent{
+        .tool_call_id = "call-1",
+        .tool_name = "read",
+        .args = JsonValue{args},
+        .partial_result = cch::agent::AsyncToolExecutionResult{
+            .content = {cch::ai::text_content("partial file text")},
+            .details = std::nullopt,
+            .is_error = false,
+            .terminate = false,
+        },
+    }).has_value());
     REQUIRE(printer.print_agent_event(cch::agent::ToolExecutionEndEvent{
         "call-1",
         "read",
@@ -150,7 +161,7 @@ TEST_CASE(
         {cch::ai::MessageVariant{user}, cch::ai::MessageVariant{assistant}, cch::ai::MessageVariant{tool_result}}}).has_value());
 
     const auto emitted = lines(output.str());
-    REQUIRE(emitted.size() == 9);
+    REQUIRE(emitted.size() == 10);
     for (const auto& line : emitted) {
         check_no_cpp_envelope_fields(object(parse_line(line)));
         CHECK(line.find("runtime_terminal") == std::string::npos);
@@ -209,7 +220,16 @@ TEST_CASE(
     CHECK(string_at(tool_start, "toolName") == "read");
     CHECK(string_at(object_at(tool_start, "args"), "path") == "README.md");
 
-    const auto& tool_end = object(parse_line(emitted[5]));
+    const auto& tool_update = object(parse_line(emitted[5]));
+    CHECK(string_at(tool_update, "type") == "tool_execution_update");
+    CHECK(string_at(tool_update, "toolCallId") == "call-1");
+    CHECK(string_at(tool_update, "toolName") == "read");
+    CHECK(string_at(object_at(tool_update, "args"), "path") == "README.md");
+    const auto& partial_result = object_at(tool_update, "partialResult");
+    CHECK(string_at(object(array_at(partial_result, "content").front()), "text") ==
+        "partial file text");
+
+    const auto& tool_end = object(parse_line(emitted[6]));
     CHECK(string_at(tool_end, "type") == "tool_execution_end");
     CHECK(tool_end.at("isError").get<bool>() == false);
     const auto& result = object_at(tool_end, "result");
@@ -217,13 +237,13 @@ TEST_CASE(
     CHECK(result.at("details").holds<JsonValue::null_t>());
     CHECK(result.at("terminate").get<bool>() == true);
 
-    const auto& turn_end = object(parse_line(emitted[7]));
+    const auto& turn_end = object(parse_line(emitted[8]));
     CHECK(string_at(turn_end, "type") == "turn_end");
     CHECK(string_at(object_at(turn_end, "message"), "role") == "assistant");
     REQUIRE(array_at(turn_end, "toolResults").size() == 1);
     CHECK(string_at(object(array_at(turn_end, "toolResults").front()), "role") == "toolResult");
 
-    const auto& agent_end = object(parse_line(emitted[8]));
+    const auto& agent_end = object(parse_line(emitted[9]));
     CHECK(string_at(agent_end, "type") == "agent_end");
     REQUIRE(array_at(agent_end, "messages").size() == 3);
 }

@@ -45,6 +45,13 @@ struct ToolExecutionStartEvent {
     util::JsonValue args;
 };
 
+struct ToolExecutionUpdateEvent {
+    std::string tool_call_id{};
+    std::string tool_name{};
+    util::JsonValue args{};
+    AsyncToolExecutionResult partial_result{};
+};
+
 struct ToolExecutionEndEvent {
     std::string tool_call_id;
     std::string tool_name;
@@ -61,6 +68,7 @@ using AgentLifecycleEvent = std::variant<
     MessageUpdateEvent,
     MessageEndEvent,
     ToolExecutionStartEvent,
+    ToolExecutionUpdateEvent,
     ToolExecutionEndEvent>;
 
 /// Weak lifecycle observer used by Agent subscriptions. Reported failures and

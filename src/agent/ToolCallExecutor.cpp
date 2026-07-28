@@ -29,6 +29,36 @@
 namespace cch::agent {
 namespace {
 
+struct ToolUpdateGate {
+    std::mutex mutex;
+    bool active{true};
+};
+
+void close_tool_updates(const std::shared_ptr<ToolUpdateGate>& gate) {
+    std::lock_guard lock(gate->mutex);
+    gate->active = false;
+}
+
+[[nodiscard]] boost::asio::awaitable<util::Expected<AsyncToolExecutionResult>>
+execute_with_update_lifetime(
+    AsyncAgentTool& tool,
+    const ToolInvocation& invocation,
+    std::stop_token stop_token,
+    ToolUpdateSink update_sink,
+    const std::shared_ptr<ToolUpdateGate>& gate) {
+    try {
+        auto result = co_await tool.execute_with_updates(
+            invocation,
+            stop_token,
+            std::move(update_sink));
+        close_tool_updates(gate);
+        co_return result;
+    } catch (...) {
+        close_tool_updates(gate);
+        throw;
+    }
+}
+
 [[nodiscard]] ai::ToolResultMessage error_tool_result(
     const ai::ToolCallContent& call,
     std::string message) {
@@ -179,8 +209,30 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
 
                 if (!blocked) {
                     std::optional<util::Expected<AsyncToolExecutionResult>> executed;
+                    auto update_gate = std::make_shared<ToolUpdateGate>();
                     try {
-                        executed = co_await tool->execute(invocation, options_.stop_token);
+                        ToolUpdateSink update_sink = [
+                            &sink,
+                            update_gate,
+                            call_id = call.id,
+                            tool_name = call.name,
+                            args = call.arguments.value_or(util::JsonValue{})](
+                                const AsyncToolExecutionResult& partial_result) {
+                            std::lock_guard lock(update_gate->mutex);
+                            if (!update_gate->active) return util::ExpectedVoid{};
+                            return emit_agent_event(sink, ToolExecutionUpdateEvent{
+                                .tool_call_id = call_id,
+                                .tool_name = tool_name,
+                                .args = args,
+                                .partial_result = partial_result,
+                            });
+                        };
+                        executed = co_await execute_with_update_lifetime(
+                            *tool,
+                            invocation,
+                            options_.stop_token,
+                            std::move(update_sink),
+                            update_gate);
                     } catch (...) {
                         tool_result = error_tool_result(call, "Tool execution failed.");
                     }
@@ -433,15 +485,36 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                 auto& prepared_call = (*prepared_calls)[index];
                 FinalizedToolCall outcome;
 
+                auto update_gate = std::make_shared<ToolUpdateGate>();
                 try {
                     ToolInvocation invocation{
                         prepared_call.tool_call.id,
                         prepared_call.tool_call.name,
                         std::move(prepared_call.arguments),
                         prepared_call.tool_call.raw_arguments};
-                    auto executed = co_await prepared_call.tool->execute(invocation, stop_token);
-
-                    if (!executed) {
+                    ToolUpdateSink update_sink = [
+                        parallel_emit,
+                        update_gate,
+                        call_id = prepared_call.tool_call.id,
+                        tool_name = prepared_call.tool_call.name,
+                        args = prepared_call.tool_call.arguments.value_or(util::JsonValue{})](
+                            const AsyncToolExecutionResult& partial_result) {
+                        std::lock_guard lock(update_gate->mutex);
+                        if (!update_gate->active) return util::ExpectedVoid{};
+                        return parallel_emit(ToolExecutionUpdateEvent{
+                            .tool_call_id = call_id,
+                            .tool_name = tool_name,
+                            .args = args,
+                            .partial_result = partial_result,
+                        });
+                    };
+                    if (auto executed = co_await execute_with_update_lifetime(
+                            *prepared_call.tool,
+                            invocation,
+                            stop_token,
+                            std::move(update_sink),
+                            update_gate);
+                        !executed) {
                         outcome.result = error_tool_result(
                             prepared_call.tool_call,
                             executed.error().detail.empty() ? executed.error().message
