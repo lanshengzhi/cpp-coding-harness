@@ -69,6 +69,7 @@ struct SelectList::Impl {
     std::shared_ptr<SelectItemSink> on_select;
     std::shared_ptr<SelectCancelSink> on_cancel;
     std::shared_ptr<SelectItemSink> on_selection_change;
+    std::shared_ptr<const KeybindingRegistry> keybindings;
     std::optional<util::Error> callback_error;
     bool focused{false};
 
@@ -209,6 +210,7 @@ SelectList::SelectList(std::vector<SelectItem> items, SelectListOptions options)
     impl_->on_select = std::make_shared<SelectItemSink>(std::move(options.on_select));
     impl_->on_cancel = std::make_shared<SelectCancelSink>(std::move(options.on_cancel));
     impl_->on_selection_change = std::make_shared<SelectItemSink>(std::move(options.on_selection_change));
+    impl_->keybindings = options.keybindings ? std::move(options.keybindings) : default_tui_keybindings();
 }
 
 SelectList::SelectList(SelectList&&) noexcept = default;
@@ -287,22 +289,23 @@ void SelectList::handle_input(const InputEventVariant& input) {
     if (key == nullptr || key->type == KeyEventType::Release) return;
     auto impl = impl_;
     const auto count = impl->filtered_indices.size();
-    if (matches_key(*key, "up")) {
+    if (impl->keybindings->matches(*key, "tui.select.up")) {
         if (count == 0) return;
         impl->selected_index = impl->selected_index == 0 ? count - 1 : impl->selected_index - 1;
         impl->notify_selection_change();
         return;
     }
-    if (matches_key(*key, "down")) {
+    if (impl->keybindings->matches(*key, "tui.select.down")) {
         if (count == 0) return;
         impl->selected_index = impl->selected_index + 1 == count ? 0 : impl->selected_index + 1;
         impl->notify_selection_change();
         return;
     }
-    if (matches_key(*key, "pageUp") || matches_key(*key, "pageDown")) {
+    if (impl->keybindings->matches(*key, "tui.select.pageUp") ||
+        impl->keybindings->matches(*key, "tui.select.pageDown")) {
         if (count == 0) return;
         const auto page = impl->max_visible;
-        if (matches_key(*key, "pageUp")) {
+        if (impl->keybindings->matches(*key, "tui.select.pageUp")) {
             impl->selected_index = impl->selected_index > page ? impl->selected_index - page : 0;
         } else {
             impl->selected_index = std::min(impl->selected_index + page, count - 1);
@@ -310,7 +313,7 @@ void SelectList::handle_input(const InputEventVariant& input) {
         impl->notify_selection_change();
         return;
     }
-    if (matches_key(*key, "enter")) {
+    if (impl->keybindings->matches(*key, "tui.select.confirm")) {
         const auto* item = impl->selected();
         auto sink = impl->on_select;
         if (item == nullptr || !sink || !*sink) return;
@@ -321,7 +324,7 @@ void SelectList::handle_input(const InputEventVariant& input) {
         }
         return;
     }
-    if (matches_key(*key, "escape") || matches_key(*key, "ctrl+c")) {
+    if (impl->keybindings->matches(*key, "tui.select.cancel")) {
         auto sink = impl->on_cancel;
         if (!sink || !*sink) return;
         try {

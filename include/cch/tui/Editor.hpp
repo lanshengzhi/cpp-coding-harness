@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/tui/Component.hpp>
+#include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Style.hpp>
 
 #include <cstddef>
@@ -49,10 +50,9 @@ using EditorChangeSink = std::move_only_function<void(std::string)>;
 using EditorSubmitSink = std::move_only_function<void(std::string)>;
 
 struct EditorOptions {
-    std::vector<std::string> submit_keys{"enter"};
-    std::vector<std::string> newline_keys{"shift+enter", "ctrl+j"};
     bool disable_submit{false};
     std::size_t max_visible_lines{5};
+    std::shared_ptr<const KeybindingRegistry> keybindings{};
 };
 
 struct EditorTheme {

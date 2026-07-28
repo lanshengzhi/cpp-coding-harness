@@ -5,13 +5,22 @@
 
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
-TEST_CASE("SettingsList cycles values deterministically and reports updates", "[tui][settings-list][issue52]") {
+TEST_CASE(
+    "SettingsList cycles values deterministically and reports updates",
+    "[tui][settings-list][issue52][issue57]") {
+    cch::tui::KeybindingResolutionRequest request;
+    request.definitions = cch::tui::builtin_tui_keybinding_definitions();
+    request.overrides = {{.id = "tui.select.confirm", .keys = {"enter", "space"}}};
+    const auto keybindings = cch::tui::resolve_keybindings(std::move(request));
+    REQUIRE(keybindings);
+
     std::vector<std::string> updates;
     cch::tui::SettingsList list(
         {
@@ -27,6 +36,7 @@ TEST_CASE("SettingsList cycles values deterministically and reports updates", "[
             .on_change = [&updates](std::string id, std::string value) {
                 updates.push_back(std::move(id) + "=" + std::move(value));
             },
+            .keybindings = keybindings->registry,
         });
 
     list.handle_input(cch::tui::KeyEvent{.key = "enter"});
@@ -148,6 +158,45 @@ TEST_CASE(
     CHECK(list.selected_item()->current_value == "light");
     REQUIRE(updates.size() == 1);
     CHECK(updates[0] == "theme=light");
+}
+
+TEST_CASE("SettingsList renders and dispatches hints from one effective registry", "[tui][settings-list][issue57]") {
+    cch::tui::KeybindingResolutionRequest request;
+    request.definitions = cch::tui::builtin_tui_keybinding_definitions();
+    request.overrides = {
+        {.id = "tui.select.confirm", .keys = {"f2"}},
+        {.id = "tui.select.cancel", .keys = {"f3"}},
+    };
+    const auto keybindings = cch::tui::resolve_keybindings(std::move(request));
+    REQUIRE(keybindings);
+
+    std::size_t changes = 0;
+    std::size_t cancellations = 0;
+    cch::tui::SettingsList list(
+        {{
+            .id = "theme",
+            .label = "Theme",
+            .current_value = "dark",
+            .control = cch::tui::SettingValues{{"dark", "light"}},
+        }},
+        cch::tui::SettingsListOptions{
+            .on_change = [&changes](std::string, std::string) { ++changes; },
+            .on_cancel = [&cancellations]() { ++cancellations; },
+            .keybindings = keybindings->registry,
+        });
+    const auto rendered = list.render(60);
+    REQUIRE(rendered);
+    CHECK(std::any_of(rendered->lines.begin(), rendered->lines.end(), [](const auto& line) {
+        return line.find("f2/space to change · f3 to cancel") != std::string::npos;
+    }));
+    list.handle_input(cch::tui::KeyEvent{.key = "enter"});
+    list.handle_input(cch::tui::KeyEvent{.key = "escape"});
+    CHECK(changes == 0);
+    CHECK(cancellations == 0);
+    list.handle_input(cch::tui::KeyEvent{.key = "f2"});
+    list.handle_input(cch::tui::KeyEvent{.key = "f3"});
+    CHECK(changes == 1);
+    CHECK(cancellations == 1);
 }
 
 TEST_CASE("SettingsList cancellation invokes the callback once per semantic key", "[tui][settings-list][issue52]") {

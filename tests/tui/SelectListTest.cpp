@@ -129,6 +129,26 @@ TEST_CASE("SelectList normalizes and aligns descriptions within configured colum
           cch::tui::detail::visible_width(rendered->lines[1].substr(0, second_description)));
 }
 
+TEST_CASE("SelectList dispatches configured keys from its effective registry", "[tui][select-list][issue57]") {
+    cch::tui::KeybindingResolutionRequest request;
+    request.definitions = cch::tui::builtin_tui_keybinding_definitions();
+    request.overrides = {{.id = "tui.select.confirm", .keys = {"f2"}}};
+    const auto keybindings = cch::tui::resolve_keybindings(std::move(request));
+    REQUIRE(keybindings);
+
+    std::size_t selections = 0;
+    cch::tui::SelectList list(
+        make_items(1),
+        cch::tui::SelectListOptions{
+            .on_select = [&selections](const cch::tui::SelectItem&) { ++selections; },
+            .keybindings = keybindings->registry,
+        });
+    list.handle_input(cch::tui::KeyEvent{.key = "enter"});
+    CHECK(selections == 0);
+    list.handle_input(cch::tui::KeyEvent{.key = "f2"});
+    CHECK(selections == 1);
+}
+
 TEST_CASE("SelectList renders descriptions in an overlay with bounded rows", "[tui][select-list][overlay][issue52]") {
     cch::tui::VirtualTerminal terminal({.columns = 70, .rows = 6});
     cch::tui::Tui tui(terminal);

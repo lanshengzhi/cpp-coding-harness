@@ -29,6 +29,7 @@
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Input.hpp>
 #include <cch/tui/Image.hpp>
+#include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Loader.hpp>
 #include <cch/tui/Markdown.hpp>
 #include <cch/tui/ProcessTerminal.hpp>
@@ -122,6 +123,13 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_final_v<tui::ProcessTerminal>);
     static_assert(std::is_aggregate_v<tui::KeyEvent>);
     static_assert(std::is_aggregate_v<tui::PasteEvent>);
+    static_assert(std::is_aggregate_v<tui::KeybindingDefinition>);
+    static_assert(std::is_aggregate_v<tui::KeybindingOverride>);
+    static_assert(std::is_aggregate_v<tui::KeybindingIssue>);
+    static_assert(std::is_aggregate_v<tui::EffectiveKeybinding>);
+    static_assert(std::is_aggregate_v<tui::KeybindingResolutionRequest>);
+    static_assert(std::is_aggregate_v<tui::KeybindingResolution>);
+    static_assert(std::is_final_v<tui::KeybindingRegistry>);
     static_assert(std::is_aggregate_v<tui::EditorCursor>);
     static_assert(std::is_aggregate_v<tui::AutocompleteItem>);
     static_assert(std::is_aggregate_v<tui::AutocompleteRequest>);

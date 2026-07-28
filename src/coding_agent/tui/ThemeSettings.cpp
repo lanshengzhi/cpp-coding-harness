@@ -28,6 +28,7 @@ namespace {
 
 struct ThemeSettingsState {
     ThemeController* controller; // must outlive the settings overlay.
+    std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings;
     std::optional<util::Error> error{std::nullopt};
 };
 
@@ -35,8 +36,14 @@ class ThemeSettingsList final : public cch::tui::Component,
                                 public cch::tui::InputHandler,
                                 public cch::tui::Focusable {
 public:
-    ThemeSettingsList(ThemeController& controller, ThemeSettingsCancelSink on_cancel)
-        : state_(std::make_shared<ThemeSettingsState>(ThemeSettingsState{.controller = &controller})),
+    ThemeSettingsList(
+        ThemeController& controller,
+        std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
+        ThemeSettingsCancelSink on_cancel)
+        : state_(std::make_shared<ThemeSettingsState>(ThemeSettingsState{
+              .controller = &controller,
+              .keybindings = std::move(keybindings),
+          })),
           list_(make_items(controller), make_options(controller, state_, std::move(on_cancel))) {}
 
     [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override {
@@ -124,10 +131,12 @@ private:
                             }
                         },
                         .on_cancel = [completion]() { (*completion)(std::nullopt); },
+                        .keybindings = state->keybindings,
                     });
                 list->set_selected_index(selected_index);
                 return list;
             },
+            .keybindings = state->keybindings,
         };
     }
 
@@ -225,6 +234,7 @@ util::ExpectedVoid ThemeController::select_theme(std::string_view name) {
 
 util::Expected<std::unique_ptr<cch::tui::Overlay>> make_theme_settings_overlay(
     ThemeController& controller,
+    std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
     ThemeSettingsCancelSink on_cancel) {
     cch::tui::OverlayOptions options;
     options.position = cch::tui::OverlayPosition::TopLeft;
@@ -232,7 +242,11 @@ util::Expected<std::unique_ptr<cch::tui::Overlay>> make_theme_settings_overlay(
     options.size_constraints.max_height = 18;
     options.z_index = 100;
     auto overlay = std::make_unique<cch::tui::Overlay>(std::move(options));
-    auto settings = std::make_unique<ThemeSettingsList>(controller, std::move(on_cancel));
+    if (!keybindings) keybindings = cch::tui::default_tui_keybindings();
+    auto settings = std::make_unique<ThemeSettingsList>(
+        controller,
+        std::move(keybindings),
+        std::move(on_cancel));
     if (auto attached = overlay->add_child(std::move(settings)); !attached) {
         return std::unexpected(attached.error());
     }

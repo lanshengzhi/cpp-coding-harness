@@ -83,8 +83,8 @@ TEST_CASE("reusable TUI stays independent of coding-agent implementation modules
 }
 
 TEST_CASE(
-    "coding-agent themes stay outside reusable TUI vocabulary and pi directories",
-    "[architecture][tui][issue55][issue56]") {
+    "coding-agent TUI configuration stays outside reusable vocabulary and pi directories",
+    "[architecture][tui][issue55][issue56][issue57]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
     const auto tui_files = files_under({"include/cch/tui", "src/tui"});
     REQUIRE_FALSE(tui_files.empty());
@@ -95,12 +95,13 @@ TEST_CASE(
     }
 
     for (const auto& file : files_under({"src/coding_agent/tui"})) {
-        const auto theme_source = read_text(file);
-        CHECK(theme_source.find("/.pi") == std::string::npos);
-        CHECK(theme_source.find("../pi") == std::string::npos);
-        CHECK(theme_source.find("getCustomThemesDir") == std::string::npos);
-        CHECK(theme_source.find("reload_themes") == std::string::npos);
-        CHECK(theme_source.find("watch_theme") == std::string::npos);
+        const auto source = read_text(file);
+        CHECK(source.find("/.pi") == std::string::npos);
+        CHECK(source.find("../pi") == std::string::npos);
+        CHECK(source.find("getCustomThemesDir") == std::string::npos);
+        CHECK(source.find("reload_themes") == std::string::npos);
+        CHECK(source.find("watch_theme") == std::string::npos);
+        CHECK(source.find("reload_keybindings") == std::string::npos);
     }
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/tui/Component.hpp>
+#include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Style.hpp>
 
 #include <cstddef>
@@ -57,6 +58,7 @@ struct SettingsListOptions {
     SettingsChangeSink on_change{};
     SettingsCancelSink on_cancel{};
     SettingsSubmenuFactoryHook submenu_factory{};
+    std::shared_ptr<const KeybindingRegistry> keybindings{};
 };
 
 /// A searchable settings interaction with deterministic cycling and nested selection.

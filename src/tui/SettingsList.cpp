@@ -144,6 +144,7 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
     std::shared_ptr<SettingsChangeSink> on_change;
     std::shared_ptr<SettingsCancelSink> on_cancel;
     SettingsSubmenuFactoryHook submenu_factory;
+    std::shared_ptr<const KeybindingRegistry> keybindings;
     std::unique_ptr<Component> submenu;
     std::optional<util::Error> callback_error;
     bool focused{false};
@@ -301,6 +302,7 @@ SettingsList::SettingsList(std::vector<SettingItem> items, SettingsListOptions o
     impl_->on_change = std::make_shared<SettingsChangeSink>(std::move(options.on_change));
     impl_->on_cancel = std::make_shared<SettingsCancelSink>(std::move(options.on_cancel));
     impl_->submenu_factory = std::move(options.submenu_factory);
+    impl_->keybindings = options.keybindings ? std::move(options.keybindings) : default_tui_keybindings();
 }
 
 SettingsList::SettingsList(SettingsList&&) noexcept = default;
@@ -426,10 +428,19 @@ util::Expected<RenderResult> SettingsList::render(std::size_t width) {
 
     if (!impl->items.empty() || impl->search_enabled) {
         lines.emplace_back();
+        auto confirm_keys = impl->keybindings->key_text("tui.select.confirm");
+        const KeyEvent space{.key = "space"};
+        if (!impl->keybindings->matches(space, "tui.select.confirm")) {
+            if (!confirm_keys.empty()) confirm_keys += '/';
+            confirm_keys += "space";
+        }
+        const auto cancel_keys = impl->keybindings->key_text("tui.select.cancel");
+        const auto actions = std::format(
+            "{} to change · {} to cancel",
+            confirm_keys,
+            cancel_keys.empty() ? "Unbound" : cancel_keys);
         auto hint = impl->hint_line(
-            impl->search_enabled
-                ? "  Type to search · Enter/Space to change · Esc to cancel"
-                : "  Enter/Space to change · Esc to cancel",
+            impl->search_enabled ? "  Type to search · " + actions : "  " + actions,
             width);
         if (!hint) return std::unexpected(hint.error());
         lines.push_back(std::move(*hint));
@@ -456,21 +467,21 @@ void SettingsList::handle_input(const InputEventVariant& input) {
     const auto* key = std::get_if<KeyEvent>(&input);
     if (key == nullptr || key->type == KeyEventType::Release) return;
     const auto& displayed = impl->displayed_indices();
-    if (matches_key(*key, "up")) {
+    if (impl->keybindings->matches(*key, "tui.select.up")) {
         if (displayed.empty()) return;
         impl->selected_index = impl->selected_index == 0 ? displayed.size() - 1 : impl->selected_index - 1;
         return;
     }
-    if (matches_key(*key, "down")) {
+    if (impl->keybindings->matches(*key, "tui.select.down")) {
         if (displayed.empty()) return;
         impl->selected_index = impl->selected_index + 1 == displayed.size() ? 0 : impl->selected_index + 1;
         return;
     }
-    if (matches_key(*key, "enter") || matches_key(*key, "space")) {
+    if (impl->keybindings->matches(*key, "tui.select.confirm") || matches_key(*key, "space")) {
         impl->activate_item();
         return;
     }
-    if (matches_key(*key, "escape") || matches_key(*key, "ctrl+c")) {
+    if (impl->keybindings->matches(*key, "tui.select.cancel")) {
         auto sink = impl->on_cancel;
         if (!sink || !*sink) return;
         try {
@@ -481,7 +492,7 @@ void SettingsList::handle_input(const InputEventVariant& input) {
         return;
     }
     if (!impl->search_enabled) return;
-    if (matches_key(*key, "backspace")) {
+    if (impl->keybindings->matches(*key, "tui.editor.deleteCharBackward")) {
         auto graphemes = detail::split_graphemes(impl->search);
         if (!graphemes.empty()) graphemes.pop_back();
         impl->search.clear();

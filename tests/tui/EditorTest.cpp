@@ -41,6 +41,13 @@ TEST_CASE("Editor edits Unicode text through semantic cursor and deletion operat
     CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 3}));
     key(editor, "w", true);
     CHECK(editor.text() == " two");
+
+    editor.set_text("ab");
+    key(editor, "backspace", false, true);
+    CHECK(editor.text() == "a");
+    key(editor, "home");
+    key(editor, "delete", false, true);
+    CHECK(editor.text().empty());
 }
 
 TEST_CASE("Editor preserves multiline undo kill yank and jump state", "[tui][editor][issue48]") {
@@ -205,11 +212,22 @@ TEST_CASE("Editor receives decoder paste events through the Virtual Terminal sea
     CHECK_FALSE(terminal.screen().empty());
 }
 
-TEST_CASE("Editor submits and resets repeatedly with configured newline operations", "[tui][editor][issue48]") {
+TEST_CASE(
+    "Editor submits and resets repeatedly with configured newline operations",
+    "[tui][editor][issue48][issue57]") {
+    cch::tui::KeybindingResolutionRequest request;
+    request.definitions = cch::tui::builtin_tui_keybinding_definitions();
+    request.overrides = {
+        {.id = "tui.input.submit", .keys = {"ctrl+enter"}},
+        {.id = "tui.input.newLine", .keys = {"enter"}},
+    };
+    const auto keybindings = cch::tui::resolve_keybindings(std::move(request));
+    REQUIRE(keybindings);
+
     std::vector<std::string> changes;
     std::vector<std::string> submitted;
     cch::tui::Editor editor(
-        {.submit_keys = {"ctrl+enter"}, .newline_keys = {"enter"}},
+        {.keybindings = keybindings->registry},
         [&changes](std::string text) { changes.push_back(std::move(text)); },
         [&submitted](std::string text) { submitted.push_back(std::move(text)); });
 

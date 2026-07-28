@@ -292,7 +292,9 @@ TEST_CASE(
         [settings_path](std::string_view name) {
             return coding_agent::SettingsLoader::save_theme_selection(settings_path, name);
         });
-    auto overlay = coding_agent::tui::make_theme_settings_overlay(controller);
+    auto overlay = coding_agent::tui::make_theme_settings_overlay(
+        controller,
+        tui::default_tui_keybindings());
     REQUIRE(overlay);
     auto* overlay_pointer = overlay->get();
     REQUIRE(root.add_overlay(std::move(*overlay)));

@@ -82,13 +82,6 @@ using Document = std::vector<Line>;
         category == UTF8PROC_CATEGORY_NL || category == UTF8PROC_CATEGORY_NO;
 }
 
-[[nodiscard]] bool matches_any(const KeyEvent& event, const std::vector<std::string>& identifiers) {
-    for (const auto& identifier : identifiers) {
-        if (matches_key(event, identifier)) return true;
-    }
-    return false;
-}
-
 [[nodiscard]] bool is_printable(const KeyEvent& event) {
     if (event.ctrl || event.alt || event.key.size() == 0) return false;
     return event.key != "enter" && event.key != "tab" && event.key != "escape" &&
@@ -709,6 +702,7 @@ struct Editor::Impl {
 
 Editor::Editor(EditorOptions options, EditorChangeSink on_change, EditorSubmitSink on_submit)
     : impl_(std::make_unique<Impl>()) {
+    if (!options.keybindings) options.keybindings = default_tui_keybindings();
     impl_->options = std::move(options);
     impl_->on_change = std::move(on_change);
     impl_->on_submit = std::move(on_submit);
@@ -829,9 +823,12 @@ void Editor::handle_input(const InputEventVariant& input) {
     }
     const auto* event = std::get_if<KeyEvent>(&input);
     if (event == nullptr || event->type == KeyEventType::Release) return;
+    const auto matches = [this, event](std::string_view action_id) {
+        return impl_->options.keybindings->matches(*event, action_id);
+    };
 
     if (impl_->jump_direction) {
-        if (matches_key(*event, "ctrl+]") || matches_key(*event, "ctrl+alt+]")) {
+        if (matches("tui.editor.jumpForward") || matches("tui.editor.jumpBackward")) {
             impl_->jump_direction.reset();
             return;
         }
@@ -844,117 +841,117 @@ void Editor::handle_input(const InputEventVariant& input) {
     }
 
     if (autocomplete_open()) {
-        if (matches_key(*event, "escape")) {
+        if (matches("tui.select.cancel")) {
             impl_->close_autocomplete();
             return;
         }
-        if (matches_key(*event, "up")) {
+        if (matches("tui.select.up")) {
             if (impl_->autocomplete_selected > 0) --impl_->autocomplete_selected;
             return;
         }
-        if (matches_key(*event, "down")) {
+        if (matches("tui.select.down")) {
             impl_->autocomplete_selected = std::min(
                 impl_->autocomplete_selected + 1,
                 impl_->autocomplete.size() - 1);
             return;
         }
-        if (matches_key(*event, "tab")) {
+        if (matches("tui.input.tab")) {
             impl_->accept_autocomplete();
             return;
         }
     }
 
-    if (matches_key(*event, "tab")) {
+    if (matches("tui.input.tab")) {
         impl_->refresh_autocomplete(true);
         return;
     }
-    if (matches_key(*event, "ctrl+-")) {
+    if (matches("tui.editor.undo")) {
         impl_->undo_once();
         return;
     }
-    if (matches_key(*event, "ctrl+]") || matches_key(*event, "ctrl+alt+]")) {
-        impl_->jump_direction = matches_key(*event, "ctrl+]")
+    if (matches("tui.editor.jumpForward") || matches("tui.editor.jumpBackward")) {
+        impl_->jump_direction = matches("tui.editor.jumpForward")
             ? Impl::JumpDirection::Forward
             : Impl::JumpDirection::Backward;
         return;
     }
-    if (matches_key(*event, "backspace") || matches_key(*event, "shift+backspace")) {
+    if (matches("tui.editor.deleteCharBackward") || matches_key(*event, "shift+backspace")) {
         impl_->erase_at_cursor(true);
         return;
     }
-    if (matches_key(*event, "delete") || matches_key(*event, "shift+delete") || matches_key(*event, "ctrl+d")) {
+    if (matches("tui.editor.deleteCharForward") || matches_key(*event, "shift+delete")) {
         impl_->erase_at_cursor(false);
         return;
     }
-    if (matches_key(*event, "ctrl+w") || matches_key(*event, "alt+backspace")) {
+    if (matches("tui.editor.deleteWordBackward")) {
         impl_->delete_word(false);
         return;
     }
-    if (matches_key(*event, "alt+d") || matches_key(*event, "alt+delete")) {
+    if (matches("tui.editor.deleteWordForward")) {
         impl_->delete_word(true);
         return;
     }
-    if (matches_key(*event, "ctrl+u")) {
+    if (matches("tui.editor.deleteToLineStart")) {
         impl_->kill_to_line(false);
         return;
     }
-    if (matches_key(*event, "ctrl+k")) {
+    if (matches("tui.editor.deleteToLineEnd")) {
         impl_->kill_to_line(true);
         return;
     }
-    if (matches_key(*event, "ctrl+y")) {
+    if (matches("tui.editor.yank")) {
         impl_->yank();
         return;
     }
-    if (matches_key(*event, "alt+y")) {
+    if (matches("tui.editor.yankPop")) {
         impl_->yank_pop();
         return;
     }
-    if (matches_key(*event, "home") || matches_key(*event, "ctrl+a")) {
+    if (matches("tui.editor.cursorLineStart")) {
         impl_->cursor.column = 0;
         return;
     }
-    if (matches_key(*event, "end") || matches_key(*event, "ctrl+e")) {
+    if (matches("tui.editor.cursorLineEnd")) {
         impl_->cursor.column = impl_->document[impl_->cursor.line].size();
         return;
     }
-    if (matches_key(*event, "left") || matches_key(*event, "ctrl+b")) {
+    if (matches("tui.editor.cursorLeft")) {
         impl_->move_left();
         return;
     }
-    if (matches_key(*event, "right") || matches_key(*event, "ctrl+f")) {
+    if (matches("tui.editor.cursorRight")) {
         impl_->move_right();
         return;
     }
-    if (matches_key(*event, "ctrl+left") || matches_key(*event, "alt+left") || matches_key(*event, "alt+b")) {
+    if (matches("tui.editor.cursorWordLeft")) {
         impl_->move_word(false);
         return;
     }
-    if (matches_key(*event, "ctrl+right") || matches_key(*event, "alt+right") || matches_key(*event, "alt+f")) {
+    if (matches("tui.editor.cursorWordRight")) {
         impl_->move_word(true);
         return;
     }
-    if (matches_key(*event, "up")) {
+    if (matches("tui.editor.cursorUp")) {
         impl_->move_vertical(-1);
         return;
     }
-    if (matches_key(*event, "down")) {
+    if (matches("tui.editor.cursorDown")) {
         impl_->move_vertical(1);
         return;
     }
-    if (matches_key(*event, "pageUp")) {
+    if (matches("tui.editor.pageUp")) {
         for (std::size_t index = 0; index < impl_->options.max_visible_lines; ++index) impl_->move_vertical(-1);
         return;
     }
-    if (matches_key(*event, "pageDown")) {
+    if (matches("tui.editor.pageDown")) {
         for (std::size_t index = 0; index < impl_->options.max_visible_lines; ++index) impl_->move_vertical(1);
         return;
     }
-    if (matches_any(*event, impl_->options.newline_keys)) {
+    if (matches("tui.input.newLine")) {
         impl_->insert_text("\n", true);
         return;
     }
-    if (matches_any(*event, impl_->options.submit_keys)) {
+    if (matches("tui.input.submit")) {
         if (!impl_->options.disable_submit) impl_->submit();
         return;
     }

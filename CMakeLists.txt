@@ -60,6 +60,7 @@ add_library(cch_tui
     src/tui/Image.cpp
     src/tui/Input.cpp
     src/tui/InputDecoder.cpp
+    src/tui/Keybindings.cpp
     src/tui/KeyboardProtocol.cpp
     src/tui/Loader.cpp
     src/tui/Markdown.cpp
@@ -83,6 +84,8 @@ target_link_libraries(cch_tui
 )
 
 add_library(cch_coding_agent_tui
+    src/coding_agent/tui/KeybindingCatalog.cpp
+    src/coding_agent/tui/KeybindingHelp.cpp
     src/coding_agent/tui/Theme.cpp
     src/coding_agent/tui/ThemeCatalog.cpp
     src/coding_agent/tui/ThemeSettings.cpp
@@ -257,6 +260,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/SkillFrontmatterParserTest.cpp
         tests/coding_agent/SkillLoaderTest.cpp
         tests/coding_agent/PromptTemplateLoaderTest.cpp
+        tests/coding_agent/tui/KeybindingCatalogTest.cpp
         tests/coding_agent/tui/ThemeTest.cpp
         tests/coding_agent/tui/ThemeCatalogTest.cpp
         tests/coding_agent/SdkSessionTest.cpp
@@ -275,6 +279,7 @@ if(CCH_BUILD_TESTS)
         tests/tui/EditorTest.cpp
         tests/tui/ImageTest.cpp
         tests/tui/InputTest.cpp
+        tests/tui/KeybindingsTest.cpp
         tests/tui/LoaderTest.cpp
         tests/tui/MarkdownTest.cpp
         tests/tui/OverlayTest.cpp

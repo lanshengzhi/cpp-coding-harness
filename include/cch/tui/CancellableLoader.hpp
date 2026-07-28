@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Loader.hpp>
 
 #include <functional>
@@ -21,6 +22,7 @@ struct CancellableLoaderOptions {
     LoaderOptions loader{};
     LoaderCompletionSink on_complete{};
     LoaderCancellationSink on_cancel{};
+    std::shared_ptr<const KeybindingRegistry> keybindings{};
 };
 
 /// A Loader with one idempotent cancellation signal and one terminal outcome.

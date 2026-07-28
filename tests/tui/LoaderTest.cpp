@@ -184,6 +184,26 @@ TEST_CASE("CancellableLoader arbitrates completion and cancellation exactly once
     CHECK(cancelled.cancelled());
 }
 
+TEST_CASE("CancellableLoader dispatches cancellation from its effective registry", "[tui][loader][issue57]") {
+    cch::tui::KeybindingResolutionRequest request;
+    request.definitions = cch::tui::builtin_tui_keybinding_definitions();
+    request.overrides = {{.id = "tui.select.cancel", .keys = {"f2"}}};
+    const auto keybindings = cch::tui::resolve_keybindings(std::move(request));
+    REQUIRE(keybindings);
+
+    cch::tui::CancellableLoader loader(cch::tui::CancellableLoaderOptions{
+        .loader = cch::tui::LoaderOptions{
+            .indicator = cch::tui::LoaderIndicatorOptions{.frames = std::vector<std::string>{}},
+            .animation_timer = std::make_unique<ManualAnimationTimer>(),
+        },
+        .keybindings = keybindings->registry,
+    });
+    loader.handle_input(cch::tui::KeyEvent{.key = "escape"});
+    CHECK(loader.state() == cch::tui::CancellableLoaderState::Active);
+    loader.handle_input(cch::tui::KeyEvent{.key = "f2"});
+    CHECK(loader.state() == cch::tui::CancellableLoaderState::Cancelled);
+}
+
 TEST_CASE("CancellableLoader resolves concurrent terminal outcomes exactly once", "[tui][loader][issue52]") {
     std::atomic_size_t completions{0};
     std::atomic_size_t cancellations{0};

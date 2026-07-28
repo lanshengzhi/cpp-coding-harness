@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/tui/Component.hpp>
+#include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Style.hpp>
 
 #include <cstddef>
@@ -49,6 +50,7 @@ struct SelectListOptions {
     SelectItemSink on_select{};
     SelectCancelSink on_cancel{};
     SelectItemSink on_selection_change{};
+    std::shared_ptr<const KeybindingRegistry> keybindings{};
 };
 
 /// A filterable, width-bounded selection list controlled by semantic keys.

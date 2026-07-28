@@ -52,7 +52,7 @@ std::vector<std::filesystem::path> files_under(const std::filesystem::path& root
 
 } // namespace
 
-TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issue56]") {
+TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issue57]") {
     const auto cmake = read_text(std::filesystem::path(CCH_SOURCE_DIR) / "CMakeLists.txt");
 
     CHECK(block_mentions(cmake, "add_library(cch_util"));
@@ -62,6 +62,7 @@ TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issu
     CHECK(block_mentions(tui_sources, "src/tui/Image.cpp"));
     CHECK(block_mentions(tui_sources, "src/tui/Input.cpp"));
     CHECK(block_mentions(tui_sources, "src/tui/InputDecoder.cpp"));
+    CHECK(block_mentions(tui_sources, "src/tui/Keybindings.cpp"));
     CHECK(block_mentions(tui_sources, "src/tui/Loader.cpp"));
     CHECK(block_mentions(tui_sources, "src/tui/Markdown.cpp"));
     CHECK(block_mentions(tui_sources, "src/tui/SelectList.cpp"));
@@ -72,6 +73,8 @@ TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issu
     CHECK(block_mentions(tui_sources, "src/tui/VirtualTerminal.cpp"));
     CHECK(block_mentions(cmake, "add_library(cch_coding_agent_tui"));
     const auto coding_agent_tui_sources = cmake_command_block(cmake, "add_library(cch_coding_agent_tui");
+    CHECK(block_mentions(coding_agent_tui_sources, "src/coding_agent/tui/KeybindingCatalog.cpp"));
+    CHECK(block_mentions(coding_agent_tui_sources, "src/coding_agent/tui/KeybindingHelp.cpp"));
     CHECK(block_mentions(coding_agent_tui_sources, "src/coding_agent/tui/Theme.cpp"));
     CHECK(block_mentions(coding_agent_tui_sources, "src/coding_agent/tui/ThemeCatalog.cpp"));
     CHECK(block_mentions(coding_agent_tui_sources, "src/coding_agent/tui/ThemeSettings.cpp"));

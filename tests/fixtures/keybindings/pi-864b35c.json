@@ -1,0 +1,7 @@
+{
+  "tui.input.submit": "ctrl+enter",
+  "tui.input.newLine": ["enter", "ctrl+j"],
+  "tui.editor.cursorUp": ["super+up"],
+  "app.model.select": "ctrl+l",
+  "future.action": "f12"
+}

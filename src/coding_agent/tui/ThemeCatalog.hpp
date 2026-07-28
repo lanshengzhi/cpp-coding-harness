@@ -2,6 +2,7 @@
 
 #include "Theme.hpp"
 
+#include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Overlay.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/util/Error.hpp>
@@ -111,6 +112,7 @@ private:
 /// reload or hot-reload control is exposed.
 [[nodiscard]] util::Expected<std::unique_ptr<cch::tui::Overlay>> make_theme_settings_overlay(
     ThemeController& controller,
+    std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
     ThemeSettingsCancelSink on_cancel = {});
 
 } // namespace cch::coding_agent::tui

@@ -14,7 +14,8 @@ struct CancellableLoader::Impl {
     explicit Impl(CancellableLoaderOptions options)
         : loader(std::move(options.loader)),
           on_complete(std::move(options.on_complete)),
-          on_cancel(std::move(options.on_cancel)) {}
+          on_cancel(std::move(options.on_cancel)),
+          keybindings(options.keybindings ? std::move(options.keybindings) : default_tui_keybindings()) {}
 
     mutable std::mutex mutex;
     Loader loader;
@@ -22,6 +23,7 @@ struct CancellableLoader::Impl {
     CancellableLoaderState state{CancellableLoaderState::Active};
     LoaderCompletionSink on_complete;
     LoaderCancellationSink on_cancel;
+    std::shared_ptr<const KeybindingRegistry> keybindings;
     std::optional<util::Error> callback_error;
     bool focused{false};
 
@@ -136,7 +138,7 @@ void CancellableLoader::invalidate() {
 void CancellableLoader::handle_input(const InputEventVariant& input) {
     const auto* key = std::get_if<KeyEvent>(&input);
     if (key == nullptr || key->type == KeyEventType::Release) return;
-    if (matches_key(*key, "escape") || matches_key(*key, "ctrl+c")) {
+    if (impl_->keybindings->matches(*key, "tui.select.cancel")) {
         (void)cancel();
     }
 }
