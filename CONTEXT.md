@@ -113,5 +113,5 @@ User-level preferences for providers, Project Resources, and Agent Session stora
 _Avoid_: User config, config file
 
 **User Bash**:
-A frontend operation that runs a user-entered shell command without treating it as an agent prompt.
+A Native TUI operation that runs a user-entered shell command without treating it as an Agent Prompt. Its completed execution belongs to Agent Session history and is either included in or excluded from later model context according to the user's invocation.
 _Avoid_: Bash tool, prompt processing
