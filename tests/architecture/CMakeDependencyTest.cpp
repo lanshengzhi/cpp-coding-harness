@@ -52,7 +52,7 @@ std::vector<std::filesystem::path> files_under(const std::filesystem::path& root
 
 } // namespace
 
-TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issue56][issue57]") {
+TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issue56][issue57][issue58]") {
     const auto cmake = read_text(std::filesystem::path(CCH_SOURCE_DIR) / "CMakeLists.txt");
 
     CHECK(block_mentions(cmake, "add_library(cch_util"));
@@ -78,6 +78,9 @@ TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issu
     CHECK(block_mentions(coding_agent_tui_sources, "src/coding_agent/tui/Theme.cpp"));
     CHECK(block_mentions(coding_agent_tui_sources, "src/coding_agent/tui/ThemeCatalog.cpp"));
     CHECK(block_mentions(coding_agent_tui_sources, "src/coding_agent/tui/ThemeSettings.cpp"));
+    CHECK(block_mentions(cmake, "add_library(cch_coding_agent_interactive"));
+    const auto interactive_sources = cmake_command_block(cmake, "add_library(cch_coding_agent_interactive");
+    CHECK(block_mentions(interactive_sources, "src/coding_agent/tui/InteractiveMode.cpp"));
     CHECK(block_mentions(cmake, "add_library(cch_ai"));
     CHECK(block_mentions(cmake, "add_library(cch_agent"));
     const auto agent_sources = cmake_command_block(cmake, "add_library(cch_agent");
@@ -95,7 +98,7 @@ TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issu
     CHECK(block_mentions(ai_sources, "src/ai/providers/SseParser.cpp"));
 }
 
-TEST_CASE("CMake target links follow the package dependency direction", "[architecture][cmake]") {
+TEST_CASE("CMake target links follow the package dependency direction", "[architecture][cmake][issue58]") {
     const auto cmake = read_text(std::filesystem::path(CCH_SOURCE_DIR) / "CMakeLists.txt");
 
     const auto tui_links = cmake_command_block(cmake, "target_link_libraries(cch_tui");
@@ -113,6 +116,12 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
     CHECK_FALSE(block_mentions(coding_agent_tui_links, "cch_harness"));
     CHECK_FALSE(block_mentions(coding_agent_tui_links, "cch_tools"));
     CHECK_FALSE(block_mentions(coding_agent_tui_links, "cch_coding_agent_runtime"));
+
+    const auto interactive_links = cmake_command_block(cmake, "target_link_libraries(cch_coding_agent_interactive");
+    CHECK(block_mentions(interactive_links, "cch_coding_agent_runtime"));
+    CHECK(block_mentions(interactive_links, "cch_coding_agent_tui"));
+    CHECK(block_mentions(interactive_links, "cch_tui"));
+    CHECK(block_mentions(interactive_links, "cch_util"));
 
     const auto ai_links = cmake_command_block(cmake, "target_link_libraries(cch_ai");
     CHECK(block_mentions(ai_links, "cch_util"));

@@ -173,6 +173,27 @@ TEST_CASE("Supported synchronized output wraps a render atomically", "[tui][rend
     CHECK(output.back() == "\x1b[?2026l");
 }
 
+TEST_CASE("Render requests coalesce until render and include resize", "[tui][render][issue58]") {
+    cch::tui::VirtualTerminal terminal({.columns = 7, .rows = 2});
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("initial", 0, 0)));
+    std::size_t requests = 0;
+    tui.set_render_request_sink([&requests] { ++requests; });
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    tui.invalidate();
+    tui.invalidate();
+    CHECK(requests == 1);
+    REQUIRE(tui.render());
+
+    tui.invalidate();
+    CHECK(requests == 2);
+    REQUIRE(tui.render());
+    REQUIRE(terminal.inject_resize({.columns = 8, .rows = 2}));
+    CHECK(requests == 3);
+}
+
 TEST_CASE("Repeated invalidate coalesces without losing latest state", "[tui][render][issue49]") {
     cch::tui::VirtualTerminal terminal({.columns = 7, .rows = 2});
     cch::tui::Tui tui(terminal);

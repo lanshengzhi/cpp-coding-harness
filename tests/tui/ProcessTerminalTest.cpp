@@ -2,6 +2,7 @@
 #include <cch/tui/Tui.hpp>
 
 #include "harness/UniqueFd.hpp"
+#include "support/PseudoTerminal.hpp"
 
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
@@ -101,52 +102,6 @@ private:
     bool focused_{false};
 };
 
-struct PtyPair {
-    cch::harness::UniqueFd master;
-    cch::harness::UniqueFd slave;
-    std::string slave_name;
-};
-
-[[nodiscard]] std::optional<PtyPair> open_pty(std::size_t columns = 80, std::size_t rows = 24) {
-    cch::harness::UniqueFd master(::posix_openpt(O_RDWR | O_NOCTTY));
-    if (!master || ::grantpt(master.get()) != 0 || ::unlockpt(master.get()) != 0) return std::nullopt;
-    const auto* slave_name = ::ptsname(master.get());
-    if (slave_name == nullptr) return std::nullopt;
-    cch::harness::UniqueFd slave(::open(slave_name, O_RDWR | O_NOCTTY));
-    if (!slave) return std::nullopt;
-
-    winsize dimensions{
-        .ws_row = static_cast<unsigned short>(rows),
-        .ws_col = static_cast<unsigned short>(columns),
-        .ws_xpixel = 0,
-        .ws_ypixel = 0,
-    };
-    if (::ioctl(slave.get(), TIOCSWINSZ, &dimensions) != 0) return std::nullopt;
-    return PtyPair{
-        .master = std::move(master),
-        .slave = std::move(slave),
-        .slave_name = slave_name,
-    };
-}
-
-[[nodiscard]] bool same_terminal_state(const termios& left, const termios& right) {
-    return left.c_iflag == right.c_iflag && left.c_oflag == right.c_oflag &&
-        left.c_cflag == right.c_cflag && left.c_lflag == right.c_lflag &&
-        ::cfgetispeed(&left) == ::cfgetispeed(&right) &&
-        ::cfgetospeed(&left) == ::cfgetospeed(&right) &&
-        std::memcmp(left.c_cc, right.c_cc, NCCS) == 0;
-}
-
-template <typename Predicate>
-[[nodiscard]] bool wait_until(Predicate predicate) {
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
-    while (std::chrono::steady_clock::now() < deadline) {
-        if (predicate()) return true;
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    }
-    return predicate();
-}
-
 [[nodiscard]] bool answer_appearance_query(
     int descriptor,
     std::string_view response) {
@@ -173,25 +128,6 @@ template <typename Predicate>
     return false;
 }
 
-[[nodiscard]] std::string read_available(
-    int descriptor,
-    std::chrono::milliseconds timeout = std::chrono::milliseconds(100)) {
-    std::string output;
-    const auto deadline = std::chrono::steady_clock::now() + timeout;
-    std::array<char, 4096> buffer{};
-    while (std::chrono::steady_clock::now() < deadline) {
-        pollfd item{.fd = descriptor, .events = POLLIN, .revents = 0};
-        const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
-            deadline - std::chrono::steady_clock::now());
-        const auto ready = ::poll(&item, 1, static_cast<int>(remaining.count()));
-        if (ready <= 0 || (item.revents & POLLIN) == 0) break;
-        const auto count = ::read(descriptor, buffer.data(), buffer.size());
-        if (count <= 0) break;
-        output.append(buffer.data(), static_cast<std::size_t>(count));
-    }
-    return output;
-}
-
 } // namespace
 
 TEST_CASE("Process Terminal rejects non-TTY descriptors before changing modes", "[tui][terminal][issue54]") {
@@ -214,7 +150,7 @@ TEST_CASE("Process Terminal rejects non-TTY descriptors before changing modes", 
 }
 
 TEST_CASE("Process Terminal restores raw paste cursor and pending render modes", "[tui][terminal][issue54]") {
-    auto pty = open_pty();
+    auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     termios original{};
     REQUIRE(::tcgetattr(pty->slave.get(), &original) == 0);
@@ -235,7 +171,7 @@ TEST_CASE("Process Terminal restores raw paste cursor and pending render modes",
     const cch::tui::TerminalDimensions expected_dimensions{.columns = 80, .rows = 24};
     CHECK(terminal.dimensions() == expected_dimensions);
     CHECK(terminal.capabilities().inline_images == cch::tui::InlineImageProtocol::None);
-    CHECK(read_available(pty->master.get()).find("\x1b[?2004h") != std::string::npos);
+    CHECK(cch::tests::read_available(pty->master.get()).find("\x1b[?2004h") != std::string::npos);
 
     REQUIRE(terminal.set_cursor_visible(false));
     REQUIRE(terminal.begin_synchronized_update());
@@ -244,16 +180,16 @@ TEST_CASE("Process Terminal restores raw paste cursor and pending render modes",
 
     termios restored{};
     REQUIRE(::tcgetattr(pty->slave.get(), &restored) == 0);
-    CHECK(same_terminal_state(restored, original));
+    CHECK(cch::tests::same_terminal_state(restored, original));
     CHECK(terminal.modes() == cch::tui::TerminalModeState{});
-    const auto restoration = read_available(pty->master.get());
+    const auto restoration = cch::tests::read_available(pty->master.get());
     CHECK(restoration.find("\x1b[?2026l") != std::string::npos);
     CHECK(restoration.find("\x1b[?25h") != std::string::npos);
     CHECK(restoration.find("\x1b[?2004l") != std::string::npos);
 }
 
 TEST_CASE("Process Terminal reports synchronized output conservatively", "[tui][terminal][issue54]") {
-    auto pty = open_pty();
+    auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     ScopedEnvironmentVariable terminal_environment("TERM");
     ScopedEnvironmentVariable program_environment("TERM_PROGRAM");
@@ -267,20 +203,20 @@ TEST_CASE("Process Terminal reports synchronized output conservatively", "[tui][
     REQUIRE(generic_terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
     CHECK_FALSE(generic_terminal.capabilities().synchronized_output);
     REQUIRE(generic_terminal.stop());
-    (void)read_available(pty->master.get());
+    (void)cch::tests::read_available(pty->master.get());
 
     terminal_environment.set("football");
     REQUIRE(generic_terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
     CHECK_FALSE(generic_terminal.capabilities().synchronized_output);
     REQUIRE(generic_terminal.stop());
-    (void)read_available(pty->master.get());
+    (void)cch::tests::read_available(pty->master.get());
 
     terminal_environment.set("xterm-unknown");
     program_environment.set("WezTerm");
     REQUIRE(generic_terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
     CHECK(generic_terminal.capabilities().synchronized_output);
     REQUIRE(generic_terminal.stop());
-    (void)read_available(pty->master.get());
+    (void)cch::tests::read_available(pty->master.get());
 
     terminal_environment.set("xterm-kitty");
     program_environment.unset();
@@ -290,7 +226,7 @@ TEST_CASE("Process Terminal reports synchronized output conservatively", "[tui][
 }
 
 TEST_CASE("Process Terminal delivers pseudo-terminal input and resize", "[tui][terminal][issue54]") {
-    auto pty = open_pty();
+    auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     std::mutex events_mutex;
     std::vector<std::string> inputs;
@@ -309,13 +245,13 @@ TEST_CASE("Process Terminal delivers pseudo-terminal input and resize", "[tui][t
             std::lock_guard lock(events_mutex);
             resizes.push_back(dimensions);
         }));
-    const auto startup_output = read_available(pty->master.get());
+    const auto startup_output = cch::tests::read_available(pty->master.get());
     CHECK(startup_output.find("\x1b[>7u\x1b[?u\x1b[c") != std::string::npos);
 
     constexpr std::string_view kKittyResponse = "\x1b[?7u";
     REQUIRE(::write(pty->master.get(), kKittyResponse.data(), kKittyResponse.size()) ==
         static_cast<ssize_t>(kKittyResponse.size()));
-    REQUIRE(wait_until([&] {
+    REQUIRE(cch::tests::wait_until([&] {
         return terminal.capabilities().keyboard_protocol == cch::tui::KeyboardProtocol::Kitty;
     }));
     REQUIRE(::write(pty->master.get(), "q", 1) == 1);
@@ -327,7 +263,7 @@ TEST_CASE("Process Terminal delivers pseudo-terminal input and resize", "[tui][t
     };
     REQUIRE(::ioctl(pty->master.get(), TIOCSWINSZ, &resized) == 0);
 
-    REQUIRE(wait_until([&] {
+    REQUIRE(cch::tests::wait_until([&] {
         std::lock_guard lock(events_mutex);
         return !inputs.empty() && !resizes.empty();
     }));
@@ -343,7 +279,7 @@ TEST_CASE("Process Terminal delivers pseudo-terminal input and resize", "[tui][t
 }
 
 TEST_CASE("Concurrent external and sink stops restore without deadlock", "[tui][terminal][issue54]") {
-    auto pty = open_pty();
+    auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     termios original{};
     REQUIRE(::tcgetattr(pty->slave.get(), &original) == 0);
@@ -364,9 +300,9 @@ TEST_CASE("Concurrent external and sink stops restore without deadlock", "[tui][
             callback_stop_succeeded = terminal.stop().has_value();
         },
         [](cch::tui::TerminalDimensions) {}));
-    (void)read_available(pty->master.get());
+    (void)cch::tests::read_available(pty->master.get());
     REQUIRE(::write(pty->master.get(), "q", 1) == 1);
-    REQUIRE(wait_until([&] { return callback_started.load(); }));
+    REQUIRE(cch::tests::wait_until([&] { return callback_started.load(); }));
 
     std::jthread external_stop([&] {
         external_stop_started = true;
@@ -378,12 +314,12 @@ TEST_CASE("Concurrent external and sink stops restore without deadlock", "[tui][
     REQUIRE(external_result);
     termios restored{};
     REQUIRE(::tcgetattr(pty->slave.get(), &restored) == 0);
-    CHECK(same_terminal_state(restored, original));
+    CHECK(cch::tests::same_terminal_state(restored, original));
     REQUIRE(terminal.stop());
 }
 
 TEST_CASE("Process Terminal reports callback and restoration failures together", "[tui][terminal][issue54]") {
-    auto pty = open_pty();
+    auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::harness::UniqueFd output(::dup(pty->slave.get()));
     REQUIRE(output);
@@ -400,9 +336,9 @@ TEST_CASE("Process Terminal reports callback and restoration failures together",
             throw ExpectedUnwind{};
         },
         [](cch::tui::TerminalDimensions) {}));
-    (void)read_available(pty->master.get());
+    (void)cch::tests::read_available(pty->master.get());
     REQUIRE(::write(pty->master.get(), "q", 1) == 1);
-    REQUIRE(wait_until([&] { return callback_failed.load(); }));
+    REQUIRE(cch::tests::wait_until([&] { return callback_failed.load(); }));
     REQUIRE(output.close() == 0);
 
     const auto failed_stop = terminal.stop();
@@ -419,14 +355,14 @@ TEST_CASE("Process Terminal reports callback and restoration failures together",
 }
 
 TEST_CASE("Process Terminal enables and restores the keyboard fallback", "[tui][terminal][issue54]") {
-    auto pty = open_pty();
+    auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::tui::ProcessTerminal terminal({
         .input_fd = pty->slave.get(),
         .output_fd = pty->slave.get(),
     });
     REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
-    (void)read_available(pty->master.get());
+    (void)cch::tests::read_available(pty->master.get());
 
     constexpr std::string_view kResponseStart = "\x1b[?";
     constexpr std::string_view kResponseEnd = "1;2c";
@@ -434,20 +370,20 @@ TEST_CASE("Process Terminal enables and restores the keyboard fallback", "[tui][
         static_cast<ssize_t>(kResponseStart.size()));
     REQUIRE(::write(pty->master.get(), kResponseEnd.data(), kResponseEnd.size()) ==
         static_cast<ssize_t>(kResponseEnd.size()));
-    REQUIRE(wait_until([&] {
+    REQUIRE(cch::tests::wait_until([&] {
         return terminal.capabilities().keyboard_protocol ==
             cch::tui::KeyboardProtocol::ModifyOtherKeys;
     }));
-    CHECK(read_available(pty->master.get()).find("\x1b[>4;2m") != std::string::npos);
+    CHECK(cch::tests::read_available(pty->master.get()).find("\x1b[>4;2m") != std::string::npos);
 
     REQUIRE(terminal.stop());
-    const auto restoration = read_available(pty->master.get());
+    const auto restoration = cch::tests::read_available(pty->master.get());
     CHECK(restoration.find("\x1b[>4;0m") != std::string::npos);
     CHECK(restoration.find("\x1b[<u") != std::string::npos);
 }
 
 TEST_CASE("Process Terminal runs a minimal TUI shell and restores during unwinding", "[tui][terminal][issue54]") {
-    auto pty = open_pty();
+    auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     termios original{};
     REQUIRE(::tcgetattr(pty->slave.get(), &original) == 0);
@@ -473,11 +409,11 @@ TEST_CASE("Process Terminal runs a minimal TUI shell and restores during unwindi
             .ws_ypixel = 0,
         };
         REQUIRE(::ioctl(pty->master.get(), TIOCSWINSZ, &resized) == 0);
-        REQUIRE(wait_until([&] { return shell->invalidations.load() >= 1; }));
+        REQUIRE(cch::tests::wait_until([&] { return shell->invalidations.load() >= 1; }));
         REQUIRE(tui.render());
         tui.invalidate();
         REQUIRE(::write(pty->master.get(), "q", 1) == 1);
-        REQUIRE(wait_until([&] {
+        REQUIRE(cch::tests::wait_until([&] {
             return shell->inputs.load() == 1 && shell->stop_succeeded.load();
         }));
         throw ExpectedUnwind{};
@@ -486,8 +422,8 @@ TEST_CASE("Process Terminal runs a minimal TUI shell and restores during unwindi
 
     termios restored{};
     REQUIRE(::tcgetattr(pty->slave.get(), &restored) == 0);
-    CHECK(same_terminal_state(restored, original));
-    const auto output = read_available(pty->master.get());
+    CHECK(cch::tests::same_terminal_state(restored, original));
+    const auto output = cch::tests::read_available(pty->master.get());
     CHECK(output.find("shell") != std::string::npos);
     CHECK(output.find("\x1b[?25l") != std::string::npos);
     CHECK(output.find("\x1b[?25h") != std::string::npos);
@@ -496,7 +432,7 @@ TEST_CASE("Process Terminal runs a minimal TUI shell and restores during unwindi
 }
 
 TEST_CASE("Process Terminal rolls back raw input after partial startup failure", "[tui][terminal][issue54]") {
-    auto pty = open_pty();
+    auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::harness::UniqueFd read_only_output(::open(pty->slave_name.c_str(), O_RDONLY | O_NOCTTY));
     REQUIRE(read_only_output);
@@ -513,7 +449,7 @@ TEST_CASE("Process Terminal rolls back raw input after partial startup failure",
     CHECK(result.error().code == cch::util::ErrorCode::Process);
     termios restored{};
     REQUIRE(::tcgetattr(pty->slave.get(), &restored) == 0);
-    CHECK(same_terminal_state(restored, original));
+    CHECK(cch::tests::same_terminal_state(restored, original));
     CHECK(terminal.modes() == cch::tui::TerminalModeState{});
 }
 
@@ -535,7 +471,7 @@ TEST_CASE("Process Terminal reports unsupported platforms without acquisition", 
 TEST_CASE(
     "Process Terminal reports conservative color and appearance observations",
     "[tui][terminal][theme][issue55]") {
-    auto pty = open_pty();
+    auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     ScopedEnvironmentVariable terminal_environment("TERM");
     ScopedEnvironmentVariable program_environment("TERM_PROGRAM");
@@ -574,7 +510,7 @@ TEST_CASE(
     CHECK(terminal.capabilities().color == cch::tui::TerminalColorCapability::Xterm256);
     CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Unknown);
     REQUIRE(terminal.stop());
-    (void)read_available(pty->master.get());
+    (void)cch::tests::read_available(pty->master.get());
 
     color_terminal_environment.set("24BIT");
     foreground_background_environment.set("0; +15ignored ");
@@ -582,7 +518,7 @@ TEST_CASE(
     CHECK(terminal.capabilities().color == cch::tui::TerminalColorCapability::TrueColor);
     CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Light);
     REQUIRE(terminal.stop());
-    (void)read_available(pty->master.get());
+    (void)cch::tests::read_available(pty->master.get());
 
     color_terminal_environment.unset();
     foreground_background_environment.set("15;0");
@@ -592,7 +528,7 @@ TEST_CASE(
     CHECK(terminal.capabilities().color == cch::tui::TerminalColorCapability::Xterm256);
     CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Dark);
     REQUIRE(terminal.stop());
-    (void)read_available(pty->master.get());
+    (void)cch::tests::read_available(pty->master.get());
 
     terminal_environment.set("xterm-unknown");
     REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
@@ -636,7 +572,7 @@ TEST_CASE(
     foreground_background_environment.set("0;15");
 
     for (const auto& probe_case : cases) {
-        auto pty = open_pty();
+        auto pty = cch::tests::open_pseudo_terminal();
         REQUIRE(pty);
         std::atomic<bool> answered{false};
         std::atomic<bool> delivered_input{false};
@@ -657,7 +593,7 @@ TEST_CASE(
         REQUIRE(answered.load());
         CHECK(terminal.capabilities().appearance == probe_case.expected);
         if (probe_case.expects_input) {
-            CHECK(wait_until([&] { return delivered_input.load(); }));
+            CHECK(cch::tests::wait_until([&] { return delivered_input.load(); }));
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
             CHECK_FALSE(delivered_input.load());
@@ -669,7 +605,7 @@ TEST_CASE(
 TEST_CASE(
     "Process Terminal consumes malformed fragmented and late appearance replies",
     "[tui][terminal][theme][issue55]") {
-    auto pty = open_pty();
+    auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     ScopedEnvironmentVariable foreground_background_environment("COLORFGBG");
     foreground_background_environment.set("15;0");
@@ -685,7 +621,7 @@ TEST_CASE(
             delivered += input;
         },
         [](cch::tui::TerminalDimensions) {}));
-    (void)read_available(pty->master.get());
+    (void)cch::tests::read_available(pty->master.get());
     CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Dark);
 
     constexpr std::string_view kMalformedStart = "\x1b]11;not-a-color";
@@ -695,7 +631,7 @@ TEST_CASE(
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
     REQUIRE(::write(pty->master.get(), kMalformedEnd.data(), kMalformedEnd.size()) ==
         static_cast<ssize_t>(kMalformedEnd.size()));
-    REQUIRE(wait_until([&] {
+    REQUIRE(cch::tests::wait_until([&] {
         std::lock_guard lock(input_mutex);
         return delivered.find("typed") != std::string::npos;
     }));
@@ -713,11 +649,11 @@ TEST_CASE(
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
     REQUIRE(::write(pty->master.get(), kLateEnd.data(), kLateEnd.size()) ==
         static_cast<ssize_t>(kLateEnd.size()));
-    REQUIRE(wait_until([&] {
+    REQUIRE(cch::tests::wait_until([&] {
         std::lock_guard lock(input_mutex);
         return delivered.find("late") != std::string::npos;
     }));
-    REQUIRE(wait_until([&] {
+    REQUIRE(cch::tests::wait_until([&] {
         return terminal.capabilities().appearance == cch::tui::TerminalAppearance::Light;
     }));
     {
@@ -732,7 +668,7 @@ TEST_CASE(
     constexpr std::string_view kAfterUnterminated = "after-unterminated";
     REQUIRE(::write(pty->master.get(), kAfterUnterminated.data(), kAfterUnterminated.size()) ==
         static_cast<ssize_t>(kAfterUnterminated.size()));
-    REQUIRE(wait_until([&] {
+    REQUIRE(cch::tests::wait_until([&] {
         std::lock_guard lock(input_mutex);
         return delivered.find(kAfterUnterminated) != std::string::npos;
     }));
@@ -743,7 +679,7 @@ TEST_CASE(
 
     constexpr char kEscape = '\x1b';
     REQUIRE(::write(pty->master.get(), &kEscape, 1) == 1);
-    REQUIRE(wait_until([&] {
+    REQUIRE(cch::tests::wait_until([&] {
         std::lock_guard lock(input_mutex);
         return delivered.find(kEscape) != std::string::npos;
     }));

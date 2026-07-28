@@ -27,6 +27,53 @@ public:
     void invalidate() override {}
 };
 
+class PartialStartupFailureTerminal final : public cch::tui::Terminal {
+public:
+    [[nodiscard]] cch::util::ExpectedVoid start(
+        cch::tui::TerminalInputSink,
+        cch::tui::TerminalResizeSink) override {
+        modes_.started = true;
+        return {};
+    }
+
+    [[nodiscard]] cch::util::ExpectedVoid stop() override {
+        return std::unexpected(cch::util::make_error(
+            cch::util::ErrorCode::Process,
+            "terminal restoration failed",
+            "stop detail"));
+    }
+
+    [[nodiscard]] cch::tui::TerminalDimensions dimensions() const override { return {}; }
+    [[nodiscard]] cch::tui::TerminalCapabilities capabilities() const override { return {}; }
+    [[nodiscard]] cch::tui::TerminalModeState modes() const override { return modes_; }
+    [[nodiscard]] cch::util::ExpectedVoid clear_screen() override { return {}; }
+    [[nodiscard]] cch::util::ExpectedVoid write(std::string_view) override { return {}; }
+    [[nodiscard]] cch::util::ExpectedVoid set_cursor(cch::tui::CursorPosition) override { return {}; }
+    [[nodiscard]] cch::util::ExpectedVoid set_cursor_visible(bool visible) override {
+        if (!visible) {
+            return std::unexpected(cch::util::make_error(
+                cch::util::ErrorCode::Process,
+                "cursor hiding failed",
+                "cursor detail"));
+        }
+        return {};
+    }
+    [[nodiscard]] cch::util::Expected<cch::tui::TerminalImageHandle> place_image(
+        const cch::tui::TerminalImage&) override {
+        return cch::tui::TerminalImageHandle{};
+    }
+    [[nodiscard]] cch::util::ExpectedVoid remove_image(
+        cch::tui::TerminalImageHandle,
+        const cch::tui::CellRegion&) override {
+        return {};
+    }
+    [[nodiscard]] cch::util::ExpectedVoid begin_synchronized_update() override { return {}; }
+    [[nodiscard]] cch::util::ExpectedVoid end_synchronized_update() override { return {}; }
+
+private:
+    cch::tui::TerminalModeState modes_;
+};
+
 class FocusableInputComponent final
     : public cch::tui::Component,
       public cch::tui::InputHandler,
@@ -105,6 +152,20 @@ TEST_CASE("Tui exposes styled Text cells with a default final style", "[tui][iss
     CHECK(terminal.cells()[0][0].grapheme == "A");
     CHECK(terminal.cells()[0][0].style.fg_color == "31");
     CHECK(terminal.final_style() == cch::tui::VirtualTerminalStyle{});
+}
+
+TEST_CASE(
+    "Tui preserves cursor and restoration failures from partial startup",
+    "[tui][terminal][issue58]") {
+    PartialStartupFailureTerminal terminal;
+    cch::tui::Tui tui(terminal);
+
+    const auto result = tui.start();
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().message == "TUI startup failed and terminal restoration was incomplete");
+    CHECK(result.error().detail.find("cursor hiding failed") != std::string::npos);
+    CHECK(result.error().detail.find("terminal restoration failed") != std::string::npos);
 }
 
 TEST_CASE("Tui rejects a null Component attachment", "[tui][issue45]") {

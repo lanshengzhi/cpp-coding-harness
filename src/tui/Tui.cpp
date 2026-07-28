@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <format>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -19,6 +20,23 @@ namespace cch::tui {
 namespace {
 
 constexpr std::size_t kInputDecodeChunkBytes = 4096;
+
+[[nodiscard]] std::string describe_error(const util::Error& error) {
+    if (error.detail.empty()) return error.message;
+    return std::format("{} [{}]", error.message, error.detail);
+}
+
+[[nodiscard]] util::Error startup_rollback_error(
+    const util::Error& startup,
+    const util::Error& rollback) {
+    return util::make_error(
+        startup.code,
+        "TUI startup failed and terminal restoration was incomplete",
+        std::format(
+            "startup: {}; restoration: {}",
+            describe_error(startup),
+            describe_error(rollback)));
+}
 
 /// Write a single full-width line to the terminal at the given row.
 [[nodiscard]] util::ExpectedVoid write_line(
@@ -217,7 +235,9 @@ util::ExpectedVoid Tui::start() {
     if (auto result = terminal_.set_cursor_visible(false); !result) {
         started_ = false;
         lock.unlock();
-        (void)terminal_.stop();
+        if (auto stopped = terminal_.stop(); !stopped) {
+            return std::unexpected(startup_rollback_error(result.error(), stopped.error()));
+        }
         return std::unexpected(result.error());
     }
 
@@ -741,14 +761,27 @@ util::ExpectedVoid Tui::set_focus(Component* component) {
     return {};
 }
 
+void Tui::set_render_request_sink(TuiRenderRequestSink sink) {
+    std::lock_guard lock(mutex_);
+    render_request_sink_ = std::move(sink);
+}
+
 void Tui::invalidate() {
     std::lock_guard lock(mutex_);
+    const bool request_render = started_ && !pending_render_;
     pending_render_ = true;
     for (const auto& child : children_) {
         child->invalidate();
     }
     for (const auto& overlay : overlays_) {
         overlay->invalidate();
+    }
+    if (request_render && render_request_sink_) {
+        try {
+            render_request_sink_();
+        } catch (...) {
+            // Scheduling notifications cannot make terminal input delivery fail.
+        }
     }
 }
 

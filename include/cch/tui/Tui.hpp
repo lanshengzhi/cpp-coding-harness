@@ -13,6 +13,10 @@
 
 namespace cch::tui {
 
+/// Notification that a render should be scheduled. Calls are coalesced until
+/// the next successful render; the sink must return promptly and must not render inline.
+using TuiRenderRequestSink = std::move_only_function<void()>;
+
 namespace detail {
 class InputDecoder;
 } // namespace detail
@@ -33,6 +37,7 @@ public:
     [[nodiscard]] util::ExpectedVoid stop();
     [[nodiscard]] util::ExpectedVoid render();
     [[nodiscard]] util::ExpectedVoid set_focus(Component* component);
+    void set_render_request_sink(TuiRenderRequestSink sink);
     void invalidate();
 
     /// Add an overlay. Overlays are rendered on top of base children
@@ -96,6 +101,7 @@ private:
     Terminal& terminal_; // must outlive this Tui.
     std::recursive_mutex mutex_;
     std::unique_ptr<detail::InputDecoder> input_decoder_;
+    TuiRenderRequestSink render_request_sink_;
     std::vector<std::unique_ptr<Component>> children_;
     std::vector<std::unique_ptr<Overlay>> overlays_;
     std::vector<OverlayFocusEntry> overlay_focus_history_;

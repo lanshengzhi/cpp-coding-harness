@@ -207,6 +207,18 @@ target_link_libraries(cch_coding_agent_runtime
         cch_util
 )
 
+add_library(cch_coding_agent_interactive
+    src/coding_agent/tui/InteractiveMode.cpp
+)
+cch_target_defaults(cch_coding_agent_interactive)
+target_link_libraries(cch_coding_agent_interactive
+    PRIVATE
+        cch_coding_agent_runtime
+        cch_coding_agent_tui
+        cch_tui
+        cch_util
+)
+
 # Transitional aggregate target for the executable/tests while the runtime is being split.
 add_library(cpp_harness_lib INTERFACE)
 target_link_libraries(cpp_harness_lib INTERFACE cch_coding_agent_runtime)
@@ -224,6 +236,7 @@ if(CCH_BUILD_TESTS)
     add_executable(cpp_harness_tests
         tests/TestMain.cpp
         tests/support/ComplexToolSchemaFixture.hpp
+        tests/support/PseudoTerminal.hpp
         tests/support/ToolArgumentCompatibilityFixture.hpp
         tests/architecture/ArchitectureSurfaceScanTest.cpp
         tests/architecture/CMakeDependencyTest.cpp
@@ -260,7 +273,9 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/SkillFrontmatterParserTest.cpp
         tests/coding_agent/SkillLoaderTest.cpp
         tests/coding_agent/PromptTemplateLoaderTest.cpp
+        tests/coding_agent/tui/InteractiveModeTest.cpp
         tests/coding_agent/tui/KeybindingCatalogTest.cpp
+        tests/coding_agent/tui/ProcessInteractiveModeTest.cpp
         tests/coding_agent/tui/ThemeTest.cpp
         tests/coding_agent/tui/ThemeCatalogTest.cpp
         tests/coding_agent/SdkSessionTest.cpp
@@ -303,7 +318,15 @@ if(CCH_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests
         third_party
     )
-    target_link_libraries(cpp_harness_tests PRIVATE cpp_harness_lib cch_coding_agent_tui cch_tui CLI11::CLI11)
+    target_link_libraries(
+        cpp_harness_tests
+        PRIVATE
+            cpp_harness_lib
+            cch_coding_agent_interactive
+            cch_coding_agent_tui
+            cch_tui
+            CLI11::CLI11
+    )
     target_sources(cpp_harness_tests PRIVATE
         src/cli/CliParse.cpp
     )

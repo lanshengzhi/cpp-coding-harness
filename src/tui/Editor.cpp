@@ -91,6 +91,10 @@ using Document = std::vector<Line>;
         event.key != "down" && event.key != "left" && event.key != "right";
 }
 
+[[nodiscard]] std::string_view printable_text(const KeyEvent& event) {
+    return event.key == "space" ? std::string_view{" "} : std::string_view{event.key};
+}
+
 [[nodiscard]] std::string trim_outer_whitespace(std::string text) {
     const auto first = std::find_if_not(text.begin(), text.end(), [](unsigned char value) {
         return std::isspace(value) != 0;
@@ -833,7 +837,7 @@ void Editor::handle_input(const InputEventVariant& input) {
             return;
         }
         if (is_printable(*event)) {
-            impl_->jump_to(event->key, *impl_->jump_direction);
+            impl_->jump_to(printable_text(*event), *impl_->jump_direction);
             impl_->jump_direction.reset();
             return;
         }
@@ -955,7 +959,7 @@ void Editor::handle_input(const InputEventVariant& input) {
         if (!impl_->options.disable_submit) impl_->submit();
         return;
     }
-    if (is_printable(*event)) impl_->insert_text(event->key, true);
+    if (is_printable(*event)) impl_->insert_text(std::string(printable_text(*event)), true);
 }
 
 bool Editor::accepts_key_releases() const {

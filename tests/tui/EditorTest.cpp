@@ -199,6 +199,18 @@ TEST_CASE("Editor edits Unicode input through the Virtual Terminal seam", "[tui]
     CHECK(editor_pointer->text() == "\xc3\xa9");
 }
 
+TEST_CASE("Editor converts the semantic space key back to fresh text", "[tui][editor][issue58]") {
+    cch::tui::VirtualTerminal terminal({.columns = 12, .rows = 2});
+    cch::tui::Tui tui(terminal);
+    auto editor = std::make_unique<cch::tui::Editor>();
+    auto* editor_pointer = editor.get();
+    REQUIRE(tui.add_child(std::move(editor)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(editor_pointer));
+    REQUIRE(terminal.inject_input("two words"));
+    CHECK(editor_pointer->text() == "two words");
+}
+
 TEST_CASE("Editor receives decoder paste events through the Virtual Terminal seam", "[tui][editor][issue48]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 3});
     cch::tui::Tui tui(terminal);
