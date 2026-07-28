@@ -1,12 +1,12 @@
 #include "coding_agent/BoundedText.hpp"
+#include "coding_agent/ProjectResourceLoader.hpp"
 #include "coding_agent/tui/ThemeCatalog.hpp"
-
+#include "harness/WorkspaceFileSystem.hpp"
+#include "support/TempWorkspace.hpp"
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
-
-#include "../../support/TempWorkspace.hpp"
 
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
@@ -113,6 +113,45 @@ TEST_CASE(
     CHECK(std::any_of(catalog->diagnostics.begin(), catalog->diagnostics.end(), [](const auto& diagnostic) {
         return diagnostic.code == "duplicate_theme_skipped";
     }));
+}
+
+TEST_CASE(
+    "Theme catalog consumes only project themes admitted by Project Trust",
+    "[coding_agent][theme][issue56]") {
+    tests::TempWorkspace workspace;
+    workspace.write(".cpp-harness/themes/dark.json", fixture_theme("dark", "#010203"));
+    auto fs = harness::WorkspaceFileSystem::create(workspace.path());
+    REQUIRE(fs);
+    coding_agent::ProjectTrustStore trust_store(workspace.path() / "trust.json");
+
+    const auto load_project_catalog = [&](coding_agent::DefaultProjectTrust trust) {
+        coding_agent::ProjectResourceLoadingRequest resource_request;
+        resource_request.workspace = workspace.path();
+        resource_request.default_project_trust = trust;
+        resource_request.theme_resources_enabled = true;
+        auto resources = coding_agent::load_project_resources(*fs, trust_store, std::move(resource_request));
+
+        coding_agent::tui::ThemeCatalogRequest catalog_request;
+        catalog_request.user_active_theme = "dark";
+        for (auto& theme : resources.resources.project_themes) {
+            catalog_request.trusted_project_themes.push_back({
+                .label = std::move(theme.path),
+                .json = std::move(theme.json),
+            });
+        }
+        return coding_agent::tui::load_theme_catalog(std::move(catalog_request));
+    };
+
+    const auto untrusted = load_project_catalog(coding_agent::DefaultProjectTrust::Never);
+    REQUIRE(untrusted);
+    CHECK(untrusted->initial_theme == coding_agent::tui::builtin_dark_theme());
+    CHECK(untrusted->initial_theme_origin == coding_agent::tui::ThemeResourceOrigin::Builtin);
+
+    const auto trusted = load_project_catalog(coding_agent::DefaultProjectTrust::Always);
+    REQUIRE(trusted);
+    CHECK(trusted->initial_theme_origin == coding_agent::tui::ThemeResourceOrigin::Project);
+    const coding_agent::tui::RgbThemeColor project_accent{.red = 1, .green = 2, .blue = 3};
+    CHECK(accent_of(trusted->initial_theme) == project_accent);
 }
 
 TEST_CASE(
