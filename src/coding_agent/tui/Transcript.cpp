@@ -45,11 +45,15 @@ struct ToolItem {
     bool embedded{false};
 };
 
+struct FrontendItem {
+    std::string text;
+};
+
 struct DiagnosticItem {
     std::string text;
 };
 
-using TranscriptItemVariant = std::variant<MessageItem, ToolItem, DiagnosticItem>;
+using TranscriptItemVariant = std::variant<MessageItem, ToolItem, FrontendItem, DiagnosticItem>;
 
 [[nodiscard]] std::string safe_text(std::string text) {
     return bounded_redacted_presentation(std::move(text));
@@ -528,6 +532,9 @@ struct Transcript::Impl {
             if (tool->embedded) return std::vector<std::string>{};
             return render_tool(*tool, width);
         }
+        if (const auto* frontend = std::get_if<FrontendItem>(&item)) {
+            return render_plain(theme, frontend->text, width, ThemeToken::Text);
+        }
         return render_plain(
             theme,
             "Error: " + std::get<DiagnosticItem>(item).text,
@@ -607,6 +614,16 @@ void Transcript::apply_event(const agent::AgentLifecycleEvent& event) {
             ? ToolStatus::Failure
             : ToolStatus::Success;
         tool.result = end->result.content;
+    }
+}
+
+void Transcript::clear() {
+    impl_->clear();
+}
+
+void Transcript::append_frontend_message(std::string text) {
+    if (!text.empty()) {
+        impl_->items.emplace_back(FrontendItem{safe_text(std::move(text))});
     }
 }
 

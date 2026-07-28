@@ -47,13 +47,6 @@ namespace {
     };
 }
 
-[[nodiscard]] std::string_view trim_left(std::string_view sv) {
-    while (!sv.empty() && (sv.front() == ' ' || sv.front() == '\t')) {
-        sv.remove_prefix(1);
-    }
-    return sv;
-}
-
 [[nodiscard]] std::vector<std::string_view> split_arguments(std::string_view args) {
     std::vector<std::string_view> result;
     while (!args.empty()) {
@@ -261,7 +254,10 @@ util::ExpectedVoid register_builtin_commands(CommandRegistry& registry) {
             "Quit the session",
             {},
             [](const CommandContext& /*ctx*/, std::string_view /*args*/) {
-                return CommandResult{"Shutting down.", true};
+                return CommandResult{
+                    .display_text = "Shutting down.",
+                    .effect = CommandEffect::Shutdown,
+                };
             });
         !registered) {
         return std::unexpected(registered.error());
@@ -271,49 +267,19 @@ util::ExpectedVoid register_builtin_commands(CommandRegistry& registry) {
         return std::unexpected(registered.error());
     }
 
-    // /clear — structured modes consume this as a no-op. The text frontend
-    // intercepts exact /clear before prompt dispatch and emits terminal bytes.
+    // /clear — each concrete frontend applies the returned terminal effect.
     if (auto registered = registry.register_command(
             "clear",
             "Clear the terminal screen",
             {},
             [](const CommandContext& /*ctx*/, std::string_view args) {
                 if (!args.empty()) {
-                    return CommandResult{"Usage: /clear"};
+                    return CommandResult{.display_text = "Usage: /clear"};
                 }
-                return CommandResult{};
-            });
-        !registered) {
-        return std::unexpected(registered.error());
-    }
-
-    // /new — return restart instructions rather than replacing the session.
-    if (auto registered = registry.register_command(
-            "new",
-            "Show restart instructions for a new session",
-            {},
-            [](const CommandContext& /*ctx*/, std::string_view /*args*/) {
-                return CommandResult{"To start a new session, restart cpp-harness without --resume."};
-            });
-        !registered) {
-        return std::unexpected(registered.error());
-    }
-
-    // /resume <session-id> — return restart instructions.
-    if (auto registered = registry.register_command(
-            "resume",
-            "Show restart instructions for resuming a session",
-            "<session-id>",
-            [](const CommandContext& /*ctx*/, std::string_view args) {
-                auto trimmed = trim_left(args);
-                if (trimmed.empty()) {
-                    return CommandResult{"Usage: /resume <session-id>\nRestart with: cpp-harness --resume <path-to-session.jsonl>"};
-                }
-                std::string text;
-                text += "To resume session '";
-                text += trimmed;
-                text += "', restart with: cpp-harness --resume <path-to-session.jsonl>";
-                return CommandResult{std::move(text)};
+                return CommandResult{
+                    .display_text = {},
+                    .effect = CommandEffect::ClearScreen,
+                };
             });
         !registered) {
         return std::unexpected(registered.error());
@@ -329,6 +295,44 @@ util::ExpectedVoid register_builtin_commands(CommandRegistry& registry) {
     }
 
     if (auto registered = registry.register_alias("commands", "help"); !registered) {
+        return std::unexpected(registered.error());
+    }
+
+    return {};
+}
+
+util::ExpectedVoid register_native_tui_commands(CommandRegistry& registry) {
+    if (auto registered = registry.register_command(
+            "settings",
+            "Open settings menu",
+            {},
+            [](const CommandContext& /*ctx*/, std::string_view args) {
+                if (!args.empty()) {
+                    return CommandResult{.display_text = "Usage: /settings"};
+                }
+                return CommandResult{
+                    .display_text = {},
+                    .effect = CommandEffect::OpenSettings,
+                };
+            });
+        !registered) {
+        return std::unexpected(registered.error());
+    }
+
+    if (auto registered = registry.register_command(
+            "hotkeys",
+            "Show all keyboard shortcuts",
+            {},
+            [](const CommandContext& /*ctx*/, std::string_view args) {
+                if (!args.empty()) {
+                    return CommandResult{.display_text = "Usage: /hotkeys"};
+                }
+                return CommandResult{
+                    .display_text = {},
+                    .effect = CommandEffect::OpenHotkeys,
+                };
+            });
+        !registered) {
         return std::unexpected(registered.error());
     }
 

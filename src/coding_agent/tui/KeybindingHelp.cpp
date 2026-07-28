@@ -2,6 +2,7 @@
 
 #include <cch/tui/Text.hpp>
 
+#include <algorithm>
 #include <format>
 #include <memory>
 #include <string>
@@ -39,8 +40,16 @@ std::unique_ptr<cch::tui::Component> make_hotkey_help_view(
     std::shared_ptr<const cch::tui::KeybindingRegistry> registry) {
     std::string text = "Hotkeys\n";
     if (registry) {
+        auto entries = hotkey_help_entries(*registry);
+        std::stable_sort(entries.begin(), entries.end(), [](const auto& left, const auto& right) {
+            const auto left_application = left.category == "Application";
+            const auto right_application = right.category == "Application";
+            if (left_application != right_application) return left_application;
+            if (left.category != right.category) return left.category < right.category;
+            return left.id < right.id;
+        });
         std::string category;
-        for (const auto& entry : hotkey_help_entries(*registry)) {
+        for (const auto& entry : entries) {
             if (entry.category != category) {
                 category = entry.category;
                 text += "\n" + category + "\n";

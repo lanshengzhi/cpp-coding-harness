@@ -770,6 +770,10 @@ std::vector<AutocompleteItem> Editor::autocomplete_items() const {
     return impl_->autocomplete;
 }
 
+std::size_t Editor::autocomplete_selected_index() const {
+    return impl_->autocomplete_selected;
+}
+
 util::Expected<RenderResult> Editor::render(std::size_t width) {
     if (impl_->callback_error) return std::unexpected(*impl_->callback_error);
     if (width == 0) {

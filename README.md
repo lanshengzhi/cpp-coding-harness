@@ -200,7 +200,7 @@ Package targets and responsibilities:
 - `cch_util` (`include/cch/util`, `src/util`): project error/expected contracts, move-only callback vocabulary, passive `JsonValue`, the Glaze-backed JSON adapter in `src/util/Json.hpp`, and async process execution.
 - `cch_tui` (`include/cch/tui`, `src/tui`): reusable source-level terminal UI contracts, a width-bounded structured Component seam, TUI root, semantic key and bracketed-paste input, a Unicode Editor with caller-supplied autocomplete and generic injected styling, Text, injected-style Markdown with optional syntax highlighting, filterable Select List and Settings List interactions, Loader and exactly-once Cancellable Loader lifecycles, structured inline Image placement with bounded fallback and private Kitty/iTerm2 protocol fixtures, a deterministic Virtual Terminal, and a transactional Linux/macOS Process Terminal with conservative appearance/color-capability observations and pseudo-terminal smoke coverage. The Process Terminal is not selected by the production CLI until the Native TUI frontend is promoted. The package depends only on project utility contracts, exposes no third-party types, has no coding-agent dependency, and makes no ABI-stability promise.
 - `cch_coding_agent_tui` (`src/coding_agent/tui`): the physically separate coding-agent Native TUI presentation layer. Its current supported slices provide baseline-pinned themes and keybindings: pi-compatible theme/keybinding parsing, deterministic Agent Config Directory discovery, bounded diagnostics, capability-aware theme mapping, an immutable effective binding registry shared by dispatch/help/hints, and settings/help presentation adapters. Known application actions are registered only when a frontend concretely assembles them, so deferred actions never become no-op bindings. Discovery is a one-shot startup operation with no generalized hot reload. This target remains independent of the Agent Session runtime.
-- `cch_coding_agent_interactive` (`src/coding_agent/tui/InteractiveMode.*`): the private Native TUI composition that connects a real Agent Session to the reusable TUI, Editor, themes, and effective keybindings. It renders the initial Agent Session snapshot before focusing input; reduces user, assistant text/thinking, correlated tool, custom, and summary lifecycle state into one coherent Markdown-capable transcript; keeps thinking/tool expansion as local presentation state; submits prompts asynchronously; and restores Virtual or Process Terminals on exit. It is exercised directly by fake-provider and persisted-session integration tests but is not selected by the public CLI before #64; SDK, text, JSON, and RPC paths do not link it.
+- `cch_coding_agent_interactive` (`src/coding_agent/tui/InteractiveMode.*`): the private Native TUI composition that connects a real Agent Session to the reusable TUI, Editor, themes, and effective keybindings. It renders the initial Agent Session snapshot before focusing input; reduces user, assistant text/thinking, correlated tool, custom, and summary lifecycle state into one coherent Markdown-capable transcript; keeps thinking/tool expansion as local presentation state; dispatches one effective command registry before prompt interpretation; derives command autocomplete and help from that registry; opens the supported theme-settings and effective-hotkeys overlays; submits unmatched input asynchronously; and restores Virtual or Process Terminals on exit. It is exercised directly by fake-provider and persisted-session integration tests but is not selected by the public CLI before #64; SDK, text, JSON, and RPC paths do not link it.
 - `cch_ai` (`include/cch/ai`, `src/ai`): passive message/content/tool/context contracts, provider-neutral stream events, provider registry, OpenAICompletionsCompat flags, OpenAI-compatible provider, scripted fake provider, and prompt cancellation propagation through provider transport; SSE and Glaze provider mapping live under `src/ai/`.
 - `cch_agent` (`include/cch/agent`, `src/agent`): public stateful `Agent` ownership of live message history, model/thinking/tool state, weak move-only subscriptions with bounded diagnostics, passive state snapshots, one active run, and the strong per-run commitment seam used by Agent Session persistence. The package also owns async tool registration, private Tool Argument Contract preparation, expected-style tool execution, pi-ordered prepare/stop/steering/follow-up policy seams, and sequential/bounded-parallel tool execution policy.
 - `cch_harness` (`include/cch/harness`, `src/harness`): pi-shaped filesystem and shell execution capability contracts (`FileSystem`/`Shell`), local implementation with workspace containment, symlink safety, atomic writes, split-stream process execution, secret environment filtering, and JSONL/in-memory Session Store implementations.
@@ -234,30 +234,31 @@ An accepted provider `error` or `aborted` outcome is presented exactly once thro
 
 ### Slash commands
 
-The effective built-in command names are:
+Every text-capable frontend assembles this implemented baseline subset:
 
 | Command | Behavior |
 | --- | --- |
 | `/help [command]` | List all effective registry names, or show detailed help for one name. Both `/help name` and `/help /name` are accepted. |
 | `/commands` | Alias for `/help`. |
 | `/session` | Show the current session id, session file (`In-memory` when running with `--no-session`), workspace, provider, model, and message count. |
-| `/new` | **Instructional placeholder:** explain how to restart without `--resume`; it does not replace the current session. |
-| `/resume <session-id>` | **Instructional placeholder:** explain how to restart with `--resume`; it does not switch the current session. |
-| `/clear` | Clear the terminal only in the text frontend. Arguments produce `Usage: /clear`. |
+| `/clear` | Clear the frontend terminal. Arguments produce `Usage: /clear`. |
 | `/quit` | Request a clean frontend shutdown. |
 | `/exit` | Alias for `/quit`. |
 
-Aliases are resolved by the command registry and appear in `/help`. Registry help does not list prompt templates or `/skill:<name>` invocations as built-in commands. Prompt interpretation in `AgentSession` activates only for a slash at column zero and applies cached skill → prompt-template precedence; CLI built-in commands are resolved by the CLI adapter before ordinary input reaches the session. Bare `/` and unmatched slash input pass through to the model unchanged.
+The Native TUI concretely extends its effective registry with `/settings` (the supported theme settings overlay) and `/hotkeys` (help for the exact effective binding registry). Instructional placeholders such as `/new` and `/resume`, User Bash, and other deferred pi actions are not registered or advertised.
+
+Aliases are resolved by the command registry and appear in `/help`. Native TUI slash completion derives built-ins from that same effective registry and adds the loaded prompt templates and `/skill:<name>` invocations. Registry help does not mislabel those project resources as built-ins. Frontend commands are resolved before input reaches `AgentSession`; unmatched slash input continues through the cached skill → prompt-template interpretation path. Bare `/` and unmatched slash input pass through to the model unchanged.
 
 `!command` and `!!command` are not prompt-processing syntax. The text REPL temporarily intercepts them with a not-implemented message; one-shot, JSON, RPC, and SDK paths currently send them as ordinary prompts until the separate UserBash persistence slice lands.
 
 Command presentation depends on the frontend:
 
-| Input | Text REPL / one-shot | JSON mode | RPC `prompt` |
-| --- | --- | --- | --- |
-| Help, session information, or restart instructions | Display the command message without invoking the model. | Emit only the session header; frontend command outcomes are not AgentSession events. | Sent as ordinary prompt text; RPC built-ins are JSON commands, not text-frontend slash commands. |
-| Exact `/clear` | Write the terminal clear sequence from the text frontend, flush, and succeed without prompting the session. | Emit only the session header and no ANSI bytes. | Sent as ordinary prompt text; no terminal-control bytes are emitted by the adapter. |
-| `/quit` or `/exit` | Display `Shutting down.` and exit successfully. | Emit only the session header, then exit successfully. | Sent as ordinary prompt text; use the RPC `shutdown` command to stop the loop. |
+| Input | Native TUI | Text REPL / one-shot | JSON mode | RPC `prompt` |
+| --- | --- | --- | --- | --- |
+| Help or session information | Render a local presentation entry without changing or persisting Agent Session history. | Display the command message without invoking the model. | Emit only the session header; frontend command outcomes are not AgentSession events. | Sent as ordinary prompt text; RPC built-ins are JSON commands, not text-frontend slash commands. |
+| `/settings` or `/hotkeys` | Open the supported overlay without invoking the model. | Unmatched input follows ordinary prompt interpretation. | Unmatched input follows ordinary prompt interpretation. | Sent as ordinary prompt text. |
+| Exact `/clear` | Clear through the Terminal seam without prompting the session. | Write the terminal clear sequence, flush, and succeed without prompting the session. | Emit only the session header and no ANSI bytes. | Sent as ordinary prompt text; no terminal-control bytes are emitted by the adapter. |
+| `/quit` or `/exit` | Close the Agent Session and restore terminal state cleanly. | Display `Shutting down.` and exit successfully. | Emit only the session header, then exit successfully. | Sent as ordinary prompt text; use the RPC `shutdown` command to stop the loop. |
 
 ## Embeddable C++ SDK
 
@@ -478,6 +479,6 @@ These cover:
 
 ## Deferred
 
-Not included yet: public Native TUI frontend selection and its later command, queue, cancellation, image-input, and production-promotion slices; extensions; packages; global/config-driven skill directories; live skill reload; OAuth; full pi RPC command parity; MCP integration; permission prompts; native Windows shell process-tree termination semantics; subagents; C++26 reflection-generated schema; `std::execution` senders/receivers; ABI-stable binary distribution; or OS-level sandboxing.
+Not included yet: public Native TUI frontend selection and its later queue, cancellation, image-input, and production-promotion slices; extensions; packages; global/config-driven skill directories; live skill reload; OAuth; full pi RPC command parity; MCP integration; permission prompts; native Windows shell process-tree termination semantics; subagents; C++26 reflection-generated schema; `std::execution` senders/receivers; ABI-stable binary distribution; or OS-level sandboxing.
 
 An experimental same-process embeddable C++ SDK surface is available (see Embeddable C++ SDK section above). Full pi SDK parity (session replacement runtime, concurrent prompts, compaction, ABI stability) is deferred.

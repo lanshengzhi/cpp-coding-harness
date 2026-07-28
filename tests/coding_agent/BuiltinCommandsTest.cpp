@@ -63,57 +63,26 @@ TEST_CASE("built-in /quit and /exit commands signal shutdown through the same ha
 
     REQUIRE(quit.has_value());
     REQUIRE(exit.has_value());
-    CHECK(quit->shutdown_requested);
+    CHECK(quit->effect == coding_agent::CommandEffect::Shutdown);
     CHECK(quit->display_text == "Shutting down.");
-    CHECK(exit->shutdown_requested);
+    CHECK(exit->effect == coding_agent::CommandEffect::Shutdown);
     CHECK(exit->display_text == quit->display_text);
 }
 
-TEST_CASE("built-in /clear is a no-op command outside the text presentation seam", "[coding_agent][prompt]") {
+TEST_CASE("built-in /clear returns one concrete frontend effect", "[coding_agent][prompt]") {
     coding_agent::CommandRegistry registry;
     REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
 
     coding_agent::CommandContext ctx;
     auto clear = registry.dispatch("clear", ctx, "");
     REQUIRE(clear.has_value());
-    CHECK_FALSE(clear->shutdown_requested);
+    CHECK(clear->effect == coding_agent::CommandEffect::ClearScreen);
     CHECK(clear->display_text.empty());
 
     auto with_arguments = registry.dispatch("clear", ctx, "now");
     REQUIRE(with_arguments.has_value());
-    CHECK_FALSE(with_arguments->shutdown_requested);
+    CHECK(with_arguments->effect == coding_agent::CommandEffect::None);
     CHECK(with_arguments->display_text == "Usage: /clear");
-}
-
-TEST_CASE("built-in /new command returns instruction text", "[coding_agent][prompt]") {
-    coding_agent::CommandRegistry registry;
-    REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
-
-    coding_agent::CommandContext ctx;
-    auto result = registry.dispatch("new", ctx, "");
-    REQUIRE(result.has_value());
-    CHECK(result->display_text.find("restart") != std::string::npos);
-}
-
-TEST_CASE("built-in /resume command with args returns instruction", "[coding_agent][prompt]") {
-    coding_agent::CommandRegistry registry;
-    REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
-
-    coding_agent::CommandContext ctx;
-    auto result = registry.dispatch("resume", ctx, "abc123");
-    REQUIRE(result.has_value());
-    CHECK(result->display_text.find("abc123") != std::string::npos);
-    CHECK(result->display_text.find("--resume") != std::string::npos);
-}
-
-TEST_CASE("built-in /resume without args shows usage", "[coding_agent][prompt]") {
-    coding_agent::CommandRegistry registry;
-    REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
-
-    coding_agent::CommandContext ctx;
-    auto result = registry.dispatch("resume", ctx, "");
-    REQUIRE(result.has_value());
-    CHECK(result->display_text.find("Usage:") != std::string::npos);
 }
 
 TEST_CASE("built-in command metadata describes the implemented operations", "[coding_agent][prompt]") {
@@ -121,7 +90,7 @@ TEST_CASE("built-in command metadata describes the implemented operations", "[co
     REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
 
     const auto commands = registry.list_commands();
-    REQUIRE(commands.size() == 8);
+    REQUIRE(commands.size() == 6);
     CHECK(commands[0].name == "clear");
     CHECK(commands[0].description == "Clear the terminal screen");
     CHECK(commands[1].name == "commands");
@@ -132,15 +101,10 @@ TEST_CASE("built-in command metadata describes the implemented operations", "[co
     CHECK(commands[3].name == "help");
     CHECK(commands[3].description == "Show available commands or help for one command");
     CHECK(commands[3].argument_hint == "[command]");
-    CHECK(commands[4].name == "new");
-    CHECK(commands[4].description == "Show restart instructions for a new session");
-    CHECK(commands[5].name == "quit");
-    CHECK(commands[5].description == "Quit the session");
-    CHECK(commands[6].name == "resume");
-    CHECK(commands[6].description == "Show restart instructions for resuming a session");
-    CHECK(commands[6].argument_hint == "<session-id>");
-    CHECK(commands[7].name == "session");
-    CHECK(commands[7].description == "Show current session information");
+    CHECK(commands[4].name == "quit");
+    CHECK(commands[4].description == "Quit the session");
+    CHECK(commands[5].name == "session");
+    CHECK(commands[5].description == "Show current session information");
 }
 
 TEST_CASE("built-in /help lists the passive command snapshot deterministically", "[coding_agent][prompt]") {
@@ -161,9 +125,7 @@ TEST_CASE("built-in /help lists the passive command snapshot deterministically",
           "  /commands               Alias for /help\n"
           "  /exit                   Alias for /quit\n"
           "  /help [command]         Show available commands or help for one command\n"
-          "  /new                    Show restart instructions for a new session\n"
           "  /quit                   Quit the session\n"
-          "  /resume <session-id>    Show restart instructions for resuming a session\n"
           "  /session                Show current session information\n"
           "  /undocumented");
 }
@@ -212,6 +174,29 @@ TEST_CASE("built-in /help handles invalid arity and unknown detailed targets", "
     auto unknown = registry.dispatch("help", ctx, "missing");
     REQUIRE(unknown.has_value());
     CHECK(unknown->display_text == "Unknown command: /missing");
+}
+
+TEST_CASE("Native TUI commands extend only the concrete effective registry", "[coding_agent][prompt][issue60]") {
+    coding_agent::CommandRegistry registry;
+    REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
+    REQUIRE(coding_agent::register_native_tui_commands(registry).has_value());
+
+    const auto commands = registry.list_commands();
+    REQUIRE(commands.size() == 8);
+    CHECK(commands[4].name == "hotkeys");
+    CHECK(commands[4].description == "Show all keyboard shortcuts");
+    CHECK(commands[7].name == "settings");
+    CHECK(commands[7].description == "Open settings menu");
+    CHECK_FALSE(registry.find_command_info("new").has_value());
+    CHECK_FALSE(registry.find_command_info("resume").has_value());
+
+    const coding_agent::CommandContext context;
+    const auto settings = registry.dispatch("settings", context, "");
+    const auto hotkeys = registry.dispatch("hotkeys", context, "");
+    REQUIRE(settings.has_value());
+    REQUIRE(hotkeys.has_value());
+    CHECK(settings->effect == coding_agent::CommandEffect::OpenSettings);
+    CHECK(hotkeys->effect == coding_agent::CommandEffect::OpenHotkeys);
 }
 
 TEST_CASE("built-in /commands dispatches through the /help handler", "[coding_agent][prompt]") {

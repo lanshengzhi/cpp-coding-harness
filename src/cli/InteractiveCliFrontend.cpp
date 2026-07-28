@@ -30,7 +30,6 @@ namespace {
     } catch (...) {
         return coding_agent::CommandResult{
             .display_text = "Command handler failed.",
-            .shutdown_requested = false,
         };
     }
 }
@@ -116,8 +115,9 @@ InteractiveCliOutcome InteractiveCliFrontend::run_prompt(
             config_.error << presented.error().message << '\n';
             return InteractiveCliOutcome::RuntimeError;
         }
-        return command_result->shutdown_requested ? InteractiveCliOutcome::ShutdownRequested
-                                                  : InteractiveCliOutcome::Success;
+        return command_result->effect == coding_agent::CommandEffect::Shutdown
+            ? InteractiveCliOutcome::ShutdownRequested
+            : InteractiveCliOutcome::Success;
     }
 
     // Unmatched slash input reaches AgentSession via ordinary prompt.

@@ -35,6 +35,8 @@ public:
 
     void initialize(const AgentSessionSnapshot& snapshot);
     void apply_event(const agent::AgentLifecycleEvent& event);
+    void clear();
+    void append_frontend_message(std::string text);
     void append_diagnostic(std::string text);
     void toggle_tool_output();
     void toggle_thinking();

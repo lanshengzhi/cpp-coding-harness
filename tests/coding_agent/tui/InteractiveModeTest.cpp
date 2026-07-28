@@ -1162,6 +1162,218 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Native TUI dispatches its effective commands without changing Agent Session history",
+    "[coding_agent][tui][commands][issue60]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto created = coding_agent::create_agent_session(session_options(
+        workspace,
+        ai::providers::make_scripted_fake_chat_client()));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("/help\r"));
+    drain_ready(io);
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("Available commands:") != std::string::npos);
+    CHECK(screen.find("/settings") != std::string::npos);
+    CHECK(screen.find("/hotkeys") != std::string::npos);
+    CHECK(screen.find("/new") == std::string::npos);
+    CHECK(screen.find("/resume") == std::string::npos);
+    CHECK(screen.find("User Bash") == std::string::npos);
+    CHECK(created->session->message_count() == 0);
+
+    REQUIRE(terminal.inject_input("/session\r"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("Session: " + created->session->session_id()) != std::string::npos);
+    CHECK(screen.find("File: In-memory") != std::string::npos);
+    CHECK(created->session->message_count() == 0);
+
+    REQUIRE(terminal.inject_input("/commands session\r"));
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("Command: /session") != std::string::npos);
+    CHECK(created->session->message_count() == 0);
+
+    (void)terminal.check_clear_screen_called();
+    REQUIRE(terminal.inject_input("/clear\r"));
+    drain_ready(io);
+    CHECK(terminal.check_clear_screen_called());
+    CHECK(created->session->message_count() == 0);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("Available commands:") == std::string::npos);
+    CHECK(screen.find("Session: " + created->session->session_id()) == std::string::npos);
+
+    REQUIRE(terminal.inject_input("/missing\r"));
+    drain_ready(io);
+    CHECK(created->session->message_count() == 2);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("Assistant: fake: /missing") != std::string::npos);
+    CHECK(screen.find("Available commands:") == std::string::npos);
+
+    REQUIRE(terminal.inject_input("/exit\r"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+    CHECK_FALSE(terminal.modes().started);
+}
+
+TEST_CASE(
+    "Native TUI command autocomplete includes effective commands and project resources",
+    "[coding_agent][tui][autocomplete][issue60]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    workspace.write(
+        ".cpp-harness/skills/project-skill/SKILL.md",
+        "---\n"
+        "name: project-skill\n"
+        "description: Project skill completion.\n"
+        "---\n"
+        "Project skill body.\n");
+    workspace.write(
+        ".cpp-harness/prompts/project-prompt.md",
+        "---\n"
+        "description: Project prompt completion.\n"
+        "---\n"
+        "Expanded project prompt: $ARGUMENTS\n");
+    auto options = session_options(
+        workspace,
+        ai::providers::make_scripted_fake_chat_client());
+    options.load_project_resources = true;
+    options.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 5});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("/"));
+    drain_ready(io);
+    for (std::size_t index = 0; index < 8; ++index) {
+        REQUIRE(terminal.inject_input("\x1b[B"));
+        drain_ready(io);
+    }
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("> /settings") != std::string::npos);
+    REQUIRE(terminal.inject_input("\t"));
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("/settings") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x03/set"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("settings") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x03/hot"));
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("hotkeys") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x03/project"));
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("project-prompt") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x03/skill:project"));
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("skill:project-skill") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x03/project-prompt target\r"));
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("Expanded project prompt: target") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("/skill:project-skill extra\r"));
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("Project skill body.") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI settings and hotkeys commands open only supported overlays",
+    "[coding_agent][tui][overlays][issue60]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    config.write("keybindings.json", R"({"app.exit":"f6"})");
+    auto created = coding_agent::create_agent_session(session_options(
+        workspace,
+        ai::providers::make_scripted_fake_chat_client()));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("/settings\r"));
+    drain_ready(io);
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("Theme") != std::string::npos);
+    CHECK(screen.find("Select the active Native TUI theme") != std::string::npos);
+    CHECK(created->session->message_count() == 0);
+
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("/hotkeys\r"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("Hotkeys") != std::string::npos);
+    CHECK(screen.find("f6") != std::string::npos);
+    CHECK(screen.find("app.exit") != std::string::npos);
+    CHECK(screen.find("app.session.new") == std::string::npos);
+    CHECK(screen.find("app.suspend") == std::string::npos);
+    CHECK(screen.find("app.clipboard.pasteImage") == std::string::npos);
+    CHECK(created->session->message_count() == 0);
+
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\x1b[17~"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+    CHECK_FALSE(terminal.modes().started);
+}
+
+TEST_CASE(
     "Native TUI redacts and bounds prompt failures before allowing retry",
     "[coding_agent][tui][failure][issue58]") {
     tests::TempWorkspace workspace;

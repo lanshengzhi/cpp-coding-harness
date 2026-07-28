@@ -83,6 +83,7 @@ public:
     void set_autocomplete_provider(AutocompleteProvider provider);
     [[nodiscard]] bool autocomplete_open() const;
     [[nodiscard]] std::vector<AutocompleteItem> autocomplete_items() const;
+    [[nodiscard]] std::size_t autocomplete_selected_index() const;
 
     [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;

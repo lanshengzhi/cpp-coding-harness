@@ -140,6 +140,25 @@ TEST_CASE("Tui renders attached Text through the VirtualTerminal seam", "[tui][i
     CHECK(terminal.modes().cursor_visible);
 }
 
+TEST_CASE("Tui clears and repaints unchanged retained content", "[tui][render][issue60]") {
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 2});
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("hello", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    (void)terminal.check_clear_screen_called();
+
+    REQUIRE(tui.clear_screen());
+    CHECK(terminal.check_clear_screen_called());
+    const std::vector<std::string> cleared_screen{"", ""};
+    CHECK(terminal.screen() == cleared_screen);
+
+    REQUIRE(tui.render());
+    const std::vector<std::string> repainted_screen{"hello   ", ""};
+    CHECK(terminal.screen() == repainted_screen);
+    REQUIRE(tui.stop());
+}
+
 TEST_CASE("Tui exposes styled Text cells with a default final style", "[tui][issue46][unicode]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
     cch::tui::Tui tui(terminal);

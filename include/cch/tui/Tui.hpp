@@ -36,6 +36,9 @@ public:
     [[nodiscard]] util::ExpectedVoid start();
     [[nodiscard]] util::ExpectedVoid stop();
     [[nodiscard]] util::ExpectedVoid render();
+    /// Clear the physical screen and reset differential-render state so the
+    /// next render repaints its complete current presentation.
+    [[nodiscard]] util::ExpectedVoid clear_screen();
     [[nodiscard]] util::ExpectedVoid set_focus(Component* component);
     void set_render_request_sink(TuiRenderRequestSink sink);
     void invalidate();

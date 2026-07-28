@@ -277,6 +277,25 @@ util::ExpectedVoid Tui::stop() {
     return {};
 }
 
+util::ExpectedVoid Tui::clear_screen() {
+    std::lock_guard lock(mutex_);
+    if (!started_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "TUI must be started before clearing the screen"));
+    }
+    if (auto removed = remove_active_images(); !removed) {
+        return std::unexpected(removed.error());
+    }
+    if (auto cleared = terminal_.clear_screen(); !cleared) {
+        return std::unexpected(cleared.error());
+    }
+    previous_lines_.clear();
+    previous_dimensions_ = {};
+    first_render_ = true;
+    return {};
+}
+
 util::ExpectedVoid Tui::render() {
     std::lock_guard lock(mutex_);
     if (!started_) {

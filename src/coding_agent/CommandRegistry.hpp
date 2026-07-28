@@ -39,12 +39,20 @@ struct CommandContext {
     std::vector<CommandInfo> available_commands;
 };
 
+enum class CommandEffect {
+    None,
+    ClearScreen,
+    OpenSettings,
+    OpenHotkeys,
+    Shutdown,
+};
+
 /// Result returned by a command handler.
 struct CommandResult {
     /// Text to display to the user.
     std::string display_text;
-    /// True if the session should shut down after this command.
-    bool shutdown_requested{false};
+    /// Concrete frontend operation requested by this registered command.
+    CommandEffect effect{CommandEffect::None};
 };
 
 /// Handler signature for slash-commands.
@@ -105,7 +113,10 @@ private:
     std::unordered_map<std::string, std::string> aliases_;
 };
 
-/// Registers the built-in session-lifecycle slash commands.
+/// Register baseline commands implemented by every text-capable frontend.
 [[nodiscard]] util::ExpectedVoid register_builtin_commands(CommandRegistry& registry);
+
+/// Extend an effective registry with commands implemented only by the Native TUI.
+[[nodiscard]] util::ExpectedVoid register_native_tui_commands(CommandRegistry& registry);
 
 } // namespace cch::coding_agent

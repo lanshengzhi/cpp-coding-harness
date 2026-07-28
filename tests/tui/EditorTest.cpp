@@ -120,7 +120,7 @@ TEST_CASE("Editor makes a large bracketed paste editable without submitting", "[
     CHECK(editor.expanded_text().empty());
 }
 
-TEST_CASE("Editor accepts caller supplied command and filesystem suggestions", "[tui][editor][issue48]") {
+TEST_CASE("Editor accepts caller supplied command and filesystem suggestions", "[tui][editor][issue48][issue60]") {
     cch::tui::Editor editor;
     editor.set_autocomplete_provider([](const cch::tui::AutocompleteRequest& request)
         -> std::optional<cch::tui::AutocompleteSuggestions> {
@@ -128,7 +128,7 @@ TEST_CASE("Editor accepts caller supplied command and filesystem suggestions", "
             return cch::tui::AutocompleteSuggestions{
                 .items = {{.value = "help", .label = "help", .description = {}},
                           {.value = "history", .label = "history", .description = {}}},
-                .prefix = "/he",
+                .prefix = request.lines[request.cursor.line],
             };
         }
         if (request.lines[request.cursor.line].starts_with("@")) {
@@ -140,6 +140,16 @@ TEST_CASE("Editor accepts caller supplied command and filesystem suggestions", "
         return std::nullopt;
     });
 
+    editor.set_text("/");
+    key(editor, "tab");
+    REQUIRE(editor.autocomplete_open());
+    CHECK(editor.autocomplete_selected_index() == 0);
+    key(editor, "down");
+    CHECK(editor.autocomplete_selected_index() == 1);
+    key(editor, "up");
+    CHECK(editor.autocomplete_selected_index() == 0);
+
+    editor.set_text({});
     type(editor, "/he");
     REQUIRE(editor.autocomplete_open());
     key(editor, "tab");
