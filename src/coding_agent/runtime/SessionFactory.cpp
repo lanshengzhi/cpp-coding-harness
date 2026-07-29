@@ -574,7 +574,8 @@ struct SessionTargetNormalizationOptions {
 
 [[nodiscard]] util::Expected<CreateAgentSessionResult> run_assembly(
     AssemblyPlan plan,
-    const UserSettingsSnapshot& snapshot) {
+    const UserSettingsSnapshot& snapshot,
+    std::unique_ptr<AsyncUserShell> user_shell) {
     std::vector<SdkDiagnostic> diagnostics;
 
     // 1. Resolve workspace and validate target shape.
@@ -880,6 +881,7 @@ struct SessionTargetNormalizationOptions {
     services.client = std::move(chat_client);
     services.env = std::move(exec_env);
     services.env_owned = env_owned;
+    services.user_shell = std::move(user_shell);
     services.tools = std::move(tools);
 
     prompt::PromptProcessor prompt_processor{std::move(skills), std::move(templates)};
@@ -915,11 +917,13 @@ struct SessionTargetNormalizationOptions {
 /// the settings fallback warning through the error context field.
 [[nodiscard]] util::Expected<CreateAgentSessionResult> finish_creation(
     util::Expected<AssemblyPlan> plan,
-    const UserSettingsSnapshot& snapshot) {
+    const UserSettingsSnapshot& snapshot,
+    std::unique_ptr<AsyncUserShell> user_shell = {}) {
     if (!plan) {
         return std::unexpected(with_settings_fallback_context(plan.error(), snapshot));
     }
-    auto result = run_assembly(std::move(*plan), snapshot);
+    auto result = run_assembly(
+        std::move(*plan), snapshot, std::move(user_shell));
     if (!result) {
         return std::unexpected(with_settings_fallback_context(result.error(), snapshot));
     }
@@ -938,6 +942,14 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
     CreateAgentSessionOptions options) {
     const auto snapshot = load_user_settings_snapshot();
     return finish_creation(normalize_sdk(std::move(options)), snapshot);
+}
+
+util::Expected<CreateAgentSessionResult> SessionFactory::create(
+    CreateAgentSessionOptions options,
+    std::unique_ptr<AsyncUserShell> user_shell) {
+    const auto snapshot = load_user_settings_snapshot();
+    return finish_creation(
+        normalize_sdk(std::move(options)), snapshot, std::move(user_shell));
 }
 
 } // namespace cch::coding_agent::runtime

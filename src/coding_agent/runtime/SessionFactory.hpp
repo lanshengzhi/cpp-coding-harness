@@ -3,6 +3,7 @@
 #include <cch/coding_agent/Sdk.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include "coding_agent/runtime/AgentSessionRuntime.hpp"
+#include "coding_agent/runtime/AsyncUserShell.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 
 #include <cstddef>
@@ -68,6 +69,11 @@ class SessionFactory {
 public:
     [[nodiscard]] static util::Expected<CreateAgentSessionResult> create(
         CreateAgentSessionOptions options);
+    /// Private integration-test/future Native TUI assembly path. Supplying a
+    /// User Shell does not alter the public SDK options or model tool registry.
+    [[nodiscard]] static util::Expected<CreateAgentSessionResult> create(
+        CreateAgentSessionOptions options,
+        std::unique_ptr<AsyncUserShell> user_shell);
     [[nodiscard]] static util::Expected<CreateAgentSessionResult> create(
         AgentSessionCreationRequest request);
 };

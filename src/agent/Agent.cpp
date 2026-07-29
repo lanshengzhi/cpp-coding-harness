@@ -1,6 +1,7 @@
 #include <cch/agent/Agent.hpp>
 
 #include "AgentLoop.hpp"
+#include "agent/AgentMessageAccess.hpp"
 #include <cch/ai/Content.hpp>
 #include "util/BoundedText.hpp"
 
@@ -603,6 +604,23 @@ void Agent::clear_subscriptions() {
     if (impl_) {
         impl_->clear_subscriptions();
     }
+}
+
+util::ExpectedVoid detail::AgentMessageAccess::append_bash_execution(
+    Agent& agent,
+    ai::BashExecutionMessage message) {
+    if (!agent.impl_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "agent is not initialized"));
+    }
+    if (agent.impl_->active_run) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "agent is busy (cannot commit passive message)"));
+    }
+    agent.impl_->state.messages.emplace_back(std::move(message));
+    return {};
 }
 
 } // namespace cch::agent

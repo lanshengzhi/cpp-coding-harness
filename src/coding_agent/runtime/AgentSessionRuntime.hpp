@@ -9,6 +9,7 @@
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionEventCommitment.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
+#include "coding_agent/runtime/UserBash.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
@@ -55,6 +56,14 @@ public:
         bool expand_prompt_templates,
         std::move_only_function<util::ExpectedVoid()> on_preflight_accepted = {});
 
+    /// Private Native TUI path for one idle direct-user Shell execution.
+    [[nodiscard]] bool has_user_shell() const { return services_.user_shell != nullptr; }
+    [[nodiscard]] boost::asio::awaitable<util::Expected<UserBashCompletion>> run_user_bash(
+        std::string command,
+        bool exclude_from_context,
+        UserBashProgressSink progress_sink);
+    void cancel_user_bash();
+
     // ── Subscriptions ──────────────────────────────────────────────────────
 
     /// Subscribe through the authoritative stateful Agent weak-observer path.
@@ -100,15 +109,17 @@ public:
     void abort();
 
     [[nodiscard]] bool is_open() const {
-        return state_ == State::Open || state_ == State::RunningPrompt;
+        return state_ == State::Open || state_ == State::RunningPrompt ||
+            state_ == State::RunningUserBash;
     }
     [[nodiscard]] bool is_busy() const {
-        return state_ == State::RunningPrompt || state_ == State::Closing;
+        return state_ == State::RunningPrompt || state_ == State::RunningUserBash ||
+            state_ == State::Closing;
     }
     void close() noexcept;
 
 private:
-    enum class State { Open, RunningPrompt, Closing, Closed };
+    enum class State { Open, RunningPrompt, RunningUserBash, Closing, Closed };
 
     /// Shared preflight outcome for entry points that require a non-closed session.
     [[nodiscard]] util::ExpectedVoid reject_if_closed() const;
@@ -118,7 +129,7 @@ private:
     [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> run_agent_loop(
         ai::UserMessage prompt,
         std::stop_source stop_source);
-    [[nodiscard]] boost::asio::awaitable<void> finalize_close_after_prompt();
+    [[nodiscard]] boost::asio::awaitable<void> finalize_close_after_active_work();
     [[nodiscard]] std::shared_ptr<harness::AsyncExecutionEnv> release_close_resources() noexcept;
     void finalize_close() noexcept;
 
@@ -131,6 +142,7 @@ private:
     AgentSessionRuntimeConfig config_;
     State state_{State::Open};
     std::optional<std::stop_source> active_stop_source_;
+    std::optional<std::stop_source> active_user_bash_stop_source_;
 };
 
 } // namespace cch::coding_agent::runtime

@@ -450,6 +450,47 @@ TEST_CASE("removed event and command contracts stay out of session ownership", "
     CHECK(sdk_header.find(command_handler) == std::string::npos);
 }
 
+TEST_CASE(
+    "User Bash remains a private Native TUI capability",
+    "[architecture][session][tui][issue85]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto sdk_header = read_text(
+        source_root / "include" / "cch" / "coding_agent" / "Sdk.hpp");
+    const auto event_header = read_text(
+        source_root / "include" / "cch" / "agent" / "AgentEvent.hpp");
+    const auto rpc_source = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "RpcMode.cpp");
+    const auto json_source = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "JsonEventPrinter.cpp");
+    const auto services_header = read_text(
+        source_root / "src" / "coding_agent" / "runtime" /
+        (std::string{"RuntimeServices"} + ".hpp"));
+    const auto runtime_source = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "AgentSessionRuntime.cpp");
+
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "include" / "cch" / "coding_agent" / "UserShell.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "include" / "cch" / "coding_agent" / "AsyncUserShell.hpp"));
+    CHECK(sdk_header.find("run_user_bash(") == std::string::npos);
+    CHECK(sdk_header.find("cancel_user_bash(") == std::string::npos);
+    CHECK(rpc_source.find("run_user_bash(") == std::string::npos);
+    CHECK(rpc_source.find("abort_bash") == std::string::npos);
+    CHECK(json_source.find("UserBash") == std::string::npos);
+    CHECK(event_header.find("UserBash") == std::string::npos);
+
+    CHECK(services_header.find("std::unique_ptr<AsyncUserShell> user_shell") !=
+          std::string::npos);
+    CHECK(runtime_source.find(
+              "AgentMessageAccess::append_bash_execution") != std::string::npos);
+    const auto live_commit = runtime_source.find(
+        "AgentMessageAccess::append_bash_execution");
+    const auto durable_commit = runtime_source.find(
+        "session_.store->append(", live_commit);
+    REQUIRE(live_commit != std::string::npos);
+    CHECK(durable_commit > live_commit);
+}
+
 TEST_CASE("Runtime session persistence stays behind the narrow SessionStore capability", "[architecture][session]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
     const auto runtime_header = read_text(

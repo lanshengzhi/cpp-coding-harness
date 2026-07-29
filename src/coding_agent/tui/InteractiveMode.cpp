@@ -14,11 +14,13 @@
 #include "coding_agent/CommandRegistry.hpp"
 #include "coding_agent/ImageInput.hpp"
 #include "coding_agent/prompt/SlashCommandParser.hpp"
+#include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/tui/KeybindingCatalog.hpp"
 #include "coding_agent/tui/KeybindingHelp.hpp"
 #include "coding_agent/tui/ThemeCatalog.hpp"
 #include "coding_agent/tui/Transcript.hpp"
 #include "harness/UniqueFd.hpp"
+#include "util/TerminalText.hpp"
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -65,6 +67,7 @@ using SubmitSink = std::move_only_function<void(std::string)>;
 using PromptActiveHook = std::move_only_function<bool()>;
 
 enum class InputSubmission { Ordinary, FollowUp };
+enum class SubmissionOrigin { FocusedEditor, InitialPrompt };
 
 struct InteractiveStartupDiagnostics {
     std::vector<KeybindingDiagnostic> keybindings;
@@ -100,6 +103,36 @@ struct InteractiveStartupDiagnostics {
     }).base();
     if (first >= last) return {};
     return {first, last};
+}
+
+struct UserBashInvocation {
+    std::string command;
+    bool exclude_from_context{false};
+};
+
+[[nodiscard]] std::optional<UserBashInvocation> parse_user_bash_invocation(
+    std::string text) {
+    text = trim_editor_submission(std::move(text));
+    if (!text.starts_with('!')) return std::nullopt;
+    const bool excluded = text.starts_with("!!");
+    auto command = trim_editor_submission(text.substr(excluded ? 2 : 1));
+    if (command.empty()) return std::nullopt;
+    return UserBashInvocation{
+        .command = std::move(command),
+        .exclude_from_context = excluded,
+    };
+}
+
+[[nodiscard]] std::string safe_user_bash_invocation(
+    const UserBashInvocation& invocation) {
+    auto command = util::strip_terminal_escape_sequences(invocation.command);
+    std::erase_if(command, [](unsigned char value) {
+        return value < 0x20 || value == 0x7f;
+    });
+    return bounded_redacted_presentation(std::format(
+        "{} {}",
+        invocation.exclude_from_context ? "!!" : "!",
+        command));
 }
 
 [[nodiscard]] std::string clipboard_uuid() {
@@ -483,6 +516,11 @@ public:
         transcript_.apply_event(event);
     }
 
+    void append_committed_message(ai::MessageVariant message) {
+        std::lock_guard lock(mutex_);
+        transcript_.append_committed_message(std::move(message));
+    }
+
     void clear_transcript() {
         std::lock_guard lock(mutex_);
         transcript_.clear();
@@ -525,6 +563,16 @@ public:
             pending_follow_up_.push_back(
                 queued_editor_text(message).value_or("[unsupported queued input]"));
         }
+    }
+
+    void set_user_bash_progress(runtime::UserBashProgress progress) {
+        std::lock_guard lock(mutex_);
+        user_bash_progress_ = std::move(progress);
+    }
+
+    void clear_user_bash_progress() {
+        std::lock_guard lock(mutex_);
+        user_bash_progress_.reset();
     }
 
     void set_editor_theme(cch::tui::EditorTheme theme) {
@@ -573,7 +621,35 @@ public:
         }
 
         std::vector<std::string> pending_lines;
-        pending_lines.reserve(pending_steering_.size() + pending_follow_up_.size() + 1);
+        pending_lines.reserve(pending_steering_.size() + pending_follow_up_.size() + 3);
+        if (user_bash_progress_) {
+            const auto prefix = user_bash_progress_->exclude_from_context ? "!!" : "!";
+            cch::tui::TruncatedText header{std::format(
+                "Bash running {} {}",
+                prefix,
+                user_bash_progress_->command)};
+            if (auto rendered = header.render(width); !rendered) {
+                return std::unexpected(rendered.error());
+            } else if (!rendered->lines.empty()) {
+                pending_lines.push_back(std::move(rendered->lines.front()));
+            }
+            std::size_t start = 0;
+            while (start < user_bash_progress_->output.size()) {
+                const auto newline = user_bash_progress_->output.find('\n', start);
+                const auto count = newline == std::string::npos
+                    ? user_bash_progress_->output.size() - start
+                    : newline - start;
+                cch::tui::TruncatedText output_line{
+                    user_bash_progress_->output.substr(start, count)};
+                if (auto rendered = output_line.render(width); !rendered) {
+                    return std::unexpected(rendered.error());
+                } else if (!rendered->lines.empty()) {
+                    pending_lines.push_back(std::move(rendered->lines.front()));
+                }
+                if (newline == std::string::npos) break;
+                start = newline + 1;
+            }
+        }
         for (const auto& message : pending_steering_) {
             cch::tui::TruncatedText item{"Steering: " + message};
             if (auto rendered = item.render(width); !rendered) {
@@ -850,6 +926,7 @@ private:
     cch::tui::Editor editor_;
     std::vector<std::string> pending_steering_;
     std::vector<std::string> pending_follow_up_;
+    std::optional<runtime::UserBashProgress> user_bash_progress_;
     std::size_t available_rows_{24};
     std::size_t editor_row_offset_{0};
 };
@@ -911,7 +988,8 @@ public:
             submit(
                 std::move(*config.initial_prompt),
                 InputSubmission::Ordinary,
-                std::move(config.initial_prompt_options));
+                std::move(config.initial_prompt_options),
+                SubmissionOrigin::InitialPrompt);
         }
         return {};
     }
@@ -1390,6 +1468,59 @@ private:
         }
     }
 
+    [[nodiscard]] bool dispatch_user_bash(std::string text) {
+        if (!detail::AgentSessionInteractiveAccess::has_user_shell(session_)) return false;
+        auto invocation = parse_user_bash_invocation(std::move(text));
+        if (!invocation) return false;
+        if (user_bash_active_) {
+            view_->restore_submitted_text(safe_user_bash_invocation(*invocation));
+            view_->append_diagnostic("A User Bash command is already in flight");
+            tui_.invalidate();
+            return true;
+        }
+
+        user_bash_active_ = true;
+        auto safe_invocation = std::make_shared<std::string>(
+            safe_user_bash_invocation(*invocation));
+        const auto self = shared_from_this();
+        boost::asio::co_spawn(
+            executor_,
+            [self,
+             invocation = std::move(*invocation),
+             safe_invocation]() mutable -> boost::asio::awaitable<void> {
+                auto result = co_await detail::AgentSessionInteractiveAccess::run_user_bash(
+                    self->session_,
+                    std::move(invocation.command),
+                    invocation.exclude_from_context,
+                    [self, safe_invocation](
+                        const runtime::UserBashProgress& progress) -> util::ExpectedVoid {
+                        *safe_invocation = std::format(
+                            "{} {}",
+                            progress.exclude_from_context ? "!!" : "!",
+                            progress.command);
+                        if (self->running_ && self->view_ != nullptr) {
+                            self->view_->set_user_bash_progress(progress);
+                            self->tui_.invalidate();
+                        }
+                        return {};
+                    });
+                self->user_bash_finished(std::move(result), *safe_invocation);
+            },
+            [weak = weak_from_this()](std::exception_ptr exception) {
+                if (!exception) return;
+                if (const auto self = weak.lock()) {
+                    self->user_bash_active_ = false;
+                    if (self->view_ != nullptr && self->running_) {
+                        self->view_->clear_user_bash_progress();
+                        self->view_->append_diagnostic("Native TUI User Bash coroutine failed");
+                        self->tui_.invalidate();
+                    }
+                    if (self->exit_requested_) self->signal_exit();
+                }
+            });
+        return true;
+    }
+
     void request_interrupt(std::size_t prompt_generation) {
         if (!running_ ||
             exit_requested_ ||
@@ -1406,8 +1537,10 @@ private:
     void submit(
         std::string text,
         InputSubmission submission,
-        PromptOptions options = {}) {
+        PromptOptions options = {},
+        SubmissionOrigin origin = SubmissionOrigin::FocusedEditor) {
         if (!running_ || view_ == nullptr || text.empty()) return;
+        if (origin == SubmissionOrigin::FocusedEditor && dispatch_user_bash(text)) return;
         if (dispatch_command(text)) return;
         if (prompt_active_ &&
             interrupt_requested_generation_ == prompt_generation_.load()) {
@@ -1524,7 +1657,30 @@ private:
             view_->restore_submitted_text(submitted_text);
             tui_.invalidate();
         }
-        if (exit_requested_) signal_exit();
+        if (exit_requested_ && !user_bash_active_) signal_exit();
+    }
+
+    void user_bash_finished(
+        util::Expected<runtime::UserBashCompletion> result,
+        const std::string& safe_invocation) {
+        user_bash_active_ = false;
+        if (view_ != nullptr && running_) {
+            view_->clear_user_bash_progress();
+            if (result) {
+                view_->append_committed_message(
+                    ai::MessageVariant{std::move(result->message)});
+                if (result->diagnostic) {
+                    view_->append_diagnostic(combined_error_text(*result->diagnostic));
+                }
+            } else {
+                view_->append_diagnostic(combined_error_text(result.error()));
+                if (!safe_invocation.empty()) {
+                    view_->restore_submitted_text(safe_invocation);
+                }
+            }
+            tui_.invalidate();
+        }
+        if (exit_requested_ && !prompt_active_) signal_exit();
     }
 
     void sync_pending_input() {
@@ -1575,7 +1731,7 @@ private:
         if (!running_ || exit_requested_) return;
         exit_requested_ = true;
         session_.close();
-        if (!prompt_active_) signal_exit();
+        if (!prompt_active_ && !user_bash_active_) signal_exit();
     }
 
     void signal_exit() {
@@ -1604,6 +1760,7 @@ private:
     cch::tui::Overlay* active_overlay_{nullptr}; // aliases an overlay owned by tui_.
     std::atomic<bool> running_{false};
     std::atomic<bool> prompt_active_{false};
+    std::atomic<bool> user_bash_active_{false};
     std::atomic<std::size_t> prompt_generation_{0};
     std::optional<std::size_t> interrupt_requested_generation_;
     std::vector<std::string> displayed_agent_diagnostics_;

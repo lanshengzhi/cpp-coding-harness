@@ -307,6 +307,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/tui/ProcessInteractiveModeTest.cpp
         tests/coding_agent/tui/ThemeTest.cpp
         tests/coding_agent/tui/ThemeCatalogTest.cpp
+        tests/coding_agent/tui/UserBashInteractiveModeTest.cpp
         tests/coding_agent/SdkSessionTest.cpp
         tests/coding_agent/AgentSessionSnapshotTest.cpp
         tests/coding_agent/SkillIntegrationTest.cpp

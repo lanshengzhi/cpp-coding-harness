@@ -3,6 +3,7 @@
 #include "util/BoundedText.hpp"
 #include "util/Json.hpp"
 #include "util/OutputLimiter.hpp"
+#include "util/TerminalText.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -423,7 +424,8 @@ public:
         const bool streamed = received_stdout || received_stderr;
         const std::string& stdout_source = streamed ? full_stdout : shell->stdout_output;
         const std::string& stderr_source = streamed ? full_stderr : shell->stderr_output;
-        std::string full_output = strip_ansi(combine_output(stdout_source, stderr_source));
+        std::string full_output = util::strip_terminal_escape_sequences(
+            combine_output(stdout_source, stderr_source));
 
         // Redact the complete output before splitting between model-visible and spill.
         std::string redacted_full = util::redact_text(full_output);
@@ -458,24 +460,6 @@ public:
             .details = std::nullopt,
             .is_error = shell->exitCode != 0,
         };
-    }
-
-private:
-    static std::string strip_ansi(const std::string& input) {
-        std::string output;
-        output.reserve(input.size());
-        for (std::size_t i = 0; i < input.size(); ++i) {
-            if (input[i] == '\x1b' && i + 1 < input.size() && input[i + 1] == '[') {
-                i += 2;
-                while (i < input.size() && !((input[i] >= 'a' && input[i] <= 'z') ||
-                    (input[i] >= 'A' && input[i] <= 'Z'))) {
-                    ++i;
-                }
-                continue;
-            }
-            output += input[i];
-        }
-        return output;
     }
 };
 

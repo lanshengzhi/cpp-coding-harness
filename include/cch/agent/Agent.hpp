@@ -15,6 +15,7 @@
 
 namespace cch::agent {
 namespace detail {
+class AgentMessageAccess;
 class AgentPromptAccess;
 } // namespace detail
 
@@ -123,6 +124,7 @@ public:
     struct Impl;
 
 private:
+    friend class detail::AgentMessageAccess;
     friend class detail::AgentPromptAccess;
 
     /// Execute one prompt using a caller-created prompt-scoped cancellation

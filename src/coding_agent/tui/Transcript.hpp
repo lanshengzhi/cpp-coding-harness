@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/agent/AgentEvent.hpp>
+#include <cch/ai/Message.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/tui/Component.hpp>
 #include <cch/util/Error.hpp>
@@ -36,6 +37,8 @@ public:
 
     void initialize(const AgentSessionSnapshot& snapshot);
     void apply_event(const agent::AgentLifecycleEvent& event);
+    /// Append one runtime-confirmed passive message that has no lifecycle event.
+    void append_committed_message(ai::MessageVariant message);
     void clear();
     void append_frontend_message(std::string text);
     void append_diagnostic(std::string text);

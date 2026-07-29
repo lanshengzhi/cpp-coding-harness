@@ -2,8 +2,12 @@
 
 #include <cch/ai/Content.hpp>
 
+#include "agent/AgentMessageAccess.hpp"
 #include "agent/AgentPromptAccess.hpp"
+#include "coding_agent/BoundedText.hpp"
 #include "coding_agent/SkillFormatting.hpp"
+#include "util/OutputLimiter.hpp"
+#include "util/TerminalText.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -11,6 +15,8 @@
 #include <boost/asio/post.hpp>
 #include <boost/asio/system_executor.hpp>
 
+#include <algorithm>
+#include <chrono>
 #include <exception>
 #include <optional>
 #include <stop_token>
@@ -46,6 +52,70 @@ namespace {
     }
 }
 
+[[nodiscard]] std::string normalize_terminal_text(std::string_view text) {
+    const auto stripped = util::strip_terminal_escape_sequences(text);
+    std::string normalized;
+    normalized.reserve(stripped.size());
+    for (std::size_t index = 0; index < stripped.size();) {
+        const auto value = static_cast<unsigned char>(stripped[index]);
+        if (stripped[index] == '\r') {
+            normalized.push_back('\n');
+            index += index + 1 < stripped.size() && stripped[index + 1] == '\n' ? 2 : 1;
+            continue;
+        }
+        if (value < 0x20 && stripped[index] != '\n' && stripped[index] != '\t') {
+            ++index;
+            continue;
+        }
+        normalized.push_back(stripped[index++]);
+    }
+    return normalized;
+}
+
+[[nodiscard]] std::string safe_user_bash_command(std::string command) {
+    return bounded_redacted_presentation(normalize_terminal_text(command));
+}
+
+[[nodiscard]] util::OutputLimitResult safe_user_bash_output(std::string output) {
+    return util::limit_output_tail_redacted(normalize_terminal_text(output));
+}
+
+[[nodiscard]] util::Error safe_user_bash_error(util::Error error) {
+    return util::make_error(
+        error.code,
+        bounded_redacted_presentation(std::move(error.message)),
+        bounded_redacted_presentation(std::move(error.detail)),
+        error.context
+            ? std::optional<std::string>{bounded_redacted_presentation(std::move(*error.context))}
+            : std::nullopt);
+}
+
+[[nodiscard]] ai::TimestampMs completion_timestamp_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+[[nodiscard]] ai::BashExecutionMessage make_bash_execution_message(
+    UserShellResult result,
+    std::string safe_command,
+    bool exclude_from_context,
+    ai::TimestampMs timestamp) {
+    auto safe_output = safe_user_bash_output(std::move(result.output));
+    ai::BashExecutionMessage message;
+    message.command = std::move(safe_command);
+    message.output = std::move(safe_output.text);
+    message.exit_code = result.cancelled ? std::nullopt : result.exit_code;
+    message.cancelled = result.cancelled;
+    message.truncated = result.truncated || safe_output.truncated;
+    if (!result.artifact_error && result.full_output_path) {
+        message.full_output_path = bounded_redacted_presentation(
+            normalize_terminal_text(*result.full_output_path));
+    }
+    message.exclude_from_context = exclude_from_context;
+    message.timestamp = timestamp;
+    return message;
+}
+
 } // namespace
 
 AgentSessionRuntime::AgentSessionRuntime(
@@ -64,6 +134,16 @@ AgentSessionRuntime::AgentSessionRuntime(
     options.max_queued_bytes = config_.max_queued_bytes;
     options.max_turns = config_.max_turns;
     options.model = ai::Model{std::move(config_.model)};
+    options.transform_context = [](
+                                    std::vector<ai::MessageVariant> messages,
+                                    std::stop_token) -> boost::asio::awaitable<
+                                        util::Expected<std::vector<ai::MessageVariant>>> {
+        std::erase_if(messages, [](const ai::MessageVariant& message) {
+            const auto* bash = std::get_if<ai::BashExecutionMessage>(&message);
+            return bash != nullptr && bash->exclude_from_context;
+        });
+        co_return messages;
+    };
 
     std::string skills_block = formatSkillsForPrompt(prompt_processor_->skills());
     if (!skills_block.empty()) {
@@ -116,7 +196,7 @@ util::ExpectedVoid AgentSessionRuntime::reject_if_closed() const {
 }
 
 util::ExpectedVoid AgentSessionRuntime::reject_if_busy() const {
-    if (state_ == State::RunningPrompt) {
+    if (state_ == State::RunningPrompt || state_ == State::RunningUserBash) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "session is busy (prompt already in flight)"));
@@ -178,11 +258,151 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
     if (state_ == State::Closing) {
         // The prompt awaitable is the existing observation seam for active
         // close: owned environment cleanup finishes before it settles.
-        co_await finalize_close_after_prompt();
+        co_await finalize_close_after_active_work();
     } else if (state_ == State::RunningPrompt) {
         state_ = State::Open;
     }
     co_return result;
+}
+
+boost::asio::awaitable<util::Expected<UserBashCompletion>>
+AgentSessionRuntime::run_user_bash(
+    std::string command,
+    bool exclude_from_context,
+    UserBashProgressSink progress_sink) {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        co_return std::unexpected(rejected.error());
+    }
+    if (auto rejected = reject_if_busy(); !rejected) {
+        co_return std::unexpected(rejected.error());
+    }
+    if (!services_.user_shell) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "User Shell is unavailable"));
+    }
+
+    state_ = State::RunningUserBash;
+    active_user_bash_stop_source_.emplace();
+    const auto safe_command = safe_user_bash_command(command);
+    util::Expected<UserShellResult> shell_result = std::unexpected(util::make_error(
+        util::ErrorCode::Unknown,
+        "User Shell execution did not finish"));
+    if (progress_sink) {
+        try {
+            if (auto started = progress_sink(UserBashProgress{
+                    .command = safe_command,
+                    .output = {},
+                    .exclude_from_context = exclude_from_context,
+                });
+                !started) {
+                active_user_bash_stop_source_.reset();
+                state_ = State::Open;
+                co_return std::unexpected(safe_user_bash_error(started.error()));
+            }
+        } catch (const std::exception& error) {
+            active_user_bash_stop_source_.reset();
+            state_ = State::Open;
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Unknown,
+                "User Bash progress callback failed",
+                bounded_redacted_presentation(error.what())));
+        } catch (...) {
+            active_user_bash_stop_source_.reset();
+            state_ = State::Open;
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Unknown,
+                "User Bash progress callback failed"));
+        }
+    }
+    try {
+        std::string progress_output;
+        shell_result = co_await services_.user_shell->execute(
+            std::move(command),
+            [safe_command, exclude_from_context, &progress_output, &progress_sink](
+                std::string_view update) -> util::ExpectedVoid {
+                progress_output.append(update);
+                auto safe_update = safe_user_bash_output(std::move(progress_output));
+                progress_output = safe_update.text;
+                if (!progress_sink) return {};
+                try {
+                    return progress_sink(UserBashProgress{
+                        .command = safe_command,
+                        .output = progress_output,
+                        .exclude_from_context = exclude_from_context,
+                    });
+                } catch (const std::exception& error) {
+                    return std::unexpected(util::make_error(
+                        util::ErrorCode::Unknown,
+                        "User Bash progress callback failed",
+                        error.what()));
+                } catch (...) {
+                    return std::unexpected(util::make_error(
+                        util::ErrorCode::Unknown,
+                        "User Bash progress callback failed"));
+                }
+            },
+            active_user_bash_stop_source_->get_token());
+    } catch (const std::exception& error) {
+        shell_result = std::unexpected(util::make_error(
+            util::ErrorCode::Unknown,
+            "User Shell execution failed",
+            error.what()));
+    } catch (...) {
+        shell_result = std::unexpected(util::make_error(
+            util::ErrorCode::Unknown,
+            "User Shell execution failed",
+            "unknown exception"));
+    }
+
+    active_user_bash_stop_source_.reset();
+    const bool closing = state_ == State::Closing;
+    if (!closing) state_ = State::Open;
+
+    if (!shell_result) {
+        if (closing) co_await finalize_close_after_active_work();
+        co_return std::unexpected(safe_user_bash_error(shell_result.error()));
+    }
+
+    const auto artifact_error = shell_result->artifact_error;
+    auto message = make_bash_execution_message(
+        std::move(*shell_result),
+        safe_command,
+        exclude_from_context,
+        completion_timestamp_ms());
+
+    if (!agent_) {
+        if (closing) co_await finalize_close_after_active_work();
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session Agent is unavailable"));
+    }
+    if (auto committed = agent::detail::AgentMessageAccess::append_bash_execution(
+            *agent_, message);
+        !committed) {
+        if (closing) co_await finalize_close_after_active_work();
+        co_return std::unexpected(committed.error());
+    }
+
+    UserBashCompletion completion{
+        .message = std::move(message),
+        .diagnostic = std::nullopt,
+    };
+    if (auto persisted = session_.store->append(
+            ai::MessageVariant{completion.message});
+        !persisted) {
+        completion.diagnostic = safe_user_bash_error(persisted.error());
+    } else if (artifact_error) {
+        completion.diagnostic = safe_user_bash_error(*artifact_error);
+    }
+    if (closing) co_await finalize_close_after_active_work();
+    co_return completion;
+}
+
+void AgentSessionRuntime::cancel_user_bash() {
+    if (state_ == State::RunningUserBash && active_user_bash_stop_source_) {
+        (void)active_user_bash_stop_source_->request_stop();
+    }
 }
 
 boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
@@ -360,6 +580,13 @@ void AgentSessionRuntime::close() noexcept {
         }
         return;
     }
+    if (state_ == State::RunningUserBash) {
+        state_ = State::Closing;
+        if (active_user_bash_stop_source_) {
+            (void)active_user_bash_stop_source_->request_stop();
+        }
+        return;
+    }
 
     state_ = State::Closing;
     finalize_close();
@@ -374,6 +601,7 @@ AgentSessionRuntime::release_close_resources() noexcept {
     prompt_processor_.reset();
     session_.store.reset();
     services_.client.reset();
+    services_.user_shell.reset();
 
     if (services_.env_owned) {
         return std::move(services_.env);
@@ -382,7 +610,7 @@ AgentSessionRuntime::release_close_resources() noexcept {
     return {};
 }
 
-boost::asio::awaitable<void> AgentSessionRuntime::finalize_close_after_prompt() {
+boost::asio::awaitable<void> AgentSessionRuntime::finalize_close_after_active_work() {
     auto owned_env = release_close_resources();
     if (owned_env) {
         try {

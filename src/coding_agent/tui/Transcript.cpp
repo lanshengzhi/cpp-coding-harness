@@ -761,6 +761,10 @@ void Transcript::apply_event(const agent::AgentLifecycleEvent& event) {
     }
 }
 
+void Transcript::append_committed_message(ai::MessageVariant message) {
+    impl_->add_message(std::move(message));
+}
+
 void Transcript::clear() {
     impl_->clear();
 }

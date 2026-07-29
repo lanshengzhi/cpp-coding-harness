@@ -3,6 +3,7 @@
 #include "../../../include/cch/agent/ToolRegistry.hpp"
 #include "../../../include/cch/ai/ChatClient.hpp"
 #include "../../../include/cch/harness/LocalExecutionEnv.hpp"
+#include "coding_agent/runtime/AsyncUserShell.hpp"
 
 #include <filesystem>
 #include <memory>
@@ -19,6 +20,9 @@ struct RuntimeServices {
     /// True when the factory created the execution environment and must clean
     /// it up on session close. Host-provided environments are never owned.
     bool env_owned{true};
+    /// Independently owned direct-user capability; absence keeps User Bash
+    /// unavailable without changing model tool authorization.
+    std::unique_ptr<AsyncUserShell> user_shell;
     agent::AsyncToolRegistry tools;
 };
 

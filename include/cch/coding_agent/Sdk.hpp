@@ -26,6 +26,7 @@
 
 namespace cch::coding_agent {
 namespace detail {
+class AgentSessionInteractiveAccess;
 class AgentSessionPromptAccess;
 class AgentSessionRuntimeAccess;
 }
@@ -407,6 +408,7 @@ public:
 private:
     friend util::Expected<CreateAgentSessionResult> create_agent_session(
         CreateAgentSessionOptions options);
+    friend class detail::AgentSessionInteractiveAccess;
     friend class detail::AgentSessionPromptAccess;
     friend class detail::AgentSessionRuntimeAccess;
 

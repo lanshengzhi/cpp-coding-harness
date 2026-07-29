@@ -1,5 +1,6 @@
 #include <cch/coding_agent/Sdk.hpp>
 
+#include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/runtime/AgentSessionPromptAccess.hpp"
 #include "coding_agent/runtime/AgentSessionRuntime.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
@@ -215,6 +216,49 @@ util::ExpectedVoid AgentSession::clear_input_queues() {
             "session is not initialized"));
     }
     return impl_->runtime->clear_input_queues();
+}
+
+bool detail::AgentSessionInteractiveAccess::has_user_shell(
+    const AgentSession& session) {
+    return session.impl_ && session.impl_->runtime &&
+        session.impl_->runtime->has_user_shell();
+}
+
+boost::asio::awaitable<util::Expected<runtime::UserBashCompletion>>
+detail::AgentSessionInteractiveAccess::run_user_bash(
+    AgentSession& session,
+    std::string command,
+    bool exclude_from_context,
+    runtime::UserBashProgressSink progress_sink) {
+    return run_user_bash_impl(
+        session.impl_,
+        std::move(command),
+        exclude_from_context,
+        std::move(progress_sink));
+}
+
+boost::asio::awaitable<util::Expected<runtime::UserBashCompletion>>
+detail::AgentSessionInteractiveAccess::run_user_bash_impl(
+    std::shared_ptr<AgentSession::Impl> impl,
+    std::string command,
+    bool exclude_from_context,
+    runtime::UserBashProgressSink progress_sink) {
+    if (!impl || !impl->runtime) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    co_return co_await impl->runtime->run_user_bash(
+        std::move(command),
+        exclude_from_context,
+        std::move(progress_sink));
+}
+
+void detail::AgentSessionInteractiveAccess::cancel_user_bash(
+    AgentSession& session) {
+    if (session.impl_ && session.impl_->runtime) {
+        session.impl_->runtime->cancel_user_bash();
+    }
 }
 
 boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::prompt(
@@ -433,6 +477,14 @@ util::Expected<CreateAgentSessionResult> create_agent_session(
 util::Expected<CreateAgentSessionResult> create_agent_session(
     runtime::AgentSessionCreationRequest request) {
     return detail::AgentSessionRuntimeAccess::wrap_factory_result(runtime::SessionFactory::create(std::move(request)));
+}
+
+util::Expected<CreateAgentSessionResult> create_agent_session(
+    CreateAgentSessionOptions options,
+    std::unique_ptr<runtime::AsyncUserShell> user_shell) {
+    return detail::AgentSessionRuntimeAccess::wrap_factory_result(
+        runtime::SessionFactory::create(
+            std::move(options), std::move(user_shell)));
 }
 
 } // namespace cch::coding_agent
