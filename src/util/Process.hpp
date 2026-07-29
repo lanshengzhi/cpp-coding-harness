@@ -12,11 +12,13 @@
 #include <optional>
 #include <stop_token>
 #include <string>
+#include <vector>
 
 namespace cch::util {
 
 struct ProcessRequest {
-    std::string command;
+    std::filesystem::path executable;
+    std::vector<std::string> arguments;
     std::filesystem::path working_directory;
     std::chrono::milliseconds timeout{30000};
     std::map<std::string, std::string> environment;

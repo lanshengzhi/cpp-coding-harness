@@ -159,6 +159,47 @@ TEST_CASE("SettingsLoader defaults sessionDir to absent", "[settings][session-di
     CHECK_FALSE(settings->session_dir.has_value());
 }
 
+TEST_CASE("SettingsLoader loads compatible Shell settings", "[coding_agent][settings][shell][issue84]") {
+    tests::TempWorkspace workspace;
+    const auto settings_path = workspace.path() / "settings.json";
+    std::ofstream(settings_path)
+        << R"({"shellPath":"~/.local/bin/custom-shell","shellCommandPrefix":"export CCH_SHELL_READY=1"})";
+
+    const auto settings = coding_agent::SettingsLoader::load(settings_path);
+
+    REQUIRE(settings);
+    CHECK(settings->shell_path == "~/.local/bin/custom-shell");
+    CHECK(settings->shell_command_prefix == "export CCH_SHELL_READY=1");
+}
+
+TEST_CASE(
+    "SettingsLoader treats malformed optional Shell settings as absent",
+    "[coding_agent][settings][shell][issue84]") {
+    tests::TempWorkspace workspace;
+    const auto settings_path = workspace.path() / "settings.json";
+    std::ofstream(settings_path)
+        << R"({"shellPath":42,"shellCommandPrefix":["not","compatible"],"model":"gpt-4"})";
+
+    const auto settings = coding_agent::SettingsLoader::load(settings_path);
+
+    REQUIRE(settings);
+    CHECK_FALSE(settings->shell_path.has_value());
+    CHECK_FALSE(settings->shell_command_prefix.has_value());
+    CHECK(settings->model == "gpt-4");
+}
+
+TEST_CASE("SettingsLoader defaults Shell settings to absent", "[coding_agent][settings][shell][issue84]") {
+    tests::TempWorkspace workspace;
+    const auto settings_path = workspace.path() / "settings.json";
+    std::ofstream(settings_path) << R"({"provider":"openai-compatible"})";
+
+    const auto settings = coding_agent::SettingsLoader::load(settings_path);
+
+    REQUIRE(settings);
+    CHECK_FALSE(settings->shell_path.has_value());
+    CHECK_FALSE(settings->shell_command_prefix.has_value());
+}
+
 TEST_CASE("SettingsLoader loads theme selection and project theme policy", "[coding_agent][settings][theme][issue56]") {
     tests::TempWorkspace workspace;
     const auto settings_path = workspace.path() / "settings.json";
@@ -177,7 +218,9 @@ TEST_CASE(
     "[coding_agent][settings][theme][issue56]") {
     tests::TempWorkspace workspace;
     const auto settings_path = workspace.path() / "settings.json";
-    std::ofstream(settings_path) << R"({"provider":"custom","future":{"enabled":true},"theme":"dark"})";
+    std::ofstream(settings_path)
+        << R"({"provider":"custom","shellPath":"/bin/custom-shell",)"
+           R"("shellCommandPrefix":"export READY=1","future":{"enabled":true},"theme":"dark"})";
 
     REQUIRE(coding_agent::SettingsLoader::save_theme_selection(settings_path, "light"));
     const auto settings = coding_agent::SettingsLoader::load(settings_path);
@@ -185,6 +228,8 @@ TEST_CASE(
     REQUIRE(settings);
     CHECK(settings->provider == "custom");
     CHECK(settings->theme == "light");
+    CHECK(settings->shell_path == "/bin/custom-shell");
+    CHECK(settings->shell_command_prefix == "export READY=1");
     const auto content = workspace.read("settings.json");
     CHECK(content.find("future") != std::string::npos);
     CHECK(content.find("enabled") != std::string::npos);

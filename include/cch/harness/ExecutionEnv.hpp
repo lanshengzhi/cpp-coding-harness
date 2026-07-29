@@ -86,6 +86,13 @@ using BinaryData = std::vector<std::byte>;
 /// Content passed to write/append: either UTF-8 text or raw bytes.
 using WriteContent = std::variant<std::string, BinaryData>;
 
+/// Effective user-level configuration for local Shell launches. Authorization
+/// remains an assembly decision and is intentionally not represented here.
+struct ShellConfig {
+    std::optional<std::string> shell_path{std::nullopt};
+    std::optional<std::string> command_prefix{std::nullopt};
+};
+
 /// Options for Shell::exec.
 struct ExecOptions {
     /// Working directory override (relative resolved against workspace).

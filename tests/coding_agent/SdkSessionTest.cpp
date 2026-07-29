@@ -2342,6 +2342,90 @@ TEST_CASE("SessionFactory applies one User Settings snapshot across provider and
     result->session->close();
 }
 
+TEST_CASE(
+    "SessionFactory applies one Shell settings snapshot to an enabled Bash Tool",
+    "[sdk][settings-snapshot][shell][issue84]") {
+#if defined(__unix__) || defined(__APPLE__)
+    TestPaths paths;
+    cch::tests::TempWorkspace agent_dir;
+    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    agent_dir_guard.set(agent_dir.path().string());
+    paths.workspace.write(
+        "custom-shell",
+        "#!/bin/sh\nexport CCH_CUSTOM_SHELL=used\nexec /bin/sh \"$@\"\n");
+    std::error_code permission_error;
+    std::filesystem::permissions(
+        paths.workspace.path() / "custom-shell",
+        std::filesystem::perms::owner_exec,
+        std::filesystem::perm_options::add,
+        permission_error);
+    REQUIRE_FALSE(permission_error);
+    agent_dir.write(
+        "settings.json",
+        "{\"shellPath\":\"" + (paths.workspace.path() / "custom-shell").string() +
+            "\",\"shellCommandPrefix\":\"export CCH_PREFIX=first-snapshot\"}");
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.builtin_tools.bash = true;
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    agent_dir.write(
+        "settings.json",
+        "{\"shellCommandPrefix\":\"export CCH_PREFIX=changed-after-startup\"}");
+
+    auto prompt = result->session->prompt_blocking(
+        "bash printf '%s' \"$CCH_CUSTOM_SHELL:$CCH_PREFIX\"");
+
+    REQUIRE(prompt);
+    const auto assistant_text = result->session->last_assistant_text();
+    REQUIRE(assistant_text.has_value());
+    CHECK(assistant_text->find("used:first-snapshot") != std::string::npos);
+    CHECK(assistant_text->find("changed-after-startup") == std::string::npos);
+    result->session->close();
+    const auto persisted = paths.workspace.read("test-session.jsonl");
+    CHECK(persisted.find("export CCH_PREFIX") == std::string::npos);
+#else
+    SUCCEED("local Shell settings are supported on Unix platforms");
+#endif
+}
+
+TEST_CASE(
+    "a stale configured Shell path defers failure until Bash execution",
+    "[sdk][settings-snapshot][shell][issue84]") {
+#if defined(__unix__) || defined(__APPLE__)
+    TestPaths paths;
+    cch::tests::TempWorkspace agent_dir;
+    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    agent_dir_guard.set(agent_dir.path().string());
+    agent_dir.write(
+        "settings.json",
+        "{\"shellPath\":\"" + (paths.workspace.path() / "missing-shell").string() + "\"}");
+
+    coding_agent::CreateAgentSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.builtin_tools.bash = true;
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    REQUIRE(result->session->prompt_blocking("ordinary prompt"));
+    const auto shell_prompt = result->session->prompt_blocking("bash printf unreachable");
+
+    REQUIRE(shell_prompt);
+    const auto assistant_text = result->session->last_assistant_text();
+    REQUIRE(assistant_text.has_value());
+    CHECK(assistant_text->find("missing-shell") != std::string::npos);
+    result->session->close();
+#else
+    SUCCEED("local Shell settings are supported on Unix platforms");
+#endif
+}
+
 TEST_CASE("SessionFactory creation without User Settings applies defaults silently", "[sdk][settings-snapshot]") {
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
@@ -4869,8 +4953,14 @@ TEST_CASE("SDK host-provided execution environment is not cleaned up by session 
     CHECK(env->cleanup_count == 0);
 }
 
-TEST_CASE("SDK disabled bash is absent from the model-visible tool registry", "[sdk][assembly]") {
+TEST_CASE("SDK disabled bash is absent from the model-visible tool registry", "[sdk][assembly][issue84]") {
     TestPaths paths;
+    cch::tests::TempWorkspace agent_dir;
+    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    agent_dir_guard.set(agent_dir.path().string());
+    agent_dir.write(
+        "settings.json",
+        R"({"shellPath":"/configured/but-unauthorized","shellCommandPrefix":"export SHOULD_NOT_AUTHORIZE=1"})");
     auto capture = std::make_unique<CaptureChatClient>();
     auto* capture_ptr = capture.get();
 

@@ -352,7 +352,9 @@ TEST_CASE("async tools prefer structured arguments over raw provider text", "[to
     CHECK(ai::text_from_content(result->content) == "from-structured");
 }
 
-TEST_CASE("async bash tool carries the active token through exec options", "[tools][async][issue40]") {
+TEST_CASE(
+    "async bash tool preserves its visible command and carries execution options",
+    "[tools][async][issue40][issue84]") {
     tests::TempWorkspace workspace;
     auto env = std::make_shared<CapturingEnv>(workspace.path());
     auto tool = tools::make_async_bash_tool(env);

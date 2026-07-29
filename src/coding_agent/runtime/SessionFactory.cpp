@@ -712,7 +712,11 @@ struct SessionTargetNormalizationOptions {
         exec_env = std::make_shared<harness::AsyncLocalExecutionEnv>(
             workspace,
             plan.builtin_tools.bash,
-            resolved.api_key_env_chain);
+            resolved.api_key_env_chain,
+            harness::ShellConfig{
+                .shell_path = settings.shell_path,
+                .command_prefix = settings.shell_command_prefix,
+            });
     }
 
     auto cleanup_on_failure = [&]() { cleanup_factory_env(env_owned, exec_env.get()); };

@@ -1,6 +1,7 @@
 #include "SyncLocalExecutionEnv.hpp"
 
 #include "ExecutionErrorClassification.hpp"
+#include "ShellResolver.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -54,13 +55,6 @@ std::map<std::string, std::string> sanitized_environment(const std::vector<std::
     return env;
 }
 
-[[nodiscard]] util::Error workspace_error(std::string message) {
-    return util::make_error(util::ErrorCode::Workspace, message, message);
-}
-
-[[nodiscard]] util::Error process_error(std::string message) {
-    return util::make_error(util::ErrorCode::Process, message, message);
-}
 
 } // namespace
 
@@ -68,10 +62,12 @@ SyncLocalExecutionEnv::SyncLocalExecutionEnv(
     std::filesystem::path workspace,
     bool bash_enabled,
     std::vector<std::string> secret_environment_names,
+    ShellConfig shell_config,
     std::shared_ptr<util::AsyncProcessRunner> runner)
     : workspace_(std::move(workspace)),
       bash_enabled_(bash_enabled),
       secret_environment_names_(std::move(secret_environment_names)),
+      shell_config_(std::move(shell_config)),
       runner_(std::move(runner)),
       fs_(workspace_) {}
 
@@ -147,16 +143,20 @@ std::expected<std::string, FileError> SyncLocalExecutionEnv::createTempFile(
 // Pi-shaped shell methods
 // ---------------------------------------------------------------------------
 
-util::Expected<util::ProcessRequest> SyncLocalExecutionEnv::make_exec_request(
+std::expected<util::ProcessRequest, ExecutionError> SyncLocalExecutionEnv::make_exec_request(
     std::string command,
     ExecOptions options) const {
     if (options.stop_token.stop_requested()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Cancelled,
-            "Operation aborted"));
+        return std::unexpected(ExecutionError{
+            .code = ExecutionErrorCode::Aborted,
+            .message = "Operation aborted",
+        });
     }
     if (!bash_enabled_) {
-        return std::unexpected(process_error("bash is disabled by default; rerun with explicit bash enablement"));
+        return std::unexpected(ExecutionError{
+            .code = ExecutionErrorCode::ShellUnavailable,
+            .message = "bash is disabled by default; rerun with explicit bash enablement",
+        });
     }
 
     // Validate cwd override through workspace containment.
@@ -164,12 +164,18 @@ util::Expected<util::ProcessRequest> SyncLocalExecutionEnv::make_exec_request(
     if (options.cwd) {
         auto resolved = fs_.resolve_addressed_path(*options.cwd);
         if (!resolved) {
-            return std::unexpected(resolved.error());
+            return std::unexpected(ExecutionError{
+                .code = ExecutionErrorCode::SpawnError,
+                .message = resolved.error().detail,
+            });
         }
-        std::error_code ec;
-        auto status = std::filesystem::symlink_status(*resolved, ec);
-        if (ec || !std::filesystem::is_directory(status)) {
-            return std::unexpected(workspace_error("cwd does not exist or is not a directory: " + *options.cwd));
+        std::error_code error;
+        const auto status = std::filesystem::symlink_status(*resolved, error);
+        if (error || !std::filesystem::is_directory(status)) {
+            return std::unexpected(ExecutionError{
+                .code = ExecutionErrorCode::SpawnError,
+                .message = "cwd does not exist or is not a directory: " + *options.cwd,
+            });
         }
         working_dir = *resolved;
     }
@@ -187,8 +193,25 @@ util::Expected<util::ProcessRequest> SyncLocalExecutionEnv::make_exec_request(
         }
     }
 
+    std::filesystem::path executable;
+    if (auto shell = resolve_shell_executable(
+            shell_config_.shell_path,
+            workspace_,
+            base_env);
+        !shell) {
+        return std::unexpected(shell.error());
+    } else {
+        executable = std::move(*shell);
+    }
+
+    std::string script = std::move(command);
+    if (shell_config_.command_prefix && !shell_config_.command_prefix->empty()) {
+        script = *shell_config_.command_prefix + "\n" + script;
+    }
+
     util::ProcessRequest request;
-    request.command = std::move(command);
+    request.executable = std::move(executable);
+    request.arguments = {"-c", std::move(script)};
     request.stop_token = options.stop_token;
     request.working_directory = working_dir;
     request.timeout = options.timeout.value_or(std::chrono::milliseconds{30000});
@@ -219,8 +242,7 @@ std::expected<ShellExecResult, ExecutionError> SyncLocalExecutionEnv::exec(
     ExecOptions options) const {
     auto request = make_exec_request(std::move(command), std::move(options));
     if (!request) {
-        return std::unexpected(classify_execution_error(
-            request.error(), ExecutionErrorOrigin::Request));
+        return std::unexpected(request.error());
     }
 
     boost::asio::io_context io;
@@ -238,8 +260,7 @@ std::expected<ShellExecResult, ExecutionError> SyncLocalExecutionEnv::exec(
         return std::unexpected(ExecutionError{ExecutionErrorCode::SpawnError, "process execution did not complete"});
     }
     if (!*process) {
-        return std::unexpected(classify_execution_error(
-            (*process).error(), ExecutionErrorOrigin::Process));
+        return std::unexpected(classify_process_execution_error((*process).error()));
     }
     if ((*process)->timed_out) {
         return std::unexpected(ExecutionError{ExecutionErrorCode::Timeout, "shell command timed out"});

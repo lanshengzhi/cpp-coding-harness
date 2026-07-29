@@ -87,6 +87,8 @@ TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issu
     CHECK(block_mentions(agent_sources, "src/agent/Agent.cpp"));
     CHECK(block_mentions(agent_sources, "src/agent/AgentLoop.cpp"));
     CHECK(block_mentions(cmake, "add_library(cch_harness"));
+    const auto harness_sources = cmake_command_block(cmake, "add_library(cch_harness");
+    CHECK(block_mentions(harness_sources, "src/harness/ShellResolver.cpp"));
     CHECK(block_mentions(cmake, "add_library(cch_tools"));
     CHECK(block_mentions(cmake, "add_library(cch_coding_agent_runtime"));
 

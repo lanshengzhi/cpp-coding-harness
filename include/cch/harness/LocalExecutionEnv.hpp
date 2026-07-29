@@ -12,7 +12,8 @@ public:
     AsyncLocalExecutionEnv(
         std::filesystem::path workspace,
         bool bash_enabled = false,
-        std::vector<std::string> secret_environment_names = {});
+        std::vector<std::string> secret_environment_names = {},
+        ShellConfig shell_config = {});
     AsyncLocalExecutionEnv(AsyncLocalExecutionEnv&&) noexcept;
     AsyncLocalExecutionEnv& operator=(AsyncLocalExecutionEnv&&) noexcept;
     ~AsyncLocalExecutionEnv() override;

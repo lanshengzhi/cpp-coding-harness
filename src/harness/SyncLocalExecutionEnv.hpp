@@ -16,6 +16,7 @@ public:
         std::filesystem::path workspace,
         bool bash_enabled = false,
         std::vector<std::string> secret_environment_names = {},
+        ShellConfig shell_config = {},
         std::shared_ptr<util::AsyncProcessRunner> runner =
             std::make_shared<util::DefaultAsyncProcessRunner>());
 
@@ -50,7 +51,7 @@ public:
 
     // -- Pi-shaped shell methods ---
 
-    [[nodiscard]] util::Expected<util::ProcessRequest> make_exec_request(
+    [[nodiscard]] std::expected<util::ProcessRequest, ExecutionError> make_exec_request(
         std::string command,
         ExecOptions options) const;
     [[nodiscard]] ShellExecResult exec_result_from_process(const util::ProcessResult& process) const;
@@ -62,6 +63,7 @@ private:
     std::filesystem::path workspace_;
     bool bash_enabled_{false};
     std::vector<std::string> secret_environment_names_;
+    ShellConfig shell_config_;
     std::shared_ptr<util::AsyncProcessRunner> runner_;
     WorkspaceFileSystem fs_;
 };

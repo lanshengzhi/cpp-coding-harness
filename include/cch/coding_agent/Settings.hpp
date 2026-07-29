@@ -32,6 +32,12 @@ struct UserSettings {
     std::optional<ResourceEnablement> project_themes{std::nullopt};
     /// Native TUI theme selected by name.
     std::optional<std::string> theme{std::nullopt};
+    /// Optional Shell executable (pi: `shellPath`); a leading home marker is
+    /// expanded by the local Shell adapter when execution is attempted.
+    std::optional<std::string> shell_path{std::nullopt};
+    /// Optional script prefix (pi: `shellCommandPrefix`) applied only at the
+    /// local process-launch boundary.
+    std::optional<std::string> shell_command_prefix{std::nullopt};
     /// CLI session-storage preference (pi: `sessionDir`, same format as the
     /// `--session-dir` flag). Consumed only by CLI automatic-directory
     /// resolution; SDK default persistence never reads it.

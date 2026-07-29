@@ -167,11 +167,17 @@ boost::asio::awaitable<Expected<ProcessResult>> DefaultAsyncProcessRunner::run(P
             }
         }
 
+        if (request.executable.empty()) {
+            co_return std::unexpected(make_error(
+                ErrorCode::Process,
+                "process execution failed",
+                "process executable is empty"));
+        }
+
         bp::group process_group;
         bp::child child(
-            bp::search_path("bash"),
-            "-lc",
-            request.command,
+            request.executable.string(),
+            bp::args(request.arguments),
             bp::start_dir = request.working_directory.string(),
             bp::std_out > stdout_pipe,
             bp::std_err > stderr_pipe,

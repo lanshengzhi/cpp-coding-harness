@@ -5,21 +5,11 @@
 
 namespace cch::harness {
 
-enum class ExecutionErrorOrigin {
-    Request,
-    Process,
-};
-
-[[nodiscard]] inline ExecutionError classify_execution_error(
-    const util::Error& error,
-    ExecutionErrorOrigin origin) {
+[[nodiscard]] inline ExecutionError classify_process_execution_error(
+    const util::Error& error) {
     auto code = ExecutionErrorCode::SpawnError;
     if (error.code == util::ErrorCode::Cancelled) {
         code = ExecutionErrorCode::Aborted;
-    } else if (origin == ExecutionErrorOrigin::Request) {
-        if (error.detail.find("disabled") != std::string::npos) {
-            code = ExecutionErrorCode::ShellUnavailable;
-        }
     } else if (error.code == util::ErrorCode::Timeout) {
         code = ExecutionErrorCode::Timeout;
     } else if (error.detail.find("callback") != std::string::npos) {

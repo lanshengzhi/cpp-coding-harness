@@ -22,6 +22,17 @@ namespace {
         std::move(detail));
 }
 
+void load_compatible_string(
+    const util::JsonValue::object_t& object,
+    std::string_view key,
+    std::optional<std::string>& target) {
+    if (auto member = object.find(std::string{key}); member != object.end()) {
+        if (const auto* value = member->second.get_if<std::string>()) {
+            target = *value;
+        }
+    }
+}
+
 [[nodiscard]] util::ExpectedVoid write_settings_text(
     const std::filesystem::path& settings_path,
     std::string serialized) {
@@ -191,6 +202,8 @@ util::Expected<UserSettings> SettingsLoader::load(const std::filesystem::path& s
                 settings.theme = *str;
             }
         }
+        load_compatible_string(obj, "shellPath", settings.shell_path);
+        load_compatible_string(obj, "shellCommandPrefix", settings.shell_command_prefix);
         if (auto it = obj.find("default_project_trust"); it != obj.end()) {
             if (auto* str = it->second.get_if<std::string>()) {
                 auto parsed = parse_default_project_trust(*str);

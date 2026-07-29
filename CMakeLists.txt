@@ -141,6 +141,7 @@ target_link_libraries(cch_agent
 
 add_library(cch_harness
     src/harness/AsyncLocalExecutionEnv.cpp
+    src/harness/ShellResolver.cpp
     src/harness/SyncLocalExecutionEnv.cpp
     src/harness/WorkspaceFileSystemFdWalk.cpp
     src/harness/WorkspaceFileSystemLegacy.cpp

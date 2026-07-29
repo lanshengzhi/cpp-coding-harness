@@ -85,6 +85,8 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
                   agent::AgentState>);
     static_assert(std::is_aggregate_v<coding_agent::AgentSessionSnapshot>);
     static_assert(std::is_copy_constructible_v<coding_agent::AgentSessionSnapshot>);
+    static_assert(std::is_aggregate_v<coding_agent::UserSettings>);
+    static_assert(std::is_aggregate_v<harness::ShellConfig>);
     static_assert(std::is_same_v<
                   decltype(std::declval<const coding_agent::AgentSession&>().snapshot()),
                   coding_agent::AgentSessionSnapshot>);

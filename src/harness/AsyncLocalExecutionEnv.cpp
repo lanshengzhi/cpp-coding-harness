@@ -37,11 +37,13 @@ template <typename Operation>
 AsyncLocalExecutionEnv::AsyncLocalExecutionEnv(
     std::filesystem::path workspace,
     bool bash_enabled,
-    std::vector<std::string> secret_environment_names)
+    std::vector<std::string> secret_environment_names,
+    ShellConfig shell_config)
     : sync_(std::make_unique<SyncLocalExecutionEnv>(
         std::move(workspace),
         bash_enabled,
-        std::move(secret_environment_names))) {}
+        std::move(secret_environment_names),
+        std::move(shell_config))) {}
 
 AsyncLocalExecutionEnv::AsyncLocalExecutionEnv(AsyncLocalExecutionEnv&&) noexcept = default;
 AsyncLocalExecutionEnv& AsyncLocalExecutionEnv::operator=(AsyncLocalExecutionEnv&&) noexcept = default;
@@ -163,13 +165,11 @@ boost::asio::awaitable<std::expected<ShellExecResult, ExecutionError>> AsyncLoca
     ExecOptions options) {
     auto request = sync_->make_exec_request(std::move(command), std::move(options));
     if (!request) {
-        co_return std::unexpected(classify_execution_error(
-            request.error(), ExecutionErrorOrigin::Request));
+        co_return std::unexpected(request.error());
     }
     auto process = co_await sync_->process_runner()->run(std::move(*request));
     if (!process) {
-        co_return std::unexpected(classify_execution_error(
-            process.error(), ExecutionErrorOrigin::Process));
+        co_return std::unexpected(classify_process_execution_error(process.error()));
     }
     if (process->timed_out) {
         co_return std::unexpected(ExecutionError{ExecutionErrorCode::Timeout, "shell command timed out"});

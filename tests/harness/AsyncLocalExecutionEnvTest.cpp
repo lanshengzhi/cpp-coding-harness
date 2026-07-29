@@ -1,8 +1,10 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
+#include "../support/EnvVarGuard.hpp"
 #include "../support/TempWorkspace.hpp"
 
 #include <cch/harness/LocalExecutionEnv.hpp>
+#include "harness/ShellResolver.hpp"
 #include "harness/SyncLocalExecutionEnv.hpp"
 #include "util/Process.hpp"
 
@@ -15,6 +17,7 @@
 #include <charconv>
 #include <chrono>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -25,6 +28,8 @@
 #if defined(__unix__) || defined(__APPLE__)
 #include <cerrno>
 #include <csignal>
+#include <pwd.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #endif
 
@@ -186,6 +191,168 @@ TEST_CASE("async local execution env runs shell commands concurrently", "[harnes
     CHECK(elapsed < std::chrono::milliseconds(1100));
 }
 
+TEST_CASE("Shell adapter expands a custom path and joins a non-empty prefix at launch", "[harness][shell][issue84]") {
+#if defined(__unix__) || defined(__APPLE__)
+    tests::TempWorkspace workspace;
+    tests::EnvVarGuard home_guard{"HOME", workspace.path().string()};
+    workspace.write("bin/custom-shell", "#!/bin/sh\nexit 0\n");
+    REQUIRE(::chmod((workspace.path() / "bin/custom-shell").c_str(), 0700) == 0);
+    auto runner = std::make_shared<FakeAsyncProcessRunner>();
+    runner->next.exit_code = 0;
+    harness::ShellConfig shell_config{
+        .shell_path = "~/bin/custom-shell",
+        .command_prefix = "export CCH_READY=1",
+    };
+    harness::SyncLocalExecutionEnv env(
+        workspace.path(), true, {"HOME"}, std::move(shell_config), runner);
+
+    auto shell = env.exec("printf '%s' \"$CCH_READY\"");
+
+    REQUIRE(shell);
+    REQUIRE(runner->requests.size() == 1);
+    CHECK(runner->requests[0].executable == workspace.path() / "bin/custom-shell");
+    REQUIRE(runner->requests[0].arguments.size() == 2);
+    CHECK(runner->requests[0].arguments[0] == "-c");
+    CHECK(runner->requests[0].arguments[1] ==
+          "export CCH_READY=1\nprintf '%s' \"$CCH_READY\"");
+    CHECK(runner->requests[0].working_directory == workspace.path());
+#else
+    SUCCEED("custom Shell resolution is supported on Unix platforms");
+#endif
+}
+
+TEST_CASE("Shell resolution expands home when HOME is absent from the environment", "[harness][shell][issue84]") {
+#if defined(__unix__) || defined(__APPLE__)
+    tests::TempWorkspace workspace;
+    tests::EnvVarGuard home_guard{"HOME", std::nullopt};
+    const auto* user = ::getpwuid(::getuid());
+    REQUIRE(user != nullptr);
+    REQUIRE(user->pw_dir != nullptr);
+    const std::string missing_name = "cch-issue84-missing-shell";
+
+    const auto resolved = harness::resolve_shell_executable(
+        "~/" + missing_name,
+        workspace.path(),
+        {});
+
+    REQUIRE_FALSE(resolved);
+    CHECK(resolved.error().code == harness::ExecutionErrorCode::ShellUnavailable);
+    CHECK(resolved.error().message.find(
+              (std::filesystem::path{user->pw_dir} / missing_name).string()) != std::string::npos);
+    CHECK(resolved.error().message.find((workspace.path() / "~").string()) == std::string::npos);
+#else
+    SUCCEED("home expansion is supported on Unix platforms");
+#endif
+}
+
+TEST_CASE("Shell adapter defaults to non-login system bash", "[harness][shell][issue84]") {
+#if defined(__unix__) || defined(__APPLE__)
+    tests::TempWorkspace workspace;
+    auto runner = std::make_shared<FakeAsyncProcessRunner>();
+    runner->next.exit_code = 0;
+    harness::SyncLocalExecutionEnv env(workspace.path(), true, {}, {}, runner);
+
+    auto shell = env.exec("printf default");
+
+    REQUIRE(shell);
+    REQUIRE(runner->requests.size() == 1);
+    CHECK(runner->requests[0].executable == "/bin/bash");
+    REQUIRE(runner->requests[0].arguments.size() == 2);
+    CHECK(runner->requests[0].arguments[0] == "-c");
+    CHECK(runner->requests[0].arguments[1] == "printf default");
+#else
+    SUCCEED("default Shell resolution is supported on Unix platforms");
+#endif
+}
+
+TEST_CASE("Shell adapter ignores an empty command prefix", "[harness][shell][issue84]") {
+#if defined(__unix__) || defined(__APPLE__)
+    tests::TempWorkspace workspace;
+    auto runner = std::make_shared<FakeAsyncProcessRunner>();
+    runner->next.exit_code = 0;
+    harness::ShellConfig shell_config{.command_prefix = ""};
+    harness::SyncLocalExecutionEnv env(
+        workspace.path(), true, {}, std::move(shell_config), runner);
+
+    auto shell = env.exec("printf plain");
+
+    REQUIRE(shell);
+    REQUIRE(runner->requests.size() == 1);
+    REQUIRE(runner->requests[0].arguments.size() == 2);
+    CHECK(runner->requests[0].arguments[1] == "printf plain");
+#else
+    SUCCEED("Shell prefix behavior is supported on Unix platforms");
+#endif
+}
+
+TEST_CASE("Shell resolution prefers PATH bash before sh when system bash is unavailable", "[harness][shell][issue84]") {
+#if defined(__unix__) || defined(__APPLE__)
+    tests::TempWorkspace workspace;
+    workspace.write("bin/bash", "#!/bin/sh\nexit 0\n");
+    workspace.write("bin/sh", "#!/bin/sh\nexit 0\n");
+    REQUIRE(::chmod((workspace.path() / "bin/bash").c_str(), 0700) == 0);
+    REQUIRE(::chmod((workspace.path() / "bin/sh").c_str(), 0700) == 0);
+    const std::map<std::string, std::string> environment{
+        {"PATH", (workspace.path() / "bin").string()},
+    };
+
+    const auto resolved = harness::resolve_shell_executable(
+        std::nullopt,
+        workspace.path(),
+        environment,
+        workspace.path() / "missing-system-bash");
+
+    REQUIRE(resolved);
+    CHECK(*resolved == workspace.path() / "bin/bash");
+#else
+    SUCCEED("PATH Shell resolution is supported on Unix platforms");
+#endif
+}
+
+TEST_CASE("Shell resolution falls back to PATH sh", "[harness][shell][issue84]") {
+#if defined(__unix__) || defined(__APPLE__)
+    tests::TempWorkspace workspace;
+    workspace.write("bin/sh", "#!/bin/sh\nexit 0\n");
+    REQUIRE(::chmod((workspace.path() / "bin/sh").c_str(), 0700) == 0);
+    const std::map<std::string, std::string> environment{
+        {"PATH", (workspace.path() / "bin").string()},
+    };
+
+    const auto resolved = harness::resolve_shell_executable(
+        std::nullopt,
+        workspace.path(),
+        environment,
+        workspace.path() / "missing-system-bash");
+
+    REQUIRE(resolved);
+    CHECK(*resolved == workspace.path() / "bin/sh");
+#else
+    SUCCEED("sh fallback is supported on Unix platforms");
+#endif
+}
+
+TEST_CASE("a stale configured Shell path fails only attempted execution", "[harness][shell][issue84]") {
+#if defined(__unix__) || defined(__APPLE__)
+    tests::TempWorkspace workspace;
+    harness::ShellConfig shell_config{
+        .shell_path = (workspace.path() / "stale-shell").string(),
+        .command_prefix = "prefix-must-not-appear-in-diagnostics",
+    };
+    harness::AsyncLocalExecutionEnv env(workspace.path(), true, {}, std::move(shell_config));
+
+    auto read = run_awaitable_pi(env.absolutePath("ordinary.txt", std::stop_token{}));
+    REQUIRE(read);
+    const auto shell = run_awaitable_pi(env.exec("printf command"));
+
+    REQUIRE_FALSE(shell);
+    CHECK(shell.error().code == harness::ExecutionErrorCode::ShellUnavailable);
+    CHECK(shell.error().message.find("stale-shell") != std::string::npos);
+    CHECK(shell.error().message.find("prefix-must-not-appear") == std::string::npos);
+#else
+    SUCCEED("custom Shell resolution is supported on Unix platforms");
+#endif
+}
+
 TEST_CASE("async local execution env sanitizes shell environment through process capability", "[harness][async][u2]") {
 #if defined(__unix__) || defined(__APPLE__)
     setenv("OPENAI_API_KEY", "sk-test-secret", 1);
@@ -197,7 +364,8 @@ TEST_CASE("async local execution env sanitizes shell environment through process
     auto runner = std::make_shared<FakeAsyncProcessRunner>();
     runner->next.exit_code = 0;
     runner->next.stdout_output = "ok";
-    harness::SyncLocalExecutionEnv env(workspace.path(), true, {"CCH_CREDENTIAL", "KIMI_API_KEY"}, runner);
+    harness::SyncLocalExecutionEnv env(
+        workspace.path(), true, {"CCH_CREDENTIAL", "KIMI_API_KEY"}, {}, runner);
 
     std::stop_source stop_source;
     harness::ExecOptions opts;
@@ -300,7 +468,8 @@ TEST_CASE("cancelling exec terminates the process group and reaps the shell", "[
 TEST_CASE("default process runner caps newline-free output without waiting for line breaks", "[harness][async][process]") {
     util::DefaultAsyncProcessRunner runner;
     util::ProcessRequest request;
-    request.command = "printf '%60000s' '' | tr ' ' x";
+    request.executable = "/bin/bash";
+    request.arguments = {"-c", "printf '%60000s' '' | tr ' ' x"};
     request.working_directory = std::filesystem::current_path();
     request.timeout = std::chrono::milliseconds(5000);
     request.output_limit = util::OutputLimit{.max_bytes = 1024, .max_lines = 2000};
@@ -322,8 +491,9 @@ TEST_CASE("default process runner caps newline-free output without waiting for l
 TEST_CASE("default process runner bounds truncated output on UTF-8 character boundaries", "[harness][async][process][issue72]") {
     util::DefaultAsyncProcessRunner runner;
     util::ProcessRequest request;
+    request.executable = "/bin/bash";
     // 500 euro signs (3 bytes each); a byte-exact 1024 cap would split the last one.
-    request.command = "printf '€%.0s' {1..500}";
+    request.arguments = {"-c", "printf '€%.0s' {1..500}"};
     request.working_directory = std::filesystem::current_path();
     request.timeout = std::chrono::milliseconds(5000);
     request.output_limit = util::OutputLimit{.max_bytes = 1024, .max_lines = 2000};
@@ -760,4 +930,23 @@ TEST_CASE("pi-shaped exec preserves nonzero exit codes", "[harness][u3]") {
     auto result = run_awaitable_pi(env.exec("exit 42"));
     REQUIRE(result);
     CHECK(result->exitCode == 42);
+}
+
+TEST_CASE("separate Shell executions restart from the canonical workspace", "[harness][shell][issue84]") {
+#if defined(__unix__) || defined(__APPLE__)
+    tests::TempWorkspace workspace;
+    std::filesystem::create_directory(workspace.path() / "nested");
+    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+
+    const auto changed = run_awaitable_pi(env.exec("cd nested && pwd"));
+    const auto restarted = run_awaitable_pi(env.exec("pwd"));
+
+    REQUIRE(changed);
+    REQUIRE(restarted);
+    CHECK(changed->stdout_output.find((workspace.path() / "nested").string()) != std::string::npos);
+    CHECK(restarted->stdout_output.find(workspace.path().string()) != std::string::npos);
+    CHECK(restarted->stdout_output.find((workspace.path() / "nested").string()) == std::string::npos);
+#else
+    SUCCEED("Shell execution is supported on Unix platforms");
+#endif
 }
