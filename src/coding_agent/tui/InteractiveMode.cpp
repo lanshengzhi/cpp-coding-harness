@@ -625,7 +625,10 @@ public:
         if (user_bash_progress_) {
             const auto prefix = user_bash_progress_->exclude_from_context ? "!!" : "!";
             cch::tui::TruncatedText header{std::format(
-                "Bash running {} {}",
+                "{} {} {}",
+                user_bash_progress_->awaiting_commitment
+                    ? "Bash pending"
+                    : "Bash running",
                 prefix,
                 user_bash_progress_->command)};
             if (auto rendered = header.render(width); !rendered) {

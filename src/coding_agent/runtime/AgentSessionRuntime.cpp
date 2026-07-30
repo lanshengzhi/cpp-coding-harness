@@ -13,7 +13,11 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/post.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/asio/system_executor.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_awaitable.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -185,7 +189,7 @@ AgentSessionRuntime::AgentSessionRuntime(
 }
 
 util::ExpectedVoid AgentSessionRuntime::reject_if_closed() const {
-    if (state_ == State::Closing || state_ == State::Closed) {
+    if (lifecycle_ != Lifecycle::Open) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "session is closed"));
@@ -194,12 +198,58 @@ util::ExpectedVoid AgentSessionRuntime::reject_if_closed() const {
 }
 
 util::ExpectedVoid AgentSessionRuntime::reject_if_busy() const {
-    if (state_ == State::RunningPrompt || state_ == State::RunningUserBash) {
+    if (prompt_active_) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "session is busy (prompt already in flight)"));
     }
     return {};
+}
+
+util::ExpectedVoid AgentSessionRuntime::reject_if_user_bash_busy() const {
+    if (user_bash_active_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "a User Bash command is already in flight"));
+    }
+    return {};
+}
+
+util::ExpectedVoid AgentSessionRuntime::commit_user_bash_completion(
+    UserBashCompletion& completion) {
+    // Live Session State advances first; a Session Store failure is reported
+    // on the completion diagnostic without rolling the message back.
+    if (auto committed = agent::detail::AgentMessageAccess::append_bash_execution(
+            *agent_, completion.message);
+        !committed) {
+        return std::unexpected(safe_user_bash_error(committed.error()));
+    }
+    if (auto persisted = session_.store->append(
+            ai::MessageVariant{completion.message});
+        !persisted) {
+        completion.diagnostic = safe_user_bash_error(persisted.error());
+    }
+    return {};
+}
+
+void AgentSessionRuntime::flush_pending_user_bash() {
+    if (pending_user_bash_.empty()) return;
+    auto pending = std::exchange(pending_user_bash_, {});
+    for (auto& entry : pending) {
+        if (agent_ && session_.store) {
+            entry->commit_result = commit_user_bash_completion(entry->completion);
+        } else {
+            entry->commit_result = std::unexpected(util::make_error(
+                util::ErrorCode::Validation,
+                "session Agent is unavailable"));
+        }
+        try {
+            (void)entry->committed_signal.cancel();
+        } catch (...) {
+            // Releasing the awaiting coroutine is best-effort; the commitment
+            // above is the authoritative outcome.
+        }
+    }
 }
 
 boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
@@ -214,7 +264,7 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
         co_return std::unexpected(rejected.error());
     }
 
-    state_ = State::RunningPrompt;
+    prompt_active_ = true;
     active_stop_source_.emplace();
 
     util::ExpectedVoid result;
@@ -253,12 +303,21 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
     }
 
     active_stop_source_.reset();
-    if (state_ == State::Closing) {
+    // The whole run (including steering and follow-up continuations) has
+    // settled: commit every Bash that completed mid-run exactly once, in
+    // completion order, before close finalization releases the store. This is
+    // also the flush point that guarantees a later idle Prompt builds provider
+    // context only after every completed Bash committed.
+    flush_pending_user_bash();
+    prompt_active_ = false;
+    if (lifecycle_ == Lifecycle::Closing) {
         // The prompt awaitable is the existing observation seam for active
-        // close: owned environment cleanup finishes before it settles.
-        co_await finalize_close_after_active_work();
-    } else if (state_ == State::RunningPrompt) {
-        state_ = State::Open;
+        // close: owned environment cleanup finishes before it settles. An
+        // overlapping User Bash finalizes close when it is the last active
+        // work instead.
+        if (!user_bash_active_) {
+            co_await finalize_close_after_active_work();
+        }
     }
     co_return result;
 }
@@ -271,7 +330,7 @@ AgentSessionRuntime::run_user_bash(
     if (auto rejected = reject_if_closed(); !rejected) {
         co_return std::unexpected(rejected.error());
     }
-    if (auto rejected = reject_if_busy(); !rejected) {
+    if (auto rejected = reject_if_user_bash_busy(); !rejected) {
         co_return std::unexpected(rejected.error());
     }
     if (!services_.user_shell) {
@@ -280,7 +339,7 @@ AgentSessionRuntime::run_user_bash(
             "User Shell is unavailable"));
     }
 
-    state_ = State::RunningUserBash;
+    user_bash_active_ = true;
     active_user_bash_stop_source_.emplace();
     const auto safe_command = safe_user_bash_command(command);
     util::Expected<UserShellResult> shell_result = std::unexpected(util::make_error(
@@ -295,19 +354,19 @@ AgentSessionRuntime::run_user_bash(
                 });
                 !started) {
                 active_user_bash_stop_source_.reset();
-                state_ = State::Open;
+                user_bash_active_ = false;
                 co_return std::unexpected(safe_user_bash_error(started.error()));
             }
         } catch (const std::exception& error) {
             active_user_bash_stop_source_.reset();
-            state_ = State::Open;
+            user_bash_active_ = false;
             co_return std::unexpected(util::make_error(
                 util::ErrorCode::Unknown,
                 "User Bash progress callback failed",
                 bounded_redacted_presentation(error.what())));
         } catch (...) {
             active_user_bash_stop_source_.reset();
-            state_ = State::Open;
+            user_bash_active_ = false;
             co_return std::unexpected(util::make_error(
                 util::ErrorCode::Unknown,
                 "User Bash progress callback failed"));
@@ -355,12 +414,17 @@ AgentSessionRuntime::run_user_bash(
     }
 
     active_user_bash_stop_source_.reset();
-    const bool closing = state_ == State::Closing;
-    if (!closing) state_ = State::Open;
+    user_bash_active_ = false;
+    const auto finalize_if_last_active_work =
+        [this]() -> boost::asio::awaitable<void> {
+        if (lifecycle_ == Lifecycle::Closing && !prompt_active_) {
+            co_await finalize_close_after_active_work();
+        }
+    };
 
     if (!shell_result) {
         output.discard();
-        if (closing) co_await finalize_close_after_active_work();
+        co_await finalize_if_last_active_work();
         co_return std::unexpected(safe_user_bash_error(shell_result.error()));
     }
 
@@ -372,36 +436,66 @@ AgentSessionRuntime::run_user_bash(
         exclude_from_context,
         completion_timestamp_ms());
 
-    if (!agent_) {
-        if (closing) co_await finalize_close_after_active_work();
+    UserBashCompletion completion{
+        .message = std::move(message),
+        .diagnostic = artifact_error
+            ? std::optional<util::Error>{safe_user_bash_error(*artifact_error)}
+            : std::nullopt,
+    };
+
+    if (prompt_active_) {
+        // Defer commitment until the whole Agent run, including steering and
+        // follow-up continuations, settles: a Bash message must not split an
+        // in-flight tool-call/tool-result sequence (pi recordBashResult
+        // semantics). The completion timestamp above already records process
+        // completion, not this deferral.
+        auto pending = std::make_shared<PendingUserBashCommit>(PendingUserBashCommit{
+            .completion = std::move(completion),
+            .committed_signal = boost::asio::steady_timer(
+                co_await boost::asio::this_coro::executor),
+            .commit_result = {},
+        });
+        pending->committed_signal.expires_at(
+            std::chrono::steady_clock::time_point::max());
+        pending_user_bash_.push_back(pending);
+        if (progress_sink) {
+            try {
+                (void)progress_sink(UserBashProgress{
+                    .command = safe_command,
+                    .output = output.tail(),
+                    .exclude_from_context = exclude_from_context,
+                    .awaiting_commitment = true,
+                });
+            } catch (...) {
+                // Execution already completed; a presentation failure must not
+                // lose the pending commitment.
+            }
+        }
+        boost::system::error_code wait_error;
+        co_await pending->committed_signal.async_wait(
+            boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
+        if (!pending->commit_result) {
+            co_return std::unexpected(pending->commit_result.error());
+        }
+        co_return std::move(pending->completion);
+    }
+
+    if (!agent_ || !session_.store) {
+        co_await finalize_if_last_active_work();
         co_return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "session Agent is unavailable"));
     }
-    if (auto committed = agent::detail::AgentMessageAccess::append_bash_execution(
-            *agent_, message);
-        !committed) {
-        if (closing) co_await finalize_close_after_active_work();
+    if (auto committed = commit_user_bash_completion(completion); !committed) {
+        co_await finalize_if_last_active_work();
         co_return std::unexpected(committed.error());
     }
-
-    UserBashCompletion completion{
-        .message = std::move(message),
-        .diagnostic = std::nullopt,
-    };
-    if (auto persisted = session_.store->append(
-            ai::MessageVariant{completion.message});
-        !persisted) {
-        completion.diagnostic = safe_user_bash_error(persisted.error());
-    } else if (artifact_error) {
-        completion.diagnostic = safe_user_bash_error(*artifact_error);
-    }
-    if (closing) co_await finalize_close_after_active_work();
+    co_await finalize_if_last_active_work();
     co_return completion;
 }
 
 void AgentSessionRuntime::cancel_user_bash() {
-    if (state_ == State::RunningUserBash && active_user_bash_stop_source_) {
+    if (user_bash_active_ && active_user_bash_stop_source_) {
         (void)active_user_bash_stop_source_->request_stop();
     }
 }
@@ -561,36 +655,30 @@ const std::vector<PromptTemplate>& AgentSessionRuntime::templates() const {
 }
 
 void AgentSessionRuntime::abort() {
-    if (state_ == State::RunningPrompt && active_stop_source_) {
+    if (prompt_active_ && active_stop_source_) {
         (void)active_stop_source_->request_stop();
     }
 }
 
 void AgentSessionRuntime::close() noexcept {
-    if (state_ == State::Closing || state_ == State::Closed) {
+    if (lifecycle_ != Lifecycle::Open) {
         return;
     }
+    lifecycle_ = Lifecycle::Closing;
 
-    if (state_ == State::RunningPrompt) {
-        // Request the same prompt-scoped cancellation as abort(), but retain
-        // the active loop, callbacks, commitment, store, and capabilities until
-        // run_prompt unwinds after the ordinary aborted lifecycle.
-        state_ = State::Closing;
-        if (active_stop_source_) {
-            (void)active_stop_source_->request_stop();
-        }
-        return;
+    // Request work-scoped cancellation but retain the active loop, callbacks,
+    // commitment, store, and capabilities until each active operation unwinds
+    // through its ordinary lifecycle. The last active work to settle
+    // finalizes the close.
+    if (prompt_active_ && active_stop_source_) {
+        (void)active_stop_source_->request_stop();
     }
-    if (state_ == State::RunningUserBash) {
-        state_ = State::Closing;
-        if (active_user_bash_stop_source_) {
-            (void)active_user_bash_stop_source_->request_stop();
-        }
-        return;
+    if (user_bash_active_ && active_user_bash_stop_source_) {
+        (void)active_user_bash_stop_source_->request_stop();
     }
-
-    state_ = State::Closing;
-    finalize_close();
+    if (!prompt_active_ && !user_bash_active_) {
+        finalize_close();
+    }
 }
 
 std::shared_ptr<harness::AsyncExecutionEnv>
@@ -620,15 +708,15 @@ boost::asio::awaitable<void> AgentSessionRuntime::finalize_close_after_active_wo
             // cleanup() is best-effort and must not make close fallible.
         }
     }
-    state_ = State::Closed;
+    lifecycle_ = Lifecycle::Closed;
 }
 
 void AgentSessionRuntime::finalize_close() noexcept {
-    if (state_ == State::Closed) {
+    if (lifecycle_ == Lifecycle::Closed) {
         return;
     }
     auto owned_env = release_close_resources();
-    state_ = State::Closed;
+    lifecycle_ = Lifecycle::Closed;
 
     // Idle close has no host executor to await. Transfer the factory-owned
     // environment to a posted best-effort cleanup task; host-owned environments

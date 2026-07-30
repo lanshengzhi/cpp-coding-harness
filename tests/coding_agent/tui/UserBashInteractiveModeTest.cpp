@@ -9,6 +9,7 @@
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/FakeUserShell.hpp"
+#include "support/GatedChatClient.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include "../../../third_party/catch2/catch_test_macros.hpp"
@@ -630,4 +631,117 @@ TEST_CASE(
     CHECK((*completion)->diagnostic->detail.size() <=
         coding_agent::kMaxPresentationPayloadBytes);
     CHECK((*completion)->diagnostic->detail.find(secret) == std::string::npos);
+}
+
+TEST_CASE(
+    "User Bash overlaps an active Agent run through the Native TUI",
+    "[coding_agent][tui][issue87]") {
+    tests::TempWorkspace workspace;
+    auto client = std::make_unique<tests::GatedChatClient>();
+    auto* client_pointer = client.get();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    auto* shell_pointer = shell.get();
+    shell_pointer->enqueue({
+        .updates = {"overlap output"},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = true,
+    });
+    shell_pointer->enqueue({
+        .updates = {"later output"},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = true,
+    });
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.chat_client = std::move(client);
+    options.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(
+        std::move(options), std::move(shell));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = workspace.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            REQUIRE(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("prompt one\r"));
+    drain_ready(io);
+    REQUIRE(client_pointer->requests.size() == 1);
+
+    // User Bash is admitted while the Agent run is active.
+    REQUIRE(terminal.inject_input("! during run\r"));
+    drain_ready(io);
+    REQUIRE(shell_pointer->commands.size() == 1);
+    CHECK(shell_pointer->commands[0] == "during run");
+
+    // A second User Bash is rejected, restored to the editor, and diagnosed.
+    REQUIRE(terminal.inject_input("! second\r"));
+    drain_ready(io);
+    CHECK(shell_pointer->commands.size() == 1);
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("already in flight") != std::string::npos);
+    CHECK(screen.find("! second") != std::string::npos);
+    REQUIRE(terminal.inject_input("\x03"));
+    drain_ready(io);
+
+    shell_pointer->release();
+    drain_ready(io);
+    // Completed during the run: visibly pending, not yet committed.
+    CHECK_FALSE(has_bash_command(
+        created->session->snapshot().agent_state.messages, "during run"));
+    screen = visible_screen(terminal);
+    CHECK(screen.find("Bash pending") != std::string::npos);
+
+    client_pointer->release();
+    drain_ready(io);
+    // The run settled: committed exactly once after the run's messages.
+    auto snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.messages.size() == 3);
+    CHECK(std::holds_alternative<ai::UserMessage>(snapshot.agent_state.messages[0]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(snapshot.agent_state.messages[1]));
+    CHECK(has_bash_command(snapshot.agent_state.messages, "during run"));
+    CHECK(visible_screen(terminal).find("overlap output") != std::string::npos);
+
+    // Reverse direction: an ordinary Prompt is admitted during active Bash.
+    REQUIRE(terminal.inject_input("! later bash\r"));
+    drain_ready(io);
+    REQUIRE(shell_pointer->commands.size() == 2);
+    REQUIRE(terminal.inject_input("prompt during bash\r"));
+    drain_ready(io);
+    CHECK(client_pointer->requests.size() == 2);
+
+    shell_pointer->release();
+    drain_ready(io);
+    CHECK_FALSE(has_bash_command(
+        created->session->snapshot().agent_state.messages, "later bash"));
+    client_pointer->release();
+    drain_ready(io);
+    snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.messages.size() == 6);
+    CHECK(has_bash_command(snapshot.agent_state.messages, "later bash"));
+    CHECK(visible_screen(terminal).find("later output") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
 }

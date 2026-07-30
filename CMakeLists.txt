@@ -263,6 +263,7 @@ if(CCH_BUILD_TESTS)
         tests/support/ComplexToolSchemaFixture.hpp
         tests/support/ImageFixture.hpp
         tests/support/PseudoTerminal.hpp
+        tests/support/GatedChatClient.hpp
         tests/support/ToolArgumentCompatibilityFixture.hpp
         tests/architecture/ArchitectureSurfaceScanTest.cpp
         tests/architecture/CMakeDependencyTest.cpp
@@ -317,6 +318,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/runtime/SessionEventCommitmentTest.cpp
         tests/coding_agent/runtime/SessionLifecycleTest.cpp
         tests/coding_agent/runtime/UserBashOutputAccumulatorTest.cpp
+        tests/coding_agent/runtime/UserBashOverlapTest.cpp
         tests/harness/AsyncLocalExecutionEnvTest.cpp
         tests/harness/session/InMemorySessionStoreTest.cpp
         tests/harness/session/JsonlSessionStoreTest.cpp

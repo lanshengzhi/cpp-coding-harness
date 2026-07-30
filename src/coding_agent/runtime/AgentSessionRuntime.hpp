@@ -12,6 +12,7 @@
 #include "coding_agent/runtime/UserBash.hpp"
 
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/steady_timer.hpp>
 
 #include <cstddef>
 #include <filesystem>
@@ -56,7 +57,9 @@ public:
         bool expand_prompt_templates,
         std::move_only_function<util::ExpectedVoid()> on_preflight_accepted = {});
 
-    /// Private Native TUI path for one idle direct-user Shell execution.
+    /// Private Native TUI path for one direct-user Shell execution. User Bash
+    /// may overlap an active Agent run; a result completed mid-run stays
+    /// pending and commits exactly once after the whole run settles.
     [[nodiscard]] bool has_user_shell() const { return services_.user_shell != nullptr; }
     [[nodiscard]] boost::asio::awaitable<util::Expected<UserBashCompletion>> run_user_bash(
         std::string command,
@@ -109,22 +112,44 @@ public:
     void abort();
 
     [[nodiscard]] bool is_open() const {
-        return state_ == State::Open || state_ == State::RunningPrompt ||
-            state_ == State::RunningUserBash;
+        return lifecycle_ == Lifecycle::Open;
     }
     [[nodiscard]] bool is_busy() const {
-        return state_ == State::RunningPrompt || state_ == State::RunningUserBash ||
-            state_ == State::Closing;
+        return lifecycle_ == Lifecycle::Closing || prompt_active_ ||
+            user_bash_active_;
     }
     void close() noexcept;
 
 private:
-    enum class State { Open, RunningPrompt, RunningUserBash, Closing, Closed };
+    /// Session lifecycle, tracked independently from the active-work facts so
+    /// User Bash may overlap an Agent run (ADR 0026).
+    enum class Lifecycle { Open, Closing, Closed };
+
+    /// One completed User Bash execution whose commitment is deferred until
+    /// the active Agent run settles. The signal is cancelled by the flush to
+    /// release the awaiting run_user_bash coroutine, which then returns the
+    /// completion or the commitment failure.
+    struct PendingUserBashCommit {
+        UserBashCompletion completion;
+        boost::asio::steady_timer committed_signal;
+        util::ExpectedVoid commit_result;
+    };
 
     /// Shared preflight outcome for entry points that require a non-closed session.
     [[nodiscard]] util::ExpectedVoid reject_if_closed() const;
     /// Shared preflight outcome for entry points that reject a concurrent prompt.
     [[nodiscard]] util::ExpectedVoid reject_if_busy() const;
+    /// Shared preflight outcome rejecting a second concurrent User Bash.
+    [[nodiscard]] util::ExpectedVoid reject_if_user_bash_busy() const;
+
+    /// Commit one completed Bash message to Live Session State, then the
+    /// Session Store. Store failure is reported on the completion diagnostic
+    /// without rolling back Live Session State; a Live Session State failure
+    /// is returned so the caller can reject the completion outright.
+    [[nodiscard]] util::ExpectedVoid commit_user_bash_completion(
+        UserBashCompletion& completion);
+    /// Commit and release every deferred Bash completion in completion order.
+    void flush_pending_user_bash();
 
     [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> run_agent_loop(
         ai::UserMessage prompt,
@@ -140,7 +165,10 @@ private:
     std::optional<agent::Agent> agent_;
 
     AgentSessionRuntimeConfig config_;
-    State state_{State::Open};
+    Lifecycle lifecycle_{Lifecycle::Open};
+    bool prompt_active_{false};
+    bool user_bash_active_{false};
+    std::vector<std::shared_ptr<PendingUserBashCommit>> pending_user_bash_;
     std::optional<std::stop_source> active_stop_source_;
     std::optional<std::stop_source> active_user_bash_stop_source_;
 };
