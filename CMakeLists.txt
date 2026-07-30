@@ -317,6 +317,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/runtime/RpcModeTest.cpp
         tests/coding_agent/runtime/SessionEventCommitmentTest.cpp
         tests/coding_agent/runtime/SessionLifecycleTest.cpp
+        tests/coding_agent/runtime/UserBashCancellationTest.cpp
         tests/coding_agent/runtime/UserBashOutputAccumulatorTest.cpp
         tests/coding_agent/runtime/UserBashOverlapTest.cpp
         tests/harness/AsyncLocalExecutionEnvTest.cpp

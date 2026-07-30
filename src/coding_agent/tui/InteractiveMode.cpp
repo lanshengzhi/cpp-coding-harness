@@ -64,7 +64,9 @@ namespace {
 
 using ActionSink = std::move_only_function<void()>;
 using SubmitSink = std::move_only_function<void(std::string)>;
-using PromptActiveHook = std::move_only_function<bool()>;
+/// Reports whether one kind of background work (Agent run or User Bash) is
+/// currently active so the effective interrupt target can be resolved.
+using ActivityHook = std::move_only_function<bool()>;
 
 enum class InputSubmission { Ordinary, FollowUp };
 enum class SubmissionOrigin { FocusedEditor, InitialPrompt };
@@ -474,7 +476,9 @@ public:
         ActionSink on_dequeue,
         ActionSink on_interrupt,
         ActionSink on_exit,
-        PromptActiveHook prompt_active,
+        ActivityHook prompt_active,
+        ActivityHook user_bash_active,
+        bool user_bash_available,
         std::vector<cch::tui::AutocompleteItem> autocomplete_items,
         cch::tui::TerminalCapabilities terminal_capabilities,
         const LiveTheme& theme)
@@ -488,6 +492,8 @@ public:
           on_interrupt_(std::move(on_interrupt)),
           on_exit_(std::move(on_exit)),
           prompt_active_(std::move(prompt_active)),
+          user_bash_active_(std::move(user_bash_active)),
+          user_bash_available_(user_bash_available),
           transcript_(theme, *keybindings_),
           editor_(
               cch::tui::EditorOptions{.keybindings = keybindings_},
@@ -768,10 +774,22 @@ public:
                 editor_.autocomplete_open() &&
                 keybindings_->matches(*key, "tui.select.cancel");
             if (keybindings_->matches(*key, "app.interrupt") &&
-                prompt_is_active() &&
                 !editor_cancels_interrupt) {
-                invoke_action(on_interrupt_, "Native TUI interrupt callback failed");
-                return;
+                // Effective interrupt precedence: autocomplete cancellation
+                // (handled above), active Agent run, active User Bash,
+                // unsubmitted Bash mode, then existing idle behavior. The
+                // Agent-versus-Bash choice resolves in the interrupt callback.
+                if (prompt_is_active() || user_bash_is_active()) {
+                    invoke_action(on_interrupt_, "Native TUI interrupt callback failed");
+                    return;
+                }
+                if (unsubmitted_bash_mode()) {
+                    editor_.set_text({});
+                    invoke_action(
+                        on_invalidate_,
+                        "Native TUI invalidation callback failed");
+                    return;
+                }
             }
             if (keybindings_->matches(*key, "app.message.followUp")) {
                 invoke_follow_up();
@@ -913,6 +931,25 @@ private:
         return false;
     }
 
+    [[nodiscard]] bool user_bash_is_active() {
+        if (!user_bash_active_) return false;
+        try {
+            return user_bash_active_();
+        } catch (const std::exception& error) {
+            record_callback_error("Native TUI User Bash state callback failed", error.what());
+        } catch (...) {
+            record_callback_error("Native TUI User Bash state callback failed");
+        }
+        return false;
+    }
+
+    /// Bash mode is the unsubmitted editor state whose trimmed text begins
+    /// with `!`; it exists only where User Bash dispatch is available.
+    [[nodiscard]] bool unsubmitted_bash_mode() const {
+        return user_bash_available_ &&
+            trim_editor_submission(editor_.expanded_text()).starts_with('!');
+    }
+
     std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings_;
     cch::tui::TerminalCapabilities terminal_capabilities_;
     ActionSink on_invalidate_;
@@ -922,7 +959,9 @@ private:
     ActionSink on_dequeue_;
     ActionSink on_interrupt_;
     ActionSink on_exit_;
-    PromptActiveHook prompt_active_;
+    ActivityHook prompt_active_;
+    ActivityHook user_bash_active_;
+    bool user_bash_available_{false};
     std::optional<util::Error> callback_error_;
     mutable std::mutex mutex_;
     Transcript transcript_;
@@ -1125,6 +1164,11 @@ private:
                 if (const auto self = weak.lock()) return self->prompt_active_.load();
                 return false;
             },
+            [weak] {
+                if (const auto self = weak.lock()) return self->user_bash_active_.load();
+                return false;
+            },
+            detail::AgentSessionInteractiveAccess::has_user_shell(session_),
             command_autocomplete_items(commands_, session_.templates(), session_.skills()),
             terminal_.capabilities(),
             theme_controller_->live_theme());
@@ -1525,16 +1569,27 @@ private:
     }
 
     void request_interrupt(std::size_t prompt_generation) {
-        if (!running_ ||
-            exit_requested_ ||
-            !prompt_active_ ||
-            prompt_generation != prompt_generation_.load() ||
-            interrupt_requested_generation_ == prompt_generation) {
+        if (!running_ || exit_requested_) {
             return;
         }
-        interrupt_requested_generation_ = prompt_generation;
-        dequeue_pending_input(false);
-        session_.abort();
+        if (prompt_active_) {
+            // Agent work takes interrupt precedence over an overlapping User
+            // Bash; the Bash becomes the target of a later interrupt once the
+            // Agent is idle (pi editor Escape precedence).
+            if (prompt_generation != prompt_generation_.load() ||
+                interrupt_requested_generation_ == prompt_generation) {
+                return;
+            }
+            interrupt_requested_generation_ = prompt_generation;
+            dequeue_pending_input(false);
+            session_.abort();
+            return;
+        }
+        if (user_bash_active_) {
+            // Repeated interrupts coalesce inside the runtime's independent
+            // User Bash stop source.
+            detail::AgentSessionInteractiveAccess::cancel_user_bash(session_);
+        }
     }
 
     void submit(

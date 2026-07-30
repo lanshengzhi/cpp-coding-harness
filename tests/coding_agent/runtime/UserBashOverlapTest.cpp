@@ -8,6 +8,7 @@
 #include "support/FakeUserShell.hpp"
 #include "support/GatedChatClient.hpp"
 #include "support/TempWorkspace.hpp"
+#include "support/UserBashTestHooks.hpp"
 
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 #include <boost/asio/co_spawn.hpp>
@@ -32,6 +33,11 @@ using namespace cch;
 namespace {
 
 using tests::drain_ready;
+using tests::bash_message_count;
+using tests::BashResult;
+using tests::PromptResult;
+using tests::spawn_bash;
+using tests::spawn_prompt;
 
 [[nodiscard]] ai::TimestampMs now_ms() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -92,15 +98,6 @@ private:
     std::optional<boost::asio::steady_timer> gate_;
 };
 
-[[nodiscard]] std::size_t bash_message_count(
-    const std::vector<ai::MessageVariant>& messages) {
-    std::size_t count = 0;
-    for (const auto& message : messages) {
-        if (std::holds_alternative<ai::BashExecutionMessage>(message)) ++count;
-    }
-    return count;
-}
-
 [[nodiscard]] bool context_has_bash_command(
     const ai::StreamChatRequest& request,
     std::string_view command) {
@@ -109,46 +106,6 @@ private:
         if (bash != nullptr && bash->command == command) return true;
     }
     return false;
-}
-
-using PromptResult = std::optional<util::ExpectedVoid>;
-using BashResult =
-    std::optional<util::Expected<coding_agent::runtime::UserBashCompletion>>;
-
-void spawn_prompt(
-    boost::asio::io_context& io,
-    coding_agent::AgentSession& session,
-    std::string text,
-    PromptResult& slot) {
-    boost::asio::co_spawn(
-        io,
-        session.prompt(std::move(text)),
-        [&slot](std::exception_ptr exception, util::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            slot.emplace(std::move(result));
-        });
-}
-
-void spawn_bash(
-    boost::asio::io_context& io,
-    coding_agent::AgentSession& session,
-    std::string command,
-    BashResult& slot) {
-    boost::asio::co_spawn(
-        io,
-        coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(
-            session,
-            std::move(command),
-            false,
-            [](const coding_agent::runtime::UserBashProgress&) {
-                return util::ExpectedVoid{};
-            }),
-        [&slot](
-            std::exception_ptr exception,
-            util::Expected<coding_agent::runtime::UserBashCompletion> result) {
-            REQUIRE(exception == nullptr);
-            slot.emplace(std::move(result));
-        });
 }
 
 } // namespace

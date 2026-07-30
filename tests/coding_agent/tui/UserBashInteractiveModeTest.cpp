@@ -1,5 +1,6 @@
 #include <cch/ai/ChatClient.hpp>
 #include <cch/ai/Content.hpp>
+#include <cch/agent/AgentTool.hpp>
 #include <cch/coding_agent/Sdk.hpp>
 #include <cch/harness/session/SessionResume.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
@@ -11,17 +12,24 @@
 #include "support/FakeUserShell.hpp"
 #include "support/GatedChatClient.hpp"
 #include "support/TempWorkspace.hpp"
+#include "support/TextHelpers.hpp"
 
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_awaitable.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -30,6 +38,8 @@
 using namespace cch;
 
 namespace {
+
+using tests::count_occurrences;
 
 class RecordingChatClient final : public ai::StreamingChatClient {
 public:
@@ -70,6 +80,189 @@ void drain_ready(boost::asio::io_context& io) {
         return bash != nullptr && bash->command == command;
     });
 }
+
+/// First request emits partial output, gates, and answers cancellation with an
+/// aborted outcome; later requests answer immediately so recovery is visible.
+class AbortAwareGatedChatClient final : public ai::StreamingChatClient {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        ++request_count;
+        if (request_count > 1) {
+            auto recovered = ai::assistant_text_message("recovery reply");
+            recovered.provider = "abort-gated-fake";
+            recovered.api = "fake";
+            recovered.model = request.model->id;
+            co_return recovered;
+        }
+
+        const auto stop_token = request.stop_token;
+        auto partial = ai::assistant_text_message("");
+        partial.provider = "abort-gated-fake";
+        partial.api = "fake";
+        partial.model = request.model->id;
+        partial.content.clear();
+        if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+        partial.content.emplace_back(ai::text_content(""));
+        if (auto emitted = sink(ai::TextStartEvent{
+                .content_index = 0,
+                .partial = partial,
+            });
+            !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+        std::get<ai::TextContent>(partial.content[0]).text = "partial assistant output";
+        if (auto emitted = sink(ai::TextDeltaEvent{
+                .content_index = 0,
+                .delta = "partial assistant output",
+                .partial = partial,
+            });
+            !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+
+        const auto executor = co_await boost::asio::this_coro::executor;
+        gate_.emplace(executor);
+        gate_->expires_at(std::chrono::steady_clock::time_point::max());
+        started = true;
+        std::stop_callback cancellation{stop_token, [this] {
+            ++stop_callback_count;
+            if (gate_) (void)gate_->cancel();
+        }};
+        boost::system::error_code error;
+        if (!stop_token.stop_requested()) {
+            co_await gate_->async_wait(
+                boost::asio::redirect_error(boost::asio::use_awaitable, error));
+        }
+        gate_.reset();
+
+        if (stop_token.stop_requested()) {
+            partial.stop_reason = ai::AssistantStopReason::Aborted;
+            partial.error_message = "prompt aborted";
+            if (auto emitted = sink(ai::AssistantErrorEvent{
+                    .reason = ai::AssistantStopReason::Aborted,
+                    .error = partial,
+                });
+                !emitted) {
+                co_return std::unexpected(emitted.error());
+            }
+            co_return partial;
+        }
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Unknown,
+            "abort-gated fake released without cancellation"));
+    }
+
+    bool started{false};
+    std::size_t request_count{0};
+    std::size_t stop_callback_count{0};
+
+private:
+    std::optional<boost::asio::steady_timer> gate_;
+};
+
+/// First request calls the gated "delayed" tool; later requests answer the
+/// aborted settle path so a closing run can unwind deterministically.
+class ToolCallThenAbortChatClient final : public ai::StreamingChatClient {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        ++request_count;
+        if (request.stop_token.stop_requested() || request_count > 1) {
+            auto aborted = ai::assistant_text_message("");
+            aborted.provider = "tool-abort-fake";
+            aborted.api = "fake";
+            aborted.model = request.model->id;
+            aborted.stop_reason = ai::AssistantStopReason::Aborted;
+            aborted.error_message = "close prompt aborted";
+            if (auto emitted = sink(ai::AssistantErrorEvent{
+                    .reason = ai::AssistantStopReason::Aborted,
+                    .error = aborted,
+                });
+                !emitted) {
+                co_return std::unexpected(emitted.error());
+            }
+            co_return aborted;
+        }
+
+        auto response = ai::assistant_text_message("");
+        response.provider = "tool-abort-fake";
+        response.api = "fake";
+        response.model = request.model->id;
+        response.content.clear();
+        response.content.emplace_back(ai::tool_call_content(
+            "delayed-call",
+            "delayed",
+            "{}",
+            util::JsonValue::object_t{}));
+        response.stop_reason = ai::AssistantStopReason::ToolUse;
+        co_return response;
+    }
+
+    std::size_t request_count{0};
+};
+
+/// Gates inside the tool until release() and records stop-token delivery.
+class GatedCloseTool final : public agent::AsyncAgentTool {
+public:
+    GatedCloseTool() {
+        definition_.name = "delayed";
+        definition_.description = "Wait until close cancellation is observable";
+        definition_.parameters = util::JsonValue::object_t{{"type", "object"}};
+    }
+
+    [[nodiscard]] const ai::Tool& definition() const override {
+        return definition_;
+    }
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
+        agent::ToolInvocation,
+        std::stop_token) override {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Tool,
+            "gated tool requires the update path"));
+    }
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>>
+    execute_with_updates(
+        agent::ToolInvocation,
+        std::stop_token stop_token,
+        agent::ToolUpdateSink) override {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        gate_.emplace(executor);
+        gate_->expires_at(std::chrono::steady_clock::time_point::max());
+        started = true;
+        std::stop_callback cancellation{stop_token, [this] {
+            ++stop_callback_count;
+        }};
+        boost::system::error_code error;
+        co_await gate_->async_wait(
+            boost::asio::redirect_error(boost::asio::use_awaitable, error));
+        gate_.reset();
+
+        if (stop_token.stop_requested()) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Cancelled,
+                "gated tool aborted by close"));
+        }
+        co_return agent::AsyncToolExecutionResult{};
+    }
+
+    void release() {
+        if (gate_) (void)gate_->cancel();
+    }
+
+    bool started{false};
+    std::size_t stop_callback_count{0};
+
+private:
+    ai::Tool definition_;
+    std::optional<boost::asio::steady_timer> gate_;
+};
 
 } // namespace
 
@@ -744,4 +937,455 @@ TEST_CASE(
     drain_ready(io);
     REQUIRE(run_result);
     CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI interrupt cancels an active Agent run before an overlapping User Bash",
+    "[coding_agent][tui][issue88]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto client = std::make_unique<AbortAwareGatedChatClient>();
+    auto* client_pointer = client.get();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    auto* shell_pointer = shell.get();
+    shell_pointer->enqueue({
+        .updates = {"partial bash output"},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = true,
+    });
+    shell_pointer->enqueue({
+        .updates = {"second command output"},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = false,
+    });
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.chat_client = std::move(client);
+    options.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(
+        std::move(options), std::move(shell));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            REQUIRE(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("stream\r"));
+    drain_ready(io);
+    REQUIRE(client_pointer->started);
+
+    // User Bash overlaps the active Agent run.
+    REQUIRE(terminal.inject_input("!echo overlap\r"));
+    drain_ready(io);
+    REQUIRE(shell_pointer->commands.size() == 1);
+    CHECK(visible_screen(terminal).find("Bash running") != std::string::npos);
+
+    // Autocomplete cancellation precedes both active operations.
+    REQUIRE(terminal.inject_input("/"));
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("/clear") != std::string::npos);
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("/clear") == std::string::npos);
+    CHECK(client_pointer->stop_callback_count == 0);
+    CHECK(shell_pointer->cancellation_request_count == 0);
+    REQUIRE(terminal.inject_input("\x03"));
+    drain_ready(io);
+
+    // The first applicable interrupt cancels the Agent run, not the Bash.
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    CHECK(client_pointer->stop_callback_count == 1);
+    CHECK(shell_pointer->cancellation_request_count == 0);
+    CHECK(visible_screen(terminal).find("Provider aborted: prompt aborted") !=
+        std::string::npos);
+    CHECK(created->session->is_busy());
+
+    // A later interrupt reaches the User Bash once the Agent is idle.
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    CHECK(shell_pointer->cancellation_request_count == 1);
+    auto snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.messages.size() == 3);
+    const auto* bash = std::get_if<ai::BashExecutionMessage>(
+        &snapshot.agent_state.messages[2]);
+    REQUIRE(bash != nullptr);
+    CHECK(bash->cancelled);
+    CHECK_FALSE(bash->exit_code.has_value());
+    CHECK(bash->output == "partial bash output");
+    CHECK(count_occurrences(visible_screen(terminal), "Bash failed: echo overlap") == 1);
+    CHECK_FALSE(created->session->is_busy());
+
+    // Recovery: a later command and an ordinary Prompt still work.
+    REQUIRE(terminal.inject_input("!echo two\r"));
+    drain_ready(io);
+    snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.messages.size() == 4);
+    const auto* second = std::get_if<ai::BashExecutionMessage>(
+        &snapshot.agent_state.messages[3]);
+    REQUIRE(second != nullptr);
+    CHECK(second->exit_code == 0);
+
+    REQUIRE(terminal.inject_input("later\r"));
+    drain_ready(io);
+    CHECK(client_pointer->request_count == 2);
+    CHECK(visible_screen(terminal).find("recovery reply") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+    CHECK_FALSE(terminal.modes().started);
+}
+
+TEST_CASE(
+    "idle Bash-mode interrupt clears the editor without creating a command or message",
+    "[coding_agent][tui][issue88]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto client = std::make_unique<RecordingChatClient>();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    auto* shell_pointer = shell.get();
+    shell_pointer->enqueue({
+        .updates = {"done output"},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = false,
+    });
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.chat_client = std::move(client);
+    options.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(
+        std::move(options), std::move(shell));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            REQUIRE(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    // Unsubmitted Bash-mode input: interrupt clears it without side effects.
+    REQUIRE(terminal.inject_input("!draft"));
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("!draft") != std::string::npos);
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("draft") == std::string::npos);
+    CHECK(shell_pointer->commands.empty());
+    CHECK(created->session->message_count() == 0);
+
+    // Unsubmitted excluded Bash-mode input clears the same way.
+    REQUIRE(terminal.inject_input("!!local only"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("local only") == std::string::npos);
+    CHECK(shell_pointer->commands.empty());
+    CHECK(created->session->message_count() == 0);
+
+    // Ordinary unsubmitted text keeps the existing idle behavior: untouched.
+    REQUIRE(terminal.inject_input("plain draft"));
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("plain draft") != std::string::npos);
+    REQUIRE(terminal.inject_input("\x03"));
+    drain_ready(io);
+
+    // Bash mode remains fully functional afterwards.
+    REQUIRE(terminal.inject_input("!echo works\r"));
+    drain_ready(io);
+    REQUIRE(shell_pointer->commands.size() == 1);
+    CHECK(shell_pointer->commands[0] == "echo works");
+    CHECK(created->session->message_count() == 1);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "repeated User Bash interrupts coalesce and recovery still works",
+    "[coding_agent][tui][issue88]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto client = std::make_unique<RecordingChatClient>();
+    auto* client_pointer = client.get();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    auto* shell_pointer = shell.get();
+    shell_pointer->enqueue({
+        .updates = {"held output"},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = true,
+    });
+    shell_pointer->enqueue({
+        .updates = {"next output"},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = false,
+    });
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.chat_client = std::move(client);
+    options.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(
+        std::move(options), std::move(shell));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            REQUIRE(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("!echo hold\r"));
+    drain_ready(io);
+    REQUIRE(shell_pointer->commands.size() == 1);
+
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    // Both interrupts coalesce into one Shell cancellation and one message.
+    CHECK(shell_pointer->cancellation_request_count == 1);
+    auto snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.messages.size() == 1);
+    const auto* bash = std::get_if<ai::BashExecutionMessage>(
+        &snapshot.agent_state.messages[0]);
+    REQUIRE(bash != nullptr);
+    CHECK(bash->cancelled);
+    CHECK(bash->output == "held output");
+    CHECK(count_occurrences(visible_screen(terminal), "Bash failed: echo hold") == 1);
+
+    // A later command and an ordinary Prompt still work after cancellation.
+    REQUIRE(terminal.inject_input("!echo next\r"));
+    drain_ready(io);
+    CHECK(shell_pointer->commands.size() == 2);
+    CHECK(created->session->message_count() == 2);
+
+    REQUIRE(terminal.inject_input("ordinary\r"));
+    drain_ready(io);
+    CHECK(client_pointer->requests.size() == 1);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Session Close through the exit command cancels gated provider, tool, and User Shell work",
+    "[coding_agent][tui][issue88]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto client = std::make_unique<ToolCallThenAbortChatClient>();
+    auto tool = std::make_unique<GatedCloseTool>();
+    auto* tool_pointer = tool.get();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    auto* shell_pointer = shell.get();
+    shell_pointer->enqueue({
+        .updates = {"close bash partial"},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = true,
+    });
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.chat_client = std::move(client);
+    options.custom_tools.push_back(std::move(tool));
+    options.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(
+        std::move(options), std::move(shell));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            REQUIRE(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("use the tool\r"));
+    drain_ready(io);
+    REQUIRE(tool_pointer->started);
+    REQUIRE(terminal.inject_input("!echo close\r"));
+    drain_ready(io);
+    REQUIRE(shell_pointer->commands.size() == 1);
+
+    // Close requests both cancellations and waits for quiescence: the run
+    // cannot finish while the tool callback is still gated.
+    REQUIRE(terminal.inject_input("/exit\r"));
+    drain_ready(io);
+    CHECK(tool_pointer->stop_callback_count == 1);
+    CHECK(shell_pointer->cancellation_request_count == 1);
+    CHECK(created->session->is_busy());
+    REQUIRE_FALSE(run_result.has_value());
+
+    tool_pointer->release();
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+    CHECK_FALSE(created->session->is_open());
+    CHECK_FALSE(created->session->is_busy());
+
+    // The cancelled Bash committed exactly once; cleanup and terminal
+    // restoration happened exactly once with no late presentation.
+    const auto screen = visible_screen(terminal);
+    CHECK(count_occurrences(screen, "Bash failed: echo close") == 1);
+    CHECK(screen.find("close bash partial") != std::string::npos);
+    CHECK_FALSE(terminal.modes().started);
+    CHECK(terminal.modes().cursor_visible);
+}
+
+TEST_CASE(
+    "Session Close through the effective exit keybinding cancels gated provider, tool, and User Shell work",
+    "[coding_agent][tui][issue88]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    config.write("keybindings.json", R"({"app.exit":"f6"})");
+    auto client = std::make_unique<ToolCallThenAbortChatClient>();
+    auto tool = std::make_unique<GatedCloseTool>();
+    auto* tool_pointer = tool.get();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    auto* shell_pointer = shell.get();
+    shell_pointer->enqueue({
+        .updates = {"keybinding close partial"},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = true,
+    });
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.chat_client = std::move(client);
+    options.custom_tools.push_back(std::move(tool));
+    options.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(
+        std::move(options), std::move(shell));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            REQUIRE(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("use the tool\r"));
+    drain_ready(io);
+    REQUIRE(tool_pointer->started);
+    REQUIRE(terminal.inject_input("!echo f6 close\r"));
+    drain_ready(io);
+    REQUIRE(shell_pointer->commands.size() == 1);
+
+    REQUIRE(terminal.inject_input("\x1b[17~"));
+    drain_ready(io);
+    CHECK(tool_pointer->stop_callback_count == 1);
+    CHECK(shell_pointer->cancellation_request_count == 1);
+    CHECK(created->session->is_busy());
+    REQUIRE_FALSE(run_result.has_value());
+
+    tool_pointer->release();
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+    CHECK_FALSE(created->session->is_open());
+    CHECK_FALSE(created->session->is_busy());
+
+    const auto screen = visible_screen(terminal);
+    CHECK(count_occurrences(screen, "Bash failed: echo f6 close") == 1);
+    CHECK(screen.find("keybinding close partial") != std::string::npos);
+    CHECK_FALSE(terminal.modes().started);
+    CHECK(terminal.modes().cursor_visible);
 }
