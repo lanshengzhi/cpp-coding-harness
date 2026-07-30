@@ -30,6 +30,11 @@ struct ProcessRequest {
     std::optional<std::move_only_function<void(std::string_view)>> on_stdout;
     /// Called with stderr chunks as they are produced.
     std::optional<std::move_only_function<void(std::string_view)>> on_stderr;
+    /// Redirect stderr into the stdout pipe at spawn so one consumer observes
+    /// both streams in process emission order. Honored only on Linux/macOS;
+    /// elsewhere stderr stays a separate stream. The stderr capture and
+    /// on_stderr callback stay empty when the merge is applied.
+    bool merge_stderr{false};
 };
 
 struct ProcessResult {

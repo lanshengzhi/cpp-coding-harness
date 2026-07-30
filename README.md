@@ -254,11 +254,9 @@ Every text-capable frontend assembles this implemented baseline subset:
 | `/quit` | Request a clean frontend shutdown. |
 | `/exit` | Alias for `/quit`. |
 
-The Native TUI concretely extends its effective registry with `/settings` (the supported theme settings overlay) and `/hotkeys` (help for the exact effective binding registry). Instructional placeholders such as `/new` and `/resume`, User Bash, and other deferred pi actions are not registered or advertised.
+The Native TUI concretely extends its effective registry with `/settings` (the supported theme settings overlay) and `/hotkeys` (help for the exact effective binding registry). Instructional placeholders such as `/new` and `/resume` and other deferred pi actions are not registered or advertised.
 
 Aliases are resolved by the command registry and appear in `/help`. Native TUI slash completion derives built-ins from that same effective registry and adds the loaded prompt templates and `/skill:<name>` invocations. Registry help does not mislabel those project resources as built-ins. Frontend commands are resolved before input reaches `AgentSession`; unmatched slash input continues through the cached skill → prompt-template interpretation path. Bare `/` and unmatched slash input pass through to the model unchanged.
-
-User Bash is deferred and exposes no placeholder frontend behavior. `!command` and `!!command` are ordinary prompt text in the Native TUI, one-shot, JSON, RPC, and SDK paths.
 
 Command presentation depends on the frontend:
 
@@ -268,6 +266,14 @@ Command presentation depends on the frontend:
 | `/settings` or `/hotkeys` | Open the supported overlay without invoking the model. | Unmatched input follows ordinary prompt interpretation. | Unmatched input follows ordinary prompt interpretation. | Sent as ordinary prompt text. |
 | Exact `/clear` | Clear through the Terminal seam without prompting the session. | Clear only when both streams are terminals; non-TTY output emits no ANSI. The command never invokes the model. | Emit only the session header and no ANSI bytes. | Sent as ordinary prompt text; no terminal-control bytes are emitted by the adapter. |
 | `/quit` or `/exit` | Close the Agent Session and restore terminal state cleanly. | Display `Shutting down.` and exit successfully. | Emit only the session header, then exit successfully. | Sent as ordinary prompt text; use the RPC `shutdown` command to stop the loop. |
+
+### Input prefixes (User Bash)
+
+In the Native TUI on supported Linux/macOS, a direct focused-editor submission whose trimmed text begins with `!` is User Bash: the remainder runs as one shell command in the Session workspace and streams into a single `$ command` transcript block (ADR 0026). A `!` result is committed to Session history as a pi v3 `bashExecution` message and may enter later model context; a `!!` result is committed the same way but is excluded entirely from model conversion. User Bash is always available in the Native TUI and is independent of `--enable-bash`, which continues to authorize only the model-requested `bash` tool.
+
+The parsed command is trimmed and may span multiple lines; a bare `!` or `!!` falls through to an ordinary Agent Prompt, and `!!!foo` is excluded User Bash running `!foo`. Only direct focused-editor submissions interpret the prefix: positional initial input, one-shot text, JSON, RPC, SDK, and Skill or Prompt Template expansions beginning with `!` remain ordinary prompt text, and the prefixes are never slash commands, autocomplete items, or hotkey actions. At most one User Bash runs at a time; it may overlap an Agent run, with completion committed after the whole run settles, and the effective interrupt binding cancels an active Agent run before an active User Bash. Execution uses the same effective `shellPath`/`shellCommandPrefix` configuration, filtered environment, and `/bin/bash` → PATH `bash` → `sh` (`-c`) resolution as the model tool, has no default timeout, starts every command from the canonical Session workspace, and cancels through process-tree termination. Output is ANSI-stripped, secret-redacted, and bounded to a 2,000-line/50 KiB tail, with truncated full output spilled to a unique owner-only temporary file.
+
+In the one-shot, JSON, RPC, and SDK paths, leading `!` text remains ordinary prompt text.
 
 ## Embeddable C++ SDK
 

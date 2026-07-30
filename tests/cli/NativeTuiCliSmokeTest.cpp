@@ -7,6 +7,9 @@
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
@@ -110,6 +113,100 @@ TEST_CASE(
     termios restored{};
     REQUIRE(::tcgetattr(pty->slave.get(), &restored) == 0);
     CHECK(cch::tests::same_terminal_state(restored, original));
+}
+
+TEST_CASE(
+    "Native TUI User Bash executes a focused command, persists it, and restores the terminal",
+    "[cli][tui][terminal][user-bash][issue90]") {
+    auto pty = cch::tests::open_pseudo_terminal(80, 24);
+    REQUIRE(pty);
+    termios original{};
+    REQUIRE(::tcgetattr(pty->slave.get(), &original) == 0);
+
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace config;
+    const auto binary = std::string{CCH_BINARY};
+    const auto workspace_path = workspace.path().string();
+    const auto config_path = config.path().string();
+
+    const pid_t child = ::fork();
+    REQUIRE(child >= 0);
+    if (child == 0) {
+        (void)pty->master.close();
+        if (::setsid() < 0 || ::ioctl(pty->slave.get(), TIOCSCTTY, 0) != 0 ||
+            ::dup2(pty->slave.get(), STDIN_FILENO) < 0 ||
+            ::dup2(pty->slave.get(), STDOUT_FILENO) < 0 ||
+            ::dup2(pty->slave.get(), STDERR_FILENO) < 0 ||
+            ::setenv("CCH_CODING_AGENT_DIR", config_path.c_str(), 1) != 0) {
+            ::_exit(126);
+        }
+        ::execl(
+            binary.c_str(),
+            binary.c_str(),
+            "--fake",
+            "--workspace",
+            workspace_path.c_str(),
+            static_cast<char*>(nullptr));
+        ::_exit(127);
+    }
+    ChildProcessCleanup cleanup{child};
+
+    // Wait for the TUI to draw, then submit one focused User Bash command.
+    // The computed output ("cch-user-bash-42") never appears in the typed
+    // invocation, so observing it proves real execution rather than editor
+    // echo.
+    std::string output;
+    REQUIRE(cch::tests::wait_until(
+        [&] {
+            output.append(cch::tests::read_available(
+                pty->master.get(),
+                std::chrono::milliseconds(20)));
+            return !output.empty();
+        },
+        std::chrono::seconds(4)));
+
+    const std::string submission = "!echo cch-user-bash-$((40+2))\r";
+    REQUIRE(::write(pty->master.get(), submission.data(), submission.size()) ==
+            static_cast<ssize_t>(submission.size()));
+    REQUIRE(cch::tests::wait_until(
+        [&] {
+            output.append(cch::tests::read_available(
+                pty->master.get(),
+                std::chrono::milliseconds(20)));
+            return output.find("cch-user-bash-42") != std::string::npos;
+        },
+        std::chrono::seconds(6)));
+
+    constexpr char kExit = '\x04';
+    REQUIRE(::write(pty->master.get(), &kExit, 1) == 1);
+    int status = 0;
+    REQUIRE(cch::tests::wait_until(
+        [&] { return ::waitpid(child, &status, WNOHANG) == child; },
+        std::chrono::seconds(4)));
+    cleanup.dismiss();
+
+    CHECK(WIFEXITED(status));
+    CHECK(WEXITSTATUS(status) == 0);
+    termios restored{};
+    REQUIRE(::tcgetattr(pty->slave.get(), &restored) == 0);
+    CHECK(cch::tests::same_terminal_state(restored, original));
+
+    // The completed execution is durable Bash history in the persisted
+    // workspace-keyed default session: one pi v3 bashExecution message with
+    // the redacted command and its bounded output.
+    std::string session_contents;
+    for (const auto& entry :
+         std::filesystem::recursive_directory_iterator(config.path())) {
+        if (entry.is_regular_file() && entry.path().extension() == ".jsonl") {
+            std::ifstream input(entry.path(), std::ios::binary);
+            session_contents += std::string(
+                std::istreambuf_iterator<char>(input),
+                std::istreambuf_iterator<char>());
+        }
+    }
+    CHECK(session_contents.find("bashExecution") != std::string::npos);
+    CHECK(session_contents.find("echo cch-user-bash-$((40+2))") != std::string::npos);
+    CHECK(session_contents.find("cch-user-bash-42") != std::string::npos);
 }
 
 #else

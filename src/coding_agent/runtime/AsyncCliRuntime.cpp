@@ -164,6 +164,10 @@ void print_session_diagnostics(const std::vector<coding_agent::SdkDiagnostic>& d
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.fake = config.fake;
     request.enable_bash = config.enable_bash;
+    // The interactive Native TUI always receives its independent User Shell
+    // (ADR 0026); one-shot, JSON, and RPC frontends keep ordinary-prompt
+    // semantics for leading '!' text.
+    request.provide_user_shell = frontend == Frontend::NativeTui;
     request.project_trust_override = config.project_trust_override;
     request.disable_project_skills = config.no_skills;
     request.disable_prompt_templates = config.no_prompt_templates;

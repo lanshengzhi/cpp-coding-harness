@@ -21,6 +21,11 @@ namespace cch::coding_agent::runtime {
 struct AgentSessionCreationRequest {
     bool fake{false};
     bool enable_bash{false};
+    /// Assemble the Native TUI's independent Session-owned User Shell
+    /// capability (ADR 0026). Only the interactive Native TUI frontend sets
+    /// this; it never registers or authorizes the model Bash Tool, and the
+    /// SDK/one-shot/JSON/RPC paths never gain a User Shell.
+    bool provide_user_shell{false};
     std::optional<bool> project_trust_override;
     bool disable_project_skills{false};
     bool disable_prompt_templates{false};

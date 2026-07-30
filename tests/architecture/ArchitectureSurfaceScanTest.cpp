@@ -491,6 +491,67 @@ TEST_CASE(
     CHECK(durable_commit > live_commit);
 }
 
+TEST_CASE(
+    "Native TUI User Bash promotion keeps public and wire surfaces unchanged",
+    "[architecture][session][tui][issue90]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto sdk_header = read_text(
+        source_root / "include" / "cch" / "coding_agent" / "Sdk.hpp");
+    const auto event_header = read_text(
+        source_root / "include" / "cch" / "agent" / "AgentEvent.hpp");
+    const auto rpc_mode_source = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "RpcMode.cpp");
+    const auto rpc_jsonl_source = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "RpcJsonl.cpp");
+    const auto json_source = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "JsonEventPrinter.cpp");
+    const auto keybinding_catalog = read_text(
+        source_root / "src" / "coding_agent" / "tui" / "KeybindingCatalog.cpp") +
+        read_text(
+            source_root / "src" / "coding_agent" / "tui" / "KeybindingCatalog.hpp");
+    const auto command_registry_source = read_text(
+        source_root / "src" / "coding_agent" / "CommandRegistry.cpp");
+    const auto factory_source = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "SessionFactory.cpp");
+    const auto cli_runtime_source = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "AsyncCliRuntime.cpp");
+
+    // No public SDK User Bash method, option, or capability descriptor.
+    CHECK(sdk_header.find("UserShell") == std::string::npos);
+    CHECK(sdk_header.find("user_shell") == std::string::npos);
+    CHECK(sdk_header.find("UserBash") == std::string::npos);
+    CHECK(sdk_header.find("user_bash") == std::string::npos);
+    CHECK(sdk_header.find("userBash") == std::string::npos);
+
+    // No RPC command and no JSON protocol addition.
+    CHECK(rpc_mode_source.find("abort_bash") == std::string::npos);
+    CHECK(rpc_jsonl_source.find("abort_bash") == std::string::npos);
+    CHECK(rpc_mode_source.find("\"bash\"") == std::string::npos);
+    CHECK(rpc_jsonl_source.find("\"bash\"") == std::string::npos);
+    CHECK(json_source.find("UserBash") == std::string::npos);
+    CHECK(json_source.find("user_bash") == std::string::npos);
+
+    // No Agent lifecycle event alternative.
+    CHECK(event_header.find("UserBash") == std::string::npos);
+    CHECK(event_header.find("Bash") == std::string::npos);
+
+    // No hotkey action and no slash-command registration for the prefixes.
+    CHECK(keybinding_catalog.find("bash") == std::string::npos);
+    CHECK(keybinding_catalog.find("Bash") == std::string::npos);
+    CHECK(command_registry_source.find("register_command(\"!") ==
+          std::string::npos);
+
+    // Production assembly: only the Native TUI CLI frontend gains the
+    // Session-owned LocalUserShell; --enable-bash still controls only the
+    // model tool registry.
+    CHECK(factory_source.find("std::make_unique<LocalUserShell>") !=
+          std::string::npos);
+    CHECK(factory_source.find("plan.provide_user_shell") != std::string::npos);
+    CHECK(cli_runtime_source.find(
+              "request.provide_user_shell = frontend == Frontend::NativeTui") !=
+          std::string::npos);
+}
+
 TEST_CASE("Runtime session persistence stays behind the narrow SessionStore capability", "[architecture][session]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
     const auto runtime_header = read_text(

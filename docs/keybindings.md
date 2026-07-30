@@ -109,8 +109,12 @@ While autocomplete is open, a key that is also the effective
 `tui.select.cancel` binding dismisses suggestions before interruption is
 eligible; a distinct configured interrupt key still aborts active work. While
 Agent Session work is active, repeated interrupt input coalesces into exactly
-one request for that run's ordinary abort lifecycle; while idle it falls through
-to the baseline editor behavior. A configured known-but-unassembled application
+one request for that run's ordinary abort lifecycle. An active Agent run is
+interrupted before an overlapping User Bash command; once the run is idle, the
+next interrupt cancels User Bash, retaining its partial output as a cancelled
+execution. When no work is active but the editor holds an unsubmitted Bash-mode
+submission, interrupt clears the editor; otherwise it falls through to the
+baseline editor behavior. A configured known-but-unassembled application
 ID is diagnosed and skipped; it never creates a no-op binding or help entry.
 Platform defaults are resolved at concrete registration: for example,
 `app.suspend` defaults to `ctrl+z` on Linux and macOS, while native Windows has

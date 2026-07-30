@@ -12,6 +12,7 @@
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/prompt/PromptProcessor.hpp"
 #include "coding_agent/runtime/AgentSessionRuntime.hpp"
+#include "coding_agent/runtime/LocalUserShell.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 #include "harness/WorkspaceFileSystem.hpp"
@@ -92,6 +93,10 @@ struct AssemblyPlan {
     /// Explicit turn cap carried into the runtime config; std::nullopt (the
     /// default) imposes no cap (ADR 0015).
     std::optional<int> max_turns{std::nullopt};
+    /// Native TUI assembly policy: provide the Session-owned User Shell
+    /// (ADR 0026). Set only by CLI normalization for the interactive Native
+    /// TUI frontend; the SDK profile never sets it.
+    bool provide_user_shell{false};
 };
 
 [[nodiscard]] SdkDiagnostic make_diag(SdkDiagnostic::Severity severity,
@@ -500,6 +505,7 @@ struct SessionTargetNormalizationOptions {
     plan.max_queued_messages = request.max_queued_messages;
     plan.max_queued_bytes = request.max_queued_bytes;
     plan.max_turns = request.max_turns;
+    plan.provide_user_shell = request.provide_user_shell;
 
     return plan;
 }
@@ -876,12 +882,24 @@ struct SessionTargetNormalizationOptions {
         open = std::move(*published);
     }
 
-    // 9. Assemble the runtime.
+    // 9. Assemble the runtime. The Native TUI's Session-owned User Shell is
+    // an independent capability instance: it shares only the effective
+    // user-level Shell configuration with an enabled model Bash Tool and
+    // never widens the shared Execution Environment (ADR 0026).
     RuntimeServices services;
     services.client = std::move(chat_client);
     services.env = std::move(exec_env);
     services.env_owned = env_owned;
     services.user_shell = std::move(user_shell);
+    if (!services.user_shell && plan.provide_user_shell) {
+        services.user_shell = std::make_unique<LocalUserShell>(
+            workspace,
+            resolved.api_key_env_chain,
+            harness::ShellConfig{
+                .shell_path = settings.shell_path,
+                .command_prefix = settings.shell_command_prefix,
+            });
+    }
     services.tools = std::move(tools);
 
     prompt::PromptProcessor prompt_processor{std::move(skills), std::move(templates)};

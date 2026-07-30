@@ -196,6 +196,7 @@ add_library(cch_coding_agent_runtime
     src/coding_agent/SkillFormatting.cpp
     src/coding_agent/runtime/AgentSessionRuntime.cpp
     src/coding_agent/runtime/EventPrinter.cpp
+    src/coding_agent/runtime/LocalUserShell.cpp
     src/coding_agent/runtime/SessionEventCommitment.cpp
     src/coding_agent/runtime/UserBashOutputAccumulator.cpp
     src/cli/OneShotCliFrontend.cpp
@@ -315,6 +316,8 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/AgentSessionSnapshotTest.cpp
         tests/coding_agent/SkillIntegrationTest.cpp
         tests/coding_agent/runtime/JsonEventPrinterTest.cpp
+        tests/coding_agent/runtime/LocalUserShellTest.cpp
+        tests/coding_agent/runtime/SessionFactoryUserShellTest.cpp
         tests/coding_agent/runtime/RpcModeTest.cpp
         tests/coding_agent/runtime/SessionEventCommitmentTest.cpp
         tests/coding_agent/runtime/SessionLifecycleTest.cpp

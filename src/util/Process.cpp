@@ -18,6 +18,7 @@
 #include <string>
 
 #if defined(__unix__) || defined(__APPLE__)
+#include <boost/process/v1/posix.hpp>
 #include <signal.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -175,14 +176,41 @@ boost::asio::awaitable<Expected<ProcessResult>> DefaultAsyncProcessRunner::run(P
         }
 
         bp::group process_group;
-        bp::child child(
-            request.executable.string(),
-            bp::args(request.arguments),
-            bp::start_dir = request.working_directory.string(),
-            bp::std_out > stdout_pipe,
-            bp::std_err > stderr_pipe,
-            child_environment,
-            process_group);
+        // When stderr is merged on a supported platform, bind the stdout
+        // pipe's raw sink fd for the child's stderr so both streams share one
+        // kernel pipe and the reader observes emission order. Binding the
+        // same async_pipe twice would close its sink twice at spawn. On other
+        // platforms the merge is unavailable and stderr stays a separate
+        // drained stream.
+#if defined(__unix__) || defined(__APPLE__)
+        const bool stderr_merged = request.merge_stderr;
+#else
+        const bool stderr_merged = false;
+#endif
+        bp::child child = [&]() {
+#if defined(__unix__) || defined(__APPLE__)
+            if (stderr_merged) {
+                // Handler order matters: the stderr fd bind must dup the pipe
+                // sink before the std_out binding closes it in the child.
+                return bp::child(
+                    request.executable.string(),
+                    bp::args(request.arguments),
+                    bp::start_dir = request.working_directory.string(),
+                    bp::posix::fd.bind(STDERR_FILENO, stdout_pipe.native_sink()),
+                    bp::std_out > stdout_pipe,
+                    child_environment,
+                    process_group);
+            }
+#endif
+            return bp::child(
+                request.executable.string(),
+                bp::args(request.arguments),
+                bp::start_dir = request.working_directory.string(),
+                bp::std_out > stdout_pipe,
+                bp::std_err > stderr_pipe,
+                child_environment,
+                process_group);
+        }();
 
         ChildGuard guard(child, process_group);
 
@@ -191,10 +219,16 @@ boost::asio::awaitable<Expected<ProcessResult>> DefaultAsyncProcessRunner::run(P
             executor,
             drain_pipe(stdout_pipe, request.output_limit, std::move(request.on_stdout)),
             boost::asio::deferred);
-        auto stderr_drain = boost::asio::co_spawn(
-            executor,
-            drain_pipe(stderr_pipe, request.output_limit, std::move(request.on_stderr)),
-            boost::asio::deferred);
+        // A merged stderr shares the stdout pipe, so it never gets a separate
+        // drain (its pipe has no writer and would block a reader forever).
+        using DrainAwaitable = decltype(stdout_drain);
+        std::optional<DrainAwaitable> stderr_drain;
+        if (!stderr_merged) {
+            stderr_drain.emplace(boost::asio::co_spawn(
+                executor,
+                drain_pipe(stderr_pipe, request.output_limit, std::move(request.on_stderr)),
+                boost::asio::deferred));
+        }
 
         ProcessResult result;
         bool cancelled = false;
@@ -262,10 +296,12 @@ boost::asio::awaitable<Expected<ProcessResult>> DefaultAsyncProcessRunner::run(P
         } catch (...) {
             callback_error = true;
         }
-        try {
-            stderr_capture = co_await std::move(stderr_drain);
-        } catch (...) {
-            callback_error = true;
+        if (stderr_drain) {
+            try {
+                stderr_capture = co_await std::move(*stderr_drain);
+            } catch (...) {
+                callback_error = true;
+            }
         }
 
         if (child.joinable()) {
