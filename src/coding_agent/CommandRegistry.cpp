@@ -103,6 +103,12 @@ namespace {
                      << description;
             }
         }
+        if (ctx.user_bash_available) {
+            // User Bash is input-prefix syntax, never a slash command or hotkey.
+            text << "\nInput prefixes:"
+                 << "\n  ! <command>           Run a shell command directly; the completed result enters later model context"
+                 << "\n  !! <command>          Run a shell command directly; the completed result is excluded from later model context";
+        }
         return CommandResult{text.str()};
     }
 

@@ -465,6 +465,10 @@ AgentSessionRuntime::run_user_bash(
                     .output = output.tail(),
                     .exclude_from_context = exclude_from_context,
                     .awaiting_commitment = true,
+                    .exit_code = pending->completion.message.exit_code,
+                    .cancelled = pending->completion.message.cancelled,
+                    .truncated = pending->completion.message.truncated,
+                    .full_output_path = pending->completion.message.full_output_path,
                 });
             } catch (...) {
                 // Execution already completed; a presentation failure must not

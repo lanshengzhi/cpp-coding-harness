@@ -2,12 +2,14 @@
 #include <cch/ai/Content.hpp>
 #include <cch/agent/AgentTool.hpp>
 #include <cch/coding_agent/Sdk.hpp>
+#include <cch/harness/session/JsonlSessionStore.hpp>
 #include <cch/harness/session/SessionResume.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 #include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/Theme.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/FakeUserShell.hpp"
 #include "support/GatedChatClient.hpp"
@@ -25,6 +27,7 @@
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iterator>
 #include <memory>
@@ -79,6 +82,30 @@ void drain_ready(boost::asio::io_context& io) {
         const auto* bash = std::get_if<ai::BashExecutionMessage>(&message);
         return bash != nullptr && bash->command == command;
     });
+}
+
+/// Extracts the leading SGR parameter list from a themed probe string.
+[[nodiscard]] std::string sgr_params(const std::string& styled) {
+    const auto begin = styled.find("\x1b[");
+    REQUIRE(begin != std::string::npos);
+    const auto end = styled.find('m', begin);
+    REQUIRE(end != std::string::npos);
+    return styled.substr(begin + 2, end - begin - 2);
+}
+
+[[nodiscard]] std::string fg_at_text(
+    const tui::VirtualTerminal& terminal,
+    std::string_view text) {
+    const auto screen = terminal.screen();
+    for (std::size_t row = 0; row < screen.size(); ++row) {
+        const auto column = screen[row].find(text);
+        if (column != std::string::npos) {
+            REQUIRE(column < terminal.cells()[row].size());
+            return terminal.cells()[row][column].style.fg_color;
+        }
+    }
+    REQUIRE(false);
+    return {};
 }
 
 /// First request emits partial output, gates, and answers cancellation with an
@@ -898,11 +925,14 @@ TEST_CASE(
 
     shell_pointer->release();
     drain_ready(io);
-    // Completed during the run: visibly pending, not yet committed.
+    // Completed during the run: the pending block shows the completed form
+    // (no loader) and is not yet committed.
     CHECK_FALSE(has_bash_command(
         created->session->snapshot().agent_state.messages, "during run"));
     screen = visible_screen(terminal);
-    CHECK(screen.find("Bash pending") != std::string::npos);
+    CHECK(screen.find("$ during run") != std::string::npos);
+    CHECK(screen.find("overlap output") != std::string::npos);
+    CHECK(screen.find("Running...") == std::string::npos);
 
     client_pointer->release();
     drain_ready(io);
@@ -998,7 +1028,9 @@ TEST_CASE(
     REQUIRE(terminal.inject_input("!echo overlap\r"));
     drain_ready(io);
     REQUIRE(shell_pointer->commands.size() == 1);
-    CHECK(visible_screen(terminal).find("Bash running") != std::string::npos);
+    auto running_screen = visible_screen(terminal);
+    CHECK(running_screen.find("$ echo overlap") != std::string::npos);
+    CHECK(running_screen.find("Running...") != std::string::npos);
 
     // Autocomplete cancellation precedes both active operations.
     REQUIRE(terminal.inject_input("/"));
@@ -1036,7 +1068,9 @@ TEST_CASE(
     CHECK(bash->cancelled);
     CHECK_FALSE(bash->exit_code.has_value());
     CHECK(bash->output == "partial bash output");
-    CHECK(count_occurrences(visible_screen(terminal), "Bash failed: echo overlap") == 1);
+    const auto cancelled_screen = visible_screen(terminal);
+    CHECK(count_occurrences(cancelled_screen, "$ echo overlap") == 1);
+    CHECK(cancelled_screen.find("(cancelled)") != std::string::npos);
     CHECK_FALSE(created->session->is_busy());
 
     // Recovery: a later command and an ordinary Prompt still work.
@@ -1217,7 +1251,9 @@ TEST_CASE(
     REQUIRE(bash != nullptr);
     CHECK(bash->cancelled);
     CHECK(bash->output == "held output");
-    CHECK(count_occurrences(visible_screen(terminal), "Bash failed: echo hold") == 1);
+    const auto close_screen = visible_screen(terminal);
+    CHECK(count_occurrences(close_screen, "$ echo hold") == 1);
+    CHECK(close_screen.find("(cancelled)") != std::string::npos);
 
     // A later command and an ordinary Prompt still work after cancellation.
     REQUIRE(terminal.inject_input("!echo next\r"));
@@ -1308,7 +1344,8 @@ TEST_CASE(
     // The cancelled Bash committed exactly once; cleanup and terminal
     // restoration happened exactly once with no late presentation.
     const auto screen = visible_screen(terminal);
-    CHECK(count_occurrences(screen, "Bash failed: echo close") == 1);
+    CHECK(count_occurrences(screen, "$ echo close") == 1);
+    CHECK(screen.find("(cancelled)") != std::string::npos);
     CHECK(screen.find("close bash partial") != std::string::npos);
     CHECK_FALSE(terminal.modes().started);
     CHECK(terminal.modes().cursor_visible);
@@ -1384,8 +1421,866 @@ TEST_CASE(
     CHECK_FALSE(created->session->is_busy());
 
     const auto screen = visible_screen(terminal);
-    CHECK(count_occurrences(screen, "Bash failed: echo f6 close") == 1);
+    CHECK(count_occurrences(screen, "$ echo f6 close") == 1);
+    CHECK(screen.find("(cancelled)") != std::string::npos);
     CHECK(screen.find("keybinding close partial") != std::string::npos);
     CHECK_FALSE(terminal.modes().started);
     CHECK(terminal.modes().cursor_visible);
+}
+
+TEST_CASE(
+    "committed User Bash blocks preview the output tail and expand through the effective action",
+    "[coding_agent][tui][issue89]") {
+    tests::TempWorkspace workspace;
+    auto client = std::make_unique<RecordingChatClient>();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    auto* shell_pointer = shell.get();
+    std::string many_lines;
+    for (int index = 1; index <= 25; ++index) {
+        if (index > 1) many_lines.push_back('\n');
+        many_lines += std::format("line-{:02}", index);
+    }
+    shell_pointer->enqueue({
+        .updates = {many_lines},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = false,
+    });
+    shell_pointer->enqueue({
+        .updates = {"failing output"},
+        .result = {.exit_code = 3},
+        .infrastructure_failure = std::nullopt,
+        .gated = false,
+    });
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.chat_client = std::move(client);
+    options.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(
+        std::move(options), std::move(shell));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = workspace.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            REQUIRE(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("!make lines\r"));
+    drain_ready(io);
+
+    // The collapsed block derives from the last 20 logical lines.
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("$ make lines") != std::string::npos);
+    CHECK(screen.find("line-01") == std::string::npos);
+    CHECK(screen.find("line-05") == std::string::npos);
+    CHECK(screen.find("line-06") != std::string::npos);
+    CHECK(screen.find("line-25") != std::string::npos);
+    CHECK(screen.find("... 5 more lines (ctrl+o to expand)") != std::string::npos);
+    CHECK(screen.find("(exit") == std::string::npos);
+    CHECK(screen.find("Bash success") == std::string::npos);
+    CHECK(count_occurrences(screen, "$ make lines") == 1);
+
+    // The existing effective tool-expansion action expands and collapses.
+    REQUIRE(terminal.inject_input("\x0f"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("line-01") != std::string::npos);
+    CHECK(screen.find("line-25") != std::string::npos);
+    CHECK(screen.find("(ctrl+o to collapse)") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x0f"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("line-01") == std::string::npos);
+
+    // A non-zero exit stays one concise status without losing the output.
+    REQUIRE(terminal.inject_input("!fails\r"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("$ fails") != std::string::npos);
+    CHECK(screen.find("failing output") != std::string::npos);
+    CHECK(screen.find("(exit 3)") != std::string::npos);
+    CHECK(screen.find("Bash failed") == std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "resumed User Bash messages render in original order with their recorded meanings",
+    "[coding_agent][tui][issue89]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    const auto session_file = workspace.path() / "bash-resume.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(
+        session_file,
+        {
+            .session_id = "bash-resume",
+            .created_at = "2026-07-28T00:00:00Z",
+            .workspace = workspace.path(),
+            .provider = "fake",
+            .model = "fake-model",
+        });
+    REQUIRE(store);
+
+    ai::UserMessage before;
+    before.timestamp = 1'700'000'000'000;
+    before.content = {ai::text_content("before bash")};
+    REQUIRE(store->append(ai::MessageVariant{before}));
+
+    ai::BashExecutionMessage included;
+    included.command = "echo resumed";
+    included.output = "resumed output";
+    included.exit_code = 0;
+    included.timestamp = 1'700'000'000'001;
+    REQUIRE(store->append(ai::MessageVariant{included}));
+
+    ai::BashExecutionMessage excluded;
+    excluded.command = "secret local";
+    excluded.output = "local output";
+    excluded.exit_code = 9;
+    excluded.exclude_from_context = true;
+    excluded.timestamp = 1'700'000'000'002;
+    REQUIRE(store->append(ai::MessageVariant{excluded}));
+
+    ai::BashExecutionMessage cancelled;
+    cancelled.command = "sleep forever";
+    cancelled.output = "partial output";
+    cancelled.cancelled = true;
+    cancelled.timestamp = 1'700'000'000'003;
+    REQUIRE(store->append(ai::MessageVariant{cancelled}));
+
+    ai::UserMessage after;
+    after.timestamp = 1'700'000'000'004;
+    after.content = {ai::text_content("after bash")};
+    REQUIRE(store->append(ai::MessageVariant{after}));
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
+    options.workspace = workspace.path();
+    options.chat_client = std::make_unique<RecordingChatClient>();
+    options.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto resumed = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(resumed);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *resumed->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            REQUIRE(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    const auto screen = visible_screen(terminal);
+    const auto before_position = screen.find("before bash");
+    const auto included_position = screen.find("$ echo resumed");
+    const auto excluded_position = screen.find("$ secret local");
+    const auto cancelled_position = screen.find("$ sleep forever");
+    const auto after_position = screen.find("after bash");
+    REQUIRE(before_position != std::string::npos);
+    REQUIRE(included_position != std::string::npos);
+    REQUIRE(excluded_position != std::string::npos);
+    REQUIRE(cancelled_position != std::string::npos);
+    REQUIRE(after_position != std::string::npos);
+    CHECK(before_position < included_position);
+    CHECK(included_position < excluded_position);
+    CHECK(excluded_position < cancelled_position);
+    CHECK(cancelled_position < after_position);
+    CHECK(screen.find("resumed output") != std::string::npos);
+    CHECK(screen.find("local output") != std::string::npos);
+    CHECK(screen.find("(exit 9)") != std::string::npos);
+    CHECK(screen.find("(cancelled)") != std::string::npos);
+    CHECK(screen.find("partial output") != std::string::npos);
+    CHECK(screen.find("Bash success") == std::string::npos);
+    CHECK(screen.find("Bash failed") == std::string::npos);
+    CHECK(count_occurrences(screen, "$ echo resumed") == 1);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "live User Bash blocks stream through one status block with a loader and effective hints",
+    "[coding_agent][tui][issue89]") {
+    tests::TempWorkspace workspace;
+    auto client = std::make_unique<RecordingChatClient>();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    auto* shell_pointer = shell.get();
+    // Trailing newline: incremental redaction holds back a trailing
+    // at-risk construct until more output or finish() flushes it.
+    shell_pointer->enqueue({
+        .updates = {"streamed partial\n"},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = true,
+    });
+    shell_pointer->enqueue({
+        .updates = {},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = true,
+    });
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.chat_client = std::move(client);
+    options.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(
+        std::move(options), std::move(shell));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = workspace.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            REQUIRE(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("!watch out\r"));
+    drain_ready(io);
+    REQUIRE(shell_pointer->commands.size() == 1);
+
+    // One streaming block: a $ command header, streamed output, and a running
+    // loader with the effective interruption hint; nothing committed yet.
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("$ watch out") != std::string::npos);
+    CHECK(screen.find("streamed partial") != std::string::npos);
+    CHECK(screen.find("Running...") != std::string::npos);
+    CHECK(screen.find("(escape to cancel)") != std::string::npos);
+    CHECK(created->session->snapshot().agent_state.messages.empty());
+
+    // Commitment reconciles the pending block into one transcript entry
+    // without duplicating history.
+    shell_pointer->release();
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(count_occurrences(screen, "$ watch out") == 1);
+    CHECK(screen.find("Running...") == std::string::npos);
+    CHECK(screen.find("(exit") == std::string::npos);
+    CHECK(created->session->snapshot().agent_state.messages.size() == 1);
+
+    // Excluded execution uses the same block form.
+    REQUIRE(terminal.inject_input("!!quiet\r"));
+    drain_ready(io);
+    REQUIRE(shell_pointer->commands.size() == 2);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("$ quiet") != std::string::npos);
+    CHECK(screen.find("Running...") != std::string::npos);
+    shell_pointer->release();
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "User Bash blocks style model-context inclusion through theme tokens",
+    "[coding_agent][tui][issue89]") {
+    tests::TempWorkspace workspace;
+    auto client = std::make_unique<RecordingChatClient>();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    auto* shell_pointer = shell.get();
+    shell_pointer->enqueue({
+        .updates = {"styled output"},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = false,
+    });
+    shell_pointer->enqueue({
+        .updates = {"hidden output"},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = false,
+    });
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.chat_client = std::move(client);
+    options.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(
+        std::move(options), std::move(shell));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = workspace.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            REQUIRE(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("!echo styled\r"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("!!echo hidden\r"));
+    drain_ready(io);
+    REQUIRE(shell_pointer->commands.size() == 2);
+
+    // The included block uses the bashMode token; the excluded block is dimmed.
+    coding_agent::tui::LiveTheme probe_theme(
+        coding_agent::tui::select_builtin_theme(terminal.capabilities()),
+        terminal.capabilities().color);
+    const auto styled_params = sgr_params(
+        probe_theme.foreground(coding_agent::tui::ThemeToken::BashMode, "x"));
+    const auto dimmed_params = sgr_params(
+        probe_theme.foreground(coding_agent::tui::ThemeToken::Dim, "x"));
+    const auto muted_params = sgr_params(
+        probe_theme.foreground(coding_agent::tui::ThemeToken::Muted, "x"));
+    CHECK(fg_at_text(terminal, "$ echo styled") == styled_params);
+    CHECK(fg_at_text(terminal, "$ echo hidden") == dimmed_params);
+    CHECK(fg_at_text(terminal, "styled output") == muted_params);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "the editor enters Bash mode on trimmed ! input and recalls the redacted invocation",
+    "[coding_agent][tui][issue89]") {
+    tests::TempWorkspace workspace;
+    const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
+    auto client = std::make_unique<RecordingChatClient>();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    auto* shell_pointer = shell.get();
+    shell_pointer->enqueue({
+        .updates = {},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = true,
+    });
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.chat_client = std::move(client);
+    options.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(
+        std::move(options), std::move(shell));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = workspace.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            REQUIRE(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    coding_agent::tui::LiveTheme probe_theme(
+        coding_agent::tui::select_builtin_theme(terminal.capabilities()),
+        terminal.capabilities().color);
+    const auto bash_params = sgr_params(
+        probe_theme.foreground(coding_agent::tui::ThemeToken::BashMode, "x"));
+    const auto text_params = sgr_params(
+        probe_theme.foreground(coding_agent::tui::ThemeToken::Text, "x"));
+
+    // Bash mode starts as soon as the trimmed input begins with !.
+    REQUIRE(terminal.inject_input("  !echo marker"));
+    drain_ready(io);
+    CHECK(fg_at_text(terminal, "!echo marker") == bash_params);
+
+    // Ordinary text keeps the ordinary editor styling.
+    REQUIRE(terminal.inject_input("\x03"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("plain text"));
+    drain_ready(io);
+    CHECK(fg_at_text(terminal, "plain text") == text_params);
+
+    // A rejected second command is recalled to the editor in its redacted
+    // invocation form.
+    REQUIRE(terminal.inject_input("\x03"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("!first wait\r"));
+    drain_ready(io);
+    REQUIRE(shell_pointer->commands.size() == 1);
+    REQUIRE(terminal.inject_input("!api_key=" + secret + " recall\r"));
+    drain_ready(io);
+    CHECK(shell_pointer->commands.size() == 1);
+    const auto screen = visible_screen(terminal);
+    CHECK(screen.find("already in flight") != std::string::npos);
+    CHECK(screen.find("! api_key=[REDACTED] recall") != std::string::npos);
+    CHECK(screen.find(secret) == std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x03"));
+    drain_ready(io);
+    shell_pointer->release();
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "User Bash hints follow effective remapped interruption and expansion bindings",
+    "[coding_agent][tui][issue89]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    config.write("keybindings.json", R"({"app.interrupt":"f5","app.tools.expand":"f7"})");
+    auto client = std::make_unique<RecordingChatClient>();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    auto* shell_pointer = shell.get();
+    std::string many_lines;
+    for (int index = 1; index <= 25; ++index) {
+        if (index > 1) many_lines.push_back('\n');
+        many_lines += std::format("remap-{:02}", index);
+    }
+    shell_pointer->enqueue({
+        .updates = {many_lines},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = false,
+    });
+    shell_pointer->enqueue({
+        .updates = {},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = true,
+    });
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.chat_client = std::move(client);
+    options.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(
+        std::move(options), std::move(shell));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            REQUIRE(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("!remap lines\r"));
+    drain_ready(io);
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("... 5 more lines (f7 to expand)") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("!remap loader\r"));
+    drain_ready(io);
+    REQUIRE(shell_pointer->commands.size() == 2);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("(f5 to cancel)") != std::string::npos);
+
+    shell_pointer->release();
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "the collapsed User Bash block renders at most 20 visual lines on a narrow terminal",
+    "[coding_agent][tui][issue89]") {
+    tests::TempWorkspace workspace;
+    auto client = std::make_unique<RecordingChatClient>();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    auto* shell_pointer = shell.get();
+    std::string wide_output;
+    for (int index = 1; index <= 5; ++index) {
+        if (index > 1) wide_output.push_back('\n');
+        wide_output += std::format("L{}-", index);
+        wide_output += std::string(190, static_cast<char>('a' + index - 1));
+    }
+    shell_pointer->enqueue({
+        .updates = {wide_output},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = false,
+    });
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.chat_client = std::move(client);
+    options.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(
+        std::move(options), std::move(shell));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 40, .rows = 40});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = workspace.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            REQUIRE(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("!narrow\r"));
+    drain_ready(io);
+
+    // Five logical lines fit the 20-line logical preview, but each wraps to
+    // five visual lines at this width: the visual tail keeps the last 20.
+    const auto screen = visible_screen(terminal);
+    CHECK(screen.find("$ narrow") != std::string::npos);
+    CHECK(screen.find("L1-") == std::string::npos);
+    CHECK(screen.find("L2-") != std::string::npos);
+    CHECK(screen.find("L5-") != std::string::npos);
+    CHECK(screen.find("more lines") == std::string::npos);
+
+    // The effective tool-expansion action still reveals the full output.
+    REQUIRE(terminal.inject_input("\x0f"));
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("L1-") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "focused User Bash dispatch trims, parses prefixes, and falls through like the pi baseline",
+    "[coding_agent][tui][issue89]") {
+    tests::TempWorkspace workspace;
+    auto client = std::make_unique<RecordingChatClient>();
+    auto* client_pointer = client.get();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    auto* shell_pointer = shell.get();
+    shell_pointer->enqueue({
+        .updates = {},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = false,
+    });
+    shell_pointer->enqueue({
+        .updates = {},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = false,
+    });
+    shell_pointer->enqueue({
+        .updates = {},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = false,
+    });
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.chat_client = std::move(client);
+    options.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(
+        std::move(options), std::move(shell));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = workspace.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            REQUIRE(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    // Surrounding whitespace does not alter dispatch; the remainder is trimmed.
+    REQUIRE(terminal.inject_input("   !   echo spaced   \r"));
+    drain_ready(io);
+    REQUIRE(shell_pointer->commands.size() == 1);
+    CHECK(shell_pointer->commands[0] == "echo spaced");
+
+    // A multiline remainder runs as one trimmed script.
+    REQUIRE(terminal.inject_input("!  \x1b[200~printf one\nprintf two  \x1b[201~\r"));
+    drain_ready(io);
+    REQUIRE(shell_pointer->commands.size() == 2);
+    CHECK(shell_pointer->commands[1] == "printf one\nprintf two");
+
+    // More than two leading exclamation marks follow the baseline prefix
+    // rule: excluded User Bash running "!foo".
+    REQUIRE(terminal.inject_input("!!!foo\r"));
+    drain_ready(io);
+    REQUIRE(shell_pointer->commands.size() == 3);
+    CHECK(shell_pointer->commands[2] == "!foo");
+    auto snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.messages.size() == 3);
+    const auto* third = std::get_if<ai::BashExecutionMessage>(
+        &snapshot.agent_state.messages[2]);
+    REQUIRE(third != nullptr);
+    CHECK(third->command == "!foo");
+    CHECK(third->exclude_from_context);
+
+    // Bare prefixes fall through to ordinary Agent Prompt processing.
+    REQUIRE(terminal.inject_input("! \r"));
+    drain_ready(io);
+    REQUIRE(client_pointer->requests.size() == 1);
+    REQUIRE(terminal.inject_input("  !!  \r"));
+    drain_ready(io);
+    REQUIRE(client_pointer->requests.size() == 2);
+    CHECK(shell_pointer->commands.size() == 3);
+    for (const auto& request : client_pointer->requests) {
+        const auto& user = std::get<ai::UserMessage>(request.context.messages.back());
+        CHECK(ai::text_from_content(user.content).starts_with("!"));
+    }
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Skill and Prompt Template expansions beginning with ! stay ordinary Agent Prompt text",
+    "[coding_agent][tui][issue89]") {
+    tests::TempWorkspace workspace;
+    workspace.write(
+        ".cpp-harness/skills/bang-skill/SKILL.md",
+        "---\n"
+        "name: bang-skill\n"
+        "description: Skill whose body begins with a bang.\n"
+        "---\n"
+        "!echo skill-body\n");
+    workspace.write(
+        ".cpp-harness/prompts/bang-prompt.md",
+        "---\n"
+        "description: Template whose expansion begins with a bang.\n"
+        "---\n"
+        "!echo template-body $ARGUMENTS\n");
+    auto client = std::make_unique<RecordingChatClient>();
+    auto* client_pointer = client.get();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    auto* shell_pointer = shell.get();
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.chat_client = std::move(client);
+    options.load_project_resources = true;
+    options.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    options.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(
+        std::move(options), std::move(shell));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = workspace.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            REQUIRE(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("/skill:bang-skill\r"));
+    drain_ready(io);
+    REQUIRE(client_pointer->requests.size() == 1);
+    const auto& skill_user = std::get<ai::UserMessage>(
+        client_pointer->requests[0].context.messages.back());
+    CHECK(ai::text_from_content(skill_user.content).find("!echo skill-body") !=
+        std::string::npos);
+    CHECK(shell_pointer->commands.empty());
+
+    REQUIRE(terminal.inject_input("/bang-prompt target\r"));
+    drain_ready(io);
+    REQUIRE(client_pointer->requests.size() == 2);
+    const auto& template_user = std::get<ai::UserMessage>(
+        client_pointer->requests[1].context.messages.back());
+    CHECK(ai::text_from_content(template_user.content) == "!echo template-body target");
+    CHECK(shell_pointer->commands.empty());
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "/help documents User Bash input prefixes without a pseudo-command or hotkey action",
+    "[coding_agent][tui][issue89]") {
+    tests::TempWorkspace workspace;
+    auto client = std::make_unique<RecordingChatClient>();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    auto* shell_pointer = shell.get();
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.chat_client = std::move(client);
+    options.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(
+        std::move(options), std::move(shell));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = workspace.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            REQUIRE(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    // A separate input-prefix section documents ! and !!.
+    REQUIRE(terminal.inject_input("/help\r"));
+    drain_ready(io);
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("Available commands:") != std::string::npos);
+    CHECK(screen.find("Input prefixes:") != std::string::npos);
+    CHECK(screen.find("! <command>") != std::string::npos);
+    CHECK(screen.find("!! <command>") != std::string::npos);
+
+    // The prefixes are not slash commands.
+    REQUIRE(terminal.inject_input("/help !\r"));
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("Unknown command: /!") != std::string::npos);
+
+    // Typing a prefix opens no slash autocomplete.
+    REQUIRE(terminal.inject_input("!"));
+    drain_ready(io);
+    CHECK(count_occurrences(visible_screen(terminal), "> /") == 0);
+    REQUIRE(terminal.inject_input("\x03"));
+    drain_ready(io);
+
+    // Hotkey help registers no User Bash action.
+    REQUIRE(terminal.inject_input("/hotkeys\r"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("Hotkeys") != std::string::npos);
+    CHECK(screen.find("bash") == std::string::npos);
+    CHECK(screen.find("Bash") == std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
 }

@@ -44,6 +44,8 @@ public:
     void append_diagnostic(std::string text);
     void toggle_tool_output();
     void toggle_thinking();
+    /// Whether tool and User Bash output currently renders in full.
+    [[nodiscard]] bool tools_expanded() const;
 
     [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) const;
 

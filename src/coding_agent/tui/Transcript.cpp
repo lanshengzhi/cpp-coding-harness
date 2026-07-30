@@ -7,6 +7,7 @@
 #include <cch/tui/Markdown.hpp>
 #include <cch/tui/Text.hpp>
 #include "coding_agent/BoundedText.hpp"
+#include "coding_agent/tui/BashBlock.hpp"
 #include "coding_agent/tui/Theme.hpp"
 #include "util/Json.hpp"
 
@@ -533,23 +534,21 @@ struct Transcript::Impl {
             return result;
         }
         if (const auto* bash = std::get_if<ai::BashExecutionMessage>(&message)) {
-            auto output = tools_expanded
-                ? safe_text(bash->output)
-                : collapsed_text(bash->output, key_hint("app.tools.expand"));
-            auto rendered = render_plain(
+            auto rendered = render_bash_block(
                 theme,
-                std::format(
-                    "Bash {}: {}\n{}",
-                    bash->cancelled || (bash->exit_code && *bash->exit_code != 0)
-                        ? "failed"
-                        : "success",
-                    bash->command,
-                    output),
-                width,
-                ThemeToken::ToolOutput,
-                bash->cancelled || (bash->exit_code && *bash->exit_code != 0)
-                    ? ThemeToken::ToolErrorBg
-                    : ThemeToken::ToolSuccessBg);
+                keybindings,
+                BashBlockView{
+                    .command = bash->command,
+                    .output = bash->output,
+                    .exclude_from_context = bash->exclude_from_context,
+                    .running = false,
+                    .exit_code = bash->exit_code,
+                    .cancelled = bash->cancelled,
+                    .truncated = bash->truncated,
+                    .full_output_path = bash->full_output_path,
+                },
+                tools_expanded,
+                width);
             if (!rendered) return std::unexpected(rendered.error());
             return lines_result(std::move(*rendered));
         }
@@ -785,6 +784,10 @@ void Transcript::toggle_tool_output() {
 
 void Transcript::toggle_thinking() {
     impl_->thinking_expanded = !impl_->thinking_expanded;
+}
+
+bool Transcript::tools_expanded() const {
+    return impl_->tools_expanded;
 }
 
 util::Expected<cch::tui::RenderResult> Transcript::render(std::size_t width) const {

@@ -37,6 +37,9 @@ struct CommandContext {
     std::size_t message_count{0};
     /// Passive snapshot of effective commands available for this dispatch.
     std::vector<CommandInfo> available_commands;
+    /// Whether this frontend dispatches User Bash input prefixes; /help
+    /// documents them only where they are interpreted.
+    bool user_bash_available{false};
 };
 
 enum class CommandEffect {

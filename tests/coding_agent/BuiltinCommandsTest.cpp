@@ -212,3 +212,29 @@ TEST_CASE("built-in /commands dispatches through the /help handler", "[coding_ag
     REQUIRE(commands.has_value());
     CHECK(commands->display_text == help->display_text);
 }
+
+TEST_CASE("built-in /help documents input prefixes only where User Bash is available", "[coding_agent][prompt][issue89]") {
+    coding_agent::CommandRegistry registry;
+    REQUIRE(coding_agent::register_builtin_commands(registry).has_value());
+
+    coding_agent::CommandContext ctx;
+    ctx.available_commands = registry.list_commands();
+    ctx.user_bash_available = true;
+    auto with_bash = registry.dispatch("help", ctx, "");
+    REQUIRE(with_bash.has_value());
+    CHECK(with_bash->display_text.find("Available commands:") != std::string::npos);
+    CHECK(with_bash->display_text.find("Input prefixes:") != std::string::npos);
+    CHECK(with_bash->display_text.find("! <command>") != std::string::npos);
+    CHECK(with_bash->display_text.find("!! <command>") != std::string::npos);
+
+    ctx.user_bash_available = false;
+    auto without_bash = registry.dispatch("help", ctx, "");
+    REQUIRE(without_bash.has_value());
+    CHECK(without_bash->display_text.find("Available commands:") != std::string::npos);
+    CHECK(without_bash->display_text.find("Input prefixes:") == std::string::npos);
+
+    // The prefixes are input prefixes, not registered slash commands.
+    auto pseudo = registry.dispatch("help", ctx, "!");
+    REQUIRE(pseudo.has_value());
+    CHECK(pseudo->display_text == "Unknown command: /!");
+}

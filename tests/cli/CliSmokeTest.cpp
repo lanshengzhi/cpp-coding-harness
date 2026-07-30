@@ -393,6 +393,22 @@ TEST_CASE("CLI text one-shot treats user bash syntax as an ordinary prompt", "[c
     CHECK(double_bang.output.find("fake: !!echo hidden") != std::string::npos);
 }
 
+TEST_CASE("CLI JSON one-shot treats user bash syntax as an ordinary prompt", "[cli][json][user-bash][issue89]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "json-user-bash.jsonl";
+    auto result = run_command_split(
+        bin() + " --fake --mode json --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) + " '!echo hi'");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.empty());
+    const auto records = parse_json_objects(result.stdout_text);
+    REQUIRE(records.size() > 1);
+    CHECK(json_string_at(records.front(), "type") == "session");
+    CHECK(result.stdout_text.find("fake: !echo hi") != std::string::npos);
+    CHECK(has_json_event_type(non_empty_lines(result.stdout_text), "tool_execution_start") == false);
+}
+
 TEST_CASE("CLI non-TTY /clear emits no ANSI and does not invoke the model", "[cli][commands][issue64]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "clear-one-shot.jsonl";

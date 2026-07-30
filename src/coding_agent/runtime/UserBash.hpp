@@ -17,6 +17,12 @@ struct UserBashProgress {
     /// Live Session State and the Session Store is deferred until the whole
     /// run settles.
     bool awaiting_commitment{false};
+    /// Terminal outcome, populated once the execution ended so the pending
+    /// presentation can show the completed block form.
+    std::optional<int> exit_code;
+    bool cancelled{false};
+    bool truncated{false};
+    std::optional<std::string> full_output_path;
 };
 
 struct UserBashCompletion {

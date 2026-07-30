@@ -94,6 +94,7 @@ target_link_libraries(cch_tui
 )
 
 add_library(cch_coding_agent_tui
+    src/coding_agent/tui/BashBlock.cpp
     src/coding_agent/tui/KeybindingCatalog.cpp
     src/coding_agent/tui/KeybindingHelp.cpp
     src/coding_agent/tui/Theme.cpp

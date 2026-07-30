@@ -5,6 +5,7 @@
 #include <cch/coding_agent/Sdk.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/tui/Editor.hpp>
+#include <cch/tui/Loader.hpp>
 #include <cch/tui/Overlay.hpp>
 #include <cch/tui/Terminal.hpp>
 #include <cch/tui/TruncatedText.hpp>
@@ -15,6 +16,7 @@
 #include "coding_agent/ImageInput.hpp"
 #include "coding_agent/prompt/SlashCommandParser.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
+#include "coding_agent/tui/BashBlock.hpp"
 #include "coding_agent/tui/KeybindingCatalog.hpp"
 #include "coding_agent/tui/KeybindingHelp.hpp"
 #include "coding_agent/tui/ThemeCatalog.hpp"
@@ -495,6 +497,7 @@ public:
           user_bash_active_(std::move(user_bash_active)),
           user_bash_available_(user_bash_available),
           transcript_(theme, *keybindings_),
+          theme_(&theme),
           editor_(
               cch::tui::EditorOptions{.keybindings = keybindings_},
               [this](std::string) {
@@ -573,23 +576,37 @@ public:
 
     void set_user_bash_progress(runtime::UserBashProgress progress) {
         std::lock_guard lock(mutex_);
+        if (!progress.awaiting_commitment) {
+            if (!bash_loader_) {
+                bash_loader_ = make_bash_loader(progress.exclude_from_context);
+            }
+        } else if (bash_loader_) {
+            bash_loader_->stop();
+            bash_loader_.reset();
+        }
         user_bash_progress_ = std::move(progress);
     }
 
     void clear_user_bash_progress() {
         std::lock_guard lock(mutex_);
+        if (bash_loader_) {
+            bash_loader_->stop();
+            bash_loader_.reset();
+        }
         user_bash_progress_.reset();
-    }
-
-    void set_editor_theme(cch::tui::EditorTheme theme) {
-        std::lock_guard lock(mutex_);
-        editor_.set_theme(std::move(theme));
     }
 
     [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override {
         std::lock_guard lock(mutex_);
         if (callback_error_) return std::unexpected(*callback_error_);
         editor_.set_available_height(available_rows_);
+        // The editor enters Bash mode as soon as the trimmed input begins
+        // with `!` (where User Bash dispatch is available).
+        editor_.set_theme(unsubmitted_bash_mode()
+            ? cch::tui::EditorTheme{
+                .text = theme_->foreground_hook(ThemeToken::BashMode),
+            }
+            : theme_->editor_theme());
         std::vector<std::string> editor_lines;
         if (auto editor = editor_.render(width); !editor) {
             return std::unexpected(editor.error());
@@ -629,34 +646,35 @@ public:
         std::vector<std::string> pending_lines;
         pending_lines.reserve(pending_steering_.size() + pending_follow_up_.size() + 3);
         if (user_bash_progress_) {
-            const auto prefix = user_bash_progress_->exclude_from_context ? "!!" : "!";
-            cch::tui::TruncatedText header{std::format(
-                "{} {} {}",
-                user_bash_progress_->awaiting_commitment
-                    ? "Bash pending"
-                    : "Bash running",
-                prefix,
-                user_bash_progress_->command)};
-            if (auto rendered = header.render(width); !rendered) {
-                return std::unexpected(rendered.error());
-            } else if (!rendered->lines.empty()) {
-                pending_lines.push_back(std::move(rendered->lines.front()));
-            }
-            std::size_t start = 0;
-            while (start < user_bash_progress_->output.size()) {
-                const auto newline = user_bash_progress_->output.find('\n', start);
-                const auto count = newline == std::string::npos
-                    ? user_bash_progress_->output.size() - start
-                    : newline - start;
-                cch::tui::TruncatedText output_line{
-                    user_bash_progress_->output.substr(start, count)};
-                if (auto rendered = output_line.render(width); !rendered) {
-                    return std::unexpected(rendered.error());
-                } else if (!rendered->lines.empty()) {
-                    pending_lines.push_back(std::move(rendered->lines.front()));
-                }
-                if (newline == std::string::npos) break;
-                start = newline + 1;
+            // One Bash block while pending; it becomes an ordinary transcript
+            // entry through the same presentation after commitment.
+            auto block = render_bash_block(
+                *theme_,
+                *keybindings_,
+                BashBlockView{
+                    .command = user_bash_progress_->command,
+                    .output = user_bash_progress_->output,
+                    .exclude_from_context = user_bash_progress_->exclude_from_context,
+                    .running = !user_bash_progress_->awaiting_commitment,
+                    .exit_code = user_bash_progress_->exit_code,
+                    .cancelled = user_bash_progress_->cancelled,
+                    .truncated = user_bash_progress_->truncated,
+                    .full_output_path = user_bash_progress_->full_output_path,
+                },
+                transcript_.tools_expanded(),
+                width);
+            if (!block) return std::unexpected(block.error());
+            pending_lines.insert(
+                pending_lines.end(),
+                std::make_move_iterator(block->begin()),
+                std::make_move_iterator(block->end()));
+            if (!user_bash_progress_->awaiting_commitment && bash_loader_) {
+                auto loader_lines = bash_loader_->render(width);
+                if (!loader_lines) return std::unexpected(loader_lines.error());
+                pending_lines.insert(
+                    pending_lines.end(),
+                    std::make_move_iterator(loader_lines->lines.begin()),
+                    std::make_move_iterator(loader_lines->lines.end()));
             }
         }
         for (const auto& message : pending_steering_) {
@@ -950,6 +968,28 @@ private:
             trim_editor_submission(editor_.expanded_text()).starts_with('!');
     }
 
+    [[nodiscard]] std::unique_ptr<cch::tui::Loader> make_bash_loader(
+        bool exclude_from_context) {
+        const auto cancel_key = keybindings_->key_text("app.interrupt");
+        cch::tui::LoaderOptions options;
+        // Render scheduling is thread-safe; failures surface on the next
+        // render rather than through callback state.
+        options.request_render = [this] {
+            if (!on_invalidate_) return;
+            try {
+                on_invalidate_();
+            } catch (...) {
+            }
+        };
+        options.spinner_style = theme_->foreground_hook(
+            exclude_from_context ? ThemeToken::Dim : ThemeToken::BashMode);
+        options.message_style = theme_->foreground_hook(ThemeToken::Muted);
+        options.message = std::format(
+            "Running... ({} to cancel)",
+            cancel_key.empty() ? "Unbound" : cancel_key);
+        return std::make_unique<cch::tui::Loader>(std::move(options));
+    }
+
     std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings_;
     cch::tui::TerminalCapabilities terminal_capabilities_;
     ActionSink on_invalidate_;
@@ -965,10 +1005,13 @@ private:
     std::optional<util::Error> callback_error_;
     mutable std::mutex mutex_;
     Transcript transcript_;
+    const LiveTheme* theme_; // must outlive the view: controller-owned live theme.
     cch::tui::Editor editor_;
     std::vector<std::string> pending_steering_;
     std::vector<std::string> pending_follow_up_;
     std::optional<runtime::UserBashProgress> user_bash_progress_;
+    // Declared after every sink it may invoke so destruction stops it first.
+    std::unique_ptr<cch::tui::Loader> bash_loader_;
     std::size_t available_rows_{24};
     std::size_t editor_row_offset_{0};
 };
@@ -1190,7 +1233,6 @@ private:
     }
 
     void initialize_view(const InteractiveStartupDiagnostics& diagnostics) {
-        view_->set_editor_theme(theme_controller_->live_theme().editor_theme());
         const auto snapshot = session_.snapshot();
         view_->initialize(snapshot);
         view_->set_pending_input(snapshot.agent_state.input_queues);
@@ -1376,6 +1418,8 @@ private:
             .model = session_.model(),
             .message_count = session_.message_count(),
             .available_commands = commands_.list_commands(),
+            .user_bash_available =
+                detail::AgentSessionInteractiveAccess::has_user_shell(session_),
         };
     }
 
