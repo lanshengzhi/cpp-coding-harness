@@ -12,16 +12,13 @@
 
 namespace cch::coding_agent::runtime {
 
-/// One terminal outcome from the private Session-owned User Shell. Output is
-/// treated as untrusted until the Agent Session runtime sanitizes and bounds it.
+/// One terminal outcome from the private Session-owned User Shell. Streamed
+/// output is treated as untrusted: the Agent Session runtime sanitizes,
+/// redacts, bounds, and spills it from the update sink, so the result carries
+/// only the terminal process status.
 struct UserShellResult {
-    std::string output;
     std::optional<int> exit_code{std::nullopt};
     bool cancelled{false};
-    bool truncated{false};
-    std::optional<std::string> full_output_path;
-    /// A retained-output artifact failure does not erase the terminal outcome.
-    std::optional<util::Error> artifact_error;
 };
 
 using UserShellUpdateSink =

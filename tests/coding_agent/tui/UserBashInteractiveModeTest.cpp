@@ -7,6 +7,7 @@
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "support/EnvVarGuard.hpp"
 #include "support/FakeUserShell.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -15,6 +16,7 @@
 #include <boost/asio/io_context.hpp>
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <memory>
@@ -79,24 +81,14 @@ TEST_CASE(
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
-        .updates = {"first update", "\nsecond update"},
-        .result = {
-            .output = "included output",
-            .exit_code = 0,
-            .full_output_path = std::nullopt,
-            .artifact_error = std::nullopt,
-        },
+        .updates = {"first update", "\nsecond update\nincluded output"},
+        .result = {.exit_code = 0},
         .infrastructure_failure = std::nullopt,
         .gated = true,
     });
     shell_pointer->enqueue({
-        .updates = {"local update"},
-        .result = {
-            .output = "excluded output",
-            .exit_code = 7,
-            .full_output_path = std::nullopt,
-            .artifact_error = std::nullopt,
-        },
+        .updates = {"excluded output"},
+        .result = {.exit_code = 7},
         .infrastructure_failure = std::nullopt,
         .gated = false,
     });
@@ -149,7 +141,7 @@ TEST_CASE(
         &snapshot.agent_state.messages[0]);
     REQUIRE(included != nullptr);
     CHECK(included->command == "echo included");
-    CHECK(included->output == "included output");
+    CHECK(included->output == "first update\nsecond update\nincluded output");
     CHECK(included->exit_code == 0);
     CHECK_FALSE(included->exclude_from_context);
     CHECK(visible_screen(terminal).find("included output") != std::string::npos);
@@ -235,27 +227,27 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "User Bash sanitizes retained values and preserves an artifact-failed outcome",
-    "[coding_agent][tui][issue85]") {
+    "User Bash sanitizes and bounds retained output and spills the complete safe stream",
+    "[coding_agent][tui][issue85][issue86]") {
     tests::TempWorkspace workspace;
+    const auto spill_dir = workspace.path() / "spill";
+    std::filesystem::create_directories(spill_dir);
+    tests::EnvVarGuard tmpdir{"TMPDIR", spill_dir.string()};
     const auto session_path = workspace.path() / "user-bash.jsonl";
     auto client = std::make_unique<RecordingChatClient>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
+    const std::string bulk(60 * 1024, 'x');
     shell_pointer->enqueue({
-        .updates = {"\x1b[31mlive api_key=" + secret + "\rupdate\x1b[0m"},
-        .result = {
-            .output = std::string(60 * 1024, 'x') + "\r\napi_key=" + secret,
-            .exit_code = 0,
-            .cancelled = false,
-            .truncated = true,
-            .full_output_path = "/tmp/api_key=" + secret,
-            .artifact_error = util::make_error(
-                util::ErrorCode::Process,
-                "artifact write failed",
-                "api_key=" + secret),
+        .updates = {
+            "\x1b[31mlive api_",
+            "key=" + secret.substr(0, 10),
+            secret.substr(10) + "\rupdate\x1b[0m\n",
+            bulk,
+            "\r\napi_key=" + secret,
         },
+        .result = {.exit_code = 0},
         .infrastructure_failure = std::nullopt,
         .gated = false,
     });
@@ -315,10 +307,25 @@ TEST_CASE(
     CHECK(bash->output.find("[REDACTED]") != std::string::npos);
     CHECK(bash->output.size() <= 50 * 1024);
     CHECK(bash->truncated);
-    CHECK_FALSE(bash->full_output_path.has_value());
     const auto screen = visible_screen(terminal);
     CHECK(screen.find(secret) == std::string::npos);
-    CHECK(screen.find("artifact write failed") != std::string::npos);
+
+    // The spill artifact holds the complete sanitized, redacted stream and is
+    // never substituted for the bounded model-context value.
+    REQUIRE(bash->full_output_path.has_value());
+    const std::filesystem::path spill_path{*bash->full_output_path};
+    CHECK(spill_path.parent_path() == spill_dir);
+    std::ifstream spill_input{spill_path, std::ios::binary};
+    const std::string spilled{
+        std::istreambuf_iterator<char>(spill_input),
+        std::istreambuf_iterator<char>()};
+    CHECK(spilled.size() > 60 * 1024);
+    CHECK(spilled.find(secret) == std::string::npos);
+    CHECK(spilled.find("live api_key=[REDACTED]\nupdate\n") != std::string::npos);
+    CHECK(spilled.ends_with("\napi_key=[REDACTED]"));
+    const auto permissions = std::filesystem::status(spill_path).permissions();
+    CHECK((permissions & std::filesystem::perms::group_all) == std::filesystem::perms::none);
+    CHECK((permissions & std::filesystem::perms::others_all) == std::filesystem::perms::none);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -333,7 +340,14 @@ TEST_CASE(
     auto resumed = harness::session::resume_session(session_path);
     REQUIRE(resumed);
     REQUIRE(resumed->history.size() == 1);
-    CHECK(std::get<ai::BashExecutionMessage>(resumed->history[0]).command == bash->command);
+    const auto& resumed_bash = std::get<ai::BashExecutionMessage>(resumed->history[0]);
+    CHECK(resumed_bash.command == bash->command);
+    CHECK(resumed_bash.full_output_path == bash->full_output_path);
+
+    // The recorded path remains valid after Session Close.
+    created->session->close();
+    CHECK(std::filesystem::exists(spill_path));
+    std::filesystem::remove(spill_path);
 }
 
 TEST_CASE(
@@ -346,12 +360,7 @@ TEST_CASE(
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
     shell->enqueue({
         .updates = {},
-        .result = {
-            .output = {},
-            .exit_code = 0,
-            .full_output_path = std::nullopt,
-            .artifact_error = std::nullopt,
-        },
+        .result = {.exit_code = 0},
         .infrastructure_failure = util::make_error(
             util::ErrorCode::Process,
             "spawn failed",
@@ -416,12 +425,7 @@ TEST_CASE(
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
     shell->enqueue({
         .updates = {"callback update api_key=" + secret},
-        .result = {
-            .output = "must not be committed",
-            .exit_code = 0,
-            .full_output_path = std::nullopt,
-            .artifact_error = std::nullopt,
-        },
+        .result = {.exit_code = 0},
         .infrastructure_failure = std::nullopt,
         .gated = false,
     });
@@ -497,12 +501,7 @@ TEST_CASE(
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
         .updates = {"partial output"},
-        .result = {
-            .output = "partial output",
-            .exit_code = 0,
-            .full_output_path = std::nullopt,
-            .artifact_error = std::nullopt,
-        },
+        .result = {.exit_code = 0},
         .infrastructure_failure = std::nullopt,
         .gated = true,
     });
@@ -563,4 +562,72 @@ TEST_CASE(
     CHECK(bash.cancelled);
     CHECK_FALSE(bash.exit_code.has_value());
     CHECK(bash.output == "partial output");
+}
+
+TEST_CASE(
+    "User Bash output spill failure preserves the bounded truncated result and a safe diagnostic",
+    "[coding_agent][runtime][issue86]") {
+    tests::TempWorkspace workspace;
+    tests::EnvVarGuard tmpdir{
+        "TMPDIR",
+        (workspace.path() / "missing" / "deeper").string()};
+    auto client = std::make_unique<RecordingChatClient>();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
+    const std::string bulk(60 * 1024, 'y');
+    shell->enqueue({
+        .updates = {bulk + "\napi_key=" + secret},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = false,
+    });
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.chat_client = std::move(client);
+    options.builtin_tools = {
+        .read = false,
+        .write = false,
+        .edit_file = false,
+        .bash = false,
+    };
+    auto created = coding_agent::create_agent_session(
+        std::move(options), std::move(shell));
+    REQUIRE(created);
+
+    boost::asio::io_context io;
+    std::optional<util::Expected<coding_agent::runtime::UserBashCompletion>> completion;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(
+            *created->session,
+            "huge output",
+            false,
+            [&secret](const coding_agent::runtime::UserBashProgress& progress)
+                -> util::ExpectedVoid {
+                CHECK(progress.output.find(secret) == std::string::npos);
+                return {};
+            }),
+        [&](std::exception_ptr exception,
+            util::Expected<coding_agent::runtime::UserBashCompletion> result) {
+            REQUIRE(exception == nullptr);
+            completion.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(completion);
+    REQUIRE(*completion);
+    const auto& bash = (*completion)->message;
+    CHECK(bash.truncated);
+    CHECK(bash.output.size() <= 50 * 1024);
+    CHECK(bash.output.find(secret) == std::string::npos);
+    CHECK(bash.output.find("[REDACTED]") != std::string::npos);
+    CHECK_FALSE(bash.full_output_path.has_value());
+    REQUIRE((*completion)->diagnostic.has_value());
+    CHECK((*completion)->diagnostic->message.size() <=
+        coding_agent::kMaxPresentationPayloadBytes);
+    CHECK((*completion)->diagnostic->detail.size() <=
+        coding_agent::kMaxPresentationPayloadBytes);
+    CHECK((*completion)->diagnostic->detail.find(secret) == std::string::npos);
 }

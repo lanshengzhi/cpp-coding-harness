@@ -6,7 +6,7 @@
 #include "agent/AgentPromptAccess.hpp"
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/SkillFormatting.hpp"
-#include "util/OutputLimiter.hpp"
+#include "coding_agent/runtime/UserBashOutputAccumulator.hpp"
 #include "util/TerminalText.hpp"
 
 #include <boost/asio/awaitable.hpp>
@@ -76,10 +76,6 @@ namespace {
     return bounded_redacted_presentation(normalize_terminal_text(command));
 }
 
-[[nodiscard]] util::OutputLimitResult safe_user_bash_output(std::string output) {
-    return util::limit_output_tail_redacted(normalize_terminal_text(output));
-}
-
 [[nodiscard]] util::Error safe_user_bash_error(util::Error error) {
     return util::make_error(
         error.code,
@@ -96,20 +92,22 @@ namespace {
 }
 
 [[nodiscard]] ai::BashExecutionMessage make_bash_execution_message(
-    UserShellResult result,
+    const UserShellResult& result,
+    const UserBashOutputAccumulator& output,
     std::string safe_command,
     bool exclude_from_context,
     ai::TimestampMs timestamp) {
-    auto safe_output = safe_user_bash_output(std::move(result.output));
     ai::BashExecutionMessage message;
     message.command = std::move(safe_command);
-    message.output = std::move(safe_output.text);
+    // The bounded sanitized tail is the model-context value; the spill path
+    // is recorded alongside it, never substituted for it.
+    message.output = output.tail();
     message.exit_code = result.cancelled ? std::nullopt : result.exit_code;
     message.cancelled = result.cancelled;
-    message.truncated = result.truncated || safe_output.truncated;
-    if (!result.artifact_error && result.full_output_path) {
+    message.truncated = output.truncated();
+    if (output.full_output_path()) {
         message.full_output_path = bounded_redacted_presentation(
-            normalize_terminal_text(*result.full_output_path));
+            normalize_terminal_text(*output.full_output_path()));
     }
     message.exclude_from_context = exclude_from_context;
     message.timestamp = timestamp;
@@ -315,20 +313,18 @@ AgentSessionRuntime::run_user_bash(
                 "User Bash progress callback failed"));
         }
     }
+    UserBashOutputAccumulator output;
     try {
-        std::string progress_output;
         shell_result = co_await services_.user_shell->execute(
             std::move(command),
-            [safe_command, exclude_from_context, &progress_output, &progress_sink](
+            [safe_command, exclude_from_context, &output, &progress_sink](
                 std::string_view update) -> util::ExpectedVoid {
-                progress_output.append(update);
-                auto safe_update = safe_user_bash_output(std::move(progress_output));
-                progress_output = safe_update.text;
+                output.append(update);
                 if (!progress_sink) return {};
                 try {
                     return progress_sink(UserBashProgress{
                         .command = safe_command,
-                        .output = progress_output,
+                        .output = output.tail(),
                         .exclude_from_context = exclude_from_context,
                     });
                 } catch (const std::exception& error) {
@@ -343,6 +339,9 @@ AgentSessionRuntime::run_user_bash(
                 }
             },
             active_user_bash_stop_source_->get_token());
+        if (shell_result) {
+            output.finish();
+        }
     } catch (const std::exception& error) {
         shell_result = std::unexpected(util::make_error(
             util::ErrorCode::Unknown,
@@ -360,13 +359,15 @@ AgentSessionRuntime::run_user_bash(
     if (!closing) state_ = State::Open;
 
     if (!shell_result) {
+        output.discard();
         if (closing) co_await finalize_close_after_active_work();
         co_return std::unexpected(safe_user_bash_error(shell_result.error()));
     }
 
-    const auto artifact_error = shell_result->artifact_error;
+    const auto artifact_error = output.artifact_error();
     auto message = make_bash_execution_message(
-        std::move(*shell_result),
+        *shell_result,
+        output,
         safe_command,
         exclude_from_context,
         completion_timestamp_ms());
