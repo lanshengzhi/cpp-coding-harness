@@ -49,7 +49,7 @@ constexpr std::array<RouteCase, 8> kRouteCases{{
 
 TEST_CASE(
     "Interrupt Admission routes the complete current-activity table by pi precedence",
-    "[coding_agent][tui][interrupt-admission][issue92]") {
+    "[coding_agent][tui][interrupt-admission][issue92][issue93]") {
     for (const auto& test : kRouteCases) {
         InterruptAdmission admission;
         CHECK(admission.admit(

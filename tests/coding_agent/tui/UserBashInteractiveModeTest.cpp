@@ -1097,7 +1097,7 @@ TEST_CASE(
 
 TEST_CASE(
     "idle Bash-mode interrupt clears the editor without creating a command or message",
-    "[coding_agent][tui][issue88]") {
+    "[coding_agent][tui][issue88][issue93]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto client = std::make_unique<RecordingChatClient>();
