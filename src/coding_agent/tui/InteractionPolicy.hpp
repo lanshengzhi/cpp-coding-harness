@@ -28,10 +28,10 @@ struct InteractionActivity {
 struct LaunchUserBash {
     UserBashInvocation invocation;
 };
-/// One User Bash runs at a time: the rejected invocation returns to the
-/// editor as its safe redacted recall text.
+/// One User Bash runs at a time: the rejected submission returns to the
+/// editor verbatim as its original trimmed text (pi `setText(text)`, ADR 0028).
 struct RestoreUserBashBusy {
-    std::string safe_recall;
+    std::string recall;
 };
 using UserBashRoute = std::variant<LaunchUserBash, RestoreUserBashBusy>;
 

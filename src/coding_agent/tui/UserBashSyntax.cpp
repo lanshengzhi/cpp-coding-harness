@@ -1,11 +1,7 @@
 #include "coding_agent/tui/UserBashSyntax.hpp"
 
-#include "coding_agent/BoundedText.hpp"
-#include "util/TerminalText.hpp"
-
 #include <algorithm>
 #include <cctype>
-#include <format>
 #include <utility>
 
 namespace cch::coding_agent::tui {
@@ -31,17 +27,6 @@ std::optional<UserBashInvocation> parse_user_bash_invocation(std::string text) {
         .command = std::move(command),
         .exclude_from_context = excluded,
     };
-}
-
-std::string safe_user_bash_invocation(const UserBashInvocation& invocation) {
-    auto command = util::strip_terminal_escape_sequences(invocation.command);
-    std::erase_if(command, [](unsigned char value) {
-        return value < 0x20 || value == 0x7f;
-    });
-    return bounded_redacted_presentation(std::format(
-        "{} {}",
-        invocation.exclude_from_context ? "!!" : "!",
-        command));
 }
 
 bool user_bash_editor_mode(std::string text, bool user_bash_available) {

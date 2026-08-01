@@ -6,7 +6,6 @@
 #include <string>
 
 using cch::coding_agent::tui::parse_user_bash_invocation;
-using cch::coding_agent::tui::safe_user_bash_invocation;
 using cch::coding_agent::tui::trim_editor_submission;
 using cch::coding_agent::tui::user_bash_editor_mode;
 using cch::coding_agent::tui::UserBashInvocation;
@@ -57,23 +56,6 @@ TEST_CASE(
         CHECK(parsed->command == test.expected->command);
         CHECK(parsed->exclude_from_context == test.expected->exclude_from_context);
     }
-}
-
-TEST_CASE(
-    "safe_user_bash_invocation restores the prefix and strips unsafe bytes",
-    "[coding_agent][tui][user-bash-syntax]") {
-    CHECK(safe_user_bash_invocation(
-              UserBashInvocation{.command = "ls", .exclude_from_context = false}) ==
-        "! ls");
-    CHECK(safe_user_bash_invocation(
-              UserBashInvocation{.command = "ls", .exclude_from_context = true}) ==
-        "!! ls");
-    // Terminal escape sequences and control bytes never reach the editor or
-    // diagnostics.
-    CHECK(safe_user_bash_invocation(UserBashInvocation{
-              .command = std::string{"e\x1b[31mcho\x07 hi"},
-              .exclude_from_context = false,
-          }) == "! echo hi");
 }
 
 TEST_CASE(

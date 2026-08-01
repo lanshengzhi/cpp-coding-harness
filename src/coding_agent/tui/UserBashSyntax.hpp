@@ -26,12 +26,6 @@ struct UserBashInvocation {
 [[nodiscard]] std::optional<UserBashInvocation> parse_user_bash_invocation(
     std::string text);
 
-/// Rebuilds the redacted, control-stripped `!`/`!!` text used to restore a
-/// rejected invocation to the editor and to name the execution in
-/// diagnostics.
-[[nodiscard]] std::string safe_user_bash_invocation(
-    const UserBashInvocation& invocation);
-
 /// Bash mode is the unsubmitted editor state whose trimmed text begins with
 /// `!`; it exists only where User Bash dispatch is available.
 [[nodiscard]] bool user_bash_editor_mode(

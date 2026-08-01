@@ -54,6 +54,9 @@ struct FrontendItem {
 
 struct DiagnosticItem {
     std::string text;
+    /// User Bash diagnostics pass through raw like pi (ADR 0028): they skip
+    /// the render-time redaction every other diagnostic receives.
+    bool raw{false};
 };
 
 using TranscriptItemVariant = std::variant<MessageItem, ToolItem, FrontendItem, DiagnosticItem>;
@@ -155,11 +158,16 @@ using TranscriptItemVariant = std::variant<MessageItem, ToolItem, FrontendItem, 
     std::string text,
     std::size_t width,
     ThemeToken text_token,
-    std::optional<ThemeToken> background = std::nullopt) {
+    std::optional<ThemeToken> background = std::nullopt,
+    bool redact = true) {
     cch::tui::BackgroundHook background_hook;
     if (background) background_hook = theme.background_hook(*background);
     cch::tui::Text component(
-        theme.foreground(text_token, safe_text(std::move(text))),
+        theme.foreground(
+            text_token,
+            redact
+                ? safe_text(std::move(text))
+                : bounded_presentation(text)),
         1,
         0,
         std::move(background_hook));
@@ -667,11 +675,14 @@ struct Transcript::Impl {
             if (!rendered) return std::unexpected(rendered.error());
             return lines_result(std::move(*rendered));
         }
+        const auto& diagnostic = std::get<DiagnosticItem>(item);
         auto rendered = render_plain(
             theme,
-            "Error: " + std::get<DiagnosticItem>(item).text,
+            "Error: " + diagnostic.text,
             width,
-            ThemeToken::Error);
+            ThemeToken::Error,
+            std::nullopt,
+            !diagnostic.raw);
         if (!rendered) return std::unexpected(rendered.error());
         return lines_result(std::move(*rendered));
     }
@@ -768,6 +779,13 @@ void Transcript::append_frontend_message(std::string text) {
 
 void Transcript::append_diagnostic(std::string text) {
     impl_->items.emplace_back(DiagnosticItem{safe_text(std::move(text))});
+}
+
+void Transcript::append_user_bash_diagnostic(std::string text) {
+    impl_->items.emplace_back(DiagnosticItem{
+        .text = bounded_presentation(text),
+        .raw = true,
+    });
 }
 
 void Transcript::toggle_tool_output() {

@@ -573,7 +573,7 @@ TEST_CASE(
 
 TEST_CASE(
     "User Shell infrastructure failure creates no Bash message and leaves the Session usable",
-    "[coding_agent][tui][issue85]") {
+    "[coding_agent][tui][issue85][issue98]") {
     tests::TempWorkspace workspace;
     auto client = std::make_unique<RecordingChatClient>();
     auto* client_pointer = client.get();
@@ -618,12 +618,16 @@ TEST_CASE(
         });
     drain_ready(io);
 
-    REQUIRE(terminal.inject_input("! fail\r"));
+    REQUIRE(terminal.inject_input("!  fail\r"));
     drain_ready(io);
     CHECK(created->session->snapshot().agent_state.messages.empty());
     auto screen = visible_screen(terminal);
     CHECK(screen.find("spawn failed") != std::string::npos);
-    CHECK(screen.find(secret) == std::string::npos);
+    // ADR 0028: shell-error diagnostics pass through without redaction, and
+    // the rejected submission returns to the editor verbatim — the doubled
+    // space after the prefix survives (pi setText(text)).
+    CHECK(screen.find(secret) != std::string::npos);
+    CHECK(screen.find("!  fail") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x03later prompt\r"));
     drain_ready(io);
@@ -1818,8 +1822,8 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "the editor enters Bash mode on trimmed ! input and recalls the redacted invocation",
-    "[coding_agent][tui][issue89][issue94]") {
+    "the editor enters Bash mode on trimmed ! input and recalls the original submission verbatim",
+    "[coding_agent][tui][issue89][issue94][issue98]") {
     tests::TempWorkspace workspace;
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
     auto client = std::make_unique<RecordingChatClient>();
@@ -1881,8 +1885,8 @@ TEST_CASE(
     drain_ready(io);
     CHECK(fg_at_text(terminal, "plain text") == text_params);
 
-    // A rejected second command is recalled to the editor in its redacted
-    // invocation form.
+    // A rejected second command is recalled to the editor verbatim (pi
+    // setText(text), ADR 0028): no redaction, no re-serialized prefix.
     REQUIRE(terminal.inject_input("\x03"));
     drain_ready(io);
     REQUIRE(terminal.inject_input("!first wait\r"));
@@ -1893,8 +1897,7 @@ TEST_CASE(
     CHECK(shell_pointer->commands.size() == 1);
     const auto screen = visible_screen(terminal);
     CHECK(screen.find("already in flight") != std::string::npos);
-    CHECK(screen.find("! api_key=[REDACTED] recall") != std::string::npos);
-    CHECK(screen.find(secret) == std::string::npos);
+    CHECK(screen.find("!api_key=" + secret + " recall") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x03"));
     drain_ready(io);

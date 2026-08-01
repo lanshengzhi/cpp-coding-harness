@@ -51,16 +51,26 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "route_user_bash restores a busy invocation as its safe recall",
+    "route_user_bash recalls a busy submission verbatim",
     "[coding_agent][tui][interaction-policy]") {
     auto busy = idle_with_shell();
     busy.user_bash_active = true;
 
+    // pi setText(text): the original trimmed submission returns to the editor
+    // verbatim — no re-serialized prefix, no sanitization (ADR 0028).
     auto route = route_user_bash("!!rm -rf ./tmp", SubmissionOrigin::FocusedEditor, busy);
     REQUIRE(route.has_value());
     const auto* restore = std::get_if<RestoreUserBashBusy>(&*route);
     REQUIRE(restore != nullptr);
-    CHECK(restore->safe_recall == "!! rm -rf ./tmp");
+    CHECK(restore->recall == "!!rm -rf ./tmp");
+
+    // Only the ends are trimmed; interior bytes pass through untouched.
+    auto spaced =
+        route_user_bash("  !echo\thi  ", SubmissionOrigin::FocusedEditor, busy);
+    REQUIRE(spaced.has_value());
+    const auto* spaced_restore = std::get_if<RestoreUserBashBusy>(&*spaced);
+    REQUIRE(spaced_restore != nullptr);
+    CHECK(spaced_restore->recall == "!echo\thi");
 }
 
 TEST_CASE(

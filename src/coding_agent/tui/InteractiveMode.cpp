@@ -542,6 +542,11 @@ public:
         transcript_.append_diagnostic(std::move(text));
     }
 
+    void append_user_bash_diagnostic(std::string text) {
+        std::lock_guard lock(mutex_);
+        transcript_.append_user_bash_diagnostic(std::move(text));
+    }
+
     void restore_submitted_text(const std::string& text) {
         std::lock_guard lock(mutex_);
         restore_editor_text({text});
@@ -1556,39 +1561,37 @@ private:
         auto route = route_user_bash(text, origin, interaction_activity());
         if (!route) return false;
         if (const auto* busy = std::get_if<RestoreUserBashBusy>(&*route)) {
-            view_->restore_submitted_text(busy->safe_recall);
-            view_->append_diagnostic("A User Bash command is already in flight");
+            view_->restore_submitted_text(busy->recall);
+            view_->append_user_bash_diagnostic(
+                "A User Bash command is already in flight");
             tui_.invalidate();
             return true;
         }
         auto invocation = std::get<LaunchUserBash>(std::move(*route)).invocation;
 
         user_bash_active_ = true;
-        auto safe_invocation = std::make_shared<std::string>(
-            safe_user_bash_invocation(invocation));
+        // The original trimmed submission is what failure restores to the
+        // editor (pi setText(text), ADR 0028) — never a re-serialized form.
+        auto recall = trim_editor_submission(text);
         const auto self = shared_from_this();
         boost::asio::co_spawn(
             executor_,
             [self,
              invocation = std::move(invocation),
-             safe_invocation]() mutable -> boost::asio::awaitable<void> {
+             recall = std::move(recall)]() mutable -> boost::asio::awaitable<void> {
                 auto result = co_await detail::AgentSessionInteractiveAccess::run_user_bash(
                     self->session_,
                     std::move(invocation.command),
                     invocation.exclude_from_context,
-                    [self, safe_invocation](
+                    [self](
                         const runtime::UserBashProgress& progress) -> util::ExpectedVoid {
-                        *safe_invocation = std::format(
-                            "{} {}",
-                            progress.exclude_from_context ? "!!" : "!",
-                            progress.command);
                         if (self->running_ && self->view_ != nullptr) {
                             self->view_->set_user_bash_progress(progress);
                             self->tui_.invalidate();
                         }
                         return {};
                     });
-                self->user_bash_finished(std::move(result), *safe_invocation);
+                self->user_bash_finished(std::move(result), recall);
             },
             [weak = weak_from_this()](std::exception_ptr exception) {
                 if (!exception) return;
@@ -1596,7 +1599,8 @@ private:
                     self->user_bash_active_ = false;
                     if (self->view_ != nullptr && self->running_) {
                         self->view_->clear_user_bash_progress();
-                        self->view_->append_diagnostic("Native TUI User Bash coroutine failed");
+                        self->view_->append_user_bash_diagnostic(
+                            "Native TUI User Bash coroutine failed");
                         self->tui_.invalidate();
                     }
                     if (self->exit_requested_) self->signal_exit();
@@ -1768,20 +1772,21 @@ private:
 
     void user_bash_finished(
         util::Expected<runtime::UserBashCompletion> result,
-        const std::string& safe_invocation) {
+        const std::string& recall) {
         user_bash_active_ = false;
         if (view_ != nullptr && running_) {
             if (result) {
                 view_->commit_user_bash(
                     ai::MessageVariant{std::move(result->message)});
                 if (result->diagnostic) {
-                    view_->append_diagnostic(combined_error_text(*result->diagnostic));
+                    view_->append_user_bash_diagnostic(
+                        combined_error_text(*result->diagnostic));
                 }
             } else {
                 view_->clear_user_bash_progress();
-                view_->append_diagnostic(combined_error_text(result.error()));
-                if (!safe_invocation.empty()) {
-                    view_->restore_submitted_text(safe_invocation);
+                view_->append_user_bash_diagnostic(combined_error_text(result.error()));
+                if (!recall.empty()) {
+                    view_->restore_submitted_text(recall);
                 }
             }
             tui_.invalidate();

@@ -42,6 +42,10 @@ public:
     void clear();
     void append_frontend_message(std::string text);
     void append_diagnostic(std::string text);
+    /// Append one User Bash diagnostic. ADR 0028: User Bash command, output,
+    /// and error-diagnostic values pass through raw like pi — bounded, never
+    /// redacted.
+    void append_user_bash_diagnostic(std::string text);
     void toggle_tool_output();
     void toggle_thinking();
     /// Whether tool and User Bash output currently renders in full.

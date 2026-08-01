@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace cch::coding_agent {
@@ -22,6 +23,15 @@ constexpr std::size_t kSecretBoundaryLookaheadBytes = 256;
         max_bytes,
         {},
         kSecretBoundaryLookaheadBytes);
+}
+
+/// Bounds presentation text without redaction. User Bash command, output, and
+/// error-diagnostic values pass through raw like pi (ADR 0028); bounding alone
+/// keeps unbounded text from overwhelming the transcript.
+[[nodiscard]] inline std::string bounded_presentation(
+    std::string_view text,
+    std::size_t max_bytes = kMaxPresentationPayloadBytes) {
+    return util::bounded_text(text, max_bytes);
 }
 
 } // namespace cch::coding_agent

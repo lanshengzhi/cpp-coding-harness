@@ -14,7 +14,7 @@ std::optional<UserBashRoute> route_user_bash(
     if (!invocation) return std::nullopt;
     if (activity.user_bash_active) {
         return UserBashRoute{RestoreUserBashBusy{
-            .safe_recall = safe_user_bash_invocation(*invocation),
+            .recall = trim_editor_submission(text),
         }};
     }
     return UserBashRoute{LaunchUserBash{.invocation = std::move(*invocation)}};
