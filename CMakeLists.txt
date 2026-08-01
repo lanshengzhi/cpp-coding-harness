@@ -228,6 +228,7 @@ target_link_libraries(cch_coding_agent_runtime
 add_library(cch_coding_agent_interactive
     src/coding_agent/tui/InteractiveMode.cpp
     src/coding_agent/tui/Transcript.cpp
+    src/coding_agent/tui/UserBashPresentation.cpp
 )
 cch_target_defaults(cch_coding_agent_interactive)
 target_link_libraries(cch_coding_agent_interactive
@@ -312,6 +313,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/tui/ThemeTest.cpp
         tests/coding_agent/tui/ThemeCatalogTest.cpp
         tests/coding_agent/tui/UserBashInteractiveModeTest.cpp
+        tests/coding_agent/tui/UserBashPresentationTest.cpp
         tests/coding_agent/SdkSessionTest.cpp
         tests/coding_agent/AgentSessionSnapshotTest.cpp
         tests/coding_agent/SkillIntegrationTest.cpp

@@ -9,6 +9,7 @@
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/tui/BashBlock.hpp"
 #include "coding_agent/tui/Theme.hpp"
+#include "coding_agent/tui/UserBashPresentation.hpp"
 #include "util/Json.hpp"
 
 #include <algorithm>
@@ -537,16 +538,7 @@ struct Transcript::Impl {
             auto rendered = render_bash_block(
                 theme,
                 keybindings,
-                BashBlockView{
-                    .command = bash->command,
-                    .output = bash->output,
-                    .exclude_from_context = bash->exclude_from_context,
-                    .running = false,
-                    .exit_code = bash->exit_code,
-                    .cancelled = bash->cancelled,
-                    .truncated = bash->truncated,
-                    .full_output_path = bash->full_output_path,
-                },
+                user_bash_block_view(*bash),
                 tools_expanded,
                 width);
             if (!rendered) return std::unexpected(rendered.error());

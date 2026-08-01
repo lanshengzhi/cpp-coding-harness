@@ -16,11 +16,11 @@
 #include "coding_agent/ImageInput.hpp"
 #include "coding_agent/prompt/SlashCommandParser.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
-#include "coding_agent/tui/BashBlock.hpp"
 #include "coding_agent/tui/KeybindingCatalog.hpp"
 #include "coding_agent/tui/KeybindingHelp.hpp"
 #include "coding_agent/tui/ThemeCatalog.hpp"
 #include "coding_agent/tui/Transcript.hpp"
+#include "coding_agent/tui/UserBashPresentation.hpp"
 #include "harness/UniqueFd.hpp"
 #include "util/TerminalText.hpp"
 
@@ -505,7 +505,10 @@ public:
               },
               [this](std::string text) {
                   invoke_submit(std::move(text));
-              }) {
+              }),
+          pending_bash_([this](bool exclude_from_context) {
+              return make_bash_loader(exclude_from_context);
+          }) {
         editor_.set_autocomplete_provider(command_autocomplete_provider(
             std::move(autocomplete_items)));
     }
@@ -576,24 +579,21 @@ public:
 
     void set_user_bash_progress(runtime::UserBashProgress progress) {
         std::lock_guard lock(mutex_);
-        if (!progress.awaiting_commitment) {
-            if (!bash_loader_) {
-                bash_loader_ = make_bash_loader(progress.exclude_from_context);
-            }
-        } else if (bash_loader_) {
-            bash_loader_->stop();
-            bash_loader_.reset();
-        }
-        user_bash_progress_ = std::move(progress);
+        pending_bash_.update(std::move(progress));
     }
 
     void clear_user_bash_progress() {
         std::lock_guard lock(mutex_);
-        if (bash_loader_) {
-            bash_loader_->stop();
-            bash_loader_.reset();
-        }
-        user_bash_progress_.reset();
+        pending_bash_.clear();
+    }
+
+    /// Replaces the pending block with its committed transcript entry in one
+    /// step, so the clear-pending-before-append ordering cannot drift apart
+    /// at call sites.
+    void commit_user_bash(ai::MessageVariant message) {
+        std::lock_guard lock(mutex_);
+        pending_bash_.clear();
+        transcript_.append_committed_message(std::move(message));
     }
 
     [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override {
@@ -645,22 +645,12 @@ public:
 
         std::vector<std::string> pending_lines;
         pending_lines.reserve(pending_steering_.size() + pending_follow_up_.size() + 3);
-        if (user_bash_progress_) {
+        if (pending_bash_.active()) {
             // One Bash block while pending; it becomes an ordinary transcript
             // entry through the same presentation after commitment.
-            auto block = render_bash_block(
+            auto block = pending_bash_.render(
                 *theme_,
                 *keybindings_,
-                BashBlockView{
-                    .command = user_bash_progress_->command,
-                    .output = user_bash_progress_->output,
-                    .exclude_from_context = user_bash_progress_->exclude_from_context,
-                    .running = !user_bash_progress_->awaiting_commitment,
-                    .exit_code = user_bash_progress_->exit_code,
-                    .cancelled = user_bash_progress_->cancelled,
-                    .truncated = user_bash_progress_->truncated,
-                    .full_output_path = user_bash_progress_->full_output_path,
-                },
                 transcript_.tools_expanded(),
                 width);
             if (!block) return std::unexpected(block.error());
@@ -668,14 +658,6 @@ public:
                 pending_lines.end(),
                 std::make_move_iterator(block->begin()),
                 std::make_move_iterator(block->end()));
-            if (!user_bash_progress_->awaiting_commitment && bash_loader_) {
-                auto loader_lines = bash_loader_->render(width);
-                if (!loader_lines) return std::unexpected(loader_lines.error());
-                pending_lines.insert(
-                    pending_lines.end(),
-                    std::make_move_iterator(loader_lines->lines.begin()),
-                    std::make_move_iterator(loader_lines->lines.end()));
-            }
         }
         for (const auto& message : pending_steering_) {
             cch::tui::TruncatedText item{"Steering: " + message};
@@ -1009,9 +991,9 @@ private:
     cch::tui::Editor editor_;
     std::vector<std::string> pending_steering_;
     std::vector<std::string> pending_follow_up_;
-    std::optional<runtime::UserBashProgress> user_bash_progress_;
-    // Declared after every sink it may invoke so destruction stops it first.
-    std::unique_ptr<cch::tui::Loader> bash_loader_;
+    // Declared after every sink its loader may invoke so destruction stops
+    // the loader first.
+    PendingUserBashPresentation pending_bash_;
     std::size_t available_rows_{24};
     std::size_t editor_row_offset_{0};
 };
@@ -1767,14 +1749,14 @@ private:
         const std::string& safe_invocation) {
         user_bash_active_ = false;
         if (view_ != nullptr && running_) {
-            view_->clear_user_bash_progress();
             if (result) {
-                view_->append_committed_message(
+                view_->commit_user_bash(
                     ai::MessageVariant{std::move(result->message)});
                 if (result->diagnostic) {
                     view_->append_diagnostic(combined_error_text(*result->diagnostic));
                 }
             } else {
+                view_->clear_user_bash_progress();
                 view_->append_diagnostic(combined_error_text(result.error()));
                 if (!safe_invocation.empty()) {
                     view_->restore_submitted_text(safe_invocation);
