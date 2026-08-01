@@ -459,6 +459,8 @@ class InteractiveView final
       public cch::tui::Focusable,
       public cch::tui::ViewportAware {
 public:
+    // Runtime activity stays with InteractiveState; the view contributes only
+    // the pending-Bash fact sampled from editor state when interrupt is pressed.
     InteractiveView(
         std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
         ActionSink on_invalidate,

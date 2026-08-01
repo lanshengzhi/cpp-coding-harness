@@ -1097,7 +1097,7 @@ TEST_CASE(
 
 TEST_CASE(
     "idle Bash-mode interrupt clears the editor without creating a command or message",
-    "[coding_agent][tui][issue88][issue93]") {
+    "[coding_agent][tui][issue88][issue93][issue94]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto client = std::make_unique<RecordingChatClient>();
@@ -1817,7 +1817,7 @@ TEST_CASE(
 
 TEST_CASE(
     "the editor enters Bash mode on trimmed ! input and recalls the redacted invocation",
-    "[coding_agent][tui][issue89]") {
+    "[coding_agent][tui][issue89][issue94]") {
     tests::TempWorkspace workspace;
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
     auto client = std::make_unique<RecordingChatClient>();
