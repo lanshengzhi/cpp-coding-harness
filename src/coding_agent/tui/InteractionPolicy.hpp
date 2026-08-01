@@ -8,10 +8,9 @@
 
 namespace cch::coding_agent::tui {
 
-/// Native TUI interaction routing (pi editor semantics at baseline 864b35c):
-/// one decision table for what a focused submission or interrupt does, given
-/// the current activity. The owning frontend supplies the facts and performs
-/// the routed effect; the precedence rules live here.
+/// Native TUI submission routing (pi editor semantics at baseline 864b35c).
+/// The owning frontend supplies current activity facts and performs the routed
+/// effect; submission precedence rules live here.
 
 enum class InputSubmission { Ordinary, FollowUp };
 enum class SubmissionOrigin { FocusedEditor, InitialPrompt };
@@ -56,11 +55,5 @@ enum class PromptRoute {
 [[nodiscard]] PromptRoute route_prompt(
     InputSubmission submission,
     const InteractionActivity& activity);
-
-/// Interrupt precedence (pi editor Escape): an active Agent run is the
-/// target before an overlapping User Bash, which becomes the target of a
-/// later interrupt once the Agent is idle. Idle interrupts do nothing.
-enum class InterruptRoute { AbortAgentRun, CancelUserBash, None };
-[[nodiscard]] InterruptRoute route_interrupt(const InteractionActivity& activity);
 
 } // namespace cch::coding_agent::tui

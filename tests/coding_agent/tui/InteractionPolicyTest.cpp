@@ -82,21 +82,3 @@ TEST_CASE(
     CHECK(route_prompt(InputSubmission::FollowUp, activity) ==
         PromptRoute::RestoreInterrupted);
 }
-
-TEST_CASE(
-    "route_interrupt targets the Agent run before an overlapping User Bash",
-    "[coding_agent][tui][interaction-policy]") {
-    auto activity = idle_with_shell();
-    CHECK(route_interrupt(activity) == InterruptRoute::None);
-
-    activity.user_bash_active = true;
-    CHECK(route_interrupt(activity) == InterruptRoute::CancelUserBash);
-
-    // pi editor Escape precedence: the Agent run first; the Bash becomes the
-    // target of a later interrupt once the Agent is idle.
-    activity.prompt_active = true;
-    CHECK(route_interrupt(activity) == InterruptRoute::AbortAgentRun);
-
-    activity.user_bash_active = false;
-    CHECK(route_interrupt(activity) == InterruptRoute::AbortAgentRun);
-}

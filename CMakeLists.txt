@@ -96,6 +96,7 @@ target_link_libraries(cch_tui
 add_library(cch_coding_agent_tui
     src/coding_agent/tui/BashBlock.cpp
     src/coding_agent/tui/InteractionPolicy.cpp
+    src/coding_agent/tui/InterruptAdmission.cpp
     src/coding_agent/tui/KeybindingCatalog.cpp
     src/coding_agent/tui/KeybindingHelp.cpp
     src/coding_agent/tui/Theme.cpp
@@ -310,6 +311,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/SkillLoaderTest.cpp
         tests/coding_agent/PromptTemplateLoaderTest.cpp
         tests/coding_agent/tui/InteractiveModeTest.cpp
+        tests/coding_agent/tui/InterruptAdmissionTest.cpp
         tests/coding_agent/tui/KeybindingCatalogTest.cpp
         tests/coding_agent/tui/ProcessInteractiveModeTest.cpp
         tests/coding_agent/tui/ThemeTest.cpp

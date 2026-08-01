@@ -1150,13 +1150,31 @@ TEST_CASE(
     CHECK(shell_pointer->commands.empty());
     CHECK(created->session->message_count() == 0);
 
-    // Unsubmitted excluded Bash-mode input clears the same way.
+    // Text entered after the key-time decision survives while the sampled
+    // excluded Bash input is cleared.
     REQUIRE(terminal.inject_input("!!local only"));
     drain_ready(io);
     REQUIRE(terminal.inject_input("\x1b"));
     REQUIRE(terminal.flush_input());
+    REQUIRE(terminal.inject_input("\x01x"));
     drain_ready(io);
-    CHECK(visible_screen(terminal).find("local only") == std::string::npos);
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("local only") == std::string::npos);
+    CHECK(screen.find("x") != std::string::npos);
+    CHECK(shell_pointer->commands.empty());
+    CHECK(created->session->message_count() == 0);
+    REQUIRE(terminal.inject_input("\x03"));
+    drain_ready(io);
+
+    // Submission decoded immediately after the interrupt cannot race the
+    // key-time pending-Bash decision and launch the cleared command.
+    REQUIRE(terminal.inject_input("!must not run"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    REQUIRE(terminal.inject_input("\r"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
     CHECK(shell_pointer->commands.empty());
     CHECK(created->session->message_count() == 0);
 

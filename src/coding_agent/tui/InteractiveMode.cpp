@@ -16,10 +16,11 @@
 #include "coding_agent/ImageInput.hpp"
 #include "coding_agent/prompt/SlashCommandParser.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
+#include "coding_agent/tui/InteractionPolicy.hpp"
+#include "coding_agent/tui/InterruptAdmission.hpp"
 #include "coding_agent/tui/KeybindingCatalog.hpp"
 #include "coding_agent/tui/KeybindingHelp.hpp"
 #include "coding_agent/tui/ThemeCatalog.hpp"
-#include "coding_agent/tui/InteractionPolicy.hpp"
 #include "coding_agent/tui/Transcript.hpp"
 #include "coding_agent/tui/UserBashPresentation.hpp"
 #include "coding_agent/tui/UserBashSyntax.hpp"
@@ -67,10 +68,20 @@ namespace cch::coding_agent::tui {
 namespace {
 
 using ActionSink = std::move_only_function<void()>;
-using SubmitSink = std::move_only_function<void(std::string)>;
-/// Reports whether one kind of background work (Agent run or User Bash) is
-/// currently active so the effective interrupt target can be resolved.
-using ActivityHook = std::move_only_function<bool()>;
+
+struct EditorSubmissionRequest {
+    std::string text;
+    std::size_t editor_revision{0};
+};
+
+struct EditorInterruptRequest {
+    std::string pending_bash_text;
+    std::size_t editor_revision{0};
+    bool pending_bash{false};
+};
+
+using InterruptSink = std::move_only_function<void(EditorInterruptRequest)>;
+using SubmitSink = std::move_only_function<void(EditorSubmissionRequest)>;
 
 struct InteractiveStartupDiagnostics {
     std::vector<KeybindingDiagnostic> keybindings;
@@ -86,6 +97,27 @@ struct InteractiveStartupDiagnostics {
         text = std::format("{} ({})", text, *error.context);
     }
     return text;
+}
+
+[[nodiscard]] std::string editor_text_after_interrupt(
+    std::string_view sampled_text,
+    std::string_view current_text) {
+    std::size_t prefix = 0;
+    while (prefix < sampled_text.size() && prefix < current_text.size() &&
+        sampled_text[prefix] == current_text[prefix]) {
+        ++prefix;
+    }
+
+    std::size_t suffix = 0;
+    while (suffix < sampled_text.size() - prefix &&
+        suffix < current_text.size() - prefix &&
+        sampled_text[sampled_text.size() - suffix - 1] ==
+            current_text[current_text.size() - suffix - 1]) {
+        ++suffix;
+    }
+    return std::string{current_text.substr(
+        prefix,
+        current_text.size() - prefix - suffix)};
 }
 
 [[nodiscard]] util::Error presentation_error(
@@ -434,10 +466,8 @@ public:
         SubmitSink on_follow_up,
         ActionSink on_clipboard_paste,
         ActionSink on_dequeue,
-        ActionSink on_interrupt,
+        InterruptSink on_interrupt,
         ActionSink on_exit,
-        ActivityHook prompt_active,
-        ActivityHook user_bash_active,
         bool user_bash_available,
         std::vector<cch::tui::AutocompleteItem> autocomplete_items,
         cch::tui::TerminalCapabilities terminal_capabilities,
@@ -451,18 +481,22 @@ public:
           on_dequeue_(std::move(on_dequeue)),
           on_interrupt_(std::move(on_interrupt)),
           on_exit_(std::move(on_exit)),
-          prompt_active_(std::move(prompt_active)),
-          user_bash_active_(std::move(user_bash_active)),
           user_bash_available_(user_bash_available),
           transcript_(theme, *keybindings_),
           theme_(&theme),
           editor_(
               cch::tui::EditorOptions{.keybindings = keybindings_},
-              [this](std::string) {
+              [this](std::string text) {
+                  // Editor submission clears before invoking its submit sink;
+                  // keep that notification on the sampled text's revision.
+                  if (!text.empty()) ++editor_revision_;
                   invoke_action(on_invalidate_, "Native TUI invalidation callback failed");
               },
               [this](std::string text) {
-                  invoke_submit(std::move(text));
+                  invoke_submit(EditorSubmissionRequest{
+                      .text = std::move(text),
+                      .editor_revision = editor_revision_,
+                  });
               }),
           pending_bash_([this](bool exclude_from_context) {
               return make_bash_loader(exclude_from_context);
@@ -509,6 +543,17 @@ public:
     void restore_submitted_text(const std::string& text) {
         std::lock_guard lock(mutex_);
         restore_editor_text({text});
+    }
+
+    void clear_pending_bash(const EditorInterruptRequest& request) {
+        std::lock_guard lock(mutex_);
+        if (editor_revision_ == request.editor_revision) {
+            editor_.set_text({});
+            return;
+        }
+        editor_.set_text(editor_text_after_interrupt(
+            request.pending_bash_text,
+            editor_.expanded_text()));
     }
 
     void insert_editor_text(std::string text) {
@@ -733,21 +778,15 @@ public:
                 keybindings_->matches(*key, "tui.select.cancel");
             if (keybindings_->matches(*key, "app.interrupt") &&
                 !editor_cancels_interrupt) {
-                // Effective interrupt precedence: autocomplete cancellation
-                // (handled above), active Agent run, active User Bash,
-                // unsubmitted Bash mode, then existing idle behavior. The
-                // Agent-versus-Bash choice resolves in the interrupt callback.
-                if (prompt_is_active() || user_bash_is_active()) {
-                    invoke_action(on_interrupt_, "Native TUI interrupt callback failed");
-                    return;
-                }
-                if (unsubmitted_bash_mode()) {
-                    editor_.set_text({});
-                    invoke_action(
-                        on_invalidate_,
-                        "Native TUI invalidation callback failed");
-                    return;
-                }
+                // Autocomplete cancellation stays in the view. Interrupt
+                // Admission owns every later precedence decision and receives
+                // Bash mode as it existed at key-press time.
+                invoke_interrupt(EditorInterruptRequest{
+                    .pending_bash_text = editor_.expanded_text(),
+                    .editor_revision = editor_revision_,
+                    .pending_bash = unsubmitted_bash_mode(),
+                });
+                return;
             }
             if (keybindings_->matches(*key, "app.message.followUp")) {
                 invoke_follow_up();
@@ -834,8 +873,11 @@ private:
         }
     }
 
-    void invoke_submit(std::string text) {
-        invoke_submission(on_submit_, std::move(text), "Native TUI submit callback failed");
+    void invoke_submit(EditorSubmissionRequest request) {
+        invoke_submission(
+            on_submit_,
+            std::move(request),
+            "Native TUI submit callback failed");
     }
 
     void invoke_follow_up() {
@@ -844,21 +886,37 @@ private:
         editor_.set_text({});
         invoke_submission(
             on_follow_up_,
-            std::move(text),
+            EditorSubmissionRequest{
+                .text = std::move(text),
+                .editor_revision = editor_revision_,
+            },
             "Native TUI follow-up callback failed");
     }
 
     void invoke_submission(
         SubmitSink& sink,
-        std::string text,
+        EditorSubmissionRequest request,
         std::string_view failure_message) {
         if (!sink) return;
         try {
-            sink(std::move(text));
+            sink(std::move(request));
         } catch (const std::exception& error) {
             record_callback_error(std::string(failure_message), error.what());
         } catch (...) {
             record_callback_error(std::string(failure_message));
+        }
+    }
+
+    void invoke_interrupt(EditorInterruptRequest request) {
+        if (!on_interrupt_) return;
+        try {
+            on_interrupt_(std::move(request));
+        } catch (const std::exception& error) {
+            record_callback_error(
+                "Native TUI interrupt callback failed",
+                error.what());
+        } catch (...) {
+            record_callback_error("Native TUI interrupt callback failed");
         }
     }
 
@@ -875,30 +933,6 @@ private:
             restored += current;
         }
         editor_.set_text(std::move(restored));
-    }
-
-    [[nodiscard]] bool prompt_is_active() {
-        if (!prompt_active_) return false;
-        try {
-            return prompt_active_();
-        } catch (const std::exception& error) {
-            record_callback_error("Native TUI prompt-state callback failed", error.what());
-        } catch (...) {
-            record_callback_error("Native TUI prompt-state callback failed");
-        }
-        return false;
-    }
-
-    [[nodiscard]] bool user_bash_is_active() {
-        if (!user_bash_active_) return false;
-        try {
-            return user_bash_active_();
-        } catch (const std::exception& error) {
-            record_callback_error("Native TUI User Bash state callback failed", error.what());
-        } catch (...) {
-            record_callback_error("Native TUI User Bash state callback failed");
-        }
-        return false;
     }
 
     [[nodiscard]] bool unsubmitted_bash_mode() const {
@@ -934,16 +968,15 @@ private:
     SubmitSink on_follow_up_;
     ActionSink on_clipboard_paste_;
     ActionSink on_dequeue_;
-    ActionSink on_interrupt_;
+    InterruptSink on_interrupt_;
     ActionSink on_exit_;
-    ActivityHook prompt_active_;
-    ActivityHook user_bash_active_;
     bool user_bash_available_{false};
     std::optional<util::Error> callback_error_;
     mutable std::mutex mutex_;
     Transcript transcript_;
     const LiveTheme* theme_; // must outlive the view: controller-owned live theme.
     cch::tui::Editor editor_;
+    std::size_t editor_revision_{0};
     std::vector<std::string> pending_steering_;
     std::vector<std::string> pending_follow_up_;
     // Declared after every sink its loader may invoke so destruction stops
@@ -1118,14 +1151,18 @@ private:
             [weak] {
                 if (const auto self = weak.lock()) self->post_invalidate();
             },
-            [weak](std::string text) {
+            [weak](EditorSubmissionRequest request) {
                 if (const auto self = weak.lock()) {
-                    self->post_submit(std::move(text), InputSubmission::Ordinary);
+                    self->post_submit(
+                        std::move(request),
+                        InputSubmission::Ordinary);
                 }
             },
-            [weak](std::string text) {
+            [weak](EditorSubmissionRequest request) {
                 if (const auto self = weak.lock()) {
-                    self->post_submit(std::move(text), InputSubmission::FollowUp);
+                    self->post_submit(
+                        std::move(request),
+                        InputSubmission::FollowUp);
                 }
             },
             [weak] {
@@ -1134,19 +1171,13 @@ private:
             [weak] {
                 if (const auto self = weak.lock()) self->post_dequeue();
             },
-            [weak] {
-                if (const auto self = weak.lock()) self->post_interrupt();
+            [weak](EditorInterruptRequest request) {
+                if (const auto self = weak.lock()) {
+                    self->post_interrupt(std::move(request));
+                }
             },
             [weak] {
                 if (const auto self = weak.lock()) self->post_exit();
-            },
-            [weak] {
-                if (const auto self = weak.lock()) return self->prompt_active_.load();
-                return false;
-            },
-            [weak] {
-                if (const auto self = weak.lock()) return self->user_bash_active_.load();
-                return false;
             },
             detail::AgentSessionInteractiveAccess::has_user_shell(session_),
             command_autocomplete_items(commands_, session_.templates(), session_.skills()),
@@ -1208,11 +1239,20 @@ private:
         });
     }
 
-    void post_submit(std::string text, InputSubmission submission) {
+    void post_submit(EditorSubmissionRequest request, InputSubmission submission) {
         const auto weak = weak_from_this();
-        boost::asio::post(executor_, [weak, text = std::move(text), submission]() mutable {
-            if (const auto self = weak.lock()) self->submit(std::move(text), submission);
-        });
+        boost::asio::post(
+            executor_,
+            [weak, request = std::move(request), submission]() mutable {
+                if (const auto self = weak.lock()) {
+                    self->submit(
+                        std::move(request.text),
+                        submission,
+                        {},
+                        SubmissionOrigin::FocusedEditor,
+                        request.editor_revision);
+                }
+            });
     }
 
     void post_clipboard_paste() {
@@ -1314,12 +1354,16 @@ private:
         });
     }
 
-    void post_interrupt() {
+    void post_interrupt(EditorInterruptRequest request) {
         const auto weak = weak_from_this();
-        const auto prompt_generation = prompt_generation_.load();
-        boost::asio::post(executor_, [weak, prompt_generation] {
-            if (const auto self = weak.lock()) self->request_interrupt(prompt_generation);
-        });
+        const auto prompt_generation = interrupt_admission_.generation();
+        boost::asio::post(
+            executor_,
+            [weak, prompt_generation, request = std::move(request)] {
+                if (const auto self = weak.lock()) {
+                    self->request_interrupt(prompt_generation, request);
+                }
+            });
     }
 
     void post_exit() {
@@ -1502,8 +1546,7 @@ private:
                 detail::AgentSessionInteractiveAccess::has_user_shell(session_),
             .user_bash_active = user_bash_active_,
             .prompt_active = prompt_active_,
-            .interrupt_requested =
-                interrupt_requested_generation_ == prompt_generation_.load(),
+            .interrupt_requested = interrupt_admission_.interrupt_requested(),
         };
     }
 
@@ -1560,25 +1603,28 @@ private:
         return true;
     }
 
-    void request_interrupt(std::size_t prompt_generation) {
-        if (!running_ || exit_requested_) {
-            return;
-        }
-        switch (route_interrupt(interaction_activity())) {
+    void request_interrupt(
+        std::size_t prompt_generation,
+        const EditorInterruptRequest& request) {
+        if (!running_ || exit_requested_) return;
+        switch (interrupt_admission_.admit(
+            interaction_activity(),
+            prompt_generation,
+            request.pending_bash)) {
         case InterruptRoute::AbortAgentRun:
-            // A stale generation or an already-interrupted run is a no-op.
-            if (prompt_generation != prompt_generation_.load() ||
-                interrupt_requested_generation_ == prompt_generation) {
-                return;
-            }
-            interrupt_requested_generation_ = prompt_generation;
+            // pi restores queued input before aborting the Agent run.
             dequeue_pending_input(false);
             session_.abort();
             return;
         case InterruptRoute::CancelUserBash:
-            // Repeated interrupts coalesce inside the runtime's independent
-            // User Bash stop source.
             detail::AgentSessionInteractiveAccess::cancel_user_bash(session_);
+            return;
+        case InterruptRoute::ClearPendingBash:
+            cleared_editor_revision_ = request.editor_revision;
+            if (view_ != nullptr) {
+                view_->clear_pending_bash(request);
+                tui_.invalidate();
+            }
             return;
         case InterruptRoute::None:
             return;
@@ -1589,8 +1635,13 @@ private:
         std::string text,
         InputSubmission submission,
         PromptOptions options = {},
-        SubmissionOrigin origin = SubmissionOrigin::FocusedEditor) {
+        SubmissionOrigin origin = SubmissionOrigin::FocusedEditor,
+        std::optional<std::size_t> editor_revision = std::nullopt) {
         if (!running_ || view_ == nullptr || text.empty()) return;
+        if (origin == SubmissionOrigin::FocusedEditor && editor_revision &&
+            cleared_editor_revision_ == editor_revision) {
+            return;
+        }
         if (dispatch_user_bash(text, origin)) return;
         if (dispatch_command(text)) return;
         const auto route = route_prompt(submission, interaction_activity());
@@ -1616,7 +1667,7 @@ private:
             return;
         }
 
-        (void)prompt_generation_.fetch_add(1);
+        interrupt_admission_.note_prompt_started();
         prompt_active_ = true;
         const auto self = shared_from_this();
         boost::asio::co_spawn(
@@ -1685,6 +1736,7 @@ private:
     }
 
     void prompt_launch_failed(std::exception_ptr exception) {
+        interrupt_admission_.note_prompt_finished();
         prompt_active_ = false;
         std::string detail = "unknown exception";
         try {
@@ -1701,6 +1753,7 @@ private:
     }
 
     void prompt_finished(util::ExpectedVoid result, const std::string& submitted_text) {
+        interrupt_admission_.note_prompt_finished();
         prompt_active_ = false;
         sync_session_observations();
         if (!result && view_ != nullptr && running_) {
@@ -1812,8 +1865,10 @@ private:
     std::atomic<bool> running_{false};
     std::atomic<bool> prompt_active_{false};
     std::atomic<bool> user_bash_active_{false};
-    std::atomic<std::size_t> prompt_generation_{0};
-    std::optional<std::size_t> interrupt_requested_generation_;
+    InterruptAdmission interrupt_admission_;
+    // Suppresses a submission already decoded from Bash text cleared by an
+    // earlier key-time interrupt decision.
+    std::optional<std::size_t> cleared_editor_revision_;
     std::vector<std::string> displayed_agent_diagnostics_;
     bool tui_started_{false};
     bool exit_requested_{false};

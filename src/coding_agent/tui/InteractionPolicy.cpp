@@ -30,10 +30,4 @@ PromptRoute route_prompt(
         : PromptRoute::QueueSteering;
 }
 
-InterruptRoute route_interrupt(const InteractionActivity& activity) {
-    if (activity.prompt_active) return InterruptRoute::AbortAgentRun;
-    if (activity.user_bash_active) return InterruptRoute::CancelUserBash;
-    return InterruptRoute::None;
-}
-
 } // namespace cch::coding_agent::tui
