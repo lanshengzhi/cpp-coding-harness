@@ -7,7 +7,6 @@
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/SkillFormatting.hpp"
 #include "coding_agent/runtime/UserBashOutputAccumulator.hpp"
-#include "util/TerminalText.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -56,40 +55,6 @@ namespace {
     }
 }
 
-[[nodiscard]] std::string normalize_terminal_text(std::string_view text) {
-    const auto stripped = util::strip_terminal_escape_sequences(text);
-    std::string normalized;
-    normalized.reserve(stripped.size());
-    for (std::size_t index = 0; index < stripped.size();) {
-        const auto value = static_cast<unsigned char>(stripped[index]);
-        if (stripped[index] == '\r') {
-            normalized.push_back('\n');
-            index += index + 1 < stripped.size() && stripped[index + 1] == '\n' ? 2 : 1;
-            continue;
-        }
-        if (value < 0x20 && stripped[index] != '\n' && stripped[index] != '\t') {
-            ++index;
-            continue;
-        }
-        normalized.push_back(stripped[index++]);
-    }
-    return normalized;
-}
-
-[[nodiscard]] std::string safe_user_bash_command(std::string command) {
-    return bounded_redacted_presentation(normalize_terminal_text(command));
-}
-
-[[nodiscard]] util::Error safe_user_bash_error(util::Error error) {
-    return util::make_error(
-        error.code,
-        bounded_redacted_presentation(std::move(error.message)),
-        bounded_redacted_presentation(std::move(error.detail)),
-        error.context
-            ? std::optional<std::string>{bounded_redacted_presentation(std::move(*error.context))}
-            : std::nullopt);
-}
-
 [[nodiscard]] ai::TimestampMs completion_timestamp_ms() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
@@ -98,11 +63,11 @@ namespace {
 [[nodiscard]] ai::BashExecutionMessage make_bash_execution_message(
     const UserShellResult& result,
     const UserBashOutputAccumulator& output,
-    std::string safe_command,
+    std::string command,
     bool exclude_from_context,
     ai::TimestampMs timestamp) {
     ai::BashExecutionMessage message;
-    message.command = std::move(safe_command);
+    message.command = std::move(command);
     // The bounded sanitized tail is the model-context value; the spill path
     // is recorded alongside it, never substituted for it.
     message.output = output.tail();
@@ -110,8 +75,7 @@ namespace {
     message.cancelled = result.cancelled;
     message.truncated = output.truncated();
     if (output.full_output_path()) {
-        message.full_output_path = bounded_redacted_presentation(
-            normalize_terminal_text(*output.full_output_path()));
+        message.full_output_path = *output.full_output_path();
     }
     message.exclude_from_context = exclude_from_context;
     message.timestamp = timestamp;
@@ -222,12 +186,12 @@ util::ExpectedVoid AgentSessionRuntime::commit_user_bash_completion(
     if (auto committed = agent::detail::AgentMessageAccess::append_bash_execution(
             *agent_, completion.message);
         !committed) {
-        return std::unexpected(safe_user_bash_error(committed.error()));
+        return std::unexpected(std::move(committed.error()));
     }
     if (auto persisted = session_.store->append(
             ai::MessageVariant{completion.message});
         !persisted) {
-        completion.diagnostic = safe_user_bash_error(persisted.error());
+        completion.diagnostic = std::move(persisted.error());
     }
     return {};
 }
@@ -364,21 +328,21 @@ AgentSessionRuntime::run_user_bash(
 
     user_bash_active_ = true;
     active_user_bash_stop_source_.emplace();
-    const auto safe_command = safe_user_bash_command(command);
+    const auto recorded_command = command;
     util::Expected<UserShellResult> shell_result = std::unexpected(util::make_error(
         util::ErrorCode::Unknown,
         "User Shell execution did not finish"));
     if (progress_sink) {
         try {
             if (auto started = progress_sink(UserBashProgress{
-                    .command = safe_command,
+                    .command = recorded_command,
                     .output = {},
                     .exclude_from_context = exclude_from_context,
                 });
                 !started) {
                 active_user_bash_stop_source_.reset();
                 user_bash_active_ = false;
-                co_return std::unexpected(safe_user_bash_error(started.error()));
+                co_return std::unexpected(std::move(started.error()));
             }
         } catch (const std::exception& error) {
             active_user_bash_stop_source_.reset();
@@ -399,13 +363,13 @@ AgentSessionRuntime::run_user_bash(
     try {
         shell_result = co_await services_.user_shell->execute(
             std::move(command),
-            [safe_command, exclude_from_context, &output, &progress_sink](
+            [recorded_command, exclude_from_context, &output, &progress_sink](
                 std::string_view update) -> util::ExpectedVoid {
                 output.append(update);
                 if (!progress_sink) return {};
                 try {
                     return progress_sink(UserBashProgress{
-                        .command = safe_command,
+                        .command = recorded_command,
                         .output = output.tail(),
                         .exclude_from_context = exclude_from_context,
                     });
@@ -448,22 +412,20 @@ AgentSessionRuntime::run_user_bash(
     if (!shell_result) {
         output.discard();
         co_await finalize_if_last_active_work();
-        co_return std::unexpected(safe_user_bash_error(shell_result.error()));
+        co_return std::unexpected(std::move(shell_result.error()));
     }
 
     const auto artifact_error = output.artifact_error();
     auto message = make_bash_execution_message(
         *shell_result,
         output,
-        safe_command,
+        recorded_command,
         exclude_from_context,
         completion_timestamp_ms());
 
     UserBashCompletion completion{
         .message = std::move(message),
-        .diagnostic = artifact_error
-            ? std::optional<util::Error>{safe_user_bash_error(*artifact_error)}
-            : std::nullopt,
+        .diagnostic = artifact_error,
     };
 
     if (prompt_active_) {
@@ -484,7 +446,7 @@ AgentSessionRuntime::run_user_bash(
         if (progress_sink) {
             try {
                 (void)progress_sink(UserBashProgress{
-                    .command = safe_command,
+                    .command = recorded_command,
                     .output = output.tail(),
                     .exclude_from_context = exclude_from_context,
                     .awaiting_commitment = true,

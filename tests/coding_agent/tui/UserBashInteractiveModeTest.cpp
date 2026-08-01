@@ -449,7 +449,7 @@ TEST_CASE(
 
 TEST_CASE(
     "User Bash sanitizes and bounds retained output and spills the complete safe stream",
-    "[coding_agent][tui][issue85][issue86]") {
+    "[coding_agent][tui][issue85][issue86][issue96]") {
     tests::TempWorkspace workspace;
     const auto spill_dir = workspace.path() / "spill";
     std::filesystem::create_directories(spill_dir);
@@ -522,8 +522,7 @@ TEST_CASE(
     const auto* bash = std::get_if<ai::BashExecutionMessage>(
         &snapshot.agent_state.messages[0]);
     REQUIRE(bash != nullptr);
-    CHECK(bash->command.find(secret) == std::string::npos);
-    CHECK(bash->command.find("[REDACTED]") != std::string::npos);
+    CHECK(bash->command == raw_command);
     CHECK(bash->output.find(secret) == std::string::npos);
     CHECK(bash->output.find("[REDACTED]") != std::string::npos);
     CHECK(bash->output.size() <= 50 * 1024);
@@ -557,7 +556,7 @@ TEST_CASE(
     const std::string persisted_text{
         std::istreambuf_iterator<char>(persisted),
         std::istreambuf_iterator<char>()};
-    CHECK(persisted_text.find(secret) == std::string::npos);
+    CHECK(persisted_text.find(secret) != std::string::npos);
     auto resumed = harness::session::resume_session(session_path);
     REQUIRE(resumed);
     REQUIRE(resumed->history.size() == 1);
@@ -638,7 +637,7 @@ TEST_CASE(
 
 TEST_CASE(
     "User Shell progress callback failure creates no Bash message and leaves the Session usable",
-    "[coding_agent][runtime][issue85]") {
+    "[coding_agent][runtime][issue85][issue96]") {
     tests::TempWorkspace workspace;
     auto client = std::make_unique<RecordingChatClient>();
     auto* client_pointer = client.get();
@@ -693,10 +692,9 @@ TEST_CASE(
     REQUIRE_FALSE(*completion);
     CHECK(created->session->snapshot().agent_state.messages.empty());
     CHECK(completion->error().message == "progress rejected");
-    CHECK(completion->error().detail.size() <=
-        coding_agent::kMaxPresentationPayloadBytes);
-    CHECK(completion->error().detail.find(secret) == std::string::npos);
-    CHECK(completion->error().detail.find("[REDACTED]") != std::string::npos);
+    CHECK(completion->error().detail ==
+        "api_key=" + secret + " " +
+            std::string(coding_agent::kMaxPresentationPayloadBytes * 2, 'x'));
 
     std::optional<util::ExpectedVoid> prompt_result;
     boost::asio::co_spawn(

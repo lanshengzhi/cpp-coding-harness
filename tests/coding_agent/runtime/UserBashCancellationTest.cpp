@@ -4,6 +4,7 @@
 #include <cch/harness/session/SessionResume.hpp>
 #include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
+#include "support/EnvVarGuard.hpp"
 #include "support/FakeUserShell.hpp"
 #include "support/GatedChatClient.hpp"
 #include "support/TempWorkspace.hpp"
@@ -16,6 +17,7 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -73,6 +75,134 @@ public:
 }
 
 } // namespace
+
+TEST_CASE(
+    "User Bash progress and committed messages preserve the raw command",
+    "[coding_agent][runtime][issue96]") {
+    tests::TempWorkspace workspace;
+    auto client = std::make_unique<ImmediateChatClient>();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    auto* shell_pointer = shell.get();
+    shell_pointer->enqueue({
+        .updates = {"command output"},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = false,
+    });
+
+    auto created = make_session(workspace.path(), std::move(client), std::move(shell));
+    REQUIRE(created);
+
+    const std::string command =
+        "printf\t'雪 api_key=sk-abcdefghijklmnopqrstuvwxyz123456'\x1b[31m";
+    std::vector<std::string> progress_commands;
+    boost::asio::io_context io;
+    BashResult result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(
+            *created->session,
+            command,
+            false,
+            [&progress_commands](const coding_agent::runtime::UserBashProgress& progress) {
+                progress_commands.push_back(progress.command);
+                return util::ExpectedVoid{};
+            }),
+        [&result](
+            std::exception_ptr exception,
+            util::Expected<coding_agent::runtime::UserBashCompletion> completion) {
+            REQUIRE(exception == nullptr);
+            result.emplace(std::move(completion));
+        });
+    io.run();
+
+    REQUIRE(result.has_value());
+    REQUIRE(*result);
+    REQUIRE(shell_pointer->commands.size() == 1);
+    CHECK(shell_pointer->commands.front() == command);
+    REQUIRE(progress_commands.size() == 2);
+    CHECK(progress_commands[0] == command);
+    CHECK(progress_commands[1] == command);
+    CHECK((*result)->message.command == command);
+    const auto& committed = created->session->snapshot().agent_state.messages;
+    REQUIRE(committed.size() == 1);
+    CHECK(std::get<ai::BashExecutionMessage>(committed.front()).command == command);
+}
+
+TEST_CASE(
+    "User Bash committed messages preserve the raw full output path",
+    "[coding_agent][runtime][issue96]") {
+    tests::TempWorkspace workspace;
+    const auto spill_directory =
+        workspace.path() / "api_key=raw-path-secret\x1b[31m";
+    std::error_code directory_error;
+    std::filesystem::create_directories(spill_directory, directory_error);
+    REQUIRE_FALSE(directory_error);
+    tests::EnvVarGuard tmpdir{"TMPDIR", spill_directory.string()};
+    auto client = std::make_unique<ImmediateChatClient>();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    shell->enqueue({
+        .updates = {std::string(60 * 1024, 'x')},
+        .result = {.exit_code = 0},
+        .infrastructure_failure = std::nullopt,
+        .gated = false,
+    });
+
+    auto created = make_session(workspace.path(), std::move(client), std::move(shell));
+    REQUIRE(created);
+
+    boost::asio::io_context io;
+    BashResult result;
+    tests::spawn_bash(io, *created->session, "large output", result);
+    io.run();
+
+    REQUIRE(result.has_value());
+    REQUIRE(*result);
+    REQUIRE((*result)->message.full_output_path.has_value());
+    const std::filesystem::path full_output_path{*(*result)->message.full_output_path};
+    CHECK(full_output_path.parent_path() == spill_directory);
+    const auto& committed = created->session->snapshot().agent_state.messages;
+    REQUIRE(committed.size() == 1);
+    const auto& committed_bash = std::get<ai::BashExecutionMessage>(committed.front());
+    CHECK(committed_bash.full_output_path == (*result)->message.full_output_path);
+}
+
+TEST_CASE(
+    "User Bash shell error diagnostics pass through raw",
+    "[coding_agent][runtime][issue96]") {
+    tests::TempWorkspace workspace;
+    auto client = std::make_unique<ImmediateChatClient>();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    const std::string message = "spawn\x1b[31m failed api_key=message-secret";
+    const std::string detail = "detail\t雪 api_key=detail-secret";
+    const std::string context = "context\r\napi_key=context-secret";
+    shell->enqueue({
+        .updates = {},
+        .result = {},
+        .infrastructure_failure = util::make_error(
+            util::ErrorCode::Process,
+            message,
+            detail,
+            context),
+        .gated = false,
+    });
+
+    auto created = make_session(workspace.path(), std::move(client), std::move(shell));
+    REQUIRE(created);
+
+    boost::asio::io_context io;
+    BashResult result;
+    tests::spawn_bash(io, *created->session, "cannot spawn", result);
+    io.run();
+
+    REQUIRE(result.has_value());
+    REQUIRE_FALSE(*result);
+    CHECK(result->error().message == message);
+    CHECK(result->error().detail == detail);
+    REQUIRE(result->error().context.has_value());
+    CHECK(*result->error().context == context);
+    CHECK(created->session->snapshot().agent_state.messages.empty());
+}
 
 TEST_CASE(
     "idle User Bash cancellation retains partial output and commits one cancelled message",

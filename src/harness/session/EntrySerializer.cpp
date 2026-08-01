@@ -537,7 +537,6 @@ void redact_assistant_content(ai::AssistantContent& content) {
                     concrete.error_message = util::redact_text(std::move(*concrete.error_message));
                 }
             } else if constexpr (std::is_same_v<T, ai::BashExecutionMessage>) {
-                concrete.command = util::redact_text(std::move(concrete.command));
                 concrete.output = util::redact_text(std::move(concrete.output));
             } else if constexpr (std::is_same_v<T, ai::CustomMessage>) {
                 for (auto& block : concrete.content) {
