@@ -19,6 +19,7 @@
 #include "coding_agent/tui/KeybindingCatalog.hpp"
 #include "coding_agent/tui/KeybindingHelp.hpp"
 #include "coding_agent/tui/ThemeCatalog.hpp"
+#include "coding_agent/tui/InteractionPolicy.hpp"
 #include "coding_agent/tui/Transcript.hpp"
 #include "coding_agent/tui/UserBashPresentation.hpp"
 #include "coding_agent/tui/UserBashSyntax.hpp"
@@ -70,9 +71,6 @@ using SubmitSink = std::move_only_function<void(std::string)>;
 /// Reports whether one kind of background work (Agent run or User Bash) is
 /// currently active so the effective interrupt target can be resolved.
 using ActivityHook = std::move_only_function<bool()>;
-
-enum class InputSubmission { Ordinary, FollowUp };
-enum class SubmissionOrigin { FocusedEditor, InitialPrompt };
 
 struct InteractiveStartupDiagnostics {
     std::vector<KeybindingDiagnostic> keybindings;
@@ -1498,25 +1496,36 @@ private:
         }
     }
 
-    [[nodiscard]] bool dispatch_user_bash(std::string text) {
-        if (!detail::AgentSessionInteractiveAccess::has_user_shell(session_)) return false;
-        auto invocation = parse_user_bash_invocation(std::move(text));
-        if (!invocation) return false;
-        if (user_bash_active_) {
-            view_->restore_submitted_text(safe_user_bash_invocation(*invocation));
+    [[nodiscard]] InteractionActivity interaction_activity() const {
+        return InteractionActivity{
+            .user_shell_available =
+                detail::AgentSessionInteractiveAccess::has_user_shell(session_),
+            .user_bash_active = user_bash_active_,
+            .prompt_active = prompt_active_,
+            .interrupt_requested =
+                interrupt_requested_generation_ == prompt_generation_.load(),
+        };
+    }
+
+    [[nodiscard]] bool dispatch_user_bash(const std::string& text, SubmissionOrigin origin) {
+        auto route = route_user_bash(text, origin, interaction_activity());
+        if (!route) return false;
+        if (const auto* busy = std::get_if<RestoreUserBashBusy>(&*route)) {
+            view_->restore_submitted_text(busy->safe_recall);
             view_->append_diagnostic("A User Bash command is already in flight");
             tui_.invalidate();
             return true;
         }
+        auto invocation = std::get<LaunchUserBash>(std::move(*route)).invocation;
 
         user_bash_active_ = true;
         auto safe_invocation = std::make_shared<std::string>(
-            safe_user_bash_invocation(*invocation));
+            safe_user_bash_invocation(invocation));
         const auto self = shared_from_this();
         boost::asio::co_spawn(
             executor_,
             [self,
-             invocation = std::move(*invocation),
+             invocation = std::move(invocation),
              safe_invocation]() mutable -> boost::asio::awaitable<void> {
                 auto result = co_await detail::AgentSessionInteractiveAccess::run_user_bash(
                     self->session_,
@@ -1555,10 +1564,9 @@ private:
         if (!running_ || exit_requested_) {
             return;
         }
-        if (prompt_active_) {
-            // Agent work takes interrupt precedence over an overlapping User
-            // Bash; the Bash becomes the target of a later interrupt once the
-            // Agent is idle (pi editor Escape precedence).
+        switch (route_interrupt(interaction_activity())) {
+        case InterruptRoute::AbortAgentRun:
+            // A stale generation or an already-interrupted run is a no-op.
             if (prompt_generation != prompt_generation_.load() ||
                 interrupt_requested_generation_ == prompt_generation) {
                 return;
@@ -1567,11 +1575,13 @@ private:
             dequeue_pending_input(false);
             session_.abort();
             return;
-        }
-        if (user_bash_active_) {
+        case InterruptRoute::CancelUserBash:
             // Repeated interrupts coalesce inside the runtime's independent
             // User Bash stop source.
             detail::AgentSessionInteractiveAccess::cancel_user_bash(session_);
+            return;
+        case InterruptRoute::None:
+            return;
         }
     }
 
@@ -1581,24 +1591,24 @@ private:
         PromptOptions options = {},
         SubmissionOrigin origin = SubmissionOrigin::FocusedEditor) {
         if (!running_ || view_ == nullptr || text.empty()) return;
-        if (origin == SubmissionOrigin::FocusedEditor && dispatch_user_bash(text)) return;
+        if (dispatch_user_bash(text, origin)) return;
         if (dispatch_command(text)) return;
-        if (prompt_active_ &&
-            interrupt_requested_generation_ == prompt_generation_.load()) {
+        const auto route = route_prompt(submission, interaction_activity());
+        if (route == PromptRoute::RestoreInterrupted) {
             view_->restore_submitted_text(text);
             view_->append_diagnostic("A prompt is already in flight");
             tui_.invalidate();
             return;
         }
-        if (prompt_active_) {
-            if (auto admitted = submission == InputSubmission::FollowUp
+        if (route == PromptRoute::QueueSteering || route == PromptRoute::QueueFollowUp) {
+            if (auto admitted = route == PromptRoute::QueueFollowUp
                     ? session_.follow_up(text)
                     : session_.steer(text);
                 !admitted) {
                 view_->restore_submitted_text(text);
                 view_->append_diagnostic(bounded_redacted_presentation(std::format(
                     "Unable to queue {} input: {}",
-                    submission == InputSubmission::FollowUp ? "follow-up" : "steering",
+                    route == PromptRoute::QueueFollowUp ? "follow-up" : "steering",
                     combined_error_text(admitted.error()))));
             }
             sync_pending_input();
