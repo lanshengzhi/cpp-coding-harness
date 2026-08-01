@@ -1,16 +1,16 @@
 #pragma once
 
-// Incremental User Bash output pipeline. Raw stdout/stderr bytes arrive in
-// callback-arrival order and pass through UTF-8 safety, ANSI stripping,
-// carriage-return normalization, and secret redaction — each stage holding
-// back only the bounded partial construct that may continue in a later chunk.
-// The sanitized stream feeds a bounded rolling tail (live presentation and the
-// completed Bash Message) and, once the tail truncates, a complete spill file
-// in the OS temporary directory.
+// Incremental User Bash output pipeline following pi's recipe (ADR 0028). Raw
+// stdout/stderr bytes arrive in callback-arrival order and pass through UTF-8
+// safety, ANSI stripping, and binary-garbage filtering with carriage-return
+// removal — each stage holding back only the bounded partial construct that
+// may continue in a later chunk. No secret redaction is applied anywhere in
+// the output path. The sanitized stream feeds a bounded rolling tail (live
+// presentation and the completed Bash Message) and, once the tail truncates,
+// a complete spill file in the OS temporary directory.
 
 #include "harness/UniqueFd.hpp"
 #include "util/OutputLimiter.hpp"
-#include "util/Redactor.hpp"
 
 #include <cch/util/Error.hpp>
 
@@ -65,65 +65,24 @@ private:
     std::string buffer_;
 };
 
-// --- Stage 3: carriage-return normalization and binary control dropping -----
-// "\r\n" and a lone "\r" both become "\n"; controls below 0x20 other than
-// "\n"/"\t" are dropped. A trailing "\r" is held back one chunk.
+// --- Stage 3: binary-garbage filter and carriage-return removal ------------
+// Pi's sanitizeBinaryOutput + .replace(/\r/g, ""): carriage returns are
+// removed outright (CRLF collapses to LF, a lone CR disappears), C0 controls
+// other than "\n"/"\t" and U+FFF9–U+FFFB are dropped, and tab, LF, and DEL
+// are preserved. Stateless: stage 1 emits complete UTF-8 sequences only, so
+// no chunk-boundary hold-back is needed.
 
-class CarriageReturnNormalize {
+class ControlFilter {
 public:
     void append(std::string_view text, std::string& out);
-    void finish(std::string& out);
-
-private:
-    bool held_cr_{false};
-};
-
-// --- Stage 4: incremental secret redaction -----------------------------------
-// Runs the single whole-buffer redactor (CODING_STANDARDS §10.1) over a
-// bounded pending window and emits only the prefix that future chunks cannot
-// change: the trailing at-risk construct (secret-key candidate, token prefix,
-// or unmatched quoted value) is held back for the next chunk. A redaction
-// marker at the end of the window arms continuation suppression so the tail
-// of a value or token redacted mid-construct is dropped rather than leaked.
-// Bounded-window divergence: secret constructs longer than kMaxAtRiskBytes
-// (about 4 KiB) or keys longer than kMaxKeyBytes may not fully redact; the
-// whole-buffer redactor has no such window.
-
-class RedactEmit {
-public:
-    void append(std::string_view text, std::string& out);
-    void finish(std::string& out);
-
-private:
-    enum class Suppression { None, UnquotedValue, QuotedValue };
-
-    [[nodiscard]] static bool is_key_character(char ch);
-    [[nodiscard]] static bool is_value_delimiter(char ch, bool authorization);
-    [[nodiscard]] static bool ends_with_marker(std::string_view text);
-    void suppress_continuation();
-    void arm_suppression();
-    [[nodiscard]] bool authorization_key_before(std::size_t marker_start) const;
-    [[nodiscard]] std::size_t emit_length() const;
-    [[nodiscard]] std::size_t trailing_key_run_start() const;
-    [[nodiscard]] std::size_t extend_over_assignment(std::size_t at_risk) const;
-    [[nodiscard]] std::size_t unmatched_quote_start() const;
-
-    static constexpr std::size_t kMaxAtRiskBytes{4096};
-    static constexpr std::size_t kMaxKeyBytes{256};
-    static constexpr std::size_t kMaxSeparatorSpaces{8};
-    std::string pending_;
-    Suppression suppression_{Suppression::None};
-    std::size_t suppress_from_{0};
-    char quote_{'\0'};
-    bool authorization_{false};
 };
 
 // --- Spill artifact ---------------------------------------------------------
-// The complete sanitized, redacted stream written incrementally to a unique
-// owner-only file in the OS temporary directory once the retained tail
-// truncates. The path is surfaced only after every write and the final close
-// succeed; any failure abandons (and removes) the partial artifact without
-// erasing the bounded truncated result.
+// The complete sanitized stream written incrementally to a unique owner-only
+// file in the OS temporary directory once the retained tail truncates. The
+// path is surfaced only after every write and the final close succeed; any
+// failure abandons (and removes) the partial artifact without erasing the
+// bounded truncated result.
 
 class SpillFile {
 public:
@@ -169,7 +128,7 @@ public:
     explicit UserBashOutputAccumulator(util::OutputLimit limit = {}) : limit_(limit) {}
 
     /// Feed one raw stdout/stderr chunk in callback-arrival order. The
-    /// sanitized, redacted increment is reflected in tail() on return.
+    /// sanitized increment is reflected in tail() on return.
     void append(std::string_view raw);
 
     /// No more output will arrive: flush every stage's held-back partial
@@ -194,7 +153,7 @@ public:
 
 private:
     // Push raw bytes (or, when flush is set, each stage's held-back partial
-    // construct) through the four-stage pipeline into the rolling tail.
+    // construct) through the three-stage pipeline into the rolling tail.
     void pump(std::string_view raw, bool flush);
     // Retain the sanitized increment in the rolling tail, applying the same
     // tail semantics as util::limit_output_tail on the complete stream. Once
@@ -208,15 +167,16 @@ private:
     [[nodiscard]] std::size_t tail_newlines() const;
     // Backward-walk trim identical to util::limit_output_tail: at most
     // limit_.max_bytes bytes and limit_.max_lines lines, never splitting a
-    // multibyte sequence or a redaction marker at the cut point.
+    // multibyte sequence at the cut point.
     void trim_tail();
 
-    static constexpr std::size_t kBoundarySlack{util::kRedactionMarker.size() + 4};
+    // One maximum-length UTF-8 sequence: keeps the lead byte of a sequence
+    // straddling the pre-cut window boundary available to the trim below.
+    static constexpr std::size_t kBoundarySlack{4};
     util::OutputLimit limit_;
     user_bash_output_detail::Utf8Safety utf8_;
     user_bash_output_detail::AnsiStrip ansi_;
-    user_bash_output_detail::CarriageReturnNormalize carriage_return_;
-    user_bash_output_detail::RedactEmit redact_;
+    user_bash_output_detail::ControlFilter control_filter_;
     user_bash_output_detail::SpillFile spill_;
     std::string tail_;
     bool truncated_{false};

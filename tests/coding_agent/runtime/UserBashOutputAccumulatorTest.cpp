@@ -30,12 +30,12 @@ void append_in_chunks(
 
 TEST_CASE(
     "User Bash output accumulator presents one sanitized stream in callback-arrival order",
-    "[coding_agent][runtime][issue86]") {
+    "[coding_agent][runtime][issue86][issue97]") {
     runtime::UserBashOutputAccumulator accumulator;
     accumulator.append("\x1b[31mfirst\x1b[0m\r\n");
     accumulator.append("sec\x1b[2Kond\rthird");
     accumulator.finish();
-    CHECK(accumulator.tail() == "first\nsecond\nthird");
+    CHECK(accumulator.tail() == "first\nsecondthird");
     CHECK_FALSE(accumulator.truncated());
     CHECK_FALSE(accumulator.full_output_path().has_value());
     CHECK_FALSE(accumulator.artifact_error().has_value());
@@ -43,15 +43,37 @@ TEST_CASE(
 
 TEST_CASE(
     "User Bash output accumulator makes invalid UTF-8 and binary bytes safe across chunk boundaries",
-    "[coding_agent][runtime][issue86]") {
+    "[coding_agent][runtime][issue86][issue97]") {
     runtime::UserBashOutputAccumulator accumulator;
     // é (U+00E9) is 0xC3 0xA9: a valid sequence split across two callbacks.
     accumulator.append("h\xc3");
     accumulator.append("\xa9llo\ttab");
     accumulator.append("\x07" "bell"); // BEL is a binary control and is dropped
+    accumulator.append("\x7f" "del"); // DEL is preserved, matching pi
+    // U+FFF9–U+FFFB are dropped, even split across chunk boundaries.
+    accumulator.append("\xef\xbf");
+    accumulator.append("\xb9");
+    accumulator.append("\xef\xbf\xba\xef\xbf\xbb");
     accumulator.append("\x80\xff"); // stray continuation and invalid lead bytes
     accumulator.finish();
-    CHECK(accumulator.tail() == "h\xc3\xa9llo\ttabbell\xef\xbf\xbd\xef\xbf\xbd");
+    CHECK(accumulator.tail() ==
+        "h\xc3\xa9llo\ttabbell\x7f" "del\xef\xbf\xbd\xef\xbf\xbd");
+    CHECK_FALSE(accumulator.truncated());
+}
+
+TEST_CASE(
+    "User Bash output accumulator filters C0 controls to pi's recipe",
+    "[coding_agent][runtime][issue97]") {
+    runtime::UserBashOutputAccumulator accumulator;
+    // Pi's sanitizeBinaryOutput keeps tab, LF, and CR; the later
+    // .replace(/\r/g, "") removes CR, so only tab and LF survive.
+    std::string controls;
+    for (char ch = 0x00; ch < 0x20; ++ch) {
+        controls.push_back(ch);
+    }
+    accumulator.append(controls);
+    accumulator.finish();
+    CHECK(accumulator.tail() == "\t\n");
     CHECK_FALSE(accumulator.truncated());
 }
 
@@ -69,19 +91,23 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "User Bash output accumulator normalizes carriage returns split across chunk boundaries",
-    "[coding_agent][runtime][issue86]") {
+    "User Bash output accumulator removes carriage returns like pi",
+    "[coding_agent][runtime][issue97]") {
     runtime::UserBashOutputAccumulator accumulator;
+    // Pi's .replace(/\r/g, ""): CRLF collapses to LF and a lone CR
+    // disappears, across chunk boundaries and at end of stream.
     accumulator.append("a\r");
-    accumulator.append("\nb\r");
+    accumulator.append("\nb\rc");
+    accumulator.append("\r\nd\r");
     accumulator.finish();
-    CHECK(accumulator.tail() == "a\nb\n");
+    CHECK(accumulator.tail() == "a\nbc\nd");
     CHECK_FALSE(accumulator.truncated());
 }
 
 TEST_CASE(
-    "User Bash output accumulator redacts secrets split across arbitrary chunk boundaries",
-    "[coding_agent][runtime][issue86]") {
+    "User Bash output accumulator passes secret-bearing output through unchanged",
+    "[coding_agent][runtime][issue97]") {
+    // ADR 0028: no secret redaction is applied anywhere in the output path.
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
     runtime::UserBashOutputAccumulator accumulator;
     accumulator.append("launch api_");
@@ -89,24 +115,18 @@ TEST_CASE(
     accumulator.append(secret.substr(5, 10));
     accumulator.append(secret.substr(15) + " done");
     accumulator.finish();
-    CHECK(accumulator.tail().find(secret) == std::string::npos);
-    CHECK(accumulator.tail().find("[REDACTED]") != std::string::npos);
-    CHECK(accumulator.tail().find("api_key=") != std::string::npos);
-    CHECK(accumulator.tail().find("done") != std::string::npos);
+    CHECK(accumulator.tail() == "launch api_key=" + secret + " done");
 }
 
 TEST_CASE(
-    "User Bash output accumulator redacts quoted secret values split across chunk boundaries",
-    "[coding_agent][runtime][issue86]") {
-    const std::string secret = "quoted secret value";
+    "User Bash output accumulator passes quoted secret values through unchanged",
+    "[coding_agent][runtime][issue97]") {
     runtime::UserBashOutputAccumulator accumulator;
     accumulator.append("{\"token\": \"");
     accumulator.append("quoted sec");
     accumulator.append("ret value\"}");
     accumulator.finish();
-    CHECK(accumulator.tail().find(secret) == std::string::npos);
-    CHECK(accumulator.tail().find("secret") == std::string::npos);
-    CHECK(accumulator.tail().find("[REDACTED]") != std::string::npos);
+    CHECK(accumulator.tail() == "{\"token\": \"quoted secret value\"}");
 }
 
 TEST_CASE(
@@ -160,32 +180,15 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "User Bash output accumulator never splits a redaction marker at the tail cut",
-"[coding_agent][runtime][issue86]") {
-    tests::TempWorkspace workspace;
-    tests::EnvVarGuard tmpdir{"TMPDIR", workspace.path().string()};
-    const util::OutputLimit limit{.max_bytes = 9, .max_lines = 100};
-    const std::string sanitized = "api_key=[REDACTED]";
-    runtime::UserBashOutputAccumulator accumulator{limit};
-    accumulator.append("api_key=secret-value");
-    accumulator.finish();
-    const auto expected = util::limit_output_tail(sanitized, limit);
-    CHECK(accumulator.tail() == expected.text);
-    CHECK(accumulator.tail().size() == 0);
-    CHECK(accumulator.truncated());
-    CHECK(expected.truncated);
-}
-
-TEST_CASE(
     "User Bash output accumulator matches whole-buffer tail semantics for arbitrary chunkings",
-"[coding_agent][runtime][issue86]") {
+"[coding_agent][runtime][issue86][issue97]") {
     tests::TempWorkspace workspace;
     tests::EnvVarGuard tmpdir{"TMPDIR", workspace.path().string()};
     const util::OutputLimit limit{.max_bytes = 64, .max_lines = 5};
     const std::string content =
         "alpha api_key=split-secret\nbeta\n\x1b[32mgamma\x1b[0m\r\ndelta\nepsilon\nzeta\neta";
     const std::string sanitized =
-        "alpha api_key=[REDACTED]\nbeta\ngamma\ndelta\nepsilon\nzeta\neta";
+        "alpha api_key=split-secret\nbeta\ngamma\ndelta\nepsilon\nzeta\neta";
     const auto expected = util::limit_output_tail(sanitized, limit);
     REQUIRE(expected.truncated);
     for (const std::size_t chunk_size : {std::size_t{1}, std::size_t{3}, std::size_t{17}}) {
@@ -215,7 +218,7 @@ TEST_CASE(
 
 TEST_CASE(
     "User Bash output accumulator spills the complete sanitized stream to an owner-only temp file",
-    "[coding_agent][runtime][issue86]") {
+    "[coding_agent][runtime][issue86][issue97]") {
     tests::TempWorkspace workspace;
     const auto spill_dir = workspace.path() / "spill";
     std::filesystem::create_directories(spill_dir);
@@ -224,7 +227,7 @@ TEST_CASE(
     const util::OutputLimit limit{.max_bytes = 64, .max_lines = 4};
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
     const std::string sanitized =
-        "one api_key=[REDACTED]\ntwo\nthree\nfour\nfive\nsix\nseven\n";
+        "one api_key=" + secret + "\ntwo\nthree\nfour\nfive\nsix\nseven\n";
     runtime::UserBashOutputAccumulator accumulator{limit};
     accumulator.append("one api_");
     accumulator.append("key=" + secret + "\r\n");
@@ -243,7 +246,8 @@ TEST_CASE(
         std::istreambuf_iterator<char>(input),
         std::istreambuf_iterator<char>()};
     CHECK(spilled == sanitized);
-    CHECK(spilled.find(secret) == std::string::npos);
+    // Secret-bearing output spills unchanged: no redaction anywhere (ADR 0028).
+    CHECK(spilled.find(secret) != std::string::npos);
 
     const auto expected_tail = util::limit_output_tail(sanitized, limit);
     REQUIRE(expected_tail.truncated);
@@ -300,17 +304,13 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "User Bash output accumulator redacts Authorization values with whitespace split across chunks",
-    "[coding_agent][runtime][issue86]") {
-    tests::TempWorkspace workspace;
-    tests::EnvVarGuard tmpdir{"TMPDIR", workspace.path().string()};
+    "User Bash output accumulator passes Authorization values through unchanged",
+    "[coding_agent][runtime][issue97]") {
     runtime::UserBashOutputAccumulator accumulator;
     accumulator.append("Authorization: Bearer abc");
     accumulator.append(" def ghi\nnext");
     accumulator.finish();
-    // Matches whole-buffer redact_text, which lets Authorization values span
-    // whitespace.
-    CHECK(accumulator.tail() == "Authorization: [REDACTED]\nnext");
+    CHECK(accumulator.tail() == "Authorization: Bearer abc def ghi\nnext");
 }
 
 TEST_CASE(

@@ -1,10 +1,8 @@
 #include "UserBashOutputAccumulator.hpp"
 
 #include "coding_agent/BoundedText.hpp"
-#include "util/BoundedText.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <format>
 #include <random>
 #include <system_error>
@@ -154,260 +152,26 @@ std::size_t AnsiStrip::sequence_end(std::size_t esc) const {
     return esc + 2 <= buffer_.size() ? esc + 2 : std::string::npos;
 }
 
-// --- Stage 3: carriage-return normalization ---------------------------------
+// --- Stage 3: binary-garbage filter and carriage-return removal -------------
 
-void CarriageReturnNormalize::append(std::string_view text, std::string& out) {
-    std::string_view rest = text;
-    if (held_cr_) {
-        held_cr_ = false;
-        out.push_back('\n');
-        if (!rest.empty() && rest.front() == '\n') rest.remove_prefix(1);
-    }
-    while (!rest.empty()) {
-        const char ch = rest.front();
-        if (ch == '\r') {
-            if (rest.size() == 1) {
-                held_cr_ = true;
-                break;
-            }
-            out.push_back('\n');
-            const bool crlf = rest[1] == '\n';
-            rest.remove_prefix(crlf ? 2 : 1);
-            continue;
-        }
+void ControlFilter::append(std::string_view text, std::string& out) {
+    for (std::size_t index = 0; index < text.size(); ++index) {
+        const char ch = text[index];
+        if (ch == '\r') continue;
         const auto value = static_cast<unsigned char>(ch);
-        if (value < 0x20 && ch != '\n' && ch != '\t') {
-            rest.remove_prefix(1);
+        if (value < 0x20 && ch != '\n' && ch != '\t') continue;
+        // U+FFF9–U+FFFB (EF BF B9/BA/BB) are binary garbage in pi's recipe.
+        // Stage 1 emits complete UTF-8 sequences only, so the full three-byte
+        // form is always present when the lead byte is.
+        if (value == 0xef && index + 2 < text.size() &&
+            static_cast<unsigned char>(text[index + 1]) == 0xbf &&
+            static_cast<unsigned char>(text[index + 2]) >= 0xb9 &&
+            static_cast<unsigned char>(text[index + 2]) <= 0xbb) {
+            index += 2;
             continue;
         }
         out.push_back(ch);
-        rest.remove_prefix(1);
     }
-}
-
-void CarriageReturnNormalize::finish(std::string& out) {
-    if (held_cr_) {
-        held_cr_ = false;
-        out.push_back('\n');
-    }
-}
-
-// --- Stage 4: incremental secret redaction -----------------------------------
-
-void RedactEmit::append(std::string_view text, std::string& out) {
-    pending_.append(text);
-    suppress_continuation();
-    pending_ = util::redact_text(std::move(pending_));
-    arm_suppression();
-    const std::size_t emit = emit_length();
-    out.append(pending_, 0, emit);
-    pending_.erase(0, emit);
-    suppress_from_ = emit < suppress_from_ ? suppress_from_ - emit : 0;
-}
-
-void RedactEmit::finish(std::string& out) {
-    suppress_continuation();
-    pending_ = util::redact_text(std::move(pending_));
-    out.append(pending_);
-    pending_.clear();
-    suppression_ = Suppression::None;
-    suppress_from_ = 0;
-    authorization_ = false;
-}
-
-bool RedactEmit::is_key_character(char ch) {
-    const auto value = static_cast<unsigned char>(ch);
-    return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z') ||
-        (value >= '0' && value <= '9') || ch == '_' || ch == '-';
-}
-
-// Unquoted value termination, mirroring redact_assignments: Authorization
-// keys additionally allow whitespace inside the value.
-bool RedactEmit::is_value_delimiter(char ch, bool authorization) {
-    const auto value = static_cast<unsigned char>(ch);
-    return ch == ',' || ch == '}' || ch == '\n' ||
-        (!authorization && std::isspace(value));
-}
-
-bool RedactEmit::ends_with_marker(std::string_view text) {
-    return text.size() >= util::kRedactionMarker.size() &&
-        text.substr(text.size() - util::kRedactionMarker.size()) ==
-            util::kRedactionMarker;
-}
-
-// The continuation of a redacted construct starts right after the marker
-// that ended the last window; suppress_from_ tracks that position.
-void RedactEmit::suppress_continuation() {
-    if (suppression_ == Suppression::None) return;
-    std::size_t end = suppress_from_;
-    bool terminated = false;
-    if (suppression_ == Suppression::QuotedValue) {
-        while (end < pending_.size()) {
-            if (pending_[end] == '\\' && end + 1 < pending_.size()) {
-                end += 2;
-                continue;
-            }
-            if (pending_[end] == quote_) {
-                ++end; // consume the closing quote
-                terminated = true;
-                break;
-            }
-            ++end;
-        }
-        // Keep a consumed closing quote: it balances the value's opening
-        // quote so the just-closed construct is not mistaken for an open
-        // one when the window is reconsidered.
-        pending_.erase(suppress_from_, end - suppress_from_ - (terminated ? 1 : 0));
-    } else {
-        while (end < pending_.size() &&
-               !is_value_delimiter(pending_[end], authorization_)) {
-            ++end;
-        }
-        terminated = end < pending_.size();
-        pending_.erase(suppress_from_, end - suppress_from_);
-    }
-    if (terminated) {
-        suppression_ = Suppression::None;
-        authorization_ = false;
-    } else {
-        suppress_from_ = pending_.size();
-    }
-}
-
-// A pending window that ends with a redaction marker may have cut a
-// value or token mid-construct; suppress its continuation in later chunks.
-void RedactEmit::arm_suppression() {
-    if (!ends_with_marker(pending_)) return;
-    const std::size_t marker_start = pending_.size() - util::kRedactionMarker.size();
-    bool in_quote = false;
-    char open_quote = '\0';
-    for (std::size_t index = 0; index < marker_start; ++index) {
-        const char ch = pending_[index];
-        if (ch == '\\' && in_quote && index + 1 < marker_start) {
-            ++index;
-            continue;
-        }
-        if (ch == '"' || ch == '\'') {
-            if (!in_quote) {
-                in_quote = true;
-                open_quote = ch;
-            } else if (ch == open_quote) {
-                in_quote = false;
-            }
-        }
-    }
-    quote_ = open_quote;
-    suppression_ = in_quote ? Suppression::QuotedValue : Suppression::UnquotedValue;
-    authorization_ =
-        suppression_ == Suppression::UnquotedValue && authorization_key_before(marker_start);
-    suppress_from_ = pending_.size();
-}
-
-// Whether the assignment whose value ends at the marker belongs to an
-// Authorization-looking key (quoted or plain), matching redact_assignments.
-bool RedactEmit::authorization_key_before(std::size_t marker_start) const {
-    const auto separator = pending_.find_last_of("=:", marker_start);
-    if (separator == std::string::npos) return false;
-    std::size_t key_end = separator;
-    while (key_end > 0 && (pending_[key_end - 1] == ' ' || pending_[key_end - 1] == '\t')) {
-        --key_end;
-    }
-    if (key_end == 0) return false;
-    std::size_t key_begin = key_end;
-    if (pending_[key_end - 1] == '"') {
-        if (key_end < 2) return false;
-        const auto open = pending_.rfind('"', key_end - 2);
-        if (open == std::string::npos) return false;
-        key_begin = open + 1;
-        --key_end;
-    } else {
-        while (key_begin > 0 && key_end - key_begin < kMaxKeyBytes &&
-               is_key_character(pending_[key_begin - 1])) {
-            --key_begin;
-        }
-    }
-    if (key_begin == key_end) return false;
-    return util::normalized_secret_key(
-               std::string_view(pending_).substr(key_begin, key_end - key_begin))
-        .find("AUTHORIZATION") != std::string::npos;
-}
-
-// Length of the pending prefix that future chunks cannot change.
-std::size_t RedactEmit::emit_length() const {
-    std::size_t at_risk = extend_over_assignment(trailing_key_run_start());
-    at_risk = std::min(at_risk, unmatched_quote_start());
-    if (pending_.size() - at_risk > kMaxAtRiskBytes) {
-        return pending_.size() - kMaxAtRiskBytes;
-    }
-    return at_risk;
-}
-
-std::size_t RedactEmit::trailing_key_run_start() const {
-    std::size_t index = pending_.size();
-    while (index > 0 && is_key_character(pending_[index - 1])) --index;
-    return index;
-}
-
-// `key = value` / `key: value` context: extend the at-risk region back
-// over the separator, surrounding spaces, and the candidate key.
-std::size_t RedactEmit::extend_over_assignment(std::size_t at_risk) const {
-    std::size_t index = at_risk;
-    std::size_t spaces = 0;
-    while (index > 0 && spaces < kMaxSeparatorSpaces &&
-           (pending_[index - 1] == ' ' || pending_[index - 1] == '\t')) {
-        --index;
-        ++spaces;
-    }
-    if (index == 0 || (pending_[index - 1] != '=' && pending_[index - 1] != ':')) {
-        return at_risk;
-    }
-    --index;
-    spaces = 0;
-    while (index > 0 && spaces < kMaxSeparatorSpaces &&
-           (pending_[index - 1] == ' ' || pending_[index - 1] == '\t')) {
-        --index;
-        ++spaces;
-    }
-    const std::size_t key_end = index;
-    if (index > 0 && pending_[index - 1] == '"') {
-        if (index >= 2) {
-            const auto open = pending_.rfind('"', index - 2);
-            if (open != std::string::npos && index - open <= kMaxKeyBytes) return open;
-        }
-        return index;
-    }
-    while (index > 0 && key_end - index < kMaxKeyBytes &&
-           is_key_character(pending_[index - 1])) {
-        --index;
-    }
-    return index;
-}
-
-// An unmatched quote within the window may open a quoted secret value;
-// hold back from it. Backslash-escaped quotes are ignored.
-std::size_t RedactEmit::unmatched_quote_start() const {
-    const std::size_t window_begin =
-        pending_.size() > kMaxAtRiskBytes ? pending_.size() - kMaxAtRiskBytes : 0;
-    std::optional<std::size_t> earliest;
-    for (const char quote : {'"', '\''}) {
-        bool in_quote = false;
-        std::size_t open = 0;
-        for (std::size_t index = window_begin; index < pending_.size(); ++index) {
-            if (pending_[index] == '\\' && in_quote && index + 1 < pending_.size()) {
-                ++index;
-                continue;
-            }
-            if (pending_[index] != quote) continue;
-            if (!in_quote) {
-                in_quote = true;
-                open = index;
-            } else {
-                in_quote = false;
-            }
-        }
-        if (in_quote && (!earliest || open < *earliest)) earliest = open;
-    }
-    return earliest.value_or(pending_.size());
 }
 
 // --- Spill artifact ---------------------------------------------------------
@@ -570,13 +334,9 @@ void UserBashOutputAccumulator::pump(std::string_view raw, bool flush) {
     std::string stripped;
     ansi_.append(safe, stripped);
     if (flush) ansi_.finish(stripped);
-    std::string normalized;
-    carriage_return_.append(stripped, normalized);
-    if (flush) carriage_return_.finish(normalized);
-    std::string emitted;
-    redact_.append(normalized, emitted);
-    if (flush) redact_.finish(emitted);
-    retain(emitted);
+    std::string filtered;
+    control_filter_.append(stripped, filtered);
+    retain(filtered);
 }
 
 void UserBashOutputAccumulator::retain(const std::string& emitted) {
@@ -596,12 +356,12 @@ void UserBashOutputAccumulator::retain(const std::string& emitted) {
             }
         }
     }
+    // The surviving region always lies within the last window bytes;
+    // pre-cut older bytes so retained memory stays bounded. The slack keeps
+    // the lead byte of a multibyte sequence straddling the final cut point
+    // available to the trim below.
     const std::size_t window = limit_.max_bytes + kBoundarySlack;
     if (tail_.size() + emitted.size() > window) {
-        // The surviving region always lies within the last window bytes;
-        // pre-cut older bytes so retained memory stays bounded. The slack
-        // keeps a split redaction marker or multibyte sequence adjacent to
-        // the final cut point intact for the trim below.
         std::size_t excess = tail_.size() + emitted.size() - window;
         if (excess < tail_.size()) {
             tail_.erase(0, excess);
@@ -642,11 +402,6 @@ void UserBashOutputAccumulator::trim_tail() {
     while (start < tail_.size() &&
            (static_cast<unsigned char>(tail_[start]) & 0xc0) == 0x80) {
         ++start;
-    }
-    const auto marker = tail_.rfind(util::kRedactionMarker, start);
-    if (marker != std::string::npos && marker < start &&
-        marker + util::kRedactionMarker.size() > start) {
-        start = marker + util::kRedactionMarker.size();
     }
     truncated_ = true;
     tail_.erase(0, start);

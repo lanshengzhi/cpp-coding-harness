@@ -448,8 +448,8 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "User Bash sanitizes and bounds retained output and spills the complete safe stream",
-    "[coding_agent][tui][issue85][issue86][issue96]") {
+    "User Bash sanitizes and bounds retained output and spills the complete sanitized stream",
+    "[coding_agent][tui][issue85][issue86][issue96][issue97]") {
     tests::TempWorkspace workspace;
     const auto spill_dir = workspace.path() / "spill";
     std::filesystem::create_directories(spill_dir);
@@ -523,15 +523,16 @@ TEST_CASE(
         &snapshot.agent_state.messages[0]);
     REQUIRE(bash != nullptr);
     CHECK(bash->command == raw_command);
-    CHECK(bash->output.find(secret) == std::string::npos);
-    CHECK(bash->output.find("[REDACTED]") != std::string::npos);
+    // ADR 0028: output follows pi's recipe — no redaction; a secret-bearing
+    // output passes through unchanged.
+    CHECK(bash->output.find(secret) != std::string::npos);
     CHECK(bash->output.size() <= 50 * 1024);
     CHECK(bash->truncated);
-    const auto screen = visible_screen(terminal);
-    CHECK(screen.find(secret) == std::string::npos);
+    // The rendered block's raw display is sibling ticket #99's seam, so this
+    // test pins the committed and spilled values only.
 
-    // The spill artifact holds the complete sanitized, redacted stream and is
-    // never substituted for the bounded model-context value.
+    // The spill artifact holds the complete sanitized stream and is never
+    // substituted for the bounded model-context value.
     REQUIRE(bash->full_output_path.has_value());
     const std::filesystem::path spill_path{*bash->full_output_path};
     CHECK(spill_path.parent_path() == spill_dir);
@@ -540,9 +541,9 @@ TEST_CASE(
         std::istreambuf_iterator<char>(spill_input),
         std::istreambuf_iterator<char>()};
     CHECK(spilled.size() > 60 * 1024);
-    CHECK(spilled.find(secret) == std::string::npos);
-    CHECK(spilled.find("live api_key=[REDACTED]\nupdate\n") != std::string::npos);
-    CHECK(spilled.ends_with("\napi_key=[REDACTED]"));
+    CHECK(spilled.find(secret) != std::string::npos);
+    CHECK(spilled.find("live api_key=" + secret + "update\n") != std::string::npos);
+    CHECK(spilled.ends_with("\napi_key=" + secret));
     const auto permissions = std::filesystem::status(spill_path).permissions();
     CHECK((permissions & std::filesystem::perms::group_all) == std::filesystem::perms::none);
     CHECK((permissions & std::filesystem::perms::others_all) == std::filesystem::perms::none);
@@ -785,7 +786,7 @@ TEST_CASE(
 
 TEST_CASE(
     "User Bash output spill failure preserves the bounded truncated result and a safe diagnostic",
-    "[coding_agent][runtime][issue86]") {
+    "[coding_agent][runtime][issue86][issue97]") {
     tests::TempWorkspace workspace;
     tests::EnvVarGuard tmpdir{
         "TMPDIR",
@@ -817,15 +818,16 @@ TEST_CASE(
 
     boost::asio::io_context io;
     std::optional<util::Expected<coding_agent::runtime::UserBashCompletion>> completion;
+    std::string streamed_tail;
     boost::asio::co_spawn(
         io,
         coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(
             *created->session,
             "huge output",
             false,
-            [&secret](const coding_agent::runtime::UserBashProgress& progress)
+            [&streamed_tail](const coding_agent::runtime::UserBashProgress& progress)
                 -> util::ExpectedVoid {
-                CHECK(progress.output.find(secret) == std::string::npos);
+                if (!progress.output.empty()) streamed_tail = progress.output;
                 return {};
             }),
         [&](std::exception_ptr exception,
@@ -840,8 +842,10 @@ TEST_CASE(
     const auto& bash = (*completion)->message;
     CHECK(bash.truncated);
     CHECK(bash.output.size() <= 50 * 1024);
-    CHECK(bash.output.find(secret) == std::string::npos);
-    CHECK(bash.output.find("[REDACTED]") != std::string::npos);
+    // ADR 0028: no redaction — the streaming tail and the committed output
+    // carry the secret-bearing output unchanged.
+    CHECK(streamed_tail.find(secret) != std::string::npos);
+    CHECK(bash.output.find(secret) != std::string::npos);
     CHECK_FALSE(bash.full_output_path.has_value());
     REQUIRE((*completion)->diagnostic.has_value());
     CHECK((*completion)->diagnostic->message.size() <=
