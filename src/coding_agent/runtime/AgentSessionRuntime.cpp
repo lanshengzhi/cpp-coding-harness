@@ -252,6 +252,33 @@ void AgentSessionRuntime::flush_pending_user_bash() {
     }
 }
 
+namespace {
+
+/// One admission shaping for every user input path (Prompt, steering,
+/// follow-up): optional Prompt Template expansion, then image content
+/// appended to one complete user Agent Message.
+[[nodiscard]] util::Expected<ai::UserMessage> make_admitted_user_message(
+    std::optional<prompt::PromptProcessor>& prompt_processor,
+    std::string text,
+    std::vector<ai::ImageContent> images,
+    bool expand_prompt_templates) {
+    if (!prompt_processor) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is closed"));
+    }
+    auto expanded = prompt_processor->process(
+        std::move(text), expand_prompt_templates);
+    auto message = ai::user_text_message(std::move(expanded.text));
+    message.content.reserve(message.content.size() + images.size());
+    for (auto& image : images) {
+        message.content.emplace_back(std::move(image));
+    }
+    return message;
+}
+
+} // namespace
+
 boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
     std::string prompt,
     std::vector<ai::ImageContent> images,
@@ -270,16 +297,17 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
     util::ExpectedVoid result;
     try {
         bool run_agent = true;
-        std::string expanded_prompt;
-        if (!prompt_processor_) {
-            result = std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
-                "session is closed"));
+        ai::UserMessage user_message;
+        if (auto message = make_admitted_user_message(
+                prompt_processor_,
+                std::move(prompt),
+                std::move(images),
+                expand_prompt_templates);
+            !message) {
+            result = std::unexpected(message.error());
             run_agent = false;
         } else {
-            auto expanded = prompt_processor_->process(
-                std::move(prompt), expand_prompt_templates);
-            expanded_prompt = std::move(expanded.text);
+            user_message = std::move(*message);
         }
 
         if (run_agent && on_preflight_accepted) {
@@ -289,11 +317,6 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
             }
         }
         if (run_agent) {
-            auto user_message = ai::user_text_message(std::move(expanded_prompt));
-            user_message.content.reserve(user_message.content.size() + images.size());
-            for (auto& image : images) {
-                user_message.content.emplace_back(std::move(image));
-            }
             result = co_await run_agent_loop(
                 std::move(user_message),
                 *active_stop_source_);
@@ -536,30 +559,6 @@ util::Expected<agent::AgentEventSubscription> AgentSessionRuntime::subscribe(
     return agent_->subscribe(std::move(sink));
 }
 
-namespace {
-
-[[nodiscard]] util::Expected<ai::UserMessage> make_queued_user_message(
-    std::optional<prompt::PromptProcessor>& prompt_processor,
-    std::string text,
-    std::vector<ai::ImageContent> images,
-    bool expand_prompt_templates) {
-    if (!prompt_processor) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "session is closed"));
-    }
-    auto expanded = prompt_processor->process(
-        std::move(text), expand_prompt_templates);
-    auto message = ai::user_text_message(std::move(expanded.text));
-    message.content.reserve(message.content.size() + images.size());
-    for (auto& image : images) {
-        message.content.emplace_back(std::move(image));
-    }
-    return message;
-}
-
-} // namespace
-
 util::ExpectedVoid AgentSessionRuntime::steer(
     std::string text,
     std::vector<ai::ImageContent> images,
@@ -567,7 +566,7 @@ util::ExpectedVoid AgentSessionRuntime::steer(
     if (auto rejected = reject_if_closed(); !rejected) {
         return rejected;
     }
-    auto message = make_queued_user_message(
+    auto message = make_admitted_user_message(
         prompt_processor_, std::move(text), std::move(images), expand_prompt_templates);
     if (!message) {
         return std::unexpected(message.error());
@@ -582,7 +581,7 @@ util::ExpectedVoid AgentSessionRuntime::follow_up(
     if (auto rejected = reject_if_closed(); !rejected) {
         return rejected;
     }
-    auto message = make_queued_user_message(
+    auto message = make_admitted_user_message(
         prompt_processor_, std::move(text), std::move(images), expand_prompt_templates);
     if (!message) {
         return std::unexpected(message.error());
