@@ -100,6 +100,7 @@ add_library(cch_coding_agent_tui
     src/coding_agent/tui/Theme.cpp
     src/coding_agent/tui/ThemeCatalog.cpp
     src/coding_agent/tui/ThemeSettings.cpp
+    src/coding_agent/tui/UserBashSyntax.cpp
 )
 cch_target_defaults(cch_coding_agent_tui)
 target_link_libraries(cch_coding_agent_tui
@@ -314,6 +315,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/tui/ThemeCatalogTest.cpp
         tests/coding_agent/tui/UserBashInteractiveModeTest.cpp
         tests/coding_agent/tui/UserBashPresentationTest.cpp
+        tests/coding_agent/tui/UserBashSyntaxTest.cpp
         tests/coding_agent/SdkSessionTest.cpp
         tests/coding_agent/AgentSessionSnapshotTest.cpp
         tests/coding_agent/SkillIntegrationTest.cpp

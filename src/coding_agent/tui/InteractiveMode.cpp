@@ -21,6 +21,7 @@
 #include "coding_agent/tui/ThemeCatalog.hpp"
 #include "coding_agent/tui/Transcript.hpp"
 #include "coding_agent/tui/UserBashPresentation.hpp"
+#include "coding_agent/tui/UserBashSyntax.hpp"
 #include "harness/UniqueFd.hpp"
 #include "util/TerminalText.hpp"
 
@@ -96,47 +97,6 @@ struct InteractiveStartupDiagnostics {
         error.code,
         std::move(message),
         bounded_redacted_presentation(combined_error_text(error)));
-}
-
-[[nodiscard]] std::string trim_editor_submission(std::string text) {
-    const auto first = std::find_if_not(text.begin(), text.end(), [](unsigned char value) {
-        return std::isspace(value) != 0;
-    });
-    const auto last = std::find_if_not(text.rbegin(), text.rend(), [](unsigned char value) {
-        return std::isspace(value) != 0;
-    }).base();
-    if (first >= last) return {};
-    return {first, last};
-}
-
-struct UserBashInvocation {
-    std::string command;
-    bool exclude_from_context{false};
-};
-
-[[nodiscard]] std::optional<UserBashInvocation> parse_user_bash_invocation(
-    std::string text) {
-    text = trim_editor_submission(std::move(text));
-    if (!text.starts_with('!')) return std::nullopt;
-    const bool excluded = text.starts_with("!!");
-    auto command = trim_editor_submission(text.substr(excluded ? 2 : 1));
-    if (command.empty()) return std::nullopt;
-    return UserBashInvocation{
-        .command = std::move(command),
-        .exclude_from_context = excluded,
-    };
-}
-
-[[nodiscard]] std::string safe_user_bash_invocation(
-    const UserBashInvocation& invocation) {
-    auto command = util::strip_terminal_escape_sequences(invocation.command);
-    std::erase_if(command, [](unsigned char value) {
-        return value < 0x20 || value == 0x7f;
-    });
-    return bounded_redacted_presentation(std::format(
-        "{} {}",
-        invocation.exclude_from_context ? "!!" : "!",
-        command));
 }
 
 [[nodiscard]] std::string clipboard_uuid() {
@@ -943,11 +903,8 @@ private:
         return false;
     }
 
-    /// Bash mode is the unsubmitted editor state whose trimmed text begins
-    /// with `!`; it exists only where User Bash dispatch is available.
     [[nodiscard]] bool unsubmitted_bash_mode() const {
-        return user_bash_available_ &&
-            trim_editor_submission(editor_.expanded_text()).starts_with('!');
+        return user_bash_editor_mode(editor_.expanded_text(), user_bash_available_);
     }
 
     [[nodiscard]] std::unique_ptr<cch::tui::Loader> make_bash_loader(
