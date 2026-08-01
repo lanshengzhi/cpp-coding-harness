@@ -15,6 +15,7 @@
 #include "support/GatedChatClient.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/TextHelpers.hpp"
+#include "util/Redactor.hpp"
 
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 #include <boost/asio/co_spawn.hpp>
@@ -449,7 +450,7 @@ TEST_CASE(
 
 TEST_CASE(
     "User Bash sanitizes and bounds retained output and spills the complete sanitized stream",
-    "[coding_agent][tui][issue85][issue86][issue96][issue97]") {
+    "[coding_agent][tui][issue85][issue86][issue96][issue97][issue99]") {
     tests::TempWorkspace workspace;
     const auto spill_dir = workspace.path() / "spill";
     std::filesystem::create_directories(spill_dir);
@@ -528,8 +529,14 @@ TEST_CASE(
     CHECK(bash->output.find(secret) != std::string::npos);
     CHECK(bash->output.size() <= 50 * 1024);
     CHECK(bash->truncated);
-    // The rendered block's raw display is sibling ticket #99's seam, so this
-    // test pins the committed and spilled values only.
+
+    // #99: the rendered block header shows the raw command exactly as it
+    // arrives from the runtime — no render-time redaction. (The raw output
+    // display is pinned at end-to-end by the streaming block test below; this
+    // output's tail sits beyond the block's presentation bound.)
+    const auto rendered_screen = visible_screen(terminal);
+    CHECK(rendered_screen.find("$ " + raw_command) != std::string::npos);
+    CHECK(rendered_screen.find(util::kRedactionMarker) == std::string::npos);
 
     // The spill artifact holds the complete sanitized stream and is never
     // substituted for the bounded model-context value.
@@ -1658,15 +1665,14 @@ TEST_CASE(
 
 TEST_CASE(
     "live User Bash blocks stream through one status block with a loader and effective hints",
-    "[coding_agent][tui][issue89]") {
+    "[coding_agent][tui][issue89][issue99]") {
     tests::TempWorkspace workspace;
     auto client = std::make_unique<RecordingChatClient>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
-    // Trailing newline: incremental redaction holds back a trailing
-    // at-risk construct until more output or finish() flushes it.
+    const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
     shell_pointer->enqueue({
-        .updates = {"streamed partial\n"},
+        .updates = {"streamed partial api_key=" + secret + "\n"},
         .result = {.exit_code = 0},
         .infrastructure_failure = std::nullopt,
         .gated = true,
@@ -1713,19 +1719,23 @@ TEST_CASE(
 
     // One streaming block: a $ command header, streamed output, and a running
     // loader with the effective interruption hint; nothing committed yet.
+    // #99: the streamed output renders raw — no render-time redaction.
     auto screen = visible_screen(terminal);
     CHECK(screen.find("$ watch out") != std::string::npos);
-    CHECK(screen.find("streamed partial") != std::string::npos);
+    CHECK(screen.find("streamed partial api_key=" + secret) != std::string::npos);
+    CHECK(screen.find(util::kRedactionMarker) == std::string::npos);
     CHECK(screen.find("Running...") != std::string::npos);
     CHECK(screen.find("(escape to cancel)") != std::string::npos);
     CHECK(created->session->snapshot().agent_state.messages.empty());
 
     // Commitment reconciles the pending block into one transcript entry
-    // without duplicating history.
+    // without duplicating history; the committed block keeps the raw output.
     shell_pointer->release();
     drain_ready(io);
     screen = visible_screen(terminal);
     CHECK(count_occurrences(screen, "$ watch out") == 1);
+    CHECK(screen.find("streamed partial api_key=" + secret) != std::string::npos);
+    CHECK(screen.find(util::kRedactionMarker) == std::string::npos);
     CHECK(screen.find("Running...") == std::string::npos);
     CHECK(screen.find("(exit") == std::string::npos);
     CHECK(created->session->snapshot().agent_state.messages.size() == 1);

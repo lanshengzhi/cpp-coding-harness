@@ -66,7 +66,7 @@ util::Expected<std::vector<std::string>> render_bash_block(
     std::vector<std::string> lines;
     if (auto header = render_styled(
             theme,
-            "$ " + bounded_redacted_presentation(view.command),
+            "$ " + bounded_presentation(view.command),
             inclusion_token,
             width);
         !header) {
@@ -75,7 +75,7 @@ util::Expected<std::vector<std::string>> render_bash_block(
         append_lines(lines, std::move(*header));
     }
 
-    const auto output = bounded_redacted_presentation(view.output);
+    const auto output = bounded_presentation(view.output);
     const auto logical = output.empty()
         ? std::vector<std::string>{}
         : split_logical_lines(output);

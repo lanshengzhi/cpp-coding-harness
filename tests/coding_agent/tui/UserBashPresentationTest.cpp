@@ -3,6 +3,7 @@
 #include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Loader.hpp>
 #include "coding_agent/tui/Theme.hpp"
+#include "util/Redactor.hpp"
 
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
@@ -171,6 +172,31 @@ TEST_CASE(
     REQUIRE(rendered);
     CHECK(any_line_contains(*rendered, "(exit 3)"));
     CHECK(any_line_contains(*rendered, "Output truncated. Full output: /tmp/spill.txt"));
+}
+
+TEST_CASE(
+    "render_bash_block shows command and output raw without render-time redaction",
+    "[coding_agent][tui][user-bash-presentation][issue99]") {
+    const auto theme = test_theme();
+    const auto keybindings = test_keybindings();
+    const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
+
+    const BashBlockView view{
+        .command = "printf api_key=" + secret,
+        .output = "token=" + secret + "\n",
+        .exclude_from_context = false,
+        .running = false,
+        .exit_code = 0,
+        .cancelled = false,
+        .truncated = false,
+        .full_output_path = std::nullopt,
+    };
+
+    auto rendered = render_bash_block(theme, keybindings, view, false, 80);
+    REQUIRE(rendered);
+    CHECK(any_line_contains(*rendered, "$ printf api_key=" + secret));
+    CHECK(any_line_contains(*rendered, "token=" + secret));
+    CHECK_FALSE(any_line_contains(*rendered, util::kRedactionMarker));
 }
 
 TEST_CASE(
