@@ -83,9 +83,9 @@ struct AgentLoopContextReplacement {
 };
 
 struct AgentLoopTurnUpdate {
-    std::optional<AgentLoopContextReplacement> context;
-    std::optional<ai::Model> model;
-    std::optional<std::string> thinking_level;
+    std::optional<AgentLoopContextReplacement> context{std::nullopt};
+    std::optional<ai::Model> model{std::nullopt};
+    std::optional<std::string> thinking_level{std::nullopt};
 };
 
 using PrepareNextTurnHook = std::move_only_function<
