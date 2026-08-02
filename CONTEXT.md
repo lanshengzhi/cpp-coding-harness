@@ -80,6 +80,14 @@ _Avoid_: Conversation handle, runtime session
 One ordered agent lifecycle step from a model request through its assistant and tool outcomes to the next-turn decision point.
 _Avoid_: Provider request, prompt
 
+**Agent Stream Flow**:
+The Agent's consumption of one model stream through the provider's `streamSimple` surface: the per-turn request-option set (reasoning, sessionId, cacheRetention, timeoutMs, maxRetries, maxRetryDelayMs, headers, signal), the terminal-error-event contract (exactly one error or aborted terminal event plus a final assistant message carrying stopReason and errorMessage), and the six-category error channel carried through the single Expected outcome.
+_Avoid_: Provider request, per-adapter option struct, second exception hierarchy
+
+**Thinking Level**:
+The model-facing reasoning preference with pi's seven levels (off, minimal, low, medium, high, xhigh, max), defaulting to medium and clamped to the active model's supported set at session creation and on model switch; per turn it becomes the stream's reasoning option, with off meaning no reasoning is requested.
+_Avoid_: Free-form effort string, provider-specific knob
+
 **Live Session State**:
 The current in-process view of an Agent Session, which may be newer than its durable history.
 _Avoid_: Persisted state, session file
@@ -115,6 +123,10 @@ _Avoid_: Session Close, process kill
 **Session Topology**:
 The shape of an Agent Session history, such as linear, branched, or compacted.
 _Avoid_: Completion state
+
+**Compaction**:
+The context-summarization capability that replaces compacted session history with a summary entry while retaining a recent tail, triggered on context overflow (compact and retry once), on threshold, or manually; summarization requests are isolated with cache retention "none" and a fresh session id.
+_Avoid_: Truncation, deletion, raw history replay
 
 **Project Resource**:
 A project-associated skill or prompt template that may be made available to an Agent Session after policy checks.
@@ -163,6 +175,14 @@ _Avoid_: Failed login, error dialog
 **Credential Refresh**:
 Request-time renewal of a stored OAuth Credential whose expiry is within five minutes, serialized under the store lock with the rotated credential persisted before use; not cancellable in the request path, matching pi. Failure preserves the stored credential for retry and never falls back to a lower-precedence source.
 _Avoid_: Background refresh, proactive expiry notification
+
+**Re-auth Guidance**:
+The two user-facing guidance outcomes produced when a request has no usable credential: the no-key message directing to login for the provider, and the expired-OAuth message directing to re-run login. Both surface at prompt preflight and at request time and are never silently skipped.
+_Avoid_: Generic auth failure, silent credential fallback
+
+**Auto-Retry**:
+The session policy that re-enters the agent loop with exponential backoff after a retryable terminal error (transient provider and network patterns), excluding quota/billing and context-overflow errors; the failed assistant message is removed from live state but retained in session history, and the backoff wait is cancellable.
+_Avoid_: Infinite retry, silent retry, adapter-level retry
 
 **OAuth Callback Server**:
 The local loopback HTTP server used by the Codex browser login flow on `127.0.0.1:1455` (`PI_OAUTH_CALLBACK_HOST`) to receive the authorization-code redirect, raced against manual code entry.
