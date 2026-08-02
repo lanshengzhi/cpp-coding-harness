@@ -129,8 +129,24 @@ The user-level root for durable harness state shared across workspaces; it is pi
 _Avoid_: Config home, user profile directory, harness-private state root
 
 **User Settings**:
-User-level preferences for providers, Project Resources, and Agent Session storage.
-_Avoid_: User config, config file
+User-level preferences following pi's two-scope `settings.json` contract: a global file in the Agent Config Directory deep-merged with a project file that loads only under Project Trust. Settings never carry secrets or secret references; model selection defaults use pi's `defaultProvider`/`defaultModel` vocabulary.
+_Avoid_: User config, config file, credential storage
+
+**Settings Scope**:
+One of the two `settings.json` layers — global or project — with project winning on deep merge and Project Trust gating project-scope reads and writes.
+_Avoid_: Profile, level
+
+**Runtime API Key Override**:
+A process-lifetime API key supplied through `ModelRuntime::set_runtime_api_key` or CLI `--api-key`, never persisted, taking the highest precedence in Request Authentication.
+_Avoid_: Saved key, default key
+
+**Configured API Key**:
+A `models.json` provider `apiKey` value — literal, `$VAR`/`${VAR}` environment template, or `!command` shell execution — resolving as the lowest Request Authentication precedence for config-only providers.
+_Avoid_: Stored credential, hardcoded key
+
+**Resume Model Resolution**:
+Re-resolving a resumed session's persisted `model_change {provider, modelId}` against the live Models Runtime catalog, with base URL and authentication drawn from current composition rather than any session snapshot.
+_Avoid_: Session restore, auth snapshot
 
 **User Bash**:
 A Native TUI operation that runs a user-entered shell command without treating it as an Agent Prompt. Its completed execution belongs to Agent Session history and is either included in or excluded from later model context according to the user's invocation.

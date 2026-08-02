@@ -7,6 +7,8 @@ status: accepted
 Default persisted Agent Session histories are user-level agent state associated with a workspace, not project artifacts. CLI and SDK default session creation therefore use `<agent-config-dir>/sessions/<encoded-workspace>/`, rooted through `AgentConfigDir`, instead of writing `.cpp-harness/sessions/` inside the process working directory. This mirrors pi's session ownership and layout while keeping one C++ session-assembly policy.
 
 > The concrete directory root referenced here is superseded by [ADR 0030](0030-share-pi-agent-config-directory-and-credential-store.md): the Agent Config Directory is pi's own `~/.pi/agent`. The session-storage ownership and workspace-keyed layout decisions below are unchanged.
+>
+> The session-directory override variable `CCH_CODING_AGENT_SESSION_DIR` is superseded by [ADR 0031](0031-align-settings-shared-file-cli-and-resume-configuration-with-pi.md): pi's `PI_CODING_AGENT_SESSION_DIR` applies, removed without fallback. The precedence chain and resolution rules below are unchanged.
 
 ## Considered options
 

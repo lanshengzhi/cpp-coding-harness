@@ -6,7 +6,7 @@ status: accepted
 
 User-level state files (auth entries, user settings, persisted project trust decisions) were scattered at the root of `~/.cpp-harness/` with their path literals duplicated across three loaders, and drift had already occurred (one file was moved without the others). pi keeps all user-level state under a single agent config directory (`~/.pi/agent/`) resolved through one `getAgentDir()` seam with a `PI_CODING_AGENT_DIR` override. This project adopts the same layout and vocabulary: one agent config directory, one public path module as the single source of truth, and pi's `settings.json` file vocabulary for user settings.
 
-> The directory root chosen here (`~/.cpp-harness/agent` with `CCH_CODING_AGENT_DIR`) is superseded by [ADR 0030](0030-share-pi-agent-config-directory-and-credential-store.md): the Agent Config Directory is pi's own `~/.pi/agent` with `PI_CODING_AGENT_DIR`, shared interoperably with pi installations. The single-path-module and `settings.json` vocabulary decisions below still stand.
+> The directory root chosen here (`~/.cpp-harness/agent` with `CCH_CODING_AGENT_DIR`) is superseded by [ADR 0030](0030-share-pi-agent-config-directory-and-credential-store.md): the Agent Config Directory is pi's own `~/.pi/agent` with `PI_CODING_AGENT_DIR`, shared interoperably with pi installations. The single-path-module and `settings.json` vocabulary decisions below still stand; the settings file contract itself (scopes, fields, write semantics) is governed by [ADR 0031](0031-align-settings-shared-file-cli-and-resume-configuration-with-pi.md).
 
 ## Considered options
 
