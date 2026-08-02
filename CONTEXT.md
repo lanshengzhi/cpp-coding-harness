@@ -148,6 +148,26 @@ _Avoid_: Stored credential, hardcoded key
 Re-resolving a resumed session's persisted `model_change {provider, modelId}` against the live Models Runtime catalog, with base URL and authentication drawn from current composition rather than any session snapshot.
 _Avoid_: Session restore, auth snapshot
 
+**Auth Interaction**:
+The host-supplied, cancellable interaction object through which an OAuth login flow exchanges prompts and events. The ai layer owns the content — what is asked and what is shown — while the host owns the presentation and cancellation, so provider implementations never render product UI and hosts never hardcode provider interaction policy.
+_Avoid_: Login callback, rendered dialog, provider UI
+
+**OAuth Login**:
+An explicit, user-invoked login flow that produces a Credential through provider-owned steps (browser callback or device code) and persists it via `CredentialStore::modify`. Never triggered by Session creation or ordinary requests.
+_Avoid_: Auto-login, implicit authentication, login snapshot
+
+**Login Cancellation**:
+A user-initiated abort of an in-flight OAuth Login through the Auth Interaction's stop source, normalizing to a stable cancelled error (message "Login cancelled") so the frontend suppresses failure UI.
+_Avoid_: Failed login, error dialog
+
+**Credential Refresh**:
+Request-time renewal of a stored OAuth Credential whose expiry is within five minutes, serialized under the store lock with the rotated credential persisted before use; not cancellable in the request path, matching pi. Failure preserves the stored credential for retry and never falls back to a lower-precedence source.
+_Avoid_: Background refresh, proactive expiry notification
+
+**OAuth Callback Server**:
+The local loopback HTTP server used by the Codex browser login flow on `127.0.0.1:1455` (`PI_OAUTH_CALLBACK_HOST`) to receive the authorization-code redirect, raced against manual code entry.
+_Avoid_: Webhook, remote endpoint
+
 **User Bash**:
 A Native TUI operation that runs a user-entered shell command without treating it as an Agent Prompt. Its completed execution belongs to Agent Session history and is either included in or excluded from later model context according to the user's invocation.
 _Avoid_: Bash tool, prompt processing
