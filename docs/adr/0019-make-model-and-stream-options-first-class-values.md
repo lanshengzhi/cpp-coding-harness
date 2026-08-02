@@ -7,6 +7,8 @@ status: accepted
 The AI module defines aggregate-friendly Model and per-call Stream Options values as the authoritative identity, capability, and request-policy contracts. Agent state holds a valid Model, and prepare-next-turn model or thinking changes must alter the next provider request; authentication, connection ownership, model discovery, and provider execution remain behind capability seams rather than being embedded in those passive values.
 
 > Refined by [ADR 0029](0029-align-models-provider-and-authentication-ownership-with-pi.md): the Model field set is now fixed to pi's supported shape (including an optional typed per-API `compat` and the null-aware `thinkingLevelMap`), Agent state holds a concrete Model with an internal pi-aligned `kDefaultModel`, and Stream Options are the pi subset the three supported paths consume (`temperature`, `maxTokens`, cancellation, `apiKey`, `headers`, `env`, `transformHeaders`). The passive-value and capability-seam principles below are unchanged.
+>
+> Refined further by [ADR 0033](0033-own-the-supported-api-adapter-surface-for-the-three-provider-paths.md): the typed per-API `compat` is exactly the two-field `AnthropicMessagesCompat` (`forceAdaptiveThinking`, `allowEmptySignature`) — the only fields the scoped Kimi catalog populates — and `OpenAIResponsesCompat` does not exist in C++ (all seven pi fields are fixed at frozen defaults or auto-detection). The Stream Options subset gains the harness-consumer set from ADR 0033: `reasoning` (ThinkingLevel), `sessionId`, `cacheRetention`, `timeoutMs`, `maxRetries`, `maxRetryDelayMs` in addition to the #326 seven.
 
 ## Considered options
 

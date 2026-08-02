@@ -168,6 +168,22 @@ _Avoid_: Background refresh, proactive expiry notification
 The local loopback HTTP server used by the Codex browser login flow on `127.0.0.1:1455` (`PI_OAUTH_CALLBACK_HOST`) to receive the authorization-code redirect, raced against manual code entry.
 _Avoid_: Webhook, remote endpoint
 
+**Adapter**:
+The private protocol executor that converts a Provider request into one wire API's format and consumes its stream back into the shared event model — one per supported API surface (`openai-codex-responses`, `openai-responses`, `anthropic-messages`). An adapter is selected by the Model's `api`, is never publicly registrable, and its existence alone never makes a Provider supported.
+_Avoid_: API client, generic OpenAI client, public registry
+
+**Compat Field**:
+A per-API typed compatibility value on the Model that carries the behavior-bearing switches a built-in catalog model populates for the adapter (`forceAdaptiveThinking`, `allowEmptySignature`). Only the scoped APIs' typed shapes exist; a generic JSON compatibility bag is never carried, and models.json carries no compat surface.
+_Avoid_: Capability flag bag, models.json compat override
+
+**Transport**:
+The channel over which a provider's wire API delivers streamed events — WebSocket-first with narrow SSE fallback for Codex, SSE for the other scoped paths. Transport choice is fixed per adapter at pi's frozen defaults; it is never a per-request caller option in the C++ surface.
+_Avoid_: Request option, transport override
+
+**Session Affinity**:
+The protocol feature that lets a provider correlate requests from one session — Codex via `previous_response_id` continuation and session-keyed socket reuse, DeepSeek via silently-ignored affinity headers. Where the provider is stateless or the continuation key is absent, full-context stateless replay is used instead.
+_Avoid_: Session metadata, resume state
+
 **User Bash**:
 A Native TUI operation that runs a user-entered shell command without treating it as an Agent Prompt. Its completed execution belongs to Agent Session history and is either included in or excluded from later model context according to the user's invocation.
 _Avoid_: Bash tool, prompt processing
