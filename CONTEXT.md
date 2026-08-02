@@ -36,6 +36,26 @@ _Avoid_: Agent Message, Session Entry
 A conversation value retained and processed by the agent; product-specific forms are converted to Provider Messages before a model request.
 _Avoid_: Provider Message, Session Entry
 
+**Model**:
+A passive, credential-free value that completely names one model — its provider, id, and API identities, capabilities, limits, and cost. Every model request carries a concrete Model; a missing selection means the pi-aligned "unknown" placeholder Model, never an absent one.
+_Avoid_: Model name string, client configuration, optional model
+
+**Provider**:
+The long-lived runtime capability that owns one provider identity's model catalog, authentication, and stream execution, delegating wire protocol work to the API the requested Model names.
+_Avoid_: Provider factory, per-request client, hard-coded provider list
+
+**Models Runtime**:
+The canonical model/authentication runtime for one Agent Config Directory: it composes built-in and configured providers, resolves live authentication, and delegates model requests to the owning Provider. It is shared across Agent Sessions and refreshed as a whole rather than reconstructed per session.
+_Avoid_: Provider registry, session-scoped client, configuration snapshot
+
+**Credential**:
+A stored per-provider authentication value in api-key or OAuth shape. Secrets inside a Credential never enter passive values, session history, frontend status, diagnostics, or logs.
+_Avoid_: Provider config field, session metadata
+
+**Request Authentication**:
+The resolution of a provider's effective credential immediately before each model request — explicit key, then stored Credential, then ambient environment only when nothing is stored — including OAuth refresh. Failures surface through the request's normal error outcome and never silently fall back to a lower-precedence source.
+_Avoid_: Login-time snapshot, startup authentication
+
 **Execution Environment**:
 The complete workspace file-system and shell capability bundle made available to an Agent Session; unavailable operations are excluded by assembly policy rather than hidden behind placeholder methods.
 _Avoid_: Tool adapter, partial capability
@@ -105,8 +125,8 @@ The user-controlled authorization decision governing whether project-authored re
 _Avoid_: Workspace configuration, project self-approval
 
 **Agent Config Directory**:
-The user-level root for durable harness state shared across workspaces.
-_Avoid_: Config home, user profile directory
+The user-level root for durable harness state shared across workspaces; it is pi's own directory, so this harness and a pi installation interoperably share one credential and model-configuration store.
+_Avoid_: Config home, user profile directory, harness-private state root
 
 **User Settings**:
 User-level preferences for providers, Project Resources, and Agent Session storage.

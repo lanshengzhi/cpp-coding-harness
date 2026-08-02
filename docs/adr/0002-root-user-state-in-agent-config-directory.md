@@ -4,7 +4,9 @@ status: accepted
 
 # Root user-level state in a pi-mirrored agent config directory
 
-User-level state files (auth entries, user settings, persisted project trust decisions) were scattered at the root of `~/.cpp-harness/` with their path literals duplicated across three loaders, and drift had already occurred (one file was moved without the others). pi keeps all user-level state under a single agent config directory (`~/.pi/agent/`) resolved through one `getAgentDir()` seam with a `PI_CODING_AGENT_DIR` override. This project adopts the same layout and vocabulary: one agent config directory at `~/.cpp-harness/agent/`, one public path module as the single source of truth, and pi's `settings.json` file vocabulary for user settings.
+User-level state files (auth entries, user settings, persisted project trust decisions) were scattered at the root of `~/.cpp-harness/` with their path literals duplicated across three loaders, and drift had already occurred (one file was moved without the others). pi keeps all user-level state under a single agent config directory (`~/.pi/agent/`) resolved through one `getAgentDir()` seam with a `PI_CODING_AGENT_DIR` override. This project adopts the same layout and vocabulary: one agent config directory, one public path module as the single source of truth, and pi's `settings.json` file vocabulary for user settings.
+
+> The directory root chosen here (`~/.cpp-harness/agent` with `CCH_CODING_AGENT_DIR`) is superseded by [ADR 0030](0030-share-pi-agent-config-directory-and-credential-store.md): the Agent Config Directory is pi's own `~/.pi/agent` with `PI_CODING_AGENT_DIR`, shared interoperably with pi installations. The single-path-module and `settings.json` vocabulary decisions below still stand.
 
 ## Considered options
 
@@ -15,7 +17,7 @@ User-level state files (auth entries, user settings, persisted project trust dec
 
 ## Consequences
 
-- `include/cch/coding_agent/AgentConfigDir.hpp` is the single source of user-level paths: `agent_config_dir()` resolves `CCH_CODING_AGENT_DIR` first, then `$HOME/.cpp-harness/agent` (`%USERPROFILE%` on Windows); `auth_file_path()`, `settings_file_path()`, and `trust_store_file_path()` derive from it and stay empty when no home is resolvable.
+- `include/cch/coding_agent/AgentConfigDir.hpp` is the single source of user-level paths: `agent_config_dir()` resolves the configured override first, then the default agent config directory (`%USERPROFILE%`-based equivalent on Windows); `auth_file_path()`, `settings_file_path()`, and `trust_store_file_path()` derive from it and stay empty when no home is resolvable. (The concrete override variable and default root are now governed by [ADR 0030](0030-share-pi-agent-config-directory-and-credential-store.md).)
 - The user settings file is `settings.json`; the domain vocabulary follows: `UserSettings` and `SettingsLoader` replace `ConfigData` and `ConfigLoader`, and "user settings" is the canonical term (see `CONTEXT.md`).
 - Old locations are ignored without fallback reads; users move their files once.
 - Future user-level features (global skills, prompt directories) land under the agent config directory through the same path module rather than inventing new roots.
