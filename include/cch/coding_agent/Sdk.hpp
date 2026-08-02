@@ -58,14 +58,15 @@ struct SdkDiagnostic {
 // ── Provider configuration ───────────────────────────────────────────────────
 
 /// Configuration for constructing the default OpenAI-compatible chat client.
-/// Ignored when a host-provided chat client is supplied.
+/// With a host-provided client, provider/model/base URL still describe the
+/// concrete request Model; client construction remains host-owned.
 struct SdkProviderConfig {
-    std::string provider;
-    std::string model;
-    std::optional<std::string> base_url;
+    std::string provider{};
+    std::string model{};
+    std::optional<std::string> base_url{std::nullopt};
     /// Environment variable chain to resolve the API key from.
     /// The first set and non-empty variable wins.
-    std::optional<std::vector<std::string>> api_key_env;
+    std::optional<std::vector<std::string>> api_key_env{std::nullopt};
 };
 
 // ── Built-in tool selection ──────────────────────────────────────────────────
@@ -127,14 +128,15 @@ struct CreateAgentSessionOptions {
     std::filesystem::path workspace;
 
     // ── Provider configuration ───────────────────────────────────────────
-    /// Configuration for default provider client construction.
-    /// Ignored when `chat_client` is set.
+    /// Configuration for default provider client construction. When
+    /// `chat_client` is set, provider/model/base URL still describe each
+    /// concrete request Model while client construction remains host-owned.
     std::optional<SdkProviderConfig> provider_config;
 
     // ── Host-provided capabilities ───────────────────────────────────────
-    /// Host-provided streaming chat client. If set, provider_config is
-    /// ignored for execution and a diagnostic notes that metadata is
-    /// host-provided. Ownership transfers to the session.
+    /// Host-provided streaming chat client. If set, provider_config does not
+    /// construct the client, but its provider/model/base URL still describe
+    /// each concrete request Model. Ownership transfers to the session.
     std::unique_ptr<ai::StreamingChatClient> chat_client;
     /// Host-provided execution environment. If not set, a local execution
     /// environment is constructed for the workspace. Host-provided environments

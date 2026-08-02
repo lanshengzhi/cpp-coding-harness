@@ -113,6 +113,7 @@ target_link_libraries(cch_coding_agent_tui
 )
 
 add_library(cch_ai
+    src/ai/Model.cpp
     src/ai/ProviderRegistry.cpp
     src/ai/providers/BoostBeastStreamTransport.cpp
     src/ai/providers/FakeChatClient.cpp
@@ -280,6 +281,7 @@ if(CCH_BUILD_TESTS)
         tests/agent/ToolCallExecutorTest.cpp
         tests/ai/GlazeRoundTripTest.cpp
         tests/ai/MessageContractTest.cpp
+        tests/ai/ModelTest.cpp
         tests/ai/ProviderRegistryTest.cpp
         tests/ai/ToolContractTest.cpp
         tests/ai/providers/BoostBeastStreamTransportTest.cpp

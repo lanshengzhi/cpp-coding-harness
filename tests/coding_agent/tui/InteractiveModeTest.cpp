@@ -135,7 +135,7 @@ public:
         auto response = ai::assistant_text_message("recovered");
         response.provider = "fake";
         response.api = "fake";
-        response.model = request.model->id;
+        response.model = request.model.id;
         co_return response;
     }
 
@@ -246,7 +246,7 @@ public:
             auto recovered = ai::assistant_text_message("recovered after TUI abort");
             recovered.provider = "abort-aware-fake";
             recovered.api = "fake";
-            recovered.model = request.model->id;
+            recovered.model = request.model.id;
             co_return recovered;
         }
 
@@ -255,7 +255,7 @@ public:
         auto partial = ai::assistant_text_message("");
         partial.provider = "abort-aware-fake";
         partial.api = "fake";
-        partial.model = request.model->id;
+        partial.model = request.model.id;
         partial.content.clear();
         if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
             co_return std::unexpected(emitted.error());
@@ -337,7 +337,7 @@ public:
         partial.content.clear();
         partial.provider = "fake";
         partial.api = "fake";
-        partial.model = request.model->id;
+        partial.model = request.model.id;
         if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
             co_return std::unexpected(emitted.error());
         }
@@ -352,7 +352,7 @@ public:
         auto response = ai::assistant_text_message("released");
         response.provider = "fake";
         response.api = "fake";
-        response.model = request.model->id;
+        response.model = request.model.id;
         co_return response;
     }
 
@@ -397,7 +397,7 @@ public:
         auto response = ai::assistant_text_message(std::format("turn {}", request_count));
         response.provider = "turn-gated-fake";
         response.api = "fake";
-        response.model = request.model->id;
+        response.model = request.model.id;
         if (first_request_errors && request_count == 1) {
             response.stop_reason = ai::AssistantStopReason::Error;
             response.error_message = "accepted queued error";
@@ -425,7 +425,7 @@ public:
         auto response = ai::assistant_text_message("tool cycle complete");
         response.provider = "tool-fake";
         response.api = "fake";
-        response.model = request.model->id;
+        response.model = request.model.id;
         if (!request.context.messages.empty() &&
             std::holds_alternative<ai::ToolResultMessage>(request.context.messages.back())) {
             co_return response;
@@ -691,7 +691,7 @@ public:
             auto aborted = ai::assistant_text_message("");
             aborted.provider = "tool-abort-fake";
             aborted.api = "fake";
-            aborted.model = request.model->id;
+            aborted.model = request.model.id;
             aborted.stop_reason = ai::AssistantStopReason::Aborted;
             aborted.error_message = "tool prompt aborted";
             if (auto emitted = sink(ai::AssistantErrorEvent{
@@ -717,7 +717,7 @@ public:
             auto recovered = ai::assistant_text_message("recovered after tool abort");
             recovered.provider = "tool-abort-fake";
             recovered.api = "fake";
-            recovered.model = request.model->id;
+            recovered.model = request.model.id;
             co_return recovered;
         }
 
@@ -725,7 +725,7 @@ public:
         auto response = ai::assistant_text_message("");
         response.provider = "tool-abort-fake";
         response.api = "fake";
-        response.model = request.model->id;
+        response.model = request.model.id;
         response.content.clear();
         response.content.emplace_back(ai::tool_call_content(
             "delayed-call",
@@ -760,7 +760,7 @@ public:
             prompt == "recover" ? "recovered after accepted outcomes" : "partial response");
         response.provider = "outcome-fake";
         response.api = "fake";
-        response.model = request.model->id;
+        response.model = request.model.id;
         if (prompt == "provider error") {
             response.stop_reason = ai::AssistantStopReason::Error;
             response.error_message = "accepted provider failure";
@@ -804,7 +804,7 @@ public:
         partial.content.clear();
         partial.provider = "fake";
         partial.api = "incremental-fake";
-        partial.model = request.model->id;
+        partial.model = request.model.id;
         if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
             co_return std::unexpected(emitted.error());
         }

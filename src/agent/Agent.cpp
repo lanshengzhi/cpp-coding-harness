@@ -352,14 +352,13 @@ Agent::Agent(
     AgentInitialState initial_state) {
     options.thinking_level = initial_state.thinking_level;
     auto definitions = tools.definitions();
-    const auto model = options.model;
     impl_ = std::make_shared<Impl>(
         client,
         std::move(definitions),
         std::move(tools),
         std::move(options),
         std::move(initial_state));
-    impl_->state.model = model;
+    impl_->state.model = impl_->loop.current_model();
     impl_->subscription_anchor = std::make_shared<AgentSubscriptionAnchor>(impl_.get());
 }
 

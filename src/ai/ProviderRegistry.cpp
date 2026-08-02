@@ -51,14 +51,8 @@ util::Expected<ProviderRegistry> make_default_provider_registry() {
         "openai-compatible",
         [](const ProviderFactoryContext& context) -> ProviderFactoryResult {
             providers::OpenAIStreamConfig config;
-            config.api = context.api.empty() ? "openai-completions" : context.api;
-            config.provider = context.provider.empty() ? context.provider_registry_name : context.provider;
-            if (!context.base_url.empty()) {
-                config.base_url = context.base_url;
-            }
             config.api_key = context.api_key;
             config.api_key_env = context.api_key_env;
-            config.model = context.model;
             config.timeout = context.timeout;
             config.compat = context.openai_compat;
             auto transport = std::make_shared<providers::BoostBeastStreamTransport>();

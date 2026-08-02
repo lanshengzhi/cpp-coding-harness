@@ -1,10 +1,3 @@
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
-#include "support/EnvVarGuard.hpp"
-#include "support/TempWorkspace.hpp"
-#include "support/UsageAssertions.hpp"
-
-#include <cch/coding_agent/Sdk.hpp>
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/agent/AgentTool.hpp>
 #include <cch/ai/Content.hpp>
@@ -12,16 +5,23 @@
 #include <cch/ai/Message.hpp>
 #include <cch/ai/providers/OpenAIChatClient.hpp>
 #include <cch/ai/providers/StreamTransport.hpp>
+#include <cch/coding_agent/Sdk.hpp>
 #include <cch/coding_agent/Skill.hpp>
 #include <cch/harness/ExecutionEnv.hpp>
 #include <cch/harness/session/JsonlSessionStore.hpp>
 #include <cch/util/Error.hpp>
 #include "ai/providers/FakeChatClient.hpp"
 #include "coding_agent/AgentSessionBridge.hpp"
-#include "coding_agent/runtime/AgentSessionPromptAccess.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
+#include "coding_agent/runtime/AgentSessionPromptAccess.hpp"
 #include "harness/session/SessionJournalTestHooks.hpp"
+#include "support/EnvVarGuard.hpp"
+#include "support/ModelFixture.hpp"
+#include "support/TempWorkspace.hpp"
+#include "support/UsageAssertions.hpp"
 #include "util/Json.hpp"
+
+#include "../../third_party/catch2/catch_test_macros.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -120,7 +120,7 @@ public:
         auto response = ai::assistant_text_message("tracked");
         response.provider = "tracked-fake";
         response.api = "fake";
-        response.model = request.model->id;
+        response.model = request.model.id;
         co_return response;
     }
 
@@ -381,7 +381,7 @@ public:
         ai::AssistantMessage msg;
         msg.provider = "capture";
         msg.api = "capture";
-        msg.model = request.model->id;
+        msg.model = request.model.id;
         msg.stop_reason = ai::AssistantStopReason::Stop;
         msg.content.emplace_back(ai::TextContent{"captured", std::nullopt});
         msg.timestamp = 1718000000123;
@@ -414,7 +414,7 @@ public:
         auto response = ai::assistant_text_message("text accepted");
         response.provider = "image-rejecting-fake";
         response.api = "fake";
-        response.model = request.model->id;
+        response.model = request.model.id;
         co_return response;
     }
 
@@ -434,7 +434,7 @@ public:
         ai::AssistantMessage response;
         response.provider = "fake";
         response.api = "issue33-fake";
-        response.model = request.model->id;
+        response.model = request.model.id;
         response.timestamp = 1718000000123;
         if (requests.size() > 1) {
             response.content.emplace_back(ai::text_content("recovered after malformed call"));
@@ -508,7 +508,7 @@ public:
             observation_->stop_requested ? "" : "not cancelled");
         response.provider = "preflight-cancellation-fake";
         response.api = "fake";
-        response.model = request.model->id;
+        response.model = request.model.id;
         if (observation_->stop_requested) {
             response.stop_reason = ai::AssistantStopReason::Aborted;
             response.error_message = "prompt aborted";
@@ -554,7 +554,7 @@ public:
         auto response = ai::assistant_text_message("async response");
         response.provider = "executor-capturing-fake";
         response.api = "fake";
-        response.model = request.model->id;
+        response.model = request.model.id;
         co_return response;
     }
 
@@ -580,7 +580,7 @@ public:
         auto response = ai::assistant_text_message("released");
         response.provider = "gated-fake";
         response.api = "fake";
-        response.model = request.model->id;
+        response.model = request.model.id;
         co_return response;
     }
 
@@ -626,7 +626,7 @@ public:
             auto recovered = ai::assistant_text_message("recovered after abort");
             recovered.provider = "abort-aware-fake";
             recovered.api = "fake";
-            recovered.model = request.model->id;
+            recovered.model = request.model.id;
             recovered.timestamp = 1718000000123;
             co_return recovered;
         }
@@ -635,7 +635,7 @@ public:
         auto partial = ai::assistant_text_message("");
         partial.provider = "abort-aware-fake";
         partial.api = "fake";
-        partial.model = request.model->id;
+        partial.model = request.model.id;
         partial.timestamp = 1718000000123;
         partial.content.clear();
         if (sink) {
@@ -702,7 +702,7 @@ public:
         auto released = ai::assistant_text_message("released without abort");
         released.provider = "abort-aware-fake";
         released.api = "fake";
-        released.model = request.model->id;
+        released.model = request.model.id;
         released.timestamp = 1718000000123;
         co_return released;
     }
@@ -736,7 +736,7 @@ public:
         ai::AssistantMessage terminal;
         terminal.provider = "host";
         terminal.api = "host";
-        terminal.model = request.model->id;
+        terminal.model = request.model.id;
         terminal.stop_reason = reason_;
         terminal.error_message = diagnostic_;
         terminal.timestamp = 1718000000123;
@@ -1021,7 +1021,9 @@ TEST_CASE(
     resumed->session->close();
 }
 
-TEST_CASE("SDK AgentSession keeps text-only prompts as the zero-image case", "[sdk][issue43]") {
+TEST_CASE(
+    "SDK AgentSession keeps text-only prompts and a truthful opaque-host Model",
+    "[sdk][issue43][issue336]") {
     TestPaths paths;
     auto capture = std::make_unique<CaptureChatClient>();
     auto* capture_ptr = capture.get();
@@ -1034,6 +1036,16 @@ TEST_CASE("SDK AgentSession keeps text-only prompts as the zero-image case", "[s
 
     REQUIRE(created->session->prompt_blocking("text only").has_value());
     REQUIRE(capture_ptr->captured_request.has_value());
+    const auto& model = capture_ptr->captured_request->model;
+    CHECK(model.id == "host-client");
+    CHECK(model.name == "host-client");
+    CHECK(model.provider == "sdk-host");
+    CHECK(model.api == "unknown");
+    CHECK(model.base_url.empty());
+    CHECK(model.input.empty());
+    CHECK(model.context_window == 0);
+    CHECK(model.max_tokens == 0);
+    REQUIRE(ai::validate_model(model));
     const auto& user = std::get<ai::UserMessage>(capture_ptr->captured_request->context.messages.front());
     REQUIRE(user.content.size() == 1);
     CHECK(std::get<ai::TextContent>(user.content.front()).text == "text only");
@@ -1451,11 +1463,15 @@ TEST_CASE(
     ai::providers::OpenAIStreamConfig provider;
     provider.api_key.clear();
     provider.api_key_env.clear();
-    provider.model = ai::Model{"gpt-test"};
 
     coding_agent::CreateAgentSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
+    opts.provider_config = coding_agent::SdkProviderConfig{
+        .provider = "openai-compatible",
+        .model = "gpt-test",
+        .base_url = "https://api.example/v1",
+    };
     opts.chat_client = std::make_unique<ai::providers::StreamingOpenAIChatClient>(
         transport,
         std::move(provider));
@@ -1510,13 +1526,15 @@ TEST_CASE(
 
     ai::providers::OpenAIStreamConfig provider;
     provider.api_key = "sk-test-api-key";
-    provider.api = "openai-completions";
-    provider.provider = "openai-compatible";
-    provider.model = ai::Model{"gpt-test"};
 
     coding_agent::CreateAgentSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
+    opts.provider_config = coding_agent::SdkProviderConfig{
+        .provider = "openai-compatible",
+        .model = "gpt-test",
+        .base_url = "https://api.example/v1",
+    };
     opts.chat_client = std::make_unique<ai::providers::StreamingOpenAIChatClient>(
         transport,
         std::move(provider));
@@ -1604,13 +1622,15 @@ TEST_CASE(
 
     ai::providers::OpenAIStreamConfig provider;
     provider.api_key = "sk-test-api-key";
-    provider.api = "openai-completions";
-    provider.provider = "openai-compatible";
-    provider.model = ai::Model{"gpt-test"};
 
     coding_agent::CreateAgentSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
+    opts.provider_config = coding_agent::SdkProviderConfig{
+        .provider = "openai-compatible",
+        .model = "gpt-test",
+        .base_url = "https://api.example/v1",
+    };
     opts.chat_client = std::make_unique<ai::providers::StreamingOpenAIChatClient>(
         transport,
         std::move(provider));
@@ -1827,13 +1847,15 @@ TEST_CASE(
 
     ai::providers::OpenAIStreamConfig provider;
     provider.api_key = "sk-test-api-key";
-    provider.api = "openai-completions";
-    provider.provider = "openai-compatible";
-    provider.model = ai::Model{"gpt-test"};
 
     coding_agent::CreateAgentSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
+    opts.provider_config = coding_agent::SdkProviderConfig{
+        .provider = "openai-compatible",
+        .model = "gpt-test",
+        .base_url = "https://api.example/v1",
+    };
     opts.chat_client = std::make_unique<ai::providers::StreamingOpenAIChatClient>(
         transport,
         std::move(provider));
@@ -2130,13 +2152,15 @@ TEST_CASE(
 
     ai::providers::OpenAIStreamConfig provider;
     provider.api_key = "sk-test-api-key";
-    provider.api = "openai-completions";
-    provider.provider = "openai-compatible";
-    provider.model = ai::Model{"gpt-test"};
 
     coding_agent::CreateAgentSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
+    opts.provider_config = coding_agent::SdkProviderConfig{
+        .provider = "openai-compatible",
+        .model = "gpt-test",
+        .base_url = "https://api.example/v1",
+    };
     opts.chat_client = std::make_unique<ai::providers::StreamingOpenAIChatClient>(
         transport,
         std::move(provider));
@@ -2812,7 +2836,9 @@ TEST_CASE("create_agent_session fails without chat_client or provider_config", "
     CHECK(result.error().code == util::ErrorCode::Validation);
 }
 
-TEST_CASE("SDK provider_config api_key_env chain accepts first set fallback", "[sdk][u2][api-key-env]") {
+TEST_CASE(
+    "SDK provider_config api_key_env chain accepts first set fallback",
+    "[sdk][u2][api-key-env][issue336]") {
     TestPaths paths;
     cch::tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
@@ -2835,6 +2861,12 @@ TEST_CASE("SDK provider_config api_key_env chain accepts first set fallback", "[
     REQUIRE(result.has_value());
     CHECK(result->provider == "fake");
     CHECK(result->model == "fake-model");
+    const auto model = result->session->snapshot().agent_state.model;
+    CHECK(model.input == std::vector<ai::ModelInput>{ai::ModelInput::Text});
+    CHECK(model.context_window == 128000);
+    CHECK(model.max_tokens == 16384);
+    CHECK(model.cost.input == 0);
+    CHECK(model.cost.output == 0);
     result->session->close();
 }
 

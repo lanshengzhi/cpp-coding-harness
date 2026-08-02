@@ -1,17 +1,18 @@
-#include "../../../third_party/catch2/catch_test_macros.hpp"
-
-#include "ai/glaze/AiJson.hpp"
-#include "support/ComplexToolSchemaFixture.hpp"
-#include "support/TempWorkspace.hpp"
-#include "support/ToolArgumentContracts.hpp"
-#include "support/UsageAssertions.hpp"
-#include "util/ExpectedMacros.hpp"
-#include "util/Json.hpp"
 #include <cch/ai/providers/OpenAIChatClient.hpp>
 #include <cch/harness/session/JsonlSessionStore.hpp>
 #include <cch/harness/session/SessionResume.hpp>
 #include <cch/util/Error.hpp>
 #include <cch/util/JsonValue.hpp>
+#include "ai/glaze/AiJson.hpp"
+#include "support/ComplexToolSchemaFixture.hpp"
+#include "support/ModelFixture.hpp"
+#include "support/TempWorkspace.hpp"
+#include "support/ToolArgumentContracts.hpp"
+#include "support/UsageAssertions.hpp"
+#include "util/ExpectedMacros.hpp"
+#include "util/Json.hpp"
+
+#include "../../../third_party/catch2/catch_test_macros.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -198,11 +199,11 @@ TEST_CASE("streaming OpenAI client serializes typed context and emits text delta
 
     ai::providers::OpenAIStreamConfig config;
     config.api_key = "sk-test-api-key";
-    config.base_url = "https://gateway.example/v1";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test", "https://gateway.example/v1");
+    request.model.headers = ai::ModelHeaders{{"X-Static", "catalog"}};
     request.context.system_prompt = "You are concise";
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
     auto expected_contract = util::read_json<util::JsonValue>(tests::kComplexToolArgumentContract);
@@ -265,6 +266,7 @@ TEST_CASE("streaming OpenAI client serializes typed context and emits text delta
     REQUIRE(transport->requests.size() == 1);
     CHECK(transport->requests[0].url == "https://gateway.example/v1/chat/completions");
     CHECK(transport->requests[0].headers.at("Accept") == "text/event-stream");
+    CHECK(transport->requests[0].headers.at("X-Static") == "catalog");
     auto body = captured_body_json(*transport);
     const auto& root = body.get_object();
     CHECK(root.at("model").get_string() == "gpt-test");
@@ -296,13 +298,12 @@ TEST_CASE(
         auto transport = std::make_shared<FakeStreamTransport>();
         ai::providers::OpenAIStreamConfig config;
         config.api_key = "sk-test-api-key";
-        config.api = std::move(api);
-        config.provider = std::move(provider);
-        config.model.id = model;
         ai::providers::StreamingOpenAIChatClient client(transport, std::move(config));
 
         ai::StreamChatRequest request;
-        request.model = ai::Model{std::move(model)};
+        request.model = tests::make_openai_model(std::move(model));
+        request.model.api = std::move(api);
+        request.model.provider = std::move(provider);
         auto run = run_client(client, std::move(request));
 
         REQUIRE_FALSE(run.result);
@@ -332,7 +333,7 @@ TEST_CASE(
     config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
 
     auto run = run_client(client, std::move(request));
 
@@ -356,7 +357,7 @@ TEST_CASE(
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
     auto run = run_client(client, std::move(request));
@@ -387,7 +388,7 @@ TEST_CASE(
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     auto run = run_client(client, std::move(request));
 
     REQUIRE(run.result);
@@ -430,7 +431,7 @@ TEST_CASE(
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     auto run = run_client(client, std::move(request));
 
     REQUIRE(run.result);
@@ -465,7 +466,7 @@ TEST_CASE(
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     auto run = run_client(client, std::move(request));
 
     REQUIRE(run.result);
@@ -498,7 +499,7 @@ TEST_CASE(
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     auto run = run_client(client, std::move(request));
 
     REQUIRE(run.result);
@@ -534,7 +535,9 @@ TEST_CASE(
     tests::check_usage(done[0]->message.usage, latest_snapshot);
 }
 
-TEST_CASE("streaming OpenAI client uses configured assistant identity", "[ai][provider][stream][u4]") {
+TEST_CASE(
+    "streaming OpenAI client uses requested Model assistant identity",
+    "[ai][provider][stream][u4][issue336]") {
     auto transport = std::make_shared<FakeStreamTransport>();
     transport->chunks = {
         sse(R"json({"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]})json"),
@@ -543,12 +546,11 @@ TEST_CASE("streaming OpenAI client uses configured assistant identity", "[ai][pr
 
     ai::providers::OpenAIStreamConfig config;
     config.api_key = "sk-test-api-key";
-    config.api = "openai-completions";
-    config.provider = "kimi-coding";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"kimi-for-coding"};
+    request.model = tests::make_openai_model("kimi-for-coding");
+    request.model.provider = "kimi-coding";
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
     auto run = run_client(client, std::move(request));
@@ -568,11 +570,10 @@ TEST_CASE("streaming OpenAI client builds Kimi-compatible tool requests offline"
 
     ai::providers::OpenAIStreamConfig config;
     config.api_key = "kimi-test-api-key";
-    config.base_url = "https://api.kimi.com/coding/v1";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"kimi-for-coding"};
+    request.model = tests::make_openai_model("kimi-for-coding", "https://api.kimi.com/coding/v1");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello kimi")});
     request.context.tools.push_back(ai::Tool{
         "read_file",
@@ -596,6 +597,33 @@ TEST_CASE("streaming OpenAI client builds Kimi-compatible tool requests offline"
     CHECK(captured.body.find(R"("tool_calls")") == std::string::npos);
 }
 
+TEST_CASE(
+    "streaming OpenAI client keeps runtime authorization above case-variant Model headers",
+    "[ai][provider][stream][issue336]") {
+    auto transport = std::make_shared<FakeStreamTransport>();
+    transport->chunks = {
+        sse(R"json({"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]})json"),
+        sse("[DONE]"),
+    };
+
+    ai::providers::OpenAIStreamConfig config;
+    config.api_key = "runtime-api-key";
+    ai::providers::StreamingOpenAIChatClient client(transport, config);
+
+    ai::StreamChatRequest request;
+    request.model = tests::make_openai_model("gpt-test");
+    request.model.headers = ai::ModelHeaders{{"authorization", "Bearer model-header-value"}};
+    request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
+
+    auto run = run_client(client, std::move(request));
+
+    REQUIRE(run.result);
+    REQUIRE(transport->requests.size() == 1);
+    const auto& captured = transport->requests[0];
+    CHECK(captured.headers.at("Authorization") == "Bearer runtime-api-key");
+    CHECK(captured.headers.find("authorization") == captured.headers.end());
+}
+
 TEST_CASE("streaming OpenAI client normalizes Kimi trailing slash and serializes prior tool calls", "[ai][provider][stream][u2]") {
     auto transport = std::make_shared<FakeStreamTransport>();
     transport->chunks = {
@@ -605,7 +633,6 @@ TEST_CASE("streaming OpenAI client normalizes Kimi trailing slash and serializes
 
     ai::providers::OpenAIStreamConfig config;
     config.api_key = "kimi-test-api-key";
-    config.base_url = "https://api.kimi.com/coding/v1/";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     auto arguments = util::read_json<util::JsonValue>(R"({"path":"README.md"})");
@@ -614,7 +641,7 @@ TEST_CASE("streaming OpenAI client normalizes Kimi trailing slash and serializes
     prior_assistant.content.emplace_back(ai::tool_call_content("call-prev", "read_file", R"({"path":"README.md"})", *arguments));
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"kimi-for-coding"};
+    request.model = tests::make_openai_model("kimi-for-coding", "https://api.kimi.com/coding/v1/");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("read README")});
     request.context.messages.push_back(ai::MessageVariant{prior_assistant});
     request.context.messages.push_back(ai::MessageVariant{ai::tool_result_message("call-prev", "read_file", "contents")});
@@ -655,6 +682,7 @@ TEST_CASE("streaming OpenAI client accumulates split tool call arguments", "[ai]
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("read")});
 
     auto run = run_client(client, std::move(request));
@@ -700,7 +728,7 @@ TEST_CASE("streaming OpenAI client serializes compat request fields", "[ai][prov
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test", "https://gateway.example/v1");
     request.context.system_prompt = "You are concise";
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
@@ -737,7 +765,7 @@ TEST_CASE("streaming OpenAI client inserts assistant after tool result when comp
     prior_assistant.content.emplace_back(ai::tool_call_content("call-prev", "read_file", R"({"path":"README.md"})", *arguments));
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("read")});
     request.context.messages.push_back(ai::MessageVariant{prior_assistant});
     request.context.messages.push_back(ai::MessageVariant{ai::tool_result_message("call-prev", "read_file", "contents")});
@@ -779,7 +807,7 @@ TEST_CASE("streaming OpenAI client serializes assistant thinking as text when co
         .text_signature = std::nullopt,
     });
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{prior_assistant});
 
     auto run = run_client(client, std::move(request));
@@ -831,7 +859,7 @@ TEST_CASE(
     });
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.emplace_back(std::move(user));
     request.context.messages.emplace_back(std::move(custom));
     request.context.messages.emplace_back(ai::user_text_message("text only"));
@@ -921,7 +949,7 @@ TEST_CASE(
     empty.tool_name = "noop";
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.emplace_back(std::move(mixed));
     request.context.messages.emplace_back(std::move(image_only));
     request.context.messages.emplace_back(std::move(empty));
@@ -980,7 +1008,7 @@ TEST_CASE(
     });
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.emplace_back(std::move(tool));
 
     auto run = run_client(client, std::move(request));
@@ -1039,7 +1067,7 @@ TEST_CASE(
     });
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.emplace_back(std::move(first_tool));
     request.context.messages.emplace_back(std::move(excluded_bash));
     request.context.messages.emplace_back(std::move(second_tool));
@@ -1107,7 +1135,7 @@ TEST_CASE(
     });
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.emplace_back(std::move(first_tool));
     request.context.messages.emplace_back(std::move(visible_bash));
     request.context.messages.emplace_back(std::move(second_tool));
@@ -1236,7 +1264,7 @@ TEST_CASE(
     fresh_config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient fresh_client(fresh_transport, fresh_config);
     ai::StreamChatRequest fresh_request;
-    fresh_request.model = ai::Model{"gpt-test"};
+    fresh_request.model = tests::make_openai_model("gpt-test");
     fresh_request.context.messages = fresh_messages;
     auto fresh_run = run_client(fresh_client, std::move(fresh_request));
     REQUIRE(fresh_run.result);
@@ -1247,7 +1275,7 @@ TEST_CASE(
     resumed_config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient resumed_client(resumed_transport, resumed_config);
     ai::StreamChatRequest resumed_request;
-    resumed_request.model = ai::Model{"gpt-test"};
+    resumed_request.model = tests::make_openai_model("gpt-test");
     resumed_request.context.messages = std::move(resumed->history);
     auto resumed_run = run_client(resumed_client, std::move(resumed_request));
     REQUIRE(resumed_run.result);
@@ -1269,7 +1297,7 @@ TEST_CASE("streaming OpenAI client accepts standard streaming chunk fields", "[a
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
     auto run = run_client(client, std::move(request));
@@ -1282,7 +1310,9 @@ TEST_CASE("streaming OpenAI client accepts standard streaming chunk fields", "[a
     CHECK(*run.result->response_model == "gpt-test-response");
 }
 
-TEST_CASE("streaming OpenAI client preserves default base URL when config base is empty", "[ai][provider][stream][u4]") {
+TEST_CASE(
+    "streaming OpenAI client uses the requested Model base URL",
+    "[ai][provider][stream][u4][issue336]") {
     auto transport = std::make_shared<FakeStreamTransport>();
     transport->chunks = {
         sse(R"json({"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]})json"),
@@ -1291,11 +1321,10 @@ TEST_CASE("streaming OpenAI client preserves default base URL when config base i
 
     ai::providers::OpenAIStreamConfig config;
     config.api_key = "sk-test-api-key";
-    config.base_url = "";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
     auto run = run_client(client, std::move(request));
@@ -1322,7 +1351,7 @@ TEST_CASE("streaming OpenAI client skips excluded bash execution messages", "[ai
     bash.exclude_from_context = true;
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{bash});
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("visible")});
 
@@ -1351,7 +1380,7 @@ TEST_CASE("streaming OpenAI client serializes tool result names when compat requ
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{ai::tool_result_message("call-prev", "read_file", "contents")});
 
     auto run = run_client(client, std::move(request));
@@ -1377,7 +1406,7 @@ TEST_CASE("streaming OpenAI client keeps malformed streamed tool arguments as in
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("read")});
 
     auto run = run_client(client, std::move(request));
@@ -1410,7 +1439,7 @@ TEST_CASE(
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
     auto run = run_client(client, std::move(request));
@@ -1430,7 +1459,7 @@ TEST_CASE(
     ai::providers::StreamingOpenAIChatClient client({}, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
     auto run = run_client(client, std::move(request));
@@ -1448,7 +1477,6 @@ TEST_CASE(
 
     ai::providers::OpenAIStreamConfig config;
     config.api_key = "sk-test-api-key";
-    config.model.id.clear();
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -1459,7 +1487,7 @@ TEST_CASE(
 
     REQUIRE_FALSE(run.result.has_value());
     CHECK(run.result.error().code == util::ErrorCode::Validation);
-    CHECK(run.result.error().message == "model is required");
+    CHECK(run.result.error().message == "invalid model");
     CHECK(transport->requests.empty());
     CHECK(run.events.empty());
 }
@@ -1475,7 +1503,7 @@ TEST_CASE(
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
     auto run = run_client(client, std::move(request));
@@ -1500,7 +1528,7 @@ TEST_CASE(
     invalid_text.push_back(static_cast<char>(0xFF));
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{
         ai::user_text_message(std::move(invalid_text))});
 
@@ -1527,7 +1555,7 @@ TEST_CASE(
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{
         ai::user_text_message("こんにちは 🌍")});
 
@@ -1562,7 +1590,7 @@ TEST_CASE(
         config.api_key = "sk-test-api-key";
         ai::providers::StreamingOpenAIChatClient client(transport, config);
         ai::StreamChatRequest request;
-        request.model = ai::Model{"gpt-test"};
+        request.model = tests::make_openai_model("gpt-test");
         request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
         auto run = run_client(client, std::move(request));
@@ -1591,7 +1619,7 @@ TEST_CASE(
         config.api_key = "sk-test-api-key";
         ai::providers::StreamingOpenAIChatClient client(transport, config);
         ai::StreamChatRequest request;
-        request.model = ai::Model{"gpt-test"};
+        request.model = tests::make_openai_model("gpt-test");
         request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
         auto run = run_client(client, std::move(request));
@@ -1619,7 +1647,7 @@ TEST_CASE(
     config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
     auto run = run_client(client, std::move(request));
@@ -1643,8 +1671,6 @@ TEST_CASE(
 
     ai::providers::OpenAIStreamConfig config;
     config.api_key = "sk-test-api-key";
-    config.api = "openai-completions";
-    config.provider = "openai-compatible";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::UserMessage user;
@@ -1654,7 +1680,7 @@ TEST_CASE(
         .mime_type = "image/png",
     });
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.emplace_back(std::move(user));
 
     auto run = run_client(client, std::move(request));
@@ -1695,7 +1721,7 @@ TEST_CASE(
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
     auto run = run_client(client, std::move(request));
@@ -1721,7 +1747,7 @@ TEST_CASE(
 
     std::stop_source stop_source;
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.stop_token = stop_source.get_token();
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
@@ -1772,12 +1798,10 @@ TEST_CASE(
 
     ai::providers::OpenAIStreamConfig config;
     config.api_key = "sk-test-api-key";
-    config.api = "openai-completions";
-    config.provider = "openai-compatible";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
     auto run = run_client(client, std::move(request));
@@ -1816,7 +1840,7 @@ TEST_CASE(
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
     const auto sink_failure = util::make_error(
         util::ErrorCode::Session,
@@ -1846,11 +1870,11 @@ TEST_CASE(
 
     ai::providers::OpenAIStreamConfig config;
     config.api_key = "sk-test-api-key";
-    config.provider = "opencode-go";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
+    request.model.provider = "opencode-go";
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
     auto run = run_client(client, std::move(request));
@@ -1916,7 +1940,7 @@ TEST_CASE(
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
     auto run = run_client(client, std::move(request));
@@ -1943,12 +1967,10 @@ TEST_CASE(
 
     ai::providers::OpenAIStreamConfig config;
     config.api_key = "sk-test-api-key";
-    config.api = "openai-completions";
-    config.provider = "openai-compatible";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
-    request.model = ai::Model{"gpt-test"};
+    request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
     auto run = run_client(client, std::move(request));

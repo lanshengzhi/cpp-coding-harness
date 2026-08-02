@@ -250,11 +250,6 @@ void add_project_resource_loading_diagnostics(
     }
 
     ai::ProviderFactoryContext ctx;
-    ctx.provider_registry_name = resolved.provider_registry_name;
-    ctx.provider = resolved.provider;
-    ctx.api = resolved.api;
-    ctx.model = ai::Model{resolved.model};
-    ctx.base_url = resolved.base_url;
     ctx.api_key = resolved.api_key;
     ctx.api_key_env = resolved_env_name.empty() ? resolved.api_key_env : resolved_env_name;
 
@@ -267,6 +262,40 @@ void add_project_resource_loading_diagnostics(
     }
 
     return client;
+}
+
+/// Transitional projection for the legacy string-only session settings. Full
+/// catalog and models.json composition belongs to #345. Until that seam lands,
+/// configured provider strings use pi's frozen custom-model defaults instead
+/// of claiming catalog-specific capabilities, while opaque host clients carry
+/// an explicit unknown protocol/capability sentinel.
+[[nodiscard]] ai::Model make_transitional_request_model(
+    const coding_agent::ResolvedProviderSettings& resolved,
+    bool uses_opaque_host_client) {
+    ai::Model model{
+        .id = resolved.model,
+        .name = resolved.model,
+        .api = resolved.api,
+        .provider = resolved.provider,
+        .base_url = resolved.base_url,
+        .reasoning = false,
+        .thinking_level_map = std::nullopt,
+        .input = {ai::ModelInput::Text},
+        .cost = {},
+        .context_window = 128000,
+        .max_tokens = 16384,
+        .headers = std::nullopt,
+        .compat = std::nullopt,
+    };
+    if (uses_opaque_host_client) {
+        model.api = "unknown";
+        model.provider = kHostClientProvider;
+        model.base_url.clear();
+        model.input.clear();
+        model.context_window = 0;
+        model.max_tokens = 0;
+    }
+    return model;
 }
 
 [[nodiscard]] util::ExpectedVoid validate_trust_store_path(
@@ -694,7 +723,7 @@ struct SessionTargetNormalizationOptions {
         diagnostics.push_back(make_diag(
             SdkDiagnostic::Severity::Info,
             "host_client_used",
-            "Using host-provided chat client; provider_config metadata is informational only"));
+            "Using host-provided chat client; provider_config describes the request Model only"));
         if (is_resume) {
             diagnostics.push_back(make_diag(
                 SdkDiagnostic::Severity::Info,
@@ -908,7 +937,13 @@ struct SessionTargetNormalizationOptions {
     runtime_config.max_queued_messages = plan.max_queued_messages;
     runtime_config.max_queued_bytes = plan.max_queued_bytes;
     runtime_config.max_turns = plan.max_turns;
-    runtime_config.model = resolved.model;
+    const bool uses_opaque_host_client =
+        provider_registry_name == kHostClientProvider &&
+        (!plan.provider_request.provider || plan.provider_request.provider->empty() ||
+         !plan.provider_request.model || plan.provider_request.model->empty());
+    runtime_config.model = make_transitional_request_model(
+        resolved,
+        uses_opaque_host_client);
 
     const auto session_path = open.store->path();
     const auto metadata = open.metadata;

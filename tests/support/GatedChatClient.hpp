@@ -44,7 +44,7 @@ public:
         auto response = ai::assistant_text_message(std::format("turn {}", turn));
         response.provider = "gated-fake";
         response.api = "fake";
-        response.model = request.model->id;
+        response.model = request.model.id;
         response.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
         co_return response;

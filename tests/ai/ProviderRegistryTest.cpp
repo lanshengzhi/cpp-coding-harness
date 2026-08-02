@@ -1,9 +1,10 @@
-#include "../../third_party/catch2/catch_test_macros.hpp"
+#include <cch/ai/Content.hpp>
+#include <cch/ai/ProviderRegistry.hpp>
+#include <cch/util/Error.hpp>
+#include "support/ModelFixture.hpp"
+#include "support/UsageAssertions.hpp"
 
-#include "../../include/cch/ai/Content.hpp"
-#include "../../include/cch/ai/ProviderRegistry.hpp"
-#include "../../include/cch/util/Error.hpp"
-#include "../support/UsageAssertions.hpp"
+#include "../../third_party/catch2/catch_test_macros.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -26,7 +27,7 @@ public:
         const ai::StreamChatRequest& request,
         ai::AssistantEventSink) override {
         ai::AssistantMessage message = ai::assistant_text_message("null");
-        message.model = request.model->id;
+        message.model = request.model.id;
         message.provider = "null";
         co_return message;
     }
@@ -83,12 +84,11 @@ TEST_CASE("provider registry creates registered clients", "[ai][provider][regist
     REQUIRE(registry.register_provider("null", make_null_client));
 
     ai::ProviderFactoryContext context;
-    context.model = ai::Model{"model-from-context"};
     auto client = registry.create("null", context);
 
     REQUIRE(client);
     ai::StreamChatRequest request;
-    request.model = context.model;
+    request.model = tests::make_model("model-from-context", "null", "null");
     auto run = run_client(**client, std::move(request));
     REQUIRE(run.result);
     CHECK(run.result->provider == "null");
@@ -119,12 +119,11 @@ TEST_CASE("default provider registry includes fake and OpenAI-compatible provide
     CHECK(registry->contains("openai-compatible"));
 
     ai::ProviderFactoryContext context;
-    context.model = ai::Model{"fake-model"};
     auto fake = registry->create("fake", context);
     REQUIRE(fake);
 
     ai::StreamChatRequest request;
-    request.model = context.model;
+    request.model = tests::make_model("fake-model");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
     auto run = run_client(**fake, std::move(request));
 
@@ -145,12 +144,11 @@ TEST_CASE(
     REQUIRE(registry);
 
     ai::ProviderFactoryContext context;
-    context.model = ai::Model{"fake-model"};
     auto fake = registry->create("fake", context);
     REQUIRE(fake);
 
     ai::StreamChatRequest request;
-    request.model = context.model;
+    request.model = tests::make_model("fake-model");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
     auto run = run_client(**fake, std::move(request));
 
@@ -199,12 +197,11 @@ TEST_CASE("fake provider emits read tool calls from prompts", "[ai][provider][re
     REQUIRE(registry);
 
     ai::ProviderFactoryContext context;
-    context.model = ai::Model{"fake-model"};
     auto fake = registry->create("fake", context);
     REQUIRE(fake);
 
     ai::StreamChatRequest request;
-    request.model = context.model;
+    request.model = tests::make_model("fake-model");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("read README.md")});
     auto run = run_client(**fake, std::move(request));
 
@@ -226,12 +223,11 @@ TEST_CASE("fake provider emits bash tool calls from prompts", "[ai][provider][re
     REQUIRE(registry);
 
     ai::ProviderFactoryContext context;
-    context.model = ai::Model{"fake-model"};
     auto fake = registry->create("fake", context);
     REQUIRE(fake);
 
     ai::StreamChatRequest request;
-    request.model = context.model;
+    request.model = tests::make_model("fake-model");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("bash echo hi")});
     auto run = run_client(**fake, std::move(request));
 
@@ -253,12 +249,11 @@ TEST_CASE("fake provider observes trailing tool results", "[ai][provider][regist
     REQUIRE(registry);
 
     ai::ProviderFactoryContext context;
-    context.model = ai::Model{"fake-model"};
     auto fake = registry->create("fake", context);
     REQUIRE(fake);
 
     ai::StreamChatRequest request;
-    request.model = context.model;
+    request.model = tests::make_model("fake-model");
     request.context.messages.push_back(ai::MessageVariant{ai::tool_result_message("fake-read-1", "read", "file contents")});
     auto run = run_client(**fake, std::move(request));
 

@@ -90,7 +90,7 @@ public:
         auto partial = ai::assistant_text_message("");
         partial.provider = "snapshot-fake";
         partial.api = "fake";
-        partial.model = request.model->id;
+        partial.model = request.model.id;
         partial.content.clear();
         if (sink) {
             if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
@@ -110,7 +110,7 @@ public:
         auto response = ai::assistant_text_message("released");
         response.provider = "snapshot-fake";
         response.api = "fake";
-        response.model = request.model->id;
+        response.model = request.model.id;
         co_return response;
     }
 
@@ -134,7 +134,7 @@ public:
         auto response = ai::assistant_text_message("captured");
         response.provider = "snapshot-fake";
         response.api = "fake";
-        response.model = request.model->id;
+        response.model = request.model.id;
         co_return response;
     }
 };

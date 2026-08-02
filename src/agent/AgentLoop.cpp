@@ -1,5 +1,6 @@
 #include "AgentLoop.hpp"
 
+#include "AgentDefaults.hpp"
 #include "ExecutionShared.hpp"
 #include "ToolCallExecutor.hpp"
 #include "util/ExpectedMacros.hpp"
@@ -57,11 +58,10 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
     ai::AiContext& context,
     AgentState& state,
     const AgentLoopTurnUpdate& update) {
-    if (update.model && update.model->id.empty()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "invalid model",
-            "model update cannot be empty"));
+    if (update.model) {
+        if (auto valid = ai::validate_model(*update.model); !valid) {
+            return valid;
+        }
     }
     if (update.thinking_level && !is_valid_thinking_level(*update.thinking_level)) {
         return std::unexpected(util::make_error(
@@ -92,7 +92,11 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
 } // namespace
 
 AsyncAgentLoop::AsyncAgentLoop(ai::StreamingChatClient& client, AsyncToolRegistry registry, AsyncAgentOptions options)
-    : client_(client), registry_(std::move(registry)), options_(std::move(options)) {}
+    : client_(client), registry_(std::move(registry)), options_(std::move(options)) {
+    if (!options_.model) {
+        options_.model = detail::kDefaultModel;
+    }
+}
 
 boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::run(
     std::string user_prompt,
@@ -143,7 +147,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
     };
 
     AgentState state;
-    state.model = options_.model;
+    state.model = *options_.model;
     state.thinking_level = options_.thinking_level;
 
     CCH_TRY_VOID(emit_agent_event(sink, AgentStartEvent{}));
@@ -180,7 +184,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
 
         ai::StreamChatRequest request;
         request.stop_token = stop_token;
-        request.model = options_.model;
+        request.model = *options_.model;
 
         {
             ai::AiContext request_context = context;
