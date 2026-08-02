@@ -7,18 +7,13 @@
 #include <chrono>
 #include <memory>
 #include <string>
+#include <string_view>
 
 namespace cch::ai::providers {
 
 struct OpenAIStreamConfig {
-    std::string api{"openai-completions"};
-    std::string provider{"openai-compatible"};
-    std::string base_url{"https://api.openai.com"};
     std::string api_key;
     std::string api_key_env{"OPENAI_API_KEY"};
-    // Configured default model identity; the request's Model takes precedence
-    // (see StreamChatRequest::model, ADR 0019).
-    ai::Model model{"gpt-4.1-mini"};
     std::string organization;
     std::string project;
     std::chrono::milliseconds timeout{30000};
@@ -35,7 +30,7 @@ public:
 
 private:
     [[nodiscard]] util::Expected<std::string> resolve_api_key() const;
-    [[nodiscard]] std::string completions_url() const;
+    [[nodiscard]] static std::string completions_url(std::string_view base_url);
 
     std::shared_ptr<StreamTransport> transport_;
     OpenAIStreamConfig config_;

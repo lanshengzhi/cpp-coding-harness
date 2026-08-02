@@ -58,7 +58,7 @@ public:
         auto response = ai::assistant_text_message("tool cycle complete");
         response.provider = "tool-gated-fake";
         response.api = "fake";
-        response.model = request.model->id;
+        response.model = request.model.id;
         response.timestamp = now_ms();
 
         if (requests.size() == 1) {

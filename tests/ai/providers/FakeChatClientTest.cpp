@@ -1,11 +1,12 @@
-#include "../../../third_party/catch2/catch_test_macros.hpp"
+#include <cch/ai/ChatClient.hpp>
+#include <cch/ai/Content.hpp>
+#include <cch/ai/Message.hpp>
+#include <cch/util/Error.hpp>
+#include "ai/providers/FakeChatClient.hpp"
+#include "support/ModelFixture.hpp"
+#include "support/UsageAssertions.hpp"
 
-#include "../../../include/cch/ai/ChatClient.hpp"
-#include "../../../include/cch/ai/Content.hpp"
-#include "../../../include/cch/ai/Message.hpp"
-#include "../../../include/cch/util/Error.hpp"
-#include "../../../src/ai/providers/FakeChatClient.hpp"
-#include "../../support/UsageAssertions.hpp"
+#include "../../../third_party/catch2/catch_test_macros.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -62,7 +63,7 @@ RunResult run_fake(
 
 ai::StreamChatRequest request_with(ai::MessageVariant message) {
     ai::StreamChatRequest request;
-    request.model = ai::Model{"fake-model"};
+    request.model = tests::make_model("fake-model");
     request.context.messages.push_back(std::move(message));
     return request;
 }
@@ -276,6 +277,21 @@ TEST_CASE(
     auto tool_result_run = run_fake(request_with(
         ai::tool_result_message("fake-read-1", "read", "file contents")));
     check_text_lifecycle(tool_result_run, "fake observed: file contents");
+}
+
+TEST_CASE(
+    "scripted fake retains its executor identity for a differently identified request Model",
+    "[ai][provider][fake][issue336]") {
+    auto request = request_with(ai::user_text_message("hello"));
+    request.model.provider = "sdk-host";
+    request.model.api = "unknown";
+
+    auto run = run_fake(std::move(request));
+
+    REQUIRE(run.result);
+    CHECK(run.result->provider == "fake");
+    CHECK(run.result->api == "scripted-fake");
+    CHECK(run.result->model == "fake-model");
 }
 
 TEST_CASE(

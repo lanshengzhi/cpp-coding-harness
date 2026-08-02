@@ -19,16 +19,6 @@ namespace cch::ai {
 // OAuth, subscription-provider, and dynamic per-call API-key resolution are not
 // supported yet; api_key_env only reads a static environment variable.
 struct ProviderFactoryContext {
-    // Registry key used to construct the adapter. This may differ from provider
-    // identity for OpenAI-compatible custom providers.
-    std::string provider_registry_name{"openai-compatible"};
-    // Provider/API identity written into assistant messages.
-    std::string provider{"openai-compatible"};
-    std::string api{"openai-completions"};
-    // Configured default model identity; the request's Model takes precedence
-    // (see StreamChatRequest::model, ADR 0019).
-    Model model;
-    std::string base_url{"https://api.openai.com"};
     std::string api_key;
     std::string api_key_env{"OPENAI_API_KEY"};
     std::chrono::milliseconds timeout{30000};

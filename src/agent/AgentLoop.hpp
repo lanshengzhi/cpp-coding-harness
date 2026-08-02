@@ -59,7 +59,7 @@ private:
         InputQueueDrainer drain_queued_messages);
 
     [[nodiscard]] const ai::Model& current_model() const noexcept {
-        return options_.model;
+        return *options_.model;
     }
     [[nodiscard]] const std::string& current_thinking_level() const noexcept {
         return options_.thinking_level;

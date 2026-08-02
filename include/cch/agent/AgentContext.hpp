@@ -83,9 +83,9 @@ struct AgentLoopContextReplacement {
 };
 
 struct AgentLoopTurnUpdate {
-    std::optional<AgentLoopContextReplacement> context;
-    std::optional<ai::Model> model;
-    std::optional<std::string> thinking_level;
+    std::optional<AgentLoopContextReplacement> context{std::nullopt};
+    std::optional<ai::Model> model{std::nullopt};
+    std::optional<std::string> thinking_level{std::nullopt};
 };
 
 using PrepareNextTurnHook = std::move_only_function<
@@ -139,7 +139,9 @@ struct AsyncAgentOptions {
     std::size_t max_queued_bytes{kDefaultMaxQueuedBytes};
     InputQueueMode steering_mode{InputQueueMode::OneAtATime};
     InputQueueMode follow_up_mode{InputQueueMode::OneAtATime};
-    ai::Model model;
+    /// Optional only at Agent construction. The Agent normalizes absence to
+    /// its internal pi-aligned unknown model before any request is created.
+    std::optional<ai::Model> model{std::nullopt};
     std::string thinking_level;
     std::optional<BeforeToolCallHook> before_tool_call;
     std::optional<AfterToolCallHook> after_tool_call;
@@ -158,7 +160,7 @@ struct AgentState {
     std::vector<std::string> active_tool_names;
     std::vector<std::string> pending_tool_call_ids;
     AgentInputQueues input_queues;
-    ai::Model model;
+    ai::Model model{};
     std::string thinking_level;
     // Bounded observations reported without vetoing run progress: redacted
     // weak-subscriber failures (ADR 0017).

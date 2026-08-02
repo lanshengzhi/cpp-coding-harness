@@ -42,7 +42,7 @@ public:
         ai::AssistantMessage terminal;
         terminal.provider = "host";
         terminal.api = "host";
-        terminal.model = request.model->id;
+        terminal.model = request.model.id;
         terminal.stop_reason = reason_;
         terminal.error_message = diagnostic_;
         terminal.content.emplace_back(ai::text_content(partial_));
@@ -77,7 +77,7 @@ public:
         ai::AssistantMessage message;
         message.provider = "host";
         message.api = "host";
-        message.model = request.model->id;
+        message.model = request.model.id;
         message.stop_reason = ai::AssistantStopReason::Stop;
         message.content.emplace_back(ai::text_content("captured"));
         if (sink) {

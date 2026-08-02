@@ -31,7 +31,7 @@ struct AgentSessionRuntimeConfig {
     /// Explicit turn cap forwarded to the Agent; std::nullopt imposes no cap
     /// (ADR 0015).
     std::optional<int> max_turns{std::nullopt};
-    std::string model;
+    ai::Model model{};
 };
 
 /// Internal runtime behind AgentSession. Composes the stateful Agent with

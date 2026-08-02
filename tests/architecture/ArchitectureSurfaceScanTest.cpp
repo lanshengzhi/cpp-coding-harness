@@ -307,32 +307,31 @@ TEST_CASE("AI message surface does not accept new runtime-only message variants"
 }
 
 TEST_CASE(
-    "model identity is one first-class value and provider options carry no inert fields",
-    "[architecture][ai][issue70]") {
+    "Model is complete typed and required on every provider request",
+    "[architecture][ai][issue336]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
 
-    // ADR 0019 no-placeholder policy: the deferred pi-parity compat fields and
-    // their vocabulary enums stay removed until StreamChatRequest carries the
-    // controls that make them observable.
-    const auto compat_header = read_text(
-        source_root / "include" / "cch" / "ai" / "providers" / "OpenAICompletionsCompat.hpp");
-    CHECK(compat_header.find("supports_reasoning_effort") == std::string::npos);
-    CHECK(compat_header.find("max_tokens_field") == std::string::npos);
-    CHECK(compat_header.find("requires_reasoning_content_on_assistant_messages") == std::string::npos);
-    CHECK(compat_header.find("thinking_format") == std::string::npos);
-    CHECK(compat_header.find("ThinkingFormat") == std::string::npos);
-    CHECK(compat_header.find("MaxTokensField") == std::string::npos);
-
-    // One model-identity value across the streaming request, the agent
-    // context, and the provider configuration (ADR 0019).
     const auto model_header = read_text(source_root / "include" / "cch" / "ai" / "Model.hpp");
     CHECK(model_header.find("struct Model") != std::string::npos);
+    CHECK(model_header.find("struct AnthropicMessagesCompat") != std::string::npos);
+    CHECK(model_header.find("force_adaptive_thinking") != std::string::npos);
+    CHECK(model_header.find("allow_empty_signature") != std::string::npos);
+    CHECK(model_header.find("OpenAIResponsesCompat") == std::string::npos);
+    CHECK(model_header.find("JsonValue") == std::string::npos);
+
+    // Every request has one complete authoritative Model. Provider construction
+    // retains no default Model fallback while Agent state stays concrete.
     const auto request_header = read_text(source_root / "include" / "cch" / "ai" / "ChatClient.hpp");
-    CHECK(request_header.find("std::optional<Model> model") != std::string::npos);
+    CHECK(request_header.find("Model model") != std::string::npos);
+    CHECK(request_header.find("std::optional<Model> model") == std::string::npos);
     const auto registry_header = read_text(source_root / "include" / "cch" / "ai" / "ProviderRegistry.hpp");
-    CHECK(registry_header.find("Model model") != std::string::npos);
+    CHECK(registry_header.find("Model model") == std::string::npos);
+    const auto openai_header = read_text(
+        source_root / "include" / "cch" / "ai" / "providers" / "OpenAIChatClient.hpp");
+    CHECK(openai_header.find("ai::Model model") == std::string::npos);
     const auto agent_context_header = read_text(source_root / "include" / "cch" / "agent" / "AgentContext.hpp");
-    CHECK(agent_context_header.find("ai::Model model") != std::string::npos);
+    CHECK(agent_context_header.find("struct AgentState") != std::string::npos);
+    CHECK(agent_context_header.find("ai::Model model{};") != std::string::npos);
 
     // The third string slot and the three-way fallback chain stay gone.
     const auto context_header = read_text(source_root / "include" / "cch" / "ai" / "Context.hpp");

@@ -64,12 +64,26 @@ TEST_CASE("public headers compile from the include contract surface", "[architec
 
     agent::AsyncAgentOptions options;
     options.max_turns = 2;
-    options.model = ai::Model{"gpt-test"};
+    options.model = ai::Model{
+        .id = "gpt-test",
+        .name = "GPT Test",
+        .api = "scripted-fake",
+        .provider = "fake",
+        .base_url = "https://example.invalid",
+        .reasoning = false,
+        .thinking_level_map = std::nullopt,
+        .input = {ai::ModelInput::Text},
+        .cost = {},
+        .context_window = 100000,
+        .max_tokens = 4096,
+        .headers = std::nullopt,
+        .compat = std::nullopt,
+    };
 
     harness::session::SessionMetadata metadata;
     metadata.session_id = "session-1";
     metadata.provider = "fake";
-    metadata.model = options.model.id;
+    metadata.model = options.model->id;
 
     CHECK(context.messages.size() == 1);
     CHECK(context.tools.size() == 1);

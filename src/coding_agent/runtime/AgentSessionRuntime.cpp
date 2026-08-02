@@ -99,7 +99,7 @@ AgentSessionRuntime::AgentSessionRuntime(
     options.max_queued_messages = config_.max_queued_messages;
     options.max_queued_bytes = config_.max_queued_bytes;
     options.max_turns = config_.max_turns;
-    options.model = ai::Model{std::move(config_.model)};
+    options.model = std::move(config_.model);
     options.transform_context = [](
                                     std::vector<ai::MessageVariant> messages,
                                     std::stop_token) -> boost::asio::awaitable<

@@ -44,7 +44,7 @@ public:
         auto response = ai::assistant_text_message("immediate reply");
         response.provider = "immediate-fake";
         response.api = "fake";
-        response.model = request.model->id;
+        response.model = request.model.id;
         co_return response;
     }
 

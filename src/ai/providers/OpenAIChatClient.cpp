@@ -9,6 +9,8 @@
 #include "util/ExpectedMacros.hpp"
 #include "util/Json.hpp"
 
+#include <boost/beast/core/string.hpp>
+
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -35,6 +37,16 @@ struct ToolCallAccumulator {
     std::string raw_arguments;
     std::size_t content_index{};
 };
+
+void set_runtime_header(
+    std::map<std::string, std::string>& headers,
+    std::string name,
+    std::string value) {
+    std::erase_if(headers, [&](const auto& header) {
+        return boost::beast::iequals(header.first, name);
+    });
+    headers.emplace(std::move(name), std::move(value));
+}
 
 void append_plain_text_part(std::string& text, std::string_view part, std::string_view separator) {
     if (part.empty()) {
@@ -595,34 +607,20 @@ StreamingOpenAIChatClient::StreamingOpenAIChatClient(std::shared_ptr<StreamTrans
 boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChatClient::stream(
     const ai::StreamChatRequest& request,
     ai::AssistantEventSink sink) {
-    CCH_TRY(api_key, resolve_api_key());
+    if (auto valid = ai::validate_model(request.model); !valid) {
+        co_return std::unexpected(valid.error());
+    }
+    if (request.model.base_url.empty()) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "base URL is required",
+            "OpenAI request Model base URL must not be empty"));
+    }
     if (!transport_) {
         co_return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "missing stream transport",
             "OpenAI streaming client requires a transport"));
-    }
-
-    // ADR 0019 precedence rule: a present request Model is authoritative; the
-    // configured Model applies when the request carries none.
-    const ai::Model& model = request.model ? *request.model : config_.model;
-    if (model.id.empty()) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "model is required",
-            "OpenAI request model must not be empty"));
-    }
-    if (config_.api.empty()) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "API identity is required",
-            "OpenAI request API identity must not be empty"));
-    }
-    if (config_.provider.empty()) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "provider identity is required",
-            "OpenAI request provider identity must not be empty"));
     }
     if (config_.timeout <= std::chrono::milliseconds::zero()) {
         co_return std::unexpected(util::make_error(
@@ -631,28 +629,32 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
             "OpenAI request timeout must be greater than zero"));
     }
 
-    CCH_TRY(body, serialize_openai_request(request_to_openai(request, config_, model.id)));
+    CCH_TRY(api_key, resolve_api_key());
+    CCH_TRY(body, serialize_openai_request(request_to_openai(request, config_, request.model.id)));
 
     StreamRequest http;
     http.method = "POST";
-    http.url = completions_url();
+    http.url = completions_url(request.model.base_url);
     http.timeout = config_.timeout;
     http.stop_token = request.stop_token;
-    http.headers["Authorization"] = "Bearer " + api_key;
-    http.headers["Content-Type"] = "application/json";
-    http.headers["Accept"] = "text/event-stream";
+    if (request.model.headers) {
+        http.headers.insert(request.model.headers->begin(), request.model.headers->end());
+    }
+    set_runtime_header(http.headers, "Authorization", "Bearer " + api_key);
+    set_runtime_header(http.headers, "Content-Type", "application/json");
+    set_runtime_header(http.headers, "Accept", "text/event-stream");
     if (!config_.organization.empty()) {
-        http.headers["OpenAI-Organization"] = config_.organization;
+        set_runtime_header(http.headers, "OpenAI-Organization", config_.organization);
     }
     if (!config_.project.empty()) {
-        http.headers["OpenAI-Project"] = config_.project;
+        set_runtime_header(http.headers, "OpenAI-Project", config_.project);
     }
     http.body = std::move(body);
 
     ai::AssistantMessage assistant;
-    assistant.api = config_.api;
-    assistant.provider = config_.provider;
-    assistant.model = model.id;
+    assistant.api = request.model.api;
+    assistant.provider = request.model.provider;
+    assistant.model = request.model.id;
     assistant.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
 
@@ -700,7 +702,10 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
             if (!assistant.response_id && chunk->id && !chunk->id->empty()) {
                 assistant.response_id = *chunk->id;
             }
-            if (!assistant.response_model && chunk->model && !chunk->model->empty() && *chunk->model != model.id) {
+            if (!assistant.response_model &&
+                chunk->model &&
+                !chunk->model->empty() &&
+                *chunk->model != request.model.id) {
                 assistant.response_model = *chunk->model;
             }
             if (chunk->usage) {
@@ -755,7 +760,7 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
                     reasoning_signature = "reasoning_content";
                 } else if (choice.delta->reasoning && !choice.delta->reasoning->empty()) {
                     reasoning_delta = &choice.delta->reasoning;
-                    reasoning_signature = config_.provider == "opencode-go"
+                    reasoning_signature = request.model.provider == "opencode-go"
                         ? "reasoning_content"
                         : "reasoning";
                 } else if (choice.delta->reasoning_text && !choice.delta->reasoning_text->empty()) {
@@ -951,13 +956,10 @@ util::Expected<std::string> StreamingOpenAIChatClient::resolve_api_key() const {
         "set " + config_.api_key_env + " or pass provider configuration"));
 }
 
-std::string StreamingOpenAIChatClient::completions_url() const {
-    std::string base = config_.base_url;
+std::string StreamingOpenAIChatClient::completions_url(std::string_view base_url) {
+    std::string base{base_url};
     while (!base.empty() && base.back() == '/') {
         base.pop_back();
-    }
-    if (base.empty()) {
-        base = "https://api.openai.com";
     }
     if (base.ends_with("/v1")) {
         return base + "/chat/completions";

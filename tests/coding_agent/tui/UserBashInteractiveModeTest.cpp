@@ -54,7 +54,7 @@ public:
         auto response = ai::assistant_text_message("provider reply");
         response.api = "fake";
         response.provider = "fake";
-        response.model = request.model->id;
+        response.model = request.model.id;
         co_return response;
     }
 
@@ -121,7 +121,7 @@ public:
             auto recovered = ai::assistant_text_message("recovery reply");
             recovered.provider = "abort-gated-fake";
             recovered.api = "fake";
-            recovered.model = request.model->id;
+            recovered.model = request.model.id;
             co_return recovered;
         }
 
@@ -129,7 +129,7 @@ public:
         auto partial = ai::assistant_text_message("");
         partial.provider = "abort-gated-fake";
         partial.api = "fake";
-        partial.model = request.model->id;
+        partial.model = request.model.id;
         partial.content.clear();
         if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
             co_return std::unexpected(emitted.error());
@@ -204,7 +204,7 @@ public:
             auto aborted = ai::assistant_text_message("");
             aborted.provider = "tool-abort-fake";
             aborted.api = "fake";
-            aborted.model = request.model->id;
+            aborted.model = request.model.id;
             aborted.stop_reason = ai::AssistantStopReason::Aborted;
             aborted.error_message = "close prompt aborted";
             if (auto emitted = sink(ai::AssistantErrorEvent{
@@ -220,7 +220,7 @@ public:
         auto response = ai::assistant_text_message("");
         response.provider = "tool-abort-fake";
         response.api = "fake";
-        response.model = request.model->id;
+        response.model = request.model.id;
         response.content.clear();
         response.content.emplace_back(ai::tool_call_content(
             "delayed-call",

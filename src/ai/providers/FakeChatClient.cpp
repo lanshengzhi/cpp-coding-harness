@@ -18,8 +18,8 @@
 namespace cch::ai::providers {
 namespace {
 
-void set_fake_metadata(ai::AssistantMessage& assistant, const std::string& model) {
-    assistant.model = model;
+void set_fake_metadata(ai::AssistantMessage& assistant, const ai::Model& model) {
+    assistant.model = model.id;
     assistant.provider = "fake";
     assistant.api = "scripted-fake";
     assistant.usage = ai::Usage{};
@@ -151,15 +151,12 @@ public:
     boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
         const ai::StreamChatRequest& request,
         ai::AssistantEventSink sink) override {
-        if (!request.model || request.model->id.empty()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
-                "model is required",
-                "scripted fake request model must not be empty"));
+        if (auto valid = ai::validate_model(request.model); !valid) {
+            co_return std::unexpected(valid.error());
         }
 
         ai::AssistantMessage assistant;
-        set_fake_metadata(assistant, request.model->id);
+        set_fake_metadata(assistant, request.model);
         assistant.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
 
