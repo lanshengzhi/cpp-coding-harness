@@ -2,14 +2,13 @@
 
 #include <cch/ai/Models.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
-#include <cch/coding_agent/AuthStorage.hpp>
+#include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/tools/ToolFactories.hpp>
 #include <cch/util/Error.hpp>
 #include "coding_agent/ProjectResourceLoader.hpp"
-#include "coding_agent/ProviderConfigResolution.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/prompt/PromptProcessor.hpp"
 #include "coding_agent/runtime/AgentSessionRuntime.hpp"
@@ -79,8 +78,29 @@ enum class CreationProfile { Cli, Sdk };
 struct AssemblyPlan {
     CreationProfile profile;
     NormalizedSessionTarget target;
-    coding_agent::ProviderRequest provider_request;
-    std::shared_ptr<ai::Models> models;
+    /// The model/auth runtime used by the session. Nullable: a runtime is
+    /// default-created from the Agent Config Directory (or `agent_dir`) when
+    /// absent (ADR 0029/0030).
+    std::shared_ptr<ModelRuntime> model_runtime;
+    /// True when the session owns the runtime (default-created, or wrapped by
+    /// the factory from injected `ai::Models` in the private test seam) and
+    /// must release it on close. A host-injected runtime is never disposed by
+    /// the session (ADR 0029: no dispose ceremony; runtimes are reusable
+    /// across sessions).
+    bool model_runtime_owned{true};
+    /// SDK `agentDir` override applied only to a default-created runtime.
+    std::optional<std::filesystem::path> agent_dir;
+    /// True when the private test seam injected an `ai::Models`; the opaque
+    /// `sdk-host`/`host-client` sentinel model resolution applies so focused
+    /// session tests keep a deterministic host-facing model.
+    bool models_injected{false};
+    /// SDK explicit initial model for the public path (pi `model` option).
+    std::optional<ai::Model> requested_model;
+    /// CLI `--fake` flag: a scripted fake provider is registered into the
+    /// runtime. The CLI module later removes the transitional flags.
+    bool cli_fake{false};
+    /// CLI transitional provider overrides (later CLI module removes these).
+    coding_agent::CliProviderOverrides cli_overrides;
     std::shared_ptr<harness::AsyncExecutionEnv> host_execution_env;
     coding_agent::SdkBuiltinTools builtin_tools;
     std::vector<std::unique_ptr<agent::AsyncAgentTool>> custom_tools;
@@ -214,147 +234,6 @@ void add_project_resource_loading_diagnostics(
     return std::nullopt;
 }
 
-class ProcessAuthContext final : public ai::AuthContext {
-public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<std::string>>> environment(
-        std::string name) const override {
-        const char* value = std::getenv(name.c_str());
-        if (value == nullptr || *value == '\0') {
-            co_return std::optional<std::string>{};
-        }
-        co_return std::optional<std::string>{std::string{value}};
-    }
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<bool>> file_exists(
-        std::string path) const override {
-        if (path.starts_with("~/")) {
-            if (const char* home = std::getenv("HOME"); home != nullptr && *home != '\0') {
-                path = (std::filesystem::path{home} / path.substr(2)).string();
-            }
-        }
-        std::error_code error;
-        const bool exists = std::filesystem::exists(path, error);
-        if (error) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Auth,
-                "could not inspect authentication file",
-                error.message()));
-        }
-        co_return exists;
-    }
-};
-
-/// Transitional alias projection for the legacy --auth/settings auth name.
-/// The value is still read live from AuthStorage for every request; no key is
-/// copied into session construction state.
-class AliasedCredentialStore final : public ai::CredentialStore {
-public:
-    AliasedCredentialStore(
-        std::shared_ptr<ai::CredentialStore> storage,
-        std::string alias)
-        : storage_(std::move(storage)), alias_(std::move(alias)) {}
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> read(
-        std::string provider_id) override {
-        CCH_TRY(credential, co_await storage_->read(key(std::move(provider_id))));
-        co_return credential;
-    }
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::vector<ai::CredentialInfo>>> list() override {
-        CCH_TRY(credentials, co_await storage_->list());
-        co_return credentials;
-    }
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> modify(
-        std::string provider_id,
-        ai::CredentialModifyHook modifier) override {
-        CCH_TRY(credential, co_await storage_->modify(
-            key(std::move(provider_id)), std::move(modifier)));
-        co_return credential;
-    }
-
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> remove(
-        std::string provider_id) override {
-        CCH_TRY_VOID(co_await storage_->remove(key(std::move(provider_id))));
-        co_return util::ExpectedVoid{};
-    }
-
-private:
-    [[nodiscard]] std::string key(std::string provider_id) const {
-        return alias_.empty() ? provider_id : alias_;
-    }
-
-    std::shared_ptr<ai::CredentialStore> storage_;
-    std::string alias_;
-};
-
-/// Transitional projection for the legacy string-only session settings. Full
-/// catalog and models.json composition belongs to #345. Until that seam lands,
-/// configured provider strings use pi's frozen custom-model defaults instead
-/// of claiming catalog-specific capabilities, while the private test Models
-/// seam carries an explicit unknown protocol/capability sentinel.
-[[nodiscard]] ai::Model make_transitional_request_model(
-    const coding_agent::ResolvedProviderSettings& resolved,
-    bool uses_injected_models) {
-    ai::Model model{
-        .id = resolved.model,
-        .name = resolved.model,
-        .api = resolved.api,
-        .provider = resolved.provider,
-        .base_url = resolved.base_url,
-        .reasoning = false,
-        .thinking_level_map = std::nullopt,
-        .input = {ai::ModelInput::Text},
-        .cost = {},
-        .context_window = 128000,
-        .max_tokens = 16384,
-        .headers = std::nullopt,
-        .compat = std::nullopt,
-    };
-    if (uses_injected_models) {
-        model.api = "unknown";
-        model.provider = kHostClientProvider;
-        model.base_url.clear();
-        model.input.clear();
-        model.context_window = 0;
-        model.max_tokens = 0;
-    }
-    return model;
-}
-
-[[nodiscard]] util::Expected<std::shared_ptr<ai::Models>> build_models(
-    const coding_agent::ResolvedProviderSettings& resolved,
-    const ai::Model& model) {
-    if (resolved.provider_registry_name == "fake") {
-        auto models = ai::providers::make_scripted_fake_models();
-        if (!models) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Provider,
-                "failed to compose fake Provider"));
-        }
-        return models;
-    }
-
-    std::shared_ptr<ai::CredentialStore> credentials =
-        std::make_shared<coding_agent::AuthStorage>(coding_agent::auth_file_path());
-    if (!resolved.auth.empty()) {
-        credentials = std::make_shared<AliasedCredentialStore>(
-            std::move(credentials), resolved.auth);
-    }
-    auto models = std::make_shared<ai::Models>(
-        std::move(credentials),
-        std::make_shared<ProcessAuthContext>());
-    auto provider = ai::providers::make_openai_compatible_provider(
-        model.provider,
-        std::vector<ai::Model>{model},
-        resolved.api_key_env_chain,
-        std::make_shared<ai::providers::BoostBeastStreamTransport>());
-    if (auto added = models->set_provider(std::move(provider)); !added) {
-        return std::unexpected(added.error());
-    }
-    return models;
-}
-
 [[nodiscard]] util::ExpectedVoid validate_trust_store_path(
     const std::filesystem::path& trust_path,
     const std::filesystem::path& workspace) {
@@ -408,6 +287,235 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
         boost::asio::co_spawn(io, env->cleanup(), boost::asio::detached);
         io.run();
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Model / runtime resolution
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// CLI transitional provider resolution (the CLI module later replaces the
+/// `--base-url`/`--api-key-env` flags with the ModelRuntime surface). The
+/// openai-compatible adapter remains the CLI default; the `ResolvedProviderSettings`
+/// vocabulary is preserved from the removed ProviderConfigResolution module.
+[[nodiscard]] std::string provider_default_model(const std::string& registry_name) {
+    if (registry_name == "fake") {
+        return "fake-model";
+    }
+    return "gpt-4.1-mini";
+}
+
+[[nodiscard]] std::string provider_default_api(const std::string& provider_registry_name) {
+    if (provider_registry_name == "fake") {
+        return "scripted-fake";
+    }
+    return "openai-completions";
+}
+
+[[nodiscard]] std::vector<std::string> resolve_api_key_env_chain(
+    const coding_agent::CliProviderOverrides& overrides,
+    const coding_agent::UserSettings& settings) {
+    if (overrides.api_key_env && !overrides.api_key_env->empty()) {
+        return {*overrides.api_key_env};
+    }
+    if (settings.api_key_env && !settings.api_key_env->empty()) {
+        return *settings.api_key_env;
+    }
+    return {"OPENAI_API_KEY"};
+}
+
+
+[[nodiscard]] coding_agent::ResolvedProviderSettings resolve_cli_provider_settings(
+    std::string_view provider_registry_name,
+    const coding_agent::CliProviderOverrides& overrides,
+    const coding_agent::UserSettings& settings,
+    const std::optional<std::string>& stored_provider,
+    const std::optional<std::string>& stored_model) {
+    const std::string registry_name{provider_registry_name};
+
+    std::string resolved_provider = registry_name;
+    if (registry_name == "fake") {
+        resolved_provider = "fake";
+    } else if (stored_provider) {
+        resolved_provider = *stored_provider;
+    } else if (settings.provider) {
+        resolved_provider = *settings.provider;
+    }
+
+    std::string resolved_model;
+    if (overrides.model) {
+        resolved_model = *overrides.model;
+    } else if (stored_model) {
+        resolved_model = *stored_model;
+    } else if (settings.model) {
+        resolved_model = *settings.model;
+    } else {
+        resolved_model = provider_default_model(registry_name);
+    }
+
+    std::string resolved_base_url;
+    if (overrides.base_url) {
+        resolved_base_url = *overrides.base_url;
+    } else if (settings.base_url) {
+        resolved_base_url = *settings.base_url;
+    } else {
+        resolved_base_url = "https://api.openai.com";
+    }
+
+    const auto resolved_api_key_env_chain = resolve_api_key_env_chain(overrides, settings);
+
+    std::string resolved_auth;
+    if (overrides.auth) {
+        resolved_auth = *overrides.auth;
+    } else if (settings.auth) {
+        resolved_auth = *settings.auth;
+    }
+
+    return coding_agent::ResolvedProviderSettings{
+        .provider_registry_name = registry_name,
+        .provider = std::move(resolved_provider),
+        .api = provider_default_api(registry_name),
+        .model = std::move(resolved_model),
+        .base_url = std::move(resolved_base_url),
+        .api_key_env = resolved_api_key_env_chain.empty() ? "" : resolved_api_key_env_chain.front(),
+        .auth = std::move(resolved_auth),
+        .api_key_env_chain = std::move(resolved_api_key_env_chain),
+    };
+}
+
+
+
+/// Transitional request Model for the CLI path. Configured provider strings
+/// use pi's frozen custom-model defaults instead of claiming catalog-specific
+/// capabilities; the private test seam carries its own sentinel Model.
+[[nodiscard]] ai::Model make_transitional_request_model(
+    const coding_agent::ResolvedProviderSettings& resolved) {
+    ai::Model model{
+        .id = resolved.model,
+        .name = resolved.model,
+        .api = resolved.api,
+        .provider = resolved.provider,
+        .base_url = resolved.base_url,
+        .reasoning = false,
+        .thinking_level_map = std::nullopt,
+        .input = {ai::ModelInput::Text},
+        .cost = {},
+        .context_window = 128000,
+        .max_tokens = 16384,
+        .headers = std::nullopt,
+        .compat = std::nullopt,
+    };
+    return model;
+}
+
+/// Opaque host-facing Model for the private Models injection seam: provider is
+/// the resolved provider identity (settings/stored/`sdk-host`) and the model id
+/// is the `host-client` sentinel for new sessions (the caller sets it on
+/// `resolved.model`), or the stored model id on resume. Metadata-less sessions
+/// keep a truthful, credential-free request Model.
+[[nodiscard]] ai::Model make_injected_models_request_model(
+    const coding_agent::ResolvedProviderSettings& resolved) {
+    ai::Model model{
+        .id = resolved.model,
+        .name = resolved.model,
+        .api = "unknown",
+        .provider = resolved.provider,
+        .base_url = "",
+        .reasoning = false,
+        .thinking_level_map = std::nullopt,
+        .input = {},
+        .cost = {},
+        .context_window = 0,
+        .max_tokens = 0,
+        .headers = std::nullopt,
+        .compat = std::nullopt,
+    };
+    return model;
+}
+
+/// Fabricate a Model for resume metadata re-resolution when the stored model no
+/// longer exists in the live runtime. Keeps session metadata consistent and
+/// lets a legacy/fake provider keep streaming (the TUI auto-selection trigger
+/// is a later module).
+[[nodiscard]] ai::Model fabricate_metadata_model(
+    std::string provider,
+    std::string model_id,
+    const ModelRuntime& runtime) {
+    ai::Model model;
+    model.id = std::move(model_id);
+    model.name = model.id;
+    model.provider = std::move(provider);
+    model.api = "unknown";
+    const auto selected = runtime.provider(model.provider);
+    if (selected) {
+        auto available = selected->models();
+        if (!available.empty()) {
+            model.api = available.front().api;
+            model.base_url = available.front().base_url;
+        }
+    }
+    return model;
+}
+
+/// Frozen runtime default selection for the public SDK path: the default-model
+/// table when the default exists in the runtime, else the first model, else a
+/// fabricated model pointing at the first provider, else an empty Model (the
+/// Agent then uses pi's internal unknown default). Authentication is resolved
+/// at request time; the TUI auto-selection trigger is a later module.
+[[nodiscard]] ai::Model runtime_default_model(const ModelRuntime& runtime) {
+    for (const auto* provider : {"openai-codex", "kimi-coding"}) {
+        if (auto default_id = ModelRuntime::default_model_for_provider(provider)) {
+            if (auto model = runtime.model(provider, *default_id); model) {
+                return *model;
+            }
+        }
+    }
+    auto all = runtime.models();
+    if (!all.empty()) {
+        return all.front();
+    }
+    auto providers = runtime.providers();
+    if (!providers.empty()) {
+        return fabricate_metadata_model(
+            std::string{providers.front()->id()}, std::string{kHostClientModel}, runtime);
+    }
+    return ai::Model{};
+}
+
+/// Resolve the SDK public path's initial model: explicit request model, then
+/// resume re-resolution against the live runtime, then the runtime default.
+[[nodiscard]] ai::Model resolve_sdk_public_model(
+    const AssemblyPlan& plan,
+    const ModelRuntime& runtime,
+    bool is_resume,
+    const std::optional<std::string>& stored_provider,
+    const std::optional<std::string>& stored_model) {
+    if (plan.requested_model) {
+        return *plan.requested_model;
+    }
+    if (is_resume && stored_provider && stored_model) {
+        if (auto model = runtime.model(*stored_provider, *stored_model); model) {
+            return *model;
+        }
+        return fabricate_metadata_model(*stored_provider, *stored_model, runtime);
+    }
+    return runtime_default_model(runtime);
+}
+
+/// Build the session's ModelRuntime: the injected/adopted runtime wins; a
+/// default-created runtime derives its Agent Config Directory from `agent_dir`.
+[[nodiscard]] util::Expected<std::shared_ptr<ModelRuntime>> build_runtime(
+    std::shared_ptr<ModelRuntime> injected,
+    const std::optional<std::filesystem::path>& agent_dir) {
+    if (injected) {
+        return injected;
+    }
+    ModelRuntimeOptions options;
+    options.agent_dir = agent_dir.value_or(std::filesystem::path{});
+    auto created = ModelRuntime::create(std::move(options));
+    if (!created) {
+        return std::unexpected(created.error());
+    }
+    return std::move(*created);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -560,17 +668,9 @@ struct SessionTargetNormalizationOptions {
     }
     plan.target = std::move(*target);
 
-    coding_agent::ProviderRequest pr;
-    pr.model = request.provider_overrides.model;
-    pr.base_url = request.provider_overrides.base_url;
-    if (request.provider_overrides.api_key_env) {
-        pr.api_key_env = std::vector<std::string>{*request.provider_overrides.api_key_env};
-    }
-    pr.auth = request.provider_overrides.auth;
-    pr.provider = request.fake ? std::optional<std::string>{"fake"} : std::nullopt;
-    plan.provider_request = std::move(pr);
-
-    plan.models = nullptr;
+    plan.model_runtime = nullptr;
+    plan.cli_fake = request.fake;
+    plan.cli_overrides = request.provider_overrides;
     plan.host_execution_env = nullptr;
     plan.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = true,
@@ -598,28 +698,8 @@ struct SessionTargetNormalizationOptions {
 
 [[nodiscard]] util::Expected<AssemblyPlan> normalize_sdk(
     CreateAgentSessionOptions options,
-    std::shared_ptr<ai::Models> models = {}) {
-    const bool is_resume =
-        std::holds_alternative<ExplicitResumeSessionTarget>(options.session_target);
-    const bool has_provider_config = options.provider_config.has_value();
-
-    if (!models && !has_provider_config) {
-        if (!is_resume) {
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
-                "no provider_config supplied",
-                "supply provider_config to create an agent session"));
-        }
-        // Resume may reconstruct a client from stored metadata and user settings.
-    }
-    if (has_provider_config && options.provider_config->api_key_env.has_value() &&
-        options.provider_config->api_key_env->empty()) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "api_key_env chain is empty",
-            "provide at least one environment variable name"));
-    }
-
+    std::shared_ptr<ModelRuntime> injected_runtime = {},
+    bool models_injected = false) {
     AssemblyPlan plan;
     plan.profile = CreationProfile::Sdk;
     const bool workspace_explicit = !options.workspace.empty();
@@ -635,16 +715,15 @@ struct SessionTargetNormalizationOptions {
     }
     plan.target = std::move(*target);
 
-    coding_agent::ProviderRequest pr;
-    if (options.provider_config) {
-        pr.provider = options.provider_config->provider;
-        pr.model = options.provider_config->model;
-        pr.base_url = options.provider_config->base_url;
-        pr.api_key_env = options.provider_config->api_key_env;
+    plan.model_runtime = std::move(injected_runtime);
+    if (options.model_runtime) {
+        // A host-injected runtime wins and is never disposed by the session.
+        plan.model_runtime = std::move(options.model_runtime);
+        plan.model_runtime_owned = false;
     }
-    plan.provider_request = std::move(pr);
-
-    plan.models = std::move(models);
+    plan.models_injected = models_injected;
+    plan.requested_model = std::move(options.model);
+    plan.agent_dir = std::move(options.agent_dir);
     plan.host_execution_env = std::move(options.execution_env);
     plan.builtin_tools = options.builtin_tools;
     plan.custom_tools = std::move(options.custom_tools);
@@ -664,6 +743,25 @@ struct SessionTargetNormalizationOptions {
 // ─────────────────────────────────────────────────────────────────────────────
 // Assembly
 // ─────────────────────────────────────────────────────────────────────────────
+
+/// Register the CLI's transitional provider into the runtime: the scripted fake
+/// provider for `--fake`, otherwise the openai-compatible provider composed
+/// from the resolved request Model and env chain (the CLI module later removes
+/// this surface).
+[[nodiscard]] util::ExpectedVoid register_cli_provider(
+    ModelRuntime& runtime,
+    const coding_agent::ResolvedProviderSettings& resolved,
+    const ai::Model& request_model) {
+    if (resolved.provider_registry_name == "fake") {
+        return runtime.register_native_provider(ai::providers::make_scripted_fake_provider());
+    }
+    auto provider = ai::providers::make_openai_compatible_provider(
+        request_model.provider,
+        std::vector<ai::Model>{request_model},
+        resolved.api_key_env_chain,
+        std::make_shared<ai::providers::BoostBeastStreamTransport>());
+    return runtime.register_native_provider(std::move(provider));
+}
 
 [[nodiscard]] util::Expected<CreateAgentSessionResult> run_assembly(
     AssemblyPlan plan,
@@ -720,7 +818,20 @@ struct SessionTargetNormalizationOptions {
     }
     const auto& settings = snapshot.settings;
 
-    // 3. Resolve provider/model metadata.
+    // 3. Resolve the model/auth runtime. An injected runtime wins; otherwise a
+    // runtime is default-created from the Agent Config Directory (or agentDir).
+    std::shared_ptr<ModelRuntime> runtime;
+    if (plan.model_runtime) {
+        runtime = std::move(plan.model_runtime);
+    } else {
+        auto built = build_runtime(nullptr, plan.agent_dir);
+        if (!built) {
+            return std::unexpected(built.error());
+        }
+        runtime = std::move(*built);
+    }
+
+    // 4. Resolve provider/model metadata and the request Model.
     std::optional<std::string> stored_provider;
     std::optional<std::string> stored_model;
     if (is_resume) {
@@ -729,9 +840,9 @@ struct SessionTargetNormalizationOptions {
     }
 
     std::string provider_registry_name;
-    if (plan.provider_request.provider) {
-        provider_registry_name = *plan.provider_request.provider;
-    } else if (plan.models) {
+    if (plan.cli_fake) {
+        provider_registry_name = "fake";
+    } else if (plan.models_injected) {
         provider_registry_name = std::string{kHostClientProvider};
     } else if (is_resume && stored_provider) {
         provider_registry_name = (*stored_provider == "fake") ? "fake" : "openai-compatible";
@@ -739,27 +850,64 @@ struct SessionTargetNormalizationOptions {
         provider_registry_name = "openai-compatible";
     }
 
-    auto resolved = coding_agent::resolve_provider_settings(
-        provider_registry_name,
-        plan.provider_request,
-        settings,
-        stored_provider,
-        stored_model);
-
-    // Metadata-less sessions using the private Models assembly seam record an
-    // opaque sentinel. Explicit or stored metadata is preserved.
-    if (plan.models && !is_resume && !plan.provider_request.model) {
-        resolved.model = std::string{kHostClientModel};
+    std::string resolved_provider;
+    std::string resolved_model;
+    ai::Model request_model;
+    coding_agent::ResolvedProviderSettings resolved;
+    if (plan.profile == CreationProfile::Cli) {
+        resolved = resolve_cli_provider_settings(
+            provider_registry_name, plan.cli_overrides, settings, stored_provider, stored_model);
+        request_model = make_transitional_request_model(resolved);
+        if (auto registered = register_cli_provider(*runtime, resolved, request_model); !registered) {
+            return std::unexpected(registered.error());
+        }
+        resolved_provider = resolved.provider;
+        resolved_model = resolved.model;
+    } else if (plan.models_injected) {
+        // The private test seam keeps the opaque sentinel model unless an
+        // explicit request model is supplied: the resolved provider identity
+        // (settings/stored/`sdk-host`) plus the `host-client` sentinel.
+        if (plan.requested_model) {
+            request_model = *plan.requested_model;
+        } else {
+            resolved = resolve_cli_provider_settings(
+                provider_registry_name,
+                coding_agent::CliProviderOverrides{},
+                settings,
+                stored_provider,
+                stored_model);
+            if (!is_resume) {
+                resolved.model = std::string{kHostClientModel};
+            }
+            request_model = make_injected_models_request_model(resolved);
+        }
+        resolved_provider = request_model.provider;
+        resolved_model = request_model.id;
+    } else {
+        // Public SDK path: the initial model comes from the explicit request
+        // model, resume re-resolution, or the runtime default.
+        request_model = resolve_sdk_public_model(
+            plan, *runtime, is_resume, stored_provider, stored_model);
+        resolved_provider = request_model.provider;
+        resolved_model = request_model.id;
     }
 
     // Resume: explicit provider/model overrides are allowed but warned.
     if (is_resume) {
-        const bool provider_overridden = plan.provider_request.provider.has_value() &&
+        std::optional<std::string> override_provider;
+        std::optional<std::string> override_model;
+        if (plan.profile == CreationProfile::Cli) {
+            override_model = plan.cli_overrides.model;
+        } else if (plan.requested_model) {
+            override_provider = plan.requested_model->provider;
+            override_model = plan.requested_model->id;
+        }
+        const bool provider_overridden = override_provider.has_value() &&
                                          stored_provider.has_value() &&
-                                         *plan.provider_request.provider != *stored_provider;
-        const bool model_overridden = plan.provider_request.model.has_value() &&
+                                         *override_provider != *stored_provider;
+        const bool model_overridden = override_model.has_value() &&
                                       stored_model.has_value() &&
-                                      *plan.provider_request.model != *stored_model;
+                                      *override_model != *stored_model;
         if (provider_overridden || model_overridden) {
             diagnostics.push_back(make_diag(
                 SdkDiagnostic::Severity::Warning,
@@ -769,33 +917,29 @@ struct SessionTargetNormalizationOptions {
                     "was ({}/{}) now ({}/{})",
                     stored_provider.value_or(""),
                     stored_model.value_or(""),
-                    resolved.provider,
-                    resolved.model)));
+                    resolved_provider,
+                    resolved_model)));
         }
     }
 
-    // 4. Build or adopt the private Models-backed stream capability. Public
-    // ModelRuntime injection lands in #345; direct Models injection is limited
-    // to the private assembly seam used by focused session tests.
-    const bool uses_injected_models =
-        plan.models != nullptr &&
-        (!plan.provider_request.provider || plan.provider_request.provider->empty() ||
-         !plan.provider_request.model || plan.provider_request.model->empty());
-    auto request_model = make_transitional_request_model(
-        resolved, uses_injected_models);
-    std::shared_ptr<ai::Models> models = std::move(plan.models);
-    if (!models) {
-        auto composed = build_models(resolved, request_model);
-        if (!composed) {
-            return std::unexpected(composed.error());
-        }
-        models = std::move(*composed);
-    }
-    std::shared_ptr<ai::StreamingChatClient> stream = models;
+    // 5. Build the shared stream capability from the runtime. The runtime is
+    // the session's canonical ModelRuntime and is held for `model_runtime()`.
+    std::shared_ptr<ai::StreamingChatClient> stream = runtime;
 
-    // 5. Resolve execution environment and ownership.
+    // 6. Resolve execution environment and ownership. Secret environment names
+    // come from the runtime's configured models.json apiKey templates plus the
+    // settings api_key_env chain (CLI transitional surface).
     std::shared_ptr<harness::AsyncExecutionEnv> exec_env;
     bool env_owned = true;
+    std::vector<std::string> secret_environment_names = runtime->configured_api_key_env_names();
+    if (settings.api_key_env) {
+        for (const auto& name : *settings.api_key_env) {
+            if (std::find(secret_environment_names.begin(), secret_environment_names.end(), name) ==
+                secret_environment_names.end()) {
+                secret_environment_names.push_back(name);
+            }
+        }
+    }
     if (plan.host_execution_env) {
         exec_env = plan.host_execution_env;
         env_owned = false;
@@ -803,7 +947,7 @@ struct SessionTargetNormalizationOptions {
         exec_env = std::make_shared<harness::AsyncLocalExecutionEnv>(
             workspace,
             plan.builtin_tools.bash,
-            resolved.api_key_env_chain,
+            std::move(secret_environment_names),
             harness::ShellConfig{
                 .shell_path = settings.shell_path,
                 .command_prefix = settings.shell_command_prefix,
@@ -812,7 +956,7 @@ struct SessionTargetNormalizationOptions {
 
     auto cleanup_on_failure = [&]() { cleanup_factory_env(env_owned, exec_env.get()); };
 
-    // 6. Build the tool registry from enabled built-ins plus validated custom tools.
+    // 7. Build the tool registry from enabled built-ins plus validated custom tools.
     agent::AsyncToolRegistry tools;
     std::set<std::string> builtin_names;
 
@@ -869,7 +1013,7 @@ struct SessionTargetNormalizationOptions {
         }
     }
 
-    // 7. Load project resources if requested.
+    // 8. Load project resources if requested.
     std::vector<Skill> skills = std::move(plan.host_skills);
     std::vector<PromptTemplate> templates = std::move(plan.host_prompt_templates);
 
@@ -957,8 +1101,8 @@ struct SessionTargetNormalizationOptions {
         }
         auto published = publish_session(
             std::move(publication),
-            resolved.provider,
-            resolved.model);
+            resolved_provider,
+            resolved_model);
         if (!published) {
             cleanup_on_failure();
             return std::unexpected(published.error());
@@ -966,19 +1110,21 @@ struct SessionTargetNormalizationOptions {
         open = std::move(*published);
     }
 
-    // 9. Assemble the runtime. The Native TUI's Session-owned User Shell is
+    // 10. Assemble the runtime. The Native TUI's Session-owned User Shell is
     // an independent capability instance: it shares only the effective
     // user-level Shell configuration with an enabled model Bash Tool and
     // never widens the shared Execution Environment (ADR 0026).
     RuntimeServices services;
     services.stream = std::move(stream);
+    services.model_runtime = std::move(runtime);
+    services.model_runtime_owned = plan.model_runtime_owned;
     services.env = std::move(exec_env);
     services.env_owned = env_owned;
     services.user_shell = std::move(user_shell);
     if (!services.user_shell && plan.provide_user_shell) {
         services.user_shell = std::make_unique<LocalUserShell>(
             workspace,
-            resolved.api_key_env_chain,
+            settings.api_key_env.value_or(std::vector<std::string>{}),
             harness::ShellConfig{
                 .shell_path = settings.shell_path,
                 .command_prefix = settings.shell_command_prefix,
@@ -996,18 +1142,18 @@ struct SessionTargetNormalizationOptions {
 
     const auto session_path = open.store->path();
     const auto metadata = open.metadata;
-    auto runtime = std::make_unique<AgentSessionRuntime>(
+    auto runtime_handle = std::make_unique<AgentSessionRuntime>(
         std::move(services),
         std::move(open),
         std::move(prompt_processor),
         std::move(runtime_config));
 
     CreateAgentSessionResult result;
-    result.runtime = std::move(runtime);
+    result.runtime = std::move(runtime_handle);
     result.diagnostics = std::move(diagnostics);
     result.session_id = metadata.session_id;
-    result.provider = resolved.provider;
-    result.model = resolved.model;
+    result.provider = resolved_provider;
+    result.model = resolved_model;
     result.session_path = session_path;
     result.workspace = workspace;
     result.metadata = metadata;
@@ -1050,8 +1196,20 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
     CreateAgentSessionOptions options,
     std::shared_ptr<ai::Models> models) {
     const auto snapshot = load_user_settings_snapshot();
+    if (!models) {
+        return finish_creation(normalize_sdk(std::move(options)), snapshot);
+    }
+    ModelRuntimeOptions wrap_options;
+    if (options.agent_dir) {
+        wrap_options.agent_dir = *options.agent_dir;
+    }
+    auto wrapped = ModelRuntime::create_from_models_for_testing(
+        std::move(models), std::move(wrap_options));
+    if (!wrapped) {
+        return std::unexpected(with_settings_fallback_context(wrapped.error(), snapshot));
+    }
     return finish_creation(
-        normalize_sdk(std::move(options), std::move(models)), snapshot);
+        normalize_sdk(std::move(options), std::move(*wrapped), true), snapshot);
 }
 
 util::Expected<CreateAgentSessionResult> SessionFactory::create(
@@ -1059,8 +1217,21 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
     std::shared_ptr<ai::Models> models,
     std::unique_ptr<AsyncUserShell> user_shell) {
     const auto snapshot = load_user_settings_snapshot();
+    if (!models) {
+        return finish_creation(
+            normalize_sdk(std::move(options)), snapshot, std::move(user_shell));
+    }
+    ModelRuntimeOptions wrap_options;
+    if (options.agent_dir) {
+        wrap_options.agent_dir = *options.agent_dir;
+    }
+    auto wrapped = ModelRuntime::create_from_models_for_testing(
+        std::move(models), std::move(wrap_options));
+    if (!wrapped) {
+        return std::unexpected(with_settings_fallback_context(wrapped.error(), snapshot));
+    }
     return finish_creation(
-        normalize_sdk(std::move(options), std::move(models)),
+        normalize_sdk(std::move(options), std::move(*wrapped), true),
         snapshot,
         std::move(user_shell));
 }

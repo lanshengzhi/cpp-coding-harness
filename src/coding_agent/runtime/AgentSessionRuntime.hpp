@@ -101,6 +101,9 @@ public:
     }
     [[nodiscard]] const std::string& provider() const { return session_.metadata.provider; }
     [[nodiscard]] const std::string& model() const { return session_.metadata.model; }
+    [[nodiscard]] std::shared_ptr<ModelRuntime> model_runtime() const {
+        return services_.model_runtime;
+    }
     [[nodiscard]] const std::filesystem::path& workspace() const { return session_.workspace; }
     [[nodiscard]] const std::vector<Skill>& skills() const;
     [[nodiscard]] const std::vector<PromptTemplate>& templates() const;

@@ -832,3 +832,39 @@ TEST_CASE(
 }
 
 
+
+TEST_CASE(
+    "ModelRuntime replaces AuthLoader and ProviderConfigResolution with no aliases",
+    "[architecture][sdk][issue345]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto sdk_header = read_text(
+        source_root / "include" / "cch" / "coding_agent" / "Sdk.hpp");
+    const auto factory_header = read_text(
+        source_root / "src" / "coding_agent" / "runtime" / "SessionFactory.hpp");
+
+    // Removed legacy files and types stay gone with no compatibility aliases.
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "include" / "cch" / "coding_agent" / "AuthLoader.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "AuthLoader.cpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "ProviderConfigResolution.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "ProviderConfigResolution.cpp"));
+    CHECK(sdk_header.find("SdkProviderConfig") == std::string::npos);
+    CHECK(sdk_header.find("provider_config") == std::string::npos);
+
+    // The ModelRuntime seam is the sole public model/auth injection surface.
+    CHECK(std::filesystem::exists(
+        source_root / "include" / "cch" / "coding_agent" / "ModelRuntime.hpp"));
+    CHECK(sdk_header.find("std::shared_ptr<ModelRuntime> model_runtime") !=
+          std::string::npos);
+    CHECK(sdk_header.find("model_runtime()") != std::string::npos);
+    CHECK(sdk_header.find("agent_dir") != std::string::npos);
+    CHECK(sdk_header.find("shared_ptr<ai::Models>") == std::string::npos);
+
+    // The private Models injection seam stays limited to the test-support
+    // factory wrapper; it never appears in the public SDK surface.
+    CHECK(factory_header.find("std::shared_ptr<ai::Models> models") !=
+          std::string::npos);
+}

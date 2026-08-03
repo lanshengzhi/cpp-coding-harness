@@ -42,34 +42,7 @@ namespace {
     co_return std::optional<AuthResult>{};
 }
 
-[[nodiscard]] ProviderAuth make_api_key_auth(
-    std::vector<std::string> environment_names) {
-    ApiKeyAuth api_key;
-    api_key.name = "API key";
-    api_key.check = [environment_names](
-                        const AuthContext& context,
-                        std::optional<ApiKeyCredential> credential)
-        -> boost::asio::awaitable<util::Expected<std::optional<AuthCheck>>> {
-        CCH_TRY(resolved, co_await resolve_api_key(
-            context, std::move(credential), environment_names));
-        if (!resolved) {
-            co_return std::optional<AuthCheck>{};
-        }
-        co_return AuthCheck{
-            .source = resolved->source,
-            .type = AuthType::ApiKey,
-        };
-    };
-    api_key.resolve = [environment_names = std::move(environment_names)](
-                          const AuthContext& context,
-                          std::optional<ApiKeyCredential> credential)
-        -> boost::asio::awaitable<util::Expected<std::optional<AuthResult>>> {
-        CCH_TRY(resolved, co_await resolve_api_key(
-            context, std::move(credential), environment_names));
-        co_return resolved;
-    };
-    return ProviderAuth{.api_key = std::move(api_key)};
-}
+
 
 class OpenAICompatibleProvider final : public ai::Provider {
 public:
@@ -82,7 +55,7 @@ public:
         : provider_id_(std::move(provider_id)),
           models_(std::move(models)),
           stream_(std::move(transport), std::move(config)),
-          auth_(make_api_key_auth(std::move(api_key_env))) {}
+          auth_(make_env_api_key_auth("API key", std::move(api_key_env))) {}
 
     [[nodiscard]] std::string_view id() const noexcept override { return provider_id_; }
     [[nodiscard]] std::string_view name() const noexcept override { return provider_id_; }
@@ -137,7 +110,7 @@ public:
         : provider_id_(std::move(provider_id)),
           models_(std::move(models)),
           adapter_(std::move(transport)),
-          auth_(make_api_key_auth(std::move(api_key_env))) {}
+          auth_(make_env_api_key_auth("API key", std::move(api_key_env))) {}
     OpenAIResponsesProvider(OpenAIResponsesProvider&&) noexcept = default;
     OpenAIResponsesProvider& operator=(OpenAIResponsesProvider&&) noexcept = default;
     ~OpenAIResponsesProvider() override = default;
@@ -181,14 +154,14 @@ public:
         std::vector<std::string> api_key_env,
         std::shared_ptr<StreamTransport> http_transport,
         std::shared_ptr<WebSocketTransport> ws_transport,
-        api::CodexWebSocketCacheConfig cache_config)
+        providers::CodexWebSocketCacheConfig cache_config)
         : provider_id_(std::move(provider_id)),
           models_(std::move(models)),
           adapter_(
               std::move(http_transport),
               std::move(ws_transport),
               cache_config),
-          auth_(make_api_key_auth(std::move(api_key_env))) {}
+          auth_(make_env_api_key_auth("API key", std::move(api_key_env))) {}
     OpenAICodexResponsesProvider(OpenAICodexResponsesProvider&&) noexcept = default;
     OpenAICodexResponsesProvider& operator=(OpenAICodexResponsesProvider&&) noexcept = default;
     ~OpenAICodexResponsesProvider() override = default;
@@ -226,6 +199,36 @@ private:
 
 } // namespace
 
+[[nodiscard]] ProviderAuth make_env_api_key_auth(
+    std::string provider_name,
+    std::vector<std::string> environment_names) {
+    ApiKeyAuth api_key;
+    api_key.name = std::move(provider_name);
+    api_key.check = [environment_names](
+                        const AuthContext& context,
+                        std::optional<ApiKeyCredential> credential)
+        -> boost::asio::awaitable<util::Expected<std::optional<AuthCheck>>> {
+        CCH_TRY(resolved, co_await resolve_api_key(
+            context, std::move(credential), environment_names));
+        if (!resolved) {
+            co_return std::optional<AuthCheck>{};
+        }
+        co_return AuthCheck{
+            .source = resolved->source,
+            .type = AuthType::ApiKey,
+        };
+    };
+    api_key.resolve = [environment_names = std::move(environment_names)](
+                          const AuthContext& context,
+                          std::optional<ApiKeyCredential> credential)
+        -> boost::asio::awaitable<util::Expected<std::optional<AuthResult>>> {
+        CCH_TRY(resolved, co_await resolve_api_key(
+            context, std::move(credential), environment_names));
+        co_return resolved;
+    };
+    return ProviderAuth{.api_key = std::move(api_key)};
+}
+
 std::shared_ptr<ai::Provider> make_openai_compatible_provider(
     std::string provider_id,
     std::vector<ai::Model> models,
@@ -258,7 +261,7 @@ std::shared_ptr<ai::Provider> make_openai_codex_responses_provider(
     std::vector<std::string> api_key_env,
     std::shared_ptr<StreamTransport> http_transport,
     std::shared_ptr<WebSocketTransport> ws_transport,
-    api::CodexWebSocketCacheConfig cache_config) {
+    providers::CodexWebSocketCacheConfig cache_config) {
     return std::make_shared<OpenAICodexResponsesProvider>(
         std::move(provider_id),
         std::move(models),

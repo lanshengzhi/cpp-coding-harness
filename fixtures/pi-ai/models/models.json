@@ -1,0 +1,22 @@
+{
+  "providers": {
+    "deepseek": {
+      "name": "DeepSeek",
+      "baseUrl": "https://api.deepseek.example/v1",
+      "api": "openai-responses",
+      "apiKey": "dummy-deepseek-key",
+      "models": [
+        {
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek V4 Flash",
+          "reasoning": true,
+          "thinkingLevelMap": { "high": "max" },
+          "input": ["text"],
+          "cost": { "input": 2.0, "output": 4.0, "cacheRead": 1.0, "cacheWrite": 3.0 },
+          "contextWindow": 131072,
+          "maxTokens": 32768
+        }
+      ]
+    }
+  }
+}

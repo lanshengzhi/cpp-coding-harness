@@ -80,7 +80,7 @@ struct CodexHarness {
 
 [[nodiscard]] CodexHarness make_codex_harness(
     const ai::Model& model,
-    ai::api::CodexWebSocketCacheConfig cache_config = {}) {
+    ai::providers::CodexWebSocketCacheConfig cache_config = {}) {
     CodexHarness harness;
     harness.http = std::make_shared<ScriptedTransport>();
     harness.ws = std::make_shared<ScriptedWebSocketTransport>();
@@ -681,7 +681,7 @@ TEST_CASE(
 TEST_CASE(
     "Codex opens a fresh socket after the idle close window",
     "[ai][provider][codex][issue342]") {
-    ai::api::CodexWebSocketCacheConfig config;
+    ai::providers::CodexWebSocketCacheConfig config;
     config.idle_close = std::chrono::milliseconds{0};
     auto harness = make_codex_harness(codex_model(), config);
     const auto make_session = [] {
@@ -710,7 +710,7 @@ TEST_CASE(
     CHECK(harness.ws->requests.size() == 2);
     CHECK(harness.ws->sockets.size() == 2);
 
-    ai::api::CodexWebSocketCacheConfig age_config;
+    ai::providers::CodexWebSocketCacheConfig age_config;
     age_config.max_age = std::chrono::milliseconds{0};
     auto age_harness = make_codex_harness(codex_model(), age_config);
     age_harness.ws->connect_scripts = {

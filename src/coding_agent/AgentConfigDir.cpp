@@ -49,6 +49,10 @@ std::filesystem::path auth_file_path() {
     return in_agent_config_dir("auth.json");
 }
 
+std::filesystem::path models_file_path() {
+    return in_agent_config_dir("models.json");
+}
+
 std::filesystem::path settings_file_path() {
     return in_agent_config_dir("settings.json");
 }

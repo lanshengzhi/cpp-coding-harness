@@ -656,6 +656,9 @@ AgentSessionRuntime::release_close_resources() noexcept {
     session_.store.reset();
     services_.stream.reset();
     services_.user_shell.reset();
+    if (services_.model_runtime_owned) {
+        services_.model_runtime.reset();
+    }
 
     if (services_.env_owned) {
         return std::move(services_.env);

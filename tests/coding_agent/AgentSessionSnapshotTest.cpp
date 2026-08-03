@@ -61,12 +61,7 @@ struct TestPaths {
     tests::ModelsSessionOptions options;
     options.session_target = std::move(target);
     options.workspace = paths.workspace.path();
-    options.provider_config = coding_agent::SdkProviderConfig{
-        .provider = "fake",
-        .model = "fake-model",
-        .base_url = std::nullopt,
-        .api_key_env = std::nullopt,
-    };
+    options.model = cch::tests::sdk_request_model("fake", "fake-model");
     options.models = cch::tests::models_from_stream(std::move(client));
     return options;
 }

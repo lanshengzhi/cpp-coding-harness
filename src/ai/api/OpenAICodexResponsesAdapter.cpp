@@ -484,7 +484,7 @@ struct CodexSocketEntry {
 /// holding the io_context open.
 class CodexWebSocketCache {
 public:
-    explicit CodexWebSocketCache(CodexWebSocketCacheConfig config)
+    explicit CodexWebSocketCache(providers::CodexWebSocketCacheConfig config)
         : config_(config) {}
 
     ~CodexWebSocketCache() {
@@ -609,7 +609,7 @@ private:
         std::map<std::string, std::shared_ptr<CodexSocketEntry>, std::less<>>,
         std::less<>>
         sessions_;
-    CodexWebSocketCacheConfig config_;
+    providers::CodexWebSocketCacheConfig config_;
 };
 
 // ── Continuation / delta ──────────────────────────────────────────────────
@@ -915,7 +915,7 @@ boost::asio::awaitable<util::Expected<WsAttemptOutcome>> run_ws_attempt(
 } // namespace
 
 struct OpenAICodexResponsesAdapter::Impl {
-    explicit Impl(CodexWebSocketCacheConfig config)
+    explicit Impl(providers::CodexWebSocketCacheConfig config)
         : cache(std::move(config)) {}
 
     CodexWebSocketCache cache;
@@ -925,7 +925,7 @@ struct OpenAICodexResponsesAdapter::Impl {
 OpenAICodexResponsesAdapter::OpenAICodexResponsesAdapter(
     std::shared_ptr<providers::StreamTransport> http_transport,
     std::shared_ptr<providers::WebSocketTransport> ws_transport,
-    CodexWebSocketCacheConfig cache_config)
+    providers::CodexWebSocketCacheConfig cache_config)
     : http_transport_(std::move(http_transport)),
       ws_transport_(std::move(ws_transport)),
       impl_(std::make_unique<Impl>(cache_config)) {}

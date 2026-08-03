@@ -14,6 +14,14 @@
 
 namespace cch::ai::providers {
 
+/// Socket-reuse policy for the Codex WebSocket session cache, mirroring pi's
+/// 5-minute idle close and 55-minute hard connection age. Tests shrink these
+/// to make expiry deterministic.
+struct CodexWebSocketCacheConfig {
+    std::chrono::milliseconds idle_close{std::chrono::minutes{5}};
+    std::chrono::milliseconds max_age{std::chrono::minutes{55}};
+};
+
 /// One WebSocket connection request. The connect timeout bounds the TCP/TLS
 /// handshake; the idle timeout bounds each wait for the next text frame and is
 /// re-armed per frame, matching pi's WS idle timeout.

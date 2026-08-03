@@ -22,6 +22,13 @@ namespace cch::ai::providers {
     std::shared_ptr<StreamTransport> transport,
     OpenAIStreamConfig config = {});
 
+/// Env-chain ApiKeyAuth (pi `envApiKeyAuth`): resolves a stored credential,
+/// then the first set environment variable in `environment_names`. Used by the
+/// composed kimi-coding built-in; shared by the private providers above.
+[[nodiscard]] ai::ProviderAuth make_env_api_key_auth(
+    std::string provider_name,
+    std::vector<std::string> environment_names);
+
 /// Private composition seam for config-only Providers whose Model selects the
 /// exact `openai-responses` adapter. #345 makes this path user-reachable.
 [[nodiscard]] std::shared_ptr<ai::Provider> make_openai_responses_provider(
@@ -39,6 +46,6 @@ namespace cch::ai::providers {
     std::vector<std::string> api_key_env,
     std::shared_ptr<StreamTransport> http_transport,
     std::shared_ptr<WebSocketTransport> ws_transport,
-    api::CodexWebSocketCacheConfig cache_config = {});
+    providers::CodexWebSocketCacheConfig cache_config = {});
 
 } // namespace cch::ai::providers

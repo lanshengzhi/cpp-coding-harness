@@ -1468,11 +1468,8 @@ TEST_CASE(
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.provider_config = coding_agent::SdkProviderConfig{
-        .provider = "openai-compatible",
-        .model = "gpt-test",
-        .base_url = "https://api.example/v1",
-    };
+    opts.model = cch::tests::sdk_request_model(
+        "openai-compatible", "gpt-test", "https://api.example/v1");
     opts.models = cch::tests::models_from_stream(cch::tests::openai_stream(
         transport,
         std::move(provider)));
@@ -1535,11 +1532,8 @@ TEST_CASE(
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.provider_config = coding_agent::SdkProviderConfig{
-        .provider = "openai-compatible",
-        .model = "gpt-test",
-        .base_url = "https://api.example/v1",
-    };
+    opts.model = cch::tests::sdk_request_model(
+        "openai-compatible", "gpt-test", "https://api.example/v1");
     opts.models = cch::tests::models_from_stream(cch::tests::openai_stream(
         transport,
         std::move(provider), "sk-test-api-key"));
@@ -1630,11 +1624,8 @@ TEST_CASE(
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.provider_config = coding_agent::SdkProviderConfig{
-        .provider = "openai-compatible",
-        .model = "gpt-test",
-        .base_url = "https://api.example/v1",
-    };
+    opts.model = cch::tests::sdk_request_model(
+        "openai-compatible", "gpt-test", "https://api.example/v1");
     opts.models = cch::tests::models_from_stream(cch::tests::openai_stream(
         transport,
         std::move(provider), "sk-test-api-key"));
@@ -1854,11 +1845,8 @@ TEST_CASE(
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.provider_config = coding_agent::SdkProviderConfig{
-        .provider = "openai-compatible",
-        .model = "gpt-test",
-        .base_url = "https://api.example/v1",
-    };
+    opts.model = cch::tests::sdk_request_model(
+        "openai-compatible", "gpt-test", "https://api.example/v1");
     opts.models = cch::tests::models_from_stream(cch::tests::openai_stream(
         transport,
         std::move(provider), "sk-test-api-key"));
@@ -2157,11 +2145,8 @@ TEST_CASE(
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.provider_config = coding_agent::SdkProviderConfig{
-        .provider = "openai-compatible",
-        .model = "gpt-test",
-        .base_url = "https://api.example/v1",
-    };
+    opts.model = cch::tests::sdk_request_model(
+        "openai-compatible", "gpt-test", "https://api.example/v1");
     opts.models = cch::tests::models_from_stream(cch::tests::openai_stream(
         transport,
         std::move(provider), "sk-test-api-key"));
@@ -2521,12 +2506,13 @@ TEST_CASE("SessionFactory SDK creation failure after User Settings fallback keep
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    // No provider_config: public SDK normalization fails.
+    // A public SDK creation failure (trust store inside the workspace) keeps
+    // the settings fallback warning in the error context.
+    opts.trust_store_path = paths.workspace.path();
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().code == util::ErrorCode::Validation);
-    CHECK(result.error().message == "no provider_config supplied");
     REQUIRE(result.error().context.has_value());
     CHECK(result.error().context->find("could not load user settings") != std::string::npos);
 }
@@ -2830,39 +2816,34 @@ TEST_CASE("SDK default creation fails when the Agent Config Directory is unresol
 }
 #endif
 
-TEST_CASE("create_agent_session fails without provider_config", "[sdk][u2][issue338]") {
-    TestPaths paths;
-
-    tests::ModelsSessionOptions opts;
-    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
-    opts.workspace = paths.workspace.path();
-    // No provider_config
-
-    auto result = coding_agent::create_agent_session(std::move(opts));
-    REQUIRE_FALSE(result.has_value());
-    CHECK(result.error().code == util::ErrorCode::Validation);
-}
-
-TEST_CASE(
-    "SDK provider_config api_key_env chain accepts first set fallback",
-    "[sdk][u2][api-key-env][issue336]") {
+TEST_CASE("SDK public session creation default-creates a ModelRuntime", "[sdk][u2][issue345]") {
     TestPaths paths;
     cch::tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
     home_guard.set(home.path().string());
-    tests::EnvVarGuard first_key{"CCH_SDK_CHAIN_FIRST"};
-    tests::EnvVarGuard second_key{"CCH_SDK_CHAIN_SECOND"};
-    first_key.unset();
-    second_key.set("second-secret");
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.provider_config = coding_agent::SdkProviderConfig{
-        .provider = "fake",
-        .model = "fake-model",
-        .api_key_env = std::vector<std::string>{"CCH_SDK_CHAIN_FIRST", "CCH_SDK_CHAIN_SECOND"},
-    };
+
+    auto result = coding_agent::create_agent_session(std::move(opts));
+    REQUIRE(result.has_value());
+    REQUIRE(result->session->model_runtime() != nullptr);
+    CHECK(result->session->model_runtime()->agent_dir() == (home.path() / ".pi" / "agent"));
+    result->session->close();
+}
+
+TEST_CASE("SDK new session carries the complete explicit request model", "[sdk][u2][api-key-env][issue336]") {
+    TestPaths paths;
+    cch::tests::TempWorkspace home;
+    tests::EnvVarGuard home_guard{"HOME"};
+    home_guard.set(home.path().string());
+
+    tests::ModelsSessionOptions opts;
+    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    opts.workspace = paths.workspace.path();
+    opts.model = cch::tests::sdk_request_model("fake", "fake-model");
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -2877,25 +2858,32 @@ TEST_CASE(
     result->session->close();
 }
 
-TEST_CASE("SDK provider_config resolves an unset API key chain at request time", "[sdk][u2][api-key-env]") {
+TEST_CASE("SDK config-only provider without apiKey fails at request time", "[sdk][u2][api-key-env][issue345]") {
     TestPaths paths;
     cch::tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
     home_guard.set(home.path().string());
-    tests::EnvVarGuard first_key{"CCH_SDK_CHAIN_UNSET_FIRST"};
-    tests::EnvVarGuard second_key{"CCH_SDK_CHAIN_UNSET_SECOND"};
-    first_key.unset();
-    second_key.unset();
+    home.write(".pi/agent/models.json", R"({
+      "providers": {
+        "deepseek": {
+          "baseUrl": "https://api.deepseek.example/v1",
+          "api": "openai-responses",
+          "models": [{"id": "deepseek-v4-flash"}]
+        }
+      }
+    })");
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.provider_config = coding_agent::SdkProviderConfig{
-        .provider = "openai-compatible",
-        .model = "gpt-test",
-        .base_url = "https://api.example/v1",
-        .api_key_env = std::vector<std::string>{"CCH_SDK_CHAIN_UNSET_FIRST", "CCH_SDK_CHAIN_UNSET_SECOND"},
-    };
+    ai::Model deepseek;
+    deepseek.id = "deepseek-v4-flash";
+    deepseek.name = "deepseek-v4-flash";
+    deepseek.api = "openai-responses";
+    deepseek.provider = "deepseek";
+    deepseek.base_url = "https://api.deepseek.example/v1";
+    deepseek.input = {ai::ModelInput::Text};
+    opts.model = std::move(deepseek);
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -2909,51 +2897,18 @@ TEST_CASE("SDK provider_config resolves an unset API key chain at request time",
     result->session->close();
 }
 
-TEST_CASE("SDK provider_config api_key_env chain rejects empty chain", "[sdk][u2][api-key-env]") {
+TEST_CASE("SDK resume re-resolves the stored model against the live runtime", "[sdk][u2][api-key-env][issue345]") {
     TestPaths paths;
     cch::tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
     home_guard.set(home.path().string());
-
-    tests::ModelsSessionOptions opts;
-    opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
-    opts.workspace = paths.workspace.path();
-    opts.provider_config = coding_agent::SdkProviderConfig{
-        .provider = "fake",
-        .model = "fake-model",
-        .api_key_env = std::vector<std::string>{},
-    };
-
-    auto result = coding_agent::create_agent_session(std::move(opts));
-    REQUIRE_FALSE(result.has_value());
-    CHECK(result.error().code == util::ErrorCode::Validation);
-    CHECK(result.error().message.find("api_key_env chain is empty") != std::string::npos);
-}
-
-TEST_CASE("SDK resume uses config-derived api_key_env chain", "[sdk][u2][api-key-env]") {
-    TestPaths paths;
-    cch::tests::TempWorkspace home;
-    tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard first_key{"CCH_SDK_RESUME_FIRST"};
-    tests::EnvVarGuard second_key{"CCH_SDK_RESUME_SECOND"};
-    home_guard.set(home.path().string());
-    first_key.unset();
-    second_key.set("resume-secret");
-
-    home.write(
-        ".pi/agent/settings.json",
-        R"({"provider":"fake","model":"fake-model","api_key_env":["CCH_SDK_RESUME_FIRST","CCH_SDK_RESUME_SECOND"]})");
 
     {
         tests::ModelsSessionOptions opts;
         opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
         opts.workspace = paths.workspace.path();
-        opts.provider_config = coding_agent::SdkProviderConfig{
-            .provider = "fake",
-            .model = "fake-model",
-            .api_key_env = std::vector<std::string>{"CCH_SDK_RESUME_FIRST", "CCH_SDK_RESUME_SECOND"},
-        };
-
+        opts.model = cch::tests::sdk_request_model("fake", "fake-model");
+        opts.models = ai::providers::make_scripted_fake_models();
         auto result = coding_agent::create_agent_session(std::move(opts));
         REQUIRE(result.has_value());
         result->session->close();
@@ -2962,6 +2917,7 @@ TEST_CASE("SDK resume uses config-derived api_key_env chain", "[sdk][u2][api-key
     tests::ModelsSessionOptions resume_opts;
     resume_opts.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
     resume_opts.workspace = paths.workspace.path();
+    resume_opts.models = ai::providers::make_scripted_fake_models();
 
     auto resume_result = coding_agent::create_agent_session(std::move(resume_opts));
     REQUIRE(resume_result.has_value());
@@ -4182,10 +4138,7 @@ TEST_CASE("SDK bounds auto-discovered resource diagnostics", "[sdk][project-reso
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.provider_config = coding_agent::SdkProviderConfig{
-        .provider = "fake",
-        .model = "fake-model",
-    };
+    opts.model = cch::tests::sdk_request_model("fake", "fake-model");
     opts.load_project_resources = true;
     opts.default_project_trust = coding_agent::DefaultProjectTrust::Always;
 
@@ -5247,10 +5200,7 @@ TEST_CASE("private Models resume without override retains stored metadata", "[sd
         opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
         opts.workspace = paths.workspace.path();
         opts.models = ai::providers::make_scripted_fake_models();
-        opts.provider_config = coding_agent::SdkProviderConfig{
-            .provider = "fake",
-            .model = "fake-model",
-        };
+        opts.model = cch::tests::sdk_request_model("fake", "fake-model");
 
         auto result = coding_agent::create_agent_session(std::move(opts));
         REQUIRE(result.has_value());
@@ -5300,10 +5250,7 @@ TEST_CASE("SDK resume with explicit provider/model override reports diagnostic",
         opts.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
         opts.workspace = paths.workspace.path();
         opts.models = ai::providers::make_scripted_fake_models();
-        opts.provider_config = coding_agent::SdkProviderConfig{
-            .provider = "openai-compatible",
-            .model = "gpt-4o",
-        };
+        opts.model = cch::tests::sdk_request_model("openai-compatible", "gpt-4o");
 
         auto result = coding_agent::create_agent_session(std::move(opts));
         REQUIRE(result.has_value());
@@ -5322,10 +5269,7 @@ TEST_CASE("SDK resume with explicit model override alone reports diagnostic", "[
         opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
         opts.workspace = paths.workspace.path();
         opts.models = ai::providers::make_scripted_fake_models();
-        opts.provider_config = coding_agent::SdkProviderConfig{
-            .provider = "openai-compatible",
-            .model = "gpt-4.1-mini",
-        };
+        opts.model = cch::tests::sdk_request_model("openai-compatible", "gpt-4.1-mini");
 
         auto result = coding_agent::create_agent_session(std::move(opts));
         REQUIRE(result.has_value());
@@ -5337,10 +5281,7 @@ TEST_CASE("SDK resume with explicit model override alone reports diagnostic", "[
         opts.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
         opts.workspace = paths.workspace.path();
         opts.models = ai::providers::make_scripted_fake_models();
-        opts.provider_config = coding_agent::SdkProviderConfig{
-            .provider = "openai-compatible",
-            .model = "gpt-4o",
-        };
+        opts.model = cch::tests::sdk_request_model("openai-compatible", "gpt-4o");
 
         auto result = coding_agent::create_agent_session(std::move(opts));
         REQUIRE(result.has_value());

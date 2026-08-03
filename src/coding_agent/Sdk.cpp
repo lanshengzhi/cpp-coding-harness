@@ -400,6 +400,10 @@ const std::string& AgentSession::model() const {
     return impl_ && impl_->runtime ? impl_->runtime->model() : empty;
 }
 
+std::shared_ptr<ModelRuntime> AgentSession::model_runtime() const {
+    return impl_ && impl_->runtime ? impl_->runtime->model_runtime() : nullptr;
+}
+
 const std::filesystem::path& AgentSession::workspace() const {
     static const std::filesystem::path empty;
     return impl_ && impl_->runtime ? impl_->runtime->workspace() : empty;

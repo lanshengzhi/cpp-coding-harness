@@ -3,7 +3,9 @@
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/agent/AgentTool.hpp>
 #include <cch/ai/Content.hpp>
+#include <cch/ai/Model.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
+#include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
@@ -45,26 +47,13 @@ struct SdkDiagnostic {
     enum class Severity { Info, Warning, Error };
 
     Severity severity{Severity::Warning};
-    /// Stable machine-readable code (e.g. "provider_config_fallback",
-    /// "resource:project_skills", "duplicate:duplicate_skill_skipped").
+    /// Stable machine-readable code (e.g. "resource:project_skills",
+    /// "duplicate:duplicate_skill_skipped").
     std::string code;
     /// Human-readable message.
     std::string message;
     /// Associated filesystem path, if any.
     std::optional<std::string> path;
-};
-
-// ── Provider configuration ───────────────────────────────────────────────────
-
-/// Transitional configuration for composing the default Provider and complete
-/// request Model. Authentication is resolved by Models at request time.
-struct SdkProviderConfig {
-    std::string provider{};
-    std::string model{};
-    std::optional<std::string> base_url{std::nullopt};
-    /// Environment variable chain to resolve the API key from.
-    /// The first set and non-empty variable wins.
-    std::optional<std::vector<std::string>> api_key_env{std::nullopt};
 };
 
 // ── Built-in tool selection ──────────────────────────────────────────────────
@@ -116,19 +105,28 @@ using SessionTarget = std::variant<
 /// resumes, if `workspace` is explicit and differs from the stored session
 /// workspace, creation fails.
 ///
-/// Provider: provider_config is the temporary default assembly input until
-/// ModelRuntime composition lands in #345. New-session creation requires it;
-/// resume may reconstruct provider configuration from stored metadata and User
-/// Settings.
+/// Model: the initial model for the new session. When absent, the runtime
+/// default applies; a resume re-resolves the stored model against the live
+/// runtime.
 struct CreateAgentSessionOptions {
     // ── Session target ───────────────────────────────────────────────────
     SessionTarget session_target{};
     std::filesystem::path workspace;
 
-    // ── Provider configuration ───────────────────────────────────────────
-    /// Transitional provider composition input. ModelRuntime replaces this
-    /// branch in #345.
-    std::optional<SdkProviderConfig> provider_config;
+    // ── Model / auth runtime ──────────────────────────────────────────────
+    /// Canonical model/auth runtime (ADR 0029/0030). Nullable: when absent a
+    /// runtime is default-created from the Agent Config Directory for this
+    /// session. An injected runtime wins over `agent_dir` path derivation,
+    /// is reusable across sessions, and has no dispose ceremony.
+    std::shared_ptr<ModelRuntime> model_runtime{nullptr};
+    /// Agent Config Directory override for the default-created runtime only
+    /// (SDK `agentDir`). Ignored when `model_runtime` is injected. When
+    /// absent, the default `agent_config_dir()` applies.
+    std::optional<std::filesystem::path> agent_dir{std::nullopt};
+    /// Initial model for the new session. When absent, the runtime default
+    /// applies (frozen default-model table, then the first available model;
+    /// a resume re-resolves the stored model against the live runtime).
+    std::optional<ai::Model> model{std::nullopt};
 
     // ── Host-provided capabilities ───────────────────────────────────────
     /// Host-provided execution environment. If not set, a local execution
@@ -365,6 +363,11 @@ public:
 
     /// Resolved model name.
     [[nodiscard]] const std::string& model() const;
+
+    /// The session's canonical model/auth runtime (ADR 0029). Held as a
+    /// `shared_ptr`; runtimes are reusable across sessions and expose live
+    /// `refresh()`/`login()`/`logout()` to all holders.
+    [[nodiscard]] std::shared_ptr<ModelRuntime> model_runtime() const;
 
     /// Workspace path.
     [[nodiscard]] const std::filesystem::path& workspace() const;

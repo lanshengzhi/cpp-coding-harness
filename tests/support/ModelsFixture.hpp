@@ -169,6 +169,30 @@ struct ModelsSessionOptions : coding_agent::CreateAgentSessionOptions {
     std::shared_ptr<ai::Models> models;
 };
 
+/// Transitional request Model for SDK session tests that no longer set
+/// `provider_config`: the same complete, credential-free shape the removed
+/// branch produced (openai-completions, 128k context, 16k max tokens).
+inline ai::Model sdk_request_model(
+    std::string provider,
+    std::string model_id,
+    std::optional<std::string> base_url = std::nullopt) {
+    ai::Model model;
+    model.id = std::move(model_id);
+    model.name = model.id;
+    model.api = "openai-completions";
+    model.provider = std::move(provider);
+    model.base_url = base_url.value_or("");
+    model.reasoning = false;
+    model.thinking_level_map = std::nullopt;
+    model.input = {ai::ModelInput::Text};
+    model.cost = {};
+    model.context_window = 128000;
+    model.max_tokens = 16384;
+    model.headers = std::nullopt;
+    model.compat = std::nullopt;
+    return model;
+}
+
 inline util::Expected<coding_agent::CreateAgentSessionResult> create_agent_session(
     ModelsSessionOptions options) {
     auto models = std::move(options.models);

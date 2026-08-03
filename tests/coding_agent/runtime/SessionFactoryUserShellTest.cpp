@@ -6,6 +6,7 @@
 
 #include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
+#include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/UserBashTestHooks.hpp"
 
@@ -118,10 +119,7 @@ TEST_CASE(
     coding_agent::CreateAgentSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.provider_config = coding_agent::SdkProviderConfig{
-        .provider = "fake",
-        .model = "fake-model",
-    };
+    options.model = cch::tests::sdk_request_model("fake", "fake-model");
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
     CHECK_FALSE(

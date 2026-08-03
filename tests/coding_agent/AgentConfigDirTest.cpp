@@ -19,6 +19,7 @@ TEST_CASE(
     const cch::tests::EnvVarGuard override_dir{"PI_CODING_AGENT_DIR", std::string{"/tmp/cch-test-agent-dir"}};
     CHECK(cch::coding_agent::auth_file_path() == std::filesystem::path{"/tmp/cch-test-agent-dir/auth.json"});
     CHECK(cch::coding_agent::settings_file_path() == std::filesystem::path{"/tmp/cch-test-agent-dir/settings.json"});
+    CHECK(cch::coding_agent::models_file_path() == std::filesystem::path{"/tmp/cch-test-agent-dir/models.json"});
     CHECK(cch::coding_agent::trust_store_file_path() == std::filesystem::path{"/tmp/cch-test-agent-dir/trust.json"});
     CHECK(cch::coding_agent::sessions_root_path() == std::filesystem::path{"/tmp/cch-test-agent-dir/sessions"});
     CHECK(cch::coding_agent::themes_root_path() == std::filesystem::path{"/tmp/cch-test-agent-dir/themes"});
@@ -51,6 +52,7 @@ TEST_CASE("agent_config_dir defaults directly to the pi home layout", "[coding_a
     const cch::tests::EnvVarGuard home{"HOME", std::string{"/tmp/test-home"}};
     CHECK(cch::coding_agent::agent_config_dir() == "/tmp/test-home/.pi/agent");
     CHECK(cch::coding_agent::settings_file_path() == "/tmp/test-home/.pi/agent/settings.json");
+    CHECK(cch::coding_agent::models_file_path() == "/tmp/test-home/.pi/agent/models.json");
     CHECK(cch::coding_agent::auth_file_path() == "/tmp/test-home/.pi/agent/auth.json");
     CHECK(cch::coding_agent::trust_store_file_path() == "/tmp/test-home/.pi/agent/trust.json");
 #else

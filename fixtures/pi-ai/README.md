@@ -124,3 +124,22 @@ frozen baseline, with the shared device-poll helper from `auth/oauth/device-code
   four attempts, immediate failure on 401/403/`invalid_grant`, 429/5xx and transport retries, and `toAuth`
   deriving `Authorization: Bearer <access>`). All credential-like values are distinguishable `dummy-*` values;
   no fixture value came from a live service.
+
+Issue #345 adds the `ModelRuntime` composition seam and the first full vertical path (models.json → config-only
+provider → stream):
+
+- `models/models.json` pins the DeepSeek `deepseek-v4-flash` custom-model upsert: a config-only `deepseek`
+  provider (`baseUrl`, `api`, literal `apiKey`, one custom model with `reasoning`/`thinkingLevelMap`/`input`/
+  `cost`) composed by `ModelRuntime.refresh()` purely from config plus the privately registered
+  `openai-responses` adapter. The fixture drives the vertical-path test in `ModelRuntimeTest`, which streams
+  through the `ModelRuntime` seam with an injected scripted transport and matches the #340
+  `wire/openai-responses-deepseek-*` goldens byte-for-byte (request body, event sequence, usage). All
+  credential-like values are distinguishable `dummy-*` values.
+- The `ModelRuntime` tests cover built-in/config composition (Codex 7 + Kimi 4 catalogs, same-ID custom-model
+  upsert, model overrides, built-in fallback on per-provider composition failure), `refresh()` failure
+  semantics (invalid config → empty user config + diagnostics; no global rollback), config-value resolution
+  (literal, `$VAR`/`${VAR}` env templates, `!command`), login/logout delegation with composition-errors-map
+  refresh failures that never fail the call, the availability snapshot, and the frozen default-model table
+  (`openai-codex → gpt-5.5`, `kimi-coding → kimi-for-coding`; config-only deepseek takes the "no default
+  model" branch). The fixture-agnostic ModelConfig/ProviderComposer tests pin the parsing/validation and
+  composition contracts against the same frozen baseline.
