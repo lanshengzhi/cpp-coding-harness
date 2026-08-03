@@ -117,12 +117,15 @@ add_library(cch_ai
     src/ai/Models.cpp
     src/ai/SimpleOptions.cpp
     src/ai/Usage.cpp
+    src/ai/api/AnthropicMessagesAdapter.cpp
     src/ai/api/MessageConversion.cpp
     src/ai/api/OpenAIResponsesAdapter.cpp
     src/ai/api/Termination.cpp
     src/ai/api/UsageNormalization.cpp
     src/ai/providers/BoostBeastStreamTransport.cpp
     src/ai/providers/FakeProvider.cpp
+    src/ai/providers/KimiCatalog.cpp
+    src/ai/providers/KimiProvider.cpp
     src/ai/providers/OpenAIChatClient.cpp
     src/ai/providers/OpenAIProvider.cpp
     src/ai/providers/RetryPolicy.cpp
@@ -280,6 +283,7 @@ if(CCH_BUILD_TESTS)
         tests/support/ImageFixture.hpp
         tests/support/PseudoTerminal.hpp
         tests/support/GatedChatClient.hpp
+        tests/support/StreamAdapterFixture.hpp
         tests/support/ToolArgumentCompatibilityFixture.hpp
         tests/architecture/ArchitectureSurfaceScanTest.cpp
         tests/architecture/CMakeDependencyTest.cpp
@@ -299,6 +303,7 @@ if(CCH_BUILD_TESTS)
         tests/ai/UsageTest.cpp
         tests/ai/providers/BoostBeastStreamTransportTest.cpp
         tests/ai/providers/FakeProviderTest.cpp
+        tests/ai/api/AnthropicMessagesAdapterTest.cpp
         tests/ai/api/OpenAIResponsesAdapterTest.cpp
         tests/ai/providers/OpenAIChatClientTest.cpp
         tests/ai/providers/SseParserTest.cpp

@@ -36,6 +36,20 @@ Issue #340 adds the DeepSeek `openai-responses` wire goldens:
   cached/reasoning usage fields. `wire/openai-responses-deepseek-ts-events.json` is the corresponding TS assistant
   event-sequence snapshot compared to the C++ output.
 
+Issue #341 adds the frozen four-model Kimi catalog from the published `pi-ai@0.83.0` shard and the Kimi
+`anthropic-messages` wire goldens. The catalog keeps `forceAdaptiveThinking` on all four models,
+`allowEmptySignature` only on `k3` and `kimi-for-coding`, and `off: null` on the K3 variants.
+
+- `wire/anthropic-messages-kimi-ts-request.json` is the canonical byte snapshot of the frozen Kimi request payload.
+  It covers system extraction, images, empty and redacted thinking signatures, normalized tool-call ids, grouped
+  `tool_result` blocks with `is_error`, adaptive thinking, effort, and cache markers.
+- `wire/anthropic-messages-kimi.sse` pins the frozen raw Anthropic event sequence, including initial block content,
+  text/thinking/signature/tool deltas, malformed-event and incremental-tool JSON repair, partial usage fields,
+  one-hour cache-write detail, an unknown event, and the mandatory `message_stop` terminal.
+  `wire/anthropic-messages-kimi-ts-events.json` is the corresponding TS event-name snapshot compared through the
+  `Models` seam. Separate adapter cases pin every stop reason, missing terminals, raw SSE errors, retries, scratch
+  cleanup, and cancellation.
+
 The adapter tests execute configured retries and cancellation against injected fake HTTP. `timeout_ms` is forwarded
 as the response-header bound; after headers the production SSE transport is governed by caller cancellation.
 The transport-independent retry classification, terminal matrix, and usage/cost goldens from #339 remain shared by

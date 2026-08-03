@@ -4,19 +4,13 @@
 #include "ai/providers/OpenAIProvider.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/PiFixture.hpp"
-#include "util/ExpectedMacros.hpp"
+#include "support/StreamAdapterFixture.hpp"
 #include "util/Json.hpp"
 
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/use_future.hpp>
-
 #include <chrono>
 #include <fstream>
-#include <functional>
-#include <map>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -30,95 +24,11 @@ using namespace cch;
 
 namespace {
 
-template <typename T>
-[[nodiscard]] T run_awaitable(boost::asio::awaitable<T> operation) {
-    boost::asio::io_context io;
-    auto result = boost::asio::co_spawn(io, std::move(operation), boost::asio::use_future);
-    io.run();
-    return result.get();
-}
-
-class EmptyCredentialStore final : public ai::CredentialStore {
-public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> read(
-        std::string) override {
-        co_return std::optional<ai::Credential>{};
-    }
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::vector<ai::CredentialInfo>>> list() override {
-        co_return std::vector<ai::CredentialInfo>{};
-    }
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> modify(
-        std::string,
-        ai::CredentialModifyHook) override {
-        co_return std::optional<ai::Credential>{};
-    }
-
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> remove(std::string) override {
-        co_return util::ExpectedVoid{};
-    }
-};
-
-class EmptyAuthContext final : public ai::AuthContext {
-public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<std::string>>> environment(
-        std::string) const override {
-        co_return std::optional<std::string>{};
-    }
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<bool>> file_exists(
-        std::string) const override {
-        co_return false;
-    }
-};
-
-struct TransportAttempt {
-    ai::providers::StreamResponseHead head{
-        .status_code = 200,
-        .headers = {},
-    };
-    std::vector<std::string> chunks;
-    std::optional<util::Error> failure{std::nullopt};
-};
-
-class ScriptedTransport final : public ai::providers::StreamTransport {
-public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::providers::StreamResponse>> async_stream(
-        const ai::providers::StreamRequest& request,
-        ai::providers::BodyChunkHandler on_body_chunk) override {
-        requests.push_back(request);
-        if (on_request) {
-            on_request();
-        }
-        if (attempt_index >= attempts.size()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Network,
-                "no scripted transport attempt"));
-        }
-        auto attempt = attempts[attempt_index++];
-        if (attempt.failure) {
-            co_return std::unexpected(*attempt.failure);
-        }
-
-        ai::providers::StreamResponse response{
-            .head = std::move(attempt.head),
-            .body = {},
-        };
-        for (const auto& chunk : attempt.chunks) {
-            response.body += chunk;
-            if (response.head.status_code >= 200 && response.head.status_code < 300) {
-                CCH_TRY_VOID(on_body_chunk(chunk));
-            }
-        }
-        co_return response;
-    }
-
-    std::vector<TransportAttempt> attempts;
-    std::vector<ai::providers::StreamRequest> requests;
-    std::size_t attempt_index{0};
-    std::function<void()> on_request;
-};
+using tests::EmptyAuthContext;
+using tests::EmptyCredentialStore;
+using tests::run_awaitable;
+using tests::ScriptedTransport;
+using tests::TransportAttempt;
 
 struct RunResult {
     util::Expected<ai::AssistantMessage> result;
