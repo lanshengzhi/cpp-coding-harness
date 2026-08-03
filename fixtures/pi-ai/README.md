@@ -104,3 +104,23 @@ Issue #343 adds the OAuth login content layer (AuthInteraction contract + Codex 
   degrade to manual entry, the `PI_OAUTH_CALLBACK_HOST` bind override, and refresh errors carrying status + body
   with no stderr output. All credential-like values are distinguishable `dummy-*` values; no fixture value came
   from a live service.
+
+Issue #344 adds the Kimi Code RFC 8628 device-flow OAuth content layer (`auth/oauth/kimi-coding.ts` at the
+frozen baseline, with the shared device-poll helper from `auth/oauth/device-code.ts`):
+
+- `auth-storage/kimi-oauth-after-login.json` and `auth-storage/kimi-oauth-after-refresh.json` pin the persisted
+  `auth.json` shapes the Kimi lifecycle writes: the `oauth` record with `refresh`/`access`/`expires` and the
+  rotated record after a request-time refresh under the CredentialStore lock. Because `expires` is a live wall-
+  clock timestamp, the fixtures use a `0` sentinel and the tests normalize the digits after `"expires":` to `0`
+  before comparing bytes. `kimi-oauth-after-refresh.json` also documents the no-divergence outcome of a dead
+  credential: logout is the only removal path, and dead credentials stay in `auth.json` for retry.
+- The Kimi OAuth tests drive the full lifecycle through `Models` + the real file-backed `AuthStorage` against a
+  scripted fake HTTP client: login persists through `CredentialStore::modify`, request-time refresh rotates the
+  credential under the store lock and persists before release, `Models::logout` removes the record locally, and
+  cancellation persists nothing and normalizes to "Login cancelled". The content-layer tests pin the frozen
+  device-flow messages (`verification_uri_complete` http(s)-only validation, 5s/15min interval/expires defaults,
+  wait-before-first-poll, `expired_token`/`access_denied`/`slow_down` outcomes, the composed 30s per-request
+  timeout, `KIMI_CODE_OAUTH_HOST` override) and the refresh contract (1/2/4s exponential backoff across at most
+  four attempts, immediate failure on 401/403/`invalid_grant`, 429/5xx and transport retries, and `toAuth`
+  deriving `Authorization: Bearer <access>`). All credential-like values are distinguishable `dummy-*` values;
+  no fixture value came from a live service.

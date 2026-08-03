@@ -126,6 +126,7 @@ add_library(cch_ai
     src/ai/auth/OAuthCallbackServer.cpp
     src/ai/auth/OAuthHttpClient.cpp
     src/ai/auth/OpenAICodexOAuth.cpp
+    src/ai/auth/KimiCodingOAuth.cpp
     src/ai/auth/OauthPage.cpp
     src/ai/auth/Pkce.cpp
     src/ai/providers/BoostBeastStreamTransport.cpp
@@ -309,6 +310,7 @@ if(CCH_BUILD_TESTS)
         tests/ai/ToolContractTest.cpp
         tests/ai/UsageTest.cpp
         tests/ai/auth/OpenAICodexOAuthTest.cpp
+        tests/ai/auth/KimiCodingOAuthTest.cpp
         tests/ai/providers/BoostBeastStreamTransportTest.cpp
         tests/ai/providers/FakeProviderTest.cpp
         tests/ai/api/AnthropicMessagesAdapterTest.cpp
@@ -330,6 +332,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/PromptTemplateProcessingTest.cpp
         tests/coding_agent/AuthLoaderTest.cpp
         tests/coding_agent/AuthStorageTest.cpp
+        tests/coding_agent/KimiOAuthLifecycleTest.cpp
         tests/coding_agent/AgentConfigDirTest.cpp
         tests/coding_agent/SessionPathPolicyTest.cpp
         tests/coding_agent/SettingsLoaderTest.cpp
