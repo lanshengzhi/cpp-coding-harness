@@ -219,6 +219,17 @@ void set_request_header(RequestHeaders& target, std::string name, std::string va
     return result;
 }
 
+[[nodiscard]] std::vector<std::string> deleted_headers(
+    const RequestHeaders& headers) {
+    std::vector<std::string> result;
+    for (const auto& [name, value] : headers) {
+        if (!value) {
+            result.push_back(name);
+        }
+    }
+    return result;
+}
+
 [[nodiscard]] bool has_non_empty_header(
     const ProviderHeaders& headers,
     std::string_view expected_name) {
@@ -329,6 +340,7 @@ struct PreparedProviderRequest {
         return std::unexpected(transformed_headers.error());
     }
 
+    auto request_deleted_headers = deleted_headers(*transformed_headers);
     auth_result.auth.headers = concrete_headers(*transformed_headers);
     if (auto asserted = assert_request_auth(model, auth_result.auth); !asserted) {
         return std::unexpected(asserted.error());
@@ -345,6 +357,7 @@ struct PreparedProviderRequest {
         .model = std::move(model),
         .options = ProviderStreamOptions{
             .auth = std::move(auth_result.auth),
+            .deleted_headers = std::move(request_deleted_headers),
             .env = std::move(request_env),
             .temperature = options.temperature,
             .max_tokens = max_tokens,

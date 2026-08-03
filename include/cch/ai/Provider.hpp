@@ -23,6 +23,10 @@ namespace cch::ai {
 /// implementations use Model::api for their private protocol dispatch.
 struct ProviderStreamOptions {
     ModelAuth auth{};
+    /// Case-insensitive header tombstones retained after Models applies the
+    /// final transform, so an adapter does not recreate explicitly deleted
+    /// protocol defaults.
+    std::vector<std::string> deleted_headers{};
     ProviderEnv env{};
     std::optional<double> temperature{std::nullopt};
     std::uint64_t max_tokens{1};

@@ -1,5 +1,6 @@
 #include "OpenAIProvider.hpp"
 
+#include "ai/api/OpenAIResponsesAdapter.hpp"
 #include "util/ExpectedMacros.hpp"
 
 #include <boost/asio/awaitable.hpp>
@@ -40,6 +41,35 @@ namespace {
     co_return std::optional<AuthResult>{};
 }
 
+[[nodiscard]] ProviderAuth make_api_key_auth(
+    std::vector<std::string> environment_names) {
+    ApiKeyAuth api_key;
+    api_key.name = "API key";
+    api_key.check = [environment_names](
+                        const AuthContext& context,
+                        std::optional<ApiKeyCredential> credential)
+        -> boost::asio::awaitable<util::Expected<std::optional<AuthCheck>>> {
+        CCH_TRY(resolved, co_await resolve_api_key(
+            context, std::move(credential), environment_names));
+        if (!resolved) {
+            co_return std::optional<AuthCheck>{};
+        }
+        co_return AuthCheck{
+            .source = resolved->source,
+            .type = AuthType::ApiKey,
+        };
+    };
+    api_key.resolve = [environment_names = std::move(environment_names)](
+                          const AuthContext& context,
+                          std::optional<ApiKeyCredential> credential)
+        -> boost::asio::awaitable<util::Expected<std::optional<AuthResult>>> {
+        CCH_TRY(resolved, co_await resolve_api_key(
+            context, std::move(credential), environment_names));
+        co_return resolved;
+    };
+    return ProviderAuth{.api_key = std::move(api_key)};
+}
+
 class OpenAICompatibleProvider final : public ai::Provider {
 public:
     OpenAICompatibleProvider(
@@ -50,33 +80,8 @@ public:
         OpenAIStreamConfig config)
         : provider_id_(std::move(provider_id)),
           models_(std::move(models)),
-          stream_(std::move(transport), std::move(config)) {
-        ApiKeyAuth api_key;
-        api_key.name = "API key";
-        api_key.check = [environment_names = api_key_env](
-                            const AuthContext& context,
-                            std::optional<ApiKeyCredential> credential)
-            -> boost::asio::awaitable<util::Expected<std::optional<AuthCheck>>> {
-            CCH_TRY(resolved, co_await resolve_api_key(
-                context, std::move(credential), environment_names));
-            if (!resolved) {
-                co_return std::optional<AuthCheck>{};
-            }
-            co_return AuthCheck{
-                .source = resolved->source,
-                .type = AuthType::ApiKey,
-            };
-        };
-        api_key.resolve = [environment_names = std::move(api_key_env)](
-                              const AuthContext& context,
-                              std::optional<ApiKeyCredential> credential)
-            -> boost::asio::awaitable<util::Expected<std::optional<AuthResult>>> {
-            CCH_TRY(resolved, co_await resolve_api_key(
-                context, std::move(credential), environment_names));
-            co_return resolved;
-        };
-        auth_.api_key = std::move(api_key);
-    }
+          stream_(std::move(transport), std::move(config)),
+          auth_(make_api_key_auth(std::move(api_key_env))) {}
 
     [[nodiscard]] std::string_view id() const noexcept override { return provider_id_; }
     [[nodiscard]] std::string_view name() const noexcept override { return provider_id_; }
@@ -121,6 +126,52 @@ private:
     ProviderAuth auth_;
 };
 
+class OpenAIResponsesProvider final : public ai::Provider {
+public:
+    OpenAIResponsesProvider(
+        std::string provider_id,
+        std::vector<Model> models,
+        std::vector<std::string> api_key_env,
+        std::shared_ptr<StreamTransport> transport)
+        : provider_id_(std::move(provider_id)),
+          models_(std::move(models)),
+          adapter_(std::move(transport)),
+          auth_(make_api_key_auth(std::move(api_key_env))) {}
+    OpenAIResponsesProvider(OpenAIResponsesProvider&&) noexcept = default;
+    OpenAIResponsesProvider& operator=(OpenAIResponsesProvider&&) noexcept = default;
+    ~OpenAIResponsesProvider() override = default;
+    OpenAIResponsesProvider(const OpenAIResponsesProvider&) = delete;
+    OpenAIResponsesProvider& operator=(const OpenAIResponsesProvider&) = delete;
+
+    [[nodiscard]] std::string_view id() const noexcept override { return provider_id_; }
+    [[nodiscard]] std::string_view name() const noexcept override { return provider_id_; }
+    [[nodiscard]] ProviderAuth& auth() noexcept override { return auth_; }
+    [[nodiscard]] std::vector<Model> models() const override { return models_; }
+
+    /// Borrowed model and context must outlive the returned awaitable.
+    [[nodiscard]] boost::asio::awaitable<util::Expected<AssistantMessage>> stream(
+        const Model& model,
+        const AiContext& context,
+        ProviderStreamOptions options,
+        AssistantEventSink sink) override {
+        if (model.api != "openai-responses") {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Stream,
+                "Provider " + provider_id_ +
+                    " has no API implementation for \"" + model.api + "\""));
+        }
+        CCH_TRY(message, co_await adapter_.stream(
+            model, context, std::move(options), std::move(sink)));
+        co_return message;
+    }
+
+private:
+    std::string provider_id_;
+    std::vector<Model> models_;
+    api::OpenAIResponsesAdapter adapter_;
+    ProviderAuth auth_;
+};
+
 } // namespace
 
 std::shared_ptr<ai::Provider> make_openai_compatible_provider(
@@ -135,6 +186,18 @@ std::shared_ptr<ai::Provider> make_openai_compatible_provider(
         std::move(api_key_env),
         std::move(transport),
         std::move(config));
+}
+
+std::shared_ptr<ai::Provider> make_openai_responses_provider(
+    std::string provider_id,
+    std::vector<ai::Model> models,
+    std::vector<std::string> api_key_env,
+    std::shared_ptr<StreamTransport> transport) {
+    return std::make_shared<OpenAIResponsesProvider>(
+        std::move(provider_id),
+        std::move(models),
+        std::move(api_key_env),
+        std::move(transport));
 }
 
 } // namespace cch::ai::providers

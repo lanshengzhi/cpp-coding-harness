@@ -18,6 +18,8 @@ struct StreamRequest {
     std::string url;
     std::map<std::string, std::string> headers;
     std::string body;
+    /// Bounds connection setup, request dispatch, and response headers. Body
+    /// streaming remains active until completion or caller cancellation.
     std::chrono::milliseconds timeout{30000};
     /// Active provider-request cancellation token. Transports return a
     /// Cancelled error when the request is stopped so the provider can produce
@@ -30,6 +32,8 @@ struct StreamResponseHead {
     std::map<std::string, std::string> headers;
 };
 
+/// One received HTTP response, including non-success statuses so protocol
+/// adapters can apply their retry and terminal-error policy.
 struct StreamResponse {
     StreamResponseHead head;
     std::string body;

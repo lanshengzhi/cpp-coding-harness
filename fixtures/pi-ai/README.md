@@ -24,9 +24,22 @@ Issue #339 adds transport-independent goldens derived from the same frozen basel
   Anthropic partial usage, reasoning details, cost-tier selection, and the one-hour cache-write rule.
 - `termination/matrix.json` pins the Responses and Anthropic stop-reason matrices, including missing-terminal errors.
 
-The #339 retry and timeout evidence is intentionally transport-independent: tests pin retry classification,
-Retry-After/exponential delays and their 60-second default bound, while `timeout_ms` is verified as a prepared
-Provider value. Actual SSE response-header timeout and retry execution belong to the adapter transport tickets.
-All fixture credential-like strings are distinguishable `dummy-*` values; none came from a live service.
+Issue #340 adds the DeepSeek `openai-responses` wire goldens:
+
+- `wire/openai-responses-deepseek-ts-request.json` is the canonical byte snapshot of the exact text-only request
+  produced by frozen TS `buildParams`/`convertResponsesMessages` at
+  `packages/ai/src/api/{openai-responses,openai-responses-shared}.ts`. The C++ request is compared directly to these
+  bytes through the `Models` seam; it includes the developer-role prompt, full-context payload, fixed compat
+  defaults, cache fields, and no `previous_response_id`.
+- `wire/openai-responses-deepseek.sse` pins the frozen `processResponsesStream` input sequence from that same TS
+  source, including reasoning, text, function-call deltas, an unknown event, the completed terminal, and DeepSeek
+  cached/reasoning usage fields. `wire/openai-responses-deepseek-ts-events.json` is the corresponding TS assistant
+  event-sequence snapshot compared to the C++ output.
+
+The adapter tests execute configured retries and cancellation against injected fake HTTP. `timeout_ms` is forwarded
+as the response-header bound; after headers the production SSE transport is governed by caller cancellation.
+The transport-independent retry classification, terminal matrix, and usage/cost goldens from #339 remain shared by
+all scoped adapters. All fixture credential-like strings are distinguishable `dummy-*` values; none came from a
+live service.
 
 The full adapter/auth/persistence capability checklist and shard hash land with the pi-ai completion gate (#347).

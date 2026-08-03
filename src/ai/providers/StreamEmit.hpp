@@ -2,6 +2,8 @@
 
 #include <cch/ai/ChatClient.hpp>
 
+#include <exception>
+
 namespace cch::ai::providers {
 
 /// Emits one assistant stream event through the consumer-owned sink; an empty
@@ -12,7 +14,18 @@ namespace cch::ai::providers {
     if (!sink) {
         return {};
     }
-    return sink(event);
+    try {
+        return sink(event);
+    } catch (const std::exception& error) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Unknown,
+            "Assistant event sink failed",
+            error.what()));
+    } catch (...) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Unknown,
+            "Assistant event sink failed"));
+    }
 }
 
 } // namespace cch::ai::providers

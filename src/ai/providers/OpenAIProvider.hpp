@@ -20,4 +20,12 @@ namespace cch::ai::providers {
     std::shared_ptr<StreamTransport> transport,
     OpenAIStreamConfig config = {});
 
+/// Private composition seam for config-only Providers whose Model selects the
+/// exact `openai-responses` adapter. #345 makes this path user-reachable.
+[[nodiscard]] std::shared_ptr<ai::Provider> make_openai_responses_provider(
+    std::string provider_id,
+    std::vector<ai::Model> models,
+    std::vector<std::string> api_key_env,
+    std::shared_ptr<StreamTransport> transport);
+
 } // namespace cch::ai::providers

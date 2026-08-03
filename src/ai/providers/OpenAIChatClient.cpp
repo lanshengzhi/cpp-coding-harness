@@ -893,6 +893,18 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
         co_return complete_accepted_failure(response.error());
     }
 
+    if (response->head.status_code < 200 || response->head.status_code >= 300) {
+        auto detail = std::to_string(response->head.status_code);
+        if (!response->body.empty()) {
+            detail += ": ";
+            detail += response->body;
+        }
+        co_return complete_accepted_failure(util::make_error(
+            util::ErrorCode::Provider,
+            "provider returned non-success HTTP status",
+            bounded_provider_error_detail(std::move(detail))));
+    }
+
     auto final_event = parser.finish();
     if (!final_event) {
         if (unsupported_finish_reason) {

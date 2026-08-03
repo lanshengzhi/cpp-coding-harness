@@ -1,7 +1,5 @@
 #include "BoostBeastStreamTransport.hpp"
 
-#include "ai/providers/ProviderError.hpp"
-
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/connect.hpp>
@@ -10,6 +8,7 @@
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/host_name_verification.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/beast/core.hpp>
@@ -118,6 +117,7 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
         co_return std::unexpected(parsed.error());
     }
 
+    auto response_header_timed_out = std::make_shared<bool>(false);
     try {
         http::verb verb = http::string_to_verb(request_method(request));
         if (verb == http::verb::unknown) {
@@ -143,6 +143,15 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
                 cancellation_signal->slot(),
                 std::move(completion_token));
         };
+        asio::steady_timer response_header_timer(executor, request.timeout);
+        response_header_timer.async_wait(
+            [response_header_timed_out, cancellation_signal](
+                boost::system::error_code error) {
+                if (!error) {
+                    *response_header_timed_out = true;
+                    cancellation_signal->emit(asio::cancellation_type::all);
+                }
+            });
 
         ssl::context ctx(ssl::context::tls_client);
         boost::system::error_code ec;
@@ -197,6 +206,10 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
             buffer,
             parser,
             cancellable(asio::use_awaitable));
+        // timeoutMs bounds setup through response headers. Streaming body
+        // lifetime is governed by caller cancellation, matching pi's SSE path.
+        response_header_timer.cancel();
+        beast::get_lowest_layer(stream).expires_never();
 
         StreamResponse response;
         response.head.status_code = static_cast<int>(parser.get().result_int());
@@ -235,15 +248,8 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
             if (request.stop_token.stop_requested()) {
                 co_return std::unexpected(cancelled_error());
             }
-            std::string detail = std::to_string(response.head.status_code);
-            if (!error_body.empty()) {
-                detail += ": ";
-                detail += error_body;
-            }
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Provider,
-                "provider returned non-success HTTP status",
-                bounded_provider_error_detail(std::move(detail))));
+            response.body = std::move(error_body);
+            co_return response;
         }
 
         const bool stream_to_callback = static_cast<bool>(on_body_chunk);
@@ -297,6 +303,12 @@ boost::asio::awaitable<util::Expected<StreamResponse>> BoostBeastStreamTransport
 
         co_return response;
     } catch (const boost::system::system_error& error) {
+        if (*response_header_timed_out) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Timeout,
+                "response header timeout",
+                error.code().message()));
+        }
         co_return std::unexpected(network_error(
             "stream transport failure",
             error.code()));
