@@ -245,6 +245,77 @@ TEST_CASE(
     CHECK(cch::tests::count_occurrences(runtime_source, "session_.history") == 1);
 }
 
+TEST_CASE(
+    "streamSimple exposes only the supported caller option set",
+    "[architecture][ai][issue339]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto request_options = read_text(
+        source_root / "include" / "cch" / "ai" / "RequestOptions.hpp");
+    const auto struct_begin = request_options.find("struct SimpleStreamOptions {");
+    REQUIRE(struct_begin != std::string::npos);
+    const auto struct_end = request_options.find("\n};", struct_begin);
+    REQUIRE(struct_end != std::string::npos);
+    const auto members = request_options.substr(struct_begin, struct_end - struct_begin);
+
+    const std::vector<std::string> required_members{
+        "temperature{",
+        "max_tokens{",
+        "stop_token{",
+        "api_key{",
+        "headers{",
+        "env{",
+        "transform_headers{",
+        "reasoning{",
+        "session_id{",
+        "cache_retention{",
+        "timeout_ms{",
+        "max_retries{",
+        "max_retry_delay_ms{",
+    };
+    for (const auto& member : required_members) {
+        CHECK(members.find(member) != std::string::npos);
+    }
+    CHECK(cch::tests::count_occurrences(members, ";") == required_members.size());
+
+    const std::vector<std::string> forbidden_members{
+        "service_tier",
+        "reasoning_summary",
+        "tool_choice",
+        "metadata",
+        "on_payload",
+        "on_response",
+        "thinking_budgets",
+        "transport",
+        "websocket_connect_timeout_ms",
+    };
+    for (const auto& member : forbidden_members) {
+        CHECK(members.find(member) == std::string::npos);
+    }
+
+    const auto chat_client = read_text(
+        source_root / "include" / "cch" / "ai" / "ChatClient.hpp");
+    const auto request_begin = chat_client.find("struct StreamChatRequest {");
+    REQUIRE(request_begin != std::string::npos);
+    const auto request_end = chat_client.find("\n};", request_begin);
+    REQUIRE(request_end != std::string::npos);
+    const auto stream_request = chat_client.substr(request_begin, request_end - request_begin);
+    CHECK(stream_request.find("api_key") == std::string::npos);
+    CHECK(stream_request.find("headers") == std::string::npos);
+    CHECK(stream_request.find("transform_headers") == std::string::npos);
+
+    const std::vector<std::string> forbidden_option_types{
+        "OpenAIResponsesOptions",
+        "CodexResponsesOptions",
+        "AnthropicOptions",
+    };
+    for (const auto& file : files_under({"include/cch", "src"})) {
+        const auto text = read_text(file);
+        for (const auto& type : forbidden_option_types) {
+            CHECK(text.find(type) == std::string::npos);
+        }
+    }
+}
+
 TEST_CASE("provider DTOs stay out of the public contract surface", "[architecture][u4]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
     CHECK_FALSE(std::filesystem::exists(source_root / "include" / "cch" / "ai" / "glaze" / "ProviderDtos.hpp"));

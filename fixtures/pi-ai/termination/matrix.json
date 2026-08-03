@@ -1,0 +1,21 @@
+{
+  "responses": {
+    "completed": "stop",
+    "completed_with_tool_call": "toolUse",
+    "done": "stop",
+    "incomplete": "length",
+    "failed": "error",
+    "missing": "error"
+  },
+  "anthropic": {
+    "end_turn": "stop",
+    "pause_turn": "stop",
+    "stop_sequence": "stop",
+    "max_tokens": "length",
+    "tool_use": "toolUse",
+    "refusal": "error",
+    "sensitive": "error",
+    "missing_message_stop": "error",
+    "unknown": "stream_error"
+  }
+}

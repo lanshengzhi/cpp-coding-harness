@@ -4,6 +4,7 @@
 #include "../../include/cch/agent/AgentContext.hpp"
 #include "../../include/cch/agent/AgentEvent.hpp"
 #include "../../include/cch/ai/ChatClient.hpp"
+#include <cch/ai/RequestOptions.hpp>
 #include "../../include/cch/ai/providers/StreamTransport.hpp"
 
 #include <memory>
@@ -47,6 +48,10 @@ TEST_CASE("event sink contracts are move-only", "[architecture][u5]") {
 
     static_assert(!std::is_copy_constructible_v<ai::AssistantEventSink>);
     static_assert(std::is_move_constructible_v<ai::AssistantEventSink>);
+    static_assert(!std::is_copy_constructible_v<ai::TransformHeadersHook>);
+    static_assert(std::is_move_constructible_v<ai::TransformHeadersHook>);
+    static_assert(!std::is_copy_constructible_v<ai::SimpleStreamOptions>);
+    static_assert(std::is_move_constructible_v<ai::SimpleStreamOptions>);
 
     static_assert(!std::is_copy_constructible_v<ai::providers::BodyChunkHandler>);
     static_assert(std::is_move_constructible_v<ai::providers::BodyChunkHandler>);

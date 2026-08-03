@@ -1,5 +1,6 @@
 #include <cch/ai/Models.hpp>
 
+#include "SimpleOptions.hpp"
 #include "util/BoundedText.hpp"
 #include "util/ExpectedMacros.hpp"
 
@@ -159,24 +160,203 @@ invoke_models_callback(
     }
 }
 
+[[nodiscard]] bool header_name_equal(std::string_view left, std::string_view right) {
+    return std::ranges::equal(
+        left,
+        right,
+        [](char left_character, char right_character) {
+            const auto lower = [](char character) {
+                if (character >= 'A' && character <= 'Z') {
+                    return static_cast<char>(character - 'A' + 'a');
+                }
+                return character;
+            };
+            return lower(left_character) == lower(right_character);
+        });
+}
+
+template <typename Headers>
+void erase_header(Headers& target, std::string_view name) {
+    std::erase_if(target, [&name](const auto& entry) {
+        return header_name_equal(entry.first, name);
+    });
+}
+
 void merge_headers(ProviderHeaders& target, const ModelHeaders& overrides) {
     for (const auto& [name, value] : overrides) {
-        std::erase_if(target, [&name](const auto& entry) {
-            return std::ranges::equal(
-                entry.first,
-                name,
-                [](char left, char right) {
-                    const auto lower = [](char character) {
-                        if (character >= 'A' && character <= 'Z') {
-                            return static_cast<char>(character - 'A' + 'a');
-                        }
-                        return character;
-                    };
-                    return lower(left) == lower(right);
-                });
-        });
+        erase_header(target, name);
         target.emplace(name, value);
     }
+}
+
+void merge_request_headers(RequestHeaders& target, const RequestHeaders& overrides) {
+    for (const auto& [name, value] : overrides) {
+        erase_header(target, name);
+        target.emplace(name, value);
+    }
+}
+
+void set_request_header(RequestHeaders& target, std::string name, std::string value) {
+    erase_header(target, name);
+    target.emplace(std::move(name), std::move(value));
+}
+
+[[nodiscard]] RequestHeaders request_headers_from_auth(const ModelAuth& auth) {
+    RequestHeaders result;
+    for (const auto& [name, value] : auth.headers) {
+        result.emplace(name, value);
+    }
+    return result;
+}
+
+[[nodiscard]] ProviderHeaders concrete_headers(const RequestHeaders& headers) {
+    ProviderHeaders result;
+    for (const auto& [name, value] : headers) {
+        if (value) {
+            result.emplace(name, *value);
+        }
+    }
+    return result;
+}
+
+[[nodiscard]] bool has_non_empty_header(
+    const ProviderHeaders& headers,
+    std::string_view expected_name) {
+    return std::ranges::any_of(headers, [&expected_name](const auto& entry) {
+        return header_name_equal(entry.first, expected_name) &&
+               std::ranges::any_of(entry.second, [](char character) {
+                   return character != ' ' && character != '\t' &&
+                          character != '\r' && character != '\n';
+               });
+    });
+}
+
+[[nodiscard]] util::ExpectedVoid assert_request_auth(
+    const Model& model,
+    const ModelAuth& auth) {
+    const bool scoped_api = model.api == "openai-codex-responses" ||
+                            model.api == "openai-responses" ||
+                            model.api == "anthropic-messages";
+    if (!scoped_api || (auth.api_key && !auth.api_key->empty()) ||
+        has_non_empty_header(auth.headers, "authorization") ||
+        has_non_empty_header(auth.headers, "x-api-key") ||
+        has_non_empty_header(auth.headers, "cf-aig-authorization")) {
+        return {};
+    }
+    return std::unexpected(util::make_error(
+        util::ErrorCode::Auth,
+        "No API key for provider: " + model.provider));
+}
+
+[[nodiscard]] util::Expected<RequestHeaders> transform_request_headers(
+    RequestHeaders headers,
+    TransformHeadersHook& transform) {
+    if (!transform) {
+        return headers;
+    }
+    try {
+        return transform(std::move(headers));
+    } catch (const std::exception& error) {
+        return std::unexpected(callback_exception_error(
+            util::ErrorCode::Stream,
+            "Header transform failed",
+            error.what()));
+    } catch (...) {
+        return std::unexpected(callback_exception_error(
+            util::ErrorCode::Stream,
+            "Header transform failed"));
+    }
+}
+
+[[nodiscard]] ModelThinkingLevel to_model_thinking_level(ThinkingLevel level) {
+    switch (level) {
+    case ThinkingLevel::Minimal:
+        return ModelThinkingLevel::Minimal;
+    case ThinkingLevel::Low:
+        return ModelThinkingLevel::Low;
+    case ThinkingLevel::Medium:
+        return ModelThinkingLevel::Medium;
+    case ThinkingLevel::High:
+        return ModelThinkingLevel::High;
+    case ThinkingLevel::XHigh:
+        return ModelThinkingLevel::XHigh;
+    case ThinkingLevel::Max:
+        return ModelThinkingLevel::Max;
+    }
+    return ModelThinkingLevel::Medium;
+}
+
+struct PreparedProviderRequest {
+    Model model{};
+    ProviderStreamOptions options{};
+};
+
+[[nodiscard]] util::Expected<PreparedProviderRequest> prepare_provider_request(
+    Model model,
+    const AiContext& context,
+    AuthResult auth_result,
+    SimpleStreamOptions options) {
+    if (auth_result.auth.base_url) {
+        model.base_url = *auth_result.auth.base_url;
+    }
+
+    auto request_env = std::move(auth_result.env);
+    for (const auto& [name, value] : options.env) {
+        request_env.insert_or_assign(name, value);
+    }
+    const auto cache_retention = detail::resolve_cache_retention(
+        options.cache_retention, request_env);
+    const auto request_session_id = cache_retention == CacheRetention::None
+        ? std::optional<std::string>{}
+        : options.session_id;
+
+    auto request_headers = request_headers_from_auth(auth_result.auth);
+    if (request_session_id) {
+        if (model.api == "openai-codex-responses") {
+            const auto codex_session_id =
+                detail::clamp_openai_prompt_cache_key(*request_session_id);
+            set_request_header(request_headers, "session-id", codex_session_id);
+            set_request_header(request_headers, "x-client-request-id", codex_session_id);
+        } else if (model.api == "openai-responses") {
+            set_request_header(request_headers, "session_id", *request_session_id);
+            set_request_header(request_headers, "x-client-request-id", *request_session_id);
+        }
+    }
+    merge_request_headers(request_headers, options.headers);
+    auto transformed_headers = transform_request_headers(
+        std::move(request_headers), options.transform_headers);
+    if (!transformed_headers) {
+        return std::unexpected(transformed_headers.error());
+    }
+
+    auth_result.auth.headers = concrete_headers(*transformed_headers);
+    if (auto asserted = assert_request_auth(model, auth_result.auth); !asserted) {
+        return std::unexpected(asserted.error());
+    }
+
+    const auto reasoning = options.reasoning
+        ? std::optional<ModelThinkingLevel>{clamp_thinking_level(
+              model, to_model_thinking_level(*options.reasoning))}
+        : std::nullopt;
+    const auto requested_max_tokens = options.max_tokens.value_or(model.max_tokens);
+    const auto max_tokens = detail::clamp_max_tokens_to_context(
+        model, context, requested_max_tokens);
+    return PreparedProviderRequest{
+        .model = std::move(model),
+        .options = ProviderStreamOptions{
+            .auth = std::move(auth_result.auth),
+            .env = std::move(request_env),
+            .temperature = options.temperature,
+            .max_tokens = max_tokens,
+            .reasoning = reasoning,
+            .session_id = request_session_id,
+            .cache_retention = cache_retention,
+            .timeout_ms = options.timeout_ms,
+            .max_retries = options.max_retries,
+            .max_retry_delay_ms = options.max_retry_delay_ms.value_or(60000),
+            .stop_token = options.stop_token,
+        },
+    };
 }
 
 [[nodiscard]] bool is_models_domain_error(util::ErrorCode code) {
@@ -587,10 +767,10 @@ boost::asio::awaitable<util::ExpectedVoid> Models::logout(
     co_return util::ExpectedVoid{};
 }
 
-boost::asio::awaitable<util::Expected<AssistantMessage>> Models::stream(
+boost::asio::awaitable<util::Expected<AssistantMessage>> Models::stream_simple(
     Model model_value,
     AiContext context,
-    ModelsStreamOptions options,
+    SimpleStreamOptions options,
     AssistantEventSink sink) {
     const auto selected = provider(model_value.provider);
     if (!selected) {
@@ -635,9 +815,12 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> Models::stream(
         co_return terminal;
     }
 
-    auto request_model = model_value;
-    if ((**auth).auth.base_url) {
-        request_model.base_url = *(**auth).auth.base_url;
+    auto prepared = prepare_provider_request(
+        model_value, context, std::move(**auth), std::move(options));
+    if (!prepared) {
+        CCH_TRY(terminal, co_await terminal_failure(
+            model_value, prepared.error(), sink));
+        co_return terminal;
     }
 
     std::optional<AssistantMessage> terminal_message;
@@ -685,13 +868,9 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> Models::stream(
         "Provider stream callback failed for " + model_value.provider,
         [&]() {
             return selected->stream(
-                request_model,
+                prepared->model,
                 context,
-                ProviderStreamOptions{
-                    .auth = (**auth).auth,
-                    .env = (**auth).env,
-                    .stop_token = options.stop_token,
-                },
+                std::move(prepared->options),
                 std::move(forwarding_sink));
         });
 
@@ -753,10 +932,10 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> Models::stream(
 boost::asio::awaitable<util::Expected<AssistantMessage>> Models::stream(
     const StreamChatRequest& request,
     AssistantEventSink sink) {
-    CCH_TRY(message, co_await stream(
+    CCH_TRY(message, co_await stream_simple(
         request.model,
         request.context,
-        ModelsStreamOptions{.stop_token = request.stop_token},
+        SimpleStreamOptions{.stop_token = request.stop_token},
         std::move(sink)));
     co_return message;
 }

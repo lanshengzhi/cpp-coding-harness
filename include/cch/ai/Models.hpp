@@ -4,6 +4,7 @@
 #include <cch/ai/ChatClient.hpp>
 #include <cch/ai/CredentialStore.hpp>
 #include <cch/ai/Provider.hpp>
+#include <cch/ai/RequestOptions.hpp>
 #include <cch/util/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
@@ -15,13 +16,6 @@
 #include <vector>
 
 namespace cch::ai {
-
-/// Models-only request authentication and cancellation inputs. Authentication
-/// is short-lived trusted state and never enters StreamChatRequest or Model.
-struct ModelsStreamOptions {
-    std::optional<std::string> api_key{std::nullopt};
-    std::stop_token stop_token{};
-};
 
 /// Runtime collection of long-lived Providers plus live authentication and
 /// request-time stream delegation.
@@ -68,10 +62,10 @@ public:
     /// Normalize model/provider/auth/request failures to one terminal event and
     /// a final AssistantMessage value. Only sink/infrastructure failure uses
     /// Expected's error alternative.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<AssistantMessage>> stream(
+    [[nodiscard]] boost::asio::awaitable<util::Expected<AssistantMessage>> stream_simple(
         Model model,
         AiContext context,
-        ModelsStreamOptions options,
+        SimpleStreamOptions options,
         AssistantEventSink sink);
     /// The borrowed request must outlive the returned awaitable.
     [[nodiscard]] boost::asio::awaitable<util::Expected<AssistantMessage>> stream(

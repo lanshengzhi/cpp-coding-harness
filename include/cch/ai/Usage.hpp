@@ -6,6 +6,8 @@
 
 namespace cch::ai {
 
+struct Model;
+
 struct UsageCost {
     double input{};
     double output{};
@@ -24,6 +26,8 @@ struct Usage {
     std::int64_t total_tokens{};
     UsageCost cost{};
 };
+
+[[nodiscard]] UsageCost calculate_cost(const Model& model, const Usage& usage);
 
 enum class AssistantStopReason {
     Stop,

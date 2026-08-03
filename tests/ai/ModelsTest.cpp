@@ -420,10 +420,10 @@ TEST_CASE("Models applies explicit stored and ambient API key precedence", "[ai]
     ai::StreamChatRequest explicit_request;
     explicit_request.model = tests::make_model("model", "provider", "api");
     std::vector<ai::AssistantStreamEvent> explicit_events;
-    auto explicit_result = run_awaitable(models.stream(
+    auto explicit_result = run_awaitable(models.stream_simple(
         explicit_request.model,
         explicit_request.context,
-        ai::ModelsStreamOptions{.api_key = "explicit-key"},
+        ai::SimpleStreamOptions{.api_key = "explicit-key"},
         [&explicit_events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
             explicit_events.push_back(event);
             return {};
@@ -596,6 +596,169 @@ TEST_CASE("Models merges Model headers after resolved auth headers case insensit
     CHECK(headers.at("x-test") == "model");
     CHECK(headers.at("Authorization") == "Bearer dummy");
     CHECK(headers.size() == 2);
+}
+
+TEST_CASE("Models prepares the complete streamSimple request before Provider dispatch", "[ai][models][issue339]") {
+    auto credentials = std::make_shared<MemoryCredentialStore>();
+    auto auth_context = std::make_shared<FakeAuthContext>();
+    ai::ApiKeyAuth api_key;
+    api_key.name = "prepared";
+    api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
+        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> {
+        co_return ai::AuthResult{
+            .auth = ai::ModelAuth{
+                .api_key = "dummy-key",
+                .headers = {{"X-Auth", "auth"}, {"X-Delete", "remove"}},
+            },
+            .env = {{"A", "auth"}, {"PI_CACHE_RETENTION", "short"}},
+            .source = "prepared",
+        };
+    };
+    auto models = make_models(credentials, auth_context);
+    auto provider = std::make_shared<RecordingProvider>(
+        "deepseek", ai::ProviderAuth{.api_key = std::move(api_key)});
+    REQUIRE(models.set_provider(provider));
+
+    auto model = tests::make_model("reasoning", "deepseek", "openai-responses");
+    model.reasoning = true;
+    model.context_window = 10000;
+    model.max_tokens = 9000;
+    model.headers = ai::ModelHeaders{{"X-Model", "model"}};
+    ai::AiContext context;
+    context.system_prompt = std::string(4000, 'x');
+    int transform_count = 0;
+    ai::SimpleStreamOptions options;
+    options.temperature = 0.25;
+    options.max_tokens = 9000;
+    options.headers = {
+        {"x-auth", std::string{"request"}},
+        {"x-delete", std::nullopt},
+    };
+    options.env = {{"A", "request"}, {"PI_CACHE_RETENTION", "long"}};
+    options.transform_headers = [&transform_count](ai::RequestHeaders headers)
+        -> util::Expected<ai::RequestHeaders> {
+        ++transform_count;
+        CHECK(headers.at("session_id") == "session-1");
+        headers.insert_or_assign("X-Transformed", "yes");
+        return headers;
+    };
+    options.reasoning = ai::ThinkingLevel::High;
+    options.session_id = "session-1";
+    options.timeout_ms = 3210;
+    options.max_retries = 2;
+    options.max_retry_delay_ms = 12345;
+
+    std::vector<ai::AssistantStreamEvent> events;
+    auto result = run_awaitable(models.stream_simple(
+        std::move(model),
+        std::move(context),
+        std::move(options),
+        [&events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+            events.push_back(event);
+            return {};
+        }));
+
+    REQUIRE(result);
+    CHECK(transform_count == 1);
+    REQUIRE(provider->seen_options.size() == 1);
+    const auto& prepared = provider->seen_options.front();
+    CHECK(prepared.temperature == 0.25);
+    CHECK(prepared.max_tokens == 4904);
+    CHECK(prepared.reasoning == ai::ModelThinkingLevel::High);
+    CHECK(prepared.session_id == "session-1");
+    CHECK(prepared.cache_retention == ai::CacheRetention::Long);
+    CHECK(prepared.timeout_ms == 3210);
+    CHECK(prepared.max_retries == 2);
+    CHECK(prepared.max_retry_delay_ms == 12345);
+    CHECK(prepared.env.at("A") == "request");
+    CHECK(prepared.auth.headers.at("x-auth") == "request");
+    CHECK(prepared.auth.headers.at("X-Model") == "model");
+    CHECK(prepared.auth.headers.at("X-Transformed") == "yes");
+    CHECK_FALSE(prepared.auth.headers.contains("X-Delete"));
+    CHECK(prepared.auth.headers.at("x-client-request-id") == "session-1");
+}
+
+TEST_CASE("Models prepares Codex session affinity headers", "[ai][models][issue339]") {
+    auto credentials = std::make_shared<MemoryCredentialStore>();
+    auto auth_context = std::make_shared<FakeAuthContext>();
+    ai::ApiKeyAuth api_key;
+    api_key.name = "codex";
+    api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
+        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> {
+        co_return ai::AuthResult{
+            .auth = ai::ModelAuth{.api_key = "dummy-codex"},
+            .source = "codex",
+        };
+    };
+    auto models = make_models(credentials, auth_context);
+    auto provider = std::make_shared<RecordingProvider>(
+        "openai-codex", ai::ProviderAuth{.api_key = std::move(api_key)});
+    REQUIRE(models.set_provider(provider));
+    auto model = tests::make_model(
+        "gpt-5.5", "openai-codex", "openai-codex-responses");
+    ai::SimpleStreamOptions options;
+    options.session_id = std::string(65, 's');
+    std::vector<ai::AssistantStreamEvent> events;
+
+    auto result = run_awaitable(models.stream_simple(
+        std::move(model),
+        ai::AiContext{},
+        std::move(options),
+        [&events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+            events.push_back(event);
+            return {};
+        }));
+
+    REQUIRE(result);
+    REQUIRE(provider->seen_options.size() == 1);
+    const auto& headers = provider->seen_options.front().auth.headers;
+    CHECK(headers.at("session-id") == std::string(64, 's'));
+    CHECK(headers.at("x-client-request-id") == std::string(64, 's'));
+    CHECK(provider->seen_options.front().session_id == std::string(65, 's'));
+}
+
+TEST_CASE(
+    "Models accepts Kimi header authentication and suppresses none-retention affinity",
+    "[ai][models][auth][issue339]") {
+    auto credentials = std::make_shared<MemoryCredentialStore>();
+    auto auth_context = std::make_shared<FakeAuthContext>();
+    ai::ApiKeyAuth api_key;
+    api_key.name = "header auth";
+    api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
+        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> {
+        co_return ai::AuthResult{
+            .auth = ai::ModelAuth{
+                .headers = {{"Authorization", "Bearer dummy-oauth"}},
+            },
+            .source = "OAuth",
+        };
+    };
+    auto models = make_models(credentials, auth_context);
+    auto provider = std::make_shared<RecordingProvider>(
+        "kimi-coding", ai::ProviderAuth{.api_key = std::move(api_key)});
+    REQUIRE(models.set_provider(provider));
+    auto model = tests::make_model(
+        "kimi-for-coding", "kimi-coding", "anthropic-messages");
+    ai::SimpleStreamOptions options;
+    options.session_id = "ignored-session";
+    options.cache_retention = ai::CacheRetention::None;
+    std::vector<ai::AssistantStreamEvent> events;
+
+    auto result = run_awaitable(models.stream_simple(
+        std::move(model),
+        ai::AiContext{},
+        std::move(options),
+        [&events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+            events.push_back(event);
+            return {};
+        }));
+
+    REQUIRE(result);
+    REQUIRE(provider->seen_options.size() == 1);
+    CHECK(provider->seen_options.front().auth.api_key == std::nullopt);
+    CHECK(provider->seen_options.front().auth.headers.at("Authorization") ==
+          "Bearer dummy-oauth");
+    CHECK(provider->seen_options.front().session_id == std::nullopt);
 }
 
 TEST_CASE("OpenAI Provider labels explicit credentials as stored credentials", "[ai][models][auth][issue338]") {

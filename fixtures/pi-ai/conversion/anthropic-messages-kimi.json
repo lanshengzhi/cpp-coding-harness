@@ -1,0 +1,67 @@
+{
+  "max_tokens": 256,
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "YWJj"}}
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {"type": "thinking", "thinking": "thought", "signature": ""},
+        {"type": "redacted_thinking", "data": "dummy-redacted"},
+        {"type": "text", "text": "answer"}
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "next"}
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {"type": "tool_use", "id": "bad_id_", "name": "lookup", "input": {"q": "x"}}
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {"type": "tool_result", "tool_use_id": "bad_id_", "content": "failed", "is_error": true},
+        {
+          "type": "tool_result",
+          "tool_use_id": "second",
+          "content": [
+            {"type": "text", "text": "(see attached image)"},
+            {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "ZGVm"}}
+          ],
+          "is_error": false,
+          "cache_control": {"type": "ephemeral"}
+        }
+      ]
+    }
+  ],
+  "model": "kimi-for-coding",
+  "output_config": {"effort": "high"},
+  "stream": true,
+  "system": [
+    {"type": "text", "text": "system", "cache_control": {"type": "ephemeral"}}
+  ],
+  "thinking": {"type": "adaptive", "display": "summarized"},
+  "tools": [
+    {
+      "name": "lookup",
+      "description": "Look up a value",
+      "eager_input_streaming": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {"q": {"type": "string"}},
+        "required": ["q"]
+      },
+      "cache_control": {"type": "ephemeral"}
+    }
+  ]
+}

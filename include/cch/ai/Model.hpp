@@ -12,6 +12,9 @@ namespace cch::ai {
 
 enum class ModelInput { Text, Image };
 
+/// Caller reasoning requests exclude Off; omission disables reasoning.
+enum class ThinkingLevel { Minimal, Low, Medium, High, XHigh, Max };
+/// Model capability maps include Off so catalogs can mark it unsupported.
 enum class ModelThinkingLevel { Off, Minimal, Low, Medium, High, XHigh, Max };
 
 using ThinkingLevelMap = std::map<ModelThinkingLevel, std::optional<std::string>>;
@@ -62,5 +65,9 @@ struct Model {
 };
 
 [[nodiscard]] util::ExpectedVoid validate_model(const Model& model);
+[[nodiscard]] std::vector<ModelThinkingLevel> get_supported_thinking_levels(const Model& model);
+[[nodiscard]] ModelThinkingLevel clamp_thinking_level(
+    const Model& model,
+    ModelThinkingLevel requested);
 
 } // namespace cch::ai

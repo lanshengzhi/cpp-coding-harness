@@ -9,6 +9,7 @@
 #include <cch/ai/Message.hpp>
 #include <cch/ai/Models.hpp>
 #include <cch/ai/Provider.hpp>
+#include <cch/ai/RequestOptions.hpp>
 #include <cch/ai/StreamEvent.hpp>
 #include <cch/ai/Tool.hpp>
 #include <cch/ai/Usage.hpp>
@@ -93,6 +94,7 @@ TEST_CASE("public headers compile from the include contract surface", "[architec
 TEST_CASE("public contracts remain value and interface oriented", "[architecture][u1]") {
     static_assert(std::is_aggregate_v<agent::AgentInitialState>);
     static_assert(std::is_aggregate_v<ai::Model>);
+    static_assert(std::is_aggregate_v<ai::SimpleStreamOptions>);
     static_assert(std::is_copy_constructible_v<agent::AgentState>);
     static_assert(std::is_same_v<
                   decltype(std::declval<const agent::Agent&>().state()),

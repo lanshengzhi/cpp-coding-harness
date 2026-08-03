@@ -1,0 +1,30 @@
+{
+  "responses": {
+    "input": 90,
+    "output": 30,
+    "cache_read": 20,
+    "cache_write": 10,
+    "reasoning": 7,
+    "total_tokens": 150,
+    "cost": {"input": 0.00018, "output": 0.00012, "cache_read": 0.00002, "cache_write": 0.00003, "total": 0.00035}
+  },
+  "deepseek": {
+    "input": 100,
+    "output": 30,
+    "cache_read": 20,
+    "cache_write": 0,
+    "reasoning": 7,
+    "total_tokens": 150,
+    "cost": {"input": 0.0002, "output": 0.00012, "cache_read": 0.00002, "cache_write": 0, "total": 0.00034}
+  },
+  "anthropic": {
+    "input": 80,
+    "output": 9,
+    "cache_read": 20,
+    "cache_write": 10,
+    "cache_write_1h": 4,
+    "reasoning": 6,
+    "total_tokens": 119,
+    "cost": {"input": 0.0008, "output": 0.00018, "cache_read": 0.0001, "cache_write": 0.00017, "total": 0.00125}
+  }
+}
