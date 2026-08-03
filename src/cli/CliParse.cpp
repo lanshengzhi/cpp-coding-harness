@@ -89,8 +89,8 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     app.footer(
         "Sessions: without --session/--resume/--no-session, a new session persists\n"
         "under the agent config directory's workspace-keyed sessions root\n"
-        "(~/.cpp-harness/agent/sessions/<workspace-key>/, root override:\n"
-        "CCH_CODING_AGENT_DIR). Automatic-directory overrides (highest first):\n"
+        "(~/.pi/agent/sessions/<workspace-key>/, root override:\n"
+        "PI_CODING_AGENT_DIR). Automatic-directory overrides (highest first):\n"
         "--session-dir, CCH_CODING_AGENT_SESSION_DIR, settings.json sessionDir;\n"
         "relative values resolve against the final workspace. Explicit paths may\n"
         "live anywhere; --no-session runs in memory without a transcript.\n"
@@ -128,7 +128,7 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
         ->default_str("https://api.openai.com");
     auto* api_key_env_option = app.add_option("--api-key-env", api_key_env_text, "Environment variable containing API key")
         ->default_str("OPENAI_API_KEY");
-    app.add_option("--auth", auth_text, "Auth provider name in ~/.cpp-harness/agent/auth.json");
+    app.add_option("--auth", auth_text, "Auth provider name in ~/.pi/agent/auth.json");
     auto* mode_option = app.add_option(
         "--mode",
         mode_text,

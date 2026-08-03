@@ -15,7 +15,7 @@ struct SkillDirSpec {
     /// Absolute or workspace-relative path to scan.
     std::string path;
     /// When true, root-level .md files in this directory are loaded as skills
-    /// (used for global ~/.cpp-harness/agent/skills/). When false, only nested
+    /// (used for global ~/.pi/agent/skills/). When false, only nested
     /// SKILL.md files within subdirectories are discovered (project dirs).
     bool includeRootFiles{false};
 };

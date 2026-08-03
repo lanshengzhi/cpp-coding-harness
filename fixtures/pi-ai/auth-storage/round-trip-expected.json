@@ -1,0 +1,30 @@
+{
+  "custom-provider": {
+    "opaque": {
+      "token": "dummy-opaque-token"
+    },
+    "type": "future"
+  },
+  "deepseek": {
+    "env": {
+      "DEEPSEEK_REGION": "dummy-region"
+    },
+    "key": "dummy-deepseek-key",
+    "type": "api_key"
+  },
+  "kimi-coding": {
+    "key": "dummy-kimi-key",
+    "type": "api_key"
+  },
+  "openai-codex": {
+    "access": "dummy-new-access-token",
+    "accountId": "dummy-account-id",
+    "expires": 2,
+    "id_token": "dummy-id-token",
+    "nested": {
+      "preserve": true
+    },
+    "refresh": "dummy-refresh-token",
+    "type": "oauth"
+  }
+}

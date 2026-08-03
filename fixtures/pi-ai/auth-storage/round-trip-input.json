@@ -1,0 +1,26 @@
+{
+  "custom-provider": {
+    "type": "future",
+    "opaque": {
+      "token": "dummy-opaque-token"
+    }
+  },
+  "deepseek": {
+    "type": "api_key",
+    "key": "dummy-deepseek-key",
+    "env": {
+      "DEEPSEEK_REGION": "dummy-region"
+    }
+  },
+  "openai-codex": {
+    "type": "oauth",
+    "refresh": "dummy-refresh-token",
+    "access": "dummy-old-access-token",
+    "expires": 1,
+    "accountId": "dummy-account-id",
+    "id_token": "dummy-id-token",
+    "nested": {
+      "preserve": true
+    }
+  }
+}

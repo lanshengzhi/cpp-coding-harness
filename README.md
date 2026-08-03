@@ -101,7 +101,7 @@ Explicit create and resume paths remain available and may live anywhere:
 ./build/cpp_harness --fake --resume /tmp/cpp-session.jsonl "continue"
 ```
 
-Redirect automatic storage for one run or for all runs (highest precedence first: `--session-dir`, `CCH_CODING_AGENT_SESSION_DIR`, `sessionDir` in `~/.cpp-harness/agent/settings.json`):
+Redirect automatic storage for one run or for all runs (highest precedence first: `--session-dir`, `CCH_CODING_AGENT_SESSION_DIR`, `sessionDir` in `~/.pi/agent/settings.json`):
 
 ```bash
 ./build/cpp_harness --fake --session-dir /data/sessions "hello"
@@ -123,7 +123,7 @@ OAuth, subscription-provider, and dynamic API-key resolution flows are intention
 
 ### Agent config directory
 
-User-level state lives in the agent config directory `~/.cpp-harness/agent/`, mirroring pi's `~/.pi/agent/`: `auth.json` (static API keys), `settings.json` (provider defaults, theme selection, and resource policy), `keybindings.json` (Native TUI bindings), `trust.json` (persisted project trust decisions), `themes/` (global Native TUI themes), and `sessions/<encoded-workspace>/` (default persisted Agent Session histories). Set `CCH_CODING_AGENT_DIR` to override the location (pi: `PI_CODING_AGENT_DIR`). These paths are centralized in `include/cch/coding_agent/AgentConfigDir.hpp`; theme and keybinding discovery never fall back to `~/.pi`.
+User-level state lives directly in pi's agent config directory `~/.pi/agent/`: `auth.json` (credentials shared with pi), `settings.json` (provider defaults, theme selection, and resource policy), `keybindings.json` (Native TUI bindings), `trust.json` (persisted project trust decisions), `themes/` (global Native TUI themes), and `sessions/<encoded-workspace>/` (default persisted Agent Session histories). Set `PI_CODING_AGENT_DIR` to override the location. These paths are centralized in `include/cch/coding_agent/AgentConfigDir.hpp`; there is no fallback read or migration from the former harness-private root.
 
 ### Session storage
 
@@ -131,13 +131,13 @@ Without `--session` or `--resume`, the CLI persists each new session under `<age
 
 `--session PATH` and `--resume PATH` keep their exact paths and may live outside the default root; automatic-directory overrides never rewrite them. Old project-local `.cpp-harness/sessions/` files are neither scanned nor migrated; pass such a file explicitly through `--resume` if it is still needed. A missing or unwritable default store fails before any model work with the attempted path and reason — the harness never falls back to a workspace-local or temporary transcript. On POSIX, harness-created session directories are owner-only (`0700`) and new session files are `0600`.
 
-Automatic-directory overrides replace the whole automatic directory for default creation: the session file lands directly in the override directory without a workspace-key component (pi: `--session-dir`). The precedence is exactly `--session-dir`, then `CCH_CODING_AGENT_SESSION_DIR`, then `sessionDir` in `~/.cpp-harness/agent/settings.json`, then the workspace-keyed default. Absolute values stay absolute, a leading `~` expands to the home directory, and relative values resolve against the final canonical workspace rather than the launch directory. An override directory that does not exist is created owner-only; an existing override directory keeps its mode while files inside remain `0600`. These CLI-only inputs never affect SDK default persistence.
+Automatic-directory overrides replace the whole automatic directory for default creation: the session file lands directly in the override directory without a workspace-key component (pi: `--session-dir`). The precedence is exactly `--session-dir`, then `CCH_CODING_AGENT_SESSION_DIR`, then `sessionDir` in `~/.pi/agent/settings.json`, then the workspace-keyed default. Absolute values stay absolute, a leading `~` expands to the home directory, and relative values resolve against the final canonical workspace rather than the launch directory. An override directory that does not exist is created owner-only; an existing override directory keeps its mode while files inside remain `0600`. These CLI-only inputs never affect SDK default persistence.
 
 `--no-session` selects an explicit in-memory Agent Session in every frontend (Native TUI, text one-shot, JSON, and RPC): provider, tools, events, live state, errors, and shutdown behave normally, but no sessions root, workspace-local session directory, or transcript file is created — including after failures. It cannot be combined with `--session` or `--resume`. In-memory operation happens only when explicitly requested; storage unavailability is never silently treated as `--no-session`. `/session` prints the persisted file path, or `File: In-memory` for these runs.
 
 ### Auth file
 
-API keys can also be stored in `~/.cpp-harness/agent/auth.json` and selected by name with the `--auth` flag (or the `auth` field in `~/.cpp-harness/agent/settings.json`). This avoids exporting keys into the shell environment.
+API keys can also be stored in `~/.pi/agent/auth.json` and selected by name with the `--auth` flag (or the `auth` field in `~/.pi/agent/settings.json`). This avoids exporting keys into the shell environment.
 
 ```json
 {
@@ -175,13 +175,13 @@ Kimi's `ANTHROPIC_BASE_URL` / `ANTHROPIC_API_KEY` examples are for Anthropic-sha
 
 Live Kimi usage sends prompts, file contents read by tools, and tool outputs to the configured provider. JSONL session redaction is a persistence boundary, not a guarantee that terminal output, CI logs, provider diagnostics, or provider-bound tool results are redacted. Do not paste raw credentials into prompts, files, or tool-visible content.
 
-`--resume` reconstructs the redacted active session path, including persisted leaf and compaction context, and restores workspace metadata. When you omit `--model`, `--base-url`, `--api-key-env`, or `--auth`, the harness falls back to values stored in the resumed session, then to `~/.cpp-harness/agent/settings.json`, then to built-in defaults. Explicit CLI flags always win. For Kimi sessions, repeating the Kimi base URL, model, and key source on resume is still recommended so runtime context stays explicit.
+`--resume` reconstructs the redacted active session path, including persisted leaf and compaction context, and restores workspace metadata. When you omit `--model`, `--base-url`, `--api-key-env`, or `--auth`, the harness falls back to values stored in the resumed session, then to `~/.pi/agent/settings.json`, then to built-in defaults. Explicit CLI flags always win. For Kimi sessions, repeating the Kimi base URL, model, and key source on resume is still recommended so runtime context stays explicit.
 
 Troubleshooting:
 
 | Symptom | Check |
 | --- | --- |
-| `missing API key` | Export `KIMI_API_KEY` and pass `--api-key-env KIMI_API_KEY`, or add the key to `~/.cpp-harness/agent/auth.json` and pass `--auth kimi-coding`. |
+| `missing API key` | Export `KIMI_API_KEY` and pass `--api-key-env KIMI_API_KEY`, or add the key to `~/.pi/agent/auth.json` and pass `--auth kimi-coding`. |
 | Authentication or authorization failure | Confirm the key is valid for Kimi Code and that the base URL is `https://api.kimi.com/coding/v1`. |
 | Invalid model | Use `--model kimi-for-coding`. |
 | Rate limit or quota error | Retry later or check Kimi Code subscription/entitlement and quota. |
@@ -409,7 +409,7 @@ Frontend selection follows pi baseline `864b35c` after argument parsing and befo
 
 At startup, the CLI scans project-local `.cpp-harness/skills` for nested `SKILL.md` files only when the project resource load plan allows project skills. A skill file uses flat YAML frontmatter (`name`, `description`, optional `disable-model-invocation`) followed by markdown instructions. Valid skills are loaded into the session, diagnostics for malformed or duplicate skills print to stderr, and visible skills are injected into model context through the pi-shaped `<available_skills>` block.
 
-Skills with `disable-model-invocation: true` are hidden from the model-visible list but can still be invoked explicitly with `/skill:<name> [additional instructions]` when the skill was loaded. Invocation uses the skill body cached at startup; edit/reload behavior during a running session, global `~/.cpp-harness/agent/skills`, and config-driven skill directories are deferred.
+Skills with `disable-model-invocation: true` are hidden from the model-visible list but can still be invoked explicitly with `/skill:<name> [additional instructions]` when the skill was loaded. Invocation uses the skill body cached at startup; edit/reload behavior during a running session, global `~/.pi/agent/skills`, and config-driven skill directories are deferred.
 
 Explicit `--prompt-template` inputs may be `.md` files or directories containing loadable `.md` files. A missing, malformed, or unsupported explicit file—or an explicit directory with no loadable templates—aborts creation before the session is published. Malformed auto-discovered project templates are skipped instead and produce bounded diagnostics.
 
@@ -429,9 +429,9 @@ The exact immutable effective registry drives component dispatch, hotkey help, a
 
 Project trust controls whether project-authored `.cpp-harness` resources are loaded at startup. It is an input-loading guard, not a sandbox: it does not restrict built-in tools, model output, prompt injection from files you choose to read, shell commands enabled with `--enable-bash`, or transcript content already present in a resumed session.
 
-Protected project markers include `.cpp-harness/settings.json`, `.cpp-harness/skills`, `.cpp-harness/prompts`, `.cpp-harness/themes`, `.cpp-harness/extensions`, `.cpp-harness/packages`, `.cpp-harness/SYSTEM.md`, and `.cpp-harness/APPEND_SYSTEM.md`. A bare `.cpp-harness` directory and `.cpp-harness/sessions` do not require trust. In non-interactive startup, the default `ask` policy acts as untrusted unless a saved trust decision or same-run override exists. Trust decisions are read from user-controlled `~/.cpp-harness/agent/trust.json` with nearest-parent inheritance.
+Protected project markers include `.cpp-harness/settings.json`, `.cpp-harness/skills`, `.cpp-harness/prompts`, `.cpp-harness/themes`, `.cpp-harness/extensions`, `.cpp-harness/packages`, `.cpp-harness/SYSTEM.md`, and `.cpp-harness/APPEND_SYSTEM.md`. A bare `.cpp-harness` directory and `.cpp-harness/sessions` do not require trust. In non-interactive startup, the default `ask` policy acts as untrusted unless a saved trust decision or same-run override exists. Trust decisions are read from user-controlled `~/.pi/agent/trust.json` with nearest-parent inheritance.
 
-User settings in `~/.cpp-harness/agent/settings.json` can set provider defaults (`provider`, `model`, `base_url`, `api_key_env`, `auth`), a Native TUI `theme` name, `default_project_trust` to `ask`, `always`, or `never`, and `project_resources.skills` / `project_resources.themes` to `auto`, `on`, or `off`. Optional compatible `shellPath` and `shellCommandPrefix` strings configure local Shell launches from the one startup settings snapshot. A leading `~` in `shellPath` expands to the user's home directory; a non-empty prefix is joined to each script with one newline but is not added to tool-visible command text or Session history. The optional `sessionDir` string (pi vocabulary) is a CLI session-storage preference below `--session-dir` and `CCH_CODING_AGENT_SESSION_DIR`; it is not a provider setting and SDK default persistence never reads it. `off` always skips project skills. `--approve` / `-a` and `--no-approve` are one-run trust overrides; they do not persist decisions. `--no-skills` disables project-local skills for the run even when the project is trusted.
+User settings in `~/.pi/agent/settings.json` can set provider defaults (`provider`, `model`, `base_url`, `api_key_env`, `auth`), a Native TUI `theme` name, `default_project_trust` to `ask`, `always`, or `never`, and `project_resources.skills` / `project_resources.themes` to `auto`, `on`, or `off`. Optional compatible `shellPath` and `shellCommandPrefix` strings configure local Shell launches from the one startup settings snapshot. A leading `~` in `shellPath` expands to the user's home directory; a non-empty prefix is joined to each script with one newline but is not added to tool-visible command text or Session history. The optional `sessionDir` string (pi vocabulary) is a CLI session-storage preference below `--session-dir` and `CCH_CODING_AGENT_SESSION_DIR`; it is not a provider setting and SDK default persistence never reads it. `off` always skips project skills. `--approve` / `-a` and `--no-approve` are one-run trust overrides; they do not persist decisions. `--no-skills` disables project-local skills for the run even when the project is trusted.
 
 ## Tools
 

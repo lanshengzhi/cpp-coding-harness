@@ -8,5 +8,9 @@ These committed Model-shape goldens are copied from the supported contract at th
   headers, cost tiers, or API compat.
 - `models/complete-anthropic-model.json` exercises every supported Model field. Its absent `off` thinking key means
   provider default, while `"low": null` means that level is unsupported.
+- `auth-storage/round-trip-input.json` and `auth-storage/round-trip-expected.json` pin the shared `auth.json`
+  read-modify-write contract: known API-key/OAuth records, Codex `accountId`, unknown provider records, and OAuth
+  extra fields survive whole-file persistence. Every credential-like value is an explicit `dummy-*` token; no fixture
+  value was copied from a live credential.
 
 The full adapter/auth/persistence capability checklist and shard hash land with the pi-ai completion gate (#347).

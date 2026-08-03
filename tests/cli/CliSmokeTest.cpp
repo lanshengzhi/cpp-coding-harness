@@ -711,7 +711,7 @@ TEST_CASE("CLI creation failure after malformed settings keeps the settings warn
     }
     auto session = workspace.path() / "settings-fallback-failure.jsonl";
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " env -u CCH_TEST_MISSING_KEY " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " env -u CCH_TEST_MISSING_KEY " + bin() +
         " --workspace " + shell_quote(workspace.path()) +
         " --session " + shell_quote(session) +
         " --api-key-env CCH_TEST_MISSING_KEY hello");
@@ -965,7 +965,7 @@ TEST_CASE("CLI project-controlled default trust store cannot authorize project s
                     "# Demo Skill\n\n"
                     "Do demo.\n");
     workspace.write(
-        ".cpp-harness/agent/trust.json",
+        ".pi/agent/trust.json",
         "{\"" + std::filesystem::weakly_canonical(workspace.path()).string() + "\":true}\n");
     auto session = workspace.path() / "project-controlled-trust.jsonl";
 
@@ -1260,8 +1260,7 @@ TEST_CASE("CLI RPC resource diagnostics stay off command stream", "[cli][rpc][pr
 TEST_CASE("CLI applies settings.json model when CLI omits --model", "[cli][settings]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    std::filesystem::create_directories(home.path() / ".cpp-harness" / "agent");
-    std::ofstream(home.path() / ".cpp-harness" / "agent" / "settings.json") << R"({"model":"config-model-name"})";
+    home.write(".pi/agent/settings.json", R"({"model":"config-model-name"})");
     auto session = workspace.path() / "settings-model-session.jsonl";
 
     auto result = run_command(
@@ -1279,8 +1278,7 @@ TEST_CASE("CLI applies settings.json model when CLI omits --model", "[cli][setti
 TEST_CASE("CLI accepts settings.json api_key_env chain without explicit --api-key-env", "[cli][settings]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    std::filesystem::create_directories(home.path() / ".cpp-harness" / "agent");
-    std::ofstream(home.path() / ".cpp-harness" / "agent" / "settings.json") << R"({"api_key_env":["CUSTOM_KEY"]})";
+    home.write(".pi/agent/settings.json", R"({"api_key_env":["CUSTOM_KEY"]})");
     auto session = workspace.path() / "settings-key-session.jsonl";
 
     auto result = run_command(
@@ -1350,8 +1348,9 @@ TEST_CASE("CLI rejects each explicit prompt template input that has no loadable 
 TEST_CASE("CLI applies settings.json provider identity when no explicit provider", "[cli][settings][provider-resolution]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    std::filesystem::create_directories(home.path() / ".cpp-harness" / "agent");
-    std::ofstream(home.path() / ".cpp-harness" / "agent" / "settings.json") << R"({"provider":"kimi-coding","model":"kimi-for-coding"})";
+    home.write(
+        ".pi/agent/settings.json",
+        R"({"provider":"kimi-coding","model":"kimi-for-coding"})");
     auto session = workspace.path() / "settings-provider-rpc.jsonl";
 
     auto result = run_command_split_with_input(
@@ -1453,7 +1452,7 @@ TEST_CASE("CLI default creation stores the session under the workspace-keyed age
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) + " hello");
 
     REQUIRE(result.exit_code == 0);
@@ -1472,7 +1471,7 @@ TEST_CASE("CLI default creation follows the explicit workspace rather than the l
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
 
     auto result = run_command_split(
-        "cd " + shell_quote(launch_dir.path()) + " && CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "cd " + shell_quote(launch_dir.path()) + " && PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) + " hello");
 
     REQUIRE(result.exit_code == 0);
@@ -1492,11 +1491,11 @@ TEST_CASE("CLI default creation shares storage across symbolic-link workspace al
     const auto canonical_workspace = std::filesystem::canonical(real.path());
 
     auto direct = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(real.path()) + " first");
     REQUIRE(direct.exit_code == 0);
     auto aliased = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(alias) + " second");
     REQUIRE(aliased.exit_code == 0);
 
@@ -1533,7 +1532,7 @@ TEST_CASE("CLI JSON mode propagates the same default persisted target", "[cli][d
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --mode json --workspace " + shell_quote(workspace.path()) + " hello");
 
     REQUIRE(result.exit_code == 0);
@@ -1555,7 +1554,7 @@ TEST_CASE("CLI RPC mode propagates the same default persisted target", "[cli][de
         "{\"id\":\"p1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
         "{\"id\":\"q1\",\"type\":\"shutdown\"}\n";
     auto result = run_command_split_with_input(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --mode rpc --workspace " + shell_quote(workspace.path()),
         input);
 
@@ -1573,7 +1572,7 @@ TEST_CASE("CLI piped print propagates the same default persisted target", "[cli]
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
 
     auto result = run_command_split(
-        "printf 'hello' | CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "printf 'hello' | PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()));
 
     REQUIRE(result.exit_code == 0);
@@ -1588,14 +1587,14 @@ TEST_CASE("CLI explicit session targets keep their exact paths outside the defau
     const auto explicit_session = workspace.path() / "explicit.jsonl";
 
     auto created = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(explicit_session) + " first");
     REQUIRE(created.exit_code == 0);
     CHECK(std::filesystem::exists(explicit_session));
     CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
 
     auto resumed = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) + " --resume " + shell_quote(explicit_session) + " second");
     REQUIRE(resumed.exit_code == 0);
     CHECK(resumed.stdout_text.find("fake: second") != std::string::npos);
@@ -1612,13 +1611,13 @@ TEST_CASE("CLI default creation ignores the old project-local sessions directory
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
 
     auto seed = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) + " --session " + shell_quote(legacy_file) + " legacy-seed");
     REQUIRE(seed.exit_code == 0);
     const auto legacy_before = read_file(legacy_file);
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) + " hello");
     REQUIRE(result.exit_code == 0);
     CHECK(read_file(legacy_file) == legacy_before);
@@ -1627,7 +1626,7 @@ TEST_CASE("CLI default creation ignores the old project-local sessions directory
 
     // A valid old file remains usable only through the explicit resume contract.
     auto resumed = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) + " --resume " + shell_quote(legacy_file) + " second");
     REQUIRE(resumed.exit_code == 0);
     CHECK(resumed.stdout_text.find("fake: second") != std::string::npos);
@@ -1645,7 +1644,7 @@ TEST_CASE("CLI default creation fails explicitly when default storage is unsafe"
     }
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(blocker) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(blocker) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) + " hello");
 
     REQUIRE(result.exit_code != 0);
@@ -1659,7 +1658,7 @@ TEST_CASE("CLI default creation fails explicitly when no user-level root can be 
     cch::tests::TempWorkspace workspace;
 
     auto result = run_command_split(
-        "env -u HOME -u USERPROFILE -u CCH_CODING_AGENT_DIR " + bin() +
+        "env -u HOME -u USERPROFILE -u PI_CODING_AGENT_DIR " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) + " hello");
 
     REQUIRE(result.exit_code != 0);
@@ -1672,7 +1671,7 @@ TEST_CASE("CLI help describes automatic user-level session storage", "[cli][defa
     auto result = run_command(bin() + " --help");
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.output.find("CCH_CODING_AGENT_DIR") != std::string::npos);
+    CHECK(result.output.find("PI_CODING_AGENT_DIR") != std::string::npos);
     CHECK(result.output.find("sessions") != std::string::npos);
     CHECK(result.output.find("--session-id") == std::string::npos);
 }
@@ -1683,7 +1682,7 @@ TEST_CASE("CLI failed assembly publishes no default session file", "[cli][defaul
     const auto agent_dir = agent_root.path() / "agent";
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) +
         " --prompt-template missing.md hello");
 
@@ -1712,7 +1711,7 @@ TEST_CASE("CLI --no-session runs a text prompt without publishing session state"
     const auto agent_dir = agent_root.path() / "agent";
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --no-session --workspace " + shell_quote(workspace.path()) + " hello");
 
     REQUIRE(result.exit_code == 0);
@@ -1728,7 +1727,7 @@ TEST_CASE("CLI --no-session JSON mode propagates the in-memory target", "[cli][n
     const auto agent_dir = agent_root.path() / "agent";
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --no-session --mode json --workspace " + shell_quote(workspace.path()) + " hello");
 
     REQUIRE(result.exit_code == 0);
@@ -1749,7 +1748,7 @@ TEST_CASE("CLI --no-session RPC mode propagates the in-memory target", "[cli][no
         "{\"id\":\"s1\",\"type\":\"get_state\"}\n"
         "{\"id\":\"q1\",\"type\":\"shutdown\"}\n";
     auto result = run_command_split_with_input(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --no-session --mode rpc --workspace " + shell_quote(workspace.path()),
         input);
 
@@ -1773,7 +1772,7 @@ TEST_CASE("CLI --no-session command reports the in-memory target", "[cli][no-ses
     const auto agent_dir = agent_root.path() / "agent";
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --no-session --print --workspace " + shell_quote(workspace.path()) +
         " /session");
 
@@ -1791,7 +1790,7 @@ TEST_CASE("CLI /session shows the persisted file for a default session", "[cli][
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) + " /session");
 
     REQUIRE(result.exit_code == 0);
@@ -1808,7 +1807,7 @@ TEST_CASE("CLI rejects --no-session combined with explicit create or resume befo
     const auto explicit_session = workspace.path() / "explicit.jsonl";
 
     auto created = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --no-session --session " + shell_quote(explicit_session) +
         " --workspace " + shell_quote(workspace.path()) + " hello");
     REQUIRE(created.exit_code != 0);
@@ -1816,7 +1815,7 @@ TEST_CASE("CLI rejects --no-session combined with explicit create or resume befo
     CHECK(created.stderr_text.find("--no-session cannot be combined with --session") != std::string::npos);
 
     auto resumed = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --no-session --resume " + shell_quote(explicit_session) +
         " --workspace " + shell_quote(workspace.path()) + " hello");
     REQUIRE(resumed.exit_code != 0);
@@ -1836,7 +1835,7 @@ TEST_CASE("CLI --no-session does not consult default storage", "[cli][no-session
     }
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(blocker) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(blocker) + " " + bin() +
         " --fake --no-session --workspace " + shell_quote(workspace.path()) + " hello");
 
     // In-memory operation is explicit, so unusable default storage is never
@@ -1853,7 +1852,7 @@ TEST_CASE("CLI --no-session preserves tool execution and events", "[cli][no-sess
     std::ofstream(workspace.path() / "note.txt") << "in-memory tool text";
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --no-session --workspace " + shell_quote(workspace.path()) + " 'read note.txt'");
 
     REQUIRE(result.exit_code == 0);
@@ -1869,7 +1868,7 @@ TEST_CASE("CLI --no-session publishes no filesystem state after a startup failur
     const auto agent_dir = agent_root.path() / "agent";
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --no-session --workspace " + shell_quote(workspace.path()) +
         " --prompt-template missing.md hello");
 
@@ -1887,7 +1886,7 @@ TEST_CASE("CLI --session-dir redirects automatic storage for one run", "[cli][se
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) +
         " --session-dir " + shell_quote(override_dir) + " hello");
 
@@ -1917,7 +1916,7 @@ TEST_CASE("CLI session directory precedence is flag over environment over settin
     }
 
     auto flagged = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) +
         " CCH_CODING_AGENT_SESSION_DIR=" + shell_quote(env_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) +
         " --session-dir " + shell_quote(flag_dir) + " first");
@@ -1927,7 +1926,7 @@ TEST_CASE("CLI session directory precedence is flag over environment over settin
     CHECK_FALSE(std::filesystem::exists(settings_dir));
 
     auto from_env = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) +
         " CCH_CODING_AGENT_SESSION_DIR=" + shell_quote(env_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) + " second");
     REQUIRE(from_env.exit_code == 0);
@@ -1935,7 +1934,7 @@ TEST_CASE("CLI session directory precedence is flag over environment over settin
     CHECK_FALSE(std::filesystem::exists(settings_dir));
 
     auto from_settings = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) + " third");
     REQUIRE(from_settings.exit_code == 0);
     CHECK(jsonl_files_under(settings_dir).size() == 1);
@@ -1950,7 +1949,7 @@ TEST_CASE("CLI relative --session-dir resolves against the final workspace", "[c
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
 
     auto result = run_command_split(
-        "cd " + shell_quote(launch_dir.path()) + " && CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "cd " + shell_quote(launch_dir.path()) + " && PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) +
         " --session-dir my-sessions hello");
 
@@ -1962,7 +1961,7 @@ TEST_CASE("CLI relative --session-dir resolves against the final workspace", "[c
     // The workspace itself determines resolution: the same relative value from
     // another launch directory lands in the same workspace-relative place.
     auto again = run_command_split(
-        "cd " + shell_quote(agent_root.path()) + " && CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "cd " + shell_quote(agent_root.path()) + " && PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) +
         " --session-dir my-sessions again");
     REQUIRE(again.exit_code == 0);
@@ -1979,7 +1978,7 @@ TEST_CASE("CLI session directory override expands a leading home marker", "[cli]
 
     auto result = run_command_split(
         "HOME=" + shell_quote(home_root.path()) +
-        " CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        " PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) +
         " --session-dir '~/tilde-sessions' hello");
 
@@ -1998,7 +1997,7 @@ TEST_CASE("CLI explicit create and resume targets ignore session directory overr
     const auto explicit_session = workspace.path() / "explicit.jsonl";
 
     auto created = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) +
         " --session-dir " + shell_quote(override_dir) +
         " --session " + shell_quote(explicit_session) + " first");
@@ -2007,7 +2006,7 @@ TEST_CASE("CLI explicit create and resume targets ignore session directory overr
     CHECK_FALSE(std::filesystem::exists(override_dir));
 
     auto resumed = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) +
         " CCH_CODING_AGENT_SESSION_DIR=" + shell_quote(override_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) +
         " --resume " + shell_quote(explicit_session) + " second");
@@ -2025,7 +2024,7 @@ TEST_CASE("CLI --no-session ignores session directory overrides and publishes no
     const auto override_dir = override_root.path() / "sessions";
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --no-session --workspace " + shell_quote(workspace.path()) +
         " --session-dir " + shell_quote(override_dir) + " hello");
 
@@ -2048,7 +2047,7 @@ TEST_CASE("CLI ignores a non-string settings sessionDir and uses the default roo
     }
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) + " hello");
 
     REQUIRE(result.exit_code == 0);
@@ -2067,7 +2066,7 @@ TEST_CASE("CLI malformed settings keep default session storage with a warning", 
     }
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) + " hello");
 
     REQUIRE(result.exit_code == 0);
@@ -2087,7 +2086,7 @@ TEST_CASE("CLI unavailable session directory override fails explicitly without f
     }
 
     auto result = run_command_split(
-        "CCH_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) +
         " --session-dir " + shell_quote(blocker) + " hello");
 

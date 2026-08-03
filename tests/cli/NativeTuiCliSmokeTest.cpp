@@ -74,7 +74,7 @@ TEST_CASE(
             ::dup2(pty->slave.get(), STDIN_FILENO) < 0 ||
             ::dup2(pty->slave.get(), STDOUT_FILENO) < 0 ||
             ::dup2(pty->slave.get(), STDERR_FILENO) < 0 ||
-            ::setenv("CCH_CODING_AGENT_DIR", config_path.c_str(), 1) != 0) {
+            ::setenv("PI_CODING_AGENT_DIR", config_path.c_str(), 1) != 0) {
             ::_exit(126);
         }
         ::execl(
@@ -137,7 +137,7 @@ TEST_CASE(
             ::dup2(pty->slave.get(), STDIN_FILENO) < 0 ||
             ::dup2(pty->slave.get(), STDOUT_FILENO) < 0 ||
             ::dup2(pty->slave.get(), STDERR_FILENO) < 0 ||
-            ::setenv("CCH_CODING_AGENT_DIR", config_path.c_str(), 1) != 0) {
+            ::setenv("PI_CODING_AGENT_DIR", config_path.c_str(), 1) != 0) {
             ::_exit(126);
         }
         ::execl(

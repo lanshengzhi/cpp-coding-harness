@@ -3,9 +3,9 @@
 The Native TUI keybinding format is compatible with pi parity baseline
 `864b35c`. The harness performs one startup read of
 `<Agent Config Directory>/keybindings.json` (normally
-`~/.cpp-harness/agent/keybindings.json`). `CCH_CODING_AGENT_DIR` changes the
-Agent Config Directory. Discovery never reads `~/.pi`, `.pi`, or any other pi
-state directory.
+`~/.pi/agent/keybindings.json`). `PI_CODING_AGENT_DIR` changes the Agent Config
+Directory. Discovery reads only that resolved user-level root and never scans a
+project-local `.pi` directory.
 
 On supported Linux/macOS, the production CLI loads this file when interactive
 stdin/stdout selects the Native TUI. Print, JSON, RPC, SDK, and unsupported-platform

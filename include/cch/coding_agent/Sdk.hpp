@@ -171,7 +171,7 @@ struct CreateAgentSessionOptions {
     std::optional<ResourceEnablement> project_skills_enablement;
     /// Optional absolute path to a user-controlled trust store outside the
     /// workspace. If omitted, the agent config directory's `trust.json`
-    /// (`~/.cpp-harness/agent/trust.json`) is used. A supplied path must be
+    /// (`~/.pi/agent/trust.json`) is used. A supplied path must be
     /// absolute and must not resolve to the workspace or any path inside it.
     std::optional<std::filesystem::path> trust_store_path;
 

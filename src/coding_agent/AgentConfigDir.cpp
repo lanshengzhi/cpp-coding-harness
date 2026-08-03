@@ -29,12 +29,12 @@ namespace {
 } // namespace
 
 std::filesystem::path agent_config_dir() {
-    if (const char* override_dir = std::getenv("CCH_CODING_AGENT_DIR");
+    if (const char* override_dir = std::getenv("PI_CODING_AGENT_DIR");
         override_dir != nullptr && override_dir[0] != '\0') {
         return override_dir;
     }
     const auto home = home_directory();
-    return home.empty() ? std::filesystem::path{} : home / ".cpp-harness" / "agent";
+    return home.empty() ? std::filesystem::path{} : home / ".pi" / "agent";
 }
 
 std::filesystem::path sessions_root_path() {

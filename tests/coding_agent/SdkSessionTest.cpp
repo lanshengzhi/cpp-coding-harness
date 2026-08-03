@@ -1231,7 +1231,7 @@ TEST_CASE(
     paths.workspace.write("target.txt", "target content\n");
     cch::tests::TempWorkspace isolated;
     const auto agent_dir = isolated.path() / "agent-not-created";
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.string());
 
     coding_agent::CreateAgentSessionOptions opts;
@@ -1334,7 +1334,7 @@ TEST_CASE(
     TestPaths paths;
     cch::tests::TempWorkspace isolated;
     const auto agent_dir = isolated.path() / "agent-not-created";
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.string());
 
     coding_agent::CreateAgentSessionOptions opts;
@@ -1382,7 +1382,7 @@ TEST_CASE(
     write_project_prompt(paths, "project-review", "Review in memory: $1.");
     cch::tests::TempWorkspace isolated;
     const auto agent_dir = isolated.path() / "agent-not-created";
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.string());
 
     coding_agent::CreateAgentSessionOptions opts;
@@ -1416,7 +1416,7 @@ TEST_CASE(
     TestPaths paths;
     cch::tests::TempWorkspace isolated;
     const auto agent_dir = isolated.path() / "agent-not-created";
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.string());
 
     coding_agent::CreateAgentSessionOptions opts;
@@ -2280,7 +2280,7 @@ TEST_CASE(
 TEST_CASE("SDK default target persists under the canonical workspace key", "[sdk][u2][default-persistence]") {
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
 
     coding_agent::CreateAgentSessionOptions opts;
@@ -2314,7 +2314,7 @@ TEST_CASE("SDK default persistence ignores CLI-only session directory inputs", "
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
     cch::tests::TempWorkspace cli_directory;
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     tests::EnvVarGuard cli_dir_guard{"CCH_CODING_AGENT_SESSION_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
     cli_dir_guard.set(cli_directory.path().string());
@@ -2345,7 +2345,7 @@ TEST_CASE("SessionFactory applies one User Settings snapshot across provider and
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
     cch::tests::TempWorkspace settings_sessions;
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
     agent_dir.write("settings.json",
         "{\"model\":\"settings-model\",\"sessionDir\":\"" + settings_sessions.path().string() + "\"}");
@@ -2372,7 +2372,7 @@ TEST_CASE(
 #if defined(__unix__) || defined(__APPLE__)
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
     paths.workspace.write(
         "custom-shell",
@@ -2423,7 +2423,7 @@ TEST_CASE(
 #if defined(__unix__) || defined(__APPLE__)
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
     agent_dir.write(
         "settings.json",
@@ -2453,7 +2453,7 @@ TEST_CASE(
 TEST_CASE("SessionFactory creation without User Settings applies defaults silently", "[sdk][settings-snapshot]") {
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
 
     coding_agent::CreateAgentSessionOptions opts;
@@ -2470,7 +2470,7 @@ TEST_CASE("SessionFactory creation without User Settings applies defaults silent
 TEST_CASE("SessionFactory creation with malformed User Settings succeeds with safe defaults and a warning", "[sdk][settings-snapshot]") {
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
     agent_dir.write("settings.json", "{not valid json");
 
@@ -2492,7 +2492,7 @@ TEST_CASE("SessionFactory creation with malformed User Settings succeeds with sa
 TEST_CASE("SessionFactory creation with invalid User Settings values falls back with a warning", "[sdk][settings-snapshot]") {
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
     agent_dir.write("settings.json", "{\"default_project_trust\":\"bogus\"}");
 
@@ -2513,7 +2513,7 @@ TEST_CASE("SessionFactory creation with invalid User Settings values falls back 
 TEST_CASE("SessionFactory SDK creation failure after User Settings fallback keeps the primary error and carries the warning", "[sdk][settings-snapshot]") {
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
     agent_dir.write("settings.json", "{not valid json");
 
@@ -2533,7 +2533,7 @@ TEST_CASE("SessionFactory SDK creation failure after User Settings fallback keep
 TEST_CASE("SessionFactory CLI creation failure after User Settings fallback keeps the primary error and carries the warning", "[sdk][settings-snapshot]") {
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
     agent_dir.write("settings.json", "{not valid json");
 
@@ -2558,7 +2558,7 @@ TEST_CASE("SessionFactory CLI creation failure after User Settings fallback keep
 TEST_CASE("SessionFactory CLI creation without credentials fails with missing API key before publishing", "[sdk][assembly][cli]") {
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
     tests::EnvVarGuard key_guard{"CCH_FACTORY_MISSING_KEY"};
     key_guard.unset();
@@ -2579,7 +2579,7 @@ TEST_CASE("SessionFactory CLI creation without credentials fails with missing AP
 TEST_CASE("SessionFactory CLI explicit new target rejects an unresolvable workspace", "[sdk][assembly][cli]") {
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
 
     coding_agent::runtime::AgentSessionCreationRequest request;
@@ -2597,7 +2597,7 @@ TEST_CASE("SessionFactory CLI explicit new target rejects an unresolvable worksp
 TEST_CASE("SessionFactory CLI resume rejects an unresolvable explicit workspace", "[sdk][assembly][cli]") {
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
 
     coding_agent::runtime::AgentSessionCreationRequest create_request;
@@ -2623,7 +2623,7 @@ TEST_CASE("SessionFactory CLI resume rejects an unresolvable explicit workspace"
 TEST_CASE("SessionFactory CLI explicit new target rejects an existing session file without modifying it", "[sdk][assembly][cli]") {
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
     {
         std::ofstream existing(paths.session_file, std::ios::binary);
@@ -2651,7 +2651,7 @@ TEST_CASE("SDK default target gives workspace symlink aliases one directory", "[
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
     cch::tests::TempWorkspace aliases;
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
     const auto alias = aliases.path() / "workspace-alias";
     std::filesystem::create_directory_symlink(paths.workspace.path(), alias);
@@ -2681,7 +2681,7 @@ TEST_CASE("failed SDK default assembly publishes no session", "[sdk][assembly][d
     TestPaths paths;
     cch::tests::TempWorkspace home;
     const auto agent_dir = home.path() / "not-created" / "agent";
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.string());
 
     coding_agent::CreateAgentSessionOptions opts;
@@ -2698,7 +2698,7 @@ TEST_CASE("failed SDK default assembly publishes no session", "[sdk][assembly][d
 TEST_CASE("SDK explicit new and resume paths bypass automatic storage", "[sdk][u2][session-target]") {
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set((agent_dir.path() / "unused-agent-dir").string());
 
     coding_agent::CreateAgentSessionOptions create;
@@ -2729,7 +2729,7 @@ TEST_CASE("SDK explicit new and resume paths bypass automatic storage", "[sdk][u
 TEST_CASE("SDK default creation ignores a valid legacy session that remains explicitly resumable", "[sdk][default-persistence]") {
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
     const auto legacy_directory = paths.workspace.path() / ".cpp-harness" / "sessions";
     const auto legacy_session = legacy_directory / "legacy.jsonl";
@@ -2788,7 +2788,7 @@ TEST_CASE("SDK default publication failure does not use the legacy workspace dir
         std::ofstream marker(legacy_marker);
         marker << "legacy";
     }
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.string());
 
     coding_agent::CreateAgentSessionOptions opts;
@@ -2806,7 +2806,7 @@ TEST_CASE("SDK default publication failure does not use the legacy workspace dir
 #if defined(__unix__) || defined(__APPLE__)
 TEST_CASE("SDK default creation fails when the Agent Config Directory is unresolved", "[sdk][default-persistence][failure]") {
     TestPaths paths;
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     tests::EnvVarGuard home_guard{"HOME"};
     agent_dir_guard.unset();
     home_guard.unset();
@@ -2929,9 +2929,9 @@ TEST_CASE("SDK resume uses config-derived api_key_env chain", "[sdk][u2][api-key
     first_key.unset();
     second_key.set("resume-secret");
 
-    std::filesystem::create_directories(home.path() / ".cpp-harness" / "agent");
-    std::ofstream(home.path() / ".cpp-harness" / "agent" / "settings.json")
-        << R"({"provider":"fake","model":"fake-model","api_key_env":["CCH_SDK_RESUME_FIRST","CCH_SDK_RESUME_SECOND"]})";
+    home.write(
+        ".pi/agent/settings.json",
+        R"({"provider":"fake","model":"fake-model","api_key_env":["CCH_SDK_RESUME_FIRST","CCH_SDK_RESUME_SECOND"]})");
 
     {
         coding_agent::CreateAgentSessionOptions opts;
@@ -4988,7 +4988,7 @@ TEST_CASE("SDK host-provided execution environment is not cleaned up by session 
 TEST_CASE("SDK disabled bash is absent from the model-visible tool registry", "[sdk][assembly][issue84]") {
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"CCH_CODING_AGENT_DIR"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
     agent_dir.write(
         "settings.json",
@@ -5072,7 +5072,7 @@ TEST_CASE("SDK default trust store inside the workspace cannot authorize project
     home_guard.set(paths.workspace.path().string());
     write_project_skill(paths, "workspace-authorized");
     paths.workspace.write(
-        ".cpp-harness/agent/trust.json",
+        ".pi/agent/trust.json",
         "{\"" + std::filesystem::weakly_canonical(paths.workspace.path()).string() + "\":true}\n");
 
     coding_agent::CreateAgentSessionOptions opts;
@@ -5211,8 +5211,7 @@ TEST_CASE("SDK host client new session uses config provider but host model senti
     cch::tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
     home_guard.set(home.path().string());
-    std::filesystem::create_directories(home.path() / ".cpp-harness" / "agent");
-    std::ofstream(home.path() / ".cpp-harness" / "agent" / "settings.json") << R"({"provider":"kimi-coding"})";
+    home.write(".pi/agent/settings.json", R"({"provider":"kimi-coding"})");
 
     coding_agent::CreateAgentSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
