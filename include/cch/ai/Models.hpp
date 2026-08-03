@@ -59,6 +59,15 @@ public:
     [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> logout(
         std::string provider_id);
 
+    /// Run a provider-owned login flow and persist its returned credential via
+    /// CredentialStore::modify, the only write path. Login-flow failures
+    /// propagate unwrapped to the host; only CredentialStore failures wrap as
+    /// the `auth` category. Login errors never enter the stream error channel.
+    [[nodiscard]] boost::asio::awaitable<util::Expected<Credential>> login(
+        std::string provider_id,
+        AuthType type,
+        AuthInteraction interaction);
+
     /// Normalize model/provider/auth/request failures to one terminal event and
     /// a final AssistantMessage value. Only sink/infrastructure failure uses
     /// Expected's error alternative.

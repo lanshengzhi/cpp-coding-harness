@@ -763,6 +763,16 @@ boost::asio::awaitable<util::Expected<std::optional<AuthResult>>> Models::get_au
     co_return resolved;
 }
 
+[[nodiscard]] std::string_view auth_type_string(AuthType type) {
+    switch (type) {
+    case AuthType::ApiKey:
+        return "api_key";
+    case AuthType::OAuth:
+        return "oauth";
+    }
+    return "oauth";
+}
+
 boost::asio::awaitable<util::ExpectedVoid> Models::logout(
     std::string provider_id) {
     auto removed = co_await invoke_models_callback(
@@ -778,6 +788,80 @@ boost::asio::awaitable<util::ExpectedVoid> Models::logout(
             removed.error()));
     }
     co_return util::ExpectedVoid{};
+}
+
+boost::asio::awaitable<util::Expected<Credential>> Models::login(
+    std::string provider_id,
+    AuthType type,
+    AuthInteraction interaction) {
+    const auto selected = provider(provider_id);
+    if (!selected) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Provider,
+            "Unknown provider: " + provider_id));
+    }
+    auto& auth = selected->auth();
+    const auto type_name = std::string{auth_type_string(type)};
+
+    util::Expected<Credential> flow_result;
+    if (type == AuthType::OAuth) {
+        if (!auth.oauth || !auth.oauth->login) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Auth,
+                std::string{selected->name()} + " does not support " +
+                    type_name + " login"));
+        }
+        auto credential = co_await invoke_models_callback(
+            util::ErrorCode::OAuth,
+            "OAuth login callback failed for " + provider_id,
+            [&]() {
+                return auth.oauth->login(std::move(interaction));
+            });
+        if (!credential) {
+            // Login-flow failures propagate unwrapped to the host.
+            co_return std::unexpected(std::move(credential.error()));
+        }
+        flow_result = std::move(*credential);
+    } else {
+        if (!auth.api_key || !auth.api_key->login) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Auth,
+                std::string{selected->name()} + " does not support " +
+                    type_name + " login"));
+        }
+        auto credential = co_await invoke_models_callback(
+            util::ErrorCode::Auth,
+            "API key login callback failed for " + provider_id,
+            [&]() {
+                return auth.api_key->login(std::move(interaction));
+            });
+        if (!credential) {
+            co_return std::unexpected(std::move(credential.error()));
+        }
+        flow_result = std::move(*credential);
+    }
+
+    // Persist exclusively through CredentialStore::modify, the only write
+    // path. Only CredentialStore failures wrap as the `auth` category.
+    util::Expected<Credential> login_credential = std::move(flow_result);
+    auto stored = co_await invoke_models_callback(
+        util::ErrorCode::Auth,
+        "Credential store modify callback failed for " + provider_id,
+        [&]() {
+            return impl_->credentials->modify(
+                provider_id,
+                [credential = login_credential](std::optional<Credential>)
+                    -> boost::asio::awaitable<util::Expected<std::optional<Credential>>> {
+                    co_return std::optional<Credential>{*credential};
+                });
+        });
+    if (!stored) {
+        co_return std::unexpected(categorized_error(
+            util::ErrorCode::Auth,
+            "Credential store modify failed for " + provider_id,
+            stored.error()));
+    }
+    co_return std::move(login_credential);
 }
 
 boost::asio::awaitable<util::Expected<AssistantMessage>> Models::stream_simple(

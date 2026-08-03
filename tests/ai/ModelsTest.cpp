@@ -59,6 +59,11 @@ public:
         std::string provider_id,
         ai::CredentialModifyHook modifier) override {
         ++modify_count;
+        if (fail_modify) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Unknown,
+                "store write failed"));
+        }
         std::optional<ai::Credential> current;
         if (const auto found = records.find(provider_id); found != records.end()) {
             current = found->second;
@@ -86,6 +91,7 @@ public:
     int modify_count{0};
     int remove_count{0};
     bool throw_read{false};
+    bool fail_modify{false};
 };
 
 class FakeAuthContext final : public ai::AuthContext {
@@ -305,6 +311,31 @@ ai::Models make_models(
     const std::shared_ptr<MemoryCredentialStore>& credentials,
     const std::shared_ptr<FakeAuthContext>& auth_context) {
     return ai::Models{credentials, auth_context};
+}
+
+
+ai::ProviderAuth oauth_login_auth(
+    ai::OAuthLoginHook login,
+    std::string name = "oauth-provider") {
+    ai::OAuthAuth oauth;
+    oauth.name = std::move(name);
+    oauth.login = std::move(login);
+    return ai::ProviderAuth{.oauth = std::move(oauth)};
+}
+
+ai::ProviderAuth api_key_login_auth(
+    ai::ApiKeyLoginHook login,
+    std::string name = "api-key-provider") {
+    ai::ApiKeyAuth api_key;
+    api_key.name = std::move(name);
+    api_key.login = std::move(login);
+    return ai::ProviderAuth{.api_key = std::move(api_key)};
+}
+
+ai::AuthInteraction empty_interaction() {
+    ai::AuthInteraction interaction;
+    interaction.notify = [](const ai::AuthEvent&) {};
+    return interaction;
 }
 
 } // namespace
@@ -1034,4 +1065,161 @@ TEST_CASE("Models live lookup and logout use owned Provider and CredentialStore 
     REQUIRE(run_awaitable(models.logout("provider")));
     CHECK(credentials->remove_count == 1);
     CHECK_FALSE(credentials->records.contains("provider"));
+}
+
+TEST_CASE("Models login persists the provider OAuth credential via CredentialStore modify", "[ai][models][auth][issue343]") {
+    auto credentials = std::make_shared<MemoryCredentialStore>();
+    auto auth_context = std::make_shared<FakeAuthContext>();
+    auto models = make_models(credentials, auth_context);
+    auto provider = std::make_shared<RecordingProvider>(
+        "login-provider",
+        oauth_login_auth(
+            [](ai::AuthInteraction) -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+                co_return ai::OAuthCredential{
+                    .refresh = "dummy-refresh",
+                    .access = "dummy-access",
+                    .expires = 123,
+                    .account_id = "account-xyz",
+                };
+            }));
+    REQUIRE(models.set_provider(provider));
+
+    auto result = run_awaitable(models.login(
+        "login-provider", ai::AuthType::OAuth, empty_interaction()));
+
+    REQUIRE(result);
+    const auto* oauth = std::get_if<ai::OAuthCredential>(&*result);
+    REQUIRE(oauth != nullptr);
+    CHECK(oauth->account_id == std::string{"account-xyz"});
+    CHECK(credentials->modify_count == 1);
+    REQUIRE(credentials->records.contains("login-provider"));
+    const auto* stored = std::get_if<ai::OAuthCredential>(&credentials->records.at("login-provider"));
+    REQUIRE(stored != nullptr);
+    CHECK(stored->access == "dummy-access");
+    CHECK(stored->refresh == "dummy-refresh");
+}
+
+TEST_CASE("Models login flow failure propagates unwrapped to the host", "[ai][models][auth][issue343]") {
+    auto credentials = std::make_shared<MemoryCredentialStore>();
+    auto auth_context = std::make_shared<FakeAuthContext>();
+    auto models = make_models(credentials, auth_context);
+    auto provider = std::make_shared<RecordingProvider>(
+        "login-provider",
+        oauth_login_auth(
+            [](ai::AuthInteraction) -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+                co_return std::unexpected(util::make_error(
+                    util::ErrorCode::Network,
+                    "provider flow failed",
+                    "detail"));
+            }));
+    REQUIRE(models.set_provider(provider));
+
+    auto result = run_awaitable(models.login(
+        "login-provider", ai::AuthType::OAuth, empty_interaction()));
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == util::ErrorCode::Network);
+    CHECK(result.error().message == "provider flow failed");
+    CHECK(result.error().detail == "detail");
+    CHECK(credentials->modify_count == 0);
+    CHECK(credentials->records.empty());
+}
+
+TEST_CASE("Models login wraps CredentialStore modify failures as the auth category", "[ai][models][auth][issue343]") {
+    auto credentials = std::make_shared<MemoryCredentialStore>();
+    credentials->fail_modify = true;
+    auto auth_context = std::make_shared<FakeAuthContext>();
+    auto models = make_models(credentials, auth_context);
+    auto provider = std::make_shared<RecordingProvider>(
+        "login-provider",
+        oauth_login_auth(
+            [](ai::AuthInteraction) -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+                co_return ai::OAuthCredential{
+                    .refresh = "r", .access = "a", .expires = 1, .account_id = "acct"};
+            }));
+    REQUIRE(models.set_provider(provider));
+
+    auto result = run_awaitable(models.login(
+        "login-provider", ai::AuthType::OAuth, empty_interaction()));
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == util::ErrorCode::Auth);
+    CHECK(result.error().message == "Credential store modify failed for login-provider");
+}
+
+TEST_CASE("Models login rejects unknown providers as a provider error", "[ai][models][auth][issue343]") {
+    auto credentials = std::make_shared<MemoryCredentialStore>();
+    auto auth_context = std::make_shared<FakeAuthContext>();
+    auto models = make_models(credentials, auth_context);
+
+    auto result = run_awaitable(models.login(
+        "missing", ai::AuthType::OAuth, empty_interaction()));
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == util::ErrorCode::Provider);
+    CHECK(result.error().message == "Unknown provider: missing");
+}
+
+TEST_CASE("Models login rejects a provider without OAuth login support", "[ai][models][auth][issue343]") {
+    auto credentials = std::make_shared<MemoryCredentialStore>();
+    auto auth_context = std::make_shared<FakeAuthContext>();
+    auto models = make_models(credentials, auth_context);
+    auto provider = std::make_shared<RecordingProvider>("key-only", keyless_auth());
+    REQUIRE(models.set_provider(provider));
+
+    auto result = run_awaitable(models.login(
+        "key-only", ai::AuthType::OAuth, empty_interaction()));
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == util::ErrorCode::Auth);
+    CHECK(result.error().message == "key-only does not support oauth login");
+    CHECK(credentials->modify_count == 0);
+}
+
+TEST_CASE("Models login persists an api-key credential through modify", "[ai][models][auth][issue343]") {
+    auto credentials = std::make_shared<MemoryCredentialStore>();
+    auto auth_context = std::make_shared<FakeAuthContext>();
+    auto models = make_models(credentials, auth_context);
+    auto provider = std::make_shared<RecordingProvider>(
+        "api-provider",
+        api_key_login_auth(
+            [](ai::AuthInteraction) -> boost::asio::awaitable<util::Expected<ai::ApiKeyCredential>> {
+                ai::ApiKeyCredential credential;
+                credential.key = "dummy-api-key";
+                co_return credential;
+            }));
+    REQUIRE(models.set_provider(provider));
+
+    auto result = run_awaitable(models.login(
+        "api-provider", ai::AuthType::ApiKey, empty_interaction()));
+
+    REQUIRE(result);
+    const auto* stored = std::get_if<ai::ApiKeyCredential>(&*result);
+    REQUIRE(stored != nullptr);
+    CHECK(stored->key == std::string{"dummy-api-key"});
+    CHECK(credentials->modify_count == 1);
+    REQUIRE(credentials->records.contains("api-provider"));
+    const auto* persisted = std::get_if<ai::ApiKeyCredential>(&credentials->records.at("api-provider"));
+    REQUIRE(persisted != nullptr);
+    CHECK(persisted->key == std::string{"dummy-api-key"});
+}
+
+TEST_CASE("Models login rejects a provider without api-key login support", "[ai][models][auth][issue343]") {
+    auto credentials = std::make_shared<MemoryCredentialStore>();
+    auto auth_context = std::make_shared<FakeAuthContext>();
+    auto models = make_models(credentials, auth_context);
+    auto provider = std::make_shared<RecordingProvider>(
+        "oauth-only",
+        oauth_login_auth(
+            [](ai::AuthInteraction) -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+                co_return ai::OAuthCredential{};
+            }));
+    REQUIRE(models.set_provider(provider));
+
+    auto result = run_awaitable(models.login(
+        "oauth-only", ai::AuthType::ApiKey, empty_interaction()));
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == util::ErrorCode::Auth);
+    CHECK(result.error().message == "oauth-only does not support api_key login");
 }

@@ -123,6 +123,11 @@ add_library(cch_ai
     src/ai/api/OpenAIResponsesAdapter.cpp
     src/ai/api/Termination.cpp
     src/ai/api/UsageNormalization.cpp
+    src/ai/auth/OAuthCallbackServer.cpp
+    src/ai/auth/OAuthHttpClient.cpp
+    src/ai/auth/OpenAICodexOAuth.cpp
+    src/ai/auth/OauthPage.cpp
+    src/ai/auth/Pkce.cpp
     src/ai/providers/BoostBeastStreamTransport.cpp
     src/ai/providers/BoostBeastWebSocketTransport.cpp
     src/ai/providers/FakeProvider.cpp
@@ -303,6 +308,7 @@ if(CCH_BUILD_TESTS)
         tests/ai/SimpleOptionsTest.cpp
         tests/ai/ToolContractTest.cpp
         tests/ai/UsageTest.cpp
+        tests/ai/auth/OpenAICodexOAuthTest.cpp
         tests/ai/providers/BoostBeastStreamTransportTest.cpp
         tests/ai/providers/FakeProviderTest.cpp
         tests/ai/api/AnthropicMessagesAdapterTest.cpp

@@ -28,4 +28,19 @@ namespace cch::tests {
     return util::read_json<util::JsonValue>(json);
 }
 
+[[nodiscard]] inline util::Expected<std::string> read_pi_fixture_text(
+    std::string_view relative_path) {
+    const auto path = std::filesystem::path{CCH_SOURCE_DIR} / "fixtures/pi-ai" /
+                      relative_path;
+    std::ifstream input{path, std::ios::binary};
+    if (!input) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Unknown,
+            "Failed to open pi fixture: " + path.string()));
+    }
+    return std::string{
+        std::istreambuf_iterator<char>{input},
+        std::istreambuf_iterator<char>{}};
+}
+
 } // namespace cch::tests

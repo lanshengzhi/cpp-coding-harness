@@ -88,3 +88,19 @@ Issue #342 adds the Codex `openai-codex-responses` wire goldens (WebSocket-first
   sockets for `cacheRetention: "none"`, the Codex terminal matrix, cancellation closing the socket with one
   `aborted` terminal, and the JWT `chatgpt_account_id` extraction. All credential-like values are
   distinguishable `dummy-*` values; the JWT carries the fixture account id `acc_test` and no live secret.
+
+Issue #343 adds the OAuth login content layer (AuthInteraction contract + Codex PKCE callback-server login):
+
+- `auth/oauth-success-callback.html`, `auth/oauth-error-route-not-found.html`, `auth/oauth-error-state-mismatch.html`,
+  `auth/oauth-error-missing-code.html`, and `auth/oauth-error-internal.html` are the frozen pi
+  `oauthSuccessHtml`/`oauthErrorHtml` page bodies captured verbatim from `packages/ai/src/auth/oauth/oauth-page.ts`
+  at baseline `83114817`. The tests compare the C++ `oauth_success_html`/`oauth_error_html` output byte-for-byte
+  against these files, and assert the callback server serves the same bodies with pi's exact status codes.
+- The Codex browser-login flow is exercised with a scripted `AuthInteraction` against a scripted fake HTTP client
+  and a real loopback callback server on an ephemeral port: the callback-vs-manual-code race in both directions,
+  the frozen authorize-URL bytes (`originator=pi`, PKCE S256 challenge, 16-byte hex state), the token-exchange
+  form body with the frozen `redirect_uri=http://localhost:1455/auth/callback`, unverified-JWT `accountId`
+  extraction, cancellation normalizing to `util::ErrorCode::Cancelled` + "Login cancelled", listen-failure
+  degrade to manual entry, the `PI_OAUTH_CALLBACK_HOST` bind override, and refresh errors carrying status + body
+  with no stderr output. All credential-like values are distinguishable `dummy-*` values; no fixture value came
+  from a live service.
