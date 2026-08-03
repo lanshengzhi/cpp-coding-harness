@@ -3,6 +3,8 @@
 #include <cch/ai/Model.hpp>
 #include <cch/ai/Provider.hpp>
 #include <cch/ai/providers/StreamTransport.hpp>
+#include <cch/ai/providers/WebSocketTransport.hpp>
+#include "ai/api/OpenAICodexResponsesAdapter.hpp"
 #include "ai/providers/OpenAIChatClient.hpp"
 
 #include <memory>
@@ -27,5 +29,16 @@ namespace cch::ai::providers {
     std::vector<ai::Model> models,
     std::vector<std::string> api_key_env,
     std::shared_ptr<StreamTransport> transport);
+
+/// Private composition seam for the WebSocket-first `openai-codex-responses`
+/// adapter. The cache config is injectable so tests can shrink the socket
+/// reuse expiry windows.
+[[nodiscard]] std::shared_ptr<ai::Provider> make_openai_codex_responses_provider(
+    std::string provider_id,
+    std::vector<ai::Model> models,
+    std::vector<std::string> api_key_env,
+    std::shared_ptr<StreamTransport> http_transport,
+    std::shared_ptr<WebSocketTransport> ws_transport,
+    api::CodexWebSocketCacheConfig cache_config = {});
 
 } // namespace cch::ai::providers

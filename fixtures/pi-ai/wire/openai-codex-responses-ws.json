@@ -1,0 +1,128 @@
+{
+  "request": {
+    "include": ["reasoning.encrypted_content"],
+    "input": [
+      {
+        "content": [
+          {"text": "hi", "type": "input_text"},
+          {"text": "(image omitted: model does not support images)", "type": "input_text"}
+        ],
+        "role": "user"
+      }
+    ],
+    "instructions": "system",
+    "model": "gpt-5.5-codex",
+    "parallel_tool_calls": true,
+    "prompt_cache_key": "session-1",
+    "reasoning": {"effort": "xhigh", "summary": "auto"},
+    "store": false,
+    "stream": true,
+    "temperature": 0.2,
+    "text": {"verbosity": "low"},
+    "tool_choice": "auto",
+    "tools": [
+      {
+        "description": "Look up a value",
+        "name": "lookup",
+        "parameters": {
+          "properties": {"q": {"type": "string"}},
+          "required": ["q"],
+          "type": "object"
+        },
+        "strict": null,
+        "type": "function"
+      }
+    ],
+    "type": "response.create"
+  },
+  "events": [
+    {"type": "response.created", "response": {"id": "resp_codex"}},
+    {
+      "type": "response.output_item.added",
+      "output_index": 0,
+      "item": {"type": "reasoning", "id": "rs_1", "summary": []}
+    },
+    {"type": "response.reasoning_text.delta", "output_index": 0, "delta": "plan"},
+    {
+      "type": "response.output_item.done",
+      "output_index": 0,
+      "item": {
+        "type": "reasoning",
+        "id": "rs_1",
+        "summary": [{"type": "summary_text", "text": "plan"}],
+        "encrypted_content": "dummy-encrypted"
+      }
+    },
+    {
+      "type": "response.output_item.added",
+      "output_index": 1,
+      "item": {
+        "type": "message",
+        "id": "msg_1",
+        "role": "assistant",
+        "status": "in_progress",
+        "content": [],
+        "phase": "final_answer"
+      }
+    },
+    {"type": "response.output_text.delta", "output_index": 1, "delta": "Hello"},
+    {
+      "type": "response.output_item.done",
+      "output_index": 1,
+      "item": {
+        "type": "message",
+        "id": "msg_1",
+        "role": "assistant",
+        "status": "completed",
+        "content": [{"type": "output_text", "text": "Hello", "annotations": []}],
+        "phase": "final_answer"
+      }
+    },
+    {
+      "type": "response.output_item.added",
+      "output_index": 2,
+      "item": {
+        "type": "function_call",
+        "id": "fc_1",
+        "call_id": "call_1",
+        "name": "lookup",
+        "arguments": ""
+      }
+    },
+    {
+      "type": "response.function_call_arguments.delta",
+      "output_index": 2,
+      "delta": "{\"q\":"
+    },
+    {
+      "type": "response.function_call_arguments.done",
+      "output_index": 2,
+      "arguments": "{\"q\":\"x\"}"
+    },
+    {
+      "type": "response.output_item.done",
+      "output_index": 2,
+      "item": {
+        "type": "function_call",
+        "id": "fc_1",
+        "call_id": "call_1",
+        "name": "lookup",
+        "arguments": "{\"q\":\"x\"}"
+      }
+    },
+    {
+      "type": "response.completed",
+      "response": {
+        "id": "resp_codex",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 120,
+          "output_tokens": 30,
+          "total_tokens": 150,
+          "input_tokens_details": {"cached_tokens": 20, "cache_write_tokens": 10},
+          "output_tokens_details": {"reasoning_tokens": 7}
+        }
+      }
+    }
+  ]
+}

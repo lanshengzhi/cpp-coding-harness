@@ -1083,4 +1083,12 @@ util::Expected<util::JsonValue> build_adapter_payload(
     return build_responses_payload(adapter, model, context, options);
 }
 
+util::Expected<util::JsonValue::array_t> build_responses_continuation_items(
+    const Model& model,
+    const AssistantMessage& assistant) {
+    AiContext context;
+    context.messages.emplace_back(assistant);
+    return convert_responses_messages(AdapterKind::OpenAICodexResponses, model, context);
+}
+
 } // namespace cch::ai::api

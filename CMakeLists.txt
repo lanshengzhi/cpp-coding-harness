@@ -119,10 +119,12 @@ add_library(cch_ai
     src/ai/Usage.cpp
     src/ai/api/AnthropicMessagesAdapter.cpp
     src/ai/api/MessageConversion.cpp
+    src/ai/api/OpenAICodexResponsesAdapter.cpp
     src/ai/api/OpenAIResponsesAdapter.cpp
     src/ai/api/Termination.cpp
     src/ai/api/UsageNormalization.cpp
     src/ai/providers/BoostBeastStreamTransport.cpp
+    src/ai/providers/BoostBeastWebSocketTransport.cpp
     src/ai/providers/FakeProvider.cpp
     src/ai/providers/KimiCatalog.cpp
     src/ai/providers/KimiProvider.cpp
@@ -304,9 +306,11 @@ if(CCH_BUILD_TESTS)
         tests/ai/providers/BoostBeastStreamTransportTest.cpp
         tests/ai/providers/FakeProviderTest.cpp
         tests/ai/api/AnthropicMessagesAdapterTest.cpp
+        tests/ai/api/OpenAICodexResponsesAdapterTest.cpp
         tests/ai/api/OpenAIResponsesAdapterTest.cpp
         tests/ai/providers/OpenAIChatClientTest.cpp
         tests/ai/providers/SseParserTest.cpp
+        tests/ai/providers/BoostBeastWebSocketTransportTest.cpp
         tests/cli/CliSmokeTest.cpp
         tests/cli/CliParseTest.cpp
         tests/cli/FrontendSelectionTest.cpp

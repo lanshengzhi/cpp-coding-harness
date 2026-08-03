@@ -22,4 +22,13 @@ enum class AdapterKind {
     const AiContext& context,
     const ProviderStreamOptions& options);
 
+/// Build the Responses input items pi replays for one completed assistant
+/// message when continuing a Codex WebSocket session: no system prompt, no
+/// tool outputs (pi `convertResponsesMessages` with `includeSystemPrompt:
+/// false` filtered to non-output items). Used for the `previous_response_id`
+/// input delta on a reused socket.
+[[nodiscard]] util::Expected<util::JsonValue::array_t> build_responses_continuation_items(
+    const Model& model,
+    const AssistantMessage& assistant);
+
 } // namespace cch::ai::api

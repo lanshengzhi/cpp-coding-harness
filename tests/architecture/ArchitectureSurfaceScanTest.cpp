@@ -338,6 +338,7 @@ TEST_CASE("provider DTOs stay out of the public contract surface", "[architectur
     const auto providers_dir = source_root / "include" / "cch" / "ai" / "providers";
     const std::vector<std::string> allowed_provider_headers = {
         "StreamTransport.hpp",
+        "WebSocketTransport.hpp",
         "OpenAICompletionsCompat.hpp",
     };
     for (const auto& entry : std::filesystem::directory_iterator(providers_dir)) {

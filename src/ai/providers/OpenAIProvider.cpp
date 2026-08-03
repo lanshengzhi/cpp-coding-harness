@@ -1,5 +1,6 @@
 #include "OpenAIProvider.hpp"
 
+#include "ai/api/OpenAICodexResponsesAdapter.hpp"
 #include "ai/api/OpenAIResponsesAdapter.hpp"
 #include "util/ExpectedMacros.hpp"
 
@@ -172,6 +173,57 @@ private:
     ProviderAuth auth_;
 };
 
+class OpenAICodexResponsesProvider final : public ai::Provider {
+public:
+    OpenAICodexResponsesProvider(
+        std::string provider_id,
+        std::vector<Model> models,
+        std::vector<std::string> api_key_env,
+        std::shared_ptr<StreamTransport> http_transport,
+        std::shared_ptr<WebSocketTransport> ws_transport,
+        api::CodexWebSocketCacheConfig cache_config)
+        : provider_id_(std::move(provider_id)),
+          models_(std::move(models)),
+          adapter_(
+              std::move(http_transport),
+              std::move(ws_transport),
+              cache_config),
+          auth_(make_api_key_auth(std::move(api_key_env))) {}
+    OpenAICodexResponsesProvider(OpenAICodexResponsesProvider&&) noexcept = default;
+    OpenAICodexResponsesProvider& operator=(OpenAICodexResponsesProvider&&) noexcept = default;
+    ~OpenAICodexResponsesProvider() override = default;
+    OpenAICodexResponsesProvider(const OpenAICodexResponsesProvider&) = delete;
+    OpenAICodexResponsesProvider& operator=(const OpenAICodexResponsesProvider&) = delete;
+
+    [[nodiscard]] std::string_view id() const noexcept override { return provider_id_; }
+    [[nodiscard]] std::string_view name() const noexcept override { return provider_id_; }
+    [[nodiscard]] ProviderAuth& auth() noexcept override { return auth_; }
+    [[nodiscard]] std::vector<Model> models() const override { return models_; }
+
+    /// Borrowed model and context must outlive the returned awaitable.
+    [[nodiscard]] boost::asio::awaitable<util::Expected<AssistantMessage>> stream(
+        const Model& model,
+        const AiContext& context,
+        ProviderStreamOptions options,
+        AssistantEventSink sink) override {
+        if (model.api != "openai-codex-responses") {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Stream,
+                "Provider " + provider_id_ +
+                    " has no API implementation for \"" + model.api + "\""));
+        }
+        CCH_TRY(message, co_await adapter_.stream(
+            model, context, std::move(options), std::move(sink)));
+        co_return message;
+    }
+
+private:
+    std::string provider_id_;
+    std::vector<Model> models_;
+    api::OpenAICodexResponsesAdapter adapter_;
+    ProviderAuth auth_;
+};
+
 } // namespace
 
 std::shared_ptr<ai::Provider> make_openai_compatible_provider(
@@ -198,6 +250,22 @@ std::shared_ptr<ai::Provider> make_openai_responses_provider(
         std::move(models),
         std::move(api_key_env),
         std::move(transport));
+}
+
+std::shared_ptr<ai::Provider> make_openai_codex_responses_provider(
+    std::string provider_id,
+    std::vector<ai::Model> models,
+    std::vector<std::string> api_key_env,
+    std::shared_ptr<StreamTransport> http_transport,
+    std::shared_ptr<WebSocketTransport> ws_transport,
+    api::CodexWebSocketCacheConfig cache_config) {
+    return std::make_shared<OpenAICodexResponsesProvider>(
+        std::move(provider_id),
+        std::move(models),
+        std::move(api_key_env),
+        std::move(http_transport),
+        std::move(ws_transport),
+        cache_config);
 }
 
 } // namespace cch::ai::providers

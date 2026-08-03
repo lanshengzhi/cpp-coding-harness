@@ -1,0 +1,25 @@
+data: {"type":"response.created","response":{"id":"resp_codex"}}
+
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"reasoning","id":"rs_1","summary":[]}}
+
+data: {"type":"response.reasoning_text.delta","output_index":0,"delta":"plan"}
+
+data: {"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","id":"rs_1","summary":[{"type":"summary_text","text":"plan"}],"encrypted_content":"dummy-encrypted"}}
+
+data: {"type":"response.output_item.added","output_index":1,"item":{"type":"message","id":"msg_1","role":"assistant","status":"in_progress","content":[],"phase":"final_answer"}}
+
+data: {"type":"response.output_text.delta","output_index":1,"delta":"Hello"}
+
+data: {"type":"response.output_item.done","output_index":1,"item":{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Hello","annotations":[]}],"phase":"final_answer"}}
+
+data: {"type":"response.output_item.added","output_index":2,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":""}}
+
+data: {"type":"response.function_call_arguments.delta","output_index":2,"delta":"{\"q\":"}
+
+data: {"type":"response.function_call_arguments.done","output_index":2,"arguments":"{\"q\":\"x\"}"}
+
+data: {"type":"response.output_item.done","output_index":2,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{\"q\":\"x\"}"}}
+
+data: {"type":"response.completed","response":{"id":"resp_codex","status":"completed","usage":{"input_tokens":120,"output_tokens":30,"total_tokens":150,"input_tokens_details":{"cached_tokens":20,"cache_write_tokens":10},"output_tokens_details":{"reasoning_tokens":7}}}}
+
+data: [DONE]
