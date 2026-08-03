@@ -1,4 +1,5 @@
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "support/ModelsFixture.hpp"
 #include "support/ImageFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -8,7 +9,7 @@
 #include <cch/harness/session/JsonlSessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include "ai/providers/FakeChatClient.hpp"
+#include "ai/providers/FakeProvider.hpp"
 #include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
@@ -42,13 +43,13 @@ using namespace cch;
 
 namespace {
 
-[[nodiscard]] coding_agent::CreateAgentSessionOptions session_options(
+[[nodiscard]] tests::ModelsSessionOptions session_options(
     const tests::TempWorkspace& workspace,
     std::unique_ptr<ai::StreamingChatClient> client) {
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -931,10 +932,10 @@ TEST_CASE(
     };
     REQUIRE(store->append(ai::MessageVariant{custom}));
 
-    coding_agent::CreateAgentSessionOptions resume_options;
+    tests::ModelsSessionOptions resume_options;
     resume_options.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     resume_options.workspace = workspace.path();
-    resume_options.chat_client = ai::providers::make_scripted_fake_chat_client();
+    resume_options.models = ai::providers::make_scripted_fake_models();
     resume_options.builtin_tools = {
         .read = false,
         .write = false,
@@ -1024,10 +1025,10 @@ TEST_CASE(
     REQUIRE(run_result);
     CHECK(*run_result);
 
-    coding_agent::CreateAgentSessionOptions fallback_resume;
+    tests::ModelsSessionOptions fallback_resume;
     fallback_resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     fallback_resume.workspace = workspace.path();
-    fallback_resume.chat_client = ai::providers::make_scripted_fake_chat_client();
+    fallback_resume.models = ai::providers::make_scripted_fake_models();
     fallback_resume.builtin_tools = {
         .read = false,
         .write = false,
@@ -1162,10 +1163,10 @@ TEST_CASE(
     tail.timestamp = 1'700'000'000'100;
     REQUIRE(store->append(ai::MessageVariant{tail}));
 
-    coding_agent::CreateAgentSessionOptions resume;
+    tests::ModelsSessionOptions resume;
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     resume.workspace = workspace.path();
-    resume.chat_client = ai::providers::make_scripted_fake_chat_client();
+    resume.models = ai::providers::make_scripted_fake_models();
     resume.builtin_tools = {
         .read = false,
         .write = false,
@@ -1217,7 +1218,7 @@ TEST_CASE(
     tests::TempWorkspace config_directory;
     auto options = session_options(
         workspace,
-        ai::providers::make_scripted_fake_chat_client());
+        ai::providers::make_scripted_fake_stream());
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
 
@@ -1306,7 +1307,7 @@ TEST_CASE(
     tests::TempWorkspace config_directory;
     auto options = session_options(
         workspace,
-        ai::providers::make_scripted_fake_chat_client());
+        ai::providers::make_scripted_fake_stream());
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
 
@@ -1350,7 +1351,7 @@ TEST_CASE(
 
     auto failed_options = session_options(
         workspace,
-        ai::providers::make_scripted_fake_chat_client());
+        ai::providers::make_scripted_fake_stream());
     auto failed_session = coding_agent::create_agent_session(std::move(failed_options));
     REQUIRE(failed_session);
     auto failed_reader = std::make_unique<FakeClipboardReader>();
@@ -1558,7 +1559,7 @@ TEST_CASE(
 
     auto create = session_options(
         workspace,
-        ai::providers::make_scripted_fake_chat_client());
+        ai::providers::make_scripted_fake_stream());
     create.session_target = coding_agent::ExplicitNewSessionTarget{session_file};
     auto fresh = coding_agent::create_agent_session(std::move(create));
     REQUIRE(fresh);
@@ -1584,10 +1585,10 @@ TEST_CASE(
     REQUIRE(fresh_result);
     CHECK(*fresh_result);
 
-    coding_agent::CreateAgentSessionOptions resume;
+    tests::ModelsSessionOptions resume;
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     resume.workspace = workspace.path();
-    resume.chat_client = ai::providers::make_scripted_fake_chat_client();
+    resume.models = ai::providers::make_scripted_fake_models();
     resume.builtin_tools = {
         .read = false,
         .write = false,
@@ -1909,7 +1910,7 @@ TEST_CASE(
     tests::TempWorkspace config;
     auto created = coding_agent::create_agent_session(session_options(
         workspace,
-        ai::providers::make_scripted_fake_chat_client()));
+        ai::providers::make_scripted_fake_stream()));
     REQUIRE(created);
     std::vector<coding_agent::EventSubscription> failing_subscriptions;
     for (std::size_t index = 0; index < 16; ++index) {
@@ -1978,7 +1979,7 @@ TEST_CASE(
     const auto session_file = workspace.path() / "persistence-recovery.jsonl";
     auto options = session_options(
         workspace,
-        ai::providers::make_scripted_fake_chat_client());
+        ai::providers::make_scripted_fake_stream());
     options.session_target = coding_agent::ExplicitNewSessionTarget{session_file};
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
@@ -2087,7 +2088,7 @@ TEST_CASE(
     tests::TempWorkspace config;
     auto created = coding_agent::create_agent_session(session_options(
         workspace,
-        ai::providers::make_scripted_fake_chat_client()));
+        ai::providers::make_scripted_fake_stream()));
     REQUIRE(created);
 
     FailingStartTerminal terminal;
@@ -2122,7 +2123,7 @@ TEST_CASE(
     tests::TempWorkspace config;
     auto created = coding_agent::create_agent_session(session_options(
         workspace,
-        ai::providers::make_scripted_fake_chat_client()));
+        ai::providers::make_scripted_fake_stream()));
     REQUIRE(created);
 
     FailingCleanupTerminal terminal;
@@ -2159,7 +2160,7 @@ TEST_CASE(
     tests::TempWorkspace config;
     auto created = coding_agent::create_agent_session(session_options(
         workspace,
-        ai::providers::make_scripted_fake_chat_client()));
+        ai::providers::make_scripted_fake_stream()));
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 60, .rows = 10});
@@ -2684,7 +2685,7 @@ TEST_CASE(
     tests::TempWorkspace config;
     auto created = coding_agent::create_agent_session(session_options(
         workspace,
-        ai::providers::make_scripted_fake_chat_client()));
+        ai::providers::make_scripted_fake_stream()));
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
@@ -2768,7 +2769,7 @@ TEST_CASE(
         "Expanded project prompt: $ARGUMENTS\n");
     auto options = session_options(
         workspace,
-        ai::providers::make_scripted_fake_chat_client());
+        ai::providers::make_scripted_fake_stream());
     options.load_project_resources = true;
     options.default_project_trust = coding_agent::DefaultProjectTrust::Always;
     auto created = coding_agent::create_agent_session(std::move(options));
@@ -2840,7 +2841,7 @@ TEST_CASE(
     config.write("keybindings.json", R"({"app.exit":"f6"})");
     auto created = coding_agent::create_agent_session(session_options(
         workspace,
-        ai::providers::make_scripted_fake_chat_client()));
+        ai::providers::make_scripted_fake_stream()));
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
@@ -2890,7 +2891,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Native TUI redacts and bounds prompt failures before allowing retry",
+    "Native TUI retains bounded terminal provider failures and allows retry",
     "[coding_agent][tui][failure][issue58]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
@@ -2917,12 +2918,13 @@ TEST_CASE(
     drain_ready(io);
     auto screen = visible_screen(terminal);
     CHECK(screen.find("sk-abcdefghijklmnopqrstuvwxyz123456") == std::string::npos);
-    CHECK(screen.find("[REDACTED]") != std::string::npos);
+    CHECK(screen.find("Provider error: provider failed") != std::string::npos);
     CHECK(screen.size() < 12000);
+    CHECK(created->session->message_count() == 2);
 
-    REQUIRE(terminal.inject_input("\x03retry\r"));
+    REQUIRE(terminal.inject_input("retry\r"));
     drain_ready(io);
-    CHECK(created->session->message_count() == 3);
+    CHECK(created->session->message_count() == 4);
     CHECK(visible_screen(terminal).find("Assistant: recovered") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));

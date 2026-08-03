@@ -2,7 +2,6 @@
 
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/agent/AgentTool.hpp>
-#include <cch/ai/ChatClient.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
@@ -57,9 +56,8 @@ struct SdkDiagnostic {
 
 // ── Provider configuration ───────────────────────────────────────────────────
 
-/// Configuration for constructing the default OpenAI-compatible chat client.
-/// With a host-provided client, provider/model/base URL still describe the
-/// concrete request Model; client construction remains host-owned.
+/// Transitional configuration for composing the default Provider and complete
+/// request Model. Authentication is resolved by Models at request time.
 struct SdkProviderConfig {
     std::string provider{};
     std::string model{};
@@ -118,26 +116,21 @@ using SessionTarget = std::variant<
 /// resumes, if `workspace` is explicit and differs from the stored session
 /// workspace, creation fails.
 ///
-/// Provider: if no `chat_client` is supplied, `provider_config` is used to
-/// construct a default OpenAI-compatible client via the provider registry.
-/// New-session creation fails if neither is supplied; resume may reconstruct
-/// provider configuration from stored metadata and User Settings.
+/// Provider: provider_config is the temporary default assembly input until
+/// ModelRuntime composition lands in #345. New-session creation requires it;
+/// resume may reconstruct provider configuration from stored metadata and User
+/// Settings.
 struct CreateAgentSessionOptions {
     // ── Session target ───────────────────────────────────────────────────
     SessionTarget session_target{};
     std::filesystem::path workspace;
 
     // ── Provider configuration ───────────────────────────────────────────
-    /// Configuration for default provider client construction. When
-    /// `chat_client` is set, provider/model/base URL still describe each
-    /// concrete request Model while client construction remains host-owned.
+    /// Transitional provider composition input. ModelRuntime replaces this
+    /// branch in #345.
     std::optional<SdkProviderConfig> provider_config;
 
     // ── Host-provided capabilities ───────────────────────────────────────
-    /// Host-provided streaming chat client. If set, provider_config does not
-    /// construct the client, but its provider/model/base URL still describe
-    /// each concrete request Model. Ownership transfers to the session.
-    std::unique_ptr<ai::StreamingChatClient> chat_client;
     /// Host-provided execution environment. If not set, a local execution
     /// environment is constructed for the workspace. Host-provided environments
     /// are never cleaned up by the session.

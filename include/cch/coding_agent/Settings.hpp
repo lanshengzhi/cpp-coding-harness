@@ -21,8 +21,8 @@ struct UserSettings {
     std::optional<std::string> base_url;
     /// Env var chain: first found value is used as the resolved API key.
     std::optional<std::vector<std::string>> api_key_env;
-    /// Auth provider name in the agent config directory's `auth.json`. If set,
-    /// the corresponding static API key is used before falling back to api_key_env.
+    /// Credential entry name in the agent config directory's `auth.json`. If
+    /// set, the entry is resolved live before falling back to api_key_env.
     std::optional<std::string> auth;
     /// User-controlled project trust default. Project-local settings cannot set this.
     std::optional<DefaultProjectTrust> default_project_trust;
@@ -82,9 +82,7 @@ struct ResolvedProviderSettings {
     std::string model;
     std::string base_url;
     std::string api_key_env;
-    /// Static API key loaded from the agent config directory's `auth.json`, if any.
-    std::string api_key;
-    /// Name of the auth entry used to obtain api_key.
+    /// Name of the credential entry resolved live for each request.
     std::string auth;
     /// Full environment variable chain used for API key lookup and secret
     /// filtering. The first element is the resolved single env var name.

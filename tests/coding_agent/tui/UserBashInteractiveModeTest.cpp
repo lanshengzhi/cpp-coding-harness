@@ -1,4 +1,5 @@
 #include <cch/ai/ChatClient.hpp>
+#include "support/ModelsFixture.hpp"
 #include <cch/ai/Content.hpp>
 #include <cch/agent/AgentTool.hpp>
 #include <cch/coding_agent/Sdk.hpp>
@@ -315,10 +316,10 @@ TEST_CASE(
         .gated = false,
     });
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -403,10 +404,10 @@ TEST_CASE(
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -474,10 +475,10 @@ TEST_CASE(
         .gated = false,
     });
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{session_path};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -596,10 +597,10 @@ TEST_CASE(
         .gated = false,
     });
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -662,10 +663,10 @@ TEST_CASE(
         .gated = false,
     });
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -737,10 +738,10 @@ TEST_CASE(
         .gated = true,
     });
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -813,10 +814,10 @@ TEST_CASE(
         .gated = false,
     });
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -887,10 +888,10 @@ TEST_CASE(
         .gated = true,
     });
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -1004,10 +1005,10 @@ TEST_CASE(
         .gated = false,
     });
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -1123,10 +1124,10 @@ TEST_CASE(
         .gated = false,
     });
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -1235,10 +1236,10 @@ TEST_CASE(
         .gated = false,
     });
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -1319,10 +1320,10 @@ TEST_CASE(
         .gated = true,
     });
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.custom_tools.push_back(std::move(tool));
     options.builtin_tools = {
         .read = false,
@@ -1400,10 +1401,10 @@ TEST_CASE(
         .gated = true,
     });
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.custom_tools.push_back(std::move(tool));
     options.builtin_tools = {
         .read = false,
@@ -1484,10 +1485,10 @@ TEST_CASE(
         .gated = false,
     });
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -1605,10 +1606,10 @@ TEST_CASE(
     after.content = {ai::text_content("after bash")};
     REQUIRE(store->append(ai::MessageVariant{after}));
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     options.workspace = workspace.path();
-    options.chat_client = std::make_unique<RecordingChatClient>();
+    options.models = cch::tests::models_from_stream(std::make_unique<RecordingChatClient>());
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -1684,10 +1685,10 @@ TEST_CASE(
         .gated = true,
     });
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -1776,10 +1777,10 @@ TEST_CASE(
         .gated = false,
     });
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -1846,10 +1847,10 @@ TEST_CASE(
         .gated = true,
     });
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -1946,10 +1947,10 @@ TEST_CASE(
         .gated = true,
     });
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -2014,10 +2015,10 @@ TEST_CASE(
         .gated = false,
     });
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -2093,10 +2094,10 @@ TEST_CASE(
         .gated = false,
     });
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -2189,10 +2190,10 @@ TEST_CASE(
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.load_project_resources = true;
     options.default_project_trust = coding_agent::DefaultProjectTrust::Always;
     options.builtin_tools = {
@@ -2249,12 +2250,11 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     auto client = std::make_unique<RecordingChatClient>();
     auto shell = std::make_unique<tests::FakeUserShell>();
-    auto* shell_pointer = shell.get();
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,

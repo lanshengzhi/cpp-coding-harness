@@ -15,7 +15,7 @@ namespace cch::coding_agent::runtime {
 /// Kept as an implementation detail; SessionFactory is the only seam that
 /// constructs or populates this bundle.
 struct RuntimeServices {
-    std::unique_ptr<ai::StreamingChatClient> client;
+    std::shared_ptr<ai::StreamingChatClient> stream;
     std::shared_ptr<harness::AsyncExecutionEnv> env;
     /// True when the factory created the execution environment and must clean
     /// it up on session close. Host-provided environments are never owned.

@@ -370,6 +370,26 @@ void normalize_message_wire(util::JsonValue& message) {
                 auto error = message_value(ai::MessageVariant{concrete.error});
                 if (!error) return std::unexpected(error.error());
                 value.emplace("error", std::move(*error));
+                if (concrete.failure) {
+                    util::JsonValue::object_t failure;
+                    failure.emplace(
+                        "code",
+                        util::JsonValue{util::to_string(concrete.failure->code)});
+                    failure.emplace(
+                        "message",
+                        util::JsonValue{bounded_redacted(concrete.failure->message)});
+                    if (!concrete.failure->detail.empty()) {
+                        failure.emplace(
+                            "detail",
+                            util::JsonValue{bounded_redacted(concrete.failure->detail)});
+                    }
+                    if (concrete.failure->context) {
+                        failure.emplace(
+                            "context",
+                            util::JsonValue{bounded_redacted(*concrete.failure->context)});
+                    }
+                    value.emplace("failure", util::JsonValue{std::move(failure)});
+                }
             }
             return util::JsonValue{std::move(value)};
         },

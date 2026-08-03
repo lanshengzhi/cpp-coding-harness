@@ -1,6 +1,4 @@
 #include "ProviderConfigResolution.hpp"
-#include "../../include/cch/coding_agent/AgentConfigDir.hpp"
-#include "../../include/cch/coding_agent/AuthLoader.hpp"
 #include "../../include/cch/coding_agent/Settings.hpp"
 
 #include <cstdlib>
@@ -89,16 +87,6 @@ ResolvedProviderSettings resolve_provider_settings(
         resolved_auth = *settings.auth;
     }
 
-    std::string resolved_api_key;
-    if (!resolved_auth.empty()) {
-        auto auth_entries = AuthLoader::load(auth_file_path());
-        if (auth_entries) {
-            if (auto it = auth_entries->find(resolved_auth); it != auth_entries->end()) {
-                resolved_api_key = it->second.key;
-            }
-        }
-    }
-
     return ResolvedProviderSettings{
         .provider_registry_name = registry_name,
         .provider = std::move(resolved_provider),
@@ -106,7 +94,6 @@ ResolvedProviderSettings resolve_provider_settings(
         .model = std::move(resolved_model),
         .base_url = std::move(resolved_base_url),
         .api_key_env = resolved_api_key_env_chain.empty() ? "" : resolved_api_key_env_chain.front(),
-        .api_key = std::move(resolved_api_key),
         .auth = std::move(resolved_auth),
         .api_key_env_chain = std::move(resolved_api_key_env_chain),
     };

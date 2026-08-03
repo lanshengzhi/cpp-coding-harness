@@ -7,11 +7,11 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Context.hpp>
 #include <cch/ai/Message.hpp>
-#include <cch/ai/ProviderRegistry.hpp>
+#include <cch/ai/Models.hpp>
+#include <cch/ai/Provider.hpp>
 #include <cch/ai/StreamEvent.hpp>
 #include <cch/ai/Tool.hpp>
 #include <cch/ai/Usage.hpp>
-#include <cch/ai/providers/OpenAIChatClient.hpp>
 #include <cch/ai/providers/StreamTransport.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
@@ -107,6 +107,7 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_move_constructible_v<ai::MessageVariant>);
     static_assert(std::is_move_constructible_v<ai::Content>);
     static_assert(std::is_abstract_v<ai::StreamingChatClient>);
+    static_assert(std::is_abstract_v<ai::Provider>);
     static_assert(std::is_abstract_v<ai::providers::StreamTransport>);
     static_assert(std::is_abstract_v<harness::AsyncExecutionEnv>);
     using ReadTextFileMethod = boost::asio::awaitable<std::expected<std::string, harness::FileError>>

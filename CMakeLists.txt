@@ -114,10 +114,11 @@ target_link_libraries(cch_coding_agent_tui
 
 add_library(cch_ai
     src/ai/Model.cpp
-    src/ai/ProviderRegistry.cpp
+    src/ai/Models.cpp
     src/ai/providers/BoostBeastStreamTransport.cpp
-    src/ai/providers/FakeChatClient.cpp
+    src/ai/providers/FakeProvider.cpp
     src/ai/providers/OpenAIChatClient.cpp
+    src/ai/providers/OpenAIProvider.cpp
     src/ai/providers/SseParser.cpp
 )
 cch_target_defaults(cch_ai)
@@ -283,10 +284,10 @@ if(CCH_BUILD_TESTS)
         tests/ai/GlazeRoundTripTest.cpp
         tests/ai/MessageContractTest.cpp
         tests/ai/ModelTest.cpp
-        tests/ai/ProviderRegistryTest.cpp
+        tests/ai/ModelsTest.cpp
         tests/ai/ToolContractTest.cpp
         tests/ai/providers/BoostBeastStreamTransportTest.cpp
-        tests/ai/providers/FakeChatClientTest.cpp
+        tests/ai/providers/FakeProviderTest.cpp
         tests/ai/providers/OpenAIChatClientTest.cpp
         tests/ai/providers/SseParserTest.cpp
         tests/cli/CliSmokeTest.cpp

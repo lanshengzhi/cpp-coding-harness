@@ -1,11 +1,12 @@
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "support/ModelsFixture.hpp"
 #include "support/PseudoTerminal.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/coding_agent/Sdk.hpp>
 #include <cch/tui/ProcessTerminal.hpp>
 
-#include "ai/providers/FakeChatClient.hpp"
+#include "ai/providers/FakeProvider.hpp"
 
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
@@ -81,10 +82,10 @@ TEST_CASE(
 
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace config;
-    cch::coding_agent::CreateAgentSessionOptions options;
+    cch::tests::ModelsSessionOptions options;
     options.session_target = cch::coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.chat_client = cch::ai::providers::make_scripted_fake_chat_client();
+    options.models = cch::tests::models_from_stream(cch::ai::providers::make_scripted_fake_stream());
     options.builtin_tools = {
         .read = false,
         .write = false,

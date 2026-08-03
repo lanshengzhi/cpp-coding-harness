@@ -14,7 +14,12 @@ enum class ErrorCode {
     Network,
     Timeout,
     Cancelled,
+    ModelSource,
+    ModelValidation,
     Provider,
+    Stream,
+    Auth,
+    OAuth,
     Tool,
     Session,
     Validation,
@@ -48,8 +53,18 @@ using ExpectedVoid = std::expected<void, Error>;
         return "timeout";
     case ErrorCode::Cancelled:
         return "cancelled";
+    case ErrorCode::ModelSource:
+        return "model_source";
+    case ErrorCode::ModelValidation:
+        return "model_validation";
     case ErrorCode::Provider:
         return "provider";
+    case ErrorCode::Stream:
+        return "stream";
+    case ErrorCode::Auth:
+        return "auth";
+    case ErrorCode::OAuth:
+        return "oauth";
     case ErrorCode::Tool:
         return "tool";
     case ErrorCode::Session:

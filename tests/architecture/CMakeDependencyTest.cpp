@@ -93,10 +93,12 @@ TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issu
     CHECK(block_mentions(cmake, "add_library(cch_coding_agent_runtime"));
 
     const auto ai_sources = cmake_command_block(cmake, "add_library(cch_ai");
-    CHECK(block_mentions(ai_sources, "src/ai/ProviderRegistry.cpp"));
+    CHECK(block_mentions(ai_sources, "src/ai/Models.cpp"));
+    CHECK_FALSE(block_mentions(ai_sources, "src/ai/ProviderRegistry.cpp"));
     CHECK(block_mentions(ai_sources, "src/ai/providers/BoostBeastStreamTransport.cpp"));
-    CHECK(block_mentions(ai_sources, "src/ai/providers/FakeChatClient.cpp"));
+    CHECK(block_mentions(ai_sources, "src/ai/providers/FakeProvider.cpp"));
     CHECK(block_mentions(ai_sources, "src/ai/providers/OpenAIChatClient.cpp"));
+    CHECK(block_mentions(ai_sources, "src/ai/providers/OpenAIProvider.cpp"));
     CHECK(block_mentions(ai_sources, "src/ai/providers/SseParser.cpp"));
 }
 

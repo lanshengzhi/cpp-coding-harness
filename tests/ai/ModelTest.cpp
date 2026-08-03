@@ -1,7 +1,7 @@
 #include <cch/agent/Agent.hpp>
 #include <cch/ai/Model.hpp>
 #include "ai/glaze/ModelJson.hpp"
-#include "ai/providers/FakeChatClient.hpp"
+#include "ai/providers/FakeProvider.hpp"
 #include "support/ModelFixture.hpp"
 
 #include "../../third_party/catch2/catch_test_macros.hpp"
@@ -71,7 +71,7 @@ TEST_CASE("complete Model matches the frozen pi shape golden", "[ai][model][issu
 }
 
 TEST_CASE("Agent starts with the concrete frozen default Model", "[ai][model][issue336]") {
-    auto client = ai::providers::make_scripted_fake_chat_client();
+    auto client = ai::providers::make_scripted_fake_stream();
     agent::Agent instance(*client, agent::AsyncToolRegistry{});
 
     auto serialized = ai::glaze::write_model_json(instance.state().model);

@@ -146,7 +146,7 @@ AgentSessionRuntime::AgentSessionRuntime(
     // Construct Agent last: it borrows the factory-owned client and takes sole
     // ownership of the move-only tool registry.
     agent_.emplace(
-        *services_.client,
+        *services_.stream,
         std::move(services_.tools),
         std::move(options),
         std::move(initial_state));
@@ -654,7 +654,7 @@ AgentSessionRuntime::release_close_resources() noexcept {
     agent_.reset();
     prompt_processor_.reset();
     session_.store.reset();
-    services_.client.reset();
+    services_.stream.reset();
     services_.user_shell.reset();
 
     if (services_.env_owned) {

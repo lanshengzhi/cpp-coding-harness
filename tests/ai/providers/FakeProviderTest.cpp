@@ -1,8 +1,8 @@
-#include <cch/ai/ChatClient.hpp>
 #include <cch/ai/Content.hpp>
+#include <cch/ai/Models.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/util/Error.hpp>
-#include "ai/providers/FakeChatClient.hpp"
+#include "ai/providers/FakeProvider.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/UsageAssertions.hpp"
 
@@ -12,10 +12,13 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
 
+#include <array>
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -33,14 +36,15 @@ RunResult run_fake(
     ai::StreamChatRequest request,
     std::optional<std::size_t> fail_at_event = std::nullopt) {
     boost::asio::io_context io;
-    auto client = ai::providers::make_scripted_fake_chat_client();
+    auto models = ai::providers::make_scripted_fake_models();
+    REQUIRE(models != nullptr);
     std::optional<util::Expected<ai::AssistantMessage>> result;
     std::vector<ai::AssistantStreamEvent> events;
 
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            result = co_await client->stream(
+            result = co_await models->stream(
                 request,
                 [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
                     events.push_back(event);
@@ -58,12 +62,15 @@ RunResult run_fake(
 
     io.run();
     REQUIRE(result.has_value());
-    return RunResult{std::move(*result), std::move(events)};
+    return RunResult{
+        .result = std::move(*result),
+        .events = std::move(events),
+    };
 }
 
 ai::StreamChatRequest request_with(ai::MessageVariant message) {
     ai::StreamChatRequest request;
-    request.model = tests::make_model("fake-model");
+    request.model = tests::make_model("fake-model", "fake", "scripted-fake");
     request.context.messages.push_back(std::move(message));
     return request;
 }
@@ -280,11 +287,10 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "scripted fake retains its executor identity for a differently identified request Model",
-    "[ai][provider][fake][issue336]") {
+    "scripted fake Provider owns execution identity while Models selects it by provider",
+    "[ai][provider][fake][issue336][issue338]") {
     auto request = request_with(ai::user_text_message("hello"));
-    request.model.provider = "sdk-host";
-    request.model.api = "unknown";
+    request.model.api = "private-fake-adapter";
 
     auto run = run_fake(std::move(request));
 
@@ -319,21 +325,73 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "scripted fake rejects static requests without starting a lifecycle",
-    "[ai][provider][fake][issue23]") {
+    "scripted fake Models normalizes static request failures into a terminal value",
+    "[ai][provider][fake][issue23][issue338]") {
     ai::StreamChatRequest request;
     auto run = run_fake(std::move(request));
 
-    REQUIRE_FALSE(run.result.has_value());
-    CHECK(run.result.error().code == util::ErrorCode::Validation);
-    CHECK(run.events.empty());
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(run.events.size() == 1);
+    CHECK(std::holds_alternative<ai::AssistantErrorEvent>(run.events.front()));
+}
+
+TEST_CASE(
+    "scripted fake Models observes cancellation as one aborted terminal value",
+    "[ai][provider][fake][issue338]") {
+    std::stop_source stop_source;
+    CHECK(stop_source.request_stop());
+    auto request = request_with(ai::user_text_message("hello"));
+    request.stop_token = stop_source.get_token();
+
+    auto run = run_fake(std::move(request));
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Aborted);
+    CHECK(run.result->error_message == "Request was aborted");
+    REQUIRE(run.events.size() == 1);
+    const auto& terminal = require_event<ai::AssistantErrorEvent>(run.events, 0);
+    CHECK(terminal.reason == ai::AssistantStopReason::Aborted);
+    REQUIRE(terminal.failure);
+    CHECK(terminal.failure->code == util::ErrorCode::Cancelled);
+}
+
+TEST_CASE(
+    "scripted fake Models preserves all six Models error categories",
+    "[ai][provider][fake][issue338]") {
+    struct FailureCase {
+        std::string_view name;
+        util::ErrorCode code;
+    };
+    constexpr std::array<FailureCase, 6> kFailureCases{{
+        {.name = "model_source", .code = util::ErrorCode::ModelSource},
+        {.name = "model_validation", .code = util::ErrorCode::ModelValidation},
+        {.name = "provider", .code = util::ErrorCode::Provider},
+        {.name = "stream", .code = util::ErrorCode::Stream},
+        {.name = "auth", .code = util::ErrorCode::Auth},
+        {.name = "oauth", .code = util::ErrorCode::OAuth},
+    }};
+
+    for (const auto& failure : kFailureCases) {
+        auto run = run_fake(request_with(ai::user_text_message(
+            "fail " + std::string{failure.name})));
+
+        REQUIRE(run.result);
+        CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+        REQUIRE(run.events.size() == 1);
+        const auto& terminal = require_event<ai::AssistantErrorEvent>(run.events, 0);
+        REQUIRE(terminal.failure);
+        CHECK(terminal.failure->code == failure.code);
+        CHECK(util::to_string(terminal.failure->code) == failure.name);
+        CHECK(terminal.error.error_message == run.result->error_message);
+    }
 }
 
 TEST_CASE(
     "scripted fake stops at and propagates every sink failure",
     "[ai][provider][fake][issue23]") {
-    constexpr std::size_t expected_event_count = 8;
-    for (std::size_t fail_at = 0; fail_at < expected_event_count; ++fail_at) {
+    constexpr std::size_t kExpectedEventCount = 8;
+    for (std::size_t fail_at = 0; fail_at < kExpectedEventCount; ++fail_at) {
         auto run = run_fake(
             request_with(ai::user_text_message("read README.md")),
             fail_at);

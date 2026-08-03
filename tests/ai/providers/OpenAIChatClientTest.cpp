@@ -1,4 +1,4 @@
-#include <cch/ai/providers/OpenAIChatClient.hpp>
+#include "ai/providers/OpenAIChatClient.hpp"
 #include <cch/harness/session/JsonlSessionStore.hpp>
 #include <cch/harness/session/SessionResume.hpp>
 #include <cch/util/Error.hpp>
@@ -104,7 +104,8 @@ struct RunResult {
 RunResult run_client(
     ai::providers::StreamingOpenAIChatClient& client,
     ai::StreamChatRequest request,
-    std::optional<util::Error> text_delta_failure = std::nullopt) {
+    std::optional<util::Error> text_delta_failure = std::nullopt,
+    std::string api_key = "sk-test-api-key") {
     boost::asio::io_context io;
     std::optional<util::Expected<ai::AssistantMessage>> result;
     std::vector<ai::AssistantStreamEvent> events;
@@ -114,6 +115,7 @@ RunResult run_client(
         [&]() -> boost::asio::awaitable<void> {
             result = co_await client.stream(
                 request,
+                ai::ModelAuth{.api_key = std::move(api_key)},
                 [&](const ai::AssistantStreamEvent& event) {
                     events.push_back(event);
                     if (text_delta_failure && std::holds_alternative<ai::TextDeltaEvent>(event)) {
@@ -198,7 +200,6 @@ TEST_CASE("streaming OpenAI client serializes typed context and emits text delta
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -297,7 +298,6 @@ TEST_CASE(
     const auto rejected = [](std::string api, std::string provider, std::string model) {
         auto transport = std::make_shared<FakeStreamTransport>();
         ai::providers::OpenAIStreamConfig config;
-        config.api_key = "sk-test-api-key";
         ai::providers::StreamingOpenAIChatClient client(transport, std::move(config));
 
         ai::StreamChatRequest request;
@@ -330,7 +330,6 @@ TEST_CASE(
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
     ai::StreamChatRequest request;
     request.model = tests::make_openai_model("gpt-test");
@@ -353,7 +352,6 @@ TEST_CASE(
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -384,7 +382,6 @@ TEST_CASE(
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -427,7 +424,6 @@ TEST_CASE(
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -462,7 +458,6 @@ TEST_CASE(
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -495,7 +490,6 @@ TEST_CASE(
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -545,7 +539,6 @@ TEST_CASE(
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -569,7 +562,6 @@ TEST_CASE("streaming OpenAI client builds Kimi-compatible tool requests offline"
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "kimi-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -581,7 +573,8 @@ TEST_CASE("streaming OpenAI client builds Kimi-compatible tool requests offline"
         test::path_tool_argument_contract(),
     });
 
-    auto run = run_client(client, std::move(request));
+    auto run = run_client(
+        client, std::move(request), std::nullopt, "kimi-test-api-key");
 
     REQUIRE(run.result);
     REQUIRE(transport->requests.size() == 1);
@@ -607,7 +600,6 @@ TEST_CASE(
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "runtime-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -615,7 +607,8 @@ TEST_CASE(
     request.model.headers = ai::ModelHeaders{{"authorization", "Bearer model-header-value"}};
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
-    auto run = run_client(client, std::move(request));
+    auto run = run_client(
+        client, std::move(request), std::nullopt, "runtime-api-key");
 
     REQUIRE(run.result);
     REQUIRE(transport->requests.size() == 1);
@@ -632,7 +625,6 @@ TEST_CASE("streaming OpenAI client normalizes Kimi trailing slash and serializes
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "kimi-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     auto arguments = util::read_json<util::JsonValue>(R"({"path":"README.md"})");
@@ -678,7 +670,6 @@ TEST_CASE("streaming OpenAI client accumulates split tool call arguments", "[ai]
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -722,7 +713,6 @@ TEST_CASE("streaming OpenAI client serializes compat request fields", "[ai][prov
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     config.compat.supports_store = true;
     config.compat.supports_developer_role = true;
     ai::providers::StreamingOpenAIChatClient client(transport, config);
@@ -755,7 +745,6 @@ TEST_CASE("streaming OpenAI client inserts assistant after tool result when comp
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     config.compat.requires_assistant_after_tool_result = true;
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
@@ -792,7 +781,6 @@ TEST_CASE("streaming OpenAI client serializes assistant thinking as text when co
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     config.compat.requires_thinking_as_text = true;
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
@@ -830,7 +818,6 @@ TEST_CASE(
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::UserMessage user;
@@ -918,7 +905,6 @@ TEST_CASE(
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::ToolResultMessage mixed;
@@ -994,7 +980,6 @@ TEST_CASE(
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     config.compat.requires_assistant_after_tool_result = true;
     config.compat.requires_tool_result_name = true;
     ai::providers::StreamingOpenAIChatClient client(transport, config);
@@ -1040,7 +1025,6 @@ TEST_CASE(
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     config.compat.requires_assistant_after_tool_result = true;
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
@@ -1111,7 +1095,6 @@ TEST_CASE(
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::ToolResultMessage first_tool;
@@ -1261,7 +1244,6 @@ TEST_CASE(
         sse("[DONE]"),
     };
     ai::providers::OpenAIStreamConfig fresh_config;
-    fresh_config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient fresh_client(fresh_transport, fresh_config);
     ai::StreamChatRequest fresh_request;
     fresh_request.model = tests::make_openai_model("gpt-test");
@@ -1272,7 +1254,6 @@ TEST_CASE(
     auto resumed_transport = std::make_shared<FakeStreamTransport>();
     resumed_transport->chunks = fresh_transport->chunks;
     ai::providers::OpenAIStreamConfig resumed_config;
-    resumed_config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient resumed_client(resumed_transport, resumed_config);
     ai::StreamChatRequest resumed_request;
     resumed_request.model = tests::make_openai_model("gpt-test");
@@ -1293,7 +1274,6 @@ TEST_CASE("streaming OpenAI client accepts standard streaming chunk fields", "[a
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -1320,7 +1300,6 @@ TEST_CASE(
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -1342,7 +1321,6 @@ TEST_CASE("streaming OpenAI client skips excluded bash execution messages", "[ai
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::BashExecutionMessage bash;
@@ -1375,7 +1353,6 @@ TEST_CASE("streaming OpenAI client serializes tool result names when compat requ
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     config.compat.requires_tool_result_name = true;
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
@@ -1402,7 +1379,6 @@ TEST_CASE("streaming OpenAI client keeps malformed streamed tool arguments as in
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -1434,15 +1410,14 @@ TEST_CASE(
     auto transport = std::make_shared<FakeStreamTransport>();
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key.clear();
-    config.api_key_env.clear();
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
     request.model = tests::make_openai_model("gpt-test");
     request.context.messages.push_back(ai::MessageVariant{ai::user_text_message("hello")});
 
-    auto run = run_client(client, std::move(request));
+    auto run = run_client(
+        client, std::move(request), std::nullopt, "");
 
     REQUIRE_FALSE(run.result.has_value());
     CHECK(run.result.error().code == util::ErrorCode::Provider);
@@ -1455,7 +1430,6 @@ TEST_CASE(
     "streaming OpenAI client rejects a missing transport capability before provider-call acceptance",
     "[ai][provider][stream][issue14]") {
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client({}, config);
 
     ai::StreamChatRequest request;
@@ -1476,7 +1450,6 @@ TEST_CASE(
     auto transport = std::make_shared<FakeStreamTransport>();
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -1498,7 +1471,6 @@ TEST_CASE(
     auto transport = std::make_shared<FakeStreamTransport>();
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     config.timeout = std::chrono::milliseconds{0};
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
@@ -1521,7 +1493,6 @@ TEST_CASE(
     auto transport = std::make_shared<FakeStreamTransport>();
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     std::string invalid_text = "invalid UTF-8: ";
@@ -1551,7 +1522,6 @@ TEST_CASE(
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -1587,7 +1557,6 @@ TEST_CASE(
             sse("[DONE]"),
         };
         ai::providers::OpenAIStreamConfig config;
-        config.api_key = "sk-test-api-key";
         ai::providers::StreamingOpenAIChatClient client(transport, config);
         ai::StreamChatRequest request;
         request.model = tests::make_openai_model("gpt-test");
@@ -1616,7 +1585,6 @@ TEST_CASE(
             sse("[DONE]"),
         };
         ai::providers::OpenAIStreamConfig config;
-        config.api_key = "sk-test-api-key";
         ai::providers::StreamingOpenAIChatClient client(transport, config);
         ai::StreamChatRequest request;
         request.model = tests::make_openai_model("gpt-test");
@@ -1644,7 +1612,6 @@ TEST_CASE(
         sse("[DONE]"),
     };
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
     ai::StreamChatRequest request;
     request.model = tests::make_openai_model("gpt-test");
@@ -1670,7 +1637,6 @@ TEST_CASE(
         "could not resolve api.example: Name or service not known");
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::UserMessage user;
@@ -1704,6 +1670,8 @@ TEST_CASE(
     const auto& terminal_event = matching_terminal_error(run);
     CHECK(terminal_event.reason == ai::AssistantStopReason::Error);
     CHECK(terminal_event.error.content.empty());
+    REQUIRE(terminal_event.failure);
+    CHECK(terminal_event.failure->code == util::ErrorCode::Stream);
 }
 
 TEST_CASE(
@@ -1717,7 +1685,6 @@ TEST_CASE(
         "401: upstream rejected " + secret + " " + std::string(5000, 'x'));
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -1742,7 +1709,6 @@ TEST_CASE(
     auto transport = std::make_shared<CancellableFakeStreamTransport>();
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     std::stop_source stop_source;
@@ -1759,6 +1725,7 @@ TEST_CASE(
         [&]() -> boost::asio::awaitable<void> {
             result = co_await client.stream(
                 request,
+                ai::ModelAuth{.api_key = "sk-test-api-key"},
                 [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
                     events.push_back(event);
                     return {};
@@ -1797,7 +1764,6 @@ TEST_CASE(
         "transport operation was cancelled");
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -1824,6 +1790,8 @@ TEST_CASE(
     CHECK(terminal_event.reason == ai::AssistantStopReason::Aborted);
     CHECK(terminal_event.error.stop_reason == ai::AssistantStopReason::Aborted);
     CHECK(terminal_event.error.content.empty());
+    REQUIRE(terminal_event.failure);
+    CHECK(terminal_event.failure->code == util::ErrorCode::Cancelled);
 }
 
 TEST_CASE(
@@ -1836,7 +1804,6 @@ TEST_CASE(
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -1869,7 +1836,6 @@ TEST_CASE(
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -1936,7 +1902,6 @@ TEST_CASE(
     };
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -1957,6 +1922,8 @@ TEST_CASE(
 
     const auto& terminal_event = matching_terminal_error(run);
     CHECK(std::get<ai::TextContent>(terminal_event.error.content[0]).text == "kept");
+    REQUIRE(terminal_event.failure);
+    CHECK(terminal_event.failure->code == util::ErrorCode::Stream);
 }
 
 TEST_CASE(
@@ -1966,7 +1933,6 @@ TEST_CASE(
     transport->chunks = {"data: {\"choices\":[}\n\n"};
 
     ai::providers::OpenAIStreamConfig config;
-    config.api_key = "sk-test-api-key";
     ai::providers::StreamingOpenAIChatClient client(transport, config);
 
     ai::StreamChatRequest request;
@@ -1985,4 +1951,6 @@ TEST_CASE(
 
     const auto& terminal_event = matching_terminal_error(run);
     CHECK(terminal_event.error.content.empty());
+    REQUIRE(terminal_event.failure);
+    CHECK(terminal_event.failure->code == util::ErrorCode::Stream);
 }

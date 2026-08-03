@@ -1,7 +1,8 @@
 #include "SessionFactory.hpp"
 
-#include <cch/ai/ProviderRegistry.hpp>
+#include <cch/ai/Models.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
+#include <cch/coding_agent/AuthStorage.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/coding_agent/Settings.hpp>
@@ -16,6 +17,10 @@
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 #include "harness/WorkspaceFileSystem.hpp"
+#include "ai/providers/BoostBeastStreamTransport.hpp"
+#include "ai/providers/FakeProvider.hpp"
+#include "ai/providers/OpenAIProvider.hpp"
+#include "util/ExpectedMacros.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -75,7 +80,7 @@ struct AssemblyPlan {
     CreationProfile profile;
     NormalizedSessionTarget target;
     coding_agent::ProviderRequest provider_request;
-    std::unique_ptr<ai::StreamingChatClient> host_client;
+    std::shared_ptr<ai::Models> models;
     std::shared_ptr<harness::AsyncExecutionEnv> host_execution_env;
     coding_agent::SdkBuiltinTools builtin_tools;
     std::vector<std::unique_ptr<agent::AsyncAgentTool>> custom_tools;
@@ -209,69 +214,88 @@ void add_project_resource_loading_diagnostics(
     return std::nullopt;
 }
 
-[[nodiscard]] util::Expected<std::unique_ptr<ai::StreamingChatClient>> build_chat_client(
-    const coding_agent::ProviderRequest& explicit_request,
-    const coding_agent::ResolvedProviderSettings& resolved) {
-    auto registry = ai::make_default_provider_registry();
-    if (!registry) {
-        return std::unexpected(registry.error());
+class ProcessAuthContext final : public ai::AuthContext {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<std::string>>> environment(
+        std::string name) const override {
+        const char* value = std::getenv(name.c_str());
+        if (value == nullptr || *value == '\0') {
+            co_return std::optional<std::string>{};
+        }
+        co_return std::optional<std::string>{std::string{value}};
     }
 
-    bool should_resolve_env = (resolved.provider_registry_name != "fake");
-    if (!should_resolve_env && explicit_request.api_key_env.has_value()) {
-        should_resolve_env = true;
-    }
-
-    std::string resolved_env_name;
-    if (should_resolve_env && resolved.api_key.empty()) {
-        bool found{false};
-        for (const auto& name : resolved.api_key_env_chain) {
-            const char* val = std::getenv(name.c_str());
-            if (val && val[0] != '\0') {
-                resolved_env_name = name;
-                found = true;
-                break;
+    [[nodiscard]] boost::asio::awaitable<util::Expected<bool>> file_exists(
+        std::string path) const override {
+        if (path.starts_with("~/")) {
+            if (const char* home = std::getenv("HOME"); home != nullptr && *home != '\0') {
+                path = (std::filesystem::path{home} / path.substr(2)).string();
             }
         }
-        if (!found) {
-            std::string chain_str;
-            for (size_t i = 0; i < resolved.api_key_env_chain.size(); ++i) {
-                if (i > 0) chain_str += ", ";
-                chain_str += resolved.api_key_env_chain[i];
-            }
-            return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
-                "missing API key",
-                std::format(
-                    "none of the API key environment variables [{}] are set or non-empty; "
-                    "set one of them, configure an auth entry, or supply a host-provided chat client",
-                    chain_str)));
+        std::error_code error;
+        const bool exists = std::filesystem::exists(path, error);
+        if (error) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Auth,
+                "could not inspect authentication file",
+                error.message()));
         }
+        co_return exists;
+    }
+};
+
+/// Transitional alias projection for the legacy --auth/settings auth name.
+/// The value is still read live from AuthStorage for every request; no key is
+/// copied into session construction state.
+class AliasedCredentialStore final : public ai::CredentialStore {
+public:
+    AliasedCredentialStore(
+        std::shared_ptr<ai::CredentialStore> storage,
+        std::string alias)
+        : storage_(std::move(storage)), alias_(std::move(alias)) {}
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> read(
+        std::string provider_id) override {
+        CCH_TRY(credential, co_await storage_->read(key(std::move(provider_id))));
+        co_return credential;
     }
 
-    ai::ProviderFactoryContext ctx;
-    ctx.api_key = resolved.api_key;
-    ctx.api_key_env = resolved_env_name.empty() ? resolved.api_key_env : resolved_env_name;
-
-    auto client = registry->create(resolved.provider_registry_name, ctx);
-    if (!client) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Provider,
-            std::format("failed to create provider client '{}': {}", resolved.provider_registry_name, client.error().message),
-            client.error().detail));
+    [[nodiscard]] boost::asio::awaitable<util::Expected<std::vector<ai::CredentialInfo>>> list() override {
+        CCH_TRY(credentials, co_await storage_->list());
+        co_return credentials;
     }
 
-    return client;
-}
+    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> modify(
+        std::string provider_id,
+        ai::CredentialModifyHook modifier) override {
+        CCH_TRY(credential, co_await storage_->modify(
+            key(std::move(provider_id)), std::move(modifier)));
+        co_return credential;
+    }
+
+    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> remove(
+        std::string provider_id) override {
+        CCH_TRY_VOID(co_await storage_->remove(key(std::move(provider_id))));
+        co_return util::ExpectedVoid{};
+    }
+
+private:
+    [[nodiscard]] std::string key(std::string provider_id) const {
+        return alias_.empty() ? provider_id : alias_;
+    }
+
+    std::shared_ptr<ai::CredentialStore> storage_;
+    std::string alias_;
+};
 
 /// Transitional projection for the legacy string-only session settings. Full
 /// catalog and models.json composition belongs to #345. Until that seam lands,
 /// configured provider strings use pi's frozen custom-model defaults instead
-/// of claiming catalog-specific capabilities, while opaque host clients carry
-/// an explicit unknown protocol/capability sentinel.
+/// of claiming catalog-specific capabilities, while the private test Models
+/// seam carries an explicit unknown protocol/capability sentinel.
 [[nodiscard]] ai::Model make_transitional_request_model(
     const coding_agent::ResolvedProviderSettings& resolved,
-    bool uses_opaque_host_client) {
+    bool uses_injected_models) {
     ai::Model model{
         .id = resolved.model,
         .name = resolved.model,
@@ -287,7 +311,7 @@ void add_project_resource_loading_diagnostics(
         .headers = std::nullopt,
         .compat = std::nullopt,
     };
-    if (uses_opaque_host_client) {
+    if (uses_injected_models) {
         model.api = "unknown";
         model.provider = kHostClientProvider;
         model.base_url.clear();
@@ -296,6 +320,39 @@ void add_project_resource_loading_diagnostics(
         model.max_tokens = 0;
     }
     return model;
+}
+
+[[nodiscard]] util::Expected<std::shared_ptr<ai::Models>> build_models(
+    const coding_agent::ResolvedProviderSettings& resolved,
+    const ai::Model& model) {
+    if (resolved.provider_registry_name == "fake") {
+        auto models = ai::providers::make_scripted_fake_models();
+        if (!models) {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Provider,
+                "failed to compose fake Provider"));
+        }
+        return models;
+    }
+
+    std::shared_ptr<ai::CredentialStore> credentials =
+        std::make_shared<coding_agent::AuthStorage>(coding_agent::auth_file_path());
+    if (!resolved.auth.empty()) {
+        credentials = std::make_shared<AliasedCredentialStore>(
+            std::move(credentials), resolved.auth);
+    }
+    auto models = std::make_shared<ai::Models>(
+        std::move(credentials),
+        std::make_shared<ProcessAuthContext>());
+    auto provider = ai::providers::make_openai_compatible_provider(
+        model.provider,
+        std::vector<ai::Model>{model},
+        resolved.api_key_env_chain,
+        std::make_shared<ai::providers::BoostBeastStreamTransport>());
+    if (auto added = models->set_provider(std::move(provider)); !added) {
+        return std::unexpected(added.error());
+    }
+    return models;
 }
 
 [[nodiscard]] util::ExpectedVoid validate_trust_store_path(
@@ -513,7 +570,7 @@ struct SessionTargetNormalizationOptions {
     pr.provider = request.fake ? std::optional<std::string>{"fake"} : std::nullopt;
     plan.provider_request = std::move(pr);
 
-    plan.host_client = nullptr;
+    plan.models = nullptr;
     plan.host_execution_env = nullptr;
     plan.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = true,
@@ -539,18 +596,19 @@ struct SessionTargetNormalizationOptions {
     return plan;
 }
 
-[[nodiscard]] util::Expected<AssemblyPlan> normalize_sdk(CreateAgentSessionOptions options) {
+[[nodiscard]] util::Expected<AssemblyPlan> normalize_sdk(
+    CreateAgentSessionOptions options,
+    std::shared_ptr<ai::Models> models = {}) {
     const bool is_resume =
         std::holds_alternative<ExplicitResumeSessionTarget>(options.session_target);
-    const bool has_chat_client = options.chat_client != nullptr;
     const bool has_provider_config = options.provider_config.has_value();
 
-    if (!has_chat_client && !has_provider_config) {
+    if (!models && !has_provider_config) {
         if (!is_resume) {
             return std::unexpected(util::make_error(
                 util::ErrorCode::Validation,
-                "no chat client or provider_config supplied",
-                "supply a chat_client or provider_config to create an agent session"));
+                "no provider_config supplied",
+                "supply provider_config to create an agent session"));
         }
         // Resume may reconstruct a client from stored metadata and user settings.
     }
@@ -559,7 +617,7 @@ struct SessionTargetNormalizationOptions {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "api_key_env chain is empty",
-            "provide at least one environment variable name or supply a host-provided chat client"));
+            "provide at least one environment variable name"));
     }
 
     AssemblyPlan plan;
@@ -586,7 +644,7 @@ struct SessionTargetNormalizationOptions {
     }
     plan.provider_request = std::move(pr);
 
-    plan.host_client = std::move(options.chat_client);
+    plan.models = std::move(models);
     plan.host_execution_env = std::move(options.execution_env);
     plan.builtin_tools = options.builtin_tools;
     plan.custom_tools = std::move(options.custom_tools);
@@ -671,10 +729,10 @@ struct SessionTargetNormalizationOptions {
     }
 
     std::string provider_registry_name;
-    if (plan.host_client) {
-        provider_registry_name = std::string{kHostClientProvider};
-    } else if (plan.provider_request.provider) {
+    if (plan.provider_request.provider) {
         provider_registry_name = *plan.provider_request.provider;
+    } else if (plan.models) {
+        provider_registry_name = std::string{kHostClientProvider};
     } else if (is_resume && stored_provider) {
         provider_registry_name = (*stored_provider == "fake") ? "fake" : "openai-compatible";
     } else {
@@ -688,9 +746,9 @@ struct SessionTargetNormalizationOptions {
         stored_provider,
         stored_model);
 
-    // Metadata-less new sessions with a host client record the documented host
-    // sentinel as their model. Explicit or stored metadata is preserved.
-    if (plan.host_client && !is_resume && !plan.provider_request.model) {
+    // Metadata-less sessions using the private Models assembly seam record an
+    // opaque sentinel. Explicit or stored metadata is preserved.
+    if (plan.models && !is_resume && !plan.provider_request.model) {
         resolved.model = std::string{kHostClientModel};
     }
 
@@ -716,27 +774,24 @@ struct SessionTargetNormalizationOptions {
         }
     }
 
-    // 4. Build or adopt the chat client.
-    std::unique_ptr<ai::StreamingChatClient> chat_client;
-    if (plan.host_client) {
-        chat_client = std::move(plan.host_client);
-        diagnostics.push_back(make_diag(
-            SdkDiagnostic::Severity::Info,
-            "host_client_used",
-            "Using host-provided chat client; provider_config describes the request Model only"));
-        if (is_resume) {
-            diagnostics.push_back(make_diag(
-                SdkDiagnostic::Severity::Info,
-                "host_client_resume",
-                "Resumed session with host-provided chat client; stored provider/model metadata may differ"));
+    // 4. Build or adopt the private Models-backed stream capability. Public
+    // ModelRuntime injection lands in #345; direct Models injection is limited
+    // to the private assembly seam used by focused session tests.
+    const bool uses_injected_models =
+        plan.models != nullptr &&
+        (!plan.provider_request.provider || plan.provider_request.provider->empty() ||
+         !plan.provider_request.model || plan.provider_request.model->empty());
+    auto request_model = make_transitional_request_model(
+        resolved, uses_injected_models);
+    std::shared_ptr<ai::Models> models = std::move(plan.models);
+    if (!models) {
+        auto composed = build_models(resolved, request_model);
+        if (!composed) {
+            return std::unexpected(composed.error());
         }
-    } else {
-        auto client_result = build_chat_client(plan.provider_request, resolved);
-        if (!client_result) {
-            return std::unexpected(client_result.error());
-        }
-        chat_client = std::move(*client_result);
+        models = std::move(*composed);
     }
+    std::shared_ptr<ai::StreamingChatClient> stream = models;
 
     // 5. Resolve execution environment and ownership.
     std::shared_ptr<harness::AsyncExecutionEnv> exec_env;
@@ -916,7 +971,7 @@ struct SessionTargetNormalizationOptions {
     // user-level Shell configuration with an enabled model Bash Tool and
     // never widens the shared Execution Environment (ADR 0026).
     RuntimeServices services;
-    services.client = std::move(chat_client);
+    services.stream = std::move(stream);
     services.env = std::move(exec_env);
     services.env_owned = env_owned;
     services.user_shell = std::move(user_shell);
@@ -937,13 +992,7 @@ struct SessionTargetNormalizationOptions {
     runtime_config.max_queued_messages = plan.max_queued_messages;
     runtime_config.max_queued_bytes = plan.max_queued_bytes;
     runtime_config.max_turns = plan.max_turns;
-    const bool uses_opaque_host_client =
-        provider_registry_name == kHostClientProvider &&
-        (!plan.provider_request.provider || plan.provider_request.provider->empty() ||
-         !plan.provider_request.model || plan.provider_request.model->empty());
-    runtime_config.model = make_transitional_request_model(
-        resolved,
-        uses_opaque_host_client);
+    runtime_config.model = std::move(request_model);
 
     const auto session_path = open.store->path();
     const auto metadata = open.metadata;
@@ -995,6 +1044,25 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
     CreateAgentSessionOptions options) {
     const auto snapshot = load_user_settings_snapshot();
     return finish_creation(normalize_sdk(std::move(options)), snapshot);
+}
+
+util::Expected<CreateAgentSessionResult> SessionFactory::create(
+    CreateAgentSessionOptions options,
+    std::shared_ptr<ai::Models> models) {
+    const auto snapshot = load_user_settings_snapshot();
+    return finish_creation(
+        normalize_sdk(std::move(options), std::move(models)), snapshot);
+}
+
+util::Expected<CreateAgentSessionResult> SessionFactory::create(
+    CreateAgentSessionOptions options,
+    std::shared_ptr<ai::Models> models,
+    std::unique_ptr<AsyncUserShell> user_shell) {
+    const auto snapshot = load_user_settings_snapshot();
+    return finish_creation(
+        normalize_sdk(std::move(options), std::move(models)),
+        snapshot,
+        std::move(user_shell));
 }
 
 util::Expected<CreateAgentSessionResult> SessionFactory::create(

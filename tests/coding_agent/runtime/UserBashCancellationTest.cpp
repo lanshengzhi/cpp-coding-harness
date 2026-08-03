@@ -1,4 +1,5 @@
 #include <cch/ai/ChatClient.hpp>
+#include "support/ModelsFixture.hpp"
 #include <cch/ai/Content.hpp>
 #include <cch/coding_agent/Sdk.hpp>
 #include <cch/harness/session/SessionResume.hpp>
@@ -56,7 +57,7 @@ public:
     std::unique_ptr<ai::StreamingChatClient> client,
     std::unique_ptr<tests::FakeUserShell> shell,
     std::optional<std::filesystem::path> session_path = std::nullopt) {
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     if (session_path) {
         options.session_target =
             coding_agent::ExplicitNewSessionTarget{*session_path};
@@ -64,7 +65,7 @@ public:
         options.session_target = coding_agent::InMemorySessionTarget{};
     }
     options.workspace = workspace;
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,

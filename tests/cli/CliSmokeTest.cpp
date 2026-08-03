@@ -683,7 +683,7 @@ TEST_CASE("CLI RPC wires stdin and JSONL stdout to a session", "[cli][rpc]") {
     CHECK(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI JSON creation validation errors do not write stdout", "[cli][json]") {
+TEST_CASE("CLI JSON reports request-time auth failure through terminal events", "[cli][json][issue338]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "json-real.jsonl";
@@ -693,14 +693,17 @@ TEST_CASE("CLI JSON creation validation errors do not write stdout", "[cli][json
         " --session " + shell_quote(session) +
         " --api-key-env CCH_TEST_MISSING_KEY hello");
 
-    REQUIRE(result.exit_code == 2);
-    CHECK(result.stdout_text.empty());
-    CHECK(result.stderr_text.find("could not create session") != std::string::npos);
-    CHECK(result.stderr_text.find("missing API key") != std::string::npos);
-    CHECK_FALSE(std::filesystem::exists(session));
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.empty());
+    const auto records = parse_json_objects(result.stdout_text);
+    REQUIRE_FALSE(records.empty());
+    CHECK(json_string_at(records.front(), "type") == "session");
+    CHECK(has_json_event_type(non_empty_lines(result.stdout_text), "message_end"));
+    CHECK(result.stdout_text.find("Provider is not configured") != std::string::npos);
+    CHECK(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI creation failure after malformed settings keeps the settings warning visible", "[cli][settings]") {
+TEST_CASE("CLI terminal auth failure after malformed settings keeps the warning visible", "[cli][settings][issue338]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
@@ -716,11 +719,11 @@ TEST_CASE("CLI creation failure after malformed settings keeps the settings warn
         " --session " + shell_quote(session) +
         " --api-key-env CCH_TEST_MISSING_KEY hello");
 
-    REQUIRE(result.exit_code == 2);
-    CHECK(result.stdout_text.empty());
-    CHECK(result.stderr_text.find("missing API key") != std::string::npos);
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stdout_text.find("[error] Provider is not configured") != std::string::npos);
+    CHECK(result.stdout_text.find("[completed]") != std::string::npos);
     CHECK(result.stderr_text.find("could not load user settings") != std::string::npos);
-    CHECK_FALSE(std::filesystem::exists(session));
+    CHECK(std::filesystem::exists(session));
 }
 
 TEST_CASE("CLI rejects an unresolvable workspace before model request", "[cli][assembly]") {
@@ -899,7 +902,7 @@ TEST_CASE("CLI fake read loop prints max-turn marker when turn budget is exhaust
     CHECK(result.output.find("loop failed: max turns exceeded") != std::string::npos);
 }
 
-TEST_CASE("CLI real-provider mode reports missing API key before model request", "[cli][u6]") {
+TEST_CASE("CLI real-provider mode reports missing API key as a terminal auth outcome", "[cli][u6][issue338]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "real.jsonl";
@@ -909,12 +912,13 @@ TEST_CASE("CLI real-provider mode reports missing API key before model request",
         " --session " + shell_quote(session) +
         " --api-key-env CCH_TEST_MISSING_KEY hello");
 
-    REQUIRE(result.exit_code == 2);
-    CHECK(result.output.find("missing API key") != std::string::npos);
-    CHECK(result.output.find("[model-request]") == std::string::npos);
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.output.find("Provider is not configured") != std::string::npos);
+    CHECK(result.output.find("[model-request]") != std::string::npos);
+    CHECK(result.output.find("[completed]") != std::string::npos);
 }
 
-TEST_CASE("CLI Kimi path validates KIMI_API_KEY before model request and session creation", "[cli][kimi][u3]") {
+TEST_CASE("CLI Kimi path reports missing KIMI_API_KEY through terminal auth", "[cli][kimi][u3][issue338]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "kimi-missing-key.jsonl";
@@ -926,11 +930,11 @@ TEST_CASE("CLI Kimi path validates KIMI_API_KEY before model request and session
         " --model kimi-for-coding"
         " --api-key-env KIMI_API_KEY hello");
 
-    REQUIRE(result.exit_code == 2);
-    CHECK(result.output.find("missing API key") != std::string::npos);
-    CHECK(result.output.find("KIMI_API_KEY") != std::string::npos);
-    CHECK(result.output.find("[model-request]") == std::string::npos);
-    CHECK_FALSE(std::filesystem::exists(session));
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.output.find("Provider is not configured") != std::string::npos);
+    CHECK(result.output.find("[model-request]") != std::string::npos);
+    CHECK(result.output.find("[completed]") != std::string::npos);
+    CHECK(std::filesystem::exists(session));
 }
 
 TEST_CASE("CLI skips project skills by default when project trust is unknown", "[cli][project-trust]") {

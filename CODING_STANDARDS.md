@@ -152,7 +152,7 @@ This section is the checkable form of AGENTS.md guardrail 5.
 
 10.5. `bash` runs with a sanitized environment that omits API-key, token, secret, password, and OpenAI-looking variables. Extend the filter; never bypass it.
 
-10.6. Credential values may appear in the credential-store layer (`cch::ai` `Credential`/`CredentialStore`, coding-agent `AuthStorage`), in `AuthResult` and short-lived request auth carried by trusted in-process authentication and Provider capabilities, in provider adapter configuration such as `ai::providers::OpenAIStreamConfig`, and in transport request headers. They flow from credential-store/auth resolution through `Models` into the Provider's transport authorization (ADR 0029, ADR 0030). `Model`, `StreamChatRequest`, message, and Session Entry contracts remain credential-free (ADR 0019). The pre-ADR-0029 carriers (`coding_agent::AuthEntry`, `coding_agent::ResolvedProviderSettings`, `ai::ProviderFactoryContext`) keep their current uses only until the one-time rename/removal lands — added or modified code targets the new carriers.
+10.6. Credential values may appear in the credential-store layer (`cch::ai` `Credential`/`CredentialStore`, coding-agent `AuthStorage`), in `AuthResult` and short-lived request auth carried by trusted in-process authentication and Provider capabilities, and in transport request headers. They flow from credential-store/auth resolution through `Models` into the Provider's transport authorization (ADR 0029, ADR 0030). `Model`, `StreamChatRequest`, message, and Session Entry contracts remain credential-free (ADR 0019). The legacy `coding_agent::AuthEntry` remains confined to the pre-#345 loader; added or modified request paths use the new carriers.
 
 ## 11. Tests
 
@@ -199,7 +199,6 @@ This section is the checkable form of AGENTS.md guardrail 5.
 Sanctioned deviations are grandfathered only on untouched existing lines. Added or modified lines comply with the current rule unless an exception below explicitly permits the deviation.
 
 - **camelCase pi vocabulary (§3.2):** untouched camelCase declarations and uses are grandfathered. A new or renamed camelCase identifier is allowed only when its issue/spec or an adjacent comment identifies the matching pi identifier; otherwise the declaration uses `snake_case`. This semantic rule covers filesystem/session/trust seams, wire fields, and skill/prompt parity code without a path allowlist.
-- **`ProviderFactory` is `std::function`** (`include/cch/ai/ProviderRegistry.hpp`) — its untouched declaration is grandfathered pending removal of `ProviderRegistry` under ADR 0029 (replaced by `Models` + `Provider`); added or modified callback declarations use `std::move_only_function`.
 - **Include spelling (§2.9):** untouched relative quoted project includes (`"../util/Error.hpp"`, `"../../include/cch/..."`) are grandfathered; added or modified include lines use the current spelling rule.
 - **Test tag `[coding-agent]`** (35 uses) predates §11.4's `[coding_agent]`; untouched tags are grandfathered, while added or modified tag lists use `[coding_agent]`.
 - **Constant naming (§3.5):** untouched snake_case constexpr locals and `SCREAMING_SNAKE` public constants are grandfathered; added or modified constant declarations use `kCamelCase`.

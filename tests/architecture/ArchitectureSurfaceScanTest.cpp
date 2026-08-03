@@ -257,14 +257,16 @@ TEST_CASE("provider DTOs stay out of the public contract surface", "[architectur
         }
     }
 
-    const auto openai_header = read_text(source_root / "include" / "cch" / "ai" / "providers" / "OpenAIChatClient.hpp");
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "include" / "cch" / "ai" / "providers" / "OpenAIChatClient.hpp"));
+    const auto openai_header = read_text(
+        source_root / "src" / "ai" / "providers" / "OpenAIChatClient.hpp");
     CHECK(openai_header.find("BoostBeastStreamTransport.hpp") == std::string::npos);
     CHECK(openai_header.find("StreamTransport.hpp") != std::string::npos);
 
     const auto providers_dir = source_root / "include" / "cch" / "ai" / "providers";
     const std::vector<std::string> allowed_provider_headers = {
         "StreamTransport.hpp",
-        "OpenAIChatClient.hpp",
         "OpenAICompletionsCompat.hpp",
     };
     for (const auto& entry : std::filesystem::directory_iterator(providers_dir)) {
@@ -324,10 +326,12 @@ TEST_CASE(
     const auto request_header = read_text(source_root / "include" / "cch" / "ai" / "ChatClient.hpp");
     CHECK(request_header.find("Model model") != std::string::npos);
     CHECK(request_header.find("std::optional<Model> model") == std::string::npos);
-    const auto registry_header = read_text(source_root / "include" / "cch" / "ai" / "ProviderRegistry.hpp");
-    CHECK(registry_header.find("Model model") == std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "include" / "cch" / "ai" / "ProviderRegistry.hpp"));
+    const auto provider_header = read_text(source_root / "include" / "cch" / "ai" / "Provider.hpp");
+    CHECK(provider_header.find("const Model& model") != std::string::npos);
     const auto openai_header = read_text(
-        source_root / "include" / "cch" / "ai" / "providers" / "OpenAIChatClient.hpp");
+        source_root / "src" / "ai" / "providers" / "OpenAIChatClient.hpp");
     CHECK(openai_header.find("ai::Model model") == std::string::npos);
     const auto agent_context_header = read_text(source_root / "include" / "cch" / "agent" / "AgentContext.hpp");
     CHECK(agent_context_header.find("struct AgentState") != std::string::npos);
@@ -409,6 +413,8 @@ TEST_CASE("AgentSession has one prompt completion and event subscription path", 
     CHECK(cch::tests::count_occurrences(rpc_source, "config.session.subscribe(") == 1);
     CHECK(rpc_source.find(prompt_sink_field) == std::string::npos);
     CHECK(sdk_header.find("preflight_result") == std::string::npos);
+    CHECK(sdk_header.find("shared_ptr<ai::Models>") == std::string::npos);
+    CHECK(sdk_header.find("chat_client") == std::string::npos);
     CHECK(rpc_source.find("AgentSessionPromptAccess::prompt_blocking") != std::string::npos);
 }
 

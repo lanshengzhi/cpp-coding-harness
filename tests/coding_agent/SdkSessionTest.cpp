@@ -1,16 +1,17 @@
 #include <cch/agent/AgentEvent.hpp>
+#include "support/ModelsFixture.hpp"
 #include <cch/agent/AgentTool.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Context.hpp>
 #include <cch/ai/Message.hpp>
-#include <cch/ai/providers/OpenAIChatClient.hpp>
+#include "ai/providers/OpenAIChatClient.hpp"
 #include <cch/ai/providers/StreamTransport.hpp>
 #include <cch/coding_agent/Sdk.hpp>
 #include <cch/coding_agent/Skill.hpp>
 #include <cch/harness/ExecutionEnv.hpp>
 #include <cch/harness/session/JsonlSessionStore.hpp>
 #include <cch/util/Error.hpp>
-#include "ai/providers/FakeChatClient.hpp"
+#include "ai/providers/FakeProvider.hpp"
 #include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/runtime/AgentSessionPromptAccess.hpp"
@@ -186,11 +187,11 @@ ai::MessageVariant user_msg(std::string text) {
     return ai::MessageVariant{ai::user_text_message(std::move(text))};
 }
 
-coding_agent::CreateAgentSessionOptions sdk_resume_options(const TestPaths& paths) {
-    coding_agent::CreateAgentSessionOptions opts;
+tests::ModelsSessionOptions sdk_resume_options(const TestPaths& paths) {
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     return opts;
 }
 
@@ -896,7 +897,7 @@ void check_partial_protocol_terminal(const ai::AssistantMessage& terminal) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST_CASE("SDK prompt contract exposes success-or-error and separate state", "[sdk][u1]") {
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{std::filesystem::path{"/tmp/test"}};
     opts.workspace = std::filesystem::path{"/tmp"};
     opts.max_turns = 10;
@@ -927,10 +928,10 @@ TEST_CASE("SDK AgentSession prompt accepts zero or more image values", "[sdk][u1
 }
 
 TEST_CASE("SDK session options default to no turn cap", "[sdk][u1][issue68]") {
-    const coding_agent::CreateAgentSessionOptions opts;
+    const tests::ModelsSessionOptions opts;
     CHECK_FALSE(opts.max_turns.has_value());
 
-    coding_agent::CreateAgentSessionOptions capped;
+    tests::ModelsSessionOptions capped;
     capped.max_turns = 10;
     REQUIRE(capped.max_turns.has_value());
     CHECK(*capped.max_turns == 10);
@@ -943,10 +944,10 @@ TEST_CASE(
     auto capture = std::make_unique<CaptureChatClient>();
     auto* capture_ptr = capture.get();
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     options.workspace = paths.workspace.path();
-    options.chat_client = std::move(capture);
+    options.models = cch::tests::models_from_stream(std::move(capture));
 
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
@@ -1005,10 +1006,10 @@ TEST_CASE(
 
     auto resumed_capture = std::make_unique<CaptureChatClient>();
     auto* resumed_capture_ptr = resumed_capture.get();
-    coding_agent::CreateAgentSessionOptions resume_options;
+    tests::ModelsSessionOptions resume_options;
     resume_options.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
     resume_options.workspace = paths.workspace.path();
-    resume_options.chat_client = std::move(resumed_capture);
+    resume_options.models = cch::tests::models_from_stream(std::move(resumed_capture));
     auto resumed = coding_agent::create_agent_session(std::move(resume_options));
     REQUIRE(resumed.has_value());
     REQUIRE(resumed->session->prompt_blocking("continue").has_value());
@@ -1027,10 +1028,10 @@ TEST_CASE(
     TestPaths paths;
     auto capture = std::make_unique<CaptureChatClient>();
     auto* capture_ptr = capture.get();
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = paths.workspace.path();
-    options.chat_client = std::move(capture);
+    options.models = cch::tests::models_from_stream(std::move(capture));
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
 
@@ -1056,10 +1057,10 @@ TEST_CASE("SDK AgentSession exposes incompatible image destinations as provider 
     TestPaths paths;
     auto rejecting_client = std::make_unique<ImageRejectingChatClient>();
     auto* rejecting_client_ptr = rejecting_client.get();
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = paths.workspace.path();
-    options.chat_client = std::move(rejecting_client);
+    options.models = cch::tests::models_from_stream(std::move(rejecting_client));
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
 
@@ -1069,12 +1070,13 @@ TEST_CASE("SDK AgentSession exposes incompatible image destinations as provider 
         .mime_type = "image/png",
     });
     auto rejected = created->session->prompt_blocking("inspect", std::move(prompt_options));
-    REQUIRE_FALSE(rejected.has_value());
-    CHECK(rejected.error().code == util::ErrorCode::Provider);
-    CHECK(rejected.error().message == "image input is not supported");
+    REQUIRE(rejected.has_value());
     CHECK(rejecting_client_ptr->request_count == 1);
     const auto snapshot = created->session->snapshot();
-    REQUIRE(snapshot.agent_state.messages.size() == 1);
+    REQUIRE(snapshot.agent_state.messages.size() == 2);
+    const auto& terminal = std::get<ai::AssistantMessage>(snapshot.agent_state.messages[1]);
+    CHECK(terminal.stop_reason == ai::AssistantStopReason::Error);
+    CHECK(terminal.error_message == "image input is not supported");
     const auto& user = std::get<ai::UserMessage>(snapshot.agent_state.messages.front());
     REQUIRE(user.content.size() == 2);
     CHECK(std::get<ai::ImageContent>(user.content[1]).data == "cmVqZWN0LW1l");
@@ -1091,10 +1093,10 @@ TEST_CASE(
     "SDK AgentSession drains observed steering before follow-up input",
     "[coding_agent][queue][issue44]") {
     TestPaths paths;
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = paths.workspace.path();
-    options.chat_client = ai::providers::make_scripted_fake_chat_client();
+    options.models = ai::providers::make_scripted_fake_models();
 
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
@@ -1136,10 +1138,10 @@ TEST_CASE(
     TestPaths paths;
     auto client = std::make_unique<GatedSdkChatClient>();
     auto* client_ptr = client.get();
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = paths.workspace.path();
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
 
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
@@ -1215,7 +1217,7 @@ TEST_CASE("SDK session target is one passive variant with default persistence", 
                   std::variant_alternative_t<3, coding_agent::SessionTarget>,
                   coding_agent::InMemorySessionTarget>);
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     CHECK(std::holds_alternative<coding_agent::DefaultPersistedSessionTarget>(opts.session_target));
 
     using ResultPath = decltype(std::declval<coding_agent::CreateAgentSessionResult>().session_path);
@@ -1234,10 +1236,10 @@ TEST_CASE(
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.string());
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -1293,10 +1295,10 @@ TEST_CASE(
     "[sdk][in-memory][move]") {
     TestPaths paths;
     auto create_in_memory = [&]() {
-        coding_agent::CreateAgentSessionOptions opts;
+        tests::ModelsSessionOptions opts;
         opts.session_target = coding_agent::InMemorySessionTarget{};
         opts.workspace = paths.workspace.path();
-        opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+        opts.models = ai::providers::make_scripted_fake_models();
         return coding_agent::create_agent_session(std::move(opts));
     };
 
@@ -1337,10 +1339,10 @@ TEST_CASE(
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.string());
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -1385,10 +1387,10 @@ TEST_CASE(
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.string());
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.load_project_resources = true;
     opts.default_project_trust = coding_agent::DefaultProjectTrust::Always;
 
@@ -1411,7 +1413,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "SDK in-memory provider preflight rejection retains only completed user state",
+    "SDK in-memory provider rejection completes as a retained terminal error",
     "[sdk][in-memory][provider-preflight-rejection]") {
     TestPaths paths;
     cch::tests::TempWorkspace isolated;
@@ -1419,10 +1421,10 @@ TEST_CASE(
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.string());
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::make_unique<PreflightRejectingChatClient>();
+    opts.models = cch::tests::models_from_stream(std::make_unique<PreflightRejectingChatClient>());
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -1438,13 +1440,14 @@ TEST_CASE(
     REQUIRE(subscription.has_value());
 
     auto failed = result->session->prompt_blocking("hello");
-    REQUIRE_FALSE(failed.has_value());
-    CHECK(failed.error().code == util::ErrorCode::Provider);
-    CHECK(failed.error().message == "provider rejected in-memory prompt");
+    REQUIRE(failed.has_value());
     CHECK(delivered_user_messages == 1);
     CHECK(result->session->is_open());
-    CHECK(result->session->message_count() == 1);
-    CHECK_FALSE(result->session->last_assistant_text().has_value());
+    CHECK(result->session->message_count() == 2);
+    const auto snapshot = result->session->snapshot();
+    const auto& terminal = std::get<ai::AssistantMessage>(snapshot.agent_state.messages.back());
+    CHECK(terminal.stop_reason == ai::AssistantStopReason::Error);
+    CHECK(terminal.error_message == "provider rejected in-memory prompt");
     CHECK_FALSE(result->session_path.has_value());
     CHECK_FALSE(result->session->session_path().has_value());
     CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
@@ -1453,7 +1456,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "SDK persists only the prompt when provider preflight rejects before transport",
+    "SDK persists a terminal error when provider setup rejects before transport",
     "[sdk][incremental-persistence][provider-preflight-rejection][issue14]") {
     TestPaths paths;
     auto transport = std::make_shared<RecoveringFailureTransport>(util::make_error(
@@ -1461,10 +1464,8 @@ TEST_CASE(
         "transport must not run"));
 
     ai::providers::OpenAIStreamConfig provider;
-    provider.api_key.clear();
-    provider.api_key_env.clear();
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
     opts.provider_config = coding_agent::SdkProviderConfig{
@@ -1472,9 +1473,9 @@ TEST_CASE(
         .model = "gpt-test",
         .base_url = "https://api.example/v1",
     };
-    opts.chat_client = std::make_unique<ai::providers::StreamingOpenAIChatClient>(
+    opts.models = cch::tests::models_from_stream(cch::tests::openai_stream(
         transport,
-        std::move(provider));
+        std::move(provider)));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -1489,15 +1490,12 @@ TEST_CASE(
     REQUIRE(subscription.has_value());
 
     auto failed = session->prompt_blocking("hello");
-    REQUIRE_FALSE(failed.has_value());
-    CHECK(failed.error().code == util::ErrorCode::Provider);
-    CHECK(failed.error().message == "missing API key");
+    REQUIRE(failed.has_value());
     CHECK(transport->requests.empty());
     CHECK(session->is_open());
-    CHECK(session->message_count() == 1);
-    CHECK_FALSE(session->last_assistant_text().has_value());
+    CHECK(session->message_count() == 2);
 
-    REQUIRE(events.size() == 5);
+    REQUIRE(events.size() == 8);
     std::size_t index = 0;
     CHECK(std::holds_alternative<agent::AgentStartEvent>(events[index++]));
     CHECK(std::holds_alternative<agent::TurnStartEvent>(events[index++]));
@@ -1507,12 +1505,20 @@ TEST_CASE(
     const auto* user_end = std::get_if<agent::MessageEndEvent>(&events[index++]);
     REQUIRE(user_end != nullptr);
     CHECK(std::holds_alternative<ai::UserMessage>(user_end->message));
+    CHECK(std::holds_alternative<agent::MessageStartEvent>(events[index++]));
+    const auto* assistant_end = std::get_if<agent::MessageEndEvent>(&events[index++]);
+    REQUIRE(assistant_end != nullptr);
+    const auto& terminal = std::get<ai::AssistantMessage>(assistant_end->message);
+    CHECK(terminal.stop_reason == ai::AssistantStopReason::Error);
+    CHECK(terminal.error_message == "missing API key");
+    CHECK(std::holds_alternative<agent::TurnEndEvent>(events[index++]));
     CHECK(std::holds_alternative<agent::AgentEndEvent>(events[index++]));
 
     auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
     REQUIRE(durable.has_value());
-    REQUIRE(durable->messages.size() == 1);
+    REQUIRE(durable->messages.size() == 2);
     REQUIRE(std::holds_alternative<ai::UserMessage>(durable->messages[0]));
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(durable->messages[1]));
     CHECK(ai::text_from_content(std::get<ai::UserMessage>(durable->messages[0]).content) == "hello");
 
     session->close();
@@ -1525,9 +1531,8 @@ TEST_CASE(
     auto transport = std::make_shared<UsageSnapshotsTransport>();
 
     ai::providers::OpenAIStreamConfig provider;
-    provider.api_key = "sk-test-api-key";
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
     opts.provider_config = coding_agent::SdkProviderConfig{
@@ -1535,9 +1540,9 @@ TEST_CASE(
         .model = "gpt-test",
         .base_url = "https://api.example/v1",
     };
-    opts.chat_client = std::make_unique<ai::providers::StreamingOpenAIChatClient>(
+    opts.models = cch::tests::models_from_stream(cch::tests::openai_stream(
         transport,
-        std::move(provider));
+        std::move(provider), "sk-test-api-key"));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -1621,9 +1626,8 @@ TEST_CASE(
         "could not resolve api.example: Name or service not known"));
 
     ai::providers::OpenAIStreamConfig provider;
-    provider.api_key = "sk-test-api-key";
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
     opts.provider_config = coding_agent::SdkProviderConfig{
@@ -1631,9 +1635,9 @@ TEST_CASE(
         .model = "gpt-test",
         .base_url = "https://api.example/v1",
     };
-    opts.chat_client = std::make_unique<ai::providers::StreamingOpenAIChatClient>(
+    opts.models = cch::tests::models_from_stream(cch::tests::openai_stream(
         transport,
-        std::move(provider));
+        std::move(provider), "sk-test-api-key"));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -1723,10 +1727,10 @@ TEST_CASE(
 
     auto capture = std::make_unique<CaptureChatClient>();
     auto* capture_ptr = capture.get();
-    coding_agent::CreateAgentSessionOptions resume;
+    tests::ModelsSessionOptions resume;
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
     resume.workspace = paths.workspace.path();
-    resume.chat_client = std::move(capture);
+    resume.models = cch::tests::models_from_stream(std::move(capture));
 
     auto reopened = coding_agent::create_agent_session(std::move(resume));
     REQUIRE(reopened.has_value());
@@ -1753,10 +1757,10 @@ TEST_CASE(
     auto* client_ptr = client.get();
     auto tool_execution_count = std::make_shared<std::size_t>(0);
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::move(client);
+    opts.models = cch::tests::models_from_stream(std::move(client));
     opts.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = false,
         .write = false,
@@ -1846,9 +1850,8 @@ TEST_CASE(
     auto tool_execution_count = std::make_shared<std::size_t>(0);
 
     ai::providers::OpenAIStreamConfig provider;
-    provider.api_key = "sk-test-api-key";
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
     opts.provider_config = coding_agent::SdkProviderConfig{
@@ -1856,9 +1859,9 @@ TEST_CASE(
         .model = "gpt-test",
         .base_url = "https://api.example/v1",
     };
-    opts.chat_client = std::make_unique<ai::providers::StreamingOpenAIChatClient>(
+    opts.models = cch::tests::models_from_stream(cch::tests::openai_stream(
         transport,
-        std::move(provider));
+        std::move(provider), "sk-test-api-key"));
     opts.custom_tools.push_back(std::make_unique<FakeEchoTool>(tool_execution_count));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
@@ -1951,10 +1954,10 @@ TEST_CASE(
 
     auto capture = std::make_unique<CaptureChatClient>();
     auto* capture_ptr = capture.get();
-    coding_agent::CreateAgentSessionOptions resume;
+    tests::ModelsSessionOptions resume;
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
     resume.workspace = paths.workspace.path();
-    resume.chat_client = std::move(capture);
+    resume.models = cch::tests::models_from_stream(std::move(capture));
 
     auto reopened = coding_agent::create_agent_session(std::move(resume));
     REQUIRE(reopened.has_value());
@@ -1979,10 +1982,10 @@ TEST_CASE(
         "host transport lost before response start");
     auto* client_ptr = client.get();
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::move(client);
+    opts.models = cch::tests::models_from_stream(std::move(client));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -2012,8 +2015,7 @@ TEST_CASE(
     CHECK(session->is_open());
     CHECK(session->message_count() == 2);
 
-    // Exactly one assistant message_start, synthesized from the authoritative
-    // final message, and exactly one message_end.
+    // Exactly one assistant message_start and exactly one message_end.
     REQUIRE(events.size() == 8);
     std::size_t index = 0;
     CHECK(std::holds_alternative<agent::AgentStartEvent>(events[index++]));
@@ -2079,10 +2081,10 @@ TEST_CASE(
         ai::AssistantStopReason::Aborted,
         "host cancelled before response start");
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::move(client);
+    opts.models = cch::tests::models_from_stream(std::move(client));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -2151,9 +2153,8 @@ TEST_CASE(
     auto tool_execution_count = std::make_shared<std::size_t>(0);
 
     ai::providers::OpenAIStreamConfig provider;
-    provider.api_key = "sk-test-api-key";
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
     opts.provider_config = coding_agent::SdkProviderConfig{
@@ -2161,9 +2162,9 @@ TEST_CASE(
         .model = "gpt-test",
         .base_url = "https://api.example/v1",
     };
-    opts.chat_client = std::make_unique<ai::providers::StreamingOpenAIChatClient>(
+    opts.models = cch::tests::models_from_stream(cch::tests::openai_stream(
         transport,
-        std::move(provider));
+        std::move(provider), "sk-test-api-key"));
     opts.custom_tools.push_back(std::make_unique<FakeEchoTool>(tool_execution_count));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
@@ -2258,10 +2259,10 @@ TEST_CASE(
 
     auto capture = std::make_unique<CaptureChatClient>();
     auto* capture_ptr = capture.get();
-    coding_agent::CreateAgentSessionOptions resume;
+    tests::ModelsSessionOptions resume;
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
     resume.workspace = paths.workspace.path();
-    resume.chat_client = std::move(capture);
+    resume.models = cch::tests::models_from_stream(std::move(capture));
 
     auto reopened = coding_agent::create_agent_session(std::move(resume));
     REQUIRE(reopened.has_value());
@@ -2283,9 +2284,9 @@ TEST_CASE("SDK default target persists under the canonical workspace key", "[sdk
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -2323,9 +2324,9 @@ TEST_CASE("SDK default persistence ignores CLI-only session directory inputs", "
         settings << "{\"sessionDir\":\"" << cli_directory.path().string() << "\"}";
     }
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -2389,10 +2390,10 @@ TEST_CASE(
         "{\"shellPath\":\"" + (paths.workspace.path() / "custom-shell").string() +
             "\",\"shellCommandPrefix\":\"export CCH_PREFIX=first-snapshot\"}");
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.builtin_tools.bash = true;
 
     auto result = coding_agent::create_agent_session(std::move(opts));
@@ -2429,10 +2430,10 @@ TEST_CASE(
         "settings.json",
         "{\"shellPath\":\"" + (paths.workspace.path() / "missing-shell").string() + "\"}");
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.builtin_tools.bash = true;
 
     auto result = coding_agent::create_agent_session(std::move(opts));
@@ -2456,10 +2457,10 @@ TEST_CASE("SessionFactory creation without User Settings applies defaults silent
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -2474,10 +2475,10 @@ TEST_CASE("SessionFactory creation with malformed User Settings succeeds with sa
     agent_dir_guard.set(agent_dir.path().string());
     agent_dir.write("settings.json", "{not valid json");
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -2496,10 +2497,10 @@ TEST_CASE("SessionFactory creation with invalid User Settings values falls back 
     agent_dir_guard.set(agent_dir.path().string());
     agent_dir.write("settings.json", "{\"default_project_trust\":\"bogus\"}");
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -2517,15 +2518,15 @@ TEST_CASE("SessionFactory SDK creation failure after User Settings fallback keep
     agent_dir_guard.set(agent_dir.path().string());
     agent_dir.write("settings.json", "{not valid json");
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    // No chat_client, no provider_config: normalization fails.
+    // No provider_config: public SDK normalization fails.
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().code == util::ErrorCode::Validation);
-    CHECK(result.error().message == "no chat client or provider_config supplied");
+    CHECK(result.error().message == "no provider_config supplied");
     REQUIRE(result.error().context.has_value());
     CHECK(result.error().context->find("could not load user settings") != std::string::npos);
 }
@@ -2555,7 +2556,7 @@ TEST_CASE("SessionFactory CLI creation failure after User Settings fallback keep
 // compatibility, and provider readiness for the CLI creation request shape.
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE("SessionFactory CLI creation without credentials fails with missing API key before publishing", "[sdk][assembly][cli]") {
+TEST_CASE("SessionFactory CLI resolves missing credentials as a terminal auth outcome", "[sdk][assembly][cli]") {
     TestPaths paths;
     cch::tests::TempWorkspace agent_dir;
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
@@ -2569,11 +2570,17 @@ TEST_CASE("SessionFactory CLI creation without credentials fails with missing AP
     request.provider_overrides.api_key_env = "CCH_FACTORY_MISSING_KEY";
 
     auto result = coding_agent::create_agent_session(std::move(request));
-    REQUIRE_FALSE(result.has_value());
-    CHECK(result.error().code == util::ErrorCode::Validation);
-    CHECK(result.error().message.find("missing API key") != std::string::npos);
-    CHECK(result.error().detail.find("CCH_FACTORY_MISSING_KEY") != std::string::npos);
-    CHECK_FALSE(std::filesystem::exists(paths.session_file));
+    REQUIRE(result.has_value());
+    auto prompted = result->session->prompt_blocking("hello");
+    REQUIRE(prompted.has_value());
+    const auto snapshot = result->session->snapshot();
+    REQUIRE(snapshot.agent_state.messages.size() == 2);
+    const auto& terminal = std::get<ai::AssistantMessage>(snapshot.agent_state.messages.back());
+    CHECK(terminal.stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(terminal.error_message);
+    CHECK(terminal.error_message->find("Provider is not configured") != std::string::npos);
+    CHECK(std::filesystem::exists(paths.session_file));
+    result->session->close();
 }
 
 TEST_CASE("SessionFactory CLI explicit new target rejects an unresolvable workspace", "[sdk][assembly][cli]") {
@@ -2657,9 +2664,9 @@ TEST_CASE("SDK default target gives workspace symlink aliases one directory", "[
     std::filesystem::create_directory_symlink(paths.workspace.path(), alias);
 
     auto create_from = [&](const std::filesystem::path& workspace) {
-        coding_agent::CreateAgentSessionOptions opts;
+        tests::ModelsSessionOptions opts;
         opts.workspace = workspace;
-        opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+        opts.models = ai::providers::make_scripted_fake_models();
         return coding_agent::create_agent_session(std::move(opts));
     };
 
@@ -2684,9 +2691,9 @@ TEST_CASE("failed SDK default assembly publishes no session", "[sdk][assembly][d
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.string());
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.custom_tools.push_back(std::make_unique<FakeEchoTool>());
     opts.custom_tools.push_back(std::make_unique<FakeEchoTool>());
 
@@ -2701,10 +2708,10 @@ TEST_CASE("SDK explicit new and resume paths bypass automatic storage", "[sdk][u
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set((agent_dir.path() / "unused-agent-dir").string());
 
-    coding_agent::CreateAgentSessionOptions create;
+    tests::ModelsSessionOptions create;
     create.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     create.workspace = paths.workspace.path();
-    create.chat_client = ai::providers::make_scripted_fake_chat_client();
+    create.models = ai::providers::make_scripted_fake_models();
 
     auto created = coding_agent::create_agent_session(std::move(create));
     REQUIRE(created.has_value());
@@ -2713,10 +2720,10 @@ TEST_CASE("SDK explicit new and resume paths bypass automatic storage", "[sdk][u
     CHECK_FALSE(std::filesystem::exists(agent_dir.path() / "unused-agent-dir" / "sessions"));
     created->session->close();
 
-    coding_agent::CreateAgentSessionOptions resume;
+    tests::ModelsSessionOptions resume;
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
     resume.workspace = paths.workspace.path();
-    resume.chat_client = ai::providers::make_scripted_fake_chat_client();
+    resume.models = ai::providers::make_scripted_fake_models();
 
     auto resumed = coding_agent::create_agent_session(std::move(resume));
     REQUIRE(resumed.has_value());
@@ -2747,9 +2754,9 @@ TEST_CASE("SDK default creation ignores a valid legacy session that remains expl
         REQUIRE(legacy_store.has_value());
     }
 
-    coding_agent::CreateAgentSessionOptions defaults;
+    tests::ModelsSessionOptions defaults;
     defaults.workspace = paths.workspace.path();
-    defaults.chat_client = ai::providers::make_scripted_fake_chat_client();
+    defaults.models = ai::providers::make_scripted_fake_models();
 
     auto created = coding_agent::create_agent_session(std::move(defaults));
     REQUIRE(created.has_value());
@@ -2759,10 +2766,10 @@ TEST_CASE("SDK default creation ignores a valid legacy session that remains expl
     CHECK(std::filesystem::is_regular_file(legacy_session));
     created->session->close();
 
-    coding_agent::CreateAgentSessionOptions resume;
+    tests::ModelsSessionOptions resume;
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{legacy_session};
     resume.workspace = paths.workspace.path();
-    resume.chat_client = ai::providers::make_scripted_fake_chat_client();
+    resume.models = ai::providers::make_scripted_fake_models();
 
     auto resumed = coding_agent::create_agent_session(std::move(resume));
     REQUIRE(resumed.has_value());
@@ -2791,9 +2798,9 @@ TEST_CASE("SDK default publication failure does not use the legacy workspace dir
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.string());
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE_FALSE(result.has_value());
@@ -2811,9 +2818,9 @@ TEST_CASE("SDK default creation fails when the Agent Config Directory is unresol
     agent_dir_guard.unset();
     home_guard.unset();
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE_FALSE(result.has_value());
@@ -2823,13 +2830,13 @@ TEST_CASE("SDK default creation fails when the Agent Config Directory is unresol
 }
 #endif
 
-TEST_CASE("create_agent_session fails without chat_client or provider_config", "[sdk][u2]") {
+TEST_CASE("create_agent_session fails without provider_config", "[sdk][u2][issue338]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    // No chat_client, no provider_config
+    // No provider_config
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE_FALSE(result.has_value());
@@ -2848,7 +2855,7 @@ TEST_CASE(
     first_key.unset();
     second_key.set("second-secret");
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
     opts.provider_config = coding_agent::SdkProviderConfig{
@@ -2870,7 +2877,7 @@ TEST_CASE(
     result->session->close();
 }
 
-TEST_CASE("SDK provider_config api_key_env chain rejects unset variables", "[sdk][u2][api-key-env]") {
+TEST_CASE("SDK provider_config resolves an unset API key chain at request time", "[sdk][u2][api-key-env]") {
     TestPaths paths;
     cch::tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
@@ -2880,22 +2887,26 @@ TEST_CASE("SDK provider_config api_key_env chain rejects unset variables", "[sdk
     first_key.unset();
     second_key.unset();
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
     opts.provider_config = coding_agent::SdkProviderConfig{
-        .provider = "fake",
-        .model = "fake-model",
+        .provider = "openai-compatible",
+        .model = "gpt-test",
+        .base_url = "https://api.example/v1",
         .api_key_env = std::vector<std::string>{"CCH_SDK_CHAIN_UNSET_FIRST", "CCH_SDK_CHAIN_UNSET_SECOND"},
     };
 
     auto result = coding_agent::create_agent_session(std::move(opts));
-    REQUIRE_FALSE(result.has_value());
-    CHECK(result.error().code == util::ErrorCode::Validation);
-    CHECK(result.error().message.find("missing API key") != std::string::npos);
-    const auto presented = result.error().message + " " + result.error().detail;
-    CHECK(presented.find("CCH_SDK_CHAIN_UNSET_FIRST") != std::string::npos);
-    CHECK(presented.find("CCH_SDK_CHAIN_UNSET_SECOND") != std::string::npos);
+    REQUIRE(result.has_value());
+    auto prompted = result->session->prompt_blocking("hello");
+    REQUIRE(prompted.has_value());
+    const auto snapshot = result->session->snapshot();
+    const auto& terminal = std::get<ai::AssistantMessage>(snapshot.agent_state.messages.back());
+    CHECK(terminal.stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(terminal.error_message);
+    CHECK(terminal.error_message->find("Provider is not configured") != std::string::npos);
+    result->session->close();
 }
 
 TEST_CASE("SDK provider_config api_key_env chain rejects empty chain", "[sdk][u2][api-key-env]") {
@@ -2904,7 +2915,7 @@ TEST_CASE("SDK provider_config api_key_env chain rejects empty chain", "[sdk][u2
     tests::EnvVarGuard home_guard{"HOME"};
     home_guard.set(home.path().string());
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
     opts.provider_config = coding_agent::SdkProviderConfig{
@@ -2934,7 +2945,7 @@ TEST_CASE("SDK resume uses config-derived api_key_env chain", "[sdk][u2][api-key
         R"({"provider":"fake","model":"fake-model","api_key_env":["CCH_SDK_RESUME_FIRST","CCH_SDK_RESUME_SECOND"]})");
 
     {
-        coding_agent::CreateAgentSessionOptions opts;
+        tests::ModelsSessionOptions opts;
         opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
         opts.workspace = paths.workspace.path();
         opts.provider_config = coding_agent::SdkProviderConfig{
@@ -2948,7 +2959,7 @@ TEST_CASE("SDK resume uses config-derived api_key_env chain", "[sdk][u2][api-key
         result->session->close();
     }
 
-    coding_agent::CreateAgentSessionOptions resume_opts;
+    tests::ModelsSessionOptions resume_opts;
     resume_opts.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
     resume_opts.workspace = paths.workspace.path();
 
@@ -2969,10 +2980,10 @@ TEST_CASE("SDK async prompt runs on the awaiting host executor", "[sdk][u3][asyn
     auto client = std::make_unique<ExecutorCapturingChatClient>();
     auto* client_ptr = client.get();
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::move(client);
+    opts.models = cch::tests::models_from_stream(std::move(client));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3002,10 +3013,10 @@ TEST_CASE("SDK async prompt runs on the awaiting host executor", "[sdk][u3][asyn
 TEST_CASE("SDK stashed prompt awaitable survives destruction of the session handle", "[sdk][u3][async][issue38]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3038,10 +3049,10 @@ TEST_CASE("SDK stashed prompt awaitable survives destruction of the session hand
 TEST_CASE("SDK stashed prompt awaitable survives a moved-from session handle", "[sdk][u3][async][issue38]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3076,10 +3087,10 @@ TEST_CASE("SDK async prompt rejects overlap before session mutation", "[sdk][u3]
     auto client = std::make_unique<GatedSdkChatClient>();
     auto* client_ptr = client.get();
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::move(client);
+    opts.models = cch::tests::models_from_stream(std::move(client));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3137,10 +3148,10 @@ TEST_CASE(
     TestPaths paths;
     auto observation = std::make_shared<PreflightCancellationObservation>();
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::make_unique<PreflightCancellationChatClient>(observation);
+    opts.models = cch::tests::models_from_stream(std::make_unique<PreflightCancellationChatClient>(observation));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3182,10 +3193,10 @@ TEST_CASE(
     TestPaths paths;
     auto counts = std::make_shared<SdkOwnedLifetimeCounts>();
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::make_unique<LifetimeTrackedChatClient>(counts);
+    opts.models = cch::tests::models_from_stream(std::make_unique<LifetimeTrackedChatClient>(counts));
     opts.custom_tools.push_back(std::make_unique<LifetimeTrackedTool>(counts));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
@@ -3228,10 +3239,10 @@ TEST_CASE(
     auto client = std::make_unique<AbortAwareSdkChatClient>(false);
     auto* client_ptr = client.get();
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::move(client);
+    opts.models = cch::tests::models_from_stream(std::move(client));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3294,10 +3305,10 @@ TEST_CASE(
     auto client = std::make_unique<AbortAwareSdkChatClient>(false, counts);
     auto* client_ptr = client.get();
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::move(client);
+    opts.models = cch::tests::models_from_stream(std::move(client));
     opts.custom_tools.push_back(std::make_unique<LifetimeTrackedTool>(counts));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
@@ -3345,12 +3356,12 @@ TEST_CASE(
     "SDK close immediately after an accepted terminal failure is safe",
     "[sdk][u3][lifecycle][issue41]") {
     TestPaths paths;
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::make_unique<TerminalBeforeStartChatClient>(
+    opts.models = cch::tests::models_from_stream(std::make_unique<TerminalBeforeStartChatClient>(
         ai::AssistantStopReason::Error,
-        "terminal failure");
+        "terminal failure"));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3368,10 +3379,10 @@ TEST_CASE(
     "SDK close immediately after persistence failure is safe",
     "[sdk][u3][lifecycle][persistence-failure][issue41]") {
     TestPaths paths;
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::make_unique<CaptureChatClient>();
+    opts.models = cch::tests::models_from_stream(std::make_unique<CaptureChatClient>());
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3396,10 +3407,10 @@ TEST_CASE(
     auto client = std::make_unique<AbortAwareSdkChatClient>(false);
     auto* client_ptr = client.get();
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::move(client);
+    opts.models = cch::tests::models_from_stream(std::move(client));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3518,10 +3529,10 @@ TEST_CASE(
     auto client = std::make_unique<AbortAwareSdkChatClient>(true);
     auto* client_ptr = client.get();
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::move(client);
+    opts.models = cch::tests::models_from_stream(std::move(client));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3581,13 +3592,13 @@ TEST_CASE(
           ai::AssistantStopReason::Aborted);
 }
 
-TEST_CASE("SDK async prompt returns fake provider failure as an expected value", "[sdk][u3][async]") {
+TEST_CASE("SDK async prompt retains fake provider failure as a terminal value", "[sdk][u3][async]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::make_unique<PreflightRejectingChatClient>();
+    opts.models = cch::tests::models_from_stream(std::make_unique<PreflightRejectingChatClient>());
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3604,21 +3615,23 @@ TEST_CASE("SDK async prompt returns fake provider failure as an expected value",
     host_io.run();
 
     REQUIRE(prompt_result.has_value());
-    REQUIRE_FALSE(prompt_result->has_value());
-    CHECK(prompt_result->error().code == util::ErrorCode::Provider);
-    CHECK(prompt_result->error().message == "provider rejected in-memory prompt");
+    REQUIRE(prompt_result->has_value());
     CHECK(created->session->is_open());
     CHECK_FALSE(created->session->is_busy());
-    CHECK(created->session->message_count() == 1);
+    CHECK(created->session->message_count() == 2);
+    const auto snapshot = created->session->snapshot();
+    const auto& terminal = std::get<ai::AssistantMessage>(snapshot.agent_state.messages.back());
+    CHECK(terminal.stop_reason == ai::AssistantStopReason::Error);
+    CHECK(terminal.error_message == "provider rejected in-memory prompt");
 }
 
 TEST_CASE("SDK async prompt defers callback close until quiescence", "[sdk][u3][async]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::make_unique<ExecutorCapturingChatClient>();
+    opts.models = cch::tests::models_from_stream(std::make_unique<ExecutorCapturingChatClient>());
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3658,10 +3671,10 @@ TEST_CASE("SDK blocking prompt rejects same-session callback self-wait", "[sdk][
     auto client = std::make_unique<ExecutorCapturingChatClient>();
     auto* client_ptr = client.get();
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::move(client);
+    opts.models = cch::tests::models_from_stream(std::move(client));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3691,10 +3704,10 @@ TEST_CASE("SDK blocking prompt rejects same-session callback self-wait", "[sdk][
 TEST_CASE("SDK create/prompt/close cycle with fake client", "[sdk][u3]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto create_result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(create_result.has_value());
@@ -3724,10 +3737,10 @@ TEST_CASE("SDK create/prompt/close cycle with fake client", "[sdk][u3]") {
 TEST_CASE("SDK event subscription delivers lifecycle events", "[sdk][u3]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto create_result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(create_result.has_value());
@@ -3764,10 +3777,10 @@ TEST_CASE("SDK event subscription delivers lifecycle events", "[sdk][u3]") {
 TEST_CASE("SDK custom tool is registered and can be called", "[sdk][u4]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     // Register a custom tool
     std::vector<std::unique_ptr<agent::AsyncAgentTool>> custom_tools;
@@ -3787,10 +3800,10 @@ TEST_CASE("SDK custom tool is registered and can be called", "[sdk][u4]") {
 TEST_CASE("SDK duplicate custom tool names fail creation", "[sdk][u4]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     std::vector<std::unique_ptr<agent::AsyncAgentTool>> custom_tools;
     custom_tools.push_back(std::make_unique<FakeEchoTool>());
@@ -3806,10 +3819,10 @@ TEST_CASE("SDK duplicate custom tool names fail creation", "[sdk][u4]") {
 TEST_CASE("SDK host-provided skills are accessible", "[sdk][u4]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     coding_agent::Skill skill;
     skill.name = "test-skill";
@@ -3831,10 +3844,10 @@ TEST_CASE("SDK host-provided skills are accessible", "[sdk][u4]") {
 TEST_CASE("SDK unknown skill command reaches the provider without diagnostics", "[sdk][u4][skill-diagnostics]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto create_result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(create_result.has_value());
@@ -3849,10 +3862,10 @@ TEST_CASE("SDK unknown skill command reaches the provider without diagnostics", 
 TEST_CASE("SDK prompt leaves diagnostics empty for valid and bare skill commands", "[sdk][u4][skill-diagnostics]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     coding_agent::Skill skill;
     skill.name = "valid-skill";
@@ -3877,10 +3890,10 @@ TEST_CASE("SDK prompt leaves diagnostics empty for valid and bare skill commands
 TEST_CASE("SDK host-provided templates are accessible", "[sdk][u4]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     coding_agent::PromptTemplate tmpl;
     tmpl.name = "greet";
@@ -3903,10 +3916,10 @@ TEST_CASE("moved SDK session retains its owned prompt resource snapshot", "[sdk]
     auto capture = std::make_unique<CaptureChatClient>();
     auto* capture_ptr = capture.get();
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::move(capture);
+    opts.models = cch::tests::models_from_stream(std::move(capture));
     opts.prompt_templates.push_back(host_template("review", "Review cached: $1"));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
@@ -3931,10 +3944,10 @@ TEST_CASE("SDK expand_prompt_templates false sends slash-shaped input raw to the
     auto capture = std::make_unique<CaptureChatClient>();
     auto* capture_ptr = capture.get();
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::move(capture);
+    opts.models = cch::tests::models_from_stream(std::move(capture));
     opts.skills.push_back(host_skill("cached"));
     opts.prompt_templates.push_back(host_template("review", "expanded: $1"));
 
@@ -3963,10 +3976,10 @@ TEST_CASE("SDK treats user bash prefixes as ordinary prompts", "[sdk][u4][prompt
     auto capture = std::make_unique<CaptureChatClient>();
     auto* capture_ptr = capture.get();
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::move(capture);
+    opts.models = cch::tests::models_from_stream(std::move(capture));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3991,10 +4004,10 @@ TEST_CASE("SDK loads trusted project resources through shared loader", "[sdk][pr
     write_project_skill(paths, "project-skill", "Use project skill instructions.");
     write_project_prompt(paths, "project-review", "Review project item: $1.");
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.load_project_resources = true;
     opts.default_project_trust = coding_agent::DefaultProjectTrust::Always;
 
@@ -4023,10 +4036,10 @@ TEST_CASE("SDK keeps host resources when project resource loading is disabled", 
     write_project_skill(paths, "project-skill");
     write_project_prompt(paths, "project-review");
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.load_project_resources = false;
     opts.skills.push_back(host_skill("host-skill"));
     opts.prompt_templates.push_back(host_template("host-review"));
@@ -4051,10 +4064,10 @@ TEST_CASE("SDK keeps host resources and returns resource decisions when project 
     write_project_skill(paths, "project-skill");
     write_project_prompt(paths, "project-review");
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.load_project_resources = true;
     opts.skills.push_back(host_skill("host-skill"));
     opts.prompt_templates.push_back(host_template("host-review"));
@@ -4075,10 +4088,10 @@ TEST_CASE("SDK project resource duplicates prefer host resources with structured
     write_project_skill(paths, "same-skill", "Project skill body.");
     write_project_prompt(paths, "same-template", "Project template body.");
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.load_project_resources = true;
     opts.default_project_trust = coding_agent::DefaultProjectTrust::Always;
     opts.skills.push_back(host_skill("same-skill", "Host skill body."));
@@ -4110,10 +4123,10 @@ TEST_CASE("SDK returns trust and adapter diagnostics as values", "[sdk][project-
         home_guard.set(paths.workspace.path().string());
         paths.workspace.write(".cpp-harness/trust.json", "{not json");
 
-        coding_agent::CreateAgentSessionOptions untrusted_opts;
+        tests::ModelsSessionOptions untrusted_opts;
         untrusted_opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
         untrusted_opts.workspace = paths.workspace.path();
-        untrusted_opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+        untrusted_opts.models = ai::providers::make_scripted_fake_models();
         untrusted_opts.load_project_resources = true;
 
         auto untrusted = coding_agent::create_agent_session(std::move(untrusted_opts));
@@ -4133,10 +4146,10 @@ TEST_CASE("SDK returns trust and adapter diagnostics as values", "[sdk][project-
         "---\n"
         "Body.\n");
 
-    coding_agent::CreateAgentSessionOptions trusted_opts;
+    tests::ModelsSessionOptions trusted_opts;
     trusted_opts.session_target = coding_agent::ExplicitNewSessionTarget{trusted_paths.session_file};
     trusted_opts.workspace = trusted_paths.workspace.path();
-    trusted_opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    trusted_opts.models = ai::providers::make_scripted_fake_models();
     trusted_opts.load_project_resources = true;
     trusted_opts.default_project_trust = coding_agent::DefaultProjectTrust::Always;
 
@@ -4166,7 +4179,7 @@ TEST_CASE("SDK bounds auto-discovered resource diagnostics", "[sdk][project-reso
             "Body.\n");
     }
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
     opts.provider_config = coding_agent::SdkProviderConfig{
@@ -4202,10 +4215,10 @@ TEST_CASE("SDK project resource diagnostics are not printed during creation", "[
         "---\n"
         "Body.\n");
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.load_project_resources = true;
     opts.default_project_trust = coding_agent::DefaultProjectTrust::Always;
 
@@ -4227,10 +4240,10 @@ TEST_CASE("SDK project resource diagnostics are not printed during creation", "[
 TEST_CASE("SDK default built-in tools exclude bash", "[sdk][u4]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     // Default builtin_tools: read=true, write=true, edit_file=true, bash=false
 
     auto create_result = coding_agent::create_agent_session(std::move(opts));
@@ -4252,10 +4265,10 @@ TEST_CASE("SDK default built-in tools exclude bash", "[sdk][u4]") {
 TEST_CASE("SDK bash tool can be explicitly enabled", "[sdk][u4]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.builtin_tools.bash = true;
 
     auto create_result = coding_agent::create_agent_session(std::move(opts));
@@ -4275,10 +4288,10 @@ TEST_CASE("SDK can resume a linear session", "[sdk][u3]") {
 
     // First, create a session
     {
-        coding_agent::CreateAgentSessionOptions opts;
+        tests::ModelsSessionOptions opts;
         opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
         opts.workspace = paths.workspace.path();
-        opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+        opts.models = ai::providers::make_scripted_fake_models();
 
         auto result = coding_agent::create_agent_session(std::move(opts));
         REQUIRE(result.has_value());
@@ -4290,10 +4303,10 @@ TEST_CASE("SDK can resume a linear session", "[sdk][u3]") {
 
     // Then, resume it
     {
-        coding_agent::CreateAgentSessionOptions opts;
+        tests::ModelsSessionOptions opts;
         opts.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
         opts.workspace = paths.workspace.path();
-        opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+        opts.models = ai::providers::make_scripted_fake_models();
 
         auto result = coding_agent::create_agent_session(std::move(opts));
         REQUIRE(result.has_value());
@@ -4396,10 +4409,10 @@ TEST_CASE("SDK resumes linear active topology with inactive branch and compactio
 TEST_CASE("SDK state accessors reflect committed history", "[sdk][u3]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto create_result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(create_result.has_value());
@@ -4424,10 +4437,10 @@ TEST_CASE("SDK message_end subscribers observe live state updated before deliver
     TestPaths paths;
     paths.workspace.write("target.txt", "target content\n");
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -4493,10 +4506,10 @@ TEST_CASE(
     TestPaths paths;
     paths.workspace.write("target.txt", "target content\n");
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -4550,10 +4563,10 @@ TEST_CASE(
     "[sdk][live-state][subscriber-failure][issue36]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -4602,10 +4615,10 @@ TEST_CASE(
     "SDK subscriptions use one run-start snapshot across callback changes",
     "[sdk][live-state][subscriptions][issue36]") {
     TestPaths paths;
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -4651,10 +4664,10 @@ TEST_CASE(
     TestPaths paths;
     auto env = std::make_shared<CountingFakeEnv>(paths.workspace.path());
     auto counts = std::make_shared<SdkOwnedLifetimeCounts>();
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::make_unique<AbortAwareSdkChatClient>(false, counts);
+    opts.models = cch::tests::models_from_stream(std::make_unique<AbortAwareSdkChatClient>(false, counts));
     opts.execution_env = env;
     opts.custom_tools.push_back(std::make_unique<LifetimeTrackedTool>(counts));
 
@@ -4698,10 +4711,10 @@ TEST_CASE(
     "SDK destruction from an observer retains the active runtime until quiescence",
     "[sdk][lifecycle][issue36]") {
     TestPaths paths;
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -4732,10 +4745,10 @@ TEST_CASE(
     auto capture = std::make_unique<CaptureChatClient>();
     auto* capture_ptr = capture.get();
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::move(capture);
+    opts.models = cch::tests::models_from_stream(std::move(capture));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -4819,10 +4832,10 @@ TEST_CASE("CreateAgentSessionResult contains metadata", "[sdk][u2]") {
     tests::EnvVarGuard home_guard{"HOME"};
     home_guard.set(home.path().string());
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -4845,10 +4858,10 @@ TEST_CASE("SDK new sessions receive fresh identity and resume preserves it", "[s
     TestPaths first_paths;
     TestPaths second_paths;
 
-    coding_agent::CreateAgentSessionOptions first_opts;
+    tests::ModelsSessionOptions first_opts;
     first_opts.session_target = coding_agent::ExplicitNewSessionTarget{first_paths.session_file};
     first_opts.workspace = first_paths.workspace.path();
-    first_opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    first_opts.models = ai::providers::make_scripted_fake_models();
 
     auto first = coding_agent::create_agent_session(std::move(first_opts));
     REQUIRE(first.has_value());
@@ -4863,10 +4876,10 @@ TEST_CASE("SDK new sessions receive fresh identity and resume preserves it", "[s
     CHECK(first_id != first_created_at);
     first->session->close();
 
-    coding_agent::CreateAgentSessionOptions second_opts;
+    tests::ModelsSessionOptions second_opts;
     second_opts.session_target = coding_agent::ExplicitNewSessionTarget{second_paths.session_file};
     second_opts.workspace = second_paths.workspace.path();
-    second_opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    second_opts.models = ai::providers::make_scripted_fake_models();
 
     auto second = coding_agent::create_agent_session(std::move(second_opts));
     REQUIRE(second.has_value());
@@ -4882,28 +4895,27 @@ TEST_CASE("SDK new sessions receive fresh identity and resume preserves it", "[s
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Diagnostics from host client
+// Private Models assembly diagnostics
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE("SDK creation with host client produces diagnostic", "[sdk][u2]") {
+TEST_CASE("private Models assembly does not publish a host-client SDK diagnostic", "[sdk][u2][issue338]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
 
-    // Should have at least one diagnostic about host client
     bool found_host_diag = false;
     for (const auto& d : result->diagnostics) {
         if (d.code == "host_client_used") {
             found_host_diag = true;
         }
     }
-    CHECK(found_host_diag);
+    CHECK_FALSE(found_host_diag);
 
     result->session->close();
 }
@@ -4931,10 +4943,10 @@ bool tool_registry_contains(const ai::AiContext& context, std::string_view name)
 TEST_CASE("Failed new-session creation leaves no session file", "[sdk][assembly]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.custom_tools.push_back(std::make_unique<FakeEchoTool>());
     opts.custom_tools.push_back(std::make_unique<FakeEchoTool>()); // duplicate
 
@@ -4973,10 +4985,10 @@ TEST_CASE("SDK host-provided execution environment is not cleaned up by session 
     TestPaths paths;
     auto env = std::make_shared<CountingFakeEnv>(paths.workspace.path());
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.execution_env = env;
 
     auto result = coding_agent::create_agent_session(std::move(opts));
@@ -4996,10 +5008,10 @@ TEST_CASE("SDK disabled bash is absent from the model-visible tool registry", "[
     auto capture = std::make_unique<CaptureChatClient>();
     auto* capture_ptr = capture.get();
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::move(capture);
+    opts.models = cch::tests::models_from_stream(std::move(capture));
     opts.builtin_tools.bash = false;
 
     auto result = coding_agent::create_agent_session(std::move(opts));
@@ -5020,10 +5032,10 @@ TEST_CASE("SDK enabled bash appears in the model-visible tool registry", "[sdk][
     auto capture = std::make_unique<CaptureChatClient>();
     auto* capture_ptr = capture.get();
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = std::move(capture);
+    opts.models = cch::tests::models_from_stream(std::move(capture));
     opts.builtin_tools.bash = true;
 
     auto result = coding_agent::create_agent_session(std::move(opts));
@@ -5039,10 +5051,10 @@ TEST_CASE("SDK enabled bash appears in the model-visible tool registry", "[sdk][
 TEST_CASE("SDK rejects workspace-local trust_store_path", "[sdk][assembly][trust]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.trust_store_path = paths.workspace.path() / ".cpp-harness" / "trust.json";
 
     auto result = coding_agent::create_agent_session(std::move(opts));
@@ -5054,10 +5066,10 @@ TEST_CASE("SDK rejects workspace-local trust_store_path", "[sdk][assembly][trust
 TEST_CASE("SDK rejects trust_store_path equal to the workspace", "[sdk][assembly][trust]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.trust_store_path = paths.workspace.path();
 
     auto result = coding_agent::create_agent_session(std::move(opts));
@@ -5075,10 +5087,10 @@ TEST_CASE("SDK default trust store inside the workspace cannot authorize project
         ".pi/agent/trust.json",
         "{\"" + std::filesystem::weakly_canonical(paths.workspace.path()).string() + "\":true}\n");
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.load_project_resources = true;
     opts.default_project_trust = coding_agent::DefaultProjectTrust::Always;
 
@@ -5096,10 +5108,10 @@ TEST_CASE("SDK rejects trust_store_path through a symlinked parent into the work
     const auto linked_workspace = external.path() / "workspace-link";
     std::filesystem::create_directory_symlink(paths.workspace.path(), linked_workspace);
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.trust_store_path = linked_workspace / ".cpp-harness" / "trust.json";
 
     auto result = coding_agent::create_agent_session(std::move(opts));
@@ -5116,10 +5128,10 @@ TEST_CASE("SDK rejects a symlinked trust_store_path into the workspace", "[sdk][
     const auto linked_trust = external.path() / "trust.json";
     std::filesystem::create_symlink(workspace_trust, linked_trust);
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.trust_store_path = linked_trust;
 
     auto result = coding_agent::create_agent_session(std::move(opts));
@@ -5134,10 +5146,10 @@ TEST_CASE("SDK rejects trust_store_path when containment cannot be determined", 
     const auto loop = external.path() / "loop";
     std::filesystem::create_directory_symlink("loop", loop);
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.trust_store_path = loop / "trust.json";
 
     auto result = coding_agent::create_agent_session(std::move(opts));
@@ -5150,10 +5162,10 @@ TEST_CASE("SDK rejects trust_store_path when containment cannot be determined", 
 TEST_CASE("SDK rejects relative trust_store_path", "[sdk][assembly][trust]") {
     TestPaths paths;
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.trust_store_path = std::filesystem::path{"relative/trust.json"};
 
     auto result = coding_agent::create_agent_session(std::move(opts));
@@ -5170,10 +5182,10 @@ TEST_CASE("SDK accepts an existing external trust store as project trust authori
     std::ofstream(external_trust)
         << "{\"" << std::filesystem::weakly_canonical(paths.workspace.path()).string() << "\":true}\n";
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.trust_store_path = external_trust;
     opts.load_project_resources = true;
 
@@ -5189,10 +5201,10 @@ TEST_CASE("SDK accepts external not-yet-created trust_store_path", "[sdk][assemb
     cch::tests::TempWorkspace home;
     auto external_trust = home.path() / "external" / "trust.json";
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
     opts.trust_store_path = external_trust;
     opts.load_project_resources = true;
     opts.default_project_trust = coding_agent::DefaultProjectTrust::Always;
@@ -5206,17 +5218,17 @@ TEST_CASE("SDK accepts external not-yet-created trust_store_path", "[sdk][assemb
 // Provider resolution and metadata precedence
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE("SDK host client new session uses config provider but host model sentinel", "[sdk][provider-resolution]") {
+TEST_CASE("private Models assembly uses settings provider with an opaque model sentinel", "[sdk][provider-resolution]") {
     TestPaths paths;
     cch::tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
     home_guard.set(home.path().string());
     home.write(".pi/agent/settings.json", R"({"provider":"kimi-coding"})");
 
-    coding_agent::CreateAgentSessionOptions opts;
+    tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+    opts.models = ai::providers::make_scripted_fake_models();
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -5227,14 +5239,14 @@ TEST_CASE("SDK host client new session uses config provider but host model senti
     result->session->close();
 }
 
-TEST_CASE("SDK host client resume without override retains stored metadata", "[sdk][provider-resolution]") {
+TEST_CASE("private Models resume without override retains stored metadata", "[sdk][provider-resolution]") {
     TestPaths paths;
 
     {
-        coding_agent::CreateAgentSessionOptions opts;
+        tests::ModelsSessionOptions opts;
         opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
         opts.workspace = paths.workspace.path();
-        opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+        opts.models = ai::providers::make_scripted_fake_models();
         opts.provider_config = coding_agent::SdkProviderConfig{
             .provider = "fake",
             .model = "fake-model",
@@ -5248,10 +5260,10 @@ TEST_CASE("SDK host client resume without override retains stored metadata", "[s
     }
 
     {
-        coding_agent::CreateAgentSessionOptions opts;
+        tests::ModelsSessionOptions opts;
         opts.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
         opts.workspace = paths.workspace.path();
-        opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+        opts.models = ai::providers::make_scripted_fake_models();
 
         auto result = coding_agent::create_agent_session(std::move(opts));
         REQUIRE(result.has_value());
@@ -5271,10 +5283,10 @@ TEST_CASE("SDK resume with explicit provider/model override reports diagnostic",
     home_guard.set(home.path().string());
 
     {
-        coding_agent::CreateAgentSessionOptions opts;
+        tests::ModelsSessionOptions opts;
         opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
         opts.workspace = paths.workspace.path();
-        opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+        opts.models = ai::providers::make_scripted_fake_models();
 
         auto result = coding_agent::create_agent_session(std::move(opts));
         REQUIRE(result.has_value());
@@ -5284,10 +5296,10 @@ TEST_CASE("SDK resume with explicit provider/model override reports diagnostic",
     }
 
     {
-        coding_agent::CreateAgentSessionOptions opts;
+        tests::ModelsSessionOptions opts;
         opts.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
         opts.workspace = paths.workspace.path();
-        opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+        opts.models = ai::providers::make_scripted_fake_models();
         opts.provider_config = coding_agent::SdkProviderConfig{
             .provider = "openai-compatible",
             .model = "gpt-4o",
@@ -5306,10 +5318,10 @@ TEST_CASE("SDK resume with explicit model override alone reports diagnostic", "[
     TestPaths paths;
 
     {
-        coding_agent::CreateAgentSessionOptions opts;
+        tests::ModelsSessionOptions opts;
         opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
         opts.workspace = paths.workspace.path();
-        opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+        opts.models = ai::providers::make_scripted_fake_models();
         opts.provider_config = coding_agent::SdkProviderConfig{
             .provider = "openai-compatible",
             .model = "gpt-4.1-mini",
@@ -5321,10 +5333,10 @@ TEST_CASE("SDK resume with explicit model override alone reports diagnostic", "[
     }
 
     {
-        coding_agent::CreateAgentSessionOptions opts;
+        tests::ModelsSessionOptions opts;
         opts.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
         opts.workspace = paths.workspace.path();
-        opts.chat_client = ai::providers::make_scripted_fake_chat_client();
+        opts.models = ai::providers::make_scripted_fake_models();
         opts.provider_config = coding_agent::SdkProviderConfig{
             .provider = "openai-compatible",
             .model = "gpt-4o",

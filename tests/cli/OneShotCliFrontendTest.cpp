@@ -1,10 +1,11 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
+#include "support/ModelsFixture.hpp"
 
 #include "cli/OneShotCliFrontend.hpp"
 #include "cli/JsonCliRenderer.hpp"
 #include "cli/TextCliRenderer.hpp"
 
-#include "ai/providers/FakeChatClient.hpp"
+#include "ai/providers/FakeProvider.hpp"
 #include <cch/coding_agent/Sdk.hpp>
 #include "util/Json.hpp"
 #include "support/TempWorkspace.hpp"
@@ -94,12 +95,12 @@ public:
     std::vector<ai::MessageVariant> messages;
 };
 
-coding_agent::CreateAgentSessionOptions fake_in_memory_options(
+tests::ModelsSessionOptions fake_in_memory_options(
     const std::filesystem::path& workspace) {
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace;
-    options.chat_client = ai::providers::make_scripted_fake_chat_client();
+    options.models = ai::providers::make_scripted_fake_models();
     options.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = false,
         .write = false,
@@ -123,7 +124,7 @@ CreatedSession make_session(
     const tests::TempWorkspace& workspace,
     std::unique_ptr<ai::StreamingChatClient> chat_client) {
     auto options = fake_in_memory_options(workspace.path());
-    options.chat_client = std::move(chat_client);
+    options.models = cch::tests::models_from_stream(std::move(chat_client));
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
     return CreatedSession{std::move(*created)};

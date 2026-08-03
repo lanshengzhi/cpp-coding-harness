@@ -1,6 +1,6 @@
 #include <cch/agent/Agent.hpp>
 #include <cch/ai/Content.hpp>
-#include "ai/providers/FakeChatClient.hpp"
+#include "ai/providers/FakeProvider.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/ToolArgumentContracts.hpp"
 
@@ -241,7 +241,7 @@ public:
 } // namespace
 
 TEST_CASE("stateful Agent retains a scripted fake-provider prompt in its passive snapshot", "[agent][stateful][issue35]") {
-    auto client = ai::providers::make_scripted_fake_chat_client();
+    auto client = ai::providers::make_scripted_fake_stream();
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
@@ -270,7 +270,7 @@ TEST_CASE("stateful Agent retains a scripted fake-provider prompt in its passive
 TEST_CASE(
     "stateful Agent gives awaitable policies its active run stop token",
     "[agent][stateful][issue82]") {
-    auto client = ai::providers::make_scripted_fake_chat_client();
+    auto client = ai::providers::make_scripted_fake_stream();
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
@@ -345,7 +345,7 @@ TEST_CASE(
 }
 
 TEST_CASE("stateful Agent reduces lifecycle state before ordered move-only observers", "[agent][stateful][issue35]") {
-    auto client = ai::providers::make_scripted_fake_chat_client();
+    auto client = ai::providers::make_scripted_fake_stream();
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
@@ -408,7 +408,7 @@ TEST_CASE("stateful Agent reduces lifecycle state before ordered move-only obser
 TEST_CASE(
     "stateful Agent commits after live state and weak observers",
     "[agent][stateful][commitment][issue36]") {
-    auto client = ai::providers::make_scripted_fake_chat_client();
+    auto client = ai::providers::make_scripted_fake_stream();
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
@@ -448,7 +448,7 @@ TEST_CASE(
 TEST_CASE(
     "stateful Agent weak observer failure cannot veto strong commitment",
     "[agent][stateful][commitment][issue36]") {
-    auto client = ai::providers::make_scripted_fake_chat_client();
+    auto client = ai::providers::make_scripted_fake_stream();
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
@@ -493,7 +493,7 @@ TEST_CASE(
 TEST_CASE(
     "stateful Agent returns strong commitment failure with retained live state and recovers",
     "[agent][stateful][commitment][issue36]") {
-    auto client = ai::providers::make_scripted_fake_chat_client();
+    auto client = ai::providers::make_scripted_fake_stream();
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
@@ -523,7 +523,7 @@ TEST_CASE(
 }
 
 TEST_CASE("stateful Agent keeps weak observer failure from vetoing a prompt", "[agent][stateful][issue35]") {
-    auto client = ai::providers::make_scripted_fake_chat_client();
+    auto client = ai::providers::make_scripted_fake_stream();
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
@@ -577,7 +577,7 @@ TEST_CASE("stateful Agent keeps weak observer failure from vetoing a prompt", "[
 }
 
 TEST_CASE("stateful Agent bounds accumulated weak-observer diagnostics", "[agent][stateful][issue35]") {
-    auto client = ai::providers::make_scripted_fake_chat_client();
+    auto client = ai::providers::make_scripted_fake_stream();
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
@@ -608,7 +608,7 @@ TEST_CASE("stateful Agent bounds accumulated weak-observer diagnostics", "[agent
 }
 
 TEST_CASE("stateful Agent retains history while agent_end stays invocation-local", "[agent][stateful][issue35]") {
-    auto client = ai::providers::make_scripted_fake_chat_client();
+    auto client = ai::providers::make_scripted_fake_stream();
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
@@ -797,7 +797,7 @@ TEST_CASE("stateful Agent retains applied run-state updates after a later policy
 }
 
 TEST_CASE("stateful Agent owns configured tool state through a fake tool run", "[agent][stateful][issue35]") {
-    auto client = ai::providers::make_scripted_fake_chat_client();
+    auto client = ai::providers::make_scripted_fake_stream();
     agent::AsyncToolRegistry tools;
     REQUIRE(tools.add(std::make_unique<ReadTool>()));
     agent::AsyncAgentOptions options;
@@ -823,7 +823,7 @@ TEST_CASE("stateful Agent owns configured tool state through a fake tool run", "
 }
 
 TEST_CASE("stateful Agent retains its configured thinking state across a run", "[agent][stateful][issue35]") {
-    auto client = ai::providers::make_scripted_fake_chat_client();
+    auto client = ai::providers::make_scripted_fake_stream();
     agent::AsyncToolRegistry tools;
     agent::AgentInitialState initial_state;
     initial_state.thinking_level = "high";
@@ -879,7 +879,7 @@ TEST_CASE(
 TEST_CASE(
     "stateful Agent queue admission is atomic at UTF-8 byte and item boundaries",
     "[agent][stateful][issue44]") {
-    auto client = ai::providers::make_scripted_fake_chat_client();
+    auto client = ai::providers::make_scripted_fake_stream();
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("fake-model");
     options.max_queued_messages = 1;

@@ -1,4 +1,5 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
+#include "support/ModelsFixture.hpp"
 
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/ai/Content.hpp>
@@ -6,7 +7,7 @@
 #include <cch/coding_agent/Sdk.hpp>
 #include <cch/harness/session/JsonlSessionStore.hpp>
 
-#include "ai/providers/FakeChatClient.hpp"
+#include "ai/providers/FakeProvider.hpp"
 #include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "harness/session/SessionJournalTestHooks.hpp"
@@ -52,12 +53,12 @@ struct TestPaths {
     return ai::MessageVariant{ai::user_text_message(std::move(text))};
 }
 
-[[nodiscard]] coding_agent::CreateAgentSessionOptions new_session_options(
+[[nodiscard]] tests::ModelsSessionOptions new_session_options(
     const TestPaths& paths,
     coding_agent::SessionTarget target,
     std::unique_ptr<ai::StreamingChatClient> client =
-        ai::providers::make_scripted_fake_chat_client()) {
-    coding_agent::CreateAgentSessionOptions options;
+        ai::providers::make_scripted_fake_stream()) {
+    tests::ModelsSessionOptions options;
     options.session_target = std::move(target);
     options.workspace = paths.workspace.path();
     options.provider_config = coding_agent::SdkProviderConfig{
@@ -66,7 +67,7 @@ struct TestPaths {
         .base_url = std::nullopt,
         .api_key_env = std::nullopt,
     };
-    options.chat_client = std::move(client);
+    options.models = cch::tests::models_from_stream(std::move(client));
     return options;
 }
 
@@ -275,10 +276,10 @@ TEST_CASE(
     "SDK snapshot retains Live Session State after persistence failure",
     "[sdk][snapshot][persistence-failure][issue42]") {
     TestPaths paths;
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     options.workspace = paths.workspace.path();
-    options.chat_client = std::make_unique<CapturingSnapshotChatClient>();
+    options.models = cch::tests::models_from_stream(std::make_unique<CapturingSnapshotChatClient>());
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
 

@@ -1,8 +1,9 @@
 #pragma once
 
-#include "../ChatClient.hpp"
-#include "OpenAICompletionsCompat.hpp"
-#include "StreamTransport.hpp"
+#include <cch/ai/Auth.hpp>
+#include <cch/ai/ChatClient.hpp>
+#include <cch/ai/providers/OpenAICompletionsCompat.hpp>
+#include <cch/ai/providers/StreamTransport.hpp>
 
 #include <chrono>
 #include <memory>
@@ -12,24 +13,27 @@
 namespace cch::ai::providers {
 
 struct OpenAIStreamConfig {
-    std::string api_key;
-    std::string api_key_env{"OPENAI_API_KEY"};
     std::string organization;
     std::string project;
     std::chrono::milliseconds timeout{30000};
     OpenAICompletionsCompat compat;
 };
 
-class StreamingOpenAIChatClient final : public ai::StreamingChatClient {
+/// Transitional private wire adapter for the OpenAI-compatible Provider.
+/// Request authentication is supplied by Models for every call.
+class StreamingOpenAIChatClient final {
 public:
-    StreamingOpenAIChatClient(std::shared_ptr<StreamTransport> transport, OpenAIStreamConfig config);
+    StreamingOpenAIChatClient(
+        std::shared_ptr<StreamTransport> transport,
+        OpenAIStreamConfig config);
 
+    /// The borrowed request must outlive the returned awaitable.
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
         const ai::StreamChatRequest& request,
-        ai::AssistantEventSink sink) override;
+        ai::ModelAuth auth,
+        ai::AssistantEventSink sink);
 
 private:
-    [[nodiscard]] util::Expected<std::string> resolve_api_key() const;
     [[nodiscard]] static std::string completions_url(std::string_view base_url);
 
     std::shared_ptr<StreamTransport> transport_;

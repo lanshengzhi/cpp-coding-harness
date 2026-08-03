@@ -1,8 +1,9 @@
 #include "../../../third_party/catch2/catch_test_macros.hpp"
+#include "support/ModelsFixture.hpp"
 
 #include "coding_agent/runtime/RpcMode.hpp"
 #include "coding_agent/runtime/RpcJsonl.hpp"
-#include "ai/providers/FakeChatClient.hpp"
+#include "ai/providers/FakeProvider.hpp"
 #include "support/TempWorkspace.hpp"
 #include "util/Json.hpp"
 
@@ -268,12 +269,12 @@ int count_responses(
 
 TranscriptResult run_transcript(
     std::string input,
-    std::unique_ptr<ai::StreamingChatClient> chat_client = ai::providers::make_scripted_fake_chat_client(),
+    std::unique_ptr<ai::StreamingChatClient> chat_client = ai::providers::make_scripted_fake_stream(),
     bool close_before_run = false,
     bool in_memory = false) {
     cch::tests::TempWorkspace workspace;
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     if (in_memory) {
         options.session_target = coding_agent::InMemorySessionTarget{};
     } else {
@@ -281,7 +282,7 @@ TranscriptResult run_transcript(
             workspace.path() / "rpc-session.jsonl"};
     }
     options.workspace = workspace.path();
-    options.chat_client = std::move(chat_client);
+    options.models = cch::tests::models_from_stream(std::move(chat_client));
     options.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = false,
         .write = false,
@@ -365,7 +366,7 @@ TEST_CASE("RPC mode omits sessionFile for an in-memory session", "[coding-agent]
     const auto result = run_transcript(
         "{\"id\":\"state-1\",\"type\":\"get_state\"}\n"
         "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n",
-        ai::providers::make_scripted_fake_chat_client(),
+        ai::providers::make_scripted_fake_stream(),
         false,
         true);
 
@@ -466,11 +467,11 @@ TEST_CASE("RPC mode flushes direct events while a prompt is running", "[coding-a
     auto chat_client = std::make_unique<BusyProbeChatClient>();
     auto* stream_probe = chat_client.get();
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{
         workspace.path() / "rpc-flush-session.jsonl"};
     options.workspace = workspace.path();
-    options.chat_client = std::move(chat_client);
+    options.models = cch::tests::models_from_stream(std::move(chat_client));
     options.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = false,
         .write = false,
@@ -619,11 +620,11 @@ TEST_CASE("RPC mode reports accepted prompt failures only through events", "[cod
 
 TEST_CASE("RPC mode keeps one event stream after a weak subscriber failure", "[coding-agent][runtime][rpc][issue36]") {
     cch::tests::TempWorkspace workspace;
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{
         workspace.path() / "rpc-subscriber-failure.jsonl"};
     options.workspace = workspace.path();
-    options.chat_client = ai::providers::make_scripted_fake_chat_client();
+    options.models = ai::providers::make_scripted_fake_models();
     options.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = false,
         .write = false,
@@ -816,7 +817,7 @@ TEST_CASE("RPC mode returns a correlated error when a closed session rejects pro
     const auto result = run_transcript(
         "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
         "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n",
-        ai::providers::make_scripted_fake_chat_client(),
+        ai::providers::make_scripted_fake_stream(),
         true);
 
     REQUIRE(result.exit_code == 0);
@@ -834,11 +835,11 @@ TEST_CASE("RPC mode returns a correlated error when a busy session rejects promp
     auto chat_client = std::make_unique<BusyProbeChatClient>();
     auto* busy_probe = chat_client.get();
 
-    coding_agent::CreateAgentSessionOptions options;
+    tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{
         workspace.path() / "rpc-busy-session.jsonl"};
     options.workspace = workspace.path();
-    options.chat_client = std::move(chat_client);
+    options.models = cch::tests::models_from_stream(std::move(chat_client));
     options.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = false,
         .write = false,

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cch/ai/Models.hpp>
 #include <cch/coding_agent/Sdk.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include "coding_agent/runtime/AgentSessionRuntime.hpp"
@@ -79,8 +80,30 @@ public:
     [[nodiscard]] static util::Expected<CreateAgentSessionResult> create(
         CreateAgentSessionOptions options,
         std::unique_ptr<AsyncUserShell> user_shell);
+    /// Private assembly seam for focused session tests. Models never appears
+    /// in the installed SDK contract.
+    [[nodiscard]] static util::Expected<CreateAgentSessionResult> create(
+        CreateAgentSessionOptions options,
+        std::shared_ptr<ai::Models> models);
+    [[nodiscard]] static util::Expected<CreateAgentSessionResult> create(
+        CreateAgentSessionOptions options,
+        std::shared_ptr<ai::Models> models,
+        std::unique_ptr<AsyncUserShell> user_shell);
     [[nodiscard]] static util::Expected<CreateAgentSessionResult> create(
         AgentSessionCreationRequest request);
 };
 
 } // namespace cch::coding_agent::runtime
+
+namespace cch::coding_agent {
+
+/// Private test-support wrapper around SessionFactory's Models assembly seam.
+[[nodiscard]] util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
+    CreateAgentSessionOptions options,
+    std::shared_ptr<ai::Models> models);
+[[nodiscard]] util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
+    CreateAgentSessionOptions options,
+    std::shared_ptr<ai::Models> models,
+    std::unique_ptr<runtime::AsyncUserShell> user_shell);
+
+} // namespace cch::coding_agent

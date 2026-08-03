@@ -1,4 +1,4 @@
-#include <cch/ai/providers/OpenAIChatClient.hpp>
+#include "OpenAIChatClient.hpp"
 
 #include <cch/ai/providers/OpenAICompletionsCompat.hpp>
 #include "ai/glaze/AiJson.hpp"
@@ -13,7 +13,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cstdlib>
 #include <iterator>
 #include <map>
 #include <optional>
@@ -560,7 +559,14 @@ void append_tool_result_assistant_bridge(
     partial.stop_reason = reason;
     partial.error_message = bounded_provider_error_detail(
         error.detail.empty() ? error.message : error.detail);
-    return emit(sink, ai::AssistantErrorEvent{reason, partial});
+    const auto failure_code = reason == ai::AssistantStopReason::Aborted
+        ? util::ErrorCode::Cancelled
+        : util::ErrorCode::Stream;
+    return emit(sink, ai::AssistantErrorEvent{
+        .reason = reason,
+        .error = partial,
+        .failure = util::make_error(failure_code, *partial.error_message),
+    });
 }
 
 [[nodiscard]] util::Expected<util::JsonValue> parse_tool_arguments(const std::string& raw_arguments) {
@@ -606,6 +612,7 @@ StreamingOpenAIChatClient::StreamingOpenAIChatClient(std::shared_ptr<StreamTrans
 
 boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChatClient::stream(
     const ai::StreamChatRequest& request,
+    ai::ModelAuth auth,
     ai::AssistantEventSink sink) {
     if (auto valid = ai::validate_model(request.model); !valid) {
         co_return std::unexpected(valid.error());
@@ -628,8 +635,16 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
             "request timeout must be positive",
             "OpenAI request timeout must be greater than zero"));
     }
+    const bool has_authorization_header = std::ranges::any_of(
+        auth.headers, [](const auto& header) {
+            return boost::beast::iequals(header.first, "Authorization");
+        });
+    if ((!auth.api_key || auth.api_key->empty()) && !has_authorization_header) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Provider,
+            "missing API key"));
+    }
 
-    CCH_TRY(api_key, resolve_api_key());
     CCH_TRY(body, serialize_openai_request(request_to_openai(request, config_, request.model.id)));
 
     StreamRequest http;
@@ -638,9 +653,16 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
     http.timeout = config_.timeout;
     http.stop_token = request.stop_token;
     if (request.model.headers) {
-        http.headers.insert(request.model.headers->begin(), request.model.headers->end());
+        for (const auto& [name, value] : *request.model.headers) {
+            set_runtime_header(http.headers, name, value);
+        }
     }
-    set_runtime_header(http.headers, "Authorization", "Bearer " + api_key);
+    for (const auto& [name, value] : auth.headers) {
+        set_runtime_header(http.headers, name, value);
+    }
+    if (auth.api_key) {
+        set_runtime_header(http.headers, "Authorization", "Bearer " + *auth.api_key);
+    }
     set_runtime_header(http.headers, "Content-Type", "application/json");
     set_runtime_header(http.headers, "Accept", "text/event-stream");
     if (!config_.organization.empty()) {
@@ -939,21 +961,6 @@ boost::asio::awaitable<util::Expected<ai::AssistantMessage>> StreamingOpenAIChat
     CCH_TRY_VOID(emit(sink, ai::AssistantDoneEvent{assistant.stop_reason, assistant}));
 
     co_return assistant;
-}
-
-util::Expected<std::string> StreamingOpenAIChatClient::resolve_api_key() const {
-    if (!config_.api_key.empty()) {
-        return config_.api_key;
-    }
-    if (!config_.api_key_env.empty()) {
-        if (const char* value = std::getenv(config_.api_key_env.c_str()); value != nullptr && *value != '\0') {
-            return std::string(value);
-        }
-    }
-    return std::unexpected(util::make_error(
-        util::ErrorCode::Provider,
-        "missing API key",
-        "set " + config_.api_key_env + " or pass provider configuration"));
 }
 
 std::string StreamingOpenAIChatClient::completions_url(std::string_view base_url) {
