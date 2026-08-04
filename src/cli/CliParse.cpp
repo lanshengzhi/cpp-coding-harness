@@ -91,7 +91,7 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
         "under the agent config directory's workspace-keyed sessions root\n"
         "(~/.pi/agent/sessions/<workspace-key>/, root override:\n"
         "PI_CODING_AGENT_DIR). Automatic-directory overrides (highest first):\n"
-        "--session-dir, CCH_CODING_AGENT_SESSION_DIR, settings.json sessionDir;\n"
+        "--session-dir, PI_CODING_AGENT_SESSION_DIR, settings.json sessionDir;\n"
         "relative values resolve against the final workspace. Explicit paths may\n"
         "live anywhere; --no-session runs in memory without a transcript.\n"
         "Frontend: --mode rpc/json wins; otherwise --print or a non-TTY stream\n"
@@ -120,7 +120,7 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     resume_option->excludes(session_option);
     auto* no_session_option = app.add_flag("--no-session", "Run the session in memory without persisting a transcript");
     auto* session_dir_option = app.add_option("--session-dir", session_dir_text,
-        "Directory for automatic session storage (overrides CCH_CODING_AGENT_SESSION_DIR and settings.json sessionDir)");
+        "Directory for automatic session storage (overrides PI_CODING_AGENT_SESSION_DIR and settings.json sessionDir)");
     app.add_option("--max-turns", config.max_turns, "Maximum model turns per prompt (default: no cap)")
         ->check(CLI::Range(1, 64));
     auto* provider_option = app.add_option("--provider", provider_text, "Provider name");

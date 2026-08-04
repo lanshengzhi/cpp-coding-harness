@@ -44,7 +44,7 @@ struct AgentSessionCreationRequest {
     /// filesystem state.
     SessionTarget session_target{};
     /// Raw --session-dir value: the highest-priority CLI automatic-directory
-    /// override, ahead of CCH_CODING_AGENT_SESSION_DIR and settings
+    /// override, ahead of PI_CODING_AGENT_SESSION_DIR and settings
     /// sessionDir. Consulted only for default persisted creation.
     std::optional<std::string> session_dir;
     /// pi CLI model selection: `--provider`, `--model`, `--models` patterns,

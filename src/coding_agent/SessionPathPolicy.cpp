@@ -137,7 +137,7 @@ util::Expected<std::filesystem::path> resolve_session_dir_value(
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "session directory override is empty",
-            "supply a non-empty --session-dir, CCH_CODING_AGENT_SESSION_DIR, or settings sessionDir value"));
+            "supply a non-empty --session-dir, PI_CODING_AGENT_SESSION_DIR, or settings sessionDir value"));
     }
 
     std::filesystem::path resolved;

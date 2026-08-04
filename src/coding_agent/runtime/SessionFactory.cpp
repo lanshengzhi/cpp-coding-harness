@@ -45,7 +45,7 @@ constexpr std::string_view kHostClientModel = "host-client";
 struct AutomaticNewSessionTarget {
     std::filesystem::path workspace;
     /// Resolved CLI automatic-directory override (--session-dir, then
-    /// CCH_CODING_AGENT_SESSION_DIR, then settings sessionDir). The SDK never
+    /// PI_CODING_AGENT_SESSION_DIR, then settings sessionDir). The SDK never
     /// supplies one; when absent the workspace-keyed Agent Config Directory
     /// default applies.
     std::optional<std::filesystem::path> directory_override;
@@ -627,7 +627,7 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
         value = flag_value;
     }
     if (!value) {
-        if (const char* env_value = std::getenv("CCH_CODING_AGENT_SESSION_DIR");
+        if (const char* env_value = std::getenv("PI_CODING_AGENT_SESSION_DIR");
             env_value != nullptr && env_value[0] != '\0') {
             value = std::string{env_value};
         }

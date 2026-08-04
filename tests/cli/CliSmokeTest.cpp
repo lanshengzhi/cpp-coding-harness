@@ -2009,7 +2009,7 @@ TEST_CASE("CLI session directory precedence is flag over environment over settin
 
     auto flagged = run_command_split(
         "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) +
-        " CCH_CODING_AGENT_SESSION_DIR=" + shell_quote(env_dir) + " " + bin() +
+        " PI_CODING_AGENT_SESSION_DIR=" + shell_quote(env_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) +
         " --session-dir " + shell_quote(flag_dir) + " first");
     REQUIRE(flagged.exit_code == 0);
@@ -2019,7 +2019,7 @@ TEST_CASE("CLI session directory precedence is flag over environment over settin
 
     auto from_env = run_command_split(
         "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) +
-        " CCH_CODING_AGENT_SESSION_DIR=" + shell_quote(env_dir) + " " + bin() +
+        " PI_CODING_AGENT_SESSION_DIR=" + shell_quote(env_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) + " second");
     REQUIRE(from_env.exit_code == 0);
     CHECK(jsonl_files_under(env_dir).size() == 1);
@@ -2099,7 +2099,7 @@ TEST_CASE("CLI explicit create and resume targets ignore session directory overr
 
     auto resumed = run_command_split(
         "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) +
-        " CCH_CODING_AGENT_SESSION_DIR=" + shell_quote(override_dir) + " " + bin() +
+        " PI_CODING_AGENT_SESSION_DIR=" + shell_quote(override_dir) + " " + bin() +
         " --fake --workspace " + shell_quote(workspace.path()) +
         " --resume " + shell_quote(explicit_session) + " second");
     REQUIRE(resumed.exit_code == 0);

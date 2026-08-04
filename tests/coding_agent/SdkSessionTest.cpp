@@ -2301,7 +2301,7 @@ TEST_CASE("SDK default persistence ignores CLI-only session directory inputs", "
     cch::tests::TempWorkspace agent_dir;
     cch::tests::TempWorkspace cli_directory;
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
-    tests::EnvVarGuard cli_dir_guard{"CCH_CODING_AGENT_SESSION_DIR"};
+    tests::EnvVarGuard cli_dir_guard{"PI_CODING_AGENT_SESSION_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
     cli_dir_guard.set(cli_directory.path().string());
     {

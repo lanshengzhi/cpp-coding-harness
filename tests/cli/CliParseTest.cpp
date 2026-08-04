@@ -405,7 +405,7 @@ TEST_CASE("parse_args help text advertises the session-directory override preced
     REQUIRE(parsed);
     REQUIRE(parsed->help);
     CHECK(parsed->help_text.find("--session-dir") != std::string::npos);
-    CHECK(parsed->help_text.find("CCH_CODING_AGENT_SESSION_DIR") != std::string::npos);
+    CHECK(parsed->help_text.find("PI_CODING_AGENT_SESSION_DIR") != std::string::npos);
     CHECK(parsed->help_text.find("sessionDir") != std::string::npos);
 }
 

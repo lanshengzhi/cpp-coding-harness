@@ -101,11 +101,11 @@ Explicit create and resume paths remain available and may live anywhere:
 ./build/cpp_harness --fake --resume /tmp/cpp-session.jsonl "continue"
 ```
 
-Redirect automatic storage for one run or for all runs (highest precedence first: `--session-dir`, `CCH_CODING_AGENT_SESSION_DIR`, `sessionDir` in `~/.pi/agent/settings.json`):
+Redirect automatic storage for one run or for all runs (highest precedence first: `--session-dir`, `PI_CODING_AGENT_SESSION_DIR`, `sessionDir` in `~/.pi/agent/settings.json`):
 
 ```bash
 ./build/cpp_harness --fake --session-dir /data/sessions "hello"
-CCH_CODING_AGENT_SESSION_DIR=/data/sessions ./build/cpp_harness --fake "hello"
+PI_CODING_AGENT_SESSION_DIR=/data/sessions ./build/cpp_harness --fake "hello"
 ```
 
 The coroutine/Glaze/event stack is the only active stack. Legacy compatibility flags such as `--async` are intentionally absent.
@@ -119,7 +119,7 @@ export KIMI_API_KEY=...
 
 Model selection follows pi: `--model <pattern>` (with optional `--provider <name>`, or `provider/model`), then a resume's stored `model_change`, then settings `defaultProvider`/`defaultModel`, then the runtime default. `--models <patterns>` limits cycling. `--api-key <key>` installs an in-memory, never-persisted runtime API key override and requires an explicit model (`--model`, `--provider/--model`, or `--models`).
 
-Request authentication resolves immediately before each request through pi's four-level chain: runtime API key override (`ModelRuntime::set_runtime_api_key`, CLI `--api-key`) → stored `auth.json` credential → provider environment variables → `models.json` configured `apiKey`. The removed `--base-url`, `--api-key-env`, and `--auth` flags fail loudly; custom endpoints become config-only providers in `models.json`. Stored OAuth credentials are refreshed by Providers that support OAuth, and the concrete login flows land in later tickets.
+Request authentication resolves immediately before each request through pi's four-level chain: runtime API key override (`ModelRuntime::set_runtime_api_key`, CLI `--api-key`) → stored `auth.json` credential → provider environment variables → `models.json` configured `apiKey`. The removed `--base-url`, `--api-key-env`, and `--auth` flags fail loudly; custom endpoints become config-only providers in `models.json`. Stored OAuth credentials are refreshed by Providers that support OAuth. Login is explicit through an injected `AuthInteraction` (Codex PKCE callback-server browser flow, Kimi RFC 8628 device flow); the interactive frontend owns the presentation, and SDK/RPC hosts bring their own interaction or use `--api-key`.
 
 ### Agent config directory
 
@@ -131,7 +131,7 @@ Without `--session` or `--resume`, the CLI persists each new session under `<age
 
 `--session PATH` and `--resume PATH` keep their exact paths and may live outside the default root; automatic-directory overrides never rewrite them. Old project-local `.cpp-harness/sessions/` files are neither scanned nor migrated; pass such a file explicitly through `--resume` if it is still needed. A missing or unwritable default store fails before any model work with the attempted path and reason — the harness never falls back to a workspace-local or temporary transcript. On POSIX, harness-created session directories are owner-only (`0700`) and new session files are `0600`.
 
-Automatic-directory overrides replace the whole automatic directory for default creation: the session file lands directly in the override directory without a workspace-key component (pi: `--session-dir`). The precedence is exactly `--session-dir`, then `CCH_CODING_AGENT_SESSION_DIR`, then `sessionDir` in `~/.pi/agent/settings.json`, then the workspace-keyed default. Absolute values stay absolute, a leading `~` expands to the home directory, and relative values resolve against the final canonical workspace rather than the launch directory. An override directory that does not exist is created owner-only; an existing override directory keeps its mode while files inside remain `0600`. These CLI-only inputs never affect SDK default persistence.
+Automatic-directory overrides replace the whole automatic directory for default creation: the session file lands directly in the override directory without a workspace-key component (pi: `--session-dir`). The precedence is exactly `--session-dir`, then `PI_CODING_AGENT_SESSION_DIR`, then `sessionDir` in `~/.pi/agent/settings.json`, then the workspace-keyed default. Absolute values stay absolute, a leading `~` expands to the home directory, and relative values resolve against the final canonical workspace rather than the launch directory. An override directory that does not exist is created owner-only; an existing override directory keeps its mode while files inside remain `0600`. These CLI-only inputs never affect SDK default persistence.
 
 `--no-session` selects an explicit in-memory Agent Session in every frontend (Native TUI, text one-shot, JSON, and RPC): provider, tools, events, live state, errors, and shutdown behave normally, but no sessions root, workspace-local session directory, or transcript file is created — including after failures. It cannot be combined with `--session` or `--resume`. In-memory operation happens only when explicitly requested; storage unavailability is never silently treated as `--no-session`. `/session` prints the persisted file path, or `File: In-memory` for these runs.
 
@@ -209,7 +209,7 @@ The build publishes `include` as the public surface and keeps `src` private. Leg
 
 ### pi parity direction
 
-The harness aims for idiomatic C++ parity with pi's module and contract semantics rather than mechanical TypeScript translation. Supported Capability claims, including Native TUI selection and interaction, are pinned to pi baseline `864b35c`. The current implemented boundary is described by this README, the public headers, and tests. Open product and scope decisions are indexed in the [pi C++ parity map](https://github.com/lanshengzhi/cpp-coding-harness/issues/2); approved work leaves that map and follows `/to-spec` → `/to-tickets` → `/implement`.
+The harness aims for idiomatic C++ parity with pi's module and contract semantics rather than mechanical TypeScript translation. The pi-ai surface (Model/Models/ModelRuntime, authentication, and the three adapters) is pinned to pi baseline `83114817c68f5413e4d7ba6d7003ddc511cd31d2` (ADR 0029/0030/0031/0032/0033); the Native TUI/interactive surface retains its earlier recorded baseline until the pi-tui/pi-coding-agent gates. The current implemented boundary is described by this README, the public headers, and tests. Open product and scope decisions are indexed in the [pi C++ parity map](https://github.com/lanshengzhi/cpp-coding-harness/issues/2); approved work leaves that map and follows `/to-spec` → `/to-tickets` → `/implement`.
 
 ## CLI states
 
@@ -416,7 +416,7 @@ Project trust controls whether project-authored `.cpp-harness` resources are loa
 
 Protected project markers include `.cpp-harness/settings.json`, `.cpp-harness/skills`, `.cpp-harness/prompts`, `.cpp-harness/themes`, `.cpp-harness/extensions`, `.cpp-harness/packages`, `.cpp-harness/SYSTEM.md`, and `.cpp-harness/APPEND_SYSTEM.md`. A bare `.cpp-harness` directory and `.cpp-harness/sessions` do not require trust. In non-interactive startup, the default `ask` policy acts as untrusted unless a saved trust decision or same-run override exists. Trust decisions are read from user-controlled `~/.pi/agent/trust.json` with nearest-parent inheritance.
 
-User settings follow pi's two-scope `settings.json` contract (ADR 0031): a global file at `~/.pi/agent/settings.json` deep-merged with a project file at `<workspace>/.pi/settings.json` that loads only while the project is trusted, with the project scope winning. The field subset is `defaultProvider`, `defaultModel`, `defaultThinkingLevel` (`off`/`minimal`/`low`/`medium`/`high`/`xhigh`/`max`), `enabledModels` (model patterns), `sessionDir`, `defaultProjectTrust` (`ask`/`always`/`never`; global-only), `shellPath`, `shellCommandPrefix`, and `theme`. The harness-private `provider`/`model`/`base_url`/`api_key_env`/`auth` fields and the `project_resources` skill/theme policy fields are removed, and settings never carry secrets. Optional compatible `shellPath` and `shellCommandPrefix` strings configure local Shell launches from the startup settings snapshot; a leading `~` in `shellPath` expands to the user's home directory. The optional `sessionDir` string is a CLI session-storage preference below `--session-dir` and `CCH_CODING_AGENT_SESSION_DIR`; it is not a provider setting and SDK default persistence never reads it. `--approve` / `-a` and `--no-approve` are one-run trust overrides; they do not persist decisions. `--no-skills` disables project-local skills for the run even when the project is trusted.
+User settings follow pi's two-scope `settings.json` contract (ADR 0031): a global file at `~/.pi/agent/settings.json` deep-merged with a project file at `<workspace>/.pi/settings.json` that loads only while the project is trusted, with the project scope winning. The field subset is `defaultProvider`, `defaultModel`, `defaultThinkingLevel` (`off`/`minimal`/`low`/`medium`/`high`/`xhigh`/`max`), `enabledModels` (model patterns), `sessionDir`, `defaultProjectTrust` (`ask`/`always`/`never`; global-only), `shellPath`, `shellCommandPrefix`, and `theme`. The harness-private `provider`/`model`/`base_url`/`api_key_env`/`auth` fields and the `project_resources` skill/theme policy fields are removed, and settings never carry secrets. Optional compatible `shellPath` and `shellCommandPrefix` strings configure local Shell launches from the startup settings snapshot; a leading `~` in `shellPath` expands to the user's home directory. The optional `sessionDir` string is a CLI session-storage preference below `--session-dir` and `PI_CODING_AGENT_SESSION_DIR`; it is not a provider setting and SDK default persistence never reads it. `--approve` / `-a` and `--no-approve` are one-run trust overrides; they do not persist decisions. `--no-skills` disables project-local skills for the run even when the project is trusted.
 
 ## Tools
 
@@ -481,6 +481,6 @@ These cover:
 
 ## Deferred
 
-Not included yet: Native Windows TUI support; extensions; packages; global/config-driven skill directories; live skill reload; OAuth; full pi RPC command parity; MCP integration; permission prompts; native Windows shell process-tree termination semantics; subagents; C++26 reflection-generated schema; `std::execution` senders/receivers; ABI-stable binary distribution; or OS-level sandboxing.
+Not included yet: Native Windows TUI support; extensions; packages; global/config-driven skill directories; live skill reload; full pi RPC command parity; MCP integration; permission prompts; native Windows shell process-tree termination semantics; subagents; C++26 reflection-generated schema; `std::execution` senders/receivers; ABI-stable binary distribution; or OS-level sandboxing. OAuth login (Codex PKCE callback server, Kimi RFC 8628 device flow) is a Supported Capability of the pi-ai module (see [fixtures/pi-ai/README.md](fixtures/pi-ai/README.md)); its interactive presentation is owned by the later pi-coding-agent gate.
 
 An experimental same-process embeddable C++ SDK surface is available (see Embeddable C++ SDK section above). Full pi SDK parity (session replacement runtime, concurrent prompts, compaction, ABI stability) is deferred.
