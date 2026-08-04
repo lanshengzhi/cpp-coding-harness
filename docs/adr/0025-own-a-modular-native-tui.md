@@ -6,6 +6,8 @@ status: accepted
 
 A Native TUI belongs in this product's boundary rather than being left to JSON/RPC or SDK clients. It follows pi's modular shape: a public, reusable source-level C++ TUI module that does not depend on coding-agent types, plus a separate interactive-mode module that assembles TUI and Agent Session capabilities; print, JSON/RPC, and SDK paths remain independent of the TUI. The earlier requirement to preserve an explicit line-oriented frontend was superseded by the Native TUI promotion decision in #34 and #64.
 
+> Refined by [ADR 0035](0035-own-the-scoped-pi-tui-toolkit-capabilities-for-the-three-provider-paths.md): the toolkit's Supported renderer is pi's default regular main-screen mode at parity baseline `83114817`; the opt-in fullscreen alt-screen/viewport half (layout engine, scroll/mouse/selection, OSC 133 navigation) is Deferred with no placeholder surface. The toolkit keeps the decoded input-event model and terminal-owned image placement as recorded Intentional Divergences under the Semantic Parity definition below, and the reusable module surface is re-pinned from `864b35c` to `83114817` (app-layer pins advance with the pi-coding-agent phase audit).
+
 ## Considered options
 
 - Keep the product boundary at the line-oriented CLI, JSON/RPC, and SDK: rejected because the intended product is an idiomatic C++ counterpart to pi's complete interactive terminal experience, not only an integration backend.

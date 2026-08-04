@@ -211,3 +211,15 @@ _Avoid_: Bash tool, prompt processing
 **Interrupt Admission**:
 The Native TUI decision of how an interrupt request applies to the current activity: which channel it targets (the active Agent run, the running User Bash, or a pending User Bash submission) and whether the request is stale relative to the active prompt generation. The decision is made against activity facts supplied at request time; the owning frontend performs the routed effect. It is the C++ translation of pi's app.interrupt precedence at the parity baseline.
 _Avoid_: Escape handling, keybinding dispatch
+
+**TUI Toolkit**:
+The reusable terminal UI capability module (`cch_tui`) that owns the terminal seam, input protocol decoding, keybindings, the editor stack, autocomplete, fuzzy matching, layout-free components, markdown rendering, and terminal image capability, depending on no coding-agent types. The Native TUI's interactive mode is assembled from it; interactive-mode application components (model selection, login presentation, footer/status, chat UX) are not toolkit capabilities.
+_Avoid_: UI library, widget set, interactive frontend
+
+**Decoded Input Event**:
+The TUI Toolkit's single decode of raw terminal escape sequences into typed KeyEvent/PasteEvent values at the terminal edge, with action matching against pi's `modifier+key` identifier grammar and full keyboard-protocol coverage (legacy, modifyOtherKeys, Kitty CSI-u with event types and alternate keys). An Intentional Divergence from pi's raw-string matching that preserves the observable sequence-to-action contract; paste input remains size-bounded.
+_Avoid_: Raw string matching, per-consumer escape parsing
+
+**Terminal-Owned Image Placement**:
+The TUI Toolkit's inline-image model in which components emit protocol-neutral image regions alongside their rendered lines and the Terminal owns physical placement and removal in absolute cell regions, including protocol selection (Kitty/iTerm2), cell-size math, animation-id reuse, and fallback text. An Intentional Divergence from pi's escape-sequences-in-lines with identical placement, sizing, and fallback outcomes.
+_Avoid_: Escape sequences in render lines, component-owned protocol bytes

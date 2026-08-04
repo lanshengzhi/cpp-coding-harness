@@ -1,7 +1,9 @@
 # Native TUI keybindings
 
 The Native TUI keybinding format is compatible with pi parity baseline
-`864b35c`. The harness performs one startup read of
+`83114817` (re-pinned from `864b35c` by ADR 0035 after the [#332](https://github.com/lanshengzhi/cpp-coding-harness/issues/332)
+toolkit inventory verified the `tui.*` action table and key grammar at the frozen
+baseline). The harness performs one startup read of
 `<Agent Config Directory>/keybindings.json` (normally
 `~/.pi/agent/keybindings.json`). `PI_CODING_AGENT_DIR` changes the Agent Config
 Directory. Discovery reads only that resolved user-level root and never scans a
@@ -76,8 +78,14 @@ activation key. It remains available when `tui.select.confirm` is remapped and
 is shown in that component's rendered hint, matching pi's Settings List
 semantics rather than inventing a configurable action ID.
 
-`tui.input.copy` is a known baseline ID but is not assembled because the current
-reusable editor has no selection/copy capability.
+`tui.input.copy` and the six `tui.altScreen.*` actions (`pageUp`, `pageDown`,
+`previousPrompt`, `nextPrompt`, `top`, `bottom`) are known baseline IDs but are
+not assembled: their only active behavior is alt-screen viewport scrolling and
+selection copy, and the alt-screen half is a Deferred Capability with no
+placeholder surface (ADR 0035). Entries for them are diagnosed as
+known-but-unassembled and skipped, never no-op bindings; the editor's
+pass-through behavior for a copy-mapped key (pi lets the parent handle exit/clear)
+holds without the action existing.
 
 Application (`app.*`) actions are registered only by a frontend that assembles
 the corresponding capability. The Native TUI composition registers these
