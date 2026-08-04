@@ -110,20 +110,20 @@ CCH_CODING_AGENT_SESSION_DIR=/data/sessions ./build/cpp_harness --fake "hello"
 
 The coroutine/Glaze/event stack is the only active stack. Legacy compatibility flags such as `--async` are intentionally absent.
 
-Real-provider mode is OpenAI Chat Completions-compatible:
+Real-provider mode resolves the model through the composed `ModelRuntime` catalog (`~/.pi/agent/models.json` overlaid on the built-in providers):
 
 ```bash
-export OPENAI_API_KEY=...
-./build/cpp_harness --model gpt-4.1-mini "summarize README.md"
+export KIMI_API_KEY=...
+./build/cpp_harness --model kimi-for-coding "summarize README.md"
 ```
 
-Use `--base-url` for compatible gateways that preserve the `/v1/chat/completions` contract.
+Model selection follows pi: `--model <pattern>` (with optional `--provider <name>`, or `provider/model`), then a resume's stored `model_change`, then settings `defaultProvider`/`defaultModel`, then the runtime default. `--models <patterns>` limits cycling. `--api-key <key>` installs an in-memory, never-persisted runtime API key override and requires an explicit model (`--model`, `--provider/--model`, or `--models`).
 
-OAuth login and subscription-provider adapters are intentionally deferred. API-key credentials are resolved immediately before each request: an explicitly selected `auth.json` entry wins, then the first set variable in the `--api-key-env` chain is used. Stored OAuth credentials can be refreshed by Providers that support OAuth, but the concrete login flows land in later tickets.
+Request authentication resolves immediately before each request through pi's four-level chain: runtime API key override (`ModelRuntime::set_runtime_api_key`, CLI `--api-key`) → stored `auth.json` credential → provider environment variables → `models.json` configured `apiKey`. The removed `--base-url`, `--api-key-env`, and `--auth` flags fail loudly; custom endpoints become config-only providers in `models.json`. Stored OAuth credentials are refreshed by Providers that support OAuth, and the concrete login flows land in later tickets.
 
 ### Agent config directory
 
-User-level state lives directly in pi's agent config directory `~/.pi/agent/`: `auth.json` (credentials shared with pi), `settings.json` (provider defaults, theme selection, and resource policy), `keybindings.json` (Native TUI bindings), `trust.json` (persisted project trust decisions), `themes/` (global Native TUI themes), and `sessions/<encoded-workspace>/` (default persisted Agent Session histories). Set `PI_CODING_AGENT_DIR` to override the location. These paths are centralized in `include/cch/coding_agent/AgentConfigDir.hpp`; there is no fallback read or migration from the former harness-private root.
+User-level state lives directly in pi's agent config directory `~/.pi/agent/`: `auth.json` (credentials shared with pi), `settings.json` (pi two-scope user settings: `defaultProvider`/`defaultModel`/`defaultThinkingLevel`/`enabledModels`/`sessionDir`/`defaultProjectTrust`/`shellPath`/`shellCommandPrefix`/`theme`), `models.json` (custom providers and model configuration; never written by the runtime), `keybindings.json` (Native TUI bindings), `trust.json` (persisted project trust decisions), `themes/` (global Native TUI themes), and `sessions/<encoded-workspace>/` (default persisted Agent Session histories). Set `PI_CODING_AGENT_DIR` to override the location. These paths are centralized in `include/cch/coding_agent/AgentConfigDir.hpp`; there is no fallback read or migration from the former harness-private root.
 
 ### Session storage
 
@@ -137,7 +137,7 @@ Automatic-directory overrides replace the whole automatic directory for default 
 
 ### Auth file
 
-API keys can also be stored in `~/.pi/agent/auth.json` and selected by name with the `--auth` flag (or the `auth` field in `~/.pi/agent/settings.json`). This avoids exporting keys into the shell environment.
+API keys can be stored in `~/.pi/agent/auth.json` (shared with pi). A stored credential for a provider is resolved at request time and takes precedence over that provider's environment variables and its `models.json` configured key:
 
 ```json
 {
@@ -147,46 +147,35 @@ API keys can also be stored in `~/.pi/agent/auth.json` and selected by name with
 ```
 
 ```bash
-# Uses the kimi-coding auth entry, no env var needed
-./build/cpp_harness --auth kimi-coding \
-  --base-url https://api.kimi.com/coding/v1 \
-  --model kimi-for-coding \
-  "summarize README.md"
+# Uses the kimi-coding auth entry automatically; no env var needed
+./build/cpp_harness --model kimi-for-coding "summarize README.md"
 ```
 
-Auth file entries take precedence over environment variables. `api_key_env` is still used as a fallback and to decide which environment variable names are filtered from child shell processes.
+Credentials never enter settings.json; `models.json` `apiKey` carries only configured keys for config-only providers. The `--auth` flag and the settings `auth` field are removed.
 
-### Kimi Code via the OpenAI-compatible path
+### Kimi Code
 
-Kimi Code can be used through the existing OpenAI-compatible provider path. Keep the Kimi base URL, model, and API key together — whether via `--api-key-env` or `--auth` — because the bearer token is sent to whichever `--base-url` you configure.
+Kimi Code is a built-in provider (`kimi-coding`, model `kimi-for-coding`) that resolves its API key from `KIMI_API_KEY` (or a stored `auth.json` entry, or a `--api-key` runtime override):
 
 ```bash
 export KIMI_API_KEY=...
-./build/cpp_harness \
-  --base-url https://api.kimi.com/coding/v1 \
-  --model kimi-for-coding \
-  --api-key-env KIMI_API_KEY \
-  "summarize README.md"
+./build/cpp_harness --model kimi-for-coding "summarize README.md"
 ```
-
-Pass the base URL (`https://api.kimi.com/coding/v1`), not the full `/chat/completions` endpoint; the harness appends `/chat/completions` for `/v1`-style base URLs.
 
 Kimi's `ANTHROPIC_BASE_URL` / `ANTHROPIC_API_KEY` examples are for Anthropic-shaped Claude Code clients. This harness does not read those variables or implement an Anthropic provider.
 
 Live Kimi usage sends prompts, file contents read by tools, and tool outputs to the configured provider. JSONL session redaction is a persistence boundary, not a guarantee that terminal output, CI logs, provider diagnostics, or provider-bound tool results are redacted. Do not paste raw credentials into prompts, files, or tool-visible content.
 
-`--resume` reconstructs the redacted active session path, including persisted leaf and compaction context, and restores workspace metadata. When you omit `--model`, `--base-url`, `--api-key-env`, or `--auth`, the harness falls back to values stored in the resumed session, then to `~/.pi/agent/settings.json`, then to built-in defaults. Explicit CLI flags always win. For Kimi sessions, repeating the Kimi base URL, model, and key source on resume is still recommended so runtime context stays explicit.
+`--resume` reconstructs the redacted active session path, including persisted leaf and compaction context, and re-resolves the stored `model_change {provider, modelId}` against the live `ModelRuntime` catalog. When you omit `--model`/`--provider`, the fallback chain is: the resumed session's `model_change` → settings `defaultProvider`/`defaultModel` → the runtime default. A stored model that no longer resolves surfaces a diagnostic without silent substitution. Explicit CLI flags always win.
 
 Troubleshooting:
 
 | Symptom | Check |
 | --- | --- |
-| `missing API key` | Export `KIMI_API_KEY` and pass `--api-key-env KIMI_API_KEY`, or add the key to `~/.pi/agent/auth.json` and pass `--auth kimi-coding`. |
-| Authentication or authorization failure | Confirm the key is valid for Kimi Code and that the base URL is `https://api.kimi.com/coding/v1`. |
-| Invalid model | Use `--model kimi-for-coding`. |
+| `Provider is not configured` | The provider has no stored credential, ambient environment variable, `--api-key` override, or `models.json` configured key. Export `KIMI_API_KEY`, add a `~/.pi/agent/auth.json` entry, or pass `--api-key`. |
+| Authentication or authorization failure | Confirm the key is valid for Kimi Code and the provider resolves to the Kimi endpoint. |
+| Invalid model | Use `--model kimi-for-coding`, or configure a custom model in `models.json`. |
 | Rate limit or quota error | Retry later or check Kimi Code subscription/entitlement and quota. |
-| Request unexpectedly goes to OpenAI | Ensure the Kimi `--base-url`, `--model`, and key source (`--api-key-env` or `--auth`) are all present. |
-| 403 Forbidden | Your key can list models but is not entitled for Kimi Code chat completions; confirm Kimi Code subscription/agent access. |
 | Provider or transport error | Re-run with harmless prompts and inspect diagnostics without printing secrets. |
 
 Optional live smoke validation is manual and never part of default `ctest`:
@@ -214,7 +203,7 @@ Package targets and responsibilities:
 - `cch_agent` (`include/cch/agent`, `src/agent`): public stateful `Agent` ownership of live message history, model/thinking/tool state, weak move-only subscriptions with bounded diagnostics, passive state snapshots, one active run, and the strong per-run commitment seam used by Agent Session persistence. The package also owns async tool registration, private Tool Argument Contract preparation, expected-style tool execution, pi-ordered prepare/stop/steering/follow-up policy seams, and sequential/bounded-parallel tool execution policy.
 - `cch_harness` (`include/cch/harness`, `src/harness`): pi-shaped filesystem and shell execution capability contracts (`FileSystem`/`Shell`), local implementation with workspace containment, symlink safety, atomic writes, split-stream process execution, secret environment filtering, and JSONL/in-memory Session Store implementations.
 - `cch_tools` (`include/cch/tools`, `src/tools`): built-in read/write/edit/bash tool factories bridging agent tool contracts to harness capabilities.
-- `cch_coding_agent_runtime` (`src/coding_agent/runtime/`, `include/cch/coding_agent/`, `src/coding_agent/`, and private one-shot adapters in `src/cli/`): SessionFactory-authoritative session assembly (including `settings.json` precedence), agent config directory path resolution (`AgentConfigDir`), user settings and auth loading (`SettingsLoader`, `AuthLoader`), session lifecycle, composition of the stateful Agent with persistence/resources/SDK presentation, semantic event printing, one-shot/JSON/RPC output, private skill/template prompt interpretation (`prompt/PromptProcessor`), strong incremental message persistence after Agent state and weak observers advance, project trust/resource controls (`ProjectTrust`, `ProjectResources`, `ProjectResourceLoader`), project-local skill discovery/loading and prompt formatting, `/skill:name` expansion from cached content, and prompt-template file loading with `--prompt-template`/`--no-prompt-templates` CLI flags. The executable owns CLI11 parsing, TTY-based frontend selection, and the final composition that may depend on both runtime and Native TUI targets.
+- `cch_coding_agent_runtime` (`src/coding_agent/runtime/`, `include/cch/coding_agent/`, `src/coding_agent/`, and private one-shot adapters in `src/cli/`): SessionFactory-authoritative session assembly (including the two-scope `settings.json` contract), agent config directory path resolution (`AgentConfigDir`), the two-scope user settings manager (`SettingsManager`) and shared-file auth storage (`AuthStorage`), session lifecycle, composition of the stateful Agent with persistence/resources/SDK presentation, semantic event printing, one-shot/JSON/RPC output, private skill/template prompt interpretation (`prompt/PromptProcessor`), strong incremental message persistence after Agent state and weak observers advance, project trust/resource controls (`ProjectTrust`, `ProjectResources`, `ProjectResourceLoader`), project-local skill discovery/loading and prompt formatting, `/skill:name` expansion from cached content, and prompt-template file loading with `--prompt-template`/`--no-prompt-templates` CLI flags. The executable owns CLI11 parsing, TTY-based frontend selection, and the final composition that may depend on both runtime and Native TUI targets.
 
 The build publishes `include` as the public surface and keeps `src` private. Legacy synchronous tools, Boost.JSON contracts, `util::Result`, and duplicate `src` contract headers have been removed.
 
@@ -288,12 +277,12 @@ using namespace cch;
 // grouped by the canonical physical workspace.
 coding_agent::CreateAgentSessionOptions opts;
 opts.workspace = std::filesystem::current_path();
-opts.provider_config = coding_agent::SdkProviderConfig{
-    .provider = "openai-compatible",
-    .model = "gpt-4o-mini",
-    .base_url = "https://api.openai.com/v1",
-    .api_key_env = {{"OPENAI_API_KEY"}},
-};
+// Optional initial model; when absent the model resolves through the runtime
+// (settings defaultProvider/defaultModel, then the runtime default).
+// opts.model = ai::Model{...};
+// Optional canonical model/auth runtime; when absent one is default-created
+// from the Agent Config Directory (or opts.agent_dir).
+// opts.model_runtime = ...;
 
 auto result = coding_agent::create_agent_session(std::move(opts));
 if (!result) {
@@ -342,12 +331,8 @@ Use the explicit in-memory target when the host needs normal Agent Session behav
 coding_agent::CreateAgentSessionOptions opts;
 opts.session_target = coding_agent::InMemorySessionTarget{};
 opts.workspace = std::filesystem::current_path();
-opts.provider_config = coding_agent::SdkProviderConfig{
-    .provider = "openai-compatible",
-    .model = "gpt-4o-mini",
-    .base_url = "https://api.openai.com/v1",
-    .api_key_env = {{"OPENAI_API_KEY"}},
-};
+// Model resolution: explicit model → runtime default; authentication is
+// resolved live at request time.
 
 auto result = coding_agent::create_agent_session(std::move(opts));
 if (!result) {
@@ -379,7 +364,7 @@ session->close();
 - `prompt_blocking()` is a separately named convenience facade over the async path. It owns a temporary executor for the call and rejects same-session callback reentry that would recursively wait on itself.
 - One persistent event-subscription path via move-only `agent::AgentEventSink`; prompt progress is not returned or delivered through per-prompt sinks.
 - Host-provided execution environments remain host-owned and are not cleaned up by session close; custom tools passed by `unique_ptr` transfer ownership to the session.
-- Transitional SDK provider composition from `SdkProviderConfig`; request authentication resolves through `Models` immediately before each Provider call. `ModelRuntime` becomes the sole public model-runtime injection seam in #345.
+- `ModelRuntime` is the sole public model/auth runtime seam: a `std::shared_ptr` injected through `CreateAgentSessionOptions` (default-created from the Agent Config Directory when absent); request authentication resolves through `Models` immediately before each Provider call.
 - Built-in tool selection with safe defaults: `read`, `write`, and `edit_file` by default; `bash` requires explicit opt-in.
 - Custom tool registration via existing `agent::AsyncAgentTool` contracts; duplicate tool names fail creation.
 - Programmatic skills and prompt templates; host resources take precedence over project-discovered duplicates.
@@ -431,7 +416,7 @@ Project trust controls whether project-authored `.cpp-harness` resources are loa
 
 Protected project markers include `.cpp-harness/settings.json`, `.cpp-harness/skills`, `.cpp-harness/prompts`, `.cpp-harness/themes`, `.cpp-harness/extensions`, `.cpp-harness/packages`, `.cpp-harness/SYSTEM.md`, and `.cpp-harness/APPEND_SYSTEM.md`. A bare `.cpp-harness` directory and `.cpp-harness/sessions` do not require trust. In non-interactive startup, the default `ask` policy acts as untrusted unless a saved trust decision or same-run override exists. Trust decisions are read from user-controlled `~/.pi/agent/trust.json` with nearest-parent inheritance.
 
-User settings in `~/.pi/agent/settings.json` can set provider defaults (`provider`, `model`, `base_url`, `api_key_env`, `auth`), a Native TUI `theme` name, `default_project_trust` to `ask`, `always`, or `never`, and `project_resources.skills` / `project_resources.themes` to `auto`, `on`, or `off`. Optional compatible `shellPath` and `shellCommandPrefix` strings configure local Shell launches from the one startup settings snapshot. A leading `~` in `shellPath` expands to the user's home directory; a non-empty prefix is joined to each script with one newline but is not added to tool-visible command text or Session history. The optional `sessionDir` string (pi vocabulary) is a CLI session-storage preference below `--session-dir` and `CCH_CODING_AGENT_SESSION_DIR`; it is not a provider setting and SDK default persistence never reads it. `off` always skips project skills. `--approve` / `-a` and `--no-approve` are one-run trust overrides; they do not persist decisions. `--no-skills` disables project-local skills for the run even when the project is trusted.
+User settings follow pi's two-scope `settings.json` contract (ADR 0031): a global file at `~/.pi/agent/settings.json` deep-merged with a project file at `<workspace>/.pi/settings.json` that loads only while the project is trusted, with the project scope winning. The field subset is `defaultProvider`, `defaultModel`, `defaultThinkingLevel` (`off`/`minimal`/`low`/`medium`/`high`/`xhigh`/`max`), `enabledModels` (model patterns), `sessionDir`, `defaultProjectTrust` (`ask`/`always`/`never`; global-only), `shellPath`, `shellCommandPrefix`, and `theme`. The harness-private `provider`/`model`/`base_url`/`api_key_env`/`auth` fields and the `project_resources` skill/theme policy fields are removed, and settings never carry secrets. Optional compatible `shellPath` and `shellCommandPrefix` strings configure local Shell launches from the startup settings snapshot; a leading `~` in `shellPath` expands to the user's home directory. The optional `sessionDir` string is a CLI session-storage preference below `--session-dir` and `CCH_CODING_AGENT_SESSION_DIR`; it is not a provider setting and SDK default persistence never reads it. `--approve` / `-a` and `--no-approve` are one-run trust overrides; they do not persist decisions. `--no-skills` disables project-local skills for the run even when the project is trusted.
 
 ## Tools
 

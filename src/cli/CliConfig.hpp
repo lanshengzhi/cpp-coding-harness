@@ -44,7 +44,14 @@ struct CliConfig {
     /// override. Applies only to default persisted creation; explicit create
     /// and resume targets keep their exact paths.
     std::optional<std::string> session_dir;
-    coding_agent::CliProviderOverrides provider_overrides;
+    /// pi CLI model selection: `--provider` (default provider name),
+    /// `--model` (model pattern), `--models` (comma-separated cycling
+    /// patterns), and `--api-key` (in-memory runtime API key override, never
+    /// persisted). `--api-key` requires an explicit model.
+    std::optional<std::string> provider;
+    std::optional<std::string> model;
+    std::vector<std::string> models;
+    std::optional<std::string> api_key;
     std::vector<std::string> file_arguments;
     std::string prompt;
     std::string help_text;

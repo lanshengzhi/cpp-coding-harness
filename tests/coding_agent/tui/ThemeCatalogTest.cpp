@@ -269,13 +269,13 @@ TEST_CASE(
     tests::TempWorkspace config;
     config.write("themes/solarized.json", fixture_theme("solarized", "#abcdef"));
     config.write("settings.json", R"({"theme":"dark","future":true})");
-    const auto settings_path = config.path() / "settings.json";
-    const auto settings = coding_agent::SettingsLoader::load(settings_path);
-    REQUIRE(settings);
+    auto settings_manager = coding_agent::SettingsManager::create(
+        /* cwd */ {}, config.path(), /* project_trusted */ false);
+    REQUIRE(settings_manager.errors().empty());
 
     coding_agent::tui::ThemeCatalogRequest request;
     request.agent_config_directory = config.path();
-    request.user_active_theme = settings->theme;
+    request.user_active_theme = settings_manager.global_settings().theme;
     request.terminal_capabilities.color = tui::TerminalColorCapability::TrueColor;
     auto catalog = coding_agent::tui::load_theme_catalog(std::move(request));
     REQUIRE(catalog);
@@ -289,8 +289,8 @@ TEST_CASE(
         std::move(*catalog),
         root,
         tui::TerminalColorCapability::TrueColor,
-        [settings_path](std::string_view name) {
-            return coding_agent::SettingsLoader::save_theme_selection(settings_path, name);
+        [manager = std::move(settings_manager)](std::string_view name) mutable {
+            return manager.set_theme(coding_agent::SettingsScope::Global, name);
         });
     auto overlay = coding_agent::tui::make_theme_settings_overlay(
         controller,
@@ -318,9 +318,10 @@ TEST_CASE(
     REQUIRE(terminal.inject_input("\x1b[B"));
     REQUIRE(terminal.inject_input("\r"));
     CHECK(controller.active_theme_name() == "light");
-    const auto saved_settings = coding_agent::SettingsLoader::load(settings_path);
-    REQUIRE(saved_settings);
-    CHECK(saved_settings->theme == "light");
+    auto saved_manager = coding_agent::SettingsManager::create(
+        /* cwd */ {}, config.path(), /* project_trusted */ false);
+    REQUIRE(saved_manager.errors().empty());
+    CHECK(saved_manager.global_settings().theme == "light");
     CHECK(config.read("settings.json").find("future") != std::string::npos);
     CHECK(base_pointer->invalidations > 0);
     CHECK(controller.live_theme().foreground(coding_agent::tui::ThemeToken::Accent, "x") ==

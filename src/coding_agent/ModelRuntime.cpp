@@ -6,6 +6,7 @@
 #include "ModelConfig.hpp"
 #include "ProcessAuthContext.hpp"
 #include "ProviderComposer.hpp"
+#include "RuntimeApiKeyOverlay.hpp"
 #include "ai/providers/BoostBeastStreamTransport.hpp"
 #include "ai/providers/BoostBeastWebSocketTransport.hpp"
 #include "util/ExpectedMacros.hpp"
@@ -54,6 +55,7 @@ struct ModelRuntime::Impl {
     std::vector<ai::Model> available_models;
     std::set<std::string, std::less<>> configured_providers;
     std::set<std::string, std::less<>> stored_providers;
+    std::set<std::string, std::less<>> runtime_providers;
     std::map<std::string, ai::AuthCheck, std::less<>> auth_snapshot;
     std::optional<std::string> availability_error;
 
@@ -121,6 +123,12 @@ struct ModelRuntime::Impl {
                 configured_providers.insert(std::string{provider_value->id()});
             }
         }
+        recompute_available_models();
+    }
+
+    /// Rebuild `available_models` from the structural `configured_providers`
+    /// set. Used by the snapshot and by runtime API key changes.
+    void recompute_available_models() {
         available_models.clear();
         available_models.reserve(all_models.size());
         for (const auto& model : all_models) {
@@ -156,8 +164,9 @@ util::Expected<std::shared_ptr<ModelRuntime>> ModelRuntime::create(
     if (!credentials) {
         credentials = std::make_shared<AuthStorage>(agent_dir / "auth.json");
     }
+    auto credentials_with_overlay = std::make_shared<RuntimeApiKeyOverlay>(credentials);
     auto auth_context = std::make_shared<ProcessAuthContext>();
-    auto models = std::make_shared<ai::Models>(credentials, auth_context);
+    auto models = std::make_shared<ai::Models>(credentials_with_overlay, auth_context);
 
     std::shared_ptr<ai::providers::StreamTransport> http_transport =
         std::move(options.http_transport);
@@ -175,7 +184,7 @@ util::Expected<std::shared_ptr<ModelRuntime>> ModelRuntime::create(
     auto impl = std::make_unique<Impl>(Impl{
         .agent_dir = std::move(agent_dir),
         .models_path = std::move(models_path),
-        .credentials = credentials,
+        .credentials = credentials_with_overlay,
         .auth_context = auth_context,
         .models = models,
         .config = {},
@@ -193,6 +202,7 @@ util::Expected<std::shared_ptr<ModelRuntime>> ModelRuntime::create(
         .available_models = {},
         .configured_providers = {},
         .stored_providers = {},
+        .runtime_providers = {},
         .auth_snapshot = {},
         .availability_error = {},
     });
@@ -214,11 +224,12 @@ ModelRuntime::create_from_models_for_testing(
     if (!credentials) {
         credentials = std::make_shared<AuthStorage>(agent_dir / "auth.json");
     }
+    auto credentials_with_overlay = std::make_shared<RuntimeApiKeyOverlay>(credentials);
     auto auth_context = std::make_shared<ProcessAuthContext>();
     auto impl = std::make_unique<Impl>(Impl{
         .agent_dir = std::move(agent_dir),
         .models_path = {},
-        .credentials = credentials,
+        .credentials = credentials_with_overlay,
         .auth_context = auth_context,
         .models = std::move(models),
         .config = {},
@@ -231,6 +242,7 @@ ModelRuntime::create_from_models_for_testing(
         .available_models = {},
         .configured_providers = {},
         .stored_providers = {},
+        .runtime_providers = {},
         .auth_snapshot = {},
         .availability_error = {},
     });
@@ -328,13 +340,7 @@ ModelRuntime::get_available(std::optional<std::string_view> provider_id) {
     for (const auto& entry : stored) {
         impl_->stored_providers.insert(entry.provider_id);
     }
-    impl_->available_models.clear();
-    impl_->available_models.reserve(impl_->all_models.size());
-    for (const auto& model : impl_->all_models) {
-        if (impl_->configured_providers.contains(model.provider)) {
-            impl_->available_models.push_back(model);
-        }
-    }
+    impl_->recompute_available_models();
     impl_->availability_error = std::move(failure);
     co_return impl_->available_models;
 }
@@ -373,10 +379,60 @@ bool ModelRuntime::is_using_oauth(std::string_view provider_id) const {
     return selected != nullptr && selected->auth().oauth.has_value();
 }
 
+util::ExpectedVoid ModelRuntime::set_runtime_api_key(
+    std::string provider_id,
+    std::string api_key) {
+    auto* overlay = dynamic_cast<RuntimeApiKeyOverlay*>(impl_->credentials.get());
+    if (overlay == nullptr) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Auth,
+            "runtime API key override unavailable for provider " + provider_id));
+    }
+    overlay->set_runtime_api_key(provider_id, std::move(api_key));
+    // Refresh the availability snapshot so the provider resolves as configured
+    // (pi `setRuntimeApiKey` refresh). Runtime keys are the highest-precedence
+    // source in Request Authentication via the credential overlay; they are
+    // never stored, so `stored_providers` is intentionally not touched.
+    impl_->runtime_providers.insert(provider_id);
+    impl_->configured_providers.insert(provider_id);
+    impl_->auth_snapshot[provider_id] = ai::AuthCheck{
+        .source = "runtime API key",
+        .type = ai::AuthType::ApiKey,
+    };
+    impl_->recompute_available_models();
+    return util::ExpectedVoid{};
+}
+
+util::ExpectedVoid ModelRuntime::remove_runtime_api_key(
+    std::string provider_id) {
+    auto* overlay = dynamic_cast<RuntimeApiKeyOverlay*>(impl_->credentials.get());
+    if (overlay == nullptr) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Auth,
+            "runtime API key override unavailable for provider " + provider_id));
+    }
+    overlay->remove_runtime_api_key(provider_id);
+    impl_->runtime_providers.erase(provider_id);
+    impl_->auth_snapshot.erase(provider_id);
+    // Restore the structural availability snapshot.
+    impl_->update_snapshot();
+    return util::ExpectedVoid{};
+}
+
+bool ModelRuntime::has_runtime_api_key(std::string_view provider_id) const {
+    if (auto* overlay = dynamic_cast<RuntimeApiKeyOverlay*>(impl_->credentials.get())) {
+        return overlay->has_runtime_api_key(provider_id);
+    }
+    return false;
+}
+
 std::optional<ModelRuntimeAuthStatus> ModelRuntime::get_provider_auth_status(
     std::string_view provider_id) const {
     if (!provider(provider_id)) {
         return std::nullopt;
+    }
+    if (impl_->runtime_providers.contains(std::string{provider_id})) {
+        return ModelRuntimeAuthStatus{.configured = true, .source = "runtime"};
     }
     if (impl_->stored_providers.contains(std::string{provider_id})) {
         return ModelRuntimeAuthStatus{.configured = true, .source = "stored"};

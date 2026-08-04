@@ -133,6 +133,20 @@ public:
     [[nodiscard]] bool has_configured_auth(std::string_view provider_id) const;
     /// True when the provider authenticates through an OAuth credential.
     [[nodiscard]] bool is_using_oauth(std::string_view provider_id) const;
+
+    /// Install a process-lifetime, in-memory runtime API key override for one
+    /// provider (pi `setRuntimeApiKey`). Never persisted. Takes the highest
+    /// precedence in Request Authentication (runtime override → stored
+    /// auth.json → environment → models.json configured key). Refreshes the
+    /// availability snapshot so the provider resolves as configured.
+    [[nodiscard]] util::ExpectedVoid set_runtime_api_key(
+        std::string provider_id,
+        std::string api_key);
+    /// Remove a runtime API key override, restoring the underlying resolution.
+    [[nodiscard]] util::ExpectedVoid remove_runtime_api_key(
+        std::string provider_id);
+    /// True when a runtime API key override is installed for the provider.
+    [[nodiscard]] bool has_runtime_api_key(std::string_view provider_id) const;
     /// Source/type-only auth status for status UI (never triggers network).
     [[nodiscard]] std::optional<ModelRuntimeAuthStatus> get_provider_auth_status(
         std::string_view provider_id) const;

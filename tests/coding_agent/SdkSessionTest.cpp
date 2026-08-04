@@ -2334,7 +2334,7 @@ TEST_CASE("SessionFactory applies one User Settings snapshot across provider and
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
     agent_dir.write("settings.json",
-        "{\"model\":\"settings-model\",\"sessionDir\":\"" + settings_sessions.path().string() + "\"}");
+        "{\"defaultModel\":\"settings-model\",\"sessionDir\":\"" + settings_sessions.path().string() + "\"}");
 
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.fake = true;
@@ -2467,10 +2467,10 @@ TEST_CASE("SessionFactory creation with malformed User Settings succeeds with sa
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
-    const auto warning = find_sdk_diag(result->diagnostics, "settings:fallback");
+    const auto warning = find_sdk_diag(result->diagnostics, "settings:global");
     REQUIRE(warning != result->diagnostics.end());
     CHECK(warning->severity == coding_agent::SdkDiagnostic::Severity::Warning);
-    CHECK(warning->message.find("could not load user settings") != std::string::npos);
+    CHECK(warning->message.find("could not load global settings") != std::string::npos);
     CHECK(warning->message.find("invalid JSON") != std::string::npos);
     result->session->close();
 }
@@ -2480,7 +2480,7 @@ TEST_CASE("SessionFactory creation with invalid User Settings values falls back 
     cch::tests::TempWorkspace agent_dir;
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
-    agent_dir.write("settings.json", "{\"default_project_trust\":\"bogus\"}");
+    agent_dir.write("settings.json", "{\"defaultProjectTrust\":\"bogus\"}");
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
@@ -2489,10 +2489,10 @@ TEST_CASE("SessionFactory creation with invalid User Settings values falls back 
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
-    const auto warning = find_sdk_diag(result->diagnostics, "settings:fallback");
+    const auto warning = find_sdk_diag(result->diagnostics, "settings:global");
     REQUIRE(warning != result->diagnostics.end());
     CHECK(warning->severity == coding_agent::SdkDiagnostic::Severity::Warning);
-    CHECK(warning->message.find("default_project_trust") != std::string::npos);
+    CHECK(warning->message.find("defaultProjectTrust") != std::string::npos);
     result->session->close();
 }
 
@@ -2514,7 +2514,7 @@ TEST_CASE("SessionFactory SDK creation failure after User Settings fallback keep
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().code == util::ErrorCode::Validation);
     REQUIRE(result.error().context.has_value());
-    CHECK(result.error().context->find("could not load user settings") != std::string::npos);
+    CHECK(result.error().context->find("could not load global settings") != std::string::npos);
 }
 
 TEST_CASE("SessionFactory CLI creation failure after User Settings fallback keeps the primary error and carries the warning", "[sdk][settings-snapshot]") {
@@ -2533,7 +2533,7 @@ TEST_CASE("SessionFactory CLI creation failure after User Settings fallback keep
     CHECK(result.error().code == util::ErrorCode::Validation);
     CHECK(result.error().message == "workspace cannot be resolved");
     REQUIRE(result.error().context.has_value());
-    CHECK(result.error().context->find("could not load user settings") != std::string::npos);
+    CHECK(result.error().context->find("could not load global settings") != std::string::npos);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2553,7 +2553,6 @@ TEST_CASE("SessionFactory CLI resolves missing credentials as a terminal auth ou
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     request.workspace = paths.workspace.path();
-    request.provider_overrides.api_key_env = "CCH_FACTORY_MISSING_KEY";
 
     auto result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(result.has_value());
@@ -5176,7 +5175,7 @@ TEST_CASE("private Models assembly uses settings provider with an opaque model s
     cch::tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
     home_guard.set(home.path().string());
-    home.write(".pi/agent/settings.json", R"({"provider":"kimi-coding"})");
+    home.write(".pi/agent/settings.json", R"({"defaultProvider":"kimi-coding"})");
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
@@ -5287,6 +5286,59 @@ TEST_CASE("SDK resume with explicit model override alone reports diagnostic", "[
         REQUIRE(result.has_value());
         CHECK(result->model == "gpt-4o");
         CHECK(has_sdk_diag(result->diagnostics, "resume_provider_override"));
+        result->session->close();
+    }
+}
+
+TEST_CASE(
+    "SDK persists only model_change identity and resume restores it",
+    "[sdk][provider-resolution][resume][issue346]") {
+    TestPaths paths;
+
+    {
+        tests::ModelsSessionOptions opts;
+        opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+        opts.workspace = paths.workspace.path();
+        opts.models = ai::providers::make_scripted_fake_models();
+        opts.model = cch::tests::sdk_request_model("fake", "fake-model");
+
+        auto result = coding_agent::create_agent_session(std::move(opts));
+        REQUIRE(result.has_value());
+        result->session->close();
+    }
+
+    // The session file persists only `model_change {provider, modelId}` as the
+    // content entry — no baseUrl, key-source, or authentication material.
+    auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
+    REQUIRE(durable.has_value());
+    const auto model_change = std::find_if(
+        durable->entries.begin(),
+        durable->entries.end(),
+        [](const harness::session::SessionEntry& entry) {
+            return entry.kind == harness::session::SessionEntryKind::ModelChange;
+        });
+    REQUIRE(model_change != durable->entries.end());
+    const auto* value =
+        std::get_if<harness::session::ModelChangeValue>(&model_change->value);
+    REQUIRE(value != nullptr);
+    CHECK(value->provider == "fake");
+    CHECK(value->model_id == "fake-model");
+    CHECK(model_change->raw_line.find("baseUrl") == std::string::npos);
+    CHECK(model_change->raw_line.find("apiKey") == std::string::npos);
+    CHECK(model_change->raw_line.find("source") == std::string::npos);
+
+    // Resume re-resolves the recorded identity against the live runtime.
+    {
+        tests::ModelsSessionOptions opts;
+        opts.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
+        opts.workspace = paths.workspace.path();
+        opts.models = ai::providers::make_scripted_fake_models();
+
+        auto result = coding_agent::create_agent_session(std::move(opts));
+        REQUIRE(result.has_value());
+        CHECK(result->provider == "fake");
+        CHECK(result->model == "fake-model");
+        CHECK_FALSE(has_sdk_diag(result->diagnostics, "resume_model_unresolved"));
         result->session->close();
     }
 }

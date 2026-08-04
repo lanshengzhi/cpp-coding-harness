@@ -47,7 +47,13 @@ struct AgentSessionCreationRequest {
     /// override, ahead of CCH_CODING_AGENT_SESSION_DIR and settings
     /// sessionDir. Consulted only for default persisted creation.
     std::optional<std::string> session_dir;
-    CliProviderOverrides provider_overrides;
+    /// pi CLI model selection: `--provider`, `--model`, `--models` patterns,
+    /// and `--api-key` (in-memory runtime override). `--api-key` requires an
+    /// explicit model at parse time.
+    std::optional<std::string> provider;
+    std::optional<std::string> model;
+    std::vector<std::string> models;
+    std::optional<std::string> api_key;
 };
 
 /// Internal result of SessionFactory::create(). The Sdk.cpp public

@@ -108,6 +108,7 @@ util::Expected<SessionResumeResult> resume_session(const std::filesystem::path& 
     return SessionResumeResult{
         .metadata = tree.metadata(),
         .history = std::move(context.messages),
+        .provider = std::move(context.provider),
         .model = std::move(context.model),
         .thinking_level = std::move(context.thinking_level),
         .topology = classify_active_topology(tree),

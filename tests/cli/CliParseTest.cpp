@@ -26,37 +26,108 @@ std::vector<char*> argv_from_strings(std::vector<std::string>& args) {
 
 } // namespace
 
-TEST_CASE("parse_args leaves provider overrides empty when model flags omitted", "[cli][parse]") {
+TEST_CASE("parse_args leaves model selection empty when model flags omitted", "[cli][parse]") {
     std::vector<std::string> args{"cpp-harness", "--fake", "hello"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
-    CHECK_FALSE(parsed->provider_overrides.model.has_value());
-    CHECK_FALSE(parsed->provider_overrides.base_url.has_value());
-    CHECK_FALSE(parsed->provider_overrides.api_key_env.has_value());
+    CHECK_FALSE(parsed->model.has_value());
+    CHECK_FALSE(parsed->provider.has_value());
+    CHECK(parsed->models.empty());
+    CHECK_FALSE(parsed->api_key.has_value());
 }
 
-TEST_CASE("parse_args records explicit provider overrides", "[cli][parse]") {
+TEST_CASE("parse_args records the pi CLI model selection surface", "[cli][parse]") {
     std::vector<std::string> args{
         "cpp-harness",
         "--fake",
+        "--provider",
+        "deepseek",
         "--model",
-        "demo-model",
-        "--base-url",
-        "https://demo.example/v1",
-        "--api-key-env",
-        "DEMO_KEY",
+        "deepseek-v4-flash",
+        "--models",
+        "deepseek-v4-flash,deepseek-r1:high",
+        "--api-key",
+        "sk-demo",
         "hello",
     };
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
-    REQUIRE(parsed->provider_overrides.model.has_value());
-    REQUIRE(parsed->provider_overrides.base_url.has_value());
-    REQUIRE(parsed->provider_overrides.api_key_env.has_value());
-    CHECK(*parsed->provider_overrides.model == "demo-model");
-    CHECK(*parsed->provider_overrides.base_url == "https://demo.example/v1");
-    CHECK(*parsed->provider_overrides.api_key_env == "DEMO_KEY");
+    REQUIRE(parsed->provider.has_value());
+    REQUIRE(parsed->model.has_value());
+    REQUIRE(parsed->api_key.has_value());
+    CHECK(*parsed->provider == "deepseek");
+    CHECK(*parsed->model == "deepseek-v4-flash");
+    CHECK(*parsed->api_key == "sk-demo");
+    REQUIRE(parsed->models.size() == 2);
+    CHECK(parsed->models[0] == "deepseek-v4-flash");
+    CHECK(parsed->models[1] == "deepseek-r1:high");
+}
+
+TEST_CASE("parse_args trims --models patterns and tolerates empty entries", "[cli][parse]") {
+    std::vector<std::string> args{
+        "cpp-harness", "--models", " sonnet ,, haiku ", "hello"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    REQUIRE(parsed->models.size() == 2);
+    CHECK(parsed->models[0] == "sonnet");
+    CHECK(parsed->models[1] == "haiku");
+}
+
+TEST_CASE("parse_args rejects --api-key without an explicit model", "[cli][parse]") {
+    std::vector<std::string> args{"cpp-harness", "--api-key", "sk-demo", "hello"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE_FALSE(parsed);
+    CHECK(
+        parsed.error().message.find("--api-key requires a model") != std::string::npos);
+}
+
+TEST_CASE("parse_args accepts --api-key with each explicit-model form", "[cli][parse]") {
+    {
+        std::vector<std::string> args{"cpp-harness", "--model", "gpt-5.5", "--api-key", "k", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "--provider", "deepseek", "--model", "deepseek-v4-flash", "--api-key", "k", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "--models", "gpt-5.5", "--api-key", "k", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+    }
+}
+
+TEST_CASE("parse_args rejects the removed --base-url flag", "[cli][parse]") {
+    std::vector<std::string> args{"cpp-harness", "--fake", "--base-url", "https://x", "hello"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE_FALSE(parsed);
+    CHECK(parsed.error().message.find("unknown option: --base-url") != std::string::npos);
+}
+
+TEST_CASE("parse_args rejects the removed --api-key-env flag", "[cli][parse]") {
+    std::vector<std::string> args{"cpp-harness", "--fake", "--api-key-env", "OPENAI_API_KEY", "hello"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE_FALSE(parsed);
+    CHECK(parsed.error().message.find("unknown option: --api-key-env") != std::string::npos);
+}
+
+TEST_CASE("parse_args rejects the removed --auth flag", "[cli][parse]") {
+    std::vector<std::string> args{"cpp-harness", "--fake", "--auth", "openai", "hello"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE_FALSE(parsed);
+    CHECK(parsed.error().message.find("unknown option: --auth") != std::string::npos);
 }
 
 TEST_CASE("parse_args defaults to no turn cap and records an explicit --max-turns", "[cli][parse][issue68]") {

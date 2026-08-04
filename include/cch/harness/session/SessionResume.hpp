@@ -21,6 +21,10 @@ enum class SessionTopology {
 struct SessionResumeResult {
     SessionMetadata metadata;
     std::vector<ai::MessageVariant> history;
+    /// Stored `model_change` provider (pi `{provider, modelId}`); re-resolved
+    /// against the live runtime catalog on resume.
+    std::optional<std::string> provider;
+    /// Stored `model_change` model id.
     std::optional<std::string> model;
     std::optional<std::string> thinking_level;
     SessionTopology topology{SessionTopology::Linear};

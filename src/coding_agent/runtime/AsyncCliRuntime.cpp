@@ -177,7 +177,10 @@ void print_session_diagnostics(const std::vector<coding_agent::SdkDiagnostic>& d
     request.workspace = config.workspace;
     request.session_target = config.session_target;
     request.session_dir = config.session_dir;
-    request.provider_overrides = config.provider_overrides;
+    request.provider = config.provider;
+    request.model = config.model;
+    request.models = config.models;
+    request.api_key = config.api_key;
 
     auto created = coding_agent::create_agent_session(std::move(request));
     if (!created) {

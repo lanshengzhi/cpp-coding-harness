@@ -205,10 +205,11 @@ add_library(cch_coding_agent_runtime
     src/coding_agent/AuthStorage.cpp
     src/coding_agent/CommandRegistry.cpp
     src/coding_agent/SessionPathPolicy.cpp
-    src/coding_agent/SettingsLoader.cpp
+    src/coding_agent/SettingsManager.cpp
     src/coding_agent/ModelConfig.cpp
     src/coding_agent/ModelRuntime.cpp
     src/coding_agent/ProviderComposer.cpp
+    src/coding_agent/RuntimeApiKeyOverlay.cpp
     src/coding_agent/ProjectResourceLoader.cpp
     src/coding_agent/ProjectResources.cpp
     src/coding_agent/ProjectTrust.cpp
@@ -336,7 +337,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/KimiOAuthLifecycleTest.cpp
         tests/coding_agent/AgentConfigDirTest.cpp
         tests/coding_agent/SessionPathPolicyTest.cpp
-        tests/coding_agent/SettingsLoaderTest.cpp
+        tests/coding_agent/SettingsManagerTest.cpp
         tests/coding_agent/ModelConfigTest.cpp
         tests/coding_agent/ModelRuntimeTest.cpp
         tests/coding_agent/ProviderComposerTest.cpp

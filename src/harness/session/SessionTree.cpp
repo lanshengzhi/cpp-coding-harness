@@ -170,6 +170,7 @@ SessionContext SessionTree::buildSessionContext() const {
         const auto& entry = **it;
         if (entry.kind == SessionEntryKind::ModelChange) {
             if (const auto* model = std::get_if<ModelChangeValue>(&entry.value)) {
+                ctx.provider = model->provider;
                 ctx.model = model->model_id;
                 break;
             }

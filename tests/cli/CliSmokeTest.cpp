@@ -688,10 +688,10 @@ TEST_CASE("CLI JSON reports request-time auth failure through terminal events", 
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "json-real.jsonl";
     auto result = run_command_split(
-        "HOME=" + shell_quote(home.path()) + " env -u CCH_TEST_MISSING_KEY " + bin() +
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
         " --mode json --workspace " + shell_quote(workspace.path()) +
         " --session " + shell_quote(session) +
-        " --api-key-env CCH_TEST_MISSING_KEY hello");
+        " hello");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.empty());
@@ -714,15 +714,15 @@ TEST_CASE("CLI terminal auth failure after malformed settings keeps the warning 
     }
     auto session = workspace.path() / "settings-fallback-failure.jsonl";
     auto result = run_command_split(
-        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " env -u CCH_TEST_MISSING_KEY " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
         " --workspace " + shell_quote(workspace.path()) +
         " --session " + shell_quote(session) +
-        " --api-key-env CCH_TEST_MISSING_KEY hello");
+        " hello");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stdout_text.find("[error] Provider is not configured") != std::string::npos);
     CHECK(result.stdout_text.find("[completed]") != std::string::npos);
-    CHECK(result.stderr_text.find("could not load user settings") != std::string::npos);
+    CHECK(result.stderr_text.find("could not load global settings") != std::string::npos);
     CHECK(std::filesystem::exists(session));
 }
 
@@ -907,10 +907,10 @@ TEST_CASE("CLI real-provider mode reports missing API key as a terminal auth out
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "real.jsonl";
     auto result = run_command(
-        "HOME=" + shell_quote(home.path()) + " env -u CCH_TEST_MISSING_KEY " + bin() +
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
         " --workspace " + shell_quote(workspace.path()) +
         " --session " + shell_quote(session) +
-        " --api-key-env CCH_TEST_MISSING_KEY hello");
+        " hello");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.output.find("Provider is not configured") != std::string::npos);
@@ -926,9 +926,7 @@ TEST_CASE("CLI Kimi path reports missing KIMI_API_KEY through terminal auth", "[
         "HOME=" + shell_quote(home.path()) + " env -u KIMI_API_KEY " + bin() +
         " --workspace " + shell_quote(workspace.path()) +
         " --session " + shell_quote(session) +
-        " --base-url https://api.kimi.com/coding/v1"
-        " --model kimi-for-coding"
-        " --api-key-env KIMI_API_KEY hello");
+        " --model kimi-for-coding hello");
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.output.find("Provider is not configured") != std::string::npos);
@@ -1264,7 +1262,7 @@ TEST_CASE("CLI RPC resource diagnostics stay off command stream", "[cli][rpc][pr
 TEST_CASE("CLI applies settings.json model when CLI omits --model", "[cli][settings]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    home.write(".pi/agent/settings.json", R"({"model":"config-model-name"})");
+    home.write(".pi/agent/settings.json", R"({"defaultModel":"config-model-name"})");
     auto session = workspace.path() / "settings-model-session.jsonl";
 
     auto result = run_command(
@@ -1279,18 +1277,36 @@ TEST_CASE("CLI applies settings.json model when CLI omits --model", "[cli][setti
     CHECK(json_string_at(object, "model") == "config-model-name");
 }
 
-TEST_CASE("CLI accepts settings.json api_key_env chain without explicit --api-key-env", "[cli][settings]") {
+TEST_CASE("CLI resolves a models.json configured apiKey provider as configured", "[cli][settings][models-json]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    home.write(".pi/agent/settings.json", R"({"api_key_env":["CUSTOM_KEY"]})");
+    home.write(".pi/agent/models.json", R"({
+        "providers": {
+            "deepseek": {
+                "baseUrl": "https://api.deepseek.com",
+                "apiKey": "$CCH_TEST_CONFIG_KEY",
+                "models": [
+                    {"id": "deepseek-v4-flash", "api": "openai-responses", "contextWindow": 128000, "maxTokens": 16384}
+                ]
+            }
+        }
+    })");
     auto session = workspace.path() / "settings-key-session.jsonl";
 
-    auto result = run_command(
-        "env -u OPENAI_API_KEY CUSTOM_KEY=test HOME=" + shell_quote(home.path()) + " " + bin() +
+    auto result = run_command_split_with_input(
+        "CCH_TEST_CONFIG_KEY=test HOME=" + shell_quote(home.path()) + " " + bin() +
         " --workspace " + shell_quote(workspace.path()) +
-        " --session " + shell_quote(session) + " hello");
+        " --session " + shell_quote(session) +
+        " --model deepseek-v4-flash --mode rpc",
+        "{\"type\":\"get_state\"}\n{\"type\":\"shutdown\"}\n");
 
-    CHECK(result.output.find("missing API key") == std::string::npos);
+    REQUIRE(result.exit_code == 0);
+    auto records = parse_json_objects(result.stdout_text);
+    auto* state = find_response(records, "get_state");
+    REQUIRE(state != nullptr);
+    auto data = state->at("data").get<cch::util::JsonValue::object_t>();
+    CHECK(json_string_at(data, "provider") == "deepseek");
+    CHECK(json_string_at(data, "model") == "deepseek-v4-flash");
     CHECK(std::filesystem::exists(session));
 }
 
@@ -1349,19 +1365,19 @@ TEST_CASE("CLI rejects each explicit prompt template input that has no loadable 
     CHECK_FALSE(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI applies settings.json provider identity when no explicit provider", "[cli][settings][provider-resolution]") {
+TEST_CASE("CLI applies settings.json defaultProvider/defaultModel when no explicit model", "[cli][settings][provider-resolution]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     home.write(
         ".pi/agent/settings.json",
-        R"({"provider":"kimi-coding","model":"kimi-for-coding"})");
+        R"({"defaultProvider":"kimi-coding","defaultModel":"kimi-for-coding"})");
     auto session = workspace.path() / "settings-provider-rpc.jsonl";
 
     auto result = run_command_split_with_input(
-        "env -u OPENAI_API_KEY CCH_CONFIG_PROVIDER_KEY=unused HOME=" + shell_quote(home.path()) + " " + bin() +
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
         " --workspace " + shell_quote(workspace.path()) +
         " --session " + shell_quote(session) +
-        " --api-key-env CCH_CONFIG_PROVIDER_KEY --mode rpc",
+        " --mode rpc",
         "{\"type\":\"get_state\"}\n{\"type\":\"shutdown\"}\n");
 
     REQUIRE(result.exit_code == 0);
@@ -1425,6 +1441,78 @@ TEST_CASE("CLI resume without override retains stored provider and model", "[cli
     auto data = state->at("data").get<cch::util::JsonValue::object_t>();
     CHECK(json_string_at(data, "provider") == "fake");
     CHECK(json_string_at(data, "model") == "fake-model");
+}
+
+TEST_CASE("CLI resume falls back with a diagnostic when the stored model no longer resolves", "[cli][resume][issue346]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    const auto models_path = home.path() / ".pi" / "agent" / "models.json";
+    home.write(".pi/agent/models.json", R"({
+      "providers": {
+        "deepseek": {
+          "baseUrl": "https://api.deepseek.example/v1",
+          "api": "openai-responses",
+          "apiKey": "configured-key",
+          "models": [{"id": "deepseek-v4-flash"}]
+        }
+      }
+    })");
+    auto session = workspace.path() / "resume-unresolved.jsonl";
+
+    // Create a session whose model_change records deepseek/deepseek-v4-flash.
+    auto first = run_command_split_with_input(
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) +
+        " --model deepseek-v4-flash --mode rpc",
+        "{\"type\":\"get_state\"}\n{\"type\":\"shutdown\"}\n");
+    REQUIRE(first.exit_code == 0);
+
+    // Remove the configured model, then resume: the stored identity no longer
+    // resolves, so resume falls back with a normal diagnostic.
+    std::filesystem::remove(models_path);
+    auto second = run_command_split_with_input(
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --workspace " + shell_quote(workspace.path()) +
+        " --resume " + shell_quote(session) + " --mode rpc",
+        "{\"type\":\"get_state\"}\n{\"type\":\"shutdown\"}\n");
+
+    REQUIRE(second.exit_code == 0);
+    CHECK(second.stderr_text.find("resume_model_unresolved") != std::string::npos);
+    CHECK(second.stderr_text.find("deepseek/deepseek-v4-flash") != std::string::npos);
+    // The fallback chain continues to the runtime default.
+    auto records = parse_json_objects(second.stdout_text);
+    auto* state = find_response(records, "get_state");
+    REQUIRE(state != nullptr);
+    auto data = state->at("data").get<cch::util::JsonValue::object_t>();
+    CHECK_FALSE(json_string_at(data, "model").empty());
+}
+
+TEST_CASE("CLI --api-key installs an in-memory runtime API key override", "[cli][api-key][issue346]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    auto session = workspace.path() / "api-key-session.jsonl";
+
+    auto result = run_command(
+        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --fake --workspace " + shell_quote(workspace.path()) +
+        " --session " + shell_quote(session) +
+        " --model fake-model --api-key sk-runtime-hello hello");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.output.find("fake: hello") != std::string::npos);
+    // The runtime API key is never persisted into the session file.
+    const auto content = read_file(session);
+    CHECK(content.find("sk-runtime-hello") == std::string::npos);
+}
+
+TEST_CASE("CLI rejects --api-key without an explicit model", "[cli][api-key][issue346]") {
+    cch::tests::TempWorkspace workspace;
+    auto result = run_command_split(
+        bin() + " --workspace " + shell_quote(workspace.path()) + " --api-key sk-nomodel hello");
+    REQUIRE(result.exit_code == 2);
+    CHECK(
+        result.stderr_text.find("--api-key requires a model") != std::string::npos);
 }
 
 TEST_CASE("CLI text command is resolved by the adapter and does not reach AgentSession", "[cli][commands]") {
@@ -2074,7 +2162,7 @@ TEST_CASE("CLI malformed settings keep default session storage with a warning", 
         " --fake --workspace " + shell_quote(workspace.path()) + " hello");
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.find("could not load user settings") != std::string::npos);
+    CHECK(result.stderr_text.find("could not load global settings") != std::string::npos);
     require_single_automatic_session(agent_dir / "sessions", canonical_workspace);
 }
 

@@ -18,7 +18,9 @@ namespace cch::harness::session {
 struct SessionContext {
     /// Messages ready for LLM consumption, in chronological order.
     std::vector<ai::MessageVariant> messages;
-    /// Current model from the nearest ModelChangeEntry on the path.
+    /// Current model provider from the nearest ModelChangeEntry on the path.
+    std::optional<std::string> provider;
+    /// Current model id from the nearest ModelChangeEntry on the path.
     std::optional<std::string> model;
     /// Current thinking level from the nearest ThinkingLevelChangeEntry on the path.
     std::optional<std::string> thinking_level;

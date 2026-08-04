@@ -79,10 +79,10 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     std::vector<std::string> prompt_parts;
     bool approve_project = false;
     bool no_approve_project = false;
+    std::string provider_text;
     std::string model_text;
-    std::string base_url_text;
-    std::string api_key_env_text;
-    std::string auth_text;
+    std::string models_text;
+    std::string api_key_text;
     std::string mode_text{"text"};
 
     CLI::App app{"C++ coding-agent harness", "cpp-harness"};
@@ -123,12 +123,10 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
         "Directory for automatic session storage (overrides CCH_CODING_AGENT_SESSION_DIR and settings.json sessionDir)");
     app.add_option("--max-turns", config.max_turns, "Maximum model turns per prompt (default: no cap)")
         ->check(CLI::Range(1, 64));
-    auto* model_option = app.add_option("--model", model_text, "Provider model name")->default_str("gpt-4.1-mini");
-    auto* base_url_option = app.add_option("--base-url", base_url_text, "OpenAI-compatible base URL")
-        ->default_str("https://api.openai.com");
-    auto* api_key_env_option = app.add_option("--api-key-env", api_key_env_text, "Environment variable containing API key")
-        ->default_str("OPENAI_API_KEY");
-    app.add_option("--auth", auth_text, "Auth provider name in ~/.pi/agent/auth.json");
+    auto* provider_option = app.add_option("--provider", provider_text, "Provider name");
+    auto* model_option = app.add_option("--model", model_text, "Model pattern or ID");
+    auto* models_option = app.add_option("--models", models_text, "Comma-separated model patterns for cycling");
+    auto* api_key_option = app.add_option("--api-key", api_key_text, "API key (in-memory runtime override, never persisted)");
     auto* mode_option = app.add_option(
         "--mode",
         mode_text,
@@ -173,16 +171,36 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
         config.session_dir = session_dir_text;
     }
     if (model_option->count() > 0) {
-        config.provider_overrides.model = model_text;
+        config.model = model_text;
     }
-    if (base_url_option->count() > 0) {
-        config.provider_overrides.base_url = base_url_text;
+    if (provider_option->count() > 0) {
+        config.provider = provider_text;
     }
-    if (api_key_env_option->count() > 0) {
-        config.provider_overrides.api_key_env = api_key_env_text;
+    if (models_option->count() > 0) {
+        std::vector<std::string> patterns;
+        std::size_t start = 0;
+        while (start <= models_text.size()) {
+            const auto comma = models_text.find(',', start);
+            const auto end = comma == std::string::npos ? models_text.size() : comma;
+            auto pattern = models_text.substr(start, end - start);
+            // Trim whitespace.
+            const auto not_space = [](unsigned char character) {
+                return !std::isspace(character);
+            };
+            pattern.erase(pattern.begin(), std::find_if(pattern.begin(), pattern.end(), not_space));
+            pattern.erase(std::find_if(pattern.rbegin(), pattern.rend(), not_space).base(), pattern.end());
+            if (!pattern.empty()) {
+                patterns.push_back(std::move(pattern));
+            }
+            if (comma == std::string::npos) {
+                break;
+            }
+            start = comma + 1;
+        }
+        config.models = std::move(patterns);
     }
-    if (app.count("--auth") > 0) {
-        config.provider_overrides.auth = auth_text;
+    if (api_key_option->count() > 0) {
+        config.api_key = api_key_text;
     }
     if (approve_option->count() > 0) {
         config.project_trust_override = true;
@@ -198,6 +216,16 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
         config.output_mode = *parsed_mode;
     } else {
         config.output_mode = OutputMode::Text;
+    }
+
+    // `--api-key` requires an explicit model (pi): it cannot name a provider
+    // without a model, and never applies to a resume/default selection.
+    if (api_key_option->count() > 0 &&
+        model_option->count() == 0 &&
+        provider_option->count() == 0 &&
+        models_option->count() == 0) {
+        return std::unexpected(cli_error(
+            "--api-key requires a model to be specified via --model, --provider/--model, or --models"));
     }
 
     std::vector<std::string> prompt_text_parts;

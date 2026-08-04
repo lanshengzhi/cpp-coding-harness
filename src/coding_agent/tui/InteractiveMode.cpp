@@ -1120,33 +1120,41 @@ private:
             }
         }
 
-        const auto settings_path = config.agent_config_directory.empty()
-            ? std::filesystem::path{}
-            : config.agent_config_directory / "settings.json";
-        if (auto settings = SettingsLoader::load(settings_path); !settings) {
-            return std::unexpected(settings.error());
-        } else {
-            const auto capabilities = terminal_.capabilities();
-            ThemeCatalogRequest request;
-            request.agent_config_directory = config.agent_config_directory;
-            request.user_active_theme = settings->theme;
-            request.terminal_capabilities = capabilities;
-            if (auto catalog = load_theme_catalog(std::move(request)); !catalog) {
-                return std::unexpected(catalog.error());
-            } else {
-                diagnostics.themes = catalog->diagnostics;
-                ThemeSelectionCommitter committer;
-                if (!settings_path.empty()) {
-                    committer = [settings_path](std::string_view name) {
-                        return SettingsLoader::save_theme_selection(settings_path, name);
-                    };
-                }
-                theme_controller_.emplace(
-                    std::move(*catalog),
-                    tui_,
-                    capabilities.color,
-                    std::move(committer));
+        // The Native TUI reads only the global settings scope (the theme is
+        // global-only) and writes theme selections surgically through the
+        // two-scope manager with the project scope untrusted.
+        auto settings_manager = coding_agent::SettingsManager::create(
+            /* cwd */ {},
+            config.agent_config_directory,
+            /* project_trusted */ false);
+        for (const auto& settings_error : settings_manager.errors()) {
+            if (settings_error.scope == coding_agent::SettingsScope::Global) {
+                return std::unexpected(util::make_error(
+                    util::ErrorCode::JsonParse,
+                    "could not load global settings",
+                    settings_error.message));
             }
+        }
+        const auto capabilities = terminal_.capabilities();
+        ThemeCatalogRequest request;
+        request.agent_config_directory = config.agent_config_directory;
+        request.user_active_theme = settings_manager.global_settings().theme;
+        request.terminal_capabilities = capabilities;
+        if (auto catalog = load_theme_catalog(std::move(request)); !catalog) {
+            return std::unexpected(catalog.error());
+        } else {
+            diagnostics.themes = catalog->diagnostics;
+            ThemeSelectionCommitter committer;
+            if (!config.agent_config_directory.empty()) {
+                committer = [manager = std::move(settings_manager)](std::string_view name) mutable {
+                    return manager.set_theme(coding_agent::SettingsScope::Global, name);
+                };
+            }
+            theme_controller_.emplace(
+                std::move(*catalog),
+                tui_,
+                capabilities.color,
+                std::move(committer));
         }
         return diagnostics;
     }
