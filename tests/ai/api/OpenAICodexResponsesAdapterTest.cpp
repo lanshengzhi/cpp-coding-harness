@@ -1,7 +1,7 @@
 #include <cch/ai/Models.hpp>
 #include <cch/ai/Provider.hpp>
 #include <cch/ai/providers/StreamTransport.hpp>
-#include "ai/providers/OpenAIProvider.hpp"
+#include "support/AdapterProviderFixture.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/PiFixture.hpp"
 #include "support/ScriptedWebSocket.hpp"
@@ -87,7 +87,7 @@ struct CodexHarness {
     harness.models = std::make_unique<ai::Models>(
         std::make_shared<EmptyCredentialStore>(),
         std::make_shared<EmptyAuthContext>());
-    auto provider = ai::providers::make_openai_codex_responses_provider(
+    auto provider = tests::make_openai_codex_responses_test_provider(
         "openai-codex", {model}, {}, harness.http, harness.ws, cache_config);
     auto registered = harness.models->set_provider(std::move(provider));
     REQUIRE(registered);

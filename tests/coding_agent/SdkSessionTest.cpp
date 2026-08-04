@@ -4,8 +4,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Context.hpp>
 #include <cch/ai/Message.hpp>
-#include "ai/providers/OpenAIChatClient.hpp"
-#include <cch/ai/providers/StreamTransport.hpp>
+#include "ai/providers/StreamEmit.hpp"
 #include <cch/coding_agent/Sdk.hpp>
 #include <cch/coding_agent/Skill.hpp>
 #include <cch/harness/ExecutionEnv.hpp>
@@ -20,6 +19,7 @@
 #include "support/ModelFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/UsageAssertions.hpp"
+#include "util/ExpectedMacros.hpp"
 #include "util/Json.hpp"
 
 #include "../../third_party/catch2/catch_test_macros.hpp"
@@ -757,97 +757,342 @@ private:
     std::string diagnostic_;
 };
 
-class PartialProtocolFailureTransport final : public ai::providers::StreamTransport {
+[[nodiscard]] ai::AssistantMessage scripted_terminal(
+    const ai::StreamChatRequest& request,
+    ai::AssistantStopReason reason,
+    std::string error_message) {
+    ai::AssistantMessage terminal;
+    terminal.provider = "scripted-fake";
+    terminal.api = "scripted-fake";
+    terminal.model = request.model.id;
+    terminal.stop_reason = reason;
+    terminal.error_message = std::move(error_message);
+    terminal.timestamp = 1718000000123;
+    return terminal;
+}
+
+[[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> emit_recovered_text(
+    const ai::StreamChatRequest& request,
+    ai::AssistantEventSink& sink) {
+    auto message = ai::assistant_text_message("recovered");
+    message.provider = "scripted-fake";
+    message.api = "scripted-fake";
+    message.model = request.model.id;
+    message.timestamp = 1718000000123;
+
+    auto partial = message;
+    partial.content.clear();
+    CCH_TRY_VOID(ai::providers::emit(sink, ai::AssistantStartEvent{.partial = partial}));
+    partial.content.emplace_back(ai::TextContent{.text = "", .text_signature = std::nullopt});
+    CCH_TRY_VOID(ai::providers::emit(sink, ai::TextStartEvent{.content_index = 0, .partial = partial}));
+    std::get<ai::TextContent>(partial.content[0]).text = "recovered";
+    CCH_TRY_VOID(ai::providers::emit(sink, ai::TextDeltaEvent{
+        .content_index = 0,
+        .delta = "recovered",
+        .partial = partial,
+    }));
+    CCH_TRY_VOID(ai::providers::emit(sink, ai::TextEndEvent{
+        .content_index = 0,
+        .content = "recovered",
+        .partial = partial,
+    }));
+    CCH_TRY_VOID(ai::providers::emit(sink, ai::AssistantDoneEvent{
+        .reason = message.stop_reason,
+        .message = message,
+    }));
+    co_return message;
+}
+
+/// Preflight gate mirroring the removed wire adapter's API-key check: without
+/// a key the stream rejects before the wrapped transport-side client runs.
+class ApiKeyGatedChatClient final : public ai::StreamingChatClient {
 public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::providers::StreamResponse>> async_stream(
-        const ai::providers::StreamRequest& request,
-        ai::providers::BodyChunkHandler on_body_chunk) override {
-        requests.push_back(request);
-        const std::string response_body =
-            "data: {\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"considering\"}}]}\n\n"
-            "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"useful text\"}}]}\n\n"
-            "data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,"
-            "\"id\":\"call_partial\",\"type\":\"function\",\"function\":{\"name\":\"echo\","
-            "\"arguments\":\"{\\\"value\\\":\\\"par\"}}]}}]}\n\n"
-            "data: {\"choices\":[}\n\n";
-        if (auto delivered = on_body_chunk(response_body); !delivered) {
-            co_return std::unexpected(delivered.error());
-        }
+    ApiKeyGatedChatClient(
+        std::unique_ptr<ai::StreamingChatClient> inner,
+        std::optional<std::string> api_key)
+        : inner_(std::move(inner)), api_key_(std::move(api_key)) {}
 
-        ai::providers::StreamResponse response;
-        response.head.status_code = 200;
-        response.body = response_body;
-        co_return response;
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        if (!api_key_) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Provider,
+                "missing API key"));
+        }
+        co_return co_await inner_->stream(request, std::move(sink));
     }
-
-    std::vector<ai::providers::StreamRequest> requests;
-};
-
-class UsageSnapshotsTransport final : public ai::providers::StreamTransport {
-public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::providers::StreamResponse>> async_stream(
-        const ai::providers::StreamRequest& request,
-        ai::providers::BodyChunkHandler on_body_chunk) override {
-        requests.push_back(request);
-        const std::string response_body =
-            "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"a\"},"
-            "\"usage\":{\"prompt_tokens\":20,\"completion_tokens\":5,"
-            "\"prompt_cache_hit_tokens\":7}}]}\n\n"
-            "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"b\"},"
-            "\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":40,"
-            "\"completion_tokens\":6,\"prompt_tokens_details\":{\"cached_tokens\":10,"
-            "\"cache_write_tokens\":4}}}\n\n"
-            "data: [DONE]\n\n";
-        if (auto delivered = on_body_chunk(response_body); !delivered) {
-            co_return std::unexpected(delivered.error());
-        }
-
-        ai::providers::StreamResponse response;
-        response.head.status_code = 200;
-        response.body = response_body;
-        co_return response;
-    }
-
-    std::vector<ai::providers::StreamRequest> requests;
-};
-
-class RecoveringFailureTransport final : public ai::providers::StreamTransport {
-public:
-    explicit RecoveringFailureTransport(util::Error first_failure, std::string partial_body = {})
-        : first_failure_(std::move(first_failure)), partial_body_(std::move(partial_body)) {}
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::providers::StreamResponse>> async_stream(
-        const ai::providers::StreamRequest& request,
-        ai::providers::BodyChunkHandler on_body_chunk) override {
-        requests.push_back(request);
-        if (requests.size() == 1) {
-            if (!partial_body_.empty()) {
-                if (auto delivered = on_body_chunk(partial_body_); !delivered) {
-                    co_return std::unexpected(delivered.error());
-                }
-            }
-            co_return std::unexpected(first_failure_);
-        }
-
-        const std::string response_body =
-            "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"recovered\"},"
-            "\"finish_reason\":\"stop\"}]}\n\n"
-            "data: [DONE]\n\n";
-        if (auto delivered = on_body_chunk(response_body); !delivered) {
-            co_return std::unexpected(delivered.error());
-        }
-
-        ai::providers::StreamResponse response;
-        response.head.status_code = 200;
-        response.body = response_body;
-        co_return response;
-    }
-
-    std::vector<ai::providers::StreamRequest> requests;
 
 private:
-    util::Error first_failure_;
-    std::string partial_body_;
+    std::unique_ptr<ai::StreamingChatClient> inner_;
+    std::optional<std::string> api_key_;
+};
+
+/// Stand-in for the transport seam behind the preflight gate: reaching it at
+/// all is the failure mode the gate test asserts against.
+class TransportStandInChatClient final : public ai::StreamingChatClient {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& /*request*/,
+        ai::AssistantEventSink /*sink*/) override {
+        ++request_count;
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Network,
+            "transport must not run"));
+    }
+
+    int request_count{0};
+};
+
+/// First call starts the assistant stream and then fails with a scripted
+/// network-class terminal whose message matches the transport detail the
+/// removed wire adapter surfaced; later calls recover with plain text.
+class RecoveringFailureChatClient final : public ai::StreamingChatClient {
+public:
+    explicit RecoveringFailureChatClient(std::string failure_message)
+        : failure_message_(std::move(failure_message)) {}
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        ++request_count;
+        if (request_count > 1) {
+            co_return co_await emit_recovered_text(request, sink);
+        }
+        auto terminal = scripted_terminal(
+            request, ai::AssistantStopReason::Error, failure_message_);
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::AssistantStartEvent{.partial = terminal}));
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::AssistantErrorEvent{
+            .reason = terminal.stop_reason,
+            .error = terminal,
+            .failure = util::make_error(util::ErrorCode::Network, failure_message_),
+        }));
+        co_return terminal;
+    }
+
+    int request_count{0};
+
+private:
+    std::string failure_message_;
+};
+
+/// First call streams a partial tool call and then fails with a
+/// cancellation-class terminal carrying the accumulated call; no tool-call
+/// end event is emitted because the stream broke mid-call. Later calls
+/// recover with plain text.
+class PartialToolCallAbortChatClient final : public ai::StreamingChatClient {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        ++request_count;
+        if (request_count > 1) {
+            co_return co_await emit_recovered_text(request, sink);
+        }
+        auto partial = scripted_terminal(
+            request, ai::AssistantStopReason::Aborted, "transport operation was cancelled");
+        partial.content.clear();
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::AssistantStartEvent{.partial = partial}));
+        partial.content.emplace_back(ai::ToolCallContent{
+            .id = "call_cancelled",
+            .name = "echo",
+            .arguments = util::JsonValue{util::JsonValue::object_t{}},
+            .raw_arguments = {},
+            .thought_signature = std::nullopt,
+            .arguments_valid = true,
+            .argument_error = std::nullopt,
+        });
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::ToolCallStartEvent{
+            .content_index = 0,
+            .partial = partial,
+        }));
+        auto& streaming_call = std::get<ai::ToolCallContent>(partial.content[0]);
+        streaming_call.raw_arguments = R"({"value":"queued"})";
+        util::JsonValue::object_t arguments_object;
+        arguments_object.emplace("value", util::JsonValue{"queued"});
+        streaming_call.arguments = util::JsonValue{std::move(arguments_object)};
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::ToolCallDeltaEvent{
+            .content_index = 0,
+            .delta = streaming_call.raw_arguments,
+            .partial = partial,
+        }));
+        auto terminal = partial;
+        terminal.stop_reason = ai::AssistantStopReason::Aborted;
+        terminal.error_message = "transport operation was cancelled";
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::AssistantErrorEvent{
+            .reason = terminal.stop_reason,
+            .error = terminal,
+            .failure = util::make_error(
+                util::ErrorCode::Cancelled,
+                "provider request cancelled",
+                "transport operation was cancelled"),
+        }));
+        co_return terminal;
+    }
+
+    int request_count{0};
+};
+
+/// Streams one thinking block, one text block, and a partial tool call whose
+/// arguments stay malformed, then fails with a terminal error carrying all
+/// three accumulated content items.
+class PartialContentFailureChatClient final : public ai::StreamingChatClient {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        ++request_count;
+        auto partial = scripted_terminal(
+            request, ai::AssistantStopReason::Error, "provider stream ended mid-chunk");
+        partial.content.clear();
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::AssistantStartEvent{.partial = partial}));
+
+        partial.content.emplace_back(ai::ThinkingContent{
+            .thinking = "",
+            .thinking_signature = std::nullopt,
+        });
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::ThinkingStartEvent{
+            .content_index = 0,
+            .partial = partial,
+        }));
+        partial.content[0] = ai::ThinkingContent{
+            .thinking = "considering",
+            .thinking_signature = "reasoning_content",
+        };
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::ThinkingDeltaEvent{
+            .content_index = 0,
+            .delta = "considering",
+            .partial = partial,
+        }));
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::ThinkingEndEvent{
+            .content_index = 0,
+            .content = "considering",
+            .partial = partial,
+        }));
+
+        partial.content.emplace_back(ai::TextContent{
+            .text = "",
+            .text_signature = std::nullopt,
+        });
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::TextStartEvent{
+            .content_index = 1,
+            .partial = partial,
+        }));
+        std::get<ai::TextContent>(partial.content[1]).text = "useful text";
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::TextDeltaEvent{
+            .content_index = 1,
+            .delta = "useful text",
+            .partial = partial,
+        }));
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::TextEndEvent{
+            .content_index = 1,
+            .content = "useful text",
+            .partial = partial,
+        }));
+
+        partial.content.emplace_back(ai::ToolCallContent{
+            .id = "call_partial",
+            .name = "echo",
+            .arguments = std::nullopt,
+            .raw_arguments = {},
+            .thought_signature = std::nullopt,
+            .arguments_valid = false,
+            .argument_error = "arguments are malformed JSON",
+        });
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::ToolCallStartEvent{
+            .content_index = 2,
+            .partial = partial,
+        }));
+        auto& streaming_call = std::get<ai::ToolCallContent>(partial.content[2]);
+        streaming_call.raw_arguments = R"({"value":"par)";
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::ToolCallDeltaEvent{
+            .content_index = 2,
+            .delta = streaming_call.raw_arguments,
+            .partial = partial,
+        }));
+        auto terminal = partial;
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::AssistantErrorEvent{
+            .reason = terminal.stop_reason,
+            .error = terminal,
+            .failure = util::make_error(
+                util::ErrorCode::Stream,
+                "provider stream ended mid-chunk"),
+        }));
+        co_return terminal;
+    }
+
+    int request_count{0};
+};
+
+/// Emits two text deltas that each carry the normalized usage snapshot the
+/// removed wire adapter derived from the chunk-level usage fields.
+class UsageSnapshotsChatClient final : public ai::StreamingChatClient {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        ++request_count;
+        auto message = ai::assistant_text_message("ab");
+        message.provider = "scripted-fake";
+        message.api = "scripted-fake";
+        message.model = request.model.id;
+        message.timestamp = 1718000000123;
+
+        const ai::Usage first_snapshot{
+            .input = 13,
+            .output = 5,
+            .cache_read = 7,
+            .cache_write = 0,
+            .total_tokens = 25,
+        };
+        const ai::Usage latest_snapshot{
+            .input = 26,
+            .output = 6,
+            .cache_read = 10,
+            .cache_write = 4,
+            .total_tokens = 46,
+        };
+
+        auto partial = message;
+        partial.content.clear();
+        partial.usage = ai::Usage{};
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::AssistantStartEvent{.partial = partial}));
+        partial.content.emplace_back(ai::TextContent{
+            .text = "",
+            .text_signature = std::nullopt,
+        });
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::TextStartEvent{
+            .content_index = 0,
+            .partial = partial,
+        }));
+        std::get<ai::TextContent>(partial.content[0]).text = "a";
+        partial.usage = first_snapshot;
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::TextDeltaEvent{
+            .content_index = 0,
+            .delta = "a",
+            .partial = partial,
+        }));
+        std::get<ai::TextContent>(partial.content[0]).text = "ab";
+        partial.usage = latest_snapshot;
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::TextDeltaEvent{
+            .content_index = 0,
+            .delta = "b",
+            .partial = partial,
+        }));
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::TextEndEvent{
+            .content_index = 0,
+            .content = "ab",
+            .partial = partial,
+        }));
+        message.usage = latest_snapshot;
+        CCH_TRY_VOID(ai::providers::emit(sink, ai::AssistantDoneEvent{
+            .reason = message.stop_reason,
+            .message = message,
+        }));
+        co_return message;
+    }
+
+    int request_count{0};
 };
 
 void check_aborted_terminal(const ai::AssistantMessage& terminal) {
@@ -1459,20 +1704,15 @@ TEST_CASE(
     "SDK persists a terminal error when provider setup rejects before transport",
     "[sdk][incremental-persistence][provider-preflight-rejection][issue14]") {
     TestPaths paths;
-    auto transport = std::make_shared<RecoveringFailureTransport>(util::make_error(
-        util::ErrorCode::Network,
-        "transport must not run"));
-
-    ai::providers::OpenAIStreamConfig provider;
+    auto inner = std::make_unique<TransportStandInChatClient>();
+    auto* inner_ptr = inner.get();
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.model = cch::tests::sdk_request_model(
-        "openai-compatible", "gpt-test", "https://api.example/v1");
-    opts.models = cch::tests::models_from_stream(cch::tests::openai_stream(
-        transport,
-        std::move(provider)));
+    opts.model = cch::tests::sdk_request_model("fake", "fake-model");
+    opts.models = cch::tests::models_from_stream(
+        std::make_unique<ApiKeyGatedChatClient>(std::move(inner), std::nullopt));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -1488,7 +1728,7 @@ TEST_CASE(
 
     auto failed = session->prompt_blocking("hello");
     REQUIRE(failed.has_value());
-    CHECK(transport->requests.empty());
+    CHECK(inner_ptr->request_count == 0);
     CHECK(session->is_open());
     CHECK(session->message_count() == 2);
 
@@ -1522,21 +1762,17 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "SDK persists the latest normalized OpenAI usage snapshot",
+    "SDK persists the latest normalized provider usage snapshot",
     "[sdk][live-state][incremental-persistence][issue20]") {
     TestPaths paths;
-    auto transport = std::make_shared<UsageSnapshotsTransport>();
-
-    ai::providers::OpenAIStreamConfig provider;
+    auto client = std::make_unique<UsageSnapshotsChatClient>();
+    auto* client_ptr = client.get();
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.model = cch::tests::sdk_request_model(
-        "openai-compatible", "gpt-test", "https://api.example/v1");
-    opts.models = cch::tests::models_from_stream(cch::tests::openai_stream(
-        transport,
-        std::move(provider), "sk-test-api-key"));
+    opts.model = cch::tests::sdk_request_model("fake", "fake-model");
+    opts.models = cch::tests::models_from_stream(std::move(client));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -1567,7 +1803,7 @@ TEST_CASE(
 
     auto prompted = session->prompt_blocking("hello");
     REQUIRE(prompted.has_value());
-    REQUIRE(transport->requests.size() == 1);
+    REQUIRE(client_ptr->request_count == 1);
 
     const ai::Usage first_snapshot{
         .input = 13,
@@ -1614,21 +1850,17 @@ TEST_CASE(
     "SDK completes an accepted network failure as a durable error turn and remains reusable",
     "[sdk][live-state][incremental-persistence][issue11]") {
     TestPaths paths;
-    auto transport = std::make_shared<RecoveringFailureTransport>(util::make_error(
-        util::ErrorCode::Network,
-        "provider connection failed",
-        "could not resolve api.example: Name or service not known"));
-
-    ai::providers::OpenAIStreamConfig provider;
+    // The scripted terminal message matches the transport detail the removed
+    // wire adapter surfaced for this network-class failure.
+    auto client = std::make_unique<RecoveringFailureChatClient>(
+        "could not resolve api.example: Name or service not known");
+    auto* client_ptr = client.get();
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.model = cch::tests::sdk_request_model(
-        "openai-compatible", "gpt-test", "https://api.example/v1");
-    opts.models = cch::tests::models_from_stream(cch::tests::openai_stream(
-        transport,
-        std::move(provider), "sk-test-api-key"));
+    opts.model = cch::tests::sdk_request_model("fake", "fake-model");
+    opts.models = cch::tests::models_from_stream(std::move(client));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -1656,7 +1888,7 @@ TEST_CASE(
 
     auto error_turn = session->prompt_blocking("hello");
     REQUIRE(error_turn.has_value());
-    CHECK(transport->requests.size() == 1);
+    CHECK(client_ptr->request_count == 1);
     CHECK(terminal_was_live_before_message_end);
     CHECK(session->is_open());
     CHECK(session->message_count() == 2);
@@ -1707,7 +1939,7 @@ TEST_CASE(
     events.clear();
     auto recovered_turn = session->prompt_blocking("try again");
     REQUIRE(recovered_turn.has_value());
-    CHECK(transport->requests.size() == 2);
+    CHECK(client_ptr->request_count == 2);
     CHECK(session->message_count() == 4);
     REQUIRE(session->last_assistant_text().has_value());
     CHECK(*session->last_assistant_text() == "recovered");
@@ -1828,28 +2060,15 @@ TEST_CASE(
     "SDK completes a cancellation-class failure as a durable aborted turn and remains reusable",
     "[sdk][live-state][incremental-persistence][issue13]") {
     TestPaths paths;
-    const std::string partial_tool_call =
-        "data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,"
-        "\"id\":\"call_cancelled\",\"type\":\"function\",\"function\":{\"name\":\"echo\","
-        "\"arguments\":\"{\\\"value\\\":\\\"queued\\\"}\"}}]}}]}\n\n";
-    auto transport = std::make_shared<RecoveringFailureTransport>(
-        util::make_error(
-            util::ErrorCode::Cancelled,
-            "provider request cancelled",
-            "transport operation was cancelled"),
-        partial_tool_call);
+    auto client = std::make_unique<PartialToolCallAbortChatClient>();
+    auto* client_ptr = client.get();
     auto tool_execution_count = std::make_shared<std::size_t>(0);
-
-    ai::providers::OpenAIStreamConfig provider;
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.model = cch::tests::sdk_request_model(
-        "openai-compatible", "gpt-test", "https://api.example/v1");
-    opts.models = cch::tests::models_from_stream(cch::tests::openai_stream(
-        transport,
-        std::move(provider), "sk-test-api-key"));
+    opts.model = cch::tests::sdk_request_model("fake", "fake-model");
+    opts.models = cch::tests::models_from_stream(std::move(client));
     opts.custom_tools.push_back(std::make_unique<FakeEchoTool>(tool_execution_count));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
@@ -1878,7 +2097,7 @@ TEST_CASE(
 
     auto aborted_turn = session->prompt_blocking("hello");
     REQUIRE(aborted_turn.has_value());
-    CHECK(transport->requests.size() == 1);
+    CHECK(client_ptr->request_count == 1);
     CHECK(*tool_execution_count == 0);
     CHECK(terminal_was_live_before_message_end);
     CHECK(session->is_open());
@@ -1933,7 +2152,7 @@ TEST_CASE(
     events.clear();
     auto recovered_turn = session->prompt_blocking("try again");
     REQUIRE(recovered_turn.has_value());
-    CHECK(transport->requests.size() == 2);
+    CHECK(client_ptr->request_count == 2);
     CHECK(*tool_execution_count == 0);
     CHECK(session->message_count() == 4);
     REQUIRE(session->last_assistant_text().has_value());
@@ -2134,22 +2353,18 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "SDK preserves a partial protocol failure across live state durable history and resume",
+    "SDK preserves a partial provider stream failure across live state durable history and resume",
     "[sdk][live-state][incremental-persistence][issue12]") {
     TestPaths paths;
-    auto transport = std::make_shared<PartialProtocolFailureTransport>();
+    auto client = std::make_unique<PartialContentFailureChatClient>();
+    auto* client_ptr = client.get();
     auto tool_execution_count = std::make_shared<std::size_t>(0);
-
-    ai::providers::OpenAIStreamConfig provider;
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.model = cch::tests::sdk_request_model(
-        "openai-compatible", "gpt-test", "https://api.example/v1");
-    opts.models = cch::tests::models_from_stream(cch::tests::openai_stream(
-        transport,
-        std::move(provider), "sk-test-api-key"));
+    opts.model = cch::tests::sdk_request_model("fake", "fake-model");
+    opts.models = cch::tests::models_from_stream(std::move(client));
     opts.custom_tools.push_back(std::make_unique<FakeEchoTool>(tool_execution_count));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
@@ -2178,7 +2393,7 @@ TEST_CASE(
 
     auto prompted = session->prompt_blocking("hello");
     REQUIRE(prompted.has_value());
-    CHECK(transport->requests.size() == 1);
+    CHECK(client_ptr->request_count == 1);
     CHECK(*tool_execution_count == 0);
     CHECK(terminal_was_live_before_message_end);
     CHECK(session->is_open());

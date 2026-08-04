@@ -1,7 +1,7 @@
 #include <cch/ai/Models.hpp>
 #include <cch/ai/Provider.hpp>
 #include <cch/util/Error.hpp>
-#include "ai/providers/OpenAIProvider.hpp"
+#include "ai/providers/EnvApiKeyAuth.hpp"
 #include "support/ModelFixture.hpp"
 #include "util/ExpectedMacros.hpp"
 
@@ -792,15 +792,13 @@ TEST_CASE(
     CHECK(provider->seen_options.front().session_id == std::nullopt);
 }
 
-TEST_CASE("OpenAI Provider labels explicit credentials as stored credentials", "[ai][models][auth][issue338]") {
+TEST_CASE("Env-chain API key auth labels explicit credentials as stored credentials", "[ai][models][auth][issue338]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
-    REQUIRE(models.set_provider(ai::providers::make_openai_compatible_provider(
+    REQUIRE(models.set_provider(std::make_shared<RecordingProvider>(
         "provider",
-        {},
-        {"API_KEY"},
-        nullptr)));
+        ai::providers::make_env_api_key_auth("API key", {"API_KEY"}))));
 
     auto resolved = run_awaitable(models.get_auth("provider", "explicit-key"));
 

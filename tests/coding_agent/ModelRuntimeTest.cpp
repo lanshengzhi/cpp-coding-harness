@@ -1,7 +1,6 @@
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/AuthStorage.hpp>
-#include "ai/providers/OpenAIProvider.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PiFixture.hpp"

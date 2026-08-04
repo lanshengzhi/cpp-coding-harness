@@ -2,7 +2,6 @@
 
 #include <cch/ai/Models.hpp>
 #include <cch/ai/Provider.hpp>
-#include "ai/providers/OpenAIChatClient.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "util/ExpectedMacros.hpp"
 
@@ -100,44 +99,7 @@ private:
     ai::ProviderAuth auth_;
 };
 
-class OpenAIClientStreamAdapter final : public ai::StreamingChatClient {
-public:
-    OpenAIClientStreamAdapter(
-        std::shared_ptr<ai::providers::StreamTransport> transport,
-        ai::providers::OpenAIStreamConfig config,
-        std::optional<std::string> api_key)
-        : client_(std::move(transport), std::move(config)),
-          api_key_(std::move(api_key)) {}
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
-        ai::AssistantEventSink sink) override {
-        if (!api_key_) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Provider,
-                "missing API key"));
-        }
-        CCH_TRY(message, co_await client_.stream(
-            request,
-            ai::ModelAuth{.api_key = *api_key_},
-            std::move(sink)));
-        co_return message;
-    }
-
-private:
-    ai::providers::StreamingOpenAIChatClient client_;
-    std::optional<std::string> api_key_;
-};
-
 } // namespace detail
-
-inline std::unique_ptr<ai::StreamingChatClient> openai_stream(
-    std::shared_ptr<ai::providers::StreamTransport> transport,
-    ai::providers::OpenAIStreamConfig config,
-    std::optional<std::string> api_key = std::nullopt) {
-    return std::make_unique<detail::OpenAIClientStreamAdapter>(
-        std::move(transport), std::move(config), std::move(api_key));
-}
 
 inline std::shared_ptr<ai::Models> models_from_stream(
     std::unique_ptr<ai::StreamingChatClient> stream,
@@ -150,7 +112,6 @@ inline std::shared_ptr<ai::Models> models_from_stream(
         std::move(provider_id),
         "sdk-host",
         "fake",
-        "openai-compatible",
     };
     for (const auto& id : provider_ids) {
         if (models->provider(id)) {
@@ -169,9 +130,8 @@ struct ModelsSessionOptions : coding_agent::CreateAgentSessionOptions {
     std::shared_ptr<ai::Models> models;
 };
 
-/// Transitional request Model for SDK session tests that no longer set
-/// `provider_config`: the same complete, credential-free shape the removed
-/// branch produced (openai-completions, 128k context, 16k max tokens).
+/// Request Model for SDK session tests that no longer set `provider_config`:
+/// a complete, credential-free shape carried through the scripted fake seam.
 inline ai::Model sdk_request_model(
     std::string provider,
     std::string model_id,
@@ -179,7 +139,7 @@ inline ai::Model sdk_request_model(
     ai::Model model;
     model.id = std::move(model_id);
     model.name = model.id;
-    model.api = "openai-completions";
+    model.api = "scripted-fake";
     model.provider = std::move(provider);
     model.base_url = base_url.value_or("");
     model.reasoning = false;

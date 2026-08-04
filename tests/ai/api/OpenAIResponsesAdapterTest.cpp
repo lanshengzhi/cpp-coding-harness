@@ -1,7 +1,7 @@
 #include <cch/ai/Models.hpp>
 #include <cch/ai/Provider.hpp>
 #include <cch/ai/providers/StreamTransport.hpp>
-#include "ai/providers/OpenAIProvider.hpp"
+#include "support/AdapterProviderFixture.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/PiFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"
@@ -68,7 +68,7 @@ struct RunResult {
     auto models = std::make_unique<ai::Models>(
         std::make_shared<EmptyCredentialStore>(),
         std::make_shared<EmptyAuthContext>());
-    auto provider = ai::providers::make_openai_responses_provider(
+    auto provider = tests::make_openai_responses_test_provider(
         "deepseek", {model}, {}, transport);
     if (auto registered = models->set_provider(std::move(provider)); !registered) {
         return nullptr;

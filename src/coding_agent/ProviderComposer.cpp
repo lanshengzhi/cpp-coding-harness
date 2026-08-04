@@ -5,7 +5,7 @@
 #include "ai/auth/KimiCodingOAuth.hpp"
 #include "ai/auth/OpenAICodexOAuth.hpp"
 #include "ai/providers/CodexCatalog.hpp"
-#include "ai/providers/OpenAIProvider.hpp"
+#include "ai/providers/EnvApiKeyAuth.hpp"
 #include "ai/providers/KimiCatalog.hpp"
 #include "util/ExpectedMacros.hpp"
 

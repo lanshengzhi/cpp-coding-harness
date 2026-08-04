@@ -29,13 +29,4 @@ namespace cch::tests {
     };
 }
 
-[[nodiscard]] inline ai::Model make_openai_model(
-    std::string id,
-    std::string base_url = "https://api.openai.com") {
-    auto model = make_model(std::move(id), "openai-compatible", "openai-completions");
-    model.base_url = std::move(base_url);
-    model.input = {ai::ModelInput::Text, ai::ModelInput::Image};
-    return model;
-}
-
 } // namespace cch::tests

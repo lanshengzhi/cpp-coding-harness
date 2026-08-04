@@ -97,8 +97,6 @@ TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issu
     CHECK_FALSE(block_mentions(ai_sources, "src/ai/ProviderRegistry.cpp"));
     CHECK(block_mentions(ai_sources, "src/ai/providers/BoostBeastStreamTransport.cpp"));
     CHECK(block_mentions(ai_sources, "src/ai/providers/FakeProvider.cpp"));
-    CHECK(block_mentions(ai_sources, "src/ai/providers/OpenAIChatClient.cpp"));
-    CHECK(block_mentions(ai_sources, "src/ai/providers/OpenAIProvider.cpp"));
     CHECK(block_mentions(ai_sources, "src/ai/providers/SseParser.cpp"));
 }
 

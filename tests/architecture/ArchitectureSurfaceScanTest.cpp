@@ -328,18 +328,27 @@ TEST_CASE("provider DTOs stay out of the public contract surface", "[architectur
         }
     }
 
+    // The Deferred openai-completions surface stays absent from the build and
+    // the source tree (ADR 0033: no registry placeholder, no shim).
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "include" / "cch" / "ai" / "providers" / "OpenAICompletionsCompat.hpp"));
     CHECK_FALSE(std::filesystem::exists(
         source_root / "include" / "cch" / "ai" / "providers" / "OpenAIChatClient.hpp"));
-    const auto openai_header = read_text(
-        source_root / "src" / "ai" / "providers" / "OpenAIChatClient.hpp");
-    CHECK(openai_header.find("BoostBeastStreamTransport.hpp") == std::string::npos);
-    CHECK(openai_header.find("StreamTransport.hpp") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "ai" / "providers" / "OpenAIChatClient.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "ai" / "providers" / "OpenAIChatClient.cpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "ai" / "providers" / "OpenAIProvider.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "ai" / "providers" / "OpenAIProvider.cpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "ai" / "glaze" / "ProviderDtos.hpp"));
 
     const auto providers_dir = source_root / "include" / "cch" / "ai" / "providers";
     const std::vector<std::string> allowed_provider_headers = {
         "StreamTransport.hpp",
         "WebSocketTransport.hpp",
-        "OpenAICompletionsCompat.hpp",
     };
     for (const auto& entry : std::filesystem::directory_iterator(providers_dir)) {
         if (entry.path().extension() != ".hpp") {
@@ -402,9 +411,6 @@ TEST_CASE(
         source_root / "include" / "cch" / "ai" / "ProviderRegistry.hpp"));
     const auto provider_header = read_text(source_root / "include" / "cch" / "ai" / "Provider.hpp");
     CHECK(provider_header.find("const Model& model") != std::string::npos);
-    const auto openai_header = read_text(
-        source_root / "src" / "ai" / "providers" / "OpenAIChatClient.hpp");
-    CHECK(openai_header.find("ai::Model model") == std::string::npos);
     const auto agent_context_header = read_text(source_root / "include" / "cch" / "agent" / "AgentContext.hpp");
     CHECK(agent_context_header.find("struct AgentState") != std::string::npos);
     CHECK(agent_context_header.find("ai::Model model{};") != std::string::npos);
@@ -412,8 +418,6 @@ TEST_CASE(
     // The third string slot and the three-way fallback chain stay gone.
     const auto context_header = read_text(source_root / "include" / "cch" / "ai" / "Context.hpp");
     CHECK(context_header.find("model;") == std::string::npos);
-    const auto openai_source = read_text(source_root / "src" / "ai" / "providers" / "OpenAIChatClient.cpp");
-    CHECK(openai_source.find("context.model") == std::string::npos);
 }
 
 TEST_CASE("coding_agent loaders stay out of the public contract surface", "[architecture][u4]") {
