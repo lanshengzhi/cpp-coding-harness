@@ -192,6 +192,47 @@ void migrate_settings(JsonObject& settings) {
     return settings;
 }
 
+/// Parse pi's nested `retry` object (`{enabled, maxRetries, baseDelayMs}`).
+/// Each field is optional; unknown or mistyped fields are ignored (a mistyped
+/// field falls back to the pi default at resolution, mirroring pi's
+/// `settings.retry?.enabled ?? true` reads).
+[[nodiscard]] util::Expected<UserRetrySettings> parse_retry_settings(
+    const util::JsonValue& value) {
+    const auto* object = value.get_if<JsonObject>();
+    if (object == nullptr) {
+        return std::unexpected(settings_file_error(
+            "invalid retry",
+            {},
+            "retry must be an object"));
+    }
+    UserRetrySettings settings;
+    const auto enabled = object->find("enabled");
+    if (enabled != object->end()) {
+        if (const auto* parsed = enabled->second.get_if<bool>()) {
+            settings.enabled = *parsed;
+        }
+    }
+    const auto max_retries = object->find("maxRetries");
+    if (max_retries != object->end()) {
+        if (const auto* parsed = max_retries->second.get_if<double>()) {
+            if (*parsed >= 0) {
+                settings.max_retries =
+                    static_cast<std::uint64_t>(*parsed);
+            }
+        }
+    }
+    const auto base_delay = object->find("baseDelayMs");
+    if (base_delay != object->end()) {
+        if (const auto* parsed = base_delay->second.get_if<double>()) {
+            if (*parsed >= 0) {
+                settings.base_delay_ms =
+                    static_cast<std::uint64_t>(*parsed);
+            }
+        }
+    }
+    return settings;
+}
+
 /// Parse one scope into `UserSettings`. `allow_default_project_trust` is true
 /// only for the global scope; a project-scope `defaultProjectTrust` is ignored
 /// (global-only). Unknown fields are ignored for forward compatibility and
@@ -256,6 +297,13 @@ void migrate_settings(JsonObject& settings) {
     if (const auto found = object.find("compaction"); found != object.end()) {
         if (auto parsed = parse_compaction_settings(found->second); parsed) {
             settings.compaction = std::move(*parsed);
+        } else {
+            return std::unexpected(parsed.error());
+        }
+    }
+    if (const auto found = object.find("retry"); found != object.end()) {
+        if (auto parsed = parse_retry_settings(found->second); parsed) {
+            settings.retry = std::move(*parsed);
         } else {
             return std::unexpected(parsed.error());
         }
@@ -628,6 +676,20 @@ struct SettingsManager::Impl {
                     project.compaction->keep_recent_tokens;
             }
             merged.compaction = merged_compaction;
+        }
+        if (project.retry) {
+            // Per-field deep merge for the nested `retry` object.
+            auto merged_retry = merged.retry.value_or(UserRetrySettings{});
+            if (project.retry->enabled) {
+                merged_retry.enabled = project.retry->enabled;
+            }
+            if (project.retry->max_retries) {
+                merged_retry.max_retries = project.retry->max_retries;
+            }
+            if (project.retry->base_delay_ms) {
+                merged_retry.base_delay_ms = project.retry->base_delay_ms;
+            }
+            merged.retry = merged_retry;
         }
         return merged;
     }

@@ -138,6 +138,7 @@ add_library(cch_ai
     src/ai/providers/KimiProvider.cpp
     src/ai/providers/RetryPolicy.cpp
     src/ai/providers/SseParser.cpp
+    src/ai/utils/RetryClassifier.cpp
 )
 cch_target_defaults(cch_ai)
 target_link_libraries(cch_ai
@@ -329,6 +330,7 @@ if(CCH_BUILD_TESTS)
         tests/ai/ModelTest.cpp
         tests/ai/ModelsTest.cpp
         tests/ai/ProviderPolicyTest.cpp
+        tests/ai/RetryClassifierTest.cpp
         tests/ai/SimpleOptionsTest.cpp
         tests/ai/ToolContractTest.cpp
         tests/ai/UsageTest.cpp
@@ -383,6 +385,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/SdkSessionTest.cpp
         tests/coding_agent/AgentSessionCompactionTest.cpp
         tests/coding_agent/ReAuthGuidanceTest.cpp
+        tests/coding_agent/TurnAutoRetryTest.cpp
         tests/coding_agent/AgentSessionSnapshotTest.cpp
         tests/coding_agent/SkillIntegrationTest.cpp
         tests/coding_agent/runtime/JsonEventPrinterTest.cpp

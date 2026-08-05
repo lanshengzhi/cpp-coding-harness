@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/agent/Agent.hpp>
+#include <cch/coding_agent/AgentSessionEvent.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
 #include <cch/coding_agent/Sdk.hpp>
@@ -40,6 +41,16 @@ struct AgentSessionRuntimeConfig {
     /// `settingsManager.getDefaultThinkingLevel() ?? DEFAULT_THINKING_LEVEL`);
     /// a resumed `thinking_level_change` entry wins over it (T04).
     std::optional<std::string> default_thinking_level{std::nullopt};
+};
+
+/// Resolved turn auto-retry settings (pi `settings-manager.ts`
+/// `getRetrySettings`): `settings.retry` fields with pi's defaults applied
+/// (`enabled: true`, `maxRetries: 3`, `baseDelayMs: 2000`, exponential
+/// backoff `baseDelayMs * 2^(attempt-1)`).
+struct RetrySettings {
+    bool enabled{true};
+    std::size_t max_retries{3};
+    std::size_t base_delay_ms{2000};
 };
 
 /// Internal runtime behind AgentSession. Composes the stateful Agent with
@@ -91,6 +102,14 @@ public:
     /// Subscribe through the authoritative stateful Agent weak-observer path.
     [[nodiscard]] util::Expected<agent::AgentEventSubscription> subscribe(
         agent::AgentEventSink sink);
+
+    /// Subscribe a weak observer for session-assembly events (pi
+    /// `AgentSessionEvent`): currently the turn auto-retry
+    /// `auto_retry_start`/`auto_retry_end` events. Observer failures are
+    /// diagnostic observations and deactivate the observer without vetoing
+    /// retry progress (ADR 0017).
+    [[nodiscard]] util::Expected<SessionEventSubscription> subscribe_session(
+        AgentSessionEventSink sink);
 
     // ── Input queues ───────────────────────────────────────────────────────
 
@@ -253,6 +272,26 @@ private:
     /// Resolve the effective compaction settings from the merged settings
     /// scope with pi's `DEFAULT_COMPACTION_SETTINGS` applied to missing fields.
     [[nodiscard]] harness::session::CompactionSettings effective_compaction_settings() const;
+    /// Resolve the effective retry settings from the merged settings
+    /// scope with pi's defaults applied to missing fields.
+    [[nodiscard]] RetrySettings effective_retry_settings() const;
+    /// Whether the failed assistant message is retryable by the turn
+    /// auto-retry policy (pi `_isRetryableError`): context overflow is never
+    /// retryable (compaction owns it, T10), otherwise pi's
+    /// `isRetryableAssistantError` classification applies.
+    [[nodiscard]] bool is_retryable_error(
+        const ai::AssistantMessage& message) const;
+    /// pi `_prepareRetry`: increment the attempt budget, emit
+    /// `auto_retry_start`, remove the failed assistant message from live
+    /// state (it stays in session history), and wait an abort-interruptible
+    /// exponential-backoff sleep. Returns whether the caller should continue
+    /// the agent; an aborted sleep emits `auto_retry_end` with pi's
+    /// "Retry cancelled" and returns false (exactly one terminal outcome).
+    [[nodiscard]] boost::asio::awaitable<bool> prepare_retry(
+        const ai::AssistantMessage& message,
+        std::stop_token stop_token);
+    /// Deliver one session-assembly event to every registered observer.
+    void emit_session_event(const AgentSessionEvent& event);
     /// Timestamp of the latest `compaction` entry on the active branch, or
     /// nullopt when none exists (pi `getLatestCompactionEntry`).
     [[nodiscard]] std::optional<ai::TimestampMs> latest_compaction_timestamp() const;
@@ -282,6 +321,30 @@ private:
     /// assistant message completes in pi); a second overflow while true fails
     /// with pi's verbatim recovery message.
     bool overflow_recovery_attempted_{false};
+    /// pi `_retryAttempt`: the in-flight turn auto-retry attempt count, reset
+    /// by a non-error assistant message completion, by the final-failure
+    /// emission, or by an aborted backoff.
+    int retry_attempt_{0};
+    /// Weak session-event observer registry (pi `AgentSessionEvent`
+    /// listeners). Failing observers are deactivated; the shared anchor keeps
+    /// subscription handles safe after the runtime is destroyed.
+    struct SessionSubscriptionAnchor {
+        AgentSessionRuntime* runtime{nullptr};
+    };
+    /// The session-event subscription handle unregisters its observer from
+    /// the registry below.
+    friend class coding_agent::SessionEventSubscription;
+    std::shared_ptr<SessionSubscriptionAnchor> session_event_anchor_{
+        std::make_shared<SessionSubscriptionAnchor>(this)};
+    struct SessionSubscriber {
+        std::size_t id{0};
+        AgentSessionEventSink sink;
+        bool registered{true};
+        bool delivery_enabled{true};
+    };
+    std::vector<std::shared_ptr<SessionSubscriber>> session_event_observers_;
+    /// Next session-event subscriber id.
+    std::size_t next_session_subscriber_id_{1};
     std::vector<std::shared_ptr<PendingUserBashCommit>> pending_user_bash_;
     std::optional<std::stop_source> active_stop_source_;
     std::optional<std::stop_source> active_user_bash_stop_source_;

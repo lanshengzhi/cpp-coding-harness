@@ -24,6 +24,18 @@ struct UserCompactionSettings {
     std::optional<std::uint64_t> keep_recent_tokens{std::nullopt};
 };
 
+/// pi `retry` — nested turn auto-retry settings (pi `RetrySettings`). Every
+/// field is optional: a missing field falls back to pi's defaults
+/// (`enabled: true`, `maxRetries: 3`, `baseDelayMs: 2000`, exponential
+/// backoff `baseDelayMs * 2^(attempt-1)`) when the session-assembly policy
+/// resolves them. Field names are pi's wire names (`maxRetries`/`baseDelayMs`)
+/// in camelCase.
+struct UserRetrySettings {
+    std::optional<bool> enabled{std::nullopt};
+    std::optional<std::uint64_t> max_retries{std::nullopt};
+    std::optional<std::uint64_t> base_delay_ms{std::nullopt};
+};
+
 /// User settings following pi's two-scope `settings.json` contract (ADR 0031).
 /// All fields are optional — CLI flags and built-in defaults fill any gaps.
 /// Settings never carry secrets or secret references; `apiKey` appears only in
@@ -57,6 +69,9 @@ struct UserSettings {
     /// pi `compaction` — nested automatic-compaction settings consumed by the
     /// session-assembly trigger policy.
     std::optional<UserCompactionSettings> compaction{std::nullopt};
+    /// pi `retry` — nested turn auto-retry settings consumed by the
+    /// session-assembly retry policy.
+    std::optional<UserRetrySettings> retry{std::nullopt};
 };
 
 /// One `settings.json` scope (pi `SettingsScope`).

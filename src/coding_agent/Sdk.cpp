@@ -407,6 +407,21 @@ util::Expected<EventSubscription> AgentSession::subscribe(agent::AgentEventSink 
     return sub;
 }
 
+util::Expected<SessionEventSubscription> AgentSession::subscribe_session(
+    AgentSessionEventSink sink) {
+    if (!impl_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    if (!sink) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session event sink is empty"));
+    }
+    return impl_->runtime->subscribe_session(std::move(sink));
+}
+
 AgentSessionSnapshot AgentSession::snapshot() const {
     if (!impl_ || !impl_->runtime) {
         return {};

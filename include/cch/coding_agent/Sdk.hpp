@@ -5,6 +5,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Model.hpp>
 #include <cch/ai/Usage.hpp>
+#include <cch/coding_agent/AgentSessionEvent.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
@@ -381,6 +382,14 @@ public:
     /// Returns an error if the session is closed.
     [[nodiscard]] util::Expected<EventSubscription> subscribe(
         agent::AgentEventSink sink);
+
+    /// Subscribe to session-assembly events (pi `AgentSessionEvent`): the
+    /// turn auto-retry `auto_retry_start`/`auto_retry_end` events. The sink
+    /// is called for every session event during subsequent prompts. Returns a
+    /// handle; events stop when the handle is destroyed or unsubscribed.
+    /// Returns an error if the session is closed.
+    [[nodiscard]] util::Expected<SessionEventSubscription> subscribe_session(
+        AgentSessionEventSink sink);
 
     // ── State accessors ──────────────────────────────────────────────────
 

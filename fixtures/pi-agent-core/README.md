@@ -6,7 +6,7 @@ tests in this repository against the C++ surface, so the gate's evidence is one 
 No fixture value is a live credential or derived from one; all strings are distinguishable
 dummy values (see [Sanitization rules](#sanitization-rules)).
 
-This file records only the capabilities landed so far (T01 [#350], T02 [#351], T03 [#352], T04 [#353], T05 [#354], T06 [#355], T07 [#356], T08 [#357], T09 [#358], T10 [#359], T11 [#360]); the
+This file records only the capabilities landed so far (T01 [#350], T02 [#351], T03 [#352], T04 [#353], T05 [#354], T06 [#355], T07 [#356], T08 [#357], T09 [#358], T10 [#359], T11 [#360], T12 [#361]); the
 capability checklist grows with each subsequent ticket (T12–T14, blockers-first per parity map [#2]), and
 rows below cover only what the ticket that last touched this file landed.
 
@@ -202,6 +202,24 @@ compaction (`contextTokens > contextWindow - reserveTokens`, `enabled`/`reserveT
 `keepRecentTokens` 20000 from the `compaction` settings object with pi defaults) compacts with no
 retry, and the pre-prompt check catches aborted/over-threshold responses before the next prompt.
 
+### Turn auto-retry lifecycle golden (`auto-retry-lifecycle.json`)
+
+The committed turn auto-retry golden ([#361], T12): the pi `AgentSessionEvent` sequence plus the
+model-call count for one transient-error-then-success prompt, captured through the scripted fake
+`Models` seam with `settings.retry {enabled: true, maxRetries: 3, baseDelayMs: 1}` (pi's own retry
+tests use the same `baseDelayMs: 1` override). Two facts are pinned in one artifact:
+
+- `auto_retry_start {attempt: 1, maxAttempts: 3, delayMs: 1, errorMessage: "overloaded_error"}` —
+  the backoff event pi's `_prepareRetry` emits before the sleep (`delayMs = baseDelayMs * 2^(attempt-1)`);
+- `auto_retry_end {success: true, attempt: 1}` — pi's `message_end` handler emits the success event
+  at the first non-error assistant message, resetting the retry counter.
+
+`modelRequests: 2` pins re-entry through the agent continuation mechanism: exactly one retry call
+after the failed attempt, matching pi's retry test (`expect(created.getCallCount()).toBe(2)`).
+The default-path delay (`delayMs: 2000`, `maxAttempts: 3`) and the exponential schedule
+(2/4/8 ms at `baseDelayMs: 2`) are asserted in `TurnAutoRetryTest` `[issue361]` from the same
+`auto_retry_start` payloads.
+
 ### Terminal matrix
 
 The six-category terminal matrix (`model_source`, `model_validation`, `provider`, `stream`,
@@ -303,6 +321,11 @@ surface, and the committed evidence. Resolution records: [#326]
 | 33 | Compaction settings surface: the nested `compaction {enabled, reserveTokens, keepRecentTokens}` settings object loads from both scopes with per-field deep merge (project wins per field), mistyped values fall back to the pi defaults at resolution, and the trigger policy resolves the effective settings exactly like pi `getCompactionSettings` | `packages/coding-agent/src/core/settings-manager.ts` `getCompactionSettings`/`getCompactionReserveTokens`/`getCompactionKeepRecentTokens` (`settings.compaction?.x ?? default`) | `include/cch/coding_agent/Settings.hpp` (`UserCompactionSettings`, `UserSettings::compaction`), `src/coding_agent/SettingsManager.cpp` (parse + per-field merge), `src/coding_agent/runtime/AgentSessionRuntime.cpp` (`effective_compaction_settings`) | `SettingsManagerTest` `[issue359]` (load/merge/mistyped-fallback/reject); `AgentSessionCompactionTest` `[issue359]` disabled-settings path |
 | 34 | Re-auth guidance, both pi branches verbatim at preflight: a real model whose provider resolves no auth fails the prompt before any stream with `formatNoApiKeyFoundMessage` (no-key branch, unknown provider renders as "the selected model") or the "Credentials may have expired … Run '/login X'" branch (OAuth-typed provider with no stored credential), as an `auth`-category error through the single `util::Expected` channel; the `kDefaultModel` placeholder is skipped and keeps its ordinary "Unknown provider: unknown" streaming failure | `packages/coding-agent/src/core/auth-guidance.ts` (`formatNoApiKeyFoundMessage`, `getProviderLoginHelp`, `UNKNOWN_PROVIDER`); `packages/coding-agent/src/core/agent-session.ts` `prompt()` (`hasConfiguredAuth || (await checkAuth(provider)) !== undefined`) | `include/cch/coding_agent/AuthGuidance.hpp`, `src/coding_agent/runtime/AgentSessionRuntime.{hpp,cpp}` (`preflight_auth_guidance` in `run_prompt`, using `ModelRuntime` `has_configured_auth`/`check_auth`/`is_using_oauth` unchanged) | `ReAuthGuidanceTest` `[issue360]`: preflight no-key (keyless `alpha` via CLI `--model`) and preflight OAuth (built-in `kimi-coding`, no credential, `KIMI_API_KEY` unset) → `re-auth-guidance-preflight-{no-key,oauth}.txt` |
 | 35 | Re-auth guidance, both pi branches verbatim at request time (pi `_getRequiredRequestAuth`): an `auth`/`oauth`-category terminal from `streamSimple` is rewritten to the guidance — no-key branch for `auth` terminals on non-OAuth providers, the re-auth branch for `auth` terminals on OAuth providers and for `oauth` terminals (dead credentials — refresh/derivation failures stay in `auth.json`, no deletion, no implicit login) — preserving the terminal-error-event contract (exactly one `error` terminal plus an agreeing final `AssistantMessage`) and the six-category channel (the `auth`/`oauth` code flows through the single `util::Expected` error value); the rewrite is owned by the session layer through a stream decorator applied to the Agent's runtime and the summarization seam (`_getSummarizationRequestAuth`), with the pi-ai `ModelRuntime`/`getAuth` surface consumed unchanged | `packages/coding-agent/src/core/agent-session.ts` `_getRequiredRequestAuth`/`_getSummarizationRequestAuth` (isUsingOAuth branch selection, `formatNoApiKeyFoundMessage`); `packages/ai/src/models.ts` `streamSimple` applyAuth (the `auth`/`oauth` terminal sources) | `include/cch/coding_agent/AuthGuidance.hpp`, `src/coding_agent/runtime/AuthGuidanceStreamRuntime.hpp` (wraps `ModelRuntime::stream_simple`, category-preserving rewrite), `src/coding_agent/runtime/AgentSessionRuntime.cpp` (decorator wired into the Agent and the summarization seam) | `ReAuthGuidanceTest` `[issue360]`: request-time no-key/oauth through scripted clients → `re-auth-guidance-request-{no-key,oauth}.txt`; the four decorator rows through the fake-`ModelRuntime` seam (auth → no-key, auth + OAuth provider → re-auth, oauth terminal → re-auth, non-auth/success pass-through); summarization-seam row (manual compaction fails with the guidance embedded in the compaction error) |
+| 36 | Turn auto-retry policy (session assembly, pi `_handlePostAgentRun`/`_prepareRetry`): enabled by default with pi's `settings.retry` defaults (`enabled: true`, `maxRetries` 3, `baseDelayMs` 2000), exponential backoff `baseDelayMs * 2^(attempt-1)`, retry re-enters through the agent continuation mechanism (`agent.continue()` / C++ `continue_run`), the failed assistant message is removed from live state but retained in session history, and retry runs before the automatic compaction check exactly like pi | `packages/coding-agent/src/core/agent-session.ts` `_handlePostAgentRun`/`_prepareRetry`; `settings-manager.ts` `getRetrySettings` (`enabled ?? true`, `maxRetries ?? 3`, `baseDelayMs ?? 2000`); `packages/agent/src/agent.ts` `continue()` | `src/coding_agent/runtime/AgentSessionRuntime.{hpp,cpp}` (retry-first post-run loop in `run_agent_loop`, `prepare_retry`, `effective_retry_settings`, `is_retryable_error`), `include/cch/coding_agent/Settings.hpp` (`UserRetrySettings`), `src/coding_agent/SettingsManager.cpp` (parse + per-field merge), `src/coding_agent/runtime/AgentSessionRuntime.cpp` | `TurnAutoRetryTest` `[issue361]`: retry-succeeds, max-retries exhaustion, defaults + exponential backoff schedule, disabled-settings, live-state-removal + session-history retention → `auto-retry-lifecycle.json` |
+| 37 | Retryability classification (`isRetryableAssistantError`): an `error` terminal whose message matches a transient provider/network pattern retries — overloaded, rate-limit/too-many-requests, 429/5xx (500/502/503/504/524), service/server/internal errors, provider-returned-error, network/connection/socket/fetch failures, DNS (`ENOTFOUND`/`EAI_AGAIN`), WebSocket close/error text, premature stream endings, "retry delay", explicit retry guidance, `ResourceExhausted` — while quota/billing/provider-limit patterns never retry (`GoUsageLimitError`/`FreeUsageLimitError`, "Monthly usage limit reached", "available balance", `insufficient_quota`, "out of budget", "quota exceeded", billing), with the non-retryable limit check winning when both match | `packages/ai/src/utils/retry.ts` `isRetryableAssistantError` + `NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN`/`RETRYABLE_PROVIDER_ERROR_PATTERN` | `src/ai/utils/RetryClassifier.{hpp,cpp}` (`is_retryable_assistant_error`) | `RetryClassifierTest` `[issue361]` pattern matrix (transient retries, quota never, non-error/empty rejections, case-insensitivity); `TurnAutoRetryTest` network-retry + quota-exclusion rows |
+| 38 | Context overflow never enters the retry path: `is_retryable_error` excludes `isContextOverflow` (T10) before the classifier, so overflow routes to compaction compact-and-retry-once and the two recovery paths never interfere | `packages/coding-agent/src/core/agent-session.ts` `_isRetryableError` (`isContextOverflow` first, "Context overflow is handled by compaction, not retry") | `AgentSessionRuntime::is_retryable_error` (overflow exclusion before the classifier) | `TurnAutoRetryTest` overflow-routing row (no auto_retry events, exactly one model call, overflow error retained in session history) |
+| 39 | `auto_retry_start`/`auto_retry_end` events (pi `AgentSessionEvent`): `auto_retry_start {attempt, maxAttempts, delayMs, errorMessage}` fires before each backoff sleep; `auto_retry_end {success, attempt, finalError?}` fires at the first non-error assistant message after retries (success), at final-failure exhaustion (with the final error message), and at an aborted backoff ("Retry cancelled") — retry is observable and cancellable like pi | `packages/coding-agent/src/core/agent-session.ts` `_prepareRetry` (start emission), `_handleAgentEvent` message_end (success reset), `_handlePostAgentRun` (failure emission), abort catch ("Retry cancelled") | `include/cch/coding_agent/AgentSessionEvent.hpp` (`AutoRetryStartEvent`/`AutoRetryEndEvent`, `AgentSessionEvent`), `AgentSessionRuntime::subscribe_session`/`emit_session_event`, `AgentSession::subscribe_session` (SDK) | `TurnAutoRetryTest` event-sequence rows + golden → `auto-retry-lifecycle.json` |
+| 40 | Abort-interruptible backoff: the prompt-scoped stop token cancels the backoff timer; an abort during the sleep emits exactly one `auto_retry_end {success: false, finalError: "Retry cancelled"}` terminal outcome, the retry never starts, and the session stays reusable for the next prompt | `packages/coding-agent/src/core/agent-session.ts` `_prepareRetry` `sleep(delayMs, this._retryAbortController.signal)` catch branch; `abort()` (`abortRetry()`) | `AgentSessionRuntime::prepare_retry` (steady_timer + `std::stop_callback`; `operation_aborted`/`stop_requested` → cancelled) | `TurnAutoRetryTest` abort-during-backoff row (one end event, one model call, error retained in session history, reusable session) |
 
 ### Recorded divergences preserved (unchanged by this ticket)
 
@@ -355,6 +378,17 @@ surface, and the committed evidence. Resolution records: [#326]
 - `overflow_recovery_attempted_` resets when a new user prompt starts instead of on every user
   `message_start` / non-error assistant `message_end`. The C++ loop runs to completion per prompt
   before the policy is consulted, so every reachable overflow sequence resets identically to pi.
+- Turn auto-retry session events (`auto_retry_start`/`auto_retry_end`) are delivered through a
+  dedicated session-event subscription (`AgentSession::subscribe_session`, pi `AgentSessionEvent`);
+  the one-shot text and `--mode json` printers consume only Agent lifecycle events, so retry events
+  do not appear there (the C++ session likewise has no compaction event channel — see the
+  second-overflow note). Hosts subscribe the session-event channel directly.
+- pi's `agent_end` events carry a computed `willRetry` field (`_willRetryAfterAgentEnd`); the C++
+  `AgentEndEvent` carries no such field — retry observability flows through the session-event
+  channel instead.
+- The C++ reads `settings.retry {enabled, maxRetries, baseDelayMs}` with pi's defaults applied, but
+  has no settings *write* API for retry yet (pi `SettingsManager.setRetryEnabled`); the toggle
+  surface is deferred to the coding-agent module gate.
 
 ## Gate notes
 
@@ -380,3 +414,4 @@ surface, and the committed evidence. Resolution records: [#326]
 [#358]: https://github.com/lanshengzhi/cpp-coding-harness/issues/358
 [#359]: https://github.com/lanshengzhi/cpp-coding-harness/issues/359
 [#360]: https://github.com/lanshengzhi/cpp-coding-harness/issues/360
+[#361]: https://github.com/lanshengzhi/cpp-coding-harness/issues/361

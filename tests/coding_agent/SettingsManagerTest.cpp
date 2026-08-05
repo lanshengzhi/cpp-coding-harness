@@ -504,3 +504,58 @@ TEST_CASE("SettingsManager rejects a non-object compaction field", "[settings][t
     REQUIRE_FALSE(manager.errors().empty());
     CHECK(manager.errors()[0].message.find("compaction") != std::string::npos);
 }
+
+TEST_CASE("SettingsManager loads and deep-merges the retry settings object", "[settings][two-scope][issue361]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({
+        "retry": { "enabled": false, "maxRetries": 5 }
+    })");
+    dirs.write_project(R"({
+        "retry": { "baseDelayMs": 100 }
+    })");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.errors().empty());
+    REQUIRE(manager.settings().retry.has_value());
+    // Per-field deep merge: the project scope wins per field, global fields
+    // the project scope does not set are kept.
+    CHECK(manager.settings().retry->enabled == false);
+    CHECK(manager.settings().retry->max_retries == 5);
+    CHECK(manager.settings().retry->base_delay_ms == 100);
+    // The project scope alone carries only its own field.
+    REQUIRE(manager.project_settings().retry.has_value());
+    CHECK_FALSE(manager.project_settings().retry->enabled.has_value());
+    CHECK_FALSE(manager.project_settings().retry->max_retries.has_value());
+    CHECK(manager.project_settings().retry->base_delay_ms == 100);
+}
+
+TEST_CASE("SettingsManager retry fields are optional and mistyped values fall back to defaults", "[settings][two-scope][issue361]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({
+        "retry": { "enabled": "yes", "maxRetries": -1, "baseDelayMs": 500 }
+    })");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.errors().empty());
+    REQUIRE(manager.settings().retry.has_value());
+    // Mistyped fields are ignored, leaving them absent (the pi default at
+    // resolution); the valid field is kept.
+    CHECK_FALSE(manager.settings().retry->enabled.has_value());
+    CHECK_FALSE(manager.settings().retry->max_retries.has_value());
+    CHECK(manager.settings().retry->base_delay_ms == 500);
+}
+
+TEST_CASE("SettingsManager rejects a non-object retry field", "[settings][two-scope][issue361]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"retry": "enabled"})");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE_FALSE(manager.errors().empty());
+    CHECK(manager.errors()[0].message.find("retry") != std::string::npos);
+}

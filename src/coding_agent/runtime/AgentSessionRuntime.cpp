@@ -7,6 +7,7 @@
 
 #include "agent/AgentMessageAccess.hpp"
 #include "agent/AgentPromptAccess.hpp"
+#include "ai/utils/RetryClassifier.hpp"
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/SkillFormatting.hpp"
 #include "coding_agent/runtime/AuthGuidanceStreamRuntime.hpp"
@@ -25,6 +26,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <exception>
 #include <optional>
 #include <stop_token>
@@ -625,28 +627,84 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
     }
 
     SessionEventCommitment commitment{*session_.store};
+    // The commitment sink also observes assistant message endings so the turn
+    // auto-retry success event fires at the first non-error assistant message
+    // (pi `_handleAgentEvent` message_end handler resets `_retryAttempt` and
+    // emits `auto_retry_end success`). Rebuilt per call because the wrapped
+    // sink is move-only and each prompt/continue takes it by value.
+    const auto make_retry_observing_sink = [&]() {
+        return agent::AgentEventCommitter{
+            [this, inner = commitment.sink()](
+                const agent::AgentLifecycleEvent& event) mutable
+                -> util::ExpectedVoid {
+                if (retry_attempt_ > 0) {
+                    if (const auto* end =
+                            std::get_if<agent::MessageEndEvent>(&event)) {
+                        const auto* assistant =
+                            std::get_if<ai::AssistantMessage>(&end->message);
+                        if (assistant != nullptr &&
+                            assistant->stop_reason !=
+                                ai::AssistantStopReason::Error) {
+                            emit_session_event(AutoRetryEndEvent{
+                                .success = true,
+                                .attempt = retry_attempt_,
+                            });
+                            retry_attempt_ = 0;
+                        }
+                    }
+                }
+                return inner(event);
+            }};
+    };
+
     std::optional<util::ExpectedVoid> result;
     result = co_await agent::detail::AgentPromptAccess::prompt(
         *agent_,
         std::move(prompt),
-        commitment.sink(),
+        make_retry_observing_sink(),
         stop_source);
     if (!result) {
         co_return commitment.conclude(std::move(result));
     }
 
-    // T10 automatic compaction trigger policy (pi `_handlePostAgentRun` /
-    // `_checkCompaction`): after a completed loop, an overflow terminal
-    // compacts and retries the turn exactly once; a second overflow fails
-    // with pi's verbatim recovery message; threshold compaction never
-    // retries. The check re-runs after every retry exactly like pi's
-    // `while (await this._handlePostAgentRun()) await this.agent.continue()`.
+    // Post-run loop in pi `_handlePostAgentRun` order: turn auto-retry (T12)
+    // first, then the automatic compaction trigger (T10). Overflow errors are
+    // never retryable (`is_retryable_error` excludes them), so the two
+    // recovery paths never interfere: overflow routes to compact-and-retry
+    // exactly once, while transient provider/network errors retry with
+    // exponential backoff through the agent continuation mechanism.
     for (;;) {
         const auto last_assistant =
             last_assistant_message_from(agent_->state().messages);
         if (!last_assistant) {
             break;
         }
+
+        if (is_retryable_error(*last_assistant)) {
+            if (co_await prepare_retry(
+                    *last_assistant, stop_source.get_token())) {
+                result =
+                    co_await agent::detail::AgentPromptAccess::continue_run(
+                        *agent_, make_retry_observing_sink(), stop_source);
+                if (!result) {
+                    break;
+                }
+                continue;
+            }
+        }
+        if (last_assistant->stop_reason == ai::AssistantStopReason::Error &&
+            retry_attempt_ > 0) {
+            // The final retry attempt failed: emit `auto_retry_end` so the
+            // retry cycle is observable end to end (pi
+            // `_handlePostAgentRun` failure branch).
+            emit_session_event(AutoRetryEndEvent{
+                .success = false,
+                .attempt = retry_attempt_,
+                .final_error = last_assistant->error_message,
+            });
+            retry_attempt_ = 0;
+        }
+
         const auto outcome = co_await check_auto_compaction(
             *last_assistant, /*skip_aborted_check=*/true);
         if (outcome == AutoCompactionOutcome::OverflowRecoveryFailed) {
@@ -663,7 +721,7 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
             break;
         }
         result = co_await agent::detail::AgentPromptAccess::continue_run(
-            *agent_, commitment.sink(), stop_source);
+            *agent_, make_retry_observing_sink(), stop_source);
         if (!result) {
             break;
         }
@@ -682,6 +740,132 @@ util::Expected<agent::AgentEventSubscription> AgentSessionRuntime::subscribe(
             "session is closed"));
     }
     return agent_->subscribe(std::move(sink));
+}
+
+// ── Session-event subscriptions (pi `AgentSessionEvent`) ────────────────────
+
+} // namespace cch::coding_agent::runtime
+
+namespace cch::coding_agent {
+
+struct SessionEventSubscription::Impl {
+    std::size_t id{0};
+    std::weak_ptr<runtime::AgentSessionRuntime::SessionSubscriptionAnchor> anchor;
+};
+
+SessionEventSubscription::SessionEventSubscription(
+    SessionEventSubscription&&) noexcept = default;
+SessionEventSubscription& SessionEventSubscription::operator=(
+    SessionEventSubscription&& other) noexcept {
+    if (this != &other) {
+        unsubscribe();
+        impl_ = std::move(other.impl_);
+    }
+    return *this;
+}
+SessionEventSubscription::~SessionEventSubscription() {
+    unsubscribe();
+}
+
+void SessionEventSubscription::unsubscribe() {
+    if (!impl_) {
+        return;
+    }
+    const auto anchor = impl_->anchor.lock();
+    const auto id = impl_->id;
+    impl_.reset();
+    if (anchor && anchor->runtime) {
+        auto& observers = anchor->runtime->session_event_observers_;
+        // Mark-only so an unsubscribe from inside an observer callback cannot
+        // invalidate the delivery loop; `emit_session_event` erases
+        // unregistered observers after delivery (the Agent's
+        // `remove_unregistered_subscribers` pattern).
+        for (const auto& observer : observers) {
+            if (observer->id == id) {
+                observer->registered = false;
+                observer->delivery_enabled = false;
+                break;
+            }
+        }
+    }
+}
+
+SessionEventSubscription::operator bool() const {
+    if (!impl_) {
+        return false;
+    }
+    const auto anchor = impl_->anchor.lock();
+    if (!anchor || !anchor->runtime) {
+        return false;
+    }
+    for (const auto& observer : anchor->runtime->session_event_observers_) {
+        if (observer->id == impl_->id && observer->registered) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace cch::coding_agent
+
+namespace cch::coding_agent::runtime {
+
+util::Expected<SessionEventSubscription>
+AgentSessionRuntime::subscribe_session(AgentSessionEventSink sink) {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        return std::unexpected(rejected.error());
+    }
+    if (!sink) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session event sink is empty"));
+    }
+    auto subscriber = std::make_shared<SessionSubscriber>(SessionSubscriber{
+        .id = next_session_subscriber_id_++,
+        .sink = std::move(sink),
+    });
+    const auto id = subscriber->id;
+    session_event_observers_.push_back(std::move(subscriber));
+
+    SessionEventSubscription subscription;
+    subscription.impl_ = std::make_unique<SessionEventSubscription::Impl>(
+        SessionEventSubscription::Impl{
+            .id = id,
+            .anchor = session_event_anchor_,
+        });
+    return subscription;
+}
+
+void AgentSessionRuntime::emit_session_event(const AgentSessionEvent& event) {
+    if (session_event_observers_.empty()) {
+        return;
+    }
+    for (const auto& subscriber : session_event_observers_) {
+        if (!subscriber->delivery_enabled || !subscriber->sink) {
+            continue;
+        }
+        try {
+            if (auto observed = subscriber->sink(event); !observed) {
+                // A failing observer is deactivated and never vetoes retry
+                // progress or persistence (ADR 0017). The runtime has no
+                // diagnostics surface for session events yet; the Agent's
+                // observer diagnostics channel covers lifecycle observers.
+                subscriber->registered = false;
+                subscriber->delivery_enabled = false;
+            }
+        } catch (const std::exception&) {
+            subscriber->registered = false;
+            subscriber->delivery_enabled = false;
+        } catch (...) {
+            subscriber->registered = false;
+            subscriber->delivery_enabled = false;
+        }
+    }
+    std::erase_if(
+        session_event_observers_,
+        [](const std::shared_ptr<SessionSubscriber>& subscriber) {
+            return !subscriber->registered;
+        });
 }
 
 util::ExpectedVoid AgentSessionRuntime::steer(
@@ -1094,8 +1278,9 @@ AgentSessionRuntime::check_auto_compaction(
     // Case 1: Overflow. An error terminal (or a successful response whose
     // usage already exceeds the window) compacts; only the error terminal
     // retries, because continue() cannot continue from a completed assistant
-    // message. Overflow never routes to turn auto-retry: this branch consumes
-    // it before any retry policy (T12's boundary).
+    // message. Overflow never routes to turn auto-retry: the post-run loop
+    // excludes it via `is_retryable_error` before reaching this branch, so
+    // the two recovery paths never interfere (T12's boundary).
     if (same_model && harness::session::is_context_overflow(
                           assistant_message, context_window)) {
         const bool will_retry =
@@ -1194,6 +1379,109 @@ AgentSessionRuntime::effective_compaction_settings() const {
             static_cast<std::size_t>(*configured->keep_recent_tokens);
     }
     return settings;
+}
+
+// ── Turn auto-retry (T12) ───────────────────────────────────────────────────
+
+RetrySettings AgentSessionRuntime::effective_retry_settings() const {
+    RetrySettings settings;
+    if (!services_.settings_manager) {
+        return settings;
+    }
+    const auto& configured = services_.settings_manager->settings().retry;
+    if (!configured) {
+        return settings;
+    }
+    if (configured->enabled) {
+        settings.enabled = *configured->enabled;
+    }
+    if (configured->max_retries) {
+        settings.max_retries =
+            static_cast<std::size_t>(*configured->max_retries);
+    }
+    if (configured->base_delay_ms) {
+        settings.base_delay_ms =
+            static_cast<std::size_t>(*configured->base_delay_ms);
+    }
+    return settings;
+}
+
+bool AgentSessionRuntime::is_retryable_error(
+    const ai::AssistantMessage& message) const {
+    // Context overflow is handled by compaction, never by retry (pi
+    // `_isRetryableError`); the two recovery paths never interfere (T10's
+    // boundary).
+    const auto& model = agent_->state().model;
+    const std::size_t context_window =
+        static_cast<std::size_t>(model.context_window);
+    if (harness::session::is_context_overflow(message, context_window)) {
+        return false;
+    }
+    return ai::is_retryable_assistant_error(message);
+}
+
+boost::asio::awaitable<bool> AgentSessionRuntime::prepare_retry(
+    const ai::AssistantMessage& message,
+    std::stop_token stop_token) {
+    const auto settings = effective_retry_settings();
+    if (!settings.enabled) {
+        co_return false;
+    }
+
+    ++retry_attempt_;
+    if (retry_attempt_ > static_cast<int>(settings.max_retries)) {
+        // Preserve the completed attempt count so post-run handling can emit
+        // the final failure (pi `_prepareRetry` decrements back).
+        --retry_attempt_;
+        co_return false;
+    }
+
+    const auto delay_ms =
+        settings.base_delay_ms *
+        (static_cast<std::size_t>(1) << (retry_attempt_ - 1));
+    emit_session_event(AutoRetryStartEvent{
+        .attempt = retry_attempt_,
+        .max_attempts = static_cast<int>(settings.max_retries),
+        .delay_ms = static_cast<std::int64_t>(delay_ms),
+        .error_message =
+            message.error_message.value_or("Unknown error"),
+    });
+
+    // Remove the failed assistant message from live state; it stays in
+    // session history (pi `_prepareRetry` `messages.slice(0, -1)`), so the
+    // continuation's last message is a user or tool-result message.
+    if (auto popped =
+            agent::detail::AgentMessageAccess::pop_trailing_assistant(*agent_);
+        !popped) {
+        co_return false;
+    }
+
+    // Abort-interruptible exponential backoff sleep (pi `sleep(delayMs,
+    // this._retryAbortController.signal)`): a prompt-scoped abort cancels the
+    // timer, and an already-requested stop aborts the wait immediately.
+    boost::asio::steady_timer timer(
+        co_await boost::asio::this_coro::executor);
+    timer.expires_after(std::chrono::milliseconds(delay_ms));
+    boost::system::error_code wait_error;
+    std::stop_callback cancel_wait{
+        stop_token, [&timer]() { timer.cancel(); }};
+    co_await timer.async_wait(
+        boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
+    if (wait_error == boost::asio::error::operation_aborted ||
+        stop_token.stop_requested()) {
+        // Aborted during backoff: emit the end event so observers can clean
+        // up, and produce exactly one terminal outcome (the retry never
+        // starts) — pi's `_prepareRetry` catch branch.
+        const int attempt = retry_attempt_;
+        retry_attempt_ = 0;
+        emit_session_event(AutoRetryEndEvent{
+            .success = false,
+            .attempt = attempt,
+            .final_error = std::string{"Retry cancelled"},
+        });
+        co_return false;
+    }
+    co_return true;
 }
 
 std::optional<ai::TimestampMs>
