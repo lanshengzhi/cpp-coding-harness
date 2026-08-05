@@ -924,7 +924,7 @@ TEST_CASE("CLI real-provider mode reports missing API key as a terminal auth out
     CHECK(result.output.find("[completed]") != std::string::npos);
 }
 
-TEST_CASE("CLI Kimi path reports missing KIMI_API_KEY through terminal auth", "[cli][kimi][u3][issue338]") {
+TEST_CASE("CLI Kimi path reports missing KIMI_API_KEY through the preflight re-auth guidance", "[cli][kimi][u3][issue338][issue360]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "kimi-missing-key.jsonl";
@@ -934,10 +934,14 @@ TEST_CASE("CLI Kimi path reports missing KIMI_API_KEY through terminal auth", "[
         " --session " + shell_quote(session) +
         " --model kimi-for-coding hello");
 
-    REQUIRE(result.exit_code == 0);
-    CHECK(result.output.find("Provider is not configured") != std::string::npos);
-    CHECK(result.output.find("[model-request]") != std::string::npos);
-    CHECK(result.output.find("[completed]") != std::string::npos);
+    // T11 preflight (pi `prompt()` hasConfiguredAuth check): a real model
+    // whose provider resolves no auth fails the prompt before any stream with
+    // pi's verbatim OAuth re-auth guidance (kimi-coding is OAuth-typed).
+    REQUIRE(result.exit_code != 0);
+    CHECK(result.output.find("loop failed: Authentication failed for \"kimi-coding\"") !=
+          std::string::npos);
+    CHECK(result.output.find("Run '/login kimi-coding' to re-authenticate.") !=
+          std::string::npos);
     CHECK(std::filesystem::exists(session));
 }
 

@@ -1,6 +1,7 @@
 #include "AgentSessionRuntime.hpp"
 
 #include <cch/ai/Content.hpp>
+#include <cch/coding_agent/AuthGuidance.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/harness/session/JsonlSessionStore.hpp>
 
@@ -8,6 +9,7 @@
 #include "agent/AgentPromptAccess.hpp"
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/SkillFormatting.hpp"
+#include "coding_agent/runtime/AuthGuidanceStreamRuntime.hpp"
 #include "coding_agent/runtime/UserBashOutputAccumulator.hpp"
 #include "harness/compaction/Compaction.hpp"
 
@@ -176,11 +178,18 @@ AgentSessionRuntime::AgentSessionRuntime(
         session_.context_thinking_level.value_or(
             config_.default_thinking_level.value_or("medium"));
 
+    // Request-time re-auth guidance (pi `_getRequiredRequestAuth`): the
+    // Agent's stream runs through a session-layer decorator that rewrites
+    // auth/oauth-category terminal failures to pi's two verbatim guidance
+    // branches; the same decorator serves the summarization seam below.
+    auth_guided_runtime_ = std::make_shared<AuthGuidanceStreamRuntime>(
+        services_.model_runtime);
+
     // Construct Agent last: it holds the factory-owned ModelRuntime (the sole
     // injectable seam per #326) and takes sole ownership of the move-only tool
     // registry.
     agent_.emplace(
-        services_.model_runtime,
+        auth_guided_runtime_,
         std::move(services_.tools),
         std::move(options),
         std::move(initial_state));
@@ -283,6 +292,45 @@ namespace {
 
 } // namespace
 
+boost::asio::awaitable<util::ExpectedVoid>
+AgentSessionRuntime::preflight_auth_guidance() {
+    if (!agent_ || !services_.model_runtime) {
+        co_return util::ExpectedVoid{};
+    }
+    const auto& model = agent_->state().model;
+    // The placeholder kDefaultModel is the C++ "no model" state; "no model"
+    // is not an auth failure, and streaming it fails through normal provider
+    // lookup ("Unknown provider: unknown") exactly like pi.
+    if (model.id == agent::detail::kDefaultModel.id) {
+        co_return util::ExpectedVoid{};
+    }
+    // pi `prompt()`: `hasConfiguredAuth(provider) ||
+    // (await checkAuth(provider)) !== undefined`. The live `checkAuth` is the
+    // authoritative backstop (the snapshot may be stale); it is
+    // side-effect-free and never refreshes OAuth.
+    if (services_.model_runtime->has_configured_auth(model.provider)) {
+        co_return util::ExpectedVoid{};
+    }
+    auto checked = co_await services_.model_runtime->check_auth(model.provider);
+    if (!checked) {
+        co_return std::unexpected(std::move(checked.error()));
+    }
+    if (*checked) {
+        co_return util::ExpectedVoid{};
+    }
+    const std::string provider{model.provider};
+    if (services_.model_runtime->is_using_oauth(provider)) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Auth,
+            format_oauth_reauthenticate_message(provider)));
+    }
+    co_return std::unexpected(util::make_error(
+        util::ErrorCode::Auth,
+        format_no_api_key_found_message(
+            provider,
+            std::filesystem::path{kDefaultAuthGuidanceDocsPath})));
+}
+
 boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
     std::string prompt,
     std::vector<ai::ImageContent> images,
@@ -320,6 +368,18 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
             user_message = std::move(*message);
         }
 
+        if (run_agent) {
+            // pi `prompt()` auth preflight: a real model whose provider has no
+            // configured auth fails with pi's verbatim re-auth guidance
+            // before the run starts (the `kDefaultModel` placeholder is
+            // skipped and keeps its ordinary "Unknown provider: unknown"
+            // streaming failure).
+            if (auto admitted = co_await preflight_auth_guidance();
+                !admitted) {
+                result = std::unexpected(admitted.error());
+                run_agent = false;
+            }
+        }
         if (run_agent && on_preflight_accepted) {
             if (auto acknowledged = on_preflight_accepted(); !acknowledged) {
                 result = std::unexpected(acknowledged.error());
@@ -873,7 +933,7 @@ AgentSessionRuntime::execute_compaction(
     const auto model = agent_->state().model;
 
     harness::session::SummarizationStreamFn summarization_stream =
-        [runtime = services_.model_runtime, model](
+        [runtime = auth_guided_runtime_, model](
             ai::AiContext context,
             ai::SimpleStreamOptions options)
             -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
@@ -1219,6 +1279,10 @@ AgentSessionRuntime::release_close_resources() noexcept {
         agent_->clear_subscriptions();
     }
     agent_.reset();
+    // Drop the session's request-time decorator handle; the Agent released its
+    // reference above, so the canonical runtime is freed once the owned
+    // reference below is reset (runtimes carry no dispose ceremony).
+    auth_guided_runtime_.reset();
     prompt_processor_.reset();
     session_.store.reset();
     services_.user_shell.reset();

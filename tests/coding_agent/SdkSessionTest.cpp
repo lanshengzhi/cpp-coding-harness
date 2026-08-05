@@ -6,6 +6,7 @@
 #include <cch/ai/Message.hpp>
 #include "ai/providers/StreamEmit.hpp"
 #include <cch/coding_agent/Sdk.hpp>
+#include <cch/coding_agent/AuthGuidance.hpp>
 #include <cch/coding_agent/Skill.hpp>
 #include <cch/harness/ExecutionEnv.hpp>
 #include <cch/harness/session/JsonlSessionStore.hpp>
@@ -3090,7 +3091,7 @@ TEST_CASE("SDK new session carries the complete explicit request model", "[sdk][
     result->session->close();
 }
 
-TEST_CASE("SDK config-only provider without apiKey fails at request time", "[sdk][u2][api-key-env][issue345]") {
+TEST_CASE("SDK config-only provider without apiKey fails at preflight with pi's verbatim no-key guidance", "[sdk][u2][api-key-env][issue345][issue360]") {
     TestPaths paths;
     cch::tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
@@ -3119,13 +3120,17 @@ TEST_CASE("SDK config-only provider without apiKey fails at request time", "[sdk
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
+    // T11 preflight (pi `prompt()` hasConfiguredAuth check): the keyless
+    // config-only provider fails the prompt before any stream with pi's
+    // verbatim formatNoApiKeyFoundMessage through the auth category.
     auto prompted = result->session->prompt_blocking("hello");
-    REQUIRE(prompted.has_value());
-    const auto snapshot = result->session->snapshot();
-    const auto& terminal = std::get<ai::AssistantMessage>(snapshot.agent_state.messages.back());
-    CHECK(terminal.stop_reason == ai::AssistantStopReason::Error);
-    REQUIRE(terminal.error_message);
-    CHECK(terminal.error_message->find("Provider is not configured") != std::string::npos);
+    REQUIRE_FALSE(prompted.has_value());
+    CHECK(prompted.error().code == util::ErrorCode::Auth);
+    CHECK(prompted.error().message ==
+          coding_agent::format_no_api_key_found_message(
+              "deepseek",
+              std::filesystem::path{
+                  coding_agent::kDefaultAuthGuidanceDocsPath}));
     result->session->close();
 }
 

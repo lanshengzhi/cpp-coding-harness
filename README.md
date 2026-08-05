@@ -172,6 +172,7 @@ Troubleshooting:
 
 | Symptom | Check |
 | --- | --- |
+| `No API key found for … Use /login …` / `Authentication failed for … Run '/login X'` | pi's re-auth guidance: the prompt preflight (or a request-time auth terminal) found no usable credential for the resolved model's provider. Export `KIMI_API_KEY`, add a `~/.pi/agent/auth.json` entry, or pass `--api-key`; for OAuth providers run `/login X` to re-authenticate. |
 | `Provider is not configured` | The provider has no stored credential, ambient environment variable, `--api-key` override, or `models.json` configured key. Export `KIMI_API_KEY`, add a `~/.pi/agent/auth.json` entry, or pass `--api-key`. |
 | Authentication or authorization failure | Confirm the key is valid for Kimi Code and the provider resolves to the Kimi endpoint. |
 | Invalid model | Use `--model kimi-for-coding`, or configure a custom model in `models.json`. |

@@ -1,0 +1,5 @@
+No API key found for alpha.
+
+Use /login to log into a provider via OAuth or API key. See:
+  ~/.pi/docs/providers.md
+  ~/.pi/docs/models.md

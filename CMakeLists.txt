@@ -382,6 +382,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/tui/UserBashSyntaxTest.cpp
         tests/coding_agent/SdkSessionTest.cpp
         tests/coding_agent/AgentSessionCompactionTest.cpp
+        tests/coding_agent/ReAuthGuidanceTest.cpp
         tests/coding_agent/AgentSessionSnapshotTest.cpp
         tests/coding_agent/SkillIntegrationTest.cpp
         tests/coding_agent/runtime/JsonEventPrinterTest.cpp

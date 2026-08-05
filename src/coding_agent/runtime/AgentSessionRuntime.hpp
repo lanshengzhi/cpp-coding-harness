@@ -57,6 +57,17 @@ public:
     AgentSessionRuntime(AgentSessionRuntime&&) = delete;
     AgentSessionRuntime& operator=(AgentSessionRuntime&&) = delete;
 
+    /// Reject the prompt at admission when the current model's provider has
+    /// no configured auth (pi `agent-session.ts` `prompt()` preflight): a real
+    /// model whose provider resolves no auth fails with pi's verbatim re-auth
+    /// guidance (no-key branch, or the OAuth re-auth branch for OAuth-typed
+    /// providers). The placeholder `kDefaultModel` is skipped: "no model" is
+    /// not an auth failure, and streaming it fails through normal provider
+    /// lookup ("Unknown provider: unknown") exactly like pi. `checkAuth`
+    /// failures propagate unchanged.
+    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid>
+    preflight_auth_guidance();
+
     /// Run one prompt on the awaiting host executor through optional prompt
     /// interpretation, the stateful Agent, persistence, and event fanout.
     [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> run_prompt(
@@ -254,6 +265,12 @@ private:
     std::optional<prompt::PromptProcessor> prompt_processor_;
     // Declared after the borrowed client/store owners so it is destroyed first.
     std::optional<agent::Agent> agent_;
+    /// Request-time re-auth guidance decorator (pi `_getRequiredRequestAuth`):
+    /// the Agent's stream and the summarization seam run through a
+    /// session-layer runtime that rewrites auth/oauth-category terminal
+    /// failures to pi's two verbatim guidance branches. Holds the canonical
+    /// runtime alive through the session.
+    std::shared_ptr<ModelRuntime> auth_guided_runtime_;
 
     AgentSessionRuntimeConfig config_;
     Lifecycle lifecycle_{Lifecycle::Open};

@@ -1,0 +1,1 @@
+Authentication failed for "sdk-host". Credentials may have expired or network is unavailable. Run '/login sdk-host' to re-authenticate.

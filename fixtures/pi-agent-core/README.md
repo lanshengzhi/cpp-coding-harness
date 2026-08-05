@@ -6,8 +6,8 @@ tests in this repository against the C++ surface, so the gate's evidence is one 
 No fixture value is a live credential or derived from one; all strings are distinguishable
 dummy values (see [Sanitization rules](#sanitization-rules)).
 
-This file records only the capabilities landed so far (T01 [#350], T02 [#351], T03 [#352], T04 [#353], T05 [#354], T06 [#355], T07 [#356], T08 [#357], T09 [#358], T10 [#359]); the
-capability checklist grows with each subsequent ticket (T11–T14, blockers-first per parity map [#2]), and
+This file records only the capabilities landed so far (T01 [#350], T02 [#351], T03 [#352], T04 [#353], T05 [#354], T06 [#355], T07 [#356], T08 [#357], T09 [#358], T10 [#359], T11 [#360]); the
+capability checklist grows with each subsequent ticket (T12–T14, blockers-first per parity map [#2]), and
 rows below cover only what the ticket that last touched this file landed.
 
 ## Pinned baseline
@@ -210,6 +210,35 @@ row scripts a terminal failure of one category through the fake runtime and asse
 terminal event plus an agreeing final `AssistantMessage`, with the category flowing through the
 single `util::Expected` error value (the #326 six-category channel).
 
+### Re-auth guidance goldens (`re-auth-guidance-*.txt`)
+
+The committed verbatim re-auth guidance goldens ([#360], T11): pi's two branches at both trigger
+points, byte-compared by `ReAuthGuidanceTest` `[issue360]`.
+
+- `re-auth-guidance-preflight-no-key.txt` — the prompt preflight (pi `agent-session.ts`
+  `prompt()` `hasConfiguredAuth` check) failing a keyless provider with pi's verbatim
+  `formatNoApiKeyFoundMessage` text through the `auth` category of the single `util::Expected`
+  channel (no second exception hierarchy);
+- `re-auth-guidance-preflight-oauth.txt` — the same preflight on an OAuth-typed provider with no
+  stored credential failing with pi's verbatim `Run '/login kimi-coding' to re-authenticate.`
+  re-auth branch;
+- `re-auth-guidance-request-no-key.txt` — request time (pi `_getRequiredRequestAuth`): an
+  `auth`-category terminal from the stream is rewritten to the no-key branch in the terminal
+  `AssistantMessage` (category preserved, exactly-one-terminal contract);
+- `re-auth-guidance-request-oauth.txt` — request time on an `oauth`-category terminal (dead
+  credentials — refresh/derivation failure) rewritten to the verbatim re-auth branch.
+
+The guidance is owned by the session layer: `include/cch/coding_agent/AuthGuidance.hpp` ports pi
+`auth-guidance.ts` (`formatNoApiKeyFoundMessage`/`getProviderLoginHelp`, unknown provider renders
+as "the selected model"), the preflight check lives in
+`AgentSessionRuntime::preflight_auth_guidance` (skipped for the `kDefaultModel` placeholder, which
+keeps its ordinary "Unknown provider: unknown" streaming failure), and the request-time rewrite is
+a session-layer stream decorator (`src/coding_agent/runtime/AuthGuidanceStreamRuntime.hpp`) that
+wraps the session's `ModelRuntime` for the Agent's stream and the summarization seam — the pi-ai
+`ModelRuntime`/`getAuth` surface is consumed unchanged. The fake-`ModelRuntime` seam scripts the
+`auth`/`oauth` terminals; the session-level tests drive both branches through scripted clients.
+The docs-path lines use the deterministic default `~/.pi/docs` (see the divergences below).
+
 ### Tool scheduling golden (`tool-scheduling.json`)
 
 The committed tool-scheduling golden ([#355]): one run against the recording fake `ModelRuntime`
@@ -272,6 +301,8 @@ surface, and the committed evidence. Resolution records: [#326]
 | 31 | Automatic compaction trigger policy (session assembly, pi `_checkCompaction`/`_runAutoCompaction`): context-overflow terminal errors compact and retry the turn exactly once (the overflow error message stays in session history but is removed from live state before the retry, and again after the context rebuild); a second overflow in the same prompt fails with pi's verbatim `Context overflow recovery failed after one compact-and-retry attempt…` message; a successful response whose usage already exceeds the window compacts without retrying (`willRetry = stopReason !== "stop"`); threshold compaction fires at `contextTokens > contextWindow − reserveTokens` and never retries; overflow never routes to turn auto-retry (T12's boundary); the post-run check runs after every retry exactly like pi's `while (await this._handlePostAgentRun()) await this.agent.continue()`, and the pre-prompt check (skipAbortedCheck=false) catches aborted/over-threshold responses before the next prompt | `packages/coding-agent/src/core/agent-session.ts` `_checkCompaction`, `_runAutoCompaction`, `_handlePostAgentRun`, `_overflowRecoveryAttempted` reset on user `message_start`; `packages/agent/src/agent.ts` `continue()` / `agent-loop.ts` `runAgentLoopContinue` | `src/coding_agent/runtime/AgentSessionRuntime.{hpp,cpp}` (`check_auto_compaction`, `run_auto_compaction`, post-run loop in `run_agent_loop`, pre-prompt check in `run_prompt`, `overflow_recovery_attempted_`), `src/agent/Agent.{hpp,cpp}` (`continue_run`), `src/agent/AgentLoop.{hpp,cpp}` (user-message-less `continue_with`), `src/agent/AgentMessageAccess.hpp` (`pop_trailing_assistant`) | `AgentSessionCompactionTest` `[issue359]`: overflow compact-and-retry-once (retry request context at the fake-`ModelRuntime` seam: compactionSummary + retained tail, overflowing user message last, no error terminal), second-overflow verbatim failure → `overflow-recovery-message.txt`, threshold compaction with no retry, disabled-settings suppression, pre-prompt aborted-response compaction |
 | 32 | Overflow detection + threshold arithmetic: `isContextOverflow` — provider error-message patterns (excluding rate-limit/throttling patterns that would false-positive), silent overflow when `usage.input + usage.cacheRead` exceeds the window, and length-stop zero-output fill — plus `shouldCompact` (`contextTokens > contextWindow - reserveTokens`, disabled settings never compact) | `packages/ai/src/utils/overflow.ts` `isContextOverflow`/`OVERFLOW_PATTERNS`/`NON_OVERFLOW_PATTERNS`; `packages/agent/src/harness/compaction/compaction.ts` `shouldCompact` | `src/harness/compaction/Compaction.{hpp,cpp}` (`is_context_overflow`, `should_compact`) | `CompactionTest` `[issue359]`: per-pattern overflow matrix + non-overflow exclusions + silent/length usage cases + unknown-window gate; threshold boundary rows (strict `>`, custom reserveTokens, zero-window arithmetic) |
 | 33 | Compaction settings surface: the nested `compaction {enabled, reserveTokens, keepRecentTokens}` settings object loads from both scopes with per-field deep merge (project wins per field), mistyped values fall back to the pi defaults at resolution, and the trigger policy resolves the effective settings exactly like pi `getCompactionSettings` | `packages/coding-agent/src/core/settings-manager.ts` `getCompactionSettings`/`getCompactionReserveTokens`/`getCompactionKeepRecentTokens` (`settings.compaction?.x ?? default`) | `include/cch/coding_agent/Settings.hpp` (`UserCompactionSettings`, `UserSettings::compaction`), `src/coding_agent/SettingsManager.cpp` (parse + per-field merge), `src/coding_agent/runtime/AgentSessionRuntime.cpp` (`effective_compaction_settings`) | `SettingsManagerTest` `[issue359]` (load/merge/mistyped-fallback/reject); `AgentSessionCompactionTest` `[issue359]` disabled-settings path |
+| 34 | Re-auth guidance, both pi branches verbatim at preflight: a real model whose provider resolves no auth fails the prompt before any stream with `formatNoApiKeyFoundMessage` (no-key branch, unknown provider renders as "the selected model") or the "Credentials may have expired … Run '/login X'" branch (OAuth-typed provider with no stored credential), as an `auth`-category error through the single `util::Expected` channel; the `kDefaultModel` placeholder is skipped and keeps its ordinary "Unknown provider: unknown" streaming failure | `packages/coding-agent/src/core/auth-guidance.ts` (`formatNoApiKeyFoundMessage`, `getProviderLoginHelp`, `UNKNOWN_PROVIDER`); `packages/coding-agent/src/core/agent-session.ts` `prompt()` (`hasConfiguredAuth || (await checkAuth(provider)) !== undefined`) | `include/cch/coding_agent/AuthGuidance.hpp`, `src/coding_agent/runtime/AgentSessionRuntime.{hpp,cpp}` (`preflight_auth_guidance` in `run_prompt`, using `ModelRuntime` `has_configured_auth`/`check_auth`/`is_using_oauth` unchanged) | `ReAuthGuidanceTest` `[issue360]`: preflight no-key (keyless `alpha` via CLI `--model`) and preflight OAuth (built-in `kimi-coding`, no credential, `KIMI_API_KEY` unset) → `re-auth-guidance-preflight-{no-key,oauth}.txt` |
+| 35 | Re-auth guidance, both pi branches verbatim at request time (pi `_getRequiredRequestAuth`): an `auth`/`oauth`-category terminal from `streamSimple` is rewritten to the guidance — no-key branch for `auth` terminals on non-OAuth providers, the re-auth branch for `auth` terminals on OAuth providers and for `oauth` terminals (dead credentials — refresh/derivation failures stay in `auth.json`, no deletion, no implicit login) — preserving the terminal-error-event contract (exactly one `error` terminal plus an agreeing final `AssistantMessage`) and the six-category channel (the `auth`/`oauth` code flows through the single `util::Expected` error value); the rewrite is owned by the session layer through a stream decorator applied to the Agent's runtime and the summarization seam (`_getSummarizationRequestAuth`), with the pi-ai `ModelRuntime`/`getAuth` surface consumed unchanged | `packages/coding-agent/src/core/agent-session.ts` `_getRequiredRequestAuth`/`_getSummarizationRequestAuth` (isUsingOAuth branch selection, `formatNoApiKeyFoundMessage`); `packages/ai/src/models.ts` `streamSimple` applyAuth (the `auth`/`oauth` terminal sources) | `include/cch/coding_agent/AuthGuidance.hpp`, `src/coding_agent/runtime/AuthGuidanceStreamRuntime.hpp` (wraps `ModelRuntime::stream_simple`, category-preserving rewrite), `src/coding_agent/runtime/AgentSessionRuntime.cpp` (decorator wired into the Agent and the summarization seam) | `ReAuthGuidanceTest` `[issue360]`: request-time no-key/oauth through scripted clients → `re-auth-guidance-request-{no-key,oauth}.txt`; the four decorator rows through the fake-`ModelRuntime` seam (auth → no-key, auth + OAuth provider → re-auth, oauth terminal → re-auth, non-auth/success pass-through); summarization-seam row (manual compaction fails with the guidance embedded in the compaction error) |
 
 ### Recorded divergences preserved (unchanged by this ticket)
 
@@ -301,6 +332,17 @@ surface, and the committed evidence. Resolution records: [#326]
   Provider wire messages never carry the timestamp, so this is not observable on the wire.
 - The manual-trigger no-model error omits pi's `getProviderLoginHelp()` tail (`/login` guidance is
   Native TUI presentation, ADR 0032; the auth-guidance capability is a separate ticket).
+- The no-key guidance's login-help docs lines use the deterministic default `~/.pi/docs`
+  (`kDefaultAuthGuidanceDocsPath`) instead of pi's `getDocsPath()` (`<packageDir>/docs`): the
+  harness cannot discover a pi install, and the committed goldens must be byte-stable. The
+  message structure stays pi's verbatim `formatNoApiKeyFoundMessage`; hosts may override the
+  docs path at the formatter call site.
+- Request-time guidance maps every `auth`/`oauth`-category terminal to the verbatim branches;
+  pi's `_getRequiredRequestAuth` rethrows non-no-key `getAuth` errors (e.g. credential-store
+  failures) unchanged on the summarization path, while the C++ session layer rewrites them to
+  the same guidance (the six-category channel carries the `auth` code either way; the dead-
+  credential flow — refresh failure → `oauth` terminal → "Run '/login X'" — matches the #328
+  record exactly).
 - Threshold compaction treats an unknown (zero) `contextWindow` as no window instead of pi's
   `contextWindow ?? 0` arithmetic (which would compact on every turn, since any context exceeds
   `0 - reserveTokens`). pi's catalog models always carry a window, while the C++ placeholders
@@ -337,3 +379,4 @@ surface, and the committed evidence. Resolution records: [#326]
 [#357]: https://github.com/lanshengzhi/cpp-coding-harness/issues/357
 [#358]: https://github.com/lanshengzhi/cpp-coding-harness/issues/358
 [#359]: https://github.com/lanshengzhi/cpp-coding-harness/issues/359
+[#360]: https://github.com/lanshengzhi/cpp-coding-harness/issues/360
