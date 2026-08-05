@@ -3,7 +3,7 @@
 #include <cch/agent/AgentContext.hpp>
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/agent/ToolRegistry.hpp>
-#include <cch/ai/ChatClient.hpp>
+#include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/util/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
@@ -50,13 +50,15 @@ private:
 
 /// Stateful owner of live Agent Message history and one active model run.
 ///
-/// The Agent and referenced chat client must outlive every prompt coroutine.
-/// Agent operations and state snapshots are executor-confined; concurrent calls
-/// from unrelated threads are not supported.
+/// The Agent issues every turn through the injected `ModelRuntime::streamSimple`
+/// surface (the sole injectable seam per #326, held as `std::shared_ptr`; the
+/// Agent keeps the runtime alive). Agent operations and state snapshots are
+/// executor-confined; concurrent calls from unrelated threads are not
+/// supported.
 class Agent {
 public:
     Agent(
-        ai::StreamingChatClient& client,
+        std::shared_ptr<coding_agent::ModelRuntime> runtime,
         AsyncToolRegistry tools,
         AsyncAgentOptions options = {},
         AgentInitialState initial_state = {});

@@ -84,7 +84,7 @@ TEST_CASE("public headers compile from the include contract surface", "[architec
     harness::session::SessionMetadata metadata;
     metadata.session_id = "session-1";
     metadata.provider = "fake";
-    metadata.model = options.model->id;
+    metadata.model = options.model.id;
 
     CHECK(context.messages.size() == 1);
     CHECK(context.tools.size() == 1);

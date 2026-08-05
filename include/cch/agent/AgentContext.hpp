@@ -18,6 +18,30 @@
 
 namespace cch::agent {
 
+namespace detail {
+
+/// Mirrors pi Agent's internal DEFAULT_MODEL at parity baseline 83114817
+/// (`packages/agent/src/agent.ts`). Concrete Agent Model when no real model has
+/// been resolved; streaming against it fails through normal provider lookup
+/// until a real model is selected (ADR 0034 / #326).
+inline const ai::Model kDefaultModel{
+    .id = "unknown",
+    .name = "unknown",
+    .api = "unknown",
+    .provider = "unknown",
+    .base_url = "",
+    .reasoning = false,
+    .thinking_level_map = std::nullopt,
+    .input = {},
+    .cost = {},
+    .context_window = 0,
+    .max_tokens = 0,
+    .headers = std::nullopt,
+    .compat = std::nullopt,
+};
+
+} // namespace detail
+
 using TransformContextHook = std::move_only_function<
     boost::asio::awaitable<util::Expected<std::vector<ai::MessageVariant>>>(
         std::vector<ai::MessageVariant>,
@@ -139,9 +163,15 @@ struct AsyncAgentOptions {
     std::size_t max_queued_bytes{kDefaultMaxQueuedBytes};
     InputQueueMode steering_mode{InputQueueMode::OneAtATime};
     InputQueueMode follow_up_mode{InputQueueMode::OneAtATime};
-    /// Optional only at Agent construction. The Agent normalizes absence to
-    /// its internal pi-aligned unknown model before any request is created.
-    std::optional<ai::Model> model{std::nullopt};
+    /// Concrete Model for every turn, forwarded to `streamSimple` exactly as
+    /// configured. Defaults to the pi-aligned unknown `kDefaultModel`; session
+    /// assembly replaces it with the first real model (ADR 0034). The Agent
+    /// applies no silent per-request placeholder substitution.
+    ai::Model model{detail::kDefaultModel};
+    /// Session identifier forwarded as the per-turn `sessionId` streamSimple
+    /// option (pi AgentOptions.sessionId / harness `sessionMetadata.id`). Empty
+    /// means the host provided none.
+    std::string session_id;
     std::string thinking_level;
     std::optional<BeforeToolCallHook> before_tool_call;
     std::optional<AfterToolCallHook> after_tool_call;

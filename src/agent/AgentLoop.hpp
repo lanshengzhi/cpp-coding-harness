@@ -3,7 +3,7 @@
 #include <cch/agent/AgentContext.hpp>
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/agent/ToolRegistry.hpp>
-#include <cch/ai/ChatClient.hpp>
+#include <cch/coding_agent/ModelRuntime.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -22,10 +22,14 @@ struct AsyncAgentRunResult {
     AgentState state;
 };
 
-/// Private execution machinery owned by the stateful Agent.
+/// Private execution machinery owned by the stateful Agent. Issues every turn
+/// through the injected `ModelRuntime::streamSimple` surface.
 class AsyncAgentLoop {
 public:
-    AsyncAgentLoop(ai::StreamingChatClient& client, AsyncToolRegistry registry, AsyncAgentOptions options = {});
+    AsyncAgentLoop(
+        std::shared_ptr<coding_agent::ModelRuntime> runtime,
+        AsyncToolRegistry registry,
+        AsyncAgentOptions options = {});
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> run(
         std::string user_prompt,
@@ -59,10 +63,13 @@ private:
         InputQueueDrainer drain_queued_messages);
 
     [[nodiscard]] const ai::Model& current_model() const noexcept {
-        return *options_.model;
+        return options_.model;
     }
     [[nodiscard]] const std::string& current_thinking_level() const noexcept {
         return options_.thinking_level;
+    }
+    [[nodiscard]] const std::string& session_id() const noexcept {
+        return options_.session_id;
     }
     [[nodiscard]] std::size_t max_queued_messages() const noexcept {
         return options_.max_queued_messages;
@@ -77,7 +84,7 @@ private:
         return options_.follow_up_mode;
     }
 
-    ai::StreamingChatClient& client_; // must outlive every run coroutine
+    std::shared_ptr<coding_agent::ModelRuntime> runtime_; // shared; keeps the runtime alive for every run coroutine
     AsyncToolRegistry registry_;
     AsyncAgentOptions options_;
 };

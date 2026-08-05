@@ -65,9 +65,10 @@ struct ModelRuntimeAuthStatus {
 /// Config Directory paths, `models.json`, built-in/config composition,
 /// availability snapshots, Provider recomposition, and `refresh()`; it holds
 /// and delegates `ai::Models` privately. Injected as a `std::shared_ptr` into
-/// `CreateAgentSessionOptions`; runtimes are reusable across sessions with no
-/// dispose ceremony.
-class ModelRuntime final : public ai::StreamingChatClient {
+/// `CreateAgentSessionOptions` and into the stateful Agent (the sole injectable
+/// seam per #326); runtimes are reusable across sessions with no dispose
+/// ceremony.
+class ModelRuntime : public ai::StreamingChatClient {
 public:
     /// Construct and refresh a ModelRuntime from the Agent Config Directory.
     /// Filesystem I/O is synchronous; provider recomposition is synchronous.
@@ -168,7 +169,13 @@ public:
 
     // ── Streaming (delegation) ─────────────────────────────────────────────
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
+    /// Stream one assistant response through the frozen `streamSimple` surface
+    /// (pi `Models.streamSimple`). Domain failures complete through exactly one
+    /// terminal event plus an agreeing AssistantMessage value; the Expected
+    /// error alternative is reserved for consumer-sink or other infrastructure
+    /// failure. Virtual so recording test fakes can stand in for the runtime at
+    /// the Agent seam.
+    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
         ai::Model model,
         ai::AiContext context,
         ai::SimpleStreamOptions options,
@@ -196,6 +203,13 @@ public:
         std::string_view provider_id);
 
     struct Impl;
+
+protected:
+    /// Test-support construction for recording fakes that stand in for the
+    /// runtime at the Agent seam. Leaves the runtime without an impl; only the
+    /// virtual `stream_simple` surface overridden by the fake is callable.
+    /// Production construction always goes through `create`.
+    ModelRuntime() noexcept;
 
 private:
     explicit ModelRuntime(std::unique_ptr<Impl> impl);

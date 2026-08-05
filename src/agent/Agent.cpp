@@ -127,12 +127,12 @@ struct Agent::Impl {
     };
 
     Impl(
-        ai::StreamingChatClient& client,
+        std::shared_ptr<coding_agent::ModelRuntime> runtime,
         std::vector<ai::Tool> definitions,
         AsyncToolRegistry tools,
         AsyncAgentOptions options,
         AgentInitialState initial_state)
-        : loop(client, std::move(tools), std::move(options)) {
+        : loop(std::move(runtime), std::move(tools), std::move(options)) {
         state.messages = std::move(initial_state.messages);
         state.thinking_level = std::move(initial_state.thinking_level);
         state.input_queues.max_messages = loop.max_queued_messages();
@@ -351,14 +351,14 @@ AgentEventSubscription::operator bool() const {
 }
 
 Agent::Agent(
-    ai::StreamingChatClient& client,
+    std::shared_ptr<coding_agent::ModelRuntime> runtime,
     AsyncToolRegistry tools,
     AsyncAgentOptions options,
     AgentInitialState initial_state) {
     options.thinking_level = initial_state.thinking_level;
     auto definitions = tools.definitions();
     impl_ = std::make_shared<Impl>(
-        client,
+        std::move(runtime),
         std::move(definitions),
         std::move(tools),
         std::move(options),

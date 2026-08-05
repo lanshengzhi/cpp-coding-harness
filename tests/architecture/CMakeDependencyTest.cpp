@@ -90,6 +90,11 @@ TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issu
     const auto harness_sources = cmake_command_block(cmake, "add_library(cch_harness");
     CHECK(block_mentions(harness_sources, "src/harness/ShellResolver.cpp"));
     CHECK(block_mentions(cmake, "add_library(cch_tools"));
+    CHECK(block_mentions(cmake, "add_library(cch_coding_agent_core"));
+    const auto core_sources = cmake_command_block(cmake, "add_library(cch_coding_agent_core");
+    CHECK(block_mentions(core_sources, "src/coding_agent/ModelRuntime.cpp"));
+    CHECK(block_mentions(core_sources, "src/coding_agent/ModelConfig.cpp"));
+    CHECK(block_mentions(core_sources, "src/coding_agent/ProviderComposer.cpp"));
     CHECK(block_mentions(cmake, "add_library(cch_coding_agent_runtime"));
 
     const auto ai_sources = cmake_command_block(cmake, "add_library(cch_ai");
@@ -109,6 +114,7 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
     CHECK_FALSE(block_mentions(tui_links, "cch_agent"));
     CHECK_FALSE(block_mentions(tui_links, "cch_harness"));
     CHECK_FALSE(block_mentions(tui_links, "cch_tools"));
+    CHECK_FALSE(block_mentions(tui_links, "cch_coding_agent_core"));
     CHECK_FALSE(block_mentions(tui_links, "cch_coding_agent_runtime"));
 
     const auto coding_agent_tui_links = cmake_command_block(cmake, "target_link_libraries(cch_coding_agent_tui");
@@ -117,6 +123,7 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
     CHECK_FALSE(block_mentions(coding_agent_tui_links, "cch_agent"));
     CHECK_FALSE(block_mentions(coding_agent_tui_links, "cch_harness"));
     CHECK_FALSE(block_mentions(coding_agent_tui_links, "cch_tools"));
+    CHECK_FALSE(block_mentions(coding_agent_tui_links, "cch_coding_agent_core"));
     CHECK_FALSE(block_mentions(coding_agent_tui_links, "cch_coding_agent_runtime"));
 
     const auto interactive_links = cmake_command_block(cmake, "target_link_libraries(cch_coding_agent_interactive");
@@ -130,9 +137,11 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
     CHECK_FALSE(block_mentions(ai_links, "cch_agent"));
     CHECK_FALSE(block_mentions(ai_links, "cch_harness"));
     CHECK_FALSE(block_mentions(ai_links, "cch_tools"));
+    CHECK_FALSE(block_mentions(ai_links, "cch_coding_agent_core"));
     CHECK_FALSE(block_mentions(ai_links, "cch_coding_agent_runtime"));
 
     const auto agent_links = cmake_command_block(cmake, "target_link_libraries(cch_agent");
+    CHECK(block_mentions(agent_links, "cch_coding_agent_core"));
     CHECK(block_mentions(agent_links, "cch_ai"));
     CHECK(block_mentions(agent_links, "cch_util"));
     CHECK_FALSE(block_mentions(agent_links, "cch_harness"));
@@ -144,17 +153,20 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
     CHECK(block_mentions(harness_links, "cch_util"));
     CHECK_FALSE(block_mentions(harness_links, "cch_agent"));
     CHECK_FALSE(block_mentions(harness_links, "cch_tools"));
+    CHECK_FALSE(block_mentions(harness_links, "cch_coding_agent_core"));
     CHECK_FALSE(block_mentions(harness_links, "cch_coding_agent_runtime"));
 
     const auto tools_links = cmake_command_block(cmake, "target_link_libraries(cch_tools");
     CHECK(block_mentions(tools_links, "cch_agent"));
     CHECK(block_mentions(tools_links, "cch_harness"));
+    CHECK_FALSE(block_mentions(tools_links, "cch_coding_agent_core"));
     CHECK_FALSE(block_mentions(tools_links, "cch_coding_agent_runtime"));
 
     const auto runtime_links = cmake_command_block(cmake, "target_link_libraries(cch_coding_agent_runtime");
     CHECK(block_mentions(runtime_links, "cch_agent"));
     CHECK(block_mentions(runtime_links, "cch_harness"));
     CHECK(block_mentions(runtime_links, "cch_tools"));
+    CHECK(block_mentions(runtime_links, "cch_coding_agent_core"));
     CHECK(block_mentions(runtime_links, "cch_ai"));
     CHECK(block_mentions(runtime_links, "WebP::webpdecoder"));
     CHECK_FALSE(block_mentions(runtime_links, "cch_tui"));

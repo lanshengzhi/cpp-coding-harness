@@ -1,6 +1,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/util/Error.hpp>
 #include "agent/AgentLoop.hpp"
+#include "support/FakeModelRuntime.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/ToolArgumentContracts.hpp"
 #include "util/ExpectedMacros.hpp"
@@ -32,12 +33,15 @@ using namespace cch;
 
 namespace {
 
-class FakeStreamingClient final : public ai::StreamingChatClient {
+class FakeStreamingClient final : public coding_agent::ModelRuntime {
 public:
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
+        ai::Model model,
+        ai::AiContext context,
+        ai::SimpleStreamOptions options,
         ai::AssistantEventSink sink) override {
-        requests.push_back(request);
+        requests.push_back(tests::RecordedStreamSimpleCall{
+            std::move(model), std::move(context), std::move(options)});
         if (failure) {
             co_return std::unexpected(*failure);
         }
@@ -66,16 +70,19 @@ public:
 
     std::deque<ai::AssistantMessage> responses;
     std::optional<util::Error> failure;
-    std::vector<ai::StreamChatRequest> requests;
+    std::vector<tests::RecordedStreamSimpleCall> requests;
 };
 
-class CancellationAwarePolicyClient final : public ai::StreamingChatClient {
+class CancellationAwarePolicyClient final : public coding_agent::ModelRuntime {
 public:
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
+        ai::Model model,
+        ai::AiContext context,
+        ai::SimpleStreamOptions options,
         ai::AssistantEventSink sink) override {
-        requests.push_back(request);
-        if (request.stop_token.stop_requested()) {
+        requests.push_back(tests::RecordedStreamSimpleCall{
+            std::move(model), std::move(context), std::move(options)});
+        if (requests.back().options.stop_token.stop_requested()) {
             auto terminal = ai::assistant_text_message("");
             terminal.stop_reason = ai::AssistantStopReason::Aborted;
             terminal.error_message = "prompt aborted by policy";
@@ -112,6 +119,7 @@ public:
                 }));
             }
         }
+
         CCH_TRY_VOID(sink(ai::AssistantDoneEvent{
             .reason = response.stop_reason,
             .message = response,
@@ -120,18 +128,21 @@ public:
     }
 
     std::deque<ai::AssistantMessage> responses;
-    std::vector<ai::StreamChatRequest> requests;
+    std::vector<tests::RecordedStreamSimpleCall> requests;
 };
 
-class TerminalOutcomeClient final : public ai::StreamingChatClient {
+class TerminalOutcomeClient final : public coding_agent::ModelRuntime {
 public:
     explicit TerminalOutcomeClient(ai::AssistantMessage terminal)
         : terminal_(std::move(terminal)) {}
 
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
+        ai::Model model,
+        ai::AiContext context,
+        ai::SimpleStreamOptions options,
         ai::AssistantEventSink sink) override {
-        requests.push_back(request);
+        requests.push_back(tests::RecordedStreamSimpleCall{
+            std::move(model), std::move(context), std::move(options)});
         CCH_TRY_VOID(sink(ai::AssistantStartEvent{terminal_}));
         ++error_events;
         CCH_TRY_VOID(sink(ai::AssistantErrorEvent{terminal_.stop_reason, terminal_}));
@@ -140,20 +151,23 @@ public:
 
     ai::AssistantMessage terminal_;
     int error_events{0};
-    std::vector<ai::StreamChatRequest> requests;
+    std::vector<tests::RecordedStreamSimpleCall> requests;
 };
 
-/// A malformed host-provided client used to prove that the Agent presents one
+/// A malformed host-provided runtime used to prove that the Agent presents one
 /// assistant lifecycle even if a provider repeats its start event.
-class DuplicateStartClient final : public ai::StreamingChatClient {
+class DuplicateStartClient final : public coding_agent::ModelRuntime {
 public:
     explicit DuplicateStartClient(ai::AssistantMessage terminal)
         : terminal_(std::move(terminal)) {}
 
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
+        ai::Model model,
+        ai::AiContext context,
+        ai::SimpleStreamOptions options,
         ai::AssistantEventSink sink) override {
-        requests.push_back(request);
+        requests.push_back(tests::RecordedStreamSimpleCall{
+            std::move(model), std::move(context), std::move(options)});
         CCH_TRY_VOID(sink(ai::AssistantStartEvent{terminal_}));
         CCH_TRY_VOID(sink(ai::AssistantStartEvent{terminal_}));
         CCH_TRY_VOID(sink(ai::AssistantErrorEvent{terminal_.stop_reason, terminal_}));
@@ -161,21 +175,24 @@ public:
     }
 
     ai::AssistantMessage terminal_;
-    std::vector<ai::StreamChatRequest> requests;
+    std::vector<tests::RecordedStreamSimpleCall> requests;
 };
 
-/// A conforming host-provided client whose accepted call reaches a terminal
+/// A conforming host-provided runtime whose accepted call reaches a terminal
 /// event before any assistant start event and returns the same final
 /// AssistantMessage through the value alternative.
-class TerminalBeforeStartClient final : public ai::StreamingChatClient {
+class TerminalBeforeStartClient final : public coding_agent::ModelRuntime {
 public:
     explicit TerminalBeforeStartClient(ai::AssistantMessage terminal)
         : terminal_(std::move(terminal)) {}
 
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
+        ai::Model model,
+        ai::AiContext context,
+        ai::SimpleStreamOptions options,
         ai::AssistantEventSink sink) override {
-        requests.push_back(request);
+        requests.push_back(tests::RecordedStreamSimpleCall{
+            std::move(model), std::move(context), std::move(options)});
         ++terminal_events;
         if (terminal_.stop_reason == ai::AssistantStopReason::Error ||
             terminal_.stop_reason == ai::AssistantStopReason::Aborted) {
@@ -188,8 +205,9 @@ public:
 
     ai::AssistantMessage terminal_;
     int terminal_events{0};
-    std::vector<ai::StreamChatRequest> requests;
+    std::vector<tests::RecordedStreamSimpleCall> requests;
 };
+
 
 class FakeTool final : public agent::AsyncAgentTool {
 public:
@@ -332,8 +350,8 @@ TEST_CASE("async tool registry owns tools and returns deterministic definitions"
 }
 
 TEST_CASE("async agent loop emits deterministic lifecycle events for text", "[agent][async][u5]") {
-    FakeStreamingClient client;
-    client.responses.push_back(ai::assistant_text_message("hello user"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("hello user"));
     agent::AsyncToolRegistry registry;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
@@ -370,7 +388,7 @@ TEST_CASE(
     terminal.api = "host-api";
     terminal.provider = "host-provider";
     terminal.model = "gpt-test";
-    TerminalBeforeStartClient client(std::move(terminal));
+    auto client = std::make_shared<TerminalBeforeStartClient>(std::move(terminal));
 
     agent::AsyncToolRegistry registry;
     agent::AsyncAgentOptions options;
@@ -387,8 +405,8 @@ TEST_CASE(
     REQUIRE(final != nullptr);
     CHECK(ai::text_from_assistant_content(final->content) == "host reply without a streamed start");
 
-    CHECK(client.requests.size() == 1);
-    CHECK(client.terminal_events == 1);
+    CHECK(client->requests.size() == 1);
+    CHECK(client->terminal_events == 1);
 
     REQUIRE(run.events.size() == 8);
     std::size_t index = 0;
@@ -417,7 +435,7 @@ TEST_CASE(
     terminal.model = "gpt-test";
     terminal.stop_reason = ai::AssistantStopReason::Error;
     terminal.error_message = "host transport lost after response start";
-    TerminalOutcomeClient client(std::move(terminal));
+    auto client = std::make_shared<TerminalOutcomeClient>(std::move(terminal));
 
     agent::AsyncToolRegistry registry;
     agent::AsyncAgentOptions options;
@@ -456,7 +474,7 @@ TEST_CASE(
     terminal.model = "gpt-test";
     terminal.stop_reason = ai::AssistantStopReason::Error;
     terminal.error_message = "host transport lost after duplicate starts";
-    DuplicateStartClient client(std::move(terminal));
+    auto client = std::make_shared<DuplicateStartClient>(std::move(terminal));
 
     agent::AsyncToolRegistry registry;
     agent::AsyncAgentOptions options;
@@ -467,7 +485,7 @@ TEST_CASE(
 
     REQUIRE(run.result.has_value());
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
-    CHECK(client.requests.size() == 1);
+    CHECK(client->requests.size() == 1);
 
     std::size_t assistant_starts = 0;
     std::size_t assistant_ends = 0;
@@ -486,8 +504,8 @@ TEST_CASE(
 }
 
 TEST_CASE("async agent loop emits user message lifecycle before assistant response", "[agent][async]") {
-    FakeStreamingClient client;
-    client.responses.push_back(ai::assistant_text_message("hello user"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("hello user"));
     agent::AsyncToolRegistry registry;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
@@ -549,13 +567,13 @@ TEST_CASE("async agent loop emits user message lifecycle before assistant respon
 
 
 TEST_CASE("async agent loop forwards thinking and tool-call stream lifecycle events", "[agent][async][u5]") {
-    FakeStreamingClient client;
+    auto client = std::make_shared<FakeStreamingClient>();
     ai::AssistantMessage message;
     message.stop_reason = ai::AssistantStopReason::ToolUse;
     message.content.emplace_back(ai::thinking_content("SECRET_THOUGHT"));
     message.content.emplace_back(ai::tool_call_content("call-1", "read_file", R"({"path":"README.md"})"));
-    client.responses.push_back(std::move(message));
-    client.responses.push_back(ai::assistant_text_message("done"));
+    client->responses.push_back(std::move(message));
+    client->responses.push_back(ai::assistant_text_message("done"));
 
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{
@@ -581,9 +599,9 @@ TEST_CASE("async agent loop forwards thinking and tool-call stream lifecycle eve
 }
 
 TEST_CASE("async agent loop executes tool calls and continues with tool result context", "[agent][async][u5][ae2]") {
-    FakeStreamingClient client;
-    client.responses.push_back(tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("done"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
 
     auto tool = std::make_unique<FakeTool>(ai::Tool{
         "read_file",
@@ -606,9 +624,9 @@ TEST_CASE("async agent loop executes tool calls and continues with tool result c
     CHECK(tool_ptr->invocations[0].call_id == "call-1");
     CHECK(tool_ptr->invocations[0].name == "read_file");
     CHECK(tool_ptr->invocations[0].arguments.get<util::JsonValue::object_t>().at("path").get_string() == "README.md");
-    REQUIRE(client.requests.size() == 2);
-    REQUIRE(client.requests[1].context.messages.size() == 3);
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client.requests[1].context.messages.back()));
+    REQUIRE(client->requests.size() == 2);
+    REQUIRE(client->requests[1].context.messages.size() == 3);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client->requests[1].context.messages.back()));
     CHECK(count_events<agent::MessageUpdateEvent>(run.events) >= 1);
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
@@ -619,9 +637,9 @@ TEST_CASE("async agent loop executes tool calls and continues with tool result c
 }
 
 TEST_CASE("async agent loop turns malformed tool arguments into error tool results", "[agent][async][u5]") {
-    FakeStreamingClient client;
-    client.responses.push_back(tool_call_response("not-json"));
-    client.responses.push_back(ai::assistant_text_message("saw error"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response("not-json"));
+    client->responses.push_back(ai::assistant_text_message("saw error"));
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
     agent::AsyncAgentOptions options;
@@ -632,9 +650,9 @@ TEST_CASE("async agent loop turns malformed tool arguments into error tool resul
     auto run = run_loop(loop, "read");
 
     REQUIRE(run.result);
-    REQUIRE(client.requests.size() == 2);
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client.requests[1].context.messages.back()));
-    const auto& result = std::get<ai::ToolResultMessage>(client.requests[1].context.messages.back());
+    REQUIRE(client->requests.size() == 2);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client->requests[1].context.messages.back()));
+    const auto& result = std::get<ai::ToolResultMessage>(client->requests[1].context.messages.back());
     CHECK(result.is_error);
     CHECK(count_events<agent::ToolExecutionEndEvent>(run.events) == 1);
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
@@ -642,11 +660,11 @@ TEST_CASE("async agent loop turns malformed tool arguments into error tool resul
 }
 
 TEST_CASE("async agent loop default options impose no turn cap", "[agent][async][u5][issue68]") {
-    FakeStreamingClient client;
+    auto client = std::make_shared<FakeStreamingClient>();
     for (int turn = 0; turn < 9; ++turn) {
-        client.responses.push_back(tool_call_response());
+        client->responses.push_back(tool_call_response());
     }
-    client.responses.push_back(ai::assistant_text_message("done"));
+    client->responses.push_back(ai::assistant_text_message("done"));
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
     agent::AsyncAgentOptions options;
@@ -662,8 +680,8 @@ TEST_CASE("async agent loop default options impose no turn cap", "[agent][async]
 }
 
 TEST_CASE("async agent loop enforces an explicit host-set turn cap", "[agent][async][u5][issue68]") {
-    FakeStreamingClient client;
-    client.responses.push_back(tool_call_response());
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
     agent::AsyncAgentOptions options;
@@ -702,9 +720,9 @@ TEST_CASE("agent queue bounds are documented configuration fields", "[agent][asy
 
 
 TEST_CASE("beforeToolCall hook can block a tool call", "[agent][async][u7]") {
-    FakeStreamingClient client;
-    client.responses.push_back(tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("done"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
 
     auto tool = std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()});
     auto* tool_ptr = tool.get();
@@ -739,17 +757,17 @@ TEST_CASE("beforeToolCall hook can block a tool call", "[agent][async][u7]") {
     REQUIRE(end_event);
     CHECK(end_event->is_error);
 
-    REQUIRE(client.requests.size() == 2);
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client.requests[1].context.messages.back()));
-    const auto& result = std::get<ai::ToolResultMessage>(client.requests[1].context.messages.back());
+    REQUIRE(client->requests.size() == 2);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client->requests[1].context.messages.back()));
+    const auto& result = std::get<ai::ToolResultMessage>(client->requests[1].context.messages.back());
     CHECK(result.is_error);
     CHECK(ai::text_from_content(result.content) == "blocked by policy");
 }
 
 TEST_CASE("beforeToolCall hook passes context and skips execution on block", "[agent][async][u7]") {
-    FakeStreamingClient client;
-    client.responses.push_back(tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("done"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
 
     auto tool = std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()});
     auto* tool_ptr = tool.get();
@@ -778,8 +796,8 @@ TEST_CASE("beforeToolCall hook passes context and skips execution on block", "[a
 }
 
 TEST_CASE("beforeToolCall hook failure aborts the run", "[agent][async][u7]") {
-    FakeStreamingClient client;
-    client.responses.push_back(tool_call_response());
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
@@ -806,8 +824,8 @@ TEST_CASE("beforeToolCall hook failure aborts the run", "[agent][async][u7]") {
 }
 
 TEST_CASE("beforeToolCall hook exception becomes a tool error", "[agent][async][u7]") {
-    FakeStreamingClient client;
-    client.responses.push_back(tool_call_response());
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
@@ -831,9 +849,9 @@ TEST_CASE("beforeToolCall hook exception becomes a tool error", "[agent][async][
 }
 
 TEST_CASE("afterToolCall hook overrides tool result content", "[agent][async][u7]") {
-    FakeStreamingClient client;
-    client.responses.push_back(tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("done"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
@@ -851,18 +869,18 @@ TEST_CASE("afterToolCall hook overrides tool result content", "[agent][async][u7
     auto run = run_loop(loop, "read");
 
     REQUIRE(run.result);
-    REQUIRE(client.requests.size() == 2);
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client.requests[1].context.messages.back()));
-    const auto& result = std::get<ai::ToolResultMessage>(client.requests[1].context.messages.back());
+    REQUIRE(client->requests.size() == 2);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client->requests[1].context.messages.back()));
+    const auto& result = std::get<ai::ToolResultMessage>(client->requests[1].context.messages.back());
     CHECK(ai::text_from_content(result.content) == "overridden");
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
 }
 
 TEST_CASE("afterToolCall hook overrides error flag", "[agent][async][u7]") {
-    FakeStreamingClient client;
-    client.responses.push_back(tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("done"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
@@ -879,9 +897,9 @@ TEST_CASE("afterToolCall hook overrides error flag", "[agent][async][u7]") {
     auto run = run_loop(loop, "read");
 
     REQUIRE(run.result);
-    REQUIRE(client.requests.size() == 2);
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client.requests[1].context.messages.back()));
-    const auto& result = std::get<ai::ToolResultMessage>(client.requests[1].context.messages.back());
+    REQUIRE(client->requests.size() == 2);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client->requests[1].context.messages.back()));
+    const auto& result = std::get<ai::ToolResultMessage>(client->requests[1].context.messages.back());
     CHECK(result.is_error);
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
@@ -890,8 +908,8 @@ TEST_CASE("afterToolCall hook overrides error flag", "[agent][async][u7]") {
 TEST_CASE(
     "afterToolCall terminate hint stops automatic continuation",
     "[agent][async][issue35]") {
-    FakeStreamingClient client;
-    client.responses.push_back(tool_call_response());
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(
         ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
@@ -911,7 +929,7 @@ TEST_CASE(
     REQUIRE(run.result);
     CHECK(run.result->turns == 1);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
-    CHECK(client.requests.size() == 1);
+    CHECK(client->requests.size() == 1);
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }
 
@@ -1083,9 +1101,9 @@ RunResult run_loop_on_pool(agent::AsyncAgentLoop& loop, std::string prompt) {
 
 
 TEST_CASE("terminate batch continues when one call declines", "[agent][async][u7]") {
-    FakeStreamingClient client;
-    client.responses.push_back(two_tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("done"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(two_tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
 
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()})));
@@ -1114,9 +1132,9 @@ TEST_CASE("terminate batch continues when one call declines", "[agent][async][u7
 }
 
 TEST_CASE("blocked call prevents terminate batch", "[agent][async][u7]") {
-    FakeStreamingClient client;
-    client.responses.push_back(two_tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("done"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(two_tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
 
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()})));
@@ -1149,9 +1167,9 @@ TEST_CASE("blocked call prevents terminate batch", "[agent][async][u7]") {
 }
 
 TEST_CASE("tool execution error prevents terminate batch", "[agent][async][u7]") {
-    FakeStreamingClient client;
-    client.responses.push_back(two_tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("done"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(two_tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
 
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()})));
@@ -1179,8 +1197,8 @@ TEST_CASE("tool execution error prevents terminate batch", "[agent][async][u7]")
 }
 
 TEST_CASE("afterToolCall hook failure aborts the run", "[agent][async][u7]") {
-    FakeStreamingClient client;
-    client.responses.push_back(tool_call_response());
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
@@ -1204,8 +1222,8 @@ TEST_CASE("afterToolCall hook failure aborts the run", "[agent][async][u7]") {
 }
 
 TEST_CASE("afterToolCall hook exception becomes a tool error", "[agent][async][u7]") {
-    FakeStreamingClient client;
-    client.responses.push_back(tool_call_response());
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
@@ -1241,8 +1259,8 @@ TEST_CASE(
     "awaitable context policies suspend and resume in Agent executor order",
     "[agent][async][issue82]") {
     boost::asio::io_context io;
-    FakeStreamingClient client;
-    client.responses.push_back(ai::assistant_text_message("ok"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("ok"));
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
@@ -1312,9 +1330,9 @@ TEST_CASE(
 TEST_CASE(
     "awaitable signal-bearing policies receive the active run stop token",
     "[agent][async][issue39][issue82]") {
-    FakeStreamingClient client;
-    client.responses.push_back(tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("done"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
@@ -1366,8 +1384,8 @@ TEST_CASE(
     "cancellation reaches a suspended tool and completes one ordinary aborted lifecycle",
     "[agent][async][abort][issue40]") {
     boost::asio::io_context io;
-    CancellationAwarePolicyClient client;
-    client.responses.push_back(tool_call_response());
+    auto client = std::make_shared<CancellationAwarePolicyClient>();
+    client->responses.push_back(tool_call_response());
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("gpt-test");
 
@@ -1412,15 +1430,15 @@ TEST_CASE(
     CHECK(*tool_ptr->observed_stop_token == stop_source.get_token());
     CHECK(tool_ptr->observed_stop_token->stop_requested());
     CHECK(tool_ptr->invocations.size() == 1);
-    REQUIRE(client.requests.size() == 2);
-    CHECK(client.requests[1].stop_token.stop_requested());
+    REQUIRE(client->requests.size() == 2);
+    CHECK(client->requests[1].options.stop_token.stop_requested());
     CHECK(count_events<agent::AgentEndEvent>(events) == 1);
 }
 
 TEST_CASE(
     "transform policy cancellation completes through an aborted provider turn",
     "[agent][async][abort][issue39]") {
-    CancellationAwarePolicyClient client;
+    auto client = std::make_shared<CancellationAwarePolicyClient>();
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("gpt-test");
     std::stop_source stop_source;
@@ -1440,8 +1458,8 @@ TEST_CASE(
 
     REQUIRE(run.result.has_value());
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Aborted);
-    REQUIRE(client.requests.size() == 1);
-    CHECK(client.requests[0].stop_token.stop_requested());
+    REQUIRE(client->requests.size() == 1);
+    CHECK(client->requests[0].options.stop_token.stop_requested());
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
     CHECK(count_events<agent::TurnEndEvent>(run.events) == 1);
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
@@ -1450,8 +1468,8 @@ TEST_CASE(
 TEST_CASE(
     "before-tool policy cancellation skips the tool and reaches an aborted provider turn",
     "[agent][async][abort][issue39][issue40]") {
-    CancellationAwarePolicyClient client;
-    client.responses.push_back(tool_call_response());
+    auto client = std::make_shared<CancellationAwarePolicyClient>();
+    client->responses.push_back(tool_call_response());
     std::stop_source stop_source;
     agent::AsyncAgentOptions options;
     options.max_turns = 1;
@@ -1479,8 +1497,8 @@ TEST_CASE(
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Aborted);
     CHECK(run.result->turns == 2);
     CHECK(tool_ptr->invocations.empty());
-    REQUIRE(client.requests.size() == 2);
-    CHECK(client.requests[1].stop_token.stop_requested());
+    REQUIRE(client->requests.size() == 2);
+    CHECK(client->requests[1].options.stop_token.stop_requested());
     CHECK(count_events<agent::TurnEndEvent>(run.events) == 2);
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }
@@ -1488,8 +1506,8 @@ TEST_CASE(
 TEST_CASE(
     "after-tool policy cancellation keeps the tool result and reaches an aborted provider turn",
     "[agent][async][abort][issue39][issue40]") {
-    CancellationAwarePolicyClient client;
-    client.responses.push_back(tool_call_response());
+    auto client = std::make_shared<CancellationAwarePolicyClient>();
+    client->responses.push_back(tool_call_response());
     std::stop_source stop_source;
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("gpt-test");
@@ -1515,8 +1533,8 @@ TEST_CASE(
     REQUIRE(run.result.has_value());
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Aborted);
     REQUIRE(tool_ptr->invocations.size() == 1);
-    REQUIRE(client.requests.size() == 2);
-    CHECK(client.requests[1].stop_token.stop_requested());
+    REQUIRE(client->requests.size() == 2);
+    CHECK(client->requests[1].options.stop_token.stop_requested());
     CHECK(count_events<agent::TurnEndEvent>(run.events) == 2);
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }
@@ -1524,8 +1542,8 @@ TEST_CASE(
 TEST_CASE(
     "awaitable policy exceptions after suspension stay in the existing error channel",
     "[agent][async][issue82]") {
-    FakeStreamingClient client;
-    client.responses.push_back(ai::assistant_text_message("unused"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("unused"));
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
@@ -1549,8 +1567,8 @@ TEST_CASE(
 }
 
 TEST_CASE("transformContext hook prunes old messages from LLM request", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(ai::assistant_text_message("ok"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("ok"));
     agent::AsyncToolRegistry registry;
 
     agent::AsyncAgentOptions options;
@@ -1570,15 +1588,15 @@ TEST_CASE("transformContext hook prunes old messages from LLM request", "[agent]
     auto run = run_loop(loop, "hi");
 
     REQUIRE(run.result);
-    REQUIRE(client.requests.size() == 1);
-    REQUIRE(client.requests[0].context.messages.size() == 1);
-    REQUIRE(std::holds_alternative<ai::UserMessage>(client.requests[0].context.messages[0]));
+    REQUIRE(client->requests.size() == 1);
+    REQUIRE(client->requests[0].context.messages.size() == 1);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(client->requests[0].context.messages[0]));
     REQUIRE(run.result->context.messages.size() == 2);
 }
 
 TEST_CASE("convertToLlm hook filters non-LLM messages", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(ai::assistant_text_message("ok"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("ok"));
     agent::AsyncToolRegistry registry;
 
     agent::AsyncAgentOptions options;
@@ -1603,13 +1621,13 @@ TEST_CASE("convertToLlm hook filters non-LLM messages", "[agent][async][u8]") {
     auto run = run_loop(loop, "hi");
 
     REQUIRE(run.result);
-    REQUIRE(client.requests.size() == 1);
-    REQUIRE(client.requests[0].context.messages.size() == 1);
+    REQUIRE(client->requests.size() == 1);
+    REQUIRE(client->requests[0].context.messages.size() == 1);
 }
 
 TEST_CASE("convertToLlm returning empty aborts with validation error", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(ai::assistant_text_message("ok"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("ok"));
     agent::AsyncToolRegistry registry;
 
     agent::AsyncAgentOptions options;
@@ -1630,8 +1648,8 @@ TEST_CASE("convertToLlm returning empty aborts with validation error", "[agent][
 }
 
 TEST_CASE("transformContext hook error aborts the run", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(ai::assistant_text_message("ok"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("ok"));
     agent::AsyncToolRegistry registry;
 
     agent::AsyncAgentOptions options;
@@ -1653,8 +1671,8 @@ TEST_CASE("transformContext hook error aborts the run", "[agent][async][u8]") {
 }
 
 TEST_CASE("convertToLlm hook error aborts the run", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(ai::assistant_text_message("ok"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("ok"));
     agent::AsyncToolRegistry registry;
 
     agent::AsyncAgentOptions options;
@@ -1677,8 +1695,8 @@ TEST_CASE("convertToLlm hook error aborts the run", "[agent][async][u8]") {
 
 TEST_CASE("transformContext and convertToLlm exceptions abort cleanly", "[agent][async][u8]") {
     {
-        FakeStreamingClient client;
-        client.responses.push_back(ai::assistant_text_message("ok"));
+        auto client = std::make_shared<FakeStreamingClient>();
+        client->responses.push_back(ai::assistant_text_message("ok"));
         agent::AsyncToolRegistry registry;
 
         agent::AsyncAgentOptions options;
@@ -1701,8 +1719,8 @@ TEST_CASE("transformContext and convertToLlm exceptions abort cleanly", "[agent]
     }
 
     {
-        FakeStreamingClient client;
-        client.responses.push_back(ai::assistant_text_message("ok"));
+        auto client = std::make_shared<FakeStreamingClient>();
+        client->responses.push_back(ai::assistant_text_message("ok"));
         agent::AsyncToolRegistry registry;
 
         agent::AsyncAgentOptions options;
@@ -1738,8 +1756,8 @@ TEST_CASE("transformContext and convertToLlm exceptions abort cleanly", "[agent]
 
 
 TEST_CASE("agent_end contains only messages from the current invocation", "[agent][async][issue35]") {
-    FakeStreamingClient client;
-    client.responses.push_back(ai::assistant_text_message("current reply"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("current reply"));
     agent::AsyncToolRegistry registry;
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -1771,9 +1789,9 @@ TEST_CASE("agent_end contains only messages from the current invocation", "[agen
 
 
 TEST_CASE("prepareNextTurn model swap changes next request model", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("second"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("second"));
 
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
@@ -1800,14 +1818,14 @@ TEST_CASE("prepareNextTurn model swap changes next request model", "[agent][asyn
     auto run = run_loop(loop, "read");
 
     REQUIRE(run.result);
-    REQUIRE(client.requests.size() == 2);
-    CHECK(client.requests[1].model.id == "gpt-swapped");
+    REQUIRE(client->requests.size() == 2);
+    CHECK(client->requests[1].model.id == "gpt-swapped");
     CHECK(run.result->state.model.id == "gpt-swapped");
 }
 
 TEST_CASE("prepareNextTurn model update without validator is rejected", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(tool_call_response());
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
 
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
@@ -1831,8 +1849,8 @@ TEST_CASE("prepareNextTurn model update without validator is rejected", "[agent]
 }
 
 TEST_CASE("prepareNextTurn thinking level is validated", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(ai::assistant_text_message("first"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("first"));
 
     agent::AsyncToolRegistry registry;
 
@@ -1854,9 +1872,9 @@ TEST_CASE("prepareNextTurn thinking level is validated", "[agent][async][u8]") {
 }
 
 TEST_CASE("prepareNextTurn rejected update does not persist partial model changes", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("second run"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("second run"));
 
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
@@ -1889,15 +1907,15 @@ TEST_CASE("prepareNextTurn rejected update does not persist partial model change
 
     auto second = run_loop(loop, "hi again");
     REQUIRE(second.result);
-    REQUIRE(client.requests.size() == 2);
-    CHECK(client.requests[1].model.id == "gpt-test");
+    REQUIRE(client->requests.size() == 2);
+    CHECK(client->requests[1].model.id == "gpt-test");
     CHECK(second.result->state.model.id == "gpt-test");
 }
 
 TEST_CASE("prepareNextTurn replaces model context without publishing replacement messages", "[agent][async][issue35]") {
-    FakeStreamingClient client;
-    client.responses.push_back(tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("second"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("second"));
 
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(
@@ -1943,14 +1961,14 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
     CHECK(prepared);
     CHECK(first_prepare_new_message_count == 3);
     CHECK(stop_observed_replacement);
-    REQUIRE(client.requests.size() == 2);
-    REQUIRE(client.requests[1].context.system_prompt.has_value());
-    CHECK(*client.requests[1].context.system_prompt == "replacement prompt");
-    REQUIRE(client.requests[1].context.messages.size() == 1);
-    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(client.requests[1].context.messages[0])) ==
+    REQUIRE(client->requests.size() == 2);
+    REQUIRE(client->requests[1].context.system_prompt.has_value());
+    CHECK(*client->requests[1].context.system_prompt == "replacement prompt");
+    REQUIRE(client->requests[1].context.messages.size() == 1);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(client->requests[1].context.messages[0])) ==
           "replacement history");
-    REQUIRE(client.requests[1].context.tools.size() == 1);
-    CHECK(client.requests[1].context.tools[0].name == "read_file");
+    REQUIRE(client->requests[1].context.tools.size() == 1);
+    CHECK(client->requests[1].context.tools[0].name == "read_file");
 
     REQUIRE(run.result->context.messages.size() == 2);
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(run.result->context.messages[0])) ==
@@ -1968,8 +1986,8 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
 }
 
 TEST_CASE("prepareNextTurn no update leaves model and thinking level unchanged", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(ai::assistant_text_message("first"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("first"));
 
     agent::AsyncToolRegistry registry;
 
@@ -1990,8 +2008,8 @@ TEST_CASE("prepareNextTurn no update leaves model and thinking level unchanged",
 }
 
 TEST_CASE("prepareNextTurn valid thinking level is preserved in state", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(ai::assistant_text_message("first"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("first"));
 
     agent::AsyncToolRegistry registry;
 
@@ -2013,9 +2031,9 @@ TEST_CASE("prepareNextTurn valid thinking level is preserved in state", "[agent]
 }
 
 TEST_CASE("prepareNextTurn model validation hook can reject unknown models", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("second"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("second"));
 
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
@@ -2048,8 +2066,8 @@ TEST_CASE("prepareNextTurn model validation hook can reject unknown models", "[a
 
 TEST_CASE("prepareNextTurn and turn-update validation exceptions abort cleanly", "[agent][async][u8]") {
     {
-        FakeStreamingClient client;
-        client.responses.push_back(ai::assistant_text_message("first"));
+        auto client = std::make_shared<FakeStreamingClient>();
+        client->responses.push_back(ai::assistant_text_message("first"));
         agent::AsyncToolRegistry registry;
 
         agent::AsyncAgentOptions options;
@@ -2071,8 +2089,8 @@ TEST_CASE("prepareNextTurn and turn-update validation exceptions abort cleanly",
     }
 
     {
-        FakeStreamingClient client;
-        client.responses.push_back(ai::assistant_text_message("first"));
+        auto client = std::make_shared<FakeStreamingClient>();
+        client->responses.push_back(ai::assistant_text_message("first"));
         agent::AsyncToolRegistry registry;
 
         agent::AsyncAgentOptions options;
@@ -2105,9 +2123,9 @@ TEST_CASE("tool execution policy defaults to sequential", "[agent][async][u8]") 
 }
 
 TEST_CASE("an exclusive tool forces a bounded batch to execute sequentially", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(two_tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("done"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(two_tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
 
     ConcurrencyProbe probe;
     agent::AsyncToolRegistry registry;
@@ -2129,14 +2147,14 @@ TEST_CASE("an exclusive tool forces a bounded batch to execute sequentially", "[
     auto run = run_loop_on_pool(loop, "read");
 
     REQUIRE(run.result);
-    REQUIRE(client.requests.size() == 2);
+    REQUIRE(client->requests.size() == 2);
     CHECK(probe.max_active.load() == 1);
 }
 
 TEST_CASE("bounded parallel execution preserves source order in the transcript", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(two_tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("done"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(two_tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
 
     agent::AsyncToolRegistry registry;
     auto alpha = std::make_unique<ConfigurableFakeTool>(
@@ -2164,8 +2182,8 @@ TEST_CASE("bounded parallel execution preserves source order in the transcript",
     CHECK(alpha_ptr->invocations.size() == 1);
     CHECK(beta_ptr->invocations.size() == 1);
 
-    REQUIRE(client.requests.size() == 2);
-    const auto& second_request = client.requests[1];
+    REQUIRE(client->requests.size() == 2);
+    const auto& second_request = client->requests[1];
     REQUIRE(second_request.context.messages.size() == 4);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(second_request.context.messages[2]));
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(second_request.context.messages[3]));
@@ -2190,7 +2208,7 @@ TEST_CASE("bounded parallel execution preserves source order in the transcript",
 TEST_CASE(
     "agent loop recovers after a schema-invalid call in a bounded parallel batch",
     "[agent][async][tool-arguments][issue27]") {
-    FakeStreamingClient client;
+    auto client = std::make_shared<FakeStreamingClient>();
 
     ai::AssistantMessage mixed_calls;
     mixed_calls.stop_reason = ai::AssistantStopReason::ToolUse;
@@ -2198,14 +2216,14 @@ TEST_CASE(
         "call-invalid", "alpha", R"({"value":"not-an-integer"})"));
     mixed_calls.content.emplace_back(ai::tool_call_content(
         "call-valid", "beta", R"({"value":"2"})"));
-    client.responses.push_back(std::move(mixed_calls));
+    client->responses.push_back(std::move(mixed_calls));
 
     ai::AssistantMessage corrected_call;
     corrected_call.stop_reason = ai::AssistantStopReason::ToolUse;
     corrected_call.content.emplace_back(ai::tool_call_content(
         "call-corrected", "alpha", R"({"value":"3"})"));
-    client.responses.push_back(std::move(corrected_call));
-    client.responses.push_back(ai::assistant_text_message("recovered"));
+    client->responses.push_back(std::move(corrected_call));
+    client->responses.push_back(ai::assistant_text_message("recovered"));
 
     const auto strict_contract = test::integer_value_tool_argument_contract();
 
@@ -2256,8 +2274,8 @@ TEST_CASE(
     CHECK(before_hook_arguments[0].at("value").get_number() == 2);
     CHECK(before_hook_arguments[1].at("value").get_number() == 3);
 
-    REQUIRE(client.requests.size() == 3);
-    const auto& recovery_context = client.requests[1].context.messages;
+    REQUIRE(client->requests.size() == 3);
+    const auto& recovery_context = client->requests[1].context.messages;
     REQUIRE(recovery_context.size() == 4);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(recovery_context[2]));
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(recovery_context[3]));
@@ -2270,7 +2288,7 @@ TEST_CASE(
     CHECK(valid_result.tool_name == "beta");
     CHECK_FALSE(valid_result.is_error);
 
-    const auto& completion_context = client.requests[2].context.messages;
+    const auto& completion_context = client->requests[2].context.messages;
     REQUIRE(completion_context.size() == 6);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(completion_context[5]));
     const auto& corrected_result = std::get<ai::ToolResultMessage>(completion_context[5]);
@@ -2282,9 +2300,9 @@ TEST_CASE(
 }
 
 TEST_CASE("bounded parallel limit one executes sequentially", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(two_tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("done"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(two_tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
 
     ConcurrencyProbe probe;
     agent::AsyncToolRegistry registry;
@@ -2312,8 +2330,8 @@ TEST_CASE("bounded parallel limit one executes sequentially", "[agent][async][u8
 }
 
 TEST_CASE("bounded parallel policy rejects zero before tools start", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(two_tool_call_response());
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(two_tool_call_response());
 
     ConcurrencyProbe probe;
     agent::AsyncToolRegistry registry;
@@ -2341,9 +2359,9 @@ TEST_CASE("bounded parallel policy rejects zero before tools start", "[agent][as
 }
 
 TEST_CASE("bounded parallel execution keeps blocked calls out of tool adapters", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(two_tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("done"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(two_tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
 
     agent::AsyncToolRegistry registry;
     auto alpha = std::make_unique<ConfigurableFakeTool>(
@@ -2379,9 +2397,9 @@ TEST_CASE("bounded parallel execution keeps blocked calls out of tool adapters",
     REQUIRE(run.result);
     CHECK(alpha_ptr->invocations.empty());
     CHECK(beta_ptr->invocations.size() == 1);
-    REQUIRE(client.requests.size() == 2);
-    const auto& alpha_result = std::get<ai::ToolResultMessage>(client.requests[1].context.messages[2]);
-    const auto& beta_result = std::get<ai::ToolResultMessage>(client.requests[1].context.messages[3]);
+    REQUIRE(client->requests.size() == 2);
+    const auto& alpha_result = std::get<ai::ToolResultMessage>(client->requests[1].context.messages[2]);
+    const auto& beta_result = std::get<ai::ToolResultMessage>(client->requests[1].context.messages[3]);
     CHECK(alpha_result.is_error);
     CHECK(ai::text_from_content(alpha_result.content) == "blocked alpha");
     CHECK_FALSE(beta_result.is_error);
@@ -2390,8 +2408,8 @@ TEST_CASE("bounded parallel execution keeps blocked calls out of tool adapters",
 }
 
 TEST_CASE("bounded parallel before-hook failure starts no workers", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(two_tool_call_response());
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(two_tool_call_response());
 
     ConcurrencyProbe probe;
     agent::AsyncToolRegistry registry;
@@ -2427,9 +2445,9 @@ TEST_CASE("bounded parallel before-hook failure starts no workers", "[agent][asy
 }
 
 TEST_CASE("bounded parallel execution preserves peer success after a tool error", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(two_tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("done"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(two_tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
 
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FailingFakeTool>(
@@ -2448,9 +2466,9 @@ TEST_CASE("bounded parallel execution preserves peer success after a tool error"
     auto run = run_loop_on_pool(loop, "read");
 
     REQUIRE(run.result);
-    REQUIRE(client.requests.size() == 2);
-    const auto& alpha_result = std::get<ai::ToolResultMessage>(client.requests[1].context.messages[2]);
-    const auto& beta_result = std::get<ai::ToolResultMessage>(client.requests[1].context.messages[3]);
+    REQUIRE(client->requests.size() == 2);
+    const auto& alpha_result = std::get<ai::ToolResultMessage>(client->requests[1].context.messages[2]);
+    const auto& beta_result = std::get<ai::ToolResultMessage>(client->requests[1].context.messages[3]);
     CHECK(alpha_result.is_error);
     CHECK_FALSE(beta_result.is_error);
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
@@ -2458,8 +2476,8 @@ TEST_CASE("bounded parallel execution preserves peer success after a tool error"
 }
 
 TEST_CASE("bounded parallel event-sink failure drains workers and emits one agent end", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(two_tool_call_response());
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(two_tool_call_response());
 
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
@@ -2514,8 +2532,8 @@ TEST_CASE("bounded parallel event-sink failure drains workers and emits one agen
 }
 
 TEST_CASE("bounded parallel execution keeps hook failures as agent errors", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(two_tool_call_response());
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(two_tool_call_response());
 
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
@@ -2553,9 +2571,9 @@ TEST_CASE("bounded parallel execution keeps hook failures as agent errors", "[ag
 }
 
 TEST_CASE("bounded parallel execution emits end events in completion order", "[agent][async][u8]") {
-    FakeStreamingClient client;
-    client.responses.push_back(two_tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("done"));
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(two_tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
 
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<DelayedFakeTool>(
@@ -2603,11 +2621,11 @@ TEST_CASE("bounded parallel execution emits end events in completion order", "[a
 }
 
 TEST_CASE("length-truncated tool calls emit errors without crossing the executor seam", "[agent][async][u8]") {
-    FakeStreamingClient client;
+    auto client = std::make_shared<FakeStreamingClient>();
     auto truncated = two_tool_call_response();
     truncated.stop_reason = ai::AssistantStopReason::Length;
-    client.responses.push_back(std::move(truncated));
-    client.responses.push_back(ai::assistant_text_message("recovered"));
+    client->responses.push_back(std::move(truncated));
+    client->responses.push_back(ai::assistant_text_message("recovered"));
 
     agent::AsyncToolRegistry registry;
     auto alpha = std::make_unique<ConfigurableFakeTool>(
@@ -2658,8 +2676,8 @@ TEST_CASE("length-truncated tool calls emit errors without crossing the executor
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 
-    REQUIRE(client.requests.size() == 2);
-    const auto& messages = client.requests[1].context.messages;
+    REQUIRE(client->requests.size() == 2);
+    const auto& messages = client->requests[1].context.messages;
     REQUIRE(messages.size() == 4);
     const auto& alpha_result = std::get<ai::ToolResultMessage>(messages[2]);
     const auto& beta_result = std::get<ai::ToolResultMessage>(messages[3]);

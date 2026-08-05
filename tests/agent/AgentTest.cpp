@@ -1,8 +1,9 @@
 #include <cch/agent/Agent.hpp>
 #include <cch/ai/Content.hpp>
-#include "ai/providers/FakeProvider.hpp"
+#include "support/FakeModelRuntime.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/ToolArgumentContracts.hpp"
+#include "util/Json.hpp"
 
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
@@ -112,18 +113,22 @@ private:
     ai::Tool definition_;
 };
 
-class RecordingStreamingClient final : public ai::StreamingChatClient {
+class RecordingModelRuntime final : public coding_agent::ModelRuntime {
 public:
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
+        ai::Model model,
+        ai::AiContext context,
+        ai::SimpleStreamOptions options,
         ai::AssistantEventSink sink) override {
-        request_models.push_back(request.model.id);
+        request_models.push_back(model.id);
+        calls.push_back(tests::RecordedStreamSimpleCall{
+            std::move(model), std::move(context), std::move(options)});
         if (responses.empty()) {
             co_return std::unexpected(util::make_error(
                 util::ErrorCode::Provider,
                 "no scripted response"));
         }
-        auto response = responses.front();
+        auto response = std::move(responses.front());
         responses.pop_front();
         if (sink) {
             if (auto emitted = sink(ai::AssistantStartEvent{response}); !emitted) {
@@ -135,6 +140,191 @@ public:
 
     std::deque<ai::AssistantMessage> responses;
     std::vector<std::string> request_models;
+    std::vector<tests::RecordedStreamSimpleCall> calls;
+};
+
+/// Emits one complete assistant lifecycle for a scripted response: a start,
+/// then per content block the text/tool-call deltas, matching the scripted
+/// fake provider's observable event shape.
+[[nodiscard]] util::ExpectedVoid emit_scripted_lifecycle(
+    ai::AssistantEventSink& sink,
+    const ai::AssistantMessage& final_message) {
+    auto emit = [&sink](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+        return sink(event);
+    };
+    auto partial = final_message;
+    partial.content.clear();
+    if (auto emitted = emit(ai::AssistantStartEvent{.partial = partial}); !emitted) {
+        return emitted;
+    }
+    for (std::size_t content_index = 0;
+         content_index < final_message.content.size();
+         ++content_index) {
+        const auto& completed = final_message.content[content_index];
+        if (const auto* text = std::get_if<ai::TextContent>(&completed)) {
+            partial.content.emplace_back(ai::TextContent{
+                .text = "",
+                .text_signature = std::nullopt,
+            });
+            if (auto emitted = emit(ai::TextStartEvent{
+                    .content_index = content_index,
+                    .partial = partial,
+                });
+                !emitted) {
+                return emitted;
+            }
+            if (!text->text.empty()) {
+                std::get<ai::TextContent>(partial.content[content_index]).text = text->text;
+                if (auto emitted = emit(ai::TextDeltaEvent{
+                        .content_index = content_index,
+                        .delta = text->text,
+                        .partial = partial,
+                    });
+                    !emitted) {
+                    return emitted;
+                }
+            }
+            partial.content[content_index] = *text;
+            if (auto emitted = emit(ai::TextEndEvent{
+                    .content_index = content_index,
+                    .content = text->text,
+                    .partial = partial,
+                });
+                !emitted) {
+                return emitted;
+            }
+            continue;
+        }
+        const auto& tool_call = std::get<ai::ToolCallContent>(completed);
+        partial.content.emplace_back(ai::ToolCallContent{
+            .id = tool_call.id,
+            .name = tool_call.name,
+            .arguments = util::JsonValue{util::JsonValue::object_t{}},
+            .raw_arguments = {},
+            .thought_signature = std::nullopt,
+            .arguments_valid = true,
+            .argument_error = std::nullopt,
+        });
+        if (auto emitted = emit(ai::ToolCallStartEvent{
+                .content_index = content_index,
+                .partial = partial,
+            });
+            !emitted) {
+            return emitted;
+        }
+        if (!tool_call.raw_arguments.empty()) {
+            std::get<ai::ToolCallContent>(partial.content[content_index]).raw_arguments =
+                tool_call.raw_arguments;
+            if (auto emitted = emit(ai::ToolCallDeltaEvent{
+                    .content_index = content_index,
+                    .delta = tool_call.raw_arguments,
+                    .partial = partial,
+                });
+                !emitted) {
+                return emitted;
+            }
+        }
+        partial.content[content_index] = tool_call;
+        if (auto emitted = emit(ai::ToolCallEndEvent{
+                .content_index = content_index,
+                .tool_call = tool_call,
+                .partial = partial,
+            });
+            !emitted) {
+            return emitted;
+        }
+    }
+    return emit(ai::AssistantDoneEvent{
+        .reason = final_message.stop_reason,
+        .message = final_message,
+    });
+}
+
+/// Scripted fake ModelRuntime mirroring the scripted fake provider's behavior
+/// ("fake: <prompt>", `read` tool calls, tool-result observation, abort
+/// terminals) so the stateful Agent tests keep their observable responses.
+class ScriptedFakeRuntime final : public coding_agent::ModelRuntime {
+public:
+    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
+        ai::Model model,
+        ai::AiContext context,
+        ai::SimpleStreamOptions options,
+        ai::AssistantEventSink sink) override {
+        calls.push_back(tests::RecordedStreamSimpleCall{
+            std::move(model), std::move(context), std::move(options)});
+        ai::AssistantMessage assistant;
+        assistant.model = calls.back().model.id;
+        assistant.provider = "fake";
+        assistant.api = "scripted-fake";
+        assistant.usage = ai::Usage{};
+        assistant.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+
+        if (calls.back().options.stop_token.stop_requested()) {
+            assistant.stop_reason = ai::AssistantStopReason::Aborted;
+            assistant.error_message = "Request was aborted";
+            if (auto emitted = sink(ai::AssistantErrorEvent{
+                    .reason = assistant.stop_reason,
+                    .error = assistant,
+                    .failure = util::make_error(
+                        util::ErrorCode::Cancelled, *assistant.error_message),
+                });
+                !emitted) {
+                co_return std::unexpected(emitted.error());
+            }
+            co_return assistant;
+        }
+
+        if (!calls.back().context.messages.empty()) {
+            if (const auto* last_tool =
+                    std::get_if<ai::ToolResultMessage>(&calls.back().context.messages.back())) {
+                assistant.content.emplace_back(ai::text_content(
+                    "fake observed: " + ai::text_from_content(last_tool->content)));
+                if (auto emitted = emit_scripted_lifecycle(sink, assistant); !emitted) {
+                    co_return std::unexpected(emitted.error());
+                }
+                co_return assistant;
+            }
+        }
+
+        std::string prompt;
+        for (auto it = calls.back().context.messages.rbegin();
+             it != calls.back().context.messages.rend();
+             ++it) {
+            if (const auto* user = std::get_if<ai::UserMessage>(&*it)) {
+                prompt = ai::text_from_user_message(*user);
+                break;
+            }
+        }
+
+        if (prompt.starts_with("read ")) {
+            ai::ToolCallContent call;
+            call.id = "fake-read-1";
+            call.name = "read";
+            const auto raw = "{\"path\":\"" + prompt.substr(5) + "\"}";
+            call.raw_arguments = raw;
+            call.arguments_valid = true;
+            call.arguments = util::JsonValue{util::JsonValue::object_t{}};
+            if (auto parsed = util::read_json<util::JsonValue>(call.raw_arguments)) {
+                call.arguments = std::move(*parsed);
+            }
+            assistant.content.emplace_back(ai::text_content("reading " + prompt.substr(5)));
+            assistant.content.emplace_back(std::move(call));
+            assistant.stop_reason = ai::AssistantStopReason::ToolUse;
+            if (auto emitted = emit_scripted_lifecycle(sink, assistant); !emitted) {
+                co_return std::unexpected(emitted.error());
+            }
+            co_return assistant;
+        }
+
+        assistant.content.emplace_back(ai::text_content("fake: " + prompt));
+        if (auto emitted = emit_scripted_lifecycle(sink, assistant); !emitted) {
+            co_return std::unexpected(emitted.error());
+        }
+        co_return assistant;
+    }
+
+    std::vector<tests::RecordedStreamSimpleCall> calls;
 };
 
 ai::AssistantMessage read_tool_call_response() {
@@ -149,10 +339,12 @@ ai::AssistantMessage read_tool_call_response() {
     return response;
 }
 
-class ThrowingThenRecoveringClient final : public ai::StreamingChatClient {
+class ThrowingThenRecoveringRuntime final : public coding_agent::ModelRuntime {
 public:
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest&,
+    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
+        ai::Model,
+        ai::AiContext,
+        ai::SimpleStreamOptions,
         ai::AssistantEventSink sink) override {
         ++calls;
         if (calls == 1) {
@@ -170,19 +362,21 @@ public:
     int calls{0};
 };
 
-class GatedStreamingClient final : public ai::StreamingChatClient {
+class GatedModelRuntime final : public coding_agent::ModelRuntime {
 public:
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
+        ai::Model,
+        ai::AiContext,
+        ai::SimpleStreamOptions options,
         ai::AssistantEventSink sink) override {
         ++request_count;
-        request_stop_token = request.stop_token;
+        request_stop_token = options.stop_token;
         started = true;
         if (request_count == 1) {
             auto executor = co_await boost::asio::this_coro::executor;
             gate.emplace(executor);
             gate->expires_at(std::chrono::steady_clock::time_point::max());
-            std::stop_callback cancellation{request.stop_token, [this] {
+            std::stop_callback cancellation{options.stop_token, [this] {
                 if (gate) {
                     gate->cancel();
                 }
@@ -193,10 +387,10 @@ public:
                 boost::asio::redirect_error(boost::asio::use_awaitable, error));
         }
 
-        auto response = request.stop_token.stop_requested()
+        auto response = options.stop_token.stop_requested()
             ? ai::assistant_text_message("")
             : ai::assistant_text_message("released");
-        if (request.stop_token.stop_requested()) {
+        if (options.stop_token.stop_requested()) {
             response.stop_reason = ai::AssistantStopReason::Aborted;
             response.error_message = "prompt aborted";
             if (sink) {
@@ -241,12 +435,12 @@ public:
 } // namespace
 
 TEST_CASE("stateful Agent retains a scripted fake-provider prompt in its passive snapshot", "[agent][stateful][issue35]") {
-    auto client = ai::providers::make_scripted_fake_stream();
+    auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
-    agent::Agent subject(*client, std::move(tools), std::move(options));
+    agent::Agent subject(client, std::move(tools), std::move(options));
 
     REQUIRE(run_prompt(subject, "hello"));
     auto snapshot = subject.state();
@@ -270,7 +464,7 @@ TEST_CASE("stateful Agent retains a scripted fake-provider prompt in its passive
 TEST_CASE(
     "stateful Agent gives awaitable policies its active run stop token",
     "[agent][stateful][issue82]") {
-    auto client = ai::providers::make_scripted_fake_stream();
+    auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
@@ -286,7 +480,7 @@ TEST_CASE(
         co_return messages;
     };
 
-    agent::Agent subject(*client, agent::AsyncToolRegistry{}, std::move(options));
+    agent::Agent subject(client, agent::AsyncToolRegistry{}, std::move(options));
     REQUIRE(run_prompt(subject, "hello"));
     CHECK(stop_possible);
     CHECK_FALSE(stop_requested);
@@ -296,7 +490,7 @@ TEST_CASE(
     "stateful Agent abort requests the same token observed by policies and provider",
     "[agent][stateful][abort][issue39]") {
     boost::asio::io_context io;
-    GatedStreamingClient client;
+    auto client = std::make_shared<GatedModelRuntime>();
     std::optional<std::stop_token> transform_stop_token;
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("fake-model");
@@ -319,11 +513,11 @@ TEST_CASE(
         },
         boost::asio::detached);
 
-    while (!client.started) {
+    while (!client->started) {
         REQUIRE(io.poll_one() == 1);
     }
     REQUIRE(transform_stop_token.has_value());
-    CHECK(*transform_stop_token == client.request_stop_token);
+    CHECK(*transform_stop_token == client->request_stop_token);
     CHECK_FALSE(transform_stop_token->stop_requested());
     subject.abort();
     subject.abort();
@@ -335,7 +529,7 @@ TEST_CASE(
     REQUIRE(result.has_value());
     REQUIRE(result->has_value());
     CHECK(transform_stop_token->stop_requested());
-    CHECK(client.request_stop_token.stop_requested());
+    CHECK(client->request_stop_token.stop_requested());
     CHECK_FALSE(subject.state().is_running);
     REQUIRE(subject.state().messages.size() == 2);
     REQUIRE(std::holds_alternative<ai::AssistantMessage>(subject.state().messages[1]));
@@ -345,12 +539,12 @@ TEST_CASE(
 }
 
 TEST_CASE("stateful Agent reduces lifecycle state before ordered move-only observers", "[agent][stateful][issue35]") {
-    auto client = ai::providers::make_scripted_fake_stream();
+    auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
-    agent::Agent subject(*client, std::move(tools), std::move(options));
+    agent::Agent subject(client, std::move(tools), std::move(options));
 
     std::vector<std::string> events;
     bool user_was_committed_before_delivery = false;
@@ -408,12 +602,12 @@ TEST_CASE("stateful Agent reduces lifecycle state before ordered move-only obser
 TEST_CASE(
     "stateful Agent commits after live state and weak observers",
     "[agent][stateful][commitment][issue36]") {
-    auto client = ai::providers::make_scripted_fake_stream();
+    auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
-    agent::Agent subject(*client, std::move(tools), std::move(options));
+    agent::Agent subject(client, std::move(tools), std::move(options));
 
     std::vector<std::string> ordering;
     auto subscribed = subject.subscribe(
@@ -448,12 +642,12 @@ TEST_CASE(
 TEST_CASE(
     "stateful Agent weak observer failure cannot veto strong commitment",
     "[agent][stateful][commitment][issue36]") {
-    auto client = ai::providers::make_scripted_fake_stream();
+    auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
-    agent::Agent subject(*client, std::move(tools), std::move(options));
+    agent::Agent subject(client, std::move(tools), std::move(options));
 
     int failing_calls = 0;
     auto failing_result = subject.subscribe(
@@ -493,12 +687,12 @@ TEST_CASE(
 TEST_CASE(
     "stateful Agent returns strong commitment failure with retained live state and recovers",
     "[agent][stateful][commitment][issue36]") {
-    auto client = ai::providers::make_scripted_fake_stream();
+    auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
-    agent::Agent subject(*client, std::move(tools), std::move(options));
+    agent::Agent subject(client, std::move(tools), std::move(options));
 
     auto failed = run_prompt(
         subject,
@@ -523,12 +717,12 @@ TEST_CASE(
 }
 
 TEST_CASE("stateful Agent keeps weak observer failure from vetoing a prompt", "[agent][stateful][issue35]") {
-    auto client = ai::providers::make_scripted_fake_stream();
+    auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
-    agent::Agent subject(*client, std::move(tools), std::move(options));
+    agent::Agent subject(client, std::move(tools), std::move(options));
 
     int failing_calls = 0;
     auto failing_result = subject.subscribe(
@@ -577,12 +771,12 @@ TEST_CASE("stateful Agent keeps weak observer failure from vetoing a prompt", "[
 }
 
 TEST_CASE("stateful Agent bounds accumulated weak-observer diagnostics", "[agent][stateful][issue35]") {
-    auto client = ai::providers::make_scripted_fake_stream();
+    auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
-    agent::Agent subject(*client, std::move(tools), std::move(options));
+    agent::Agent subject(client, std::move(tools), std::move(options));
 
     std::vector<agent::AgentEventSubscription> subscriptions;
     for (int index = 0; index < 20; ++index) {
@@ -608,12 +802,12 @@ TEST_CASE("stateful Agent bounds accumulated weak-observer diagnostics", "[agent
 }
 
 TEST_CASE("stateful Agent retains history while agent_end stays invocation-local", "[agent][stateful][issue35]") {
-    auto client = ai::providers::make_scripted_fake_stream();
+    auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
-    agent::Agent subject(*client, std::move(tools), std::move(options));
+    agent::Agent subject(client, std::move(tools), std::move(options));
 
     std::vector<std::size_t> invocation_message_counts;
     auto subscribed = subject.subscribe(
@@ -640,7 +834,7 @@ TEST_CASE("stateful Agent retains history while agent_end stays invocation-local
 
 TEST_CASE("stateful Agent rejects a second prompt while its active run is suspended", "[agent][stateful][issue35]") {
     boost::asio::io_context io;
-    GatedStreamingClient client;
+    auto client = std::make_shared<GatedModelRuntime>();
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
@@ -657,7 +851,7 @@ TEST_CASE("stateful Agent rejects a second prompt while its active run is suspen
         boost::asio::detached);
 
     REQUIRE(io.run_one() == 1);
-    REQUIRE(client.started);
+    REQUIRE(client->started);
     const auto active_snapshot = subject.state();
     CHECK(active_snapshot.is_running);
     REQUIRE(active_snapshot.messages.size() == 1);
@@ -679,7 +873,7 @@ TEST_CASE("stateful Agent rejects a second prompt while its active run is suspen
     CHECK(subject.state().is_running);
     CHECK(subject.state().messages.size() == 1);
 
-    client.release();
+    client->release();
     io.run();
 
     REQUIRE(first_prompt.has_value());
@@ -690,7 +884,7 @@ TEST_CASE("stateful Agent rejects a second prompt while its active run is suspen
 
 TEST_CASE("stateful Agent keeps a suspended run valid when its handle is moved", "[agent][stateful][issue35]") {
     boost::asio::io_context io;
-    GatedStreamingClient client;
+    auto client = std::make_shared<GatedModelRuntime>();
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
@@ -706,11 +900,11 @@ TEST_CASE("stateful Agent keeps a suspended run valid when its handle is moved",
         },
         boost::asio::detached);
     REQUIRE(io.run_one() == 1);
-    REQUIRE(client.started);
+    REQUIRE(client->started);
 
     agent::Agent moved(std::move(original));
     CHECK(moved.state().is_running);
-    client.release();
+    client->release();
     io.run();
 
     REQUIRE(prompted.has_value());
@@ -720,7 +914,7 @@ TEST_CASE("stateful Agent keeps a suspended run valid when its handle is moved",
 }
 
 TEST_CASE("stateful Agent releases its active run after an unexpected provider exception", "[agent][stateful][issue35]") {
-    ThrowingThenRecoveringClient client;
+    auto client = std::make_shared<ThrowingThenRecoveringRuntime>();
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
@@ -734,14 +928,14 @@ TEST_CASE("stateful Agent releases its active run after an unexpected provider e
 
     REQUIRE(run_prompt(subject, "second"));
     CHECK_FALSE(subject.state().is_running);
-    CHECK(client.calls == 2);
+    CHECK(client->calls == 2);
 }
 
 TEST_CASE("stateful Agent retains applied run-state updates after a later policy failure", "[agent][stateful][issue35]") {
-    RecordingStreamingClient client;
-    client.responses.push_back(read_tool_call_response());
-    client.responses.push_back(ai::assistant_text_message("first run reply"));
-    client.responses.push_back(ai::assistant_text_message("second run reply"));
+    auto client = std::make_shared<RecordingModelRuntime>();
+    client->responses.push_back(read_tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("first run reply"));
+    client->responses.push_back(ai::assistant_text_message("second run reply"));
 
     agent::AsyncToolRegistry tools;
     REQUIRE(tools.add(std::make_unique<ReadTool>()));
@@ -792,18 +986,18 @@ TEST_CASE("stateful Agent retains applied run-state updates after a later policy
     REQUIRE(run_prompt(subject, "second"));
     const std::vector<std::string> expected_models{
         "model-old", "model-new", "model-new"};
-    CHECK(client.request_models == expected_models);
+    CHECK(client->request_models == expected_models);
     CHECK(subject.state().thinking_level == "high");
 }
 
 TEST_CASE("stateful Agent owns configured tool state through a fake tool run", "[agent][stateful][issue35]") {
-    auto client = ai::providers::make_scripted_fake_stream();
+    auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::AsyncToolRegistry tools;
     REQUIRE(tools.add(std::make_unique<ReadTool>()));
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
-    agent::Agent subject(*client, std::move(tools), std::move(options));
+    agent::Agent subject(client, std::move(tools), std::move(options));
 
     const auto initial = subject.state();
     REQUIRE(initial.active_tool_names.size() == 1);
@@ -823,7 +1017,7 @@ TEST_CASE("stateful Agent owns configured tool state through a fake tool run", "
 }
 
 TEST_CASE("stateful Agent retains its configured thinking state across a run", "[agent][stateful][issue35]") {
-    auto client = ai::providers::make_scripted_fake_stream();
+    auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::AsyncToolRegistry tools;
     agent::AgentInitialState initial_state;
     initial_state.thinking_level = "high";
@@ -831,7 +1025,7 @@ TEST_CASE("stateful Agent retains its configured thinking state across a run", "
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
     agent::Agent subject(
-        *client,
+        client,
         std::move(tools),
         std::move(options),
         std::move(initial_state));
@@ -843,10 +1037,10 @@ TEST_CASE("stateful Agent retains its configured thinking state across a run", "
 TEST_CASE(
     "stateful Agent admits bounded queues and drains steering before follow-up in pi order",
     "[agent][stateful][issue44]") {
-    RecordingStreamingClient client;
-    client.responses.push_back(ai::assistant_text_message("first"));
-    client.responses.push_back(ai::assistant_text_message("second"));
-    client.responses.push_back(ai::assistant_text_message("third"));
+    auto client = std::make_shared<RecordingModelRuntime>();
+    client->responses.push_back(ai::assistant_text_message("first"));
+    client->responses.push_back(ai::assistant_text_message("second"));
+    client->responses.push_back(ai::assistant_text_message("third"));
 
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("fake-model");
@@ -865,7 +1059,7 @@ TEST_CASE(
     REQUIRE(queued.input_queues.follow_up.messages.size() == 1);
 
     REQUIRE(run_prompt(subject, "prompt"));
-    REQUIRE(client.request_models.size() == 3);
+    REQUIRE(client->request_models.size() == 3);
     const auto state = subject.state();
     CHECK(state.input_queues.steering.messages.empty());
     CHECK(state.input_queues.follow_up.messages.empty());
@@ -879,12 +1073,12 @@ TEST_CASE(
 TEST_CASE(
     "stateful Agent queue admission is atomic at UTF-8 byte and item boundaries",
     "[agent][stateful][issue44]") {
-    auto client = ai::providers::make_scripted_fake_stream();
+    auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("fake-model");
     options.max_queued_messages = 1;
     options.max_queued_bytes = 6;
-    agent::Agent subject(*client, agent::AsyncToolRegistry{}, std::move(options));
+    agent::Agent subject(client, agent::AsyncToolRegistry{}, std::move(options));
 
     const std::string multibyte = "\xC3\xA9\xC3\xA9\xC3\xA9";
     REQUIRE(multibyte.size() == 6);
@@ -916,7 +1110,7 @@ TEST_CASE(
     "stateful Agent accepts steering and follow-up while streaming without disrupting the active run",
     "[agent][stateful][issue44]") {
     boost::asio::io_context io;
-    GatedStreamingClient client;
+    auto client = std::make_shared<GatedModelRuntime>();
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("fake-model");
     options.max_queued_messages = 1;
@@ -930,7 +1124,7 @@ TEST_CASE(
             co_return;
         },
         boost::asio::detached);
-    while (!client.started) {
+    while (!client->started) {
         REQUIRE(io.poll_one() == 1);
     }
 
@@ -943,7 +1137,7 @@ TEST_CASE(
     REQUIRE(subject.state().input_queues.steering.messages.size() == 1);
     REQUIRE(subject.state().input_queues.follow_up.messages.size() == 1);
 
-    client.release();
+    client->release();
     if (io.stopped()) {
         io.restart();
     }
@@ -958,8 +1152,8 @@ TEST_CASE(
 }
 
 TEST_CASE("stateful Agent all queue modes preserve FIFO order", "[agent][stateful][issue44]") {
-    RecordingStreamingClient client;
-    client.responses.push_back(ai::assistant_text_message("done"));
+    auto client = std::make_shared<RecordingModelRuntime>();
+    client->responses.push_back(ai::assistant_text_message("done"));
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("fake-model");
     agent::Agent subject(client, agent::AsyncToolRegistry{}, std::move(options));
@@ -978,9 +1172,9 @@ TEST_CASE("stateful Agent all queue modes preserve FIFO order", "[agent][statefu
 }
 
 TEST_CASE("stateful Agent drains all follow-up messages together in FIFO order", "[agent][stateful][issue44]") {
-    RecordingStreamingClient client;
-    client.responses.push_back(ai::assistant_text_message("first"));
-    client.responses.push_back(ai::assistant_text_message("second"));
+    auto client = std::make_shared<RecordingModelRuntime>();
+    client->responses.push_back(ai::assistant_text_message("first"));
+    client->responses.push_back(ai::assistant_text_message("second"));
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("fake-model");
     agent::Agent subject(client, agent::AsyncToolRegistry{}, std::move(options));

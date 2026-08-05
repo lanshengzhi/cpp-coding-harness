@@ -149,6 +149,24 @@ target_link_libraries(cch_ai
 )
 target_compile_options(cch_ai PRIVATE -Wall -Wextra -Wpedantic)
 
+# ModelRuntime closure (Model/Models composition + Agent Config Directory + auth
+# storage). Lives below cch_agent so the stateful Agent can be constructed on
+# the sole injectable ModelRuntime seam (#326/#331) without a dependency cycle.
+add_library(cch_coding_agent_core
+    src/coding_agent/ModelRuntime.cpp
+    src/coding_agent/ModelConfig.cpp
+    src/coding_agent/ProviderComposer.cpp
+    src/coding_agent/AgentConfigDir.cpp
+    src/coding_agent/AuthStorage.cpp
+    src/coding_agent/RuntimeApiKeyOverlay.cpp
+)
+cch_target_defaults(cch_coding_agent_core)
+target_link_libraries(cch_coding_agent_core
+    PUBLIC
+        cch_ai
+        cch_util
+)
+
 add_library(cch_agent
     src/agent/Agent.cpp
     src/agent/AgentLoop.cpp
@@ -159,6 +177,7 @@ add_library(cch_agent
 cch_target_defaults(cch_agent)
 target_link_libraries(cch_agent
     PUBLIC
+        cch_coding_agent_core
         cch_ai
         cch_util
 )
@@ -200,15 +219,9 @@ target_link_libraries(cch_tools
 add_library(cch_coding_agent_runtime
     src/coding_agent/ImageInput.cpp
     src/cli/InitialPrompt.cpp
-    src/coding_agent/AgentConfigDir.cpp
-    src/coding_agent/AuthStorage.cpp
     src/coding_agent/CommandRegistry.cpp
     src/coding_agent/SessionPathPolicy.cpp
     src/coding_agent/SettingsManager.cpp
-    src/coding_agent/ModelConfig.cpp
-    src/coding_agent/ModelRuntime.cpp
-    src/coding_agent/ProviderComposer.cpp
-    src/coding_agent/RuntimeApiKeyOverlay.cpp
     src/coding_agent/ProjectResourceLoader.cpp
     src/coding_agent/ProjectResources.cpp
     src/coding_agent/ProjectTrust.cpp
@@ -245,6 +258,7 @@ target_link_libraries(cch_coding_agent_runtime
         cch_agent
         cch_harness
         cch_tools
+        cch_coding_agent_core
         cch_ai
         cch_util
     PRIVATE
@@ -293,6 +307,7 @@ if(CCH_BUILD_TESTS)
         tests/support/ImageFixture.hpp
         tests/support/PseudoTerminal.hpp
         tests/support/GatedChatClient.hpp
+        tests/support/FakeModelRuntime.hpp
         tests/support/StreamAdapterFixture.hpp
         tests/support/ToolArgumentCompatibilityFixture.hpp
         tests/architecture/ArchitectureSurfaceScanTest.cpp
@@ -301,6 +316,7 @@ if(CCH_BUILD_TESTS)
         tests/architecture/PublicHeaderBoundaryTest.cpp
         tests/agent/AgentTest.cpp
         tests/agent/AsyncAgentLoopTest.cpp
+        tests/agent/ModelRuntimeSeamTest.cpp
         tests/agent/ToolCallExecutorTest.cpp
         tests/ai/GlazeRoundTripTest.cpp
         tests/ai/MessageContractTest.cpp

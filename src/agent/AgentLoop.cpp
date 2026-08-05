@@ -1,6 +1,5 @@
 #include "AgentLoop.hpp"
 
-#include "AgentDefaults.hpp"
 #include "ExecutionShared.hpp"
 #include "ToolCallExecutor.hpp"
 #include "util/ExpectedMacros.hpp"
@@ -91,11 +90,15 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
 
 } // namespace
 
-AsyncAgentLoop::AsyncAgentLoop(ai::StreamingChatClient& client, AsyncToolRegistry registry, AsyncAgentOptions options)
-    : client_(client), registry_(std::move(registry)), options_(std::move(options)) {
-    if (!options_.model) {
-        options_.model = detail::kDefaultModel;
-    }
+AsyncAgentLoop::AsyncAgentLoop(
+    std::shared_ptr<coding_agent::ModelRuntime> runtime,
+    AsyncToolRegistry registry,
+    AsyncAgentOptions options)
+    : runtime_(std::move(runtime)),
+      registry_(std::move(registry)),
+      options_(std::move(options)) {
+    // options_.model is concrete (kDefaultModel default); no placeholder
+    // substitution happens anywhere in the loop.
 }
 
 boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::run(
@@ -147,7 +150,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
     };
 
     AgentState state;
-    state.model = *options_.model;
+    state.model = options_.model;
     state.thinking_level = options_.thinking_level;
 
     CCH_TRY_VOID(emit_agent_event(sink, AgentStartEvent{}));
@@ -182,12 +185,19 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             pending_messages.clear();
         }
 
-        ai::StreamChatRequest request;
-        request.stop_token = stop_token;
-        request.model = *options_.model;
+        ai::SimpleStreamOptions stream_options;
+        // Every turn forwards the active prompt cancellation signal and the
+        // harness-consumer session id. `cacheRetention` stays unset so the
+        // pi-aligned default `"short"` applies (ADR 0033: compaction is the
+        // only agent-core consumer that overrides it, with `"none"` and a
+        // fresh session id).
+        stream_options.stop_token = stop_token;
+        if (!options_.session_id.empty()) {
+            stream_options.session_id = options_.session_id;
+        }
 
+        ai::AiContext request_context = context;
         {
-            ai::AiContext request_context = context;
             bool transform_cancelled = false;
             if (options_.transform_context) {
                 auto transformed = co_await invoke_agent_hook(
@@ -229,7 +239,6 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                 }
                 request_context.messages = std::move(*converted);
             }
-            request.context = std::move(request_context);
         }
 
         // Tracks whether the provider emitted an assistant start event for
@@ -239,8 +248,10 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         if (stop_token.stop_requested()) {
             cancellation_completion_attempted = true;
         }
-        auto assistant = co_await client_.stream(
-            request,
+        auto assistant = co_await runtime_->stream_simple(
+            options_.model,
+            std::move(request_context),
+            std::move(stream_options),
             [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
                 if (const auto* start = std::get_if<ai::AssistantStartEvent>(&event)) {
                     if (assistant_start_emitted) {

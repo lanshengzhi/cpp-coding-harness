@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../../../include/cch/agent/ToolRegistry.hpp"
-#include "../../../include/cch/ai/ChatClient.hpp"
 #include "../../../include/cch/coding_agent/ModelRuntime.hpp"
 #include "../../../include/cch/harness/LocalExecutionEnv.hpp"
 #include "coding_agent/runtime/AsyncUserShell.hpp"
@@ -16,10 +15,10 @@ namespace cch::coding_agent::runtime {
 /// Kept as an implementation detail; SessionFactory is the only seam that
 /// constructs or populates this bundle.
 struct RuntimeServices {
-    std::shared_ptr<ai::StreamingChatClient> stream;
-    /// The session's canonical model/auth runtime. Nullable on legacy/CLI
-    /// assembly paths that predate ModelRuntime injection; the Agent uses
-    /// `stream` for requests.
+    /// The session's canonical model/auth runtime, held as `std::shared_ptr`
+    /// and injected into the stateful Agent (the sole injectable seam per
+    /// #326). Always constructed by SessionFactory: a host-injected runtime
+    /// wins, otherwise one is default-created from the Agent Config Directory.
     std::shared_ptr<ModelRuntime> model_runtime;
     /// True when the session created the runtime (default-created or the
     /// private test seam's wrap) and must release it on close. A host-injected

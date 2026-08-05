@@ -100,6 +100,9 @@ AgentSessionRuntime::AgentSessionRuntime(
     options.max_queued_bytes = config_.max_queued_bytes;
     options.max_turns = config_.max_turns;
     options.model = std::move(config_.model);
+    // The session id is forwarded as the per-turn `sessionId` streamSimple
+    // option (pi harness `sessionMetadata.id`).
+    options.session_id = session_.metadata.session_id;
     options.transform_context = [](
                                     std::vector<ai::MessageVariant> messages,
                                     std::stop_token) -> boost::asio::awaitable<
@@ -143,10 +146,11 @@ AgentSessionRuntime::AgentSessionRuntime(
     initial_state.messages = std::move(session_.history);
     initial_state.thinking_level = session_.context_thinking_level.value_or("off");
 
-    // Construct Agent last: it borrows the factory-owned client and takes sole
-    // ownership of the move-only tool registry.
+    // Construct Agent last: it holds the factory-owned ModelRuntime (the sole
+    // injectable seam per #326) and takes sole ownership of the move-only tool
+    // registry.
     agent_.emplace(
-        *services_.stream,
+        services_.model_runtime,
         std::move(services_.tools),
         std::move(options),
         std::move(initial_state));
@@ -655,7 +659,6 @@ AgentSessionRuntime::release_close_resources() noexcept {
     agent_.reset();
     prompt_processor_.reset();
     session_.store.reset();
-    services_.stream.reset();
     services_.user_shell.reset();
     if (services_.model_runtime_owned) {
         services_.model_runtime.reset();

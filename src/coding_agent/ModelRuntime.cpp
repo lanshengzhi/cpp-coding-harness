@@ -142,6 +142,8 @@ struct ModelRuntime::Impl {
 ModelRuntime::ModelRuntime(std::unique_ptr<Impl> impl)
     : impl_(std::move(impl)) {}
 
+ModelRuntime::ModelRuntime() noexcept = default;
+
 ModelRuntime::ModelRuntime(ModelRuntime&&) noexcept = default;
 ModelRuntime& ModelRuntime::operator=(ModelRuntime&&) noexcept = default;
 ModelRuntime::~ModelRuntime() = default;

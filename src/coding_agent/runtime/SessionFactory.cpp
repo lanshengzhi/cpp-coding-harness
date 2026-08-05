@@ -1145,9 +1145,8 @@ struct SessionTargetNormalizationOptions {
         }
     }
 
-    // 7. Build the shared stream capability from the runtime. The runtime is
-    // the session's canonical ModelRuntime and is held for `model_runtime()`.
-    std::shared_ptr<ai::StreamingChatClient> stream = runtime;
+    // 7. The runtime is the session's canonical ModelRuntime, held for
+    // `model_runtime()` and injected as the Agent's sole stream seam (#326).
 
     // 8. Resolve execution environment and ownership. Secret environment names
     // come from the runtime's configured models.json apiKey templates.
@@ -1283,7 +1282,6 @@ struct SessionTargetNormalizationOptions {
     // user-level Shell configuration with an enabled model Bash Tool and
     // never widens the shared Execution Environment (ADR 0026).
     RuntimeServices services;
-    services.stream = std::move(stream);
     services.model_runtime = std::move(runtime);
     services.model_runtime_owned = plan.model_runtime_owned;
     services.env = std::move(exec_env);
