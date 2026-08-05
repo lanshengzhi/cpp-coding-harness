@@ -1,6 +1,7 @@
 #include "SessionFactory.hpp"
 
 #include <cch/ai/Models.hpp>
+#include <cch/agent/AgentContext.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
@@ -23,6 +24,7 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/use_future.hpp>
 
 #include <algorithm>
 #include <cstdlib>
@@ -482,56 +484,58 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
 
 /// Fabricate a Model for resume metadata re-resolution when the stored model no
 /// longer exists in the live runtime. Keeps session metadata consistent and
-/// lets a legacy/fake provider keep streaming (the TUI auto-selection trigger
-/// is a later module).
-[[nodiscard]] ai::Model fabricate_metadata_model(
-    std::string provider,
-    std::string model_id,
-    const ModelRuntime& runtime) {
-    ai::Model model;
-    model.id = std::move(model_id);
-    model.name = model.id;
-    model.provider = std::move(provider);
-    model.api = "unknown";
-    const auto selected = runtime.provider(model.provider);
-    if (selected) {
-        auto available = selected->models();
-        if (!available.empty()) {
-            model.api = available.front().api;
-            model.base_url = available.front().base_url;
-        }
+/// Run the side-effect-free availability coroutine to completion on a
+/// temporary executor so the synchronous session-assembly path can consult
+/// live configured auth (pi `refreshAvailability`, which session creation and
+/// `findInitialModel` both run). The per-provider checks never hit the
+/// network and OAuth credentials are never refreshed; a refresh failure keeps
+/// the last-known snapshot (pi keeps the previous list on failure).
+void refresh_availability_sync(
+    const std::shared_ptr<ModelRuntime>& runtime) {
+    boost::asio::io_context io;
+    auto future = boost::asio::co_spawn(
+        io,
+        [runtime]() -> boost::asio::awaitable<void> {
+            (void)co_await runtime->get_available();
+            co_return;
+        },
+        boost::asio::use_future);
+    io.run();
+    try {
+        future.get();
+    } catch (...) {
+        // Availability failures keep the last-known snapshot.
     }
-    return model;
 }
 
-/// Frozen runtime default selection for the public SDK path: the default-model
-/// table when the default exists in the runtime, else the first model, else a
-/// fabricated model pointing at the first provider, else an empty Model (the
-/// Agent then uses pi's internal unknown default). Authentication is resolved
-/// at request time; the TUI auto-selection trigger is a later module.
+/// Frozen runtime default selection (pi `findInitialModel` step 4): the
+/// default-model table over the available (configured-auth) models, then the
+/// first available model, then the concrete unknown `kDefaultModel` (pi
+/// `DEFAULT_MODEL`) — streaming fails through normal provider lookup, so no
+/// construction-time default silently wins. The availability snapshot must
+/// be live: the factory refreshes it before the resolution chain runs.
 [[nodiscard]] ai::Model runtime_default_model(const ModelRuntime& runtime) {
+    const auto available = runtime.get_available_snapshot();
     for (const auto* provider : {"openai-codex", "kimi-coding"}) {
         if (auto default_id = ModelRuntime::default_model_for_provider(provider)) {
-            if (auto model = runtime.model(provider, *default_id); model) {
-                return *model;
+            for (const auto& model : available) {
+                if (model.provider == provider && model.id == *default_id) {
+                    return model;
+                }
             }
         }
     }
-    auto all = runtime.models();
-    if (!all.empty()) {
-        return all.front();
+    if (!available.empty()) {
+        return available.front();
     }
-    auto providers = runtime.providers();
-    if (!providers.empty()) {
-        return fabricate_metadata_model(
-            std::string{providers.front()->id()}, std::string{kHostClientModel}, runtime);
-    }
-    return ai::Model{};
+    return agent::detail::kDefaultModel;
 }
 
 /// Resolve the SDK public path's initial model: explicit request model, then
 /// resume re-resolution against the live runtime, then settings defaults, then
-/// the runtime default (pi `createAgentSession` chain).
+/// the runtime default (pi `createAgentSession` chain). Resume and settings
+/// defaults require configured auth (pi `restoreModelFromSession` /
+/// `findInitialModel`: `model && hasConfiguredAuth`).
 [[nodiscard]] ai::Model resolve_sdk_public_model(
     const AssemblyPlan& plan,
     const ModelRuntime& runtime,
@@ -544,7 +548,8 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
         return *plan.requested_model;
     }
     if (is_resume && stored_provider && stored_model) {
-        if (auto model = runtime.model(*stored_provider, *stored_model); model) {
+        if (auto model = runtime.model(*stored_provider, *stored_model);
+            model && runtime.has_configured_auth(model->provider)) {
             return *model;
         }
         diagnostics.push_back(make_diag(
@@ -556,7 +561,7 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
     if (settings.default_provider && settings.default_model) {
         if (auto model = runtime.model(
                 *settings.default_provider, *settings.default_model);
-            model) {
+            model && runtime.has_configured_auth(model->provider)) {
             return *model;
         }
     }
@@ -843,10 +848,12 @@ struct SessionTargetNormalizationOptions {
     }
 
     // 3. Resume: re-resolve the stored model_change identity against the live
-    // runtime catalog. A model that no longer resolves fails through normal
-    // diagnostics without silent substitution.
+    // runtime catalog and require configured auth (pi `restoreModelFromSession`:
+    // `restoredModel && hasConfiguredAuth`). A model that no longer resolves or
+    // has no auth fails through normal diagnostics without silent substitution.
     if (is_resume && stored_provider && stored_model) {
-        if (auto restored = runtime.model(*stored_provider, *stored_model); restored) {
+        if (auto restored = runtime.model(*stored_provider, *stored_model);
+            restored && runtime.has_configured_auth(restored->provider)) {
             return *restored;
         }
         diagnostics.push_back(make_diag(
@@ -870,11 +877,13 @@ struct SessionTargetNormalizationOptions {
         return scoped.front();
     }
 
-    // 5. Settings defaultProvider/defaultModel.
+    // 5. Settings defaultProvider/defaultModel — only when the provider has
+    // configured auth (pi findInitialModel: `found && hasConfiguredAuth`). An
+    // unauthenticated settings default falls through to the runtime default.
     if (settings.default_provider && settings.default_model) {
         if (auto model = runtime.model(
                 *settings.default_provider, *settings.default_model);
-            model) {
+            model && runtime.has_configured_auth(model->provider)) {
             return *model;
         }
     }
@@ -1038,7 +1047,13 @@ struct SessionTargetNormalizationOptions {
 
     // 6. Resolve provider/model metadata and the request Model. Resume stores
     // only `model_change {provider, modelId}`; the recorded identity is
-    // re-resolved against the live runtime catalog.
+    // re-resolved against the live runtime catalog. Refresh live availability
+    // first so the resolution chain consults real configured auth (pi
+    // `refreshAvailability` at runtime creation and inside `findInitialModel`):
+    // `has_configured_auth` and the available snapshot then reflect actual
+    // credential resolution, not the structural provider composition.
+    refresh_availability_sync(runtime);
+
     std::optional<std::string> stored_provider;
     std::optional<std::string> stored_model;
     if (is_resume) {
@@ -1281,9 +1296,22 @@ struct SessionTargetNormalizationOptions {
     // an independent capability instance: it shares only the effective
     // user-level Shell configuration with an enabled model Bash Tool and
     // never widens the shared Execution Environment (ADR 0026).
+    // Capture the merged settings values first: the manager moves into the
+    // runtime below so it can persist later defaults with the same
+    // project-trust state (pi `AgentSession.settingsManager`).
+    AgentSessionRuntimeConfig runtime_config;
+    runtime_config.max_queued_messages = plan.max_queued_messages;
+    runtime_config.max_queued_bytes = plan.max_queued_bytes;
+    runtime_config.max_turns = plan.max_turns;
+    runtime_config.model = std::move(request_model);
+    runtime_config.default_thinking_level = settings.default_thinking_level;
+    const auto shell_path = settings.shell_path;
+    const auto shell_command_prefix = settings.shell_command_prefix;
+
     RuntimeServices services;
     services.model_runtime = std::move(runtime);
     services.model_runtime_owned = plan.model_runtime_owned;
+    services.settings_manager = std::move(snapshot.manager);
     services.env = std::move(exec_env);
     services.env_owned = env_owned;
     services.user_shell = std::move(user_shell);
@@ -1292,19 +1320,13 @@ struct SessionTargetNormalizationOptions {
             workspace,
             services.model_runtime->configured_api_key_env_names(),
             harness::ShellConfig{
-                .shell_path = settings.shell_path,
-                .command_prefix = settings.shell_command_prefix,
+                .shell_path = shell_path,
+                .command_prefix = shell_command_prefix,
             });
     }
     services.tools = std::move(tools);
 
     prompt::PromptProcessor prompt_processor{std::move(skills), std::move(templates)};
-
-    AgentSessionRuntimeConfig runtime_config;
-    runtime_config.max_queued_messages = plan.max_queued_messages;
-    runtime_config.max_queued_bytes = plan.max_queued_bytes;
-    runtime_config.max_turns = plan.max_turns;
-    runtime_config.model = std::move(request_model);
 
     const auto session_path = open.store->path();
     const auto metadata = open.metadata;

@@ -2769,8 +2769,10 @@ TEST_CASE("SessionFactory CLI resolves missing credentials as a terminal auth ou
     cch::tests::TempWorkspace agent_dir;
     tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR"};
     agent_dir_guard.set(agent_dir.path().string());
-    tests::EnvVarGuard key_guard{"CCH_FACTORY_MISSING_KEY"};
-    key_guard.unset();
+    // Deterministic: no ambient kimi key, so nothing resolves as configured
+    // and the Agent holds pi's unknown kDefaultModel (T04).
+    tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
+    kimi_guard.unset();
 
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
@@ -2785,7 +2787,7 @@ TEST_CASE("SessionFactory CLI resolves missing credentials as a terminal auth ou
     const auto& terminal = std::get<ai::AssistantMessage>(snapshot.agent_state.messages.back());
     CHECK(terminal.stop_reason == ai::AssistantStopReason::Error);
     REQUIRE(terminal.error_message);
-    CHECK(terminal.error_message->find("Provider is not configured") != std::string::npos);
+    CHECK(terminal.error_message->find("Unknown provider: unknown") != std::string::npos);
     CHECK(std::filesystem::exists(paths.session_file));
     result->session->close();
 }

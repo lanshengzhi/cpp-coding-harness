@@ -256,6 +256,98 @@ TEST_CASE("SettingsManager writes the project scope only when trusted", "[settin
     CHECK(manager.settings().theme == "light");
 }
 
+TEST_CASE("SettingsManager surgical defaultThinkingLevel write preserves unknown fields and creates the file", "[settings][two-scope][write][issue353]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({
+        "defaultProvider": "alpha",
+        "defaultModel": "alpha-1",
+        "future": {"enabled": true},
+        "theme": "dark"
+    })");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.errors().empty());
+
+    REQUIRE(manager.set_default_thinking_level(
+        coding_agent::SettingsScope::Global, "high"));
+
+    const auto content = dirs.workspace.read("agent/settings.json");
+    CHECK(content.find("\"defaultThinkingLevel\": \"high\"") != std::string::npos);
+    // Unmodified / unknown fields are preserved.
+    CHECK(content.find("\"defaultProvider\": \"alpha\"") != std::string::npos);
+    CHECK(content.find("\"defaultModel\": \"alpha-1\"") != std::string::npos);
+    CHECK(content.find("\"future\"") != std::string::npos);
+    CHECK(content.find("\"theme\": \"dark\"") != std::string::npos);
+
+    // The in-memory view updates too.
+    CHECK(manager.settings().default_thinking_level == "high");
+    CHECK(manager.settings().default_provider == "alpha");
+}
+
+TEST_CASE("SettingsManager defaultThinkingLevel write creates a missing file", "[settings][two-scope][write][issue353]") {
+    SettingsDirs dirs;
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.set_default_thinking_level(
+        coding_agent::SettingsScope::Global, "low"));
+
+    const auto content = dirs.workspace.read("agent/settings.json");
+    CHECK(content.find("\"defaultThinkingLevel\": \"low\"") != std::string::npos);
+    CHECK(manager.settings().default_thinking_level == "low");
+}
+
+TEST_CASE("SettingsManager rejects an invalid defaultThinkingLevel write", "[settings][two-scope][write][issue353]") {
+    SettingsDirs dirs;
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    auto rejected = manager.set_default_thinking_level(
+        coding_agent::SettingsScope::Global, "sometimes");
+    REQUIRE_FALSE(rejected);
+    CHECK(rejected.error().message.find("defaultThinkingLevel") != std::string::npos);
+    // Nothing was written and the in-memory view is unchanged.
+    CHECK_FALSE(std::filesystem::exists(dirs.workspace.path() / "agent" / "settings.json"));
+    CHECK_FALSE(manager.settings().default_thinking_level.has_value());
+}
+
+TEST_CASE("SettingsManager defaultThinkingLevel writes the project scope only when trusted", "[settings][two-scope][write][trust][issue353]") {
+    SettingsDirs dirs;
+    dirs.write_project(R"({"defaultThinkingLevel":"high"})");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ false);
+
+    auto refused = manager.set_default_thinking_level(
+        coding_agent::SettingsScope::Project, "low");
+    REQUIRE_FALSE(refused);
+    CHECK(refused.error().message.find("not trusted") != std::string::npos);
+
+    REQUIRE(manager.set_project_trusted(true));
+    REQUIRE(manager.set_default_thinking_level(
+        coding_agent::SettingsScope::Project, "low"));
+
+    const auto content = dirs.workspace.read(".pi/settings.json");
+    CHECK(content.find("\"defaultThinkingLevel\": \"low\"") != std::string::npos);
+    // Project scope wins over the global scope in the merged view.
+    CHECK(manager.settings().default_thinking_level == "low");
+}
+
+TEST_CASE("SettingsManager defaultThinkingLevel write is a no-op when unchanged", "[settings][two-scope][write][issue353]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"defaultThinkingLevel":"high"})");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.set_default_thinking_level(
+        coding_agent::SettingsScope::Global, "high"));
+    // The file is untouched (no timestamp churn) and the view is unchanged.
+    CHECK(dirs.workspace.read("agent/settings.json") == R"({"defaultThinkingLevel":"high"})");
+    CHECK(manager.settings().default_thinking_level == "high");
+}
+
 TEST_CASE("SettingsManager applies pi read-time migrations on load and write", "[settings][two-scope][migration]") {
     SettingsDirs dirs;
     dirs.write_global(R"({

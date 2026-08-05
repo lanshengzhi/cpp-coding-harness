@@ -105,6 +105,17 @@ public:
     /// Change the drain policy for queued follow-up messages.
     [[nodiscard]] util::ExpectedVoid set_follow_up_mode(InputQueueMode mode);
 
+    /// Set the thinking level for subsequent turns (pi `setThinkingLevel`).
+    /// The request is validated against the seven-level set and clamped to the
+    /// active model's supported levels (`getSupportedThinkingLevels`/
+    /// `clampThinkingLevel`, ADR 0034 / #352), so an unsupported level can
+    /// never be forwarded to the stream; the effective (clamped) level becomes
+    /// the live state. Returns the effective level, or an error for an invalid
+    /// request. A request whose clamped level equals the current level is a
+    /// no-op success.
+    [[nodiscard]] util::Expected<std::string> set_thinking_level(
+        std::string_view level);
+
     /// Remove all pending steering messages.
     [[nodiscard]] util::ExpectedVoid clear_steering_queue();
 

@@ -218,6 +218,16 @@ util::ExpectedVoid AgentSession::clear_input_queues() {
     return impl_->runtime->clear_input_queues();
 }
 
+util::Expected<std::string> AgentSession::set_thinking_level(
+    std::string_view level) {
+    if (!impl_ || !impl_->runtime) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    return impl_->runtime->set_thinking_level(level);
+}
+
 bool detail::AgentSessionInteractiveAccess::has_user_shell(
     const AgentSession& session) {
     return session.impl_ && session.impl_->runtime &&

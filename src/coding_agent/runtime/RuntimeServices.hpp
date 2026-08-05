@@ -2,11 +2,13 @@
 
 #include "../../../include/cch/agent/ToolRegistry.hpp"
 #include "../../../include/cch/coding_agent/ModelRuntime.hpp"
+#include "../../../include/cch/coding_agent/Settings.hpp"
 #include "../../../include/cch/harness/LocalExecutionEnv.hpp"
 #include "coding_agent/runtime/AsyncUserShell.hpp"
 
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace cch::coding_agent::runtime {
@@ -24,6 +26,11 @@ struct RuntimeServices {
     /// private test seam's wrap) and must release it on close. A host-injected
     /// runtime is never disposed by the session (ADR 0029).
     bool model_runtime_owned{false};
+    /// The two-scope settings manager the session was assembled under (pi
+    /// `AgentSession.settingsManager`): the runtime persists thinking-level
+    /// (and later model) defaults to settings.json with the same project-trust
+    /// state as creation. Empty when assembly had no settings surface.
+    std::optional<coding_agent::SettingsManager> settings_manager;
     std::shared_ptr<harness::AsyncExecutionEnv> env;
     /// True when the factory created the execution environment and must clean
     /// it up on session close. Host-provided environments are never owned.

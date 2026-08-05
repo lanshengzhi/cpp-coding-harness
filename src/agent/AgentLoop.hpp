@@ -68,6 +68,13 @@ private:
     [[nodiscard]] const std::string& current_thinking_level() const noexcept {
         return options_.thinking_level;
     }
+    /// Apply a clamped thinking level for subsequent turns (pi
+    /// `agent-session.ts` setThinkingLevel). The caller has already clamped
+    /// the request against the active model; this keeps the loop's option and
+    /// the live Agent state in agreement for the next stream request.
+    void set_thinking_level(std::string level) noexcept {
+        options_.thinking_level = std::move(level);
+    }
     [[nodiscard]] const std::string& session_id() const noexcept {
         return options_.session_id;
     }

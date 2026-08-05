@@ -114,6 +114,16 @@ public:
     /// trust. No-op when the value is unchanged.
     [[nodiscard]] util::ExpectedVoid set_theme(SettingsScope scope, std::string_view value);
 
+    /// Surgical field-level write of the pi `defaultThinkingLevel` field in
+    /// one scope (pi `SettingsManager.setDefaultThinkingLevel`). Validates the
+    /// value against the seven-level set (`off`/`minimal`/`low`/`medium`/
+    /// `high`/`xhigh`/`max`); preserves every other field. A scope whose load
+    /// failed suppresses its write; project-scope writes require trust. No-op
+    /// when the value is unchanged.
+    [[nodiscard]] util::ExpectedVoid set_default_thinking_level(
+        SettingsScope scope,
+        std::string_view value);
+
 private:
     struct Impl;
     explicit SettingsManager(std::unique_ptr<Impl> impl);

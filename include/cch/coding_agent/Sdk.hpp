@@ -327,6 +327,18 @@ public:
     /// Remove all pending steering and follow-up input.
     [[nodiscard]] util::ExpectedVoid clear_input_queues();
 
+    // ── Model / thinking state ────────────────────────────────────────────
+
+    /// Set the thinking level for subsequent turns (pi `AgentSession`
+    /// `setThinkingLevel`). The level is validated and clamped to the active
+    /// model's supported set; on a real change the session persists a
+    /// `thinking_level_change` entry and the global settings default, so
+    /// resume restores the level exactly like pi (T04). Returns the effective
+    /// (clamped) level, or an error for an invalid request or a persistence
+    /// failure.
+    [[nodiscard]] util::Expected<std::string> set_thinking_level(
+        std::string_view level);
+
     // ── Event subscriptions ──────────────────────────────────────────────
 
     /// Subscribe to agent lifecycle events. The sink is called for every

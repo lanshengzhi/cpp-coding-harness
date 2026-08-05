@@ -358,6 +358,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/SessionPathPolicyTest.cpp
         tests/coding_agent/SettingsManagerTest.cpp
         tests/coding_agent/ModelConfigTest.cpp
+        tests/coding_agent/ModelResolutionTest.cpp
         tests/coding_agent/ModelRuntimeTest.cpp
         tests/coding_agent/ProviderComposerTest.cpp
         tests/coding_agent/ProjectResourcesTest.cpp

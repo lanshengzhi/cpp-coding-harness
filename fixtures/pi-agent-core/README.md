@@ -6,8 +6,8 @@ tests in this repository against the C++ surface, so the gate's evidence is one 
 No fixture value is a live credential or derived from one; all strings are distinguishable
 dummy values (see [Sanitization rules](#sanitization-rules)).
 
-This file records only the capabilities landed so far (T01 [#350], T02 [#351], T03 [#352], T05 [#354], T06 [#355]); the
-capability checklist grows with each subsequent ticket (T04, T07–T14, blockers-first per parity map [#2]), and
+This file records only the capabilities landed so far (T01 [#350], T02 [#351], T03 [#352], T04 [#353], T05 [#354], T06 [#355]); the
+capability checklist grows with each subsequent ticket (T07–T14, blockers-first per parity map [#2]), and
 rows below cover only what the ticket that last touched this file landed.
 
 ## Pinned baseline
@@ -88,6 +88,18 @@ Agent's creation-time and model-switch clamping produces it, captured through th
   **re-clamps** `"xhigh"` to `"off"` — `reasoning` is undefined, so an unsupported level never
   reaches the wire.
 
+### Thinking-persistence golden (`thinking-persistence.json`)
+
+The committed thinking-persistence golden ([#353]): one `setThinkingLevel("high")` on a fresh session
+whose resolution chain landed the first available model with configured auth (a reasoning
+`models.json` model). Two facts are pinned in one artifact:
+
+- the `thinking_level_change` entry shape the session file carries (`type` + `thinkingLevel`; the
+  generated `id`/`timestamp` and the generic `parentId` null-vs-omitted tree metadata are stripped
+  here and pinned by the T07 session-wire contract);
+- the settings default write (`defaultThinkingLevel: "high"` in the global `settings.json`), so
+  resume restores the level exactly like pi.
+
 ### Terminal matrix
 
 The six-category terminal matrix (`model_source`, `model_validation`, `provider`, `stream`,
@@ -144,6 +156,8 @@ surface, and the committed evidence. Resolution records: [#326]
 | 17 | Creation-time and model-switch clamping via `getSupportedThinkingLevels`/`clampThinkingLevel` (null = unsupported; xhigh/max require explicit mapping); an unsupported level can never reach the wire | `packages/ai/src/models.ts` `getSupportedThinkingLevels`/`clampThinkingLevel`; `packages/coding-agent/src/core/sdk.ts` (creation clamp) and `agent-session.ts` (re-clamp on model switch / `setThinkingLevel`) | `include/cch/ai/Model.hpp` + `src/ai/SimpleOptions.cpp` (`clamp_thinking_level_string`), `src/agent/AgentLoop.cpp` (constructor clamp + `apply_turn_update` re-clamp) | `ModelRuntimeSeamTest` `"creation-time thinking clamping covers every level against full, partial, and null thinking maps"` (7×3 matrix), `"model switch re-clamps…"`; `SimpleOptionsTest` string-level clamp; `AgentCoreEvidenceTest` → `thinking-level-clamp.json` |
 | 18 | Per turn, thinking `off` produces an undefined `reasoning` option and any other (clamped) level forwards as-is | `agent-harness.ts` `createStreamFn`; `agent.ts` `createLoopConfig` (`thinkingLevel === "off" ? undefined : thinkingLevel`) | `src/agent/AgentLoop.cpp` (`stream_reasoning`) | `ModelRuntimeSeamTest` option-forwarding tests; `AgentCoreEvidenceTest` → `stream-simple-options-default.json` (clamped default, no reasoning) |
 | 19 | The Agent holds the concrete unknown `kDefaultModel` with no special-casing until a real model resolves; streaming against it fails through normal provider lookup exactly like pi | `packages/agent/src/agent.ts` (`DEFAULT_MODEL`); `sdk.ts` `if (!model) thinkingLevel = "off"` | `include/cch/agent/AgentContext.hpp` (`kDefaultModel`, `AsyncAgentOptions::model` default), `src/agent/AgentLoop.cpp` (no placeholder substitution) | `ModelRuntimeSeamTest` `"the Agent holds kDefaultModel with no special-casing…"` |
+| 20 | The first real model resolves through pi's exact precedence chain — CLI `--model`/`--provider` → scoped models (`--models`/`enabledModels`, new sessions only; saved default in scope wins) → resumed session `model_change {provider, modelId}` re-resolved against the live runtime → settings `defaultProvider`/`defaultModel` → first available model with configured auth → `kDefaultModel`; the settings-default and resume levels require configured auth (`model && hasConfiguredAuth`) and the final fallback is availability-based, so nothing configured never silently wins | `packages/coding-agent/src/core/model-resolver.ts` `findInitialModel`/`restoreModelFromSession`; `main.ts` `buildSessionOptions`; `sdk.ts` | `src/coding_agent/runtime/SessionFactory.cpp` (`resolve_cli_request_model`, `resolve_sdk_public_model`, `runtime_default_model`, live availability refresh), `include/cch/coding_agent/ModelRuntime.hpp` (`has_configured_auth`, `get_available`) | `ModelResolutionTest` (`[model-resolution]`/`[issue353]`): one test per precedence level — CLI `--model`, scoped first/`saved-in-scope`, resume restore, resume-without-auth fallback + `resume_model_unresolved` diagnostic, unauthenticated settings default skipped, first-available-with-auth (CLI + SDK public), nothing-configured → `kDefaultModel` streaming failure `"Unknown provider: unknown"` |
+| 21 | Thinking-level changes persist as a `thinking_level_change` session entry plus the global settings default (`supportsThinking() || level !== "off"`), so resume restores the level exactly like pi — session creation resolves the level as resumed `thinking_level_change` → settings `defaultThinkingLevel` → `DEFAULT_THINKING_LEVEL`, clamped against the resolved first real model (T03 clamping applied through the resolution path) | `packages/coding-agent/src/core/agent-session.ts` `setThinkingLevel` (`appendThinkingLevelChange` + `setDefaultThinkingLevel` gated on `supportsThinking()`); `packages/coding-agent/src/core/settings-manager.ts` `setDefaultThinkingLevel`; `sdk.ts` thinking-level chain | `src/coding_agent/runtime/AgentSessionRuntime.{hpp,cpp}` (`set_thinking_level`, config `default_thinking_level`), `include/cch/agent/Agent.hpp` + `src/agent/Agent.cpp` (`Agent::set_thinking_level` clamp), `src/coding_agent/SettingsManager.cpp` (`set_default_thinking_level`), `src/coding_agent/Sdk.cpp` (`AgentSession::set_thinking_level`), `include/cch/coding_agent/Sdk.hpp` | `ModelResolutionTest` `[thinking-persistence]`/`[issue353]` (entry + settings write, resume restore, resumed-without-entry uses settings default, fresh session requests settings default, reasoning-model `off` gate, clamp + invalid + no-op); `AgentCoreEvidenceTest`-style golden `thinking-persistence.json`; `SettingsManagerTest` `[issue353]`; `ModelRuntimeSeamTest` `[issue353]` |
 
 ### Recorded divergences preserved (unchanged by this ticket)
 
@@ -174,5 +188,6 @@ surface, and the committed evidence. Resolution records: [#326]
 [#350]: https://github.com/lanshengzhi/cpp-coding-harness/issues/350
 [#351]: https://github.com/lanshengzhi/cpp-coding-harness/issues/351
 [#352]: https://github.com/lanshengzhi/cpp-coding-harness/issues/352
+[#353]: https://github.com/lanshengzhi/cpp-coding-harness/issues/353
 [#354]: https://github.com/lanshengzhi/cpp-coding-harness/issues/354
 [#355]: https://github.com/lanshengzhi/cpp-coding-harness/issues/355

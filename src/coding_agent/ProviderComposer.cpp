@@ -683,8 +683,12 @@ public:
           models_(std::move(models)),
           auth_(std::move(auth)),
           responses_adapter_(http_transport),
-          codex_adapter_(std::move(http_transport), std::move(ws_transport), cache_config),
-          anthropic_adapter_(http_transport) {}
+          // The codex adapter takes the HTTP transport by value for its SSE
+          // fallback; the anthropic adapter then takes the original so every
+          // scoped adapter owns a usable transport (the anthropic adapter
+          // must never receive the moved-from parameter).
+          codex_adapter_(http_transport, std::move(ws_transport), cache_config),
+          anthropic_adapter_(std::move(http_transport)) {}
 
     [[nodiscard]] std::string_view id() const noexcept override { return provider_id_; }
     [[nodiscard]] std::string_view name() const noexcept override { return name_; }

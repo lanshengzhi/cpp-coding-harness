@@ -765,4 +765,49 @@ util::ExpectedVoid SettingsManager::set_theme(
     return util::ExpectedVoid{};
 }
 
+util::ExpectedVoid SettingsManager::set_default_thinking_level(
+    SettingsScope scope,
+    std::string_view value) {
+    if (scope == SettingsScope::Project && !impl_->project_trusted) {
+        return std::unexpected(settings_error(
+            "Project is not trusted; refusing to write project settings"));
+    }
+    if (!is_thinking_level(value)) {
+        return std::unexpected(settings_error(
+            "invalid defaultThinkingLevel",
+            "defaultThinkingLevel must be one of: off, minimal, low, medium, high, xhigh, max"));
+    }
+    // A scope whose load failed suppresses writes to that scope (pi).
+    const bool load_failed = scope == SettingsScope::Global
+        ? impl_->global_load_failed
+        : impl_->project_load_failed;
+    if (load_failed) {
+        return util::ExpectedVoid{};
+    }
+    const auto& path = scope == SettingsScope::Global
+        ? impl_->global_path
+        : impl_->project_path;
+    if (path.empty()) {
+        return util::ExpectedVoid{};
+    }
+
+    auto& target = scope == SettingsScope::Global
+        ? impl_->global_settings
+        : impl_->project_settings;
+    if (target.default_thinking_level == value) {
+        return util::ExpectedVoid{};
+    }
+
+    // Persist first; the in-memory view advances only when the surgical write
+    // succeeded, so a persist failure never leaves memory diverged from disk.
+    auto persisted = persist_field(
+        path, "defaultThinkingLevel", util::JsonValue{std::string{value}});
+    if (!persisted) {
+        return persisted;
+    }
+    target.default_thinking_level = std::string{value};
+    impl_->recompute_merged();
+    return util::ExpectedVoid{};
+}
+
 } // namespace cch::coding_agent

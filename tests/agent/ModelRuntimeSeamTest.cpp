@@ -596,3 +596,71 @@ TEST_CASE(
 
     CHECK(subject.state().thinking_level == "xhigh");
 }
+
+TEST_CASE(
+    "Agent set_thinking_level clamps to the active model and updates live state",
+    "[agent][streamSimple][issue353]") {
+    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    runtime->responses.push_back(ai::assistant_text_message("ok"));
+
+    // A reasoning model without an xhigh/max mapping supports off..high, so
+    // a "max" request clamps to "high" (pi setThinkingLevel clamps before
+    // persisting).
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_reasoning_model(
+        "gpt-partial", partial_thinking_map());
+    agent::Agent subject(
+        runtime,
+        agent::AsyncToolRegistry{},
+        std::move(options),
+        agent::AgentInitialState{.thinking_level = "medium"});
+
+    auto clamped = subject.set_thinking_level("max");
+    REQUIRE(clamped.has_value());
+    CHECK(*clamped == "xhigh");
+    CHECK(subject.state().thinking_level == "xhigh");
+
+    // The next stream request forwards the effective level.
+    REQUIRE(run_prompt(subject, "hi"));
+    REQUIRE(runtime->calls.size() == 1);
+    CHECK(runtime->calls[0].options.reasoning == ai::ThinkingLevel::XHigh);
+}
+
+TEST_CASE(
+    "Agent set_thinking_level rejects invalid levels and no-ops on unchanged clamped level",
+    "[agent][streamSimple][issue353]") {
+    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    runtime->responses.push_back(ai::assistant_text_message("ok"));
+
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_full_thinking_model("gpt-test");
+    agent::Agent subject(
+        runtime,
+        agent::AsyncToolRegistry{},
+        std::move(options),
+        agent::AgentInitialState{.thinking_level = "high"});
+
+    auto invalid = subject.set_thinking_level("sometimes");
+    REQUIRE_FALSE(invalid.has_value());
+    CHECK(invalid.error().code == util::ErrorCode::Validation);
+    CHECK(subject.state().thinking_level == "high");
+
+    // A request whose clamped level equals the current level is a no-op
+    // success that leaves the level untouched.
+    auto unchanged = subject.set_thinking_level("high");
+    REQUIRE(unchanged.has_value());
+    CHECK(*unchanged == "high");
+    CHECK(subject.state().thinking_level == "high");
+
+    // A non-reasoning model clamps every level to its only supported level
+    // ("off"), so a change request becomes a no-op and never reaches the wire
+    // as reasoning.
+    agent::AsyncAgentOptions basic_options;
+    basic_options.model = tests::make_model("gpt-basic");
+    agent::Agent basic(
+        runtime, agent::AsyncToolRegistry{}, std::move(basic_options));
+    auto clamped = basic.set_thinking_level("high");
+    REQUIRE(clamped.has_value());
+    CHECK(*clamped == "off");
+    CHECK(basic.state().thinking_level == "off");
+}

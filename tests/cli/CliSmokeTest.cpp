@@ -688,7 +688,7 @@ TEST_CASE("CLI JSON reports request-time auth failure through terminal events", 
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "json-real.jsonl";
     auto result = run_command_split(
-        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        "HOME=" + shell_quote(home.path()) + " env -u KIMI_API_KEY " + bin() +
         " --mode json --workspace " + shell_quote(workspace.path()) +
         " --session " + shell_quote(session) +
         " hello");
@@ -699,7 +699,9 @@ TEST_CASE("CLI JSON reports request-time auth failure through terminal events", 
     REQUIRE_FALSE(records.empty());
     CHECK(json_string_at(records.front(), "type") == "session");
     CHECK(has_json_event_type(non_empty_lines(result.stdout_text), "message_end"));
-    CHECK(result.stdout_text.find("Provider is not configured") != std::string::npos);
+    // Nothing resolves as configured (no ambient kimi key), so the Agent
+    // holds pi's unknown kDefaultModel and fails through provider lookup (T04).
+    CHECK(result.stdout_text.find("Unknown provider: unknown") != std::string::npos);
     CHECK(std::filesystem::exists(session));
 }
 
@@ -714,13 +716,15 @@ TEST_CASE("CLI terminal auth failure after malformed settings keeps the warning 
     }
     auto session = workspace.path() / "settings-fallback-failure.jsonl";
     auto result = run_command_split(
-        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " " + bin() +
+        "PI_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " env -u KIMI_API_KEY " + bin() +
         " --workspace " + shell_quote(workspace.path()) +
         " --session " + shell_quote(session) +
         " hello");
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("[error] Provider is not configured") != std::string::npos);
+    // Nothing resolves as configured: the Agent holds kDefaultModel and the
+    // terminal auth outcome names the unknown provider (T04).
+    CHECK(result.stdout_text.find("[error] Unknown provider: unknown") != std::string::npos);
     CHECK(result.stdout_text.find("[completed]") != std::string::npos);
     CHECK(result.stderr_text.find("could not load global settings") != std::string::npos);
     CHECK(std::filesystem::exists(session));
@@ -907,13 +911,15 @@ TEST_CASE("CLI real-provider mode reports missing API key as a terminal auth out
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "real.jsonl";
     auto result = run_command(
-        "HOME=" + shell_quote(home.path()) + " " + bin() +
+        "HOME=" + shell_quote(home.path()) + " env -u KIMI_API_KEY " + bin() +
         " --workspace " + shell_quote(workspace.path()) +
         " --session " + shell_quote(session) +
         " hello");
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.output.find("Provider is not configured") != std::string::npos);
+    // Nothing resolves as configured: the Agent holds pi's unknown
+    // kDefaultModel and fails through normal provider lookup (T04).
+    CHECK(result.output.find("Unknown provider: unknown") != std::string::npos);
     CHECK(result.output.find("[model-request]") != std::string::npos);
     CHECK(result.output.find("[completed]") != std::string::npos);
 }

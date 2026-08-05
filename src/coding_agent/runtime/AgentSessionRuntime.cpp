@@ -1,6 +1,8 @@
 #include "AgentSessionRuntime.hpp"
 
 #include <cch/ai/Content.hpp>
+#include <cch/coding_agent/Settings.hpp>
+#include <cch/harness/session/JsonlSessionStore.hpp>
 
 #include "agent/AgentMessageAccess.hpp"
 #include "agent/AgentPromptAccess.hpp"
@@ -144,12 +146,14 @@ AgentSessionRuntime::AgentSessionRuntime(
     // state. AgentSession retains product metadata and durable storage only.
     agent::AgentInitialState initial_state;
     initial_state.messages = std::move(session_.history);
-    // Fresh sessions request pi's DEFAULT_THINKING_LEVEL ("medium"); the Agent
-    // clamps it against the active model at construction (#352). The full
-    // settings/resume resolution chain lands with the T04 model-resolution
-    // ticket; until then a resumed `thinking_level_change` (if any) wins.
+    // Thinking level through pi's session-creation chain (sdk.ts): a resumed
+    // `thinking_level_change` entry wins, then the settings
+    // `defaultThinkingLevel`, then pi's DEFAULT_THINKING_LEVEL ("medium"); the
+    // Agent clamps the request against the resolved model at construction
+    // (ADR 0034 / #352 / T04).
     initial_state.thinking_level =
-        session_.context_thinking_level.value_or("medium");
+        session_.context_thinking_level.value_or(
+            config_.default_thinking_level.value_or("medium"));
 
     // Construct Agent last: it holds the factory-owned ModelRuntime (the sole
     // injectable seam per #326) and takes sole ownership of the move-only tool
@@ -599,6 +603,53 @@ util::ExpectedVoid AgentSessionRuntime::clear_input_queues() {
     }
     return agent_ ? agent_->clear_input_queues() : std::unexpected(util::make_error(
         util::ErrorCode::Validation, "session is closed"));
+}
+
+util::Expected<std::string> AgentSessionRuntime::set_thinking_level(
+    std::string_view level) {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        return std::unexpected(rejected.error());
+    }
+    if (!agent_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation, "session is closed"));
+    }
+
+    const auto previous = agent_->state().thinking_level;
+    auto effective = agent_->set_thinking_level(level);
+    if (!effective) {
+        return effective;
+    }
+    if (*effective == previous) {
+        return effective;
+    }
+
+    // Persist the `thinking_level_change` session entry (pi
+    // `appendThinkingLevelChange`). In-memory sessions have no v3 tree entry
+    // surface and are not resumable, so the entry is skipped there exactly
+    // like the creation-time `model_change` entry.
+    if (auto* jsonl_store =
+            dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get())) {
+        if (auto appended = jsonl_store->append_thinking_level_change(
+                std::nullopt, *effective);
+            !appended) {
+            return std::unexpected(std::move(appended.error()));
+        }
+    }
+
+    // Persist the settings default unless the active model supports no
+    // thinking and the level is "off" (pi agent-session.ts setThinkingLevel:
+    // `if (this.supportsThinking() || effectiveLevel !== "off")`).
+    const auto& active_model = agent_->state().model;
+    if (services_.settings_manager &&
+        (active_model.reasoning || *effective != "off")) {
+        if (auto saved = services_.settings_manager->set_default_thinking_level(
+                SettingsScope::Global, *effective);
+            !saved) {
+            return std::unexpected(std::move(saved.error()));
+        }
+    }
+    return effective;
 }
 
 AgentSessionSnapshot AgentSessionRuntime::snapshot(

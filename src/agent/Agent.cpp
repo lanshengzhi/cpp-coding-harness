@@ -550,6 +550,38 @@ util::ExpectedVoid Agent::set_follow_up_mode(InputQueueMode mode) {
     return {};
 }
 
+namespace {
+
+[[nodiscard]] bool is_valid_thinking_level(std::string_view level) {
+    static const std::vector<std::string> allowed{
+        "off", "minimal", "low", "medium", "high", "xhigh", "max"};
+    return std::find(allowed.begin(), allowed.end(), level) != allowed.end();
+}
+
+} // namespace
+
+util::Expected<std::string> Agent::set_thinking_level(std::string_view level) {
+    if (!impl_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "agent is not initialized"));
+    }
+    if (!is_valid_thinking_level(level)) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "invalid thinking level",
+            std::string{level}));
+    }
+    // Clamp against the active model so an unsupported level can never be
+    // forwarded to the stream (pi agent-session.ts setThinkingLevel clamps
+    // before persisting; a clamped level equal to the current one is a no-op).
+    const auto effective = ai::clamp_thinking_level_string(
+        impl_->loop.current_model(), level);
+    impl_->loop.set_thinking_level(effective);
+    impl_->state.thinking_level = effective;
+    return effective;
+}
+
 util::ExpectedVoid Agent::clear_steering_queue() {
     if (!impl_) {
         return std::unexpected(util::make_error(

@@ -32,6 +32,12 @@ struct AgentSessionRuntimeConfig {
     /// (ADR 0015).
     std::optional<int> max_turns{std::nullopt};
     ai::Model model{};
+    /// pi `defaultThinkingLevel` from the merged settings scope. Used as the
+    /// fresh-session and resumed-without-entry thinking level before the
+    /// Agent's creation clamp (pi sdk.ts
+    /// `settingsManager.getDefaultThinkingLevel() ?? DEFAULT_THINKING_LEVEL`);
+    /// a resumed `thinking_level_change` entry wins over it (T04).
+    std::optional<std::string> default_thinking_level{std::nullopt};
 };
 
 /// Internal runtime behind AgentSession. Composes the stateful Agent with
@@ -88,6 +94,21 @@ public:
     [[nodiscard]] util::ExpectedVoid clear_steering_queue();
     [[nodiscard]] util::ExpectedVoid clear_follow_up_queue();
     [[nodiscard]] util::ExpectedVoid clear_input_queues();
+
+    // ── Model / thinking state ────────────────────────────────────────────
+
+    /// Set the thinking level for subsequent turns (pi `AgentSession`
+    /// `setThinkingLevel`). The level is clamped to the active model's
+    /// supported set; on a real change the session appends a
+    /// `thinking_level_change` entry and writes the global settings default
+    /// (pi: `supportsThinking() || effectiveLevel !== "off"`), so resume
+    /// restores the level exactly like pi (T04). Returns the effective
+    /// (clamped) level, or an error for an invalid request or a persistence
+    /// failure. Live Agent state advances first; a persistence failure is
+    /// reported without rolling the change back (Session Event Commitment
+    /// philosophy).
+    [[nodiscard]] util::Expected<std::string> set_thinking_level(
+        std::string_view level);
 
     // ── State accessors ────────────────────────────────────────────────────
 
