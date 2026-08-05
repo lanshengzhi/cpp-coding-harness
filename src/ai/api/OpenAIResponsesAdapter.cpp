@@ -126,7 +126,13 @@ void apply_usage(
     const Model& model,
     const JsonObject& event,
     std::string_view event_type,
-    AssistantMessage& assistant) {
+    AssistantMessage& assistant,
+    bool& saw_terminal) {
+    // pi's `processResponsesStream` records that a terminal response event
+    // arrived (`sawTerminalResponseEvent`); the shared guard errors with
+    // "OpenAI Responses stream ended before a terminal response event" when
+    // none did, before the wrapper's defensive pending check ever runs.
+    saw_terminal = true;
     const auto* response = stream::object_member(event, "response");
     if (!response) {
         return std::unexpected(stream::stream_error(
@@ -176,7 +182,8 @@ void apply_usage(
     const JsonObject& event,
     AssistantMessage& assistant,
     std::map<std::size_t, stream::OutputSlot>& slots,
-    AssistantEventSink& sink) {
+    AssistantEventSink& sink,
+    bool& saw_terminal) {
     const auto type = stream::string_member(event, "type");
     if (!type) {
         return {};
@@ -214,7 +221,7 @@ void apply_usage(
     }
     if (*type == "response.completed" || *type == "response.done" ||
         *type == "response.incomplete" || *type == "response.failed") {
-        return finalize_response(model, event, *type, assistant);
+        return finalize_response(model, event, *type, assistant, saw_terminal);
     }
     if (*type == "error") {
         const auto code = stream::string_member(event, "code").value_or("unknown");
@@ -230,7 +237,8 @@ void apply_usage(
     const Model& model,
     AssistantMessage& assistant,
     std::map<std::size_t, stream::OutputSlot>& slots,
-    AssistantEventSink& sink) {
+    AssistantEventSink& sink,
+    bool& saw_terminal) {
     if (event.done || event.data.empty()) {
         return {};
     }
@@ -253,7 +261,7 @@ void apply_usage(
             "event data must be a JSON object"));
     }
     return process_json_event(
-        model, *event_object, assistant, slots, sink);
+        model, *event_object, assistant, slots, sink, saw_terminal);
 }
 
 } // namespace
@@ -317,6 +325,7 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAIResponsesAdapter:
     for (std::uint32_t attempt = 0;; ++attempt) {
         providers::SseParser parser;
         std::map<std::size_t, stream::OutputSlot> slots;
+        bool saw_terminal = false;
         bool started = false;
         bool saw_body = false;
         std::optional<util::Error> handler_failure;
@@ -334,7 +343,7 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAIResponsesAdapter:
             }
             for (const auto& event : *events) {
                 auto processed = process_sse_event(
-                    event, model, assistant, slots, guarded_sink);
+                    event, model, assistant, slots, guarded_sink, saw_terminal);
                 if (!processed) {
                     handler_failure = processed.error();
                     return std::unexpected(processed.error());
@@ -415,7 +424,8 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAIResponsesAdapter:
                     model,
                     assistant,
                     slots,
-                    guarded_sink);
+                    guarded_sink,
+                    saw_terminal);
                 !processed) {
                 if (sink_failure) {
                     co_return std::unexpected(*sink_failure);
@@ -432,12 +442,15 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAIResponsesAdapter:
                     "Request was aborted"),
                 guarded_sink);
         }
-        // pi: a stream whose accumulation ends still-pending is an error.
-        if (assistant.stop_reason == AssistantStopReason::Pending) {
+        // pi's shared processor guard: a stream that ends without a terminal
+        // response event is an error (openai-responses-shared.ts); this is
+        // the wording pi observably surfaces, before the wrapper's defensive
+        // pending check (openai-responses.ts) which is unreachable in pi.
+        if (!saw_terminal) {
             co_return stream::complete_failure(
                 assistant,
                 stream::stream_error(
-                    "OpenAI Responses stream ended without a stop reason"),
+                    "OpenAI Responses stream ended before a terminal response event"),
                 guarded_sink);
         }
         if (assistant.stop_reason == AssistantStopReason::Error) {

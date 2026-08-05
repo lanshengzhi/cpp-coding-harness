@@ -327,25 +327,36 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "DeepSeek Responses stream ending still pending is a terminal error",
-    "[ai][provider][responses][issue374]") {
+    "DeepSeek Responses stream ending without a terminal event is a terminal error",
+    "[ai][provider][responses][issue374][issue375]") {
     auto transport = std::make_shared<ScriptedTransport>();
-    transport->attempts.push_back(TransportAttempt{.chunks = {
-        "data: {\"type\":\"response.created\",\"response\":{\"id\":\"early\"}}\n\n",
-    }});
+    const auto sse =
+        read_fixture_text("wire/openai-responses-deepseek-no-terminal.sse");
+    REQUIRE_FALSE(sse.empty());
+    transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
     const auto model = deepseek_model();
     auto models = make_models(transport, model);
     REQUIRE(models);
     ai::SimpleStreamOptions options;
-    options.api_key = "dummy-key";
+    options.api_key = "dummy-deepseek-key";
+    options.temperature = 0.2;
+    options.max_tokens = 123;
+    options.reasoning = ai::ThinkingLevel::High;
+    options.session_id = "session-1";
+    options.cache_retention = ai::CacheRetention::Long;
+    options.timeout_ms = 4321;
 
-    auto run = run_models(*models, model, {}, std::move(options));
+    auto run = run_models(*models, model, request_context(), std::move(options));
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
     REQUIRE(run.result->error_message);
-    CHECK(run.result->error_message->contains(
-        "OpenAI Responses stream ended without a stop reason"));
+    // pi observably surfaces the shared processor guard
+    // (openai-responses-shared.ts) for a stream ending without a terminal
+    // response event; the wrapper's defensive pending check
+    // (openai-responses.ts) is unreachable in pi and not mirrored.
+    CHECK(*run.result->error_message ==
+        "OpenAI Responses stream ended before a terminal response event");
     REQUIRE_FALSE(run.events.empty());
     REQUIRE(std::holds_alternative<ai::AssistantErrorEvent>(run.events.back()));
     const auto& terminal = std::get<ai::AssistantErrorEvent>(run.events.back());
@@ -353,6 +364,18 @@ TEST_CASE(
     CHECK(terminal.error.stop_reason == ai::AssistantStopReason::Error);
     REQUIRE(terminal.error.error_message);
     CHECK(*terminal.error.error_message == *run.result->error_message);
+    tests::check_pi_event_snapshot(
+        run.events,
+        "wire/openai-responses-deepseek-no-terminal-ts-events.json");
+
+    REQUIRE(transport->requests.size() == 1);
+    auto expected_request_bytes = read_fixture_text(
+        "wire/openai-responses-deepseek-ts-request.json");
+    REQUIRE_FALSE(expected_request_bytes.empty());
+    if (expected_request_bytes.back() == '\n') {
+        expected_request_bytes.pop_back();
+    }
+    CHECK(transport->requests.front().body == expected_request_bytes);
 }
 
 TEST_CASE(

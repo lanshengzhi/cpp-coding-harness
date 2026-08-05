@@ -109,11 +109,23 @@ shared by all three scoped adapters:
   (`response.create` + server events). Documented divergences from the frozen TS bytes: the C++
   adapter omits zstd SSE compression (pi's plain-JSON branch) and sends its own
   `User-Agent: pi (cpp-harness)`.
+- `wire/openai-responses-deepseek-no-terminal.sse` + `-ts-events.json` and
+  `wire/anthropic-messages-kimi-refusal.sse` + `-ts-events.json` (#375): terminal-outcome TS
+  snapshots for the assistant-lifecycle gate rows — a Responses stream ending without a terminal
+  response event (pi's shared-processor guard wording) and a Kimi stream whose
+  `message_delta.stop_reason` the mapper rejects (`refusal` preserved as `rawStopReason`). Both
+  share the happy-path request goldens (the request never depends on the response), so no
+  duplicate `-ts-request.json` is committed.
 
-All four `-ts-events.json` fixtures are **full-payload** assistant event snapshots (#370), not
-name-only arrays: every event carries its `contentIndex`/`delta`/`content`/`toolCall` and the
-`partial`/`message`/`error` `AssistantMessage` (including usage, stop reason, raw stop reason,
-and diagnostics), so partial-content, index, and metadata drift fails the differential tests.
+All `-ts-events.json` fixtures are **full-payload** assistant event snapshots (#370, extended
+with terminal-outcome scenarios by #375), not name-only arrays: every event carries its
+`contentIndex`/`delta`/`content`/`toolCall` and the `partial`/`message`/`error`
+`AssistantMessage` (including usage, stop reason, raw stop reason, and diagnostics), so
+partial-content, index, and metadata drift fails the differential tests. The two #375
+terminal-outcome snapshots follow the same full-payload projection (a `start` with a `pending`
+partial plus one `error` event carrying the final message), pinning the TS-side wording and
+`rawStopReason` the frozen suite asserts (`openai-responses-terminal-event.test.ts`,
+`anthropic-sse-parsing.test.ts`).
 
 ### Auth goldens (`auth/`, `auth-storage/`)
 
@@ -263,7 +275,11 @@ the C++ surface, and the committed evidence. Resolution records: [#326]
 | 30 | Secret boundary: secrets never enter Model/session/diagnostics/logs/fixtures; `CredentialStore::list` metadata-only | `#327` resolution | `Auth.hpp`, `CredentialStore.hpp` | `AuthStorageTest`, session/redaction tests |
 | 31 | `settings.json` two-scope contract (global + trusted project, deep merge project-wins, global-only `defaultProjectTrust`, pi read-time migrations, surgical field-level writes, no schema markers) | `core/settings-manager.ts` | `Settings.hpp`, `SettingsManager.cpp` | `SettingsManagerTest`, `CliSmokeTest` |
 | 32 | CLI flag surface `--provider`/`--model`/`--models`/`--api-key`; `--auth`/`--api-key-env`/`--base-url` removed and fail loudly; resume persists only `model_change {provider, modelId}` re-resolved live | `cli/args.ts`, `core/agent-session.ts` | `CliParse.cpp`, `SessionResume.hpp` | `CliParseTest`, `CliSmokeTest`, `AgentSessionSnapshotTest` |
-| 33 | Assistant lifecycle `pending` stop reason + `rawStopReason`: partials constructed `pending` on all three adapters; Responses partials flip to `stop` when a `message` item with `phase: "final_answer"` arrives (pi `applyMessagePhaseStopReason`); still-pending stream end → frozen per-family error ("OpenAI Responses/Codex/Anthropic stream ended without a stop reason"); Anthropic pre-mapping raw capture (including normalized and rejected values); the Responses family records the raw terminal `status` as `rawStopReason` (pi `finalizeResponse`); `"pending"`/`rawStopReason` JSON round-trip with absence preserved; unknown-reason error policy unchanged | `types.ts:391,411`; `api/openai-responses.ts:124,170-171`; `api/openai-codex-responses.ts:118-119,266`; `api/anthropic-messages.ts:509,709,751-752`; `api/openai-responses-shared.ts:426-428,567,721` | `Usage.hpp` (`AssistantStopReason::Pending`), `Message.hpp` (`raw_stop_reason`), `glaze/AiJson.hpp`, the three adapters, `ResponsesStream.hpp` | `AnthropicMessagesAdapterTest`/`OpenAIResponsesAdapterTest`/`OpenAICodexResponsesAdapterTest` `[issue374]` cases, `MessageContractTest` `[issue374]`, full-payload `-ts-events.json` snapshots `[issue370]` |
+| 33 | Assistant-lifecycle partial construction: every partial assistant message carries the `pending` stop reason on all three scoped adapters; Responses partials flip to `stop` once a `message` item with `phase: "final_answer"` arrives (pi `applyMessagePhaseStopReason`), replaced by terminal mapping exactly where pi does | `api/openai-responses.ts:124`; `api/openai-codex-responses.ts:266`; `api/anthropic-messages.ts:509`; `api/openai-responses-shared.ts:426-428` | `src/ai/api/OpenAIResponsesAdapter.cpp`/`OpenAICodexResponsesAdapter.cpp`/`AnthropicMessagesAdapter.cpp` (partials built `AssistantStopReason::Pending`), `ResponsesStream.hpp` | `AnthropicMessagesAdapterTest`/`OpenAIResponsesAdapterTest`/`OpenAICodexResponsesAdapterTest` `[issue374]` partial cases (`partial_stop_reasons`), full-payload `-ts-events.json` snapshots (every partial carries `"stopReason": "pending"`) |
+| 34 | End-of-stream guard: a stream ending without a terminal stop mapping is a terminal error through the six-category channel. The Responses family surfaces pi's shared-processor wording "OpenAI Responses stream ended before a terminal response event" — the observably reachable guard; pi's wrapper checks (`openai-responses.ts:170-171`, `openai-codex-responses.ts:118-119`) are defensive in pi and not mirrored. The Anthropic family surfaces "Anthropic stream ended without a stop reason", guarded on the pending reason itself | `api/openai-responses-shared.ts:733`; `api/anthropic-messages.ts:751-752`; defensive wrappers `api/openai-responses.ts:170-171`, `api/openai-codex-responses.ts:118-119` | `src/ai/api/OpenAIResponsesAdapter.cpp`/`OpenAICodexResponsesAdapter.cpp` saw-terminal guards; `src/ai/api/AnthropicMessagesAdapter.cpp` pending guard | `OpenAIResponsesAdapterTest`/`OpenAICodexResponsesAdapterTest`/`AnthropicMessagesAdapterTest` `[issue374]` terminal cases (frozen per-family wording), `OpenAIResponsesAdapterTest` `[issue375]` differential `wire/openai-responses-deepseek-no-terminal-ts-events.json` |
+| 35 | Raw-stop-reason capture: the Anthropic adapter records the pre-mapping `message_delta.stop_reason` onto the message before `mapStopReason`, including values the mapper normalizes and rejects; the Responses family records the raw terminal `status` as `rawStopReason` (pi `finalizeResponse`); never invented where pi does not set it | `api/anthropic-messages.ts:709-711`; `api/openai-responses-shared.ts:567`; `types.ts:411` | `src/ai/api/AnthropicMessagesAdapter.cpp` (raw capture before mapping), `Message.hpp` (`raw_stop_reason`), `src/ai/api/Termination.*` | `AnthropicMessagesAdapterTest` `[issue374]` "captures the raw stop reason before mapping" (end_turn/pause_turn/future_reason), `AnthropicMessagesAdapterTest` `[issue375]` differential `wire/anthropic-messages-kimi-refusal-ts-events.json` (rejected `refusal` preserved), full-payload snapshots (Responses `rawStopReason` = terminal `status`; Kimi `rawStopReason` = `tool_use`) |
+| 36 | `"pending"` accepted and emitted by the message JSON mapping in both directions; `rawStopReason` round-trips through the glaze surface under pi's key with absence preserved | `types.ts:391,411` | `glaze/AiJson.hpp`, `Message.hpp` | `MessageContractTest` `[issue374]` round-trip and absence cases |
+| 37 | Unknown-stop-reason policy checked-and-aligned: unknown/unsupported reasons error on both sides (pi `Unhandled stop reason` throw; C++ terminal error) — no behavior change, regression-locked; no frozen pi test exercises the path, so the row pins it via the C++ seams | `api/openai-responses-shared.ts:753`; `api/anthropic-messages.ts:1349` | `src/ai/api/Termination.*` unknown → error | `AnthropicMessagesAdapterTest` `[issue374]` `future_reason` raw-capture case (mapped to error), termination-matrix unknown cases (`ProviderPolicyTest` → `termination/matrix.json`), "unknown stop reasons still error" regression lock |
 
 ### Deferred Capabilities (absent from the surface — no placeholders, no compatibility shims)
 
@@ -295,8 +311,16 @@ Every capability scoped by the parity map for the three provider/auth paths
 Capability** carrying the evidence in the checklist above, or a **Deferred Capability** absent from
 the surface. There are no partial placeholders, no compatibility shims, and no fallback reads: the
 legacy `ProviderRegistry`/`ProviderFactoryContext`/`AuthLoader`/`ProviderConfigResolution` and the
-`--auth`/`--api-key-env`/`--base-url` flags are removed from the surface. Full test suite:
-`1408 test(s), 0 failure(s)` at the #370 gate.
+`--auth`/`--api-key-env`/`--base-url` flags are removed from the surface.
+
+The assistant-lifecycle classification was re-checked against reality while building rows 33–37
+(#375): the end-of-stream wording on the Responses family is pi's observably reachable
+shared-processor guard ("OpenAI Responses stream ended before a terminal response event", row 34),
+and the unknown-stop-reason policy is confirmed unchanged and regression-locked (row 37). The
+full-payload differential also surfaced one usage drift, now aligned: the Anthropic adapter
+records `cacheWrite1h` on every `message_start`, defaulting to 0 when the provider omits
+`cache_creation` (pi `anthropic-messages.ts:582`), pinned by the refusal snapshot's
+`"cacheWrite1h": 0`. Full test suite: `1409 test(s), 0 failure(s)` at the #375 gate.
 
 ## Gate report
 
@@ -304,8 +328,8 @@ legacy `ProviderRegistry`/`ProviderFactoryContext`/`AuthLoader`/`ProviderConfigR
 
 - **Adapters** — request payload bytes, SSE/WS event sequences, full-payload TS event snapshots,
   terminal matrix, and usage/cost normalization are all covered by deterministic goldens:
-  `OpenAICodexResponsesAdapterTest` (19), `OpenAIResponsesAdapterTest` (7),
-  `AnthropicMessagesAdapterTest` (9), `ProviderPolicyTest` (2), `UsageTest` (2),
+  `OpenAICodexResponsesAdapterTest` (21), `OpenAIResponsesAdapterTest` (9),
+  `AnthropicMessagesAdapterTest` (13), `ProviderPolicyTest` (2), `UsageTest` (2),
   `MessageConversionTest` (7), plus the `ModelRuntime` re-drive of the DeepSeek wire path.
 - **OAuth lifecycle** — login, refresh, logout, cancellation, and expiry-at-request-time are covered
   per provider: `OpenAICodexOAuthTest` (21), `KimiCodingOAuthTest` (16),

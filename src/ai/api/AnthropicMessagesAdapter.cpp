@@ -225,18 +225,25 @@ template <typename Headers>
 }
 
 [[nodiscard]] AnthropicUsageUpdate usage_update(const JsonObject& usage) {
+    // pi records `cacheWrite1h` on every message_start, defaulting to 0 when
+    // the provider omits `cache_creation` (anthropic-messages.ts
+    // `cache_creation?.ephemeral_1h_input_tokens || 0`).
+    std::optional<std::int64_t> cache_write_1h = 0;
+    if (const auto* cache_creation = object_member(usage, "cache_creation")) {
+        cache_write_1h =
+            integer_member(*cache_creation, "ephemeral_1h_input_tokens");
+        if (!cache_write_1h) {
+            cache_write_1h = 0;
+        }
+    }
     AnthropicUsageUpdate update{
         .input = integer_member(usage, "input_tokens"),
         .output = integer_member(usage, "output_tokens"),
         .cache_read = integer_member(usage, "cache_read_input_tokens"),
         .cache_write = integer_member(usage, "cache_creation_input_tokens"),
-        .cache_write_1h = std::nullopt,
+        .cache_write_1h = cache_write_1h,
         .reasoning = std::nullopt,
     };
-    if (const auto* cache_creation = object_member(usage, "cache_creation")) {
-        update.cache_write_1h = integer_member(
-            *cache_creation, "ephemeral_1h_input_tokens");
-    }
     if (const auto* output_details = object_member(usage, "output_tokens_details")) {
         update.reasoning = integer_member(*output_details, "thinking_tokens");
     }

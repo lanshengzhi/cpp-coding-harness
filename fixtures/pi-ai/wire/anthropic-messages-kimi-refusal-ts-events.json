@@ -1,0 +1,59 @@
+[
+  {
+    "type": "start",
+    "partial": {
+      "role": "assistant",
+      "content": [],
+      "api": "anthropic-messages",
+      "provider": "kimi-coding",
+      "model": "kimi-for-coding",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "pending",
+      "timestamp": 0
+    }
+  },
+  {
+    "type": "error",
+    "reason": "error",
+    "error": {
+      "role": "assistant",
+      "content": [],
+      "api": "anthropic-messages",
+      "provider": "kimi-coding",
+      "model": "kimi-for-coding",
+      "usage": {
+        "input": 1,
+        "output": 1,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 2,
+        "cost": {
+          "input": 9.499999999999999e-7,
+          "output": 0.000004,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0.00000495
+        },
+        "cacheWrite1h": 0
+      },
+      "stopReason": "error",
+      "timestamp": 0,
+      "responseId": "msg_refusal",
+      "rawStopReason": "refusal",
+      "errorMessage": "The model refused to complete the request"
+    }
+  }
+]

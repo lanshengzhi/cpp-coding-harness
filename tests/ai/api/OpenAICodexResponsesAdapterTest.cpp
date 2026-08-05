@@ -1125,7 +1125,7 @@ TEST_CASE(
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
     REQUIRE(run.result->error_message);
     CHECK(run.result->error_message->contains(
-        "Codex stream ended without a stop reason"));
+        "OpenAI Responses stream ended before a terminal response event"));
     REQUIRE_FALSE(run.events.empty());
     REQUIRE(std::holds_alternative<ai::AssistantErrorEvent>(run.events.back()));
     const auto& terminal = std::get<ai::AssistantErrorEvent>(run.events.back());

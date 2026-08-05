@@ -1,0 +1,57 @@
+[
+  {
+    "type": "start",
+    "partial": {
+      "role": "assistant",
+      "content": [],
+      "api": "openai-responses",
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "pending",
+      "timestamp": 0
+    }
+  },
+  {
+    "type": "error",
+    "reason": "error",
+    "error": {
+      "role": "assistant",
+      "content": [],
+      "api": "openai-responses",
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "error",
+      "timestamp": 0,
+      "responseId": "early",
+      "errorMessage": "OpenAI Responses stream ended before a terminal response event"
+    }
+  }
+]

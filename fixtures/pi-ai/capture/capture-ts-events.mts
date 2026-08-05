@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * Regenerates the full-payload TS event snapshots for the pi-ai wire fixtures
- * (issue #370).
+ * (issue #370, extended with terminal-outcome scenarios by issue #375).
  *
  * Replays the frozen `.sse` / `.ws` inputs under `fixtures/pi-ai/wire/`
  * through the frozen pi adapters (`streamSimple` per scoped API) with scripted
@@ -477,6 +477,45 @@ async function captureDeepseek(): Promise<void> {
 	writeSnapshot("wire/openai-responses-deepseek-ts-events.json", events);
 }
 
+/**
+ * H2-T2 (issue #375): the end-of-stream still-pending guard, exercised by the
+ * frozen `openai-responses-terminal-event.test.ts`. The same deepseek request
+ * bytes as the happy path (the request never depends on the response), but the
+ * SSE ends without a terminal response event, so pi's shared processor guard
+ * surfaces "OpenAI Responses stream ended before a terminal response event"
+ * (`openai-responses-shared.ts`) — the observable wording, not the defensive
+ * wrapper check.
+ */
+async function captureResponsesNoTerminal(): Promise<void> {
+	const recorded: RecordedRequest[] = [];
+	const events = await collectEvents(
+		streamSimpleResponses(deepseekModel(), simpleContext(), {
+			apiKey: "dummy-deepseek-key",
+			temperature: 0.2,
+			maxTokens: 123,
+			reasoning: "high",
+			sessionId: "session-1",
+			cacheRetention: "long",
+			timeoutMs: 4321,
+			fetch: sseFetch(
+				readFixture("wire/openai-responses-deepseek-no-terminal.sse"),
+				recorded,
+			),
+		} as any),
+	);
+	if (recorded.length !== 1) {
+		throw new Error(
+			`deepseek no-terminal: expected 1 request, got ${recorded.length}`,
+		);
+	}
+	assertCanonicalRequest(
+		recorded[0].body,
+		JSON.parse(readFixture("wire/openai-responses-deepseek-ts-request.json")),
+		"deepseek no-terminal",
+	);
+	writeSnapshot("wire/openai-responses-deepseek-no-terminal-ts-events.json", events);
+}
+
 async function captureKimi(): Promise<void> {
 	const recorded: RecordedRequest[] = [];
 	const events = await collectEvents(
@@ -499,6 +538,43 @@ async function captureKimi(): Promise<void> {
 		"kimi",
 	);
 	writeSnapshot("wire/anthropic-messages-kimi-ts-events.json", events);
+}
+
+/**
+ * H2-T2 (issue #375): the pre-mapping raw-stop-reason capture, exercised by
+ * the frozen `anthropic-sse-parsing.test.ts` (refusal / sensitive cases).
+ * Same kimi request bytes as the happy path; the terminal `message_delta`
+ * carries a stop reason the mapper rejects, and the raw value is preserved on
+ * the terminal error message (pi `anthropic-messages.ts` captures
+ * `output.rawStopReason` before `mapStopReason`).
+ */
+async function captureKimiRefusal(): Promise<void> {
+	const recorded: RecordedRequest[] = [];
+	const events = await collectEvents(
+		streamSimpleAnthropic(kimiModel(), kimiContext(), {
+			headers: { Authorization: "Bearer dummy-kimi-oauth" },
+			temperature: 0.5,
+			maxTokens: 256,
+			reasoning: "high",
+			cacheRetention: "short",
+			timeoutMs: 4321,
+			fetch: sseFetch(
+				readFixture("wire/anthropic-messages-kimi-refusal.sse"),
+				recorded,
+			),
+		} as any),
+	);
+	if (recorded.length !== 1) {
+		throw new Error(
+			`kimi refusal: expected 1 request, got ${recorded.length}`,
+		);
+	}
+	assertCanonicalRequest(
+		recorded[0].body,
+		JSON.parse(readFixture("wire/anthropic-messages-kimi-ts-request.json")),
+		"kimi refusal",
+	);
+	writeSnapshot("wire/anthropic-messages-kimi-refusal-ts-events.json", events);
 }
 
 async function captureCodexWebSocket(): Promise<void> {
@@ -576,6 +652,8 @@ async function captureCodexSseFallback(): Promise<void> {
 }
 
 await captureDeepseek();
+await captureResponsesNoTerminal();
 await captureKimi();
+await captureKimiRefusal();
 await captureCodexWebSocket();
 await captureCodexSseFallback();

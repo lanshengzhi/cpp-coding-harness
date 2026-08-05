@@ -256,7 +256,13 @@ void apply_codex_usage(
 [[nodiscard]] util::ExpectedVoid finalize_codex_response(
     const Model& model,
     const JsonObject& event,
-    AssistantMessage& assistant) {
+    AssistantMessage& assistant,
+    bool& saw_terminal) {
+    // pi's `processResponsesStream` records that a terminal response event
+    // arrived (`sawTerminalResponseEvent`); the shared guard errors with
+    // "OpenAI Responses stream ended before a terminal response event" when
+    // none did, before the Codex wrapper's defensive pending check ever runs.
+    saw_terminal = true;
     const auto* response = stream::object_member(event, "response");
     if (!response) {
         // pi mapCodexEvents yields a terminal with an undefined response and
@@ -312,7 +318,8 @@ enum class WsFrameAction { Continue, Terminal };
     AssistantMessage& assistant,
     std::map<std::size_t, stream::OutputSlot>& slots,
     AssistantEventSink& sink,
-    CodexFailure* failure) {
+    CodexFailure* failure,
+    bool& saw_terminal) {
     const auto type = stream::string_member(event, "type");
     if (!type) {
         return WsFrameAction::Continue;
@@ -377,7 +384,7 @@ enum class WsFrameAction { Continue, Terminal };
     if (*type == "response.completed" || *type == "response.done" ||
         *type == "response.incomplete") {
         if (auto finalized = finalize_codex_response(
-                model, event, assistant);
+                model, event, assistant, saw_terminal);
             !finalized) {
             return std::unexpected(finalized.error());
         }
@@ -418,7 +425,8 @@ enum class WsFrameAction { Continue, Terminal };
     AssistantMessage& assistant,
     std::map<std::size_t, stream::OutputSlot>& slots,
     AssistantEventSink& sink,
-    CodexFailure* failure) {
+    CodexFailure* failure,
+    bool& saw_terminal) {
     if (event.done || event.data.empty()) {
         return {};
     }
@@ -440,7 +448,7 @@ enum class WsFrameAction { Continue, Terminal };
             "event data must be a JSON object"));
     }
     auto action = process_codex_json_event(
-        *event_object, model, assistant, slots, sink, failure);
+        *event_object, model, assistant, slots, sink, failure, saw_terminal);
     if (!action) {
         return std::unexpected(action.error());
     }
@@ -822,6 +830,7 @@ boost::asio::awaitable<util::Expected<WsAttemptOutcome>> run_ws_attempt(
 
     std::map<std::size_t, stream::OutputSlot> slots;
     CodexFailure failure;
+    bool saw_terminal = false;
     for (;;) {
         if (options.stop_token.stop_requested()) {
             release_socket(false);
@@ -876,7 +885,7 @@ boost::asio::awaitable<util::Expected<WsAttemptOutcome>> run_ws_attempt(
             }
         }
         auto action = process_codex_json_event(
-            *event, model, assistant, slots, sink, &failure);
+            *event, model, assistant, slots, sink, &failure, saw_terminal);
         if (!action) {
             const auto kind = failure.kind;
             release_socket(false);
@@ -1105,6 +1114,7 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAICodexResponsesAda
     for (std::uint32_t attempt = 0;; ++attempt) {
         providers::SseParser parser;
         std::map<std::size_t, stream::OutputSlot> slots;
+        bool saw_terminal = false;
         bool saw_body = false;
         std::optional<util::Error> handler_failure;
 
@@ -1127,7 +1137,8 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAICodexResponsesAda
                     assistant,
                     slots,
                     guarded_sink,
-                    nullptr);
+                    nullptr,
+                    saw_terminal);
                 if (!processed) {
                     handler_failure = processed.error();
                     return std::unexpected(processed.error());
@@ -1210,7 +1221,8 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAICodexResponsesAda
                     assistant,
                     slots,
                     guarded_sink,
-                    nullptr);
+                    nullptr,
+                    saw_terminal);
                 !processed) {
                 if (sink_failure) {
                     co_return std::unexpected(*sink_failure);
@@ -1227,12 +1239,15 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> OpenAICodexResponsesAda
                     "Request was aborted"),
                 guarded_sink);
         }
-        // pi: a stream whose accumulation ends still-pending is an error.
-        if (assistant.stop_reason == AssistantStopReason::Pending) {
+        // pi's shared processor guard: a stream that ends without a terminal
+        // response event is an error (openai-responses-shared.ts); this is
+        // the wording pi observably surfaces for the Codex SSE fallback too,
+        // before the wrapper's defensive pending check ever runs.
+        if (!saw_terminal) {
             co_return stream::complete_failure(
                 assistant,
                 stream::stream_error(
-                    "Codex stream ended without a stop reason"),
+                    "OpenAI Responses stream ended before a terminal response event"),
                 guarded_sink);
         }
         if (assistant.stop_reason == AssistantStopReason::Error) {

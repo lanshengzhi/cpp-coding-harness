@@ -325,6 +325,51 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Kimi raw stop reason capture: rejected refusal matches the frozen TS snapshot",
+    "[ai][provider][anthropic][issue374][issue375]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    const auto sse =
+        read_fixture_text("wire/anthropic-messages-kimi-refusal.sse");
+    REQUIRE_FALSE(sse.empty());
+    transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
+    const auto model = kimi_model();
+    auto models = make_models(transport, model);
+    REQUIRE(models);
+    auto options = authorized_options();
+    options.temperature = 0.5;
+    options.max_tokens = 256;
+    options.reasoning = ai::ThinkingLevel::High;
+    options.cache_retention = ai::CacheRetention::Short;
+    options.timeout_ms = 4321;
+
+    auto run = run_models(*models, model, request_context(), std::move(options));
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(run.result->error_message);
+    // pi maps refusal to error with the generic refusal message when no
+    // stop_details explanation arrives (anthropic-messages.ts mapStopReason).
+    CHECK(*run.result->error_message ==
+        "The model refused to complete the request");
+    // The raw provider value is captured before the mapping rejects it.
+    REQUIRE(run.result->raw_stop_reason);
+    CHECK(*run.result->raw_stop_reason == "refusal");
+    CHECK(run.result->response_id == "msg_refusal");
+    tests::check_pi_event_snapshot(
+        run.events,
+        "wire/anthropic-messages-kimi-refusal-ts-events.json");
+
+    REQUIRE(transport->requests.size() == 1);
+    auto expected_request =
+        read_fixture_text("wire/anthropic-messages-kimi-ts-request.json");
+    REQUIRE_FALSE(expected_request.empty());
+    if (expected_request.back() == '\n') {
+        expected_request.pop_back();
+    }
+    CHECK(transport->requests.front().body == expected_request);
+}
+
+TEST_CASE(
     "Kimi Anthropic Messages keeps adaptive thinking and k3 off-null semantics",
     "[ai][provider][anthropic][issue341]") {
     auto enabled_transport = std::make_shared<ScriptedTransport>();
