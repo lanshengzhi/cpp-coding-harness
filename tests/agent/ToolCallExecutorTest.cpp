@@ -344,7 +344,15 @@ TEST_CASE("ToolCallExecutor is a move-only private adapter", "[agent][tool-execu
     static_assert(std::is_move_constructible_v<agent::ToolCallExecutor>);
 }
 
-TEST_CASE("ToolCallExecutor defaults to source-order sequential execution", "[agent][tool-executor]") {
+TEST_CASE("ToolCallExecutor default policy is bounded parallel with no explicit cap", "[agent][tool-executor]") {
+    agent::ToolCallExecutorOptions options;
+    CHECK(std::holds_alternative<agent::BoundedParallelToolExecution>(options.execution));
+    CHECK(std::get<agent::BoundedParallelToolExecution>(options.execution).max_in_flight == 0);
+}
+
+TEST_CASE(
+    "ToolCallExecutor executes a single exclusive call through the sequential path",
+    "[agent][tool-executor]") {
     agent::AsyncToolRegistry registry;
     auto tool = std::make_unique<RecordingTool>(
         ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()});
@@ -1483,7 +1491,7 @@ TEST_CASE(
 
     auto add_tool = [&](std::string name,
                         util::JsonValue contract,
-                        agent::ToolConcurrency concurrency = agent::ToolConcurrency::Exclusive,
+                        agent::ToolConcurrency concurrency = agent::ToolConcurrency::ParallelSafe,
                         std::string result = "ok",
                         std::chrono::milliseconds delay = std::chrono::milliseconds{}) {
         auto tool = std::make_unique<RecordingTool>(
@@ -1634,25 +1642,29 @@ TEST_CASE("bounded parallel execution accepts a limit of one", "[agent][tool-exe
     CHECK(probe.max_active.load() == 1);
 }
 
-TEST_CASE("bounded parallel execution rejects zero before events or tools", "[agent][tool-executor]") {
+TEST_CASE("bounded parallel zero means no explicit concurrency cap", "[agent][tool-executor]") {
+    ConcurrencyProbe probe;
     agent::AsyncToolRegistry registry;
-    auto tool = std::make_unique<RecordingTool>(
+    REQUIRE(registry.add(std::make_unique<RecordingTool>(
         ai::Tool{"lookup", "Lookup", test::empty_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe);
-    auto* tool_ptr = tool.get();
-    REQUIRE(registry.add(std::move(tool)));
+        agent::ToolConcurrency::ParallelSafe,
+        "ok",
+        std::chrono::milliseconds{30},
+        &probe)));
 
     agent::ToolCallExecutorOptions options;
     options.execution = agent::BoundedParallelToolExecution{0};
     agent::ToolCallExecutor executor{registry, std::move(options)};
-    auto assistant = assistant_with_calls({make_call("call-1", "lookup")});
+    auto assistant = assistant_with_calls({
+        make_call("call-1", "lookup"),
+        make_call("call-2", "lookup"),
+    });
 
     auto run = run_executor(executor, assistant);
 
-    REQUIRE_FALSE(run.result);
-    CHECK(run.result.error().code == util::ErrorCode::Validation);
-    CHECK(run.events.empty());
-    CHECK(tool_ptr->invocation_count() == 0);
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 2);
+    CHECK(probe.max_active.load() == 2);
 }
 
 TEST_CASE("bounded parallel execution preserves source-order results", "[agent][tool-executor]") {
@@ -1880,4 +1892,420 @@ TEST_CASE("tool errors prevent batch termination", "[agent][tool-executor]") {
     CHECK_FALSE(run.result->terminate_batch);
     REQUIRE(run.result->results.size() == 1);
     CHECK(run.result->results[0].is_error);
+}
+
+// ---------------------------------------------------------------------------
+// T06 (#355): pi tool scheduling — hooks around every execution, parallel
+// default with per-tool sequential override, truncated fail-all, and the
+// all-true terminate batch hint.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// Deterministic tool outcome for scheduling tests: configurable is_error and
+/// terminate so the executor's finalization rules can be exercised without an
+/// after hook.
+class OutcomeTool final : public agent::AsyncAgentTool {
+public:
+    OutcomeTool(
+        ai::Tool definition,
+        bool is_error = false,
+        bool terminate = false,
+        std::string result_text = "outcome",
+        agent::ToolConcurrency concurrency = agent::ToolConcurrency::ParallelSafe)
+        : definition_(std::move(definition)),
+          is_error_(is_error),
+          terminate_(terminate),
+          result_text_(std::move(result_text)),
+          concurrency_(concurrency) {}
+
+    const ai::Tool& definition() const override { return definition_; }
+
+    agent::ToolConcurrency concurrency() const noexcept override {
+        return concurrency_;
+    }
+
+    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
+        agent::ToolInvocation,
+        std::stop_token) override {
+        ++invocation_count;
+        co_return agent::AsyncToolExecutionResult{
+            .content = std::vector<ai::Content>{ai::text_content(result_text_)},
+            .details = std::nullopt,
+            .is_error = is_error_,
+            .terminate = terminate_};
+    }
+
+    ai::Tool definition_;
+    bool is_error_;
+    bool terminate_;
+    std::string result_text_;
+    agent::ToolConcurrency concurrency_;
+    std::atomic<int> invocation_count{0};
+};
+
+} // namespace
+
+TEST_CASE(
+    "afterToolCall runs for an error execution result (sequential path)",
+    "[agent][tool-executor][issue355]") {
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<OutcomeTool>(
+        ai::Tool{"work", "Work", test::empty_object_tool_argument_contract()},
+        /*is_error=*/true,
+        /*terminate=*/false,
+        "nope")));
+
+    bool hook_saw_error = false;
+    agent::AfterToolCallHook after_hook =
+        agent::adapt_sync_after_tool_call(
+            [&](const agent::AfterToolCallContext& context)
+        -> util::Expected<agent::AfterToolCallResult> {
+        hook_saw_error = context.is_error;
+        return agent::AfterToolCallResult{};
+    });
+    agent::ToolCallExecutorOptions options;
+    options.after_tool_call = &after_hook;
+    agent::ToolCallExecutor executor{registry, std::move(options)};
+    auto assistant = assistant_with_calls({make_call("call-1", "work")});
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
+    CHECK(run.result->results[0].is_error);
+    CHECK(hook_saw_error);
+}
+
+TEST_CASE(
+    "afterToolCall runs for an error execution result (bounded parallel path)",
+    "[agent][tool-executor][issue355]") {
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<OutcomeTool>(
+        ai::Tool{"work", "Work", test::empty_object_tool_argument_contract()},
+        /*is_error=*/true,
+        /*terminate=*/false,
+        "nope")));
+
+    bool hook_saw_error = false;
+    agent::AfterToolCallHook after_hook =
+        agent::adapt_sync_after_tool_call(
+            [&](const agent::AfterToolCallContext& context)
+        -> util::Expected<agent::AfterToolCallResult> {
+        hook_saw_error = context.is_error;
+        return agent::AfterToolCallResult{};
+    });
+    agent::ToolCallExecutorOptions options;
+    options.after_tool_call = &after_hook;
+    options.execution = agent::BoundedParallelToolExecution{2};
+    agent::ToolCallExecutor executor{registry, std::move(options)};
+    auto assistant = assistant_with_calls({make_call("call-1", "work")});
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
+    CHECK(run.result->results[0].is_error);
+    CHECK(hook_saw_error);
+}
+
+TEST_CASE(
+    "afterToolCall runs for a throwing tool (isolation handling)",
+    "[agent][tool-executor][issue355]") {
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<FailingTool>(
+        ai::Tool{"work", "Work", test::empty_object_tool_argument_contract()})));
+
+    int after_calls = 0;
+    agent::AfterToolCallHook after_hook =
+        agent::adapt_sync_after_tool_call(
+            [&](const agent::AfterToolCallContext&)
+        -> util::Expected<agent::AfterToolCallResult> {
+        ++after_calls;
+        return agent::AfterToolCallResult{};
+    });
+    agent::ToolCallExecutorOptions options;
+    options.after_tool_call = &after_hook;
+    agent::ToolCallExecutor executor{registry, std::move(options)};
+    auto assistant = assistant_with_calls({make_call("call-1", "work")});
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
+    CHECK(run.result->results[0].is_error);
+    CHECK(after_calls == 1);
+}
+
+TEST_CASE(
+    "beforeToolCall hook failure finalizes only its call (sequential path)",
+    "[agent][tool-executor][issue355]") {
+    agent::AsyncToolRegistry registry;
+    auto alpha = std::make_unique<RecordingTool>(
+        ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()});
+    auto beta = std::make_unique<RecordingTool>(
+        ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()});
+    auto* alpha_ptr = alpha.get();
+    auto* beta_ptr = beta.get();
+    REQUIRE(registry.add(std::move(alpha)));
+    REQUIRE(registry.add(std::move(beta)));
+
+    agent::BeforeToolCallHook before_hook =
+        agent::adapt_sync_before_tool_call(
+            [](const agent::BeforeToolCallContext& context)
+        -> util::Expected<agent::BeforeToolCallResult> {
+        if (context.tool_call.id == "call-1") {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Tool, "policy rejected"));
+        }
+        return agent::BeforeToolCallResult{};
+    });
+    agent::ToolCallExecutorOptions options;
+    options.before_tool_call = &before_hook;
+    agent::ToolCallExecutor executor{registry, std::move(options)};
+    auto assistant = assistant_with_calls({
+        make_call("call-1", "alpha"),
+        make_call("call-2", "beta"),
+    });
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 2);
+    CHECK(run.result->results[0].is_error);
+    CHECK(ai::text_from_content(run.result->results[0].content) == "policy rejected");
+    CHECK_FALSE(run.result->results[1].is_error);
+    CHECK(alpha_ptr->invocation_count() == 0);
+    CHECK(beta_ptr->invocation_count() == 1);
+}
+
+TEST_CASE(
+    "beforeToolCall hook failure finalizes only its call (bounded parallel path)",
+    "[agent][tool-executor][issue355]") {
+    agent::AsyncToolRegistry registry;
+    auto alpha = std::make_unique<RecordingTool>(
+        ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
+        agent::ToolConcurrency::ParallelSafe);
+    auto beta = std::make_unique<RecordingTool>(
+        ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
+        agent::ToolConcurrency::ParallelSafe);
+    auto* alpha_ptr = alpha.get();
+    auto* beta_ptr = beta.get();
+    REQUIRE(registry.add(std::move(alpha)));
+    REQUIRE(registry.add(std::move(beta)));
+
+    agent::BeforeToolCallHook before_hook =
+        agent::adapt_sync_before_tool_call(
+            [](const agent::BeforeToolCallContext& context)
+        -> util::Expected<agent::BeforeToolCallResult> {
+        if (context.tool_call.id == "call-1") {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Tool, "policy rejected"));
+        }
+        return agent::BeforeToolCallResult{};
+    });
+    agent::ToolCallExecutorOptions options;
+    options.before_tool_call = &before_hook;
+    options.execution = agent::BoundedParallelToolExecution{2};
+    agent::ToolCallExecutor executor{registry, std::move(options)};
+    auto assistant = assistant_with_calls({
+        make_call("call-1", "alpha"),
+        make_call("call-2", "beta"),
+    });
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 2);
+    CHECK(run.result->results[0].is_error);
+    CHECK(ai::text_from_content(run.result->results[0].content) == "policy rejected");
+    CHECK_FALSE(run.result->results[1].is_error);
+    CHECK(alpha_ptr->invocation_count() == 0);
+    CHECK(beta_ptr->invocation_count() == 1);
+}
+
+TEST_CASE(
+    "afterToolCall hook failure finalizes only its call",
+    "[agent][tool-executor][issue355]") {
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+        ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
+        agent::ToolConcurrency::ParallelSafe)));
+    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+        ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
+        agent::ToolConcurrency::ParallelSafe)));
+
+    agent::AfterToolCallHook after_hook =
+        agent::adapt_sync_after_tool_call(
+            [](const agent::AfterToolCallContext& context)
+        -> util::Expected<agent::AfterToolCallResult> {
+        if (context.tool_call.id == "call-1") {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Tool, "post-processor failed"));
+        }
+        return agent::AfterToolCallResult{};
+    });
+    agent::ToolCallExecutorOptions options;
+    options.after_tool_call = &after_hook;
+    options.execution = agent::BoundedParallelToolExecution{2};
+    agent::ToolCallExecutor executor{registry, std::move(options)};
+    auto assistant = assistant_with_calls({
+        make_call("call-1", "alpha"),
+        make_call("call-2", "beta"),
+    });
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 2);
+    CHECK(run.result->results[0].is_error);
+    CHECK(ai::text_from_content(run.result->results[0].content) == "post-processor failed");
+    CHECK_FALSE(run.result->results[1].is_error);
+    CHECK(run.result->results[1].tool_name == "beta");
+}
+
+TEST_CASE(
+    "an exclusive tool serializes the whole batch with full per-call lifecycle",
+    "[agent][tool-executor][issue355]") {
+    ConcurrencyProbe probe;
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+        ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
+        agent::ToolConcurrency::ParallelSafe,
+        "alpha",
+        std::chrono::milliseconds{20},
+        &probe)));
+    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+        ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
+        agent::ToolConcurrency::Exclusive,
+        "beta",
+        std::chrono::milliseconds{20},
+        &probe)));
+
+    agent::ToolCallExecutorOptions options;
+    options.execution = agent::BoundedParallelToolExecution{2};
+    agent::ToolCallExecutor executor{registry, std::move(options)};
+    auto assistant = assistant_with_calls({
+        make_call("call-1", "alpha"),
+        make_call("call-2", "beta"),
+    });
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 2);
+    CHECK(probe.max_active.load() == 1);
+
+    // pi executeToolCallsSequential: each call's full lifecycle completes
+    // before the next call starts (start → end → result message → next start).
+    std::vector<std::string> sequence;
+    for (const auto& event : run.events) {
+        if (const auto* start = std::get_if<agent::ToolExecutionStartEvent>(&event)) {
+            sequence.push_back("start:" + start->tool_call_id);
+        } else if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
+            sequence.push_back("end:" + end->tool_call_id);
+        } else if (const auto* start = std::get_if<agent::MessageStartEvent>(&event)) {
+            const auto* result = std::get_if<ai::ToolResultMessage>(&start->message);
+            REQUIRE(result != nullptr);
+            sequence.push_back("message-start:" + result->tool_call_id);
+        } else if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+            const auto* result = std::get_if<ai::ToolResultMessage>(&end->message);
+            REQUIRE(result != nullptr);
+            sequence.push_back("message-end:" + result->tool_call_id);
+        }
+    }
+
+    REQUIRE((sequence == std::vector<std::string>{
+        "start:call-1",
+        "end:call-1",
+        "message-start:call-1",
+        "message-end:call-1",
+        "start:call-2",
+        "end:call-2",
+        "message-start:call-2",
+        "message-end:call-2",
+    }));
+}
+
+TEST_CASE(
+    "default policy executes parallel-safe calls concurrently",
+    "[agent][tool-executor][issue355]") {
+    ConcurrencyProbe probe;
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+        ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
+        agent::ToolConcurrency::ParallelSafe,
+        "alpha",
+        std::chrono::milliseconds{30},
+        &probe)));
+    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+        ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
+        agent::ToolConcurrency::ParallelSafe,
+        "beta",
+        std::chrono::milliseconds{30},
+        &probe)));
+
+    // No explicit policy: the executor default is bounded parallel with no cap.
+    agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
+    auto assistant = assistant_with_calls({
+        make_call("call-1", "alpha"),
+        make_call("call-2", "beta"),
+    });
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 2);
+    CHECK(probe.max_active.load() == 2);
+}
+
+TEST_CASE(
+    "an error result with an explicit terminate hint terminates the batch",
+    "[agent][tool-executor][issue355]") {
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<OutcomeTool>(
+        ai::Tool{"work", "Work", test::empty_object_tool_argument_contract()},
+        /*is_error=*/true,
+        /*terminate=*/true,
+        "cannot continue")));
+
+    agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
+    auto assistant = assistant_with_calls({make_call("call-1", "work")});
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
+    CHECK(run.result->results[0].is_error);
+    // pi shouldTerminateToolBatch: the finalized result carries
+    // terminate === true; there is no implicit ban on error results (ADR 0008).
+    CHECK(run.result->terminate_batch);
+}
+
+TEST_CASE(
+    "batch termination requires every call to carry the hint",
+    "[agent][tool-executor][issue355]") {
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<OutcomeTool>(
+        ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
+        /*is_error=*/false,
+        /*terminate=*/true,
+        "alpha done")));
+    REQUIRE(registry.add(std::make_unique<OutcomeTool>(
+        ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
+        /*is_error=*/false,
+        /*terminate=*/false,
+        "beta done")));
+
+    agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
+    auto assistant = assistant_with_calls({
+        make_call("call-1", "alpha"),
+        make_call("call-2", "beta"),
+    });
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 2);
+    CHECK_FALSE(run.result->terminate_batch);
 }

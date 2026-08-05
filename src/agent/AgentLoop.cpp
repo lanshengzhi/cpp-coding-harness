@@ -403,8 +403,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                 result.is_error = true;
                 result.content.emplace_back(ai::text_content(
                     "Tool call \"" + call.name +
-                    "\" was not executed because the response hit the output token limit and its arguments may be "
-                    "truncated. Re-issue the tool call with complete arguments."));
+                    "\" was not executed: the response hit the output token limit, so its "
+                    "arguments may be truncated. Re-issue the tool call with complete arguments."));
 
                 AsyncToolExecutionResult execution_result;
                 execution_result.content = result.content;

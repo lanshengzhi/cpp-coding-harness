@@ -21,7 +21,7 @@ struct ToolCallExecutorOptions {
     BeforeToolCallHook* before_tool_call{nullptr};
     AfterToolCallHook* after_tool_call{nullptr};
     std::stop_token stop_token;
-    ToolExecutionPolicy execution{SequentialToolExecution{}};
+    ToolExecutionPolicy execution{BoundedParallelToolExecution{}};
 };
 
 struct ToolCallBatchRequest {

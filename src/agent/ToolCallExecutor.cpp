@@ -86,6 +86,14 @@ struct FinalizedToolCall {
     };
 }
 
+/// Hook failure text for a per-call error result: pi catches a hook throw and
+/// produces the call's error result (ADR 0008); the C++ hook error's detail
+/// (or message when the detail is empty) is the closest equivalent of the
+/// thrown message.
+[[nodiscard]] std::string hook_failure_text(const util::Error& error) {
+    return error.detail.empty() ? error.message : error.detail;
+}
+
 void apply_after_result(
     ai::ToolResultMessage& tool_result,
     bool& call_terminate,
@@ -105,9 +113,13 @@ void apply_after_result(
 
 [[nodiscard]] ToolCallBatchResult make_batch_result(
     std::vector<FinalizedToolCall> finalized) {
+    // pi shouldTerminateToolBatch: every finalized result carries an explicit
+    // terminate hint. Error results carry no implicit ban (ADR 0008): a result
+    // finalizes as terminate only through the tool result or the after hook,
+    // never through failure handling.
     const bool terminate = !finalized.empty() &&
                            std::all_of(finalized.begin(), finalized.end(), [](const FinalizedToolCall& call) {
-                               return call.call_terminate && !call.result.is_error;
+                               return call.call_terminate;
                            });
 
     std::vector<ai::ToolResultMessage> results;
@@ -128,20 +140,24 @@ ToolCallExecutor::ToolCallExecutor(
 boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::execute(
     ToolCallBatchRequest request,
     AgentEventSink& sink) {
-    const auto* parallel = std::get_if<BoundedParallelToolExecution>(&options_.execution);
-    if (parallel != nullptr && parallel->max_in_flight == 0) {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "invalid bounded parallel tool execution policy",
-            "max_in_flight must be greater than zero"));
-    }
-
     const auto calls = tool_calls_from(request.assistant_message);
     if (calls.empty()) {
         co_return ToolCallBatchResult{};
     }
 
-    if (parallel == nullptr || parallel->max_in_flight == 1) {
+    const auto* parallel = std::get_if<BoundedParallelToolExecution>(&options_.execution);
+
+    // pi executeToolCalls: the whole batch runs through the sequential path
+    // when the policy is sequential or when any tool call references a tool
+    // whose execution mode is sequential (C++: an adapter declaring
+    // `ToolConcurrency::Exclusive`). A bounded-parallel cap of one is
+    // effectively sequential and shares that path.
+    const bool any_sequential_tool = std::any_of(
+        calls.begin(), calls.end(), [&](const ai::ToolCallContent& call) {
+            const auto* tool = registry_.find(call.name);
+            return tool != nullptr && tool->concurrency() == ToolConcurrency::Exclusive;
+        });
+    if (parallel == nullptr || any_sequential_tool || parallel->max_in_flight == 1) {
         co_return co_await execute_sequential(request, calls, sink);
     }
 
@@ -162,7 +178,6 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
         CCH_TRY_VOID(emit_agent_event(sink, ToolExecutionStartEvent{call.id, call.name, call.arguments.value_or(util::JsonValue{})}));
 
         ai::ToolResultMessage tool_result;
-        bool executed_successfully = false;
         bool call_terminate = false;
         auto* tool = registry_.find(call.name);
         if (tool == nullptr) {
@@ -189,13 +204,13 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                         std::move(hook_context),
                         options_.stop_token);
                     if (!before_result) {
-                        if (!options_.stop_token.stop_requested()) {
-                            co_return std::unexpected(before_result.error());
-                        }
+                        // pi prepareToolCall: a failing before hook finalizes
+                        // only this call's outcome; it never aborts the run
+                        // (ADR 0008).
                         blocked = true;
-                        tool_result = error_tool_result(call, "Operation aborted");
-                    }
-                    if (before_result && before_result->block) {
+                        tool_result = error_tool_result(
+                            call, hook_failure_text(before_result.error()));
+                    } else if (before_result->block) {
                         blocked = true;
                         tool_result = error_tool_result(
                             call, before_result->reason.value_or("Tool execution was blocked"));
@@ -208,7 +223,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                 }
 
                 if (!blocked) {
-                    std::optional<util::Expected<AsyncToolExecutionResult>> executed;
+                    AsyncToolExecutionResult outcome;
                     auto update_gate = std::make_shared<ToolUpdateGate>();
                     try {
                         ToolUpdateSink update_sink = [
@@ -227,70 +242,76 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                                 .partial_result = partial_result,
                             });
                         };
-                        executed = co_await execute_with_update_lifetime(
+                        auto executed = co_await execute_with_update_lifetime(
                             *tool,
                             invocation,
                             options_.stop_token,
                             std::move(update_sink),
                             update_gate);
+                        if (!executed) {
+                            // pi executePreparedToolCall: a throwing tool
+                            // becomes an error outcome, never a run failure.
+                            outcome = AsyncToolExecutionResult{
+                                .content = std::vector<ai::Content>{ai::text_content(
+                                    executed.error().detail.empty()
+                                        ? executed.error().message
+                                        : executed.error().detail)},
+                                .details = std::nullopt,
+                                .is_error = true,
+                                .terminate = false,
+                            };
+                        } else {
+                            outcome = std::move(*executed);
+                        }
                     } catch (...) {
-                        tool_result = error_tool_result(call, "Tool execution failed.");
+                        outcome = AsyncToolExecutionResult{
+                            .content = std::vector<ai::Content>{
+                                ai::text_content("Tool execution failed.")},
+                            .details = std::nullopt,
+                            .is_error = true,
+                            .terminate = false,
+                        };
                     }
 
-                    if (executed) {
-                        if (!*executed) {
-                            tool_result = error_tool_result(
-                                call,
-                                executed->error().detail.empty() ? executed->error().message
-                                                                 : executed->error().detail);
-                        } else {
-                            executed_successfully = true;
-                            tool_result.tool_call_id = call.id;
-                            tool_result.tool_name = call.name;
-                            tool_result.content = (*executed)->content;
-                            tool_result.details = (*executed)->details;
-                            tool_result.is_error = (*executed)->is_error;
+                    tool_result.tool_call_id = call.id;
+                    tool_result.tool_name = call.name;
+                    tool_result.content = outcome.content;
+                    tool_result.details = outcome.details;
+                    tool_result.is_error = outcome.is_error;
+                    call_terminate = outcome.terminate;
 
-                            if (!(*executed)->is_error && options_.after_tool_call) {
-                                AfterToolCallContext hook_context{
-                                    request.assistant_message,
-                                    call,
-                                    invocation.arguments,
-                                    **executed,
-                                    false,
-                                    request.context};
-                                auto after_result = co_await invoke_agent_hook(
-                                    "afterToolCall",
-                                    *options_.after_tool_call,
-                                    std::move(hook_context),
-                                    options_.stop_token);
-                                if (!after_result) {
-                                    if (!options_.stop_token.stop_requested()) {
-                                        co_return std::unexpected(after_result.error());
-                                    }
-                                    // Preserve the completed tool result. The
-                                    // next provider request observes the same
-                                    // stopped token and owns the aborted
-                                    // assistant terminal outcome.
-                                    call_terminate = (*executed)->terminate;
-                                } else {
-                                    apply_after_result(
-                                        tool_result,
-                                        call_terminate,
-                                        std::move(*after_result),
-                                        (*executed)->terminate);
-                                }
-                            } else {
-                                call_terminate = (*executed)->terminate;
-                            }
+                    if (options_.after_tool_call) {
+                        // pi finalizeExecutedToolCall: the after hook runs for
+                        // every executed outcome, success or error (ADR 0008).
+                        AfterToolCallContext hook_context{
+                            request.assistant_message,
+                            call,
+                            invocation.arguments,
+                            outcome,
+                            outcome.is_error,
+                            request.context};
+                        auto after_result = co_await invoke_agent_hook(
+                            "afterToolCall",
+                            *options_.after_tool_call,
+                            std::move(hook_context),
+                            options_.stop_token);
+                        if (!after_result) {
+                            // A failing after hook finalizes this call's
+                            // outcome as an error result; the run keeps going
+                            // (pi catches the hook throw, ADR 0008).
+                            tool_result = error_tool_result(
+                                call, hook_failure_text(after_result.error()));
+                            call_terminate = false;
+                        } else {
+                            apply_after_result(
+                                tool_result,
+                                call_terminate,
+                                std::move(*after_result),
+                                outcome.terminate);
                         }
                     }
                 }
             }
-        }
-
-        if (!executed_successfully || tool_result.is_error) {
-            call_terminate = false;
         }
 
         CCH_TRY_VOID(emit_agent_event(sink, ToolExecutionEndEvent{
@@ -378,13 +399,12 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                 std::move(hook_context),
                 options_.stop_token);
             if (!before_result) {
-                if (!options_.stop_token.stop_requested()) {
-                    co_return std::unexpected(before_result.error());
-                }
+                // pi prepareToolCall: a failing before hook finalizes only
+                // this call's outcome (ADR 0008).
                 CCH_TRY_VOID(complete_immediate(
                     source_index,
                     call,
-                    error_tool_result(call, "Operation aborted")));
+                    error_tool_result(call, hook_failure_text(before_result.error()))));
                 continue;
             }
             if (before_result->block) {
@@ -436,12 +456,13 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
     auto finalized = std::make_shared<std::vector<std::optional<FinalizedToolCall>>>(
         std::move(finalized_calls));
 
-    const bool all_prepared_tools_parallel_safe = std::all_of(
-        prepared_calls->begin(), prepared_calls->end(), [](const PreparedToolCall& call) {
-            return call.tool->concurrency() == ToolConcurrency::ParallelSafe;
-        });
+    // Every prepared tool here is ParallelSafe: execute() routes any batch
+    // containing an Exclusive (pi "sequential") tool through the sequential
+    // path, so this worker pool never observes one. A cap of zero (the policy
+    // default) dispatches every prepared call concurrently, matching pi's
+    // unbounded parallel default (ADR 0034).
     const std::size_t execution_limit =
-        all_prepared_tools_parallel_safe ? max_in_flight : std::size_t{1};
+        max_in_flight == 0 ? prepared_calls->size() : max_in_flight;
     const std::size_t worker_count = std::min(execution_limit, prepared_calls->size());
 
     auto parallel_emit = [state, sink_ptr = &sink](const AgentLifecycleEvent& event) -> util::ExpectedVoid {
@@ -508,82 +529,105 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                             .partial_result = partial_result,
                         });
                     };
-                    if (auto executed = co_await execute_with_update_lifetime(
+                    AsyncToolExecutionResult executed_outcome;
+                    try {
+                        auto executed = co_await execute_with_update_lifetime(
                             *prepared_call.tool,
                             invocation,
                             stop_token,
                             std::move(update_sink),
                             update_gate);
-                        !executed) {
-                        outcome.result = error_tool_result(
-                            prepared_call.tool_call,
-                            executed.error().detail.empty() ? executed.error().message
-                                                            : executed.error().detail);
-                    } else {
-                        outcome.result.tool_call_id = prepared_call.tool_call.id;
-                        outcome.result.tool_name = prepared_call.tool_call.name;
-                        outcome.result.content = executed->content;
-                        outcome.result.details = executed->details;
-                        outcome.result.is_error = executed->is_error;
-                        outcome.call_terminate = executed->terminate;
+                        if (!executed) {
+                            // pi executePreparedToolCall: a throwing tool
+                            // becomes an error outcome, never a run failure.
+                            executed_outcome = AsyncToolExecutionResult{
+                                .content = std::vector<ai::Content>{ai::text_content(
+                                    executed.error().detail.empty()
+                                        ? executed.error().message
+                                        : executed.error().detail)},
+                                .details = std::nullopt,
+                                .is_error = true,
+                                .terminate = false,
+                            };
+                        } else {
+                            executed_outcome = std::move(*executed);
+                        }
+                    } catch (...) {
+                        executed_outcome = AsyncToolExecutionResult{
+                            .content = std::vector<ai::Content>{
+                                ai::text_content("Tool execution failed.")},
+                            .details = std::nullopt,
+                            .is_error = true,
+                            .terminate = false,
+                        };
+                    }
 
-                        if (!executed->is_error && after_hook) {
-                            const auto [permit_error] = co_await after_hook_permits->async_receive(
-                                boost::asio::as_tuple(boost::asio::use_awaitable));
-                            if (permit_error) {
+                    outcome.result.tool_call_id = prepared_call.tool_call.id;
+                    outcome.result.tool_name = prepared_call.tool_call.name;
+                    outcome.result.content = executed_outcome.content;
+                    outcome.result.details = executed_outcome.details;
+                    outcome.result.is_error = executed_outcome.is_error;
+                    outcome.call_terminate = executed_outcome.terminate;
+
+                    if (after_hook) {
+                        // pi finalizeExecutedToolCall: the after hook runs for
+                        // every executed outcome, success or error (ADR 0008).
+                        // Hook invocations stay serialized so the move-only
+                        // contract never overlaps.
+                        const auto [permit_error] = co_await after_hook_permits->async_receive(
+                            boost::asio::as_tuple(boost::asio::use_awaitable));
+                        if (permit_error) {
+                            std::lock_guard error_lock(state->error_mutex);
+                            if (!state->fatal_error) {
+                                state->fatal_error = util::make_error(
+                                    util::ErrorCode::Tool,
+                                    "afterToolCall hook serialization failed",
+                                    permit_error.message());
+                            }
+                            outcome.result = error_tool_result(
+                                prepared_call.tool_call,
+                                "afterToolCall hook failed");
+                            outcome.call_terminate = false;
+                        } else {
+                            AfterToolCallContext hook_context{
+                                *assistant_snapshot,
+                                prepared_call.tool_call,
+                                invocation.arguments,
+                                executed_outcome,
+                                executed_outcome.is_error,
+                                *context_snapshot};
+                            auto after_result = co_await invoke_agent_hook(
+                                "afterToolCall",
+                                *after_hook,
+                                std::move(hook_context),
+                                stop_token);
+                            const bool released = after_hook_permits->try_send(
+                                boost::system::error_code{});
+                            if (!released) {
                                 std::lock_guard error_lock(state->error_mutex);
                                 if (!state->fatal_error) {
                                     state->fatal_error = util::make_error(
                                         util::ErrorCode::Tool,
-                                        "afterToolCall hook serialization failed",
-                                        permit_error.message());
+                                        "afterToolCall hook serialization failed");
                                 }
                                 outcome.result = error_tool_result(
                                     prepared_call.tool_call,
                                     "afterToolCall hook failed");
                                 outcome.call_terminate = false;
-                            } else {
-                                AfterToolCallContext hook_context{
-                                    *assistant_snapshot,
+                            } else if (!after_result) {
+                                // A failing after hook finalizes this call's
+                                // outcome as an error result; the run keeps
+                                // going (pi catches the hook throw, ADR 0008).
+                                outcome.result = error_tool_result(
                                     prepared_call.tool_call,
-                                    invocation.arguments,
-                                    *executed,
-                                    false,
-                                    *context_snapshot};
-                                auto after_result = co_await invoke_agent_hook(
-                                    "afterToolCall",
-                                    *after_hook,
-                                    std::move(hook_context),
-                                    stop_token);
-                                const bool released = after_hook_permits->try_send(
-                                    boost::system::error_code{});
-                                if (!released) {
-                                    std::lock_guard error_lock(state->error_mutex);
-                                    if (!state->fatal_error) {
-                                        state->fatal_error = util::make_error(
-                                            util::ErrorCode::Tool,
-                                            "afterToolCall hook serialization failed");
-                                    }
-                                    outcome.result = error_tool_result(
-                                        prepared_call.tool_call,
-                                        "afterToolCall hook failed");
-                                    outcome.call_terminate = false;
-                                } else if (!after_result && !stop_token.stop_requested()) {
-                                    std::lock_guard error_lock(state->error_mutex);
-                                    if (!state->fatal_error) {
-                                        state->fatal_error = after_result.error();
-                                    }
-                                    outcome.result = error_tool_result(
-                                        prepared_call.tool_call,
-                                        "afterToolCall hook failed");
-                                    outcome.call_terminate = false;
-                                } else if (after_result) {
-                                    apply_after_result(
-                                        outcome.result,
-                                        outcome.call_terminate,
-                                        std::move(*after_result),
-                                        executed->terminate);
-                                }
+                                    hook_failure_text(after_result.error()));
+                                outcome.call_terminate = false;
+                            } else {
+                                apply_after_result(
+                                    outcome.result,
+                                    outcome.call_terminate,
+                                    std::move(*after_result),
+                                    executed_outcome.terminate);
                             }
                         }
                     }
@@ -591,10 +635,6 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                     outcome.result = error_tool_result(
                         prepared_call.tool_call,
                         "Tool execution failed.");
-                    outcome.call_terminate = false;
-                }
-
-                if (outcome.result.is_error) {
                     outcome.call_terminate = false;
                 }
 

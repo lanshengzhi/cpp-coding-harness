@@ -143,7 +143,12 @@ using SyncValidateTurnUpdatePolicy = std::move_only_function<
 struct SequentialToolExecution {};
 
 struct BoundedParallelToolExecution {
-    std::size_t max_in_flight{1};
+    /// Maximum concurrently executing prepared tool calls. 0 (the default)
+    /// means no explicit cap: every prepared call in the batch is dispatched
+    /// concurrently, matching pi's unbounded parallel default (ADR 0034),
+    /// subject to the per-tool parallel-safety bound (ADR 0016). An explicit
+    /// value of 1 executes the batch through the sequential path.
+    std::size_t max_in_flight{0};
 };
 
 using ToolExecutionPolicy = std::variant<
@@ -206,7 +211,13 @@ struct AsyncAgentOptions {
     std::optional<PrepareNextTurnHook> prepare_next_turn;
     std::optional<ShouldStopAfterTurnHook> should_stop_after_turn;
     std::optional<ValidateTurnUpdateHook> validate_turn_update;
-    ToolExecutionPolicy tool_execution{SequentialToolExecution{}};
+    /// Tool scheduling policy for each assistant tool-call batch. Defaults to
+    /// bounded parallel with no explicit cap (pi's parallel default): calls in
+    /// one assistant message execute concurrently, while a batch containing a
+    /// call to a tool whose adapter declares `ToolConcurrency::Exclusive` runs
+    /// through the sequential path exactly like pi's per-tool
+    /// `executionMode: "sequential"` override (ADR 0034 / #355).
+    ToolExecutionPolicy tool_execution{BoundedParallelToolExecution{}};
 };
 
 struct AgentState {

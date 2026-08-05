@@ -99,7 +99,12 @@ using CancellableSyncAfterToolCallPolicy = std::move_only_function<
     CancellableSyncAfterToolCallPolicy policy);
 
 enum class ToolConcurrency {
+    /// pi `executionMode: "sequential"`: a batch containing a call to this
+    /// tool executes entirely through the sequential path (per-tool sequential
+    /// override, ADR 0034 / #355).
     Exclusive,
+    /// pi `executionMode: "parallel"` (the default when omitted): this tool
+    /// can execute concurrently with other tool calls.
     ParallelSafe,
 };
 

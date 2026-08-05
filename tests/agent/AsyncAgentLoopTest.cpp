@@ -795,9 +795,10 @@ TEST_CASE("beforeToolCall hook passes context and skips execution on block", "[a
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
 }
 
-TEST_CASE("beforeToolCall hook failure aborts the run", "[agent][async][u7]") {
+TEST_CASE("beforeToolCall hook failure finalizes only its call", "[agent][async][u7]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("recovered"));
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
@@ -813,19 +814,25 @@ TEST_CASE("beforeToolCall hook failure aborts the run", "[agent][async][u7]") {
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
-    REQUIRE_FALSE(run.result);
-    CHECK(run.result.error().code == util::ErrorCode::Tool);
-    CHECK(run.result.error().message == "policy rejected");
-    CHECK(count_events<agent::MessageStartEvent>(run.events) == 2);
-    CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
-
-    const auto* end_event = std::get_if<agent::AgentEndEvent>(&run.events.back());
-    REQUIRE(end_event);
+    // pi prepareToolCall catches a failing before hook into that call's error
+    // result; the run continues (ADR 0008).
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 2);
+    REQUIRE(client->requests.size() == 2);
+    const auto& messages = client->requests[1].context.messages;
+    REQUIRE(messages.size() == 3);
+    const auto* tool_result = std::get_if<ai::ToolResultMessage>(&messages.back());
+    REQUIRE(tool_result != nullptr);
+    CHECK(tool_result->is_error);
+    CHECK(ai::text_from_content(tool_result->content) == "policy rejected");
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
 }
 
-TEST_CASE("beforeToolCall hook exception becomes a tool error", "[agent][async][u7]") {
+TEST_CASE("beforeToolCall hook exception becomes a per-call tool error", "[agent][async][u7]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("recovered"));
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
@@ -841,11 +848,17 @@ TEST_CASE("beforeToolCall hook exception becomes a tool error", "[agent][async][
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
-    REQUIRE_FALSE(run.result);
-    CHECK(run.result.error().code == util::ErrorCode::Tool);
-    CHECK(run.result.error().detail.find("boom") != std::string::npos);
-    CHECK(count_events<agent::MessageStartEvent>(run.events) == 2);
-    CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 2);
+    REQUIRE(client->requests.size() == 2);
+    const auto& messages = client->requests[1].context.messages;
+    REQUIRE(messages.size() == 3);
+    const auto* tool_result = std::get_if<ai::ToolResultMessage>(&messages.back());
+    REQUIRE(tool_result != nullptr);
+    CHECK(tool_result->is_error);
+    CHECK(ai::text_from_content(tool_result->content).find("boom") != std::string::npos);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
 }
 
 TEST_CASE("afterToolCall hook overrides tool result content", "[agent][async][u7]") {
@@ -1166,10 +1179,9 @@ TEST_CASE("blocked call prevents terminate batch", "[agent][async][u7]") {
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 }
 
-TEST_CASE("tool execution error prevents terminate batch", "[agent][async][u7]") {
+TEST_CASE("an error result with an explicit terminate hint still terminates the batch", "[agent][async][u7]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(two_tool_call_response());
-    client->responses.push_back(ai::assistant_text_message("done"));
 
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()})));
@@ -1190,15 +1202,22 @@ TEST_CASE("tool execution error prevents terminate batch", "[agent][async][u7]")
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
+    // pi shouldTerminateToolBatch: every finalized result carries
+    // terminate === true. The alpha error result still counts because the
+    // after hook explicitly set the hint; there is no implicit ban on error
+    // results (ADR 0008).
     REQUIRE(run.result);
-    CHECK(run.result->turns == 2);
-    CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
-    CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
+    CHECK(run.result->turns == 1);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    CHECK(client->requests.size() == 1);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
 }
 
-TEST_CASE("afterToolCall hook failure aborts the run", "[agent][async][u7]") {
+TEST_CASE("afterToolCall hook failure finalizes only its call", "[agent][async][u7]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("recovered"));
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
@@ -1214,16 +1233,25 @@ TEST_CASE("afterToolCall hook failure aborts the run", "[agent][async][u7]") {
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
-    REQUIRE_FALSE(run.result);
-    CHECK(run.result.error().code == util::ErrorCode::Tool);
-    CHECK(run.result.error().message == "post-processor failed");
-    CHECK(count_events<agent::MessageStartEvent>(run.events) == 2);
-    CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
+    // pi finalizeExecutedToolCall catches a failing after hook into that
+    // call's error result; the run continues (ADR 0008).
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 2);
+    REQUIRE(client->requests.size() == 2);
+    const auto& messages = client->requests[1].context.messages;
+    REQUIRE(messages.size() == 3);
+    const auto* tool_result = std::get_if<ai::ToolResultMessage>(&messages.back());
+    REQUIRE(tool_result != nullptr);
+    CHECK(tool_result->is_error);
+    CHECK(ai::text_from_content(tool_result->content) == "post-processor failed");
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
 }
 
-TEST_CASE("afterToolCall hook exception becomes a tool error", "[agent][async][u7]") {
+TEST_CASE("afterToolCall hook exception becomes a per-call tool error", "[agent][async][u7]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("recovered"));
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
 
@@ -1239,11 +1267,17 @@ TEST_CASE("afterToolCall hook exception becomes a tool error", "[agent][async][u
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
-    REQUIRE_FALSE(run.result);
-    CHECK(run.result.error().code == util::ErrorCode::Tool);
-    CHECK(run.result.error().detail.find("after boom") != std::string::npos);
-    CHECK(count_events<agent::MessageStartEvent>(run.events) == 2);
-    CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 2);
+    REQUIRE(client->requests.size() == 2);
+    const auto& messages = client->requests[1].context.messages;
+    REQUIRE(messages.size() == 3);
+    const auto* tool_result = std::get_if<ai::ToolResultMessage>(&messages.back());
+    REQUIRE(tool_result != nullptr);
+    CHECK(tool_result->is_error);
+    CHECK(ai::text_from_content(tool_result->content).find("after boom") != std::string::npos);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
 }
 
 TEST_CASE("AsyncAgentOptions hooks are move-only", "[agent][async][u7][issue82]") {
@@ -2117,9 +2151,10 @@ TEST_CASE("prepareNextTurn and turn-update validation exceptions abort cleanly",
     }
 }
 
-TEST_CASE("tool execution policy defaults to sequential", "[agent][async][u8]") {
+TEST_CASE("tool execution policy defaults to bounded parallel", "[agent][async][u8]") {
     agent::AsyncAgentOptions options;
-    CHECK(std::holds_alternative<agent::SequentialToolExecution>(options.tool_execution));
+    CHECK(std::holds_alternative<agent::BoundedParallelToolExecution>(options.tool_execution));
+    CHECK(std::get<agent::BoundedParallelToolExecution>(options.tool_execution).max_in_flight == 0);
 }
 
 TEST_CASE("an exclusive tool forces a bounded batch to execute sequentially", "[agent][async][u8]") {
@@ -2329,9 +2364,10 @@ TEST_CASE("bounded parallel limit one executes sequentially", "[agent][async][u8
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 }
 
-TEST_CASE("bounded parallel policy rejects zero before tools start", "[agent][async][u8]") {
+TEST_CASE("bounded parallel zero means no explicit concurrency cap", "[agent][async][u8]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(two_tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
 
     ConcurrencyProbe probe;
     agent::AsyncToolRegistry registry;
@@ -2352,10 +2388,10 @@ TEST_CASE("bounded parallel policy rejects zero before tools start", "[agent][as
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
-    REQUIRE_FALSE(run.result);
-    CHECK(run.result.error().code == util::ErrorCode::Validation);
-    CHECK(probe.max_active.load() == 0);
-    CHECK(count_events<agent::ToolExecutionStartEvent>(run.events) == 0);
+    REQUIRE(run.result);
+    CHECK(probe.max_active.load() == 2);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 }
 
 TEST_CASE("bounded parallel execution keeps blocked calls out of tool adapters", "[agent][async][u8]") {
@@ -2407,7 +2443,7 @@ TEST_CASE("bounded parallel execution keeps blocked calls out of tool adapters",
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 }
 
-TEST_CASE("bounded parallel before-hook failure starts no workers", "[agent][async][u8]") {
+TEST_CASE("bounded parallel before-hook failure finalizes every call without starting workers", "[agent][async][u8]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(two_tool_call_response());
 
@@ -2433,15 +2469,25 @@ TEST_CASE("bounded parallel before-hook failure starts no workers", "[agent][asy
         return std::unexpected(util::make_error(util::ErrorCode::Tool, "preflight failed"));
     });
 
+    // pi prepareToolCall: every failing before hook finalizes its own call's
+    // error result; no worker ever starts and the run continues (ADR 0008).
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
-    REQUIRE_FALSE(run.result);
-    CHECK(run.result.error().message == "preflight failed");
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 2);
     CHECK(probe.max_active.load() == 0);
-    CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
-    CHECK(count_events<agent::MessageStartEvent>(run.events) == 2);
-    CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
+    REQUIRE(client->requests.size() == 2);
+    const auto& messages = client->requests[1].context.messages;
+    REQUIRE(messages.size() == 4);
+    const auto& alpha_result = std::get<ai::ToolResultMessage>(messages[2]);
+    const auto& beta_result = std::get<ai::ToolResultMessage>(messages[3]);
+    CHECK(alpha_result.is_error);
+    CHECK(beta_result.is_error);
+    CHECK(ai::text_from_content(alpha_result.content) == "preflight failed");
+    CHECK(ai::text_from_content(beta_result.content) == "preflight failed");
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 }
 
 TEST_CASE("bounded parallel execution preserves peer success after a tool error", "[agent][async][u8]") {
@@ -2531,9 +2577,10 @@ TEST_CASE("bounded parallel event-sink failure drains workers and emits one agen
     CHECK(count_events<agent::MessageEndEvent>(events) == 2);
 }
 
-TEST_CASE("bounded parallel execution keeps hook failures as agent errors", "[agent][async][u8]") {
+TEST_CASE("bounded parallel after-hook failure finalizes only its call", "[agent][async][u8]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(two_tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
 
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
@@ -2562,12 +2609,18 @@ TEST_CASE("bounded parallel execution keeps hook failures as agent errors", "[ag
     agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
-    REQUIRE_FALSE(run.result);
-    CHECK(run.result.error().code == util::ErrorCode::Tool);
-    CHECK(run.result.error().message == "post-processor failed");
-    CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
-    CHECK(count_events<agent::MessageStartEvent>(run.events) == 2);
-    CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 2);
+    REQUIRE(client->requests.size() == 2);
+    const auto& messages = client->requests[1].context.messages;
+    REQUIRE(messages.size() == 4);
+    const auto& alpha_result = std::get<ai::ToolResultMessage>(messages[2]);
+    const auto& beta_result = std::get<ai::ToolResultMessage>(messages[3]);
+    CHECK(alpha_result.is_error);
+    CHECK(ai::text_from_content(alpha_result.content) == "post-processor failed");
+    CHECK_FALSE(beta_result.is_error);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 }
 
 TEST_CASE("bounded parallel execution emits end events in completion order", "[agent][async][u8]") {
@@ -2696,4 +2749,190 @@ TEST_CASE("tool scheduling vocabulary belongs to cch::agent", "[agent][async][u8
     static_assert(std::is_same_v<
         agent::ToolExecutionPolicy,
         std::variant<agent::SequentialToolExecution, agent::BoundedParallelToolExecution>>);
+}
+
+TEST_CASE("default tool execution runs a parallel-safe batch concurrently", "[agent][async][issue355]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(two_tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
+
+    ConcurrencyProbe probe;
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
+        ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
+        agent::ToolConcurrency::ParallelSafe,
+        probe)));
+    REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
+        ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
+        agent::ToolConcurrency::ParallelSafe,
+        probe)));
+
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    // No explicit tool_execution: the loop default is bounded parallel with
+    // no cap, so a parallel-safe batch overlaps (pi's parallel default).
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop_on_pool(loop, "read");
+
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 2);
+    CHECK(probe.max_active.load() == 2);
+    REQUIRE(client->requests.size() == 2);
+    const auto& messages = client->requests[1].context.messages;
+    REQUIRE(messages.size() == 4);
+    CHECK(std::get<ai::ToolResultMessage>(messages[2]).tool_name == "alpha");
+    CHECK(std::get<ai::ToolResultMessage>(messages[3]).tool_name == "beta");
+}
+
+TEST_CASE(
+    "an exclusive tool serializes the whole batch with full per-call lifecycle at the loop",
+    "[agent][async][issue355]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(two_tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
+
+    ConcurrencyProbe probe;
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
+        ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
+        agent::ToolConcurrency::ParallelSafe,
+        probe)));
+    REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
+        ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
+        agent::ToolConcurrency::Exclusive,
+        probe)));
+
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.tool_execution = agent::BoundedParallelToolExecution{2};
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop_on_pool(loop, "read");
+
+    REQUIRE(run.result);
+    CHECK(probe.max_active.load() == 1);
+
+    // pi executeToolCallsSequential: each call's full lifecycle completes
+    // before the next call starts, in assistant source order.
+    std::vector<std::string> sequence;
+    for (const auto& event : run.events) {
+        if (const auto* start = std::get_if<agent::ToolExecutionStartEvent>(&event)) {
+            sequence.push_back("start:" + start->tool_call_id);
+        } else if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
+            sequence.push_back("end:" + end->tool_call_id);
+        } else if (const auto* start = std::get_if<agent::MessageStartEvent>(&event)) {
+            if (const auto* result = std::get_if<ai::ToolResultMessage>(&start->message)) {
+                sequence.push_back("message-start:" + result->tool_call_id);
+            }
+        }
+    }
+    REQUIRE((sequence == std::vector<std::string>{
+        "start:call-1",
+        "end:call-1",
+        "message-start:call-1",
+        "start:call-2",
+        "end:call-2",
+        "message-start:call-2",
+    }));
+}
+
+TEST_CASE(
+    "length-truncated fail-all matches pi's message and emits source-order errors",
+    "[agent][async][issue355]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    auto truncated = two_tool_call_response();
+    truncated.stop_reason = ai::AssistantStopReason::Length;
+    client->responses.push_back(std::move(truncated));
+    client->responses.push_back(ai::assistant_text_message("recovered"));
+
+    agent::AsyncToolRegistry registry;
+    auto alpha = std::make_unique<ConfigurableFakeTool>(
+        ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
+        agent::ToolConcurrency::ParallelSafe,
+        "alpha result");
+    auto beta = std::make_unique<ConfigurableFakeTool>(
+        ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
+        agent::ToolConcurrency::ParallelSafe,
+        "beta result");
+    auto* alpha_ptr = alpha.get();
+    auto* beta_ptr = beta.get();
+    REQUIRE(registry.add(std::move(alpha)));
+    REQUIRE(registry.add(std::move(beta)));
+
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop_on_pool(loop, "read");
+
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 2);
+    CHECK(alpha_ptr->invocations.empty());
+    CHECK(beta_ptr->invocations.empty());
+
+    // pi failToolCallsFromTruncatedMessage: per-call start/end pairs in
+    // source order with the verbatim truncated-arguments message.
+    std::vector<std::string> sequence;
+    const std::string expected_message =
+        "Tool call \"alpha\" was not executed: the response hit the output token limit, so its "
+        "arguments may be truncated. Re-issue the tool call with complete arguments.";
+    for (const auto& event : run.events) {
+        if (const auto* start = std::get_if<agent::ToolExecutionStartEvent>(&event)) {
+            sequence.push_back("start:" + start->tool_call_id);
+        } else if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
+            sequence.push_back("end:" + end->tool_call_id);
+        } else if (const auto* start = std::get_if<agent::MessageStartEvent>(&event)) {
+            if (const auto* result = std::get_if<ai::ToolResultMessage>(&start->message)) {
+                sequence.push_back("message-start:" + result->tool_call_id);
+                if (result->tool_call_id == "call-1") {
+                    CHECK(ai::text_from_content(result->content) == expected_message);
+                }
+            }
+        }
+    }
+    REQUIRE((sequence == std::vector<std::string>{
+        "start:call-1",
+        "end:call-1",
+        "message-start:call-1",
+        "start:call-2",
+        "end:call-2",
+        "message-start:call-2",
+    }));
+
+    REQUIRE(client->requests.size() == 2);
+    const auto& messages = client->requests[1].context.messages;
+    REQUIRE(messages.size() == 4);
+    CHECK(std::get<ai::ToolResultMessage>(messages[2]).is_error);
+    CHECK(std::get<ai::ToolResultMessage>(messages[3]).is_error);
+}
+
+TEST_CASE("all-true terminate batch ends the loop after one turn", "[agent][async][issue355]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(two_tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("unused"));
+
+    agent::AsyncToolRegistry registry;
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()})));
+    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()})));
+
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.after_tool_call =
+        agent::adapt_sync_after_tool_call(
+            [](const agent::AfterToolCallContext&) -> util::Expected<agent::AfterToolCallResult> {
+        return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
+    });
+
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    auto run = run_loop(loop, "read");
+
+    REQUIRE(run.result);
+    CHECK(run.result->turns == 1);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    CHECK(client->requests.size() == 1);
+    CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }

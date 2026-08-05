@@ -6,8 +6,8 @@ tests in this repository against the C++ surface, so the gate's evidence is one 
 No fixture value is a live credential or derived from one; all strings are distinguishable
 dummy values (see [Sanitization rules](#sanitization-rules)).
 
-This file records only the capabilities landed so far (T01 [#350], T02 [#351], T05 [#354]); the capability
-checklist grows with each subsequent ticket (T03–T14, blockers-first per parity map [#2]), and
+This file records only the capabilities landed so far (T01 [#350], T02 [#351], T05 [#354], T06 [#355]); the
+capability checklist grows with each subsequent ticket (T03–T14, blockers-first per parity map [#2]), and
 rows below cover only what this ticket touches.
 
 ## Pinned baseline
@@ -83,6 +83,24 @@ row scripts a terminal failure of one category through the fake runtime and asse
 terminal event plus an agreeing final `AssistantMessage`, with the category flowing through the
 single `util::Expected` error value (the #326 six-category channel).
 
+### Tool scheduling golden (`tool-scheduling.json`)
+
+The committed tool-scheduling golden ([#355]): one run against the recording fake `ModelRuntime`
+with deterministic per-tool delays, serializing the full per-call event stream (start events with
+argument payloads, end events with `isError`, tool-result message events with tool call ids,
+turn boundaries with stop reasons). Three turns pin the four T06 behaviors in one artifact:
+
+- turn 1 (`alpha`/`beta`, both `ParallelSafe`, delays 20/5 ms): the **parallel default** — both
+  `tool_execution_start` events precede any end, ends arrive in completion order (`beta`, `alpha`),
+  and tool-result messages land later in assistant source order;
+- turn 2 (`Length` stop): **truncated fail-all** — every call gets a per-call `is_error` result in
+  source order and no tool executes (pi `failToolCallsFromTruncatedMessage`);
+- turn 3 (`gamma` is `Exclusive`): the **per-tool sequential override** serializes the whole batch
+  with full per-call lifecycle in source order, and the after hook's all-true **terminate** hint
+  ends the loop after that turn.
+
+`agent_end.messageCount` (10) pins the invocation-local transcript length.
+
 ## Capability-to-source checklist
 
 One line per scoped capability, tying it to the frozen pi source, the resolution record, the C++
@@ -105,6 +123,10 @@ surface, and the committed evidence. Resolution records: [#326]
 | 9 | Tool results group with `is_error` exactly as pi's `ToolResultMessage` shape; committed golden proves it | `packages/ai/src/types.ts` `ToolResultMessage` (`isError`, role `toolResult`, `toolCallId`, `toolName`, `content`, `details?`, `timestamp`) | `include/cch/ai/Message.hpp` (`ToolResultMessage`), `src/ai/glaze/AiJson.hpp` (`to_dto`), `src/agent/ToolCallExecutor.cpp` | `AgentCoreEvidenceTest` `"tool-result shape golden …"` → `tool-result-shape.json` |
 | 10 | Per-call failure isolation (Tool Call Outcome): one failing call produces an error result while sibling calls in the same assistant message complete normally; batch termination only from all-true explicit termination | ADR 0008; `packages/agent/src/types.ts` `AgentToolResult.terminate` | `src/agent/ToolCallExecutor.cpp` (sequential + bounded parallel), `src/agent/AgentLoop.cpp` | `AgentCoreEvidenceTest` → `tool-result-shape.json`; `ToolCallExecutorTest` isolation/termination rows |
 | 11 | Concrete `bash` tool registration stays gated by `--enable-bash` authorization; user Bash stays independent (ADR 0026) | ADR 0026; `packages/agent/src/harness/tools/bash.ts` (tool exists; authorization is assembly policy) | `include/cch/coding_agent/Sdk.hpp` (`SdkBuiltinTools::bash`), `src/cli/CliParse.cpp` (`--enable-bash`), `src/coding_agent/runtime/SessionFactory.cpp` | `SdkSessionTest` `"SDK disabled bash is absent …"/"SDK enabled bash appears …"`; `SessionFactoryUserShellTest` |
+| 12 | `beforeToolCall` fires after argument validation for every prepared call, in pi's order; `afterToolCall` runs for every executed outcome (success, error result, throwing tool) before `tool_execution_end` and may override content/details/isError/terminate | `packages/agent/src/agent-loop.ts` `prepareToolCall` / `finalizeExecutedToolCall`; ADR 0008 (hook failures isolate per call; after hooks run for error outcomes) | `src/agent/ToolCallExecutor.cpp` (sequential + bounded parallel), `src/agent/ExecutionShared.hpp` (`invoke_agent_hook`) | `ToolCallExecutorTest` `"afterToolCall runs for an error execution result (sequential/parallel path)"`, `"afterToolCall runs for a throwing tool"`, `"beforeToolCall hook failure finalizes only its call…"`, `"afterToolCall hook failure finalizes only its call"`; `AsyncAgentLoopTest` `"beforeToolCall hook failure finalizes only its call"`, `"afterToolCall hook failure finalizes only its call"`, `"afterToolCall hook exception becomes a per-call tool error"` |
+| 13 | Tool calls in one assistant message execute in parallel by default (pi `toolExecution` default `"parallel"`, no explicit cap); a per-tool sequential override — any call to a tool whose adapter declares `Exclusive` (pi `executionMode: "sequential"`) — serializes the whole batch through the sequential path; bounded caps (incl. 0 = no cap) and sequential policy stay available | `packages/agent/src/harness/types.ts` (`toolExecution` default `"parallel"`); `packages/agent/src/agent-loop.ts` `executeToolCalls` (`hasSequentialToolCall`); `packages/agent/src/types.ts` `AgentTool.executionMode` | `include/cch/agent/AgentContext.hpp` (`BoundedParallelToolExecution` default `0`, `ToolExecutionPolicy`), `src/agent/ToolCallExecutor.cpp` (`execute()` routing) | `AsyncAgentLoopTest` `"default tool execution runs a parallel-safe batch concurrently"`, `"tool execution policy defaults to bounded parallel"`, `"an exclusive tool serializes the whole batch with full per-call lifecycle…"`, `"bounded parallel zero means no explicit concurrency cap"`; `ToolCallExecutorTest` `"default policy executes parallel-safe calls concurrently"`, `"an exclusive tool serializes the whole batch with full per-call lifecycle"` |
+| 14 | A `length`-truncated assistant message fails every one of its tool calls with pi's verbatim error result and executes none of them; hooks do not fire and the batch never terminates | `packages/agent/src/agent-loop.ts` `failToolCallsFromTruncatedMessage` (verbatim message, `terminate: false`) | `src/agent/AgentLoop.cpp` (length branch before the executor seam) | `AsyncAgentLoopTest` `"length-truncated fail-all matches pi's message and emits source-order errors"`, `"length-truncated tool calls emit errors without crossing the executor seam"`; `AgentCoreEvidenceTest` → `tool-scheduling.json` turn 2 |
+| 15 | All-true `terminate` batch hint ends the loop exactly like pi: batch terminates iff every finalized result carries an explicit terminate hint; error results carry no implicit ban (ADR 0008) but plain failure outcomes never terminate | `packages/agent/src/agent-loop.ts` `shouldTerminateToolBatch` (`every(result.terminate === true)`); ADR 0008 | `src/agent/ToolCallExecutor.cpp` (`make_batch_result`), `src/agent/AgentLoop.cpp` (`has_more_tool_calls`) | `AsyncAgentLoopTest` `"all-true terminate batch ends the loop after one turn"`, `"an error result with an explicit terminate hint still terminates the batch"`, `"terminate batch continues when one call declines"`; `ToolCallExecutorTest` `"an error result with an explicit terminate hint terminates the batch"`, `"batch termination requires every call to carry the hint"`; `AgentCoreEvidenceTest` → `tool-scheduling.json` turn 3 |
 
 ### Recorded divergences preserved (unchanged by this ticket)
 
@@ -114,6 +136,10 @@ surface, and the committed evidence. Resolution records: [#326]
 - `transport` is fixed per adapter instead of a per-request option (the codex adapter is
   WebSocket-first with narrow SSE fallback, the Responses/Anthropic family plain SSE), matching
   the pi-ai wire goldens and [#329].
+- C++ tool adapters keep ADR 0016's explicit parallel-safety opt-in (`concurrency()` defaults to
+  `Exclusive`, the built-ins stay exclusive because their shared execution environment has no
+  concurrent-use contract); a batch containing such a tool runs through pi's sequential override.
+  This is the C++-flavored expression of pi's `executionMode`, not a scheduling divergence.
 
 ## Gate notes
 
@@ -131,3 +157,4 @@ surface, and the committed evidence. Resolution records: [#326]
 [#350]: https://github.com/lanshengzhi/cpp-coding-harness/issues/350
 [#351]: https://github.com/lanshengzhi/cpp-coding-harness/issues/351
 [#354]: https://github.com/lanshengzhi/cpp-coding-harness/issues/354
+[#355]: https://github.com/lanshengzhi/cpp-coding-harness/issues/355

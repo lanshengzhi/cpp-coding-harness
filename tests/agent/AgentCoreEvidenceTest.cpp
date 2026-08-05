@@ -32,7 +32,11 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/use_awaitable.hpp>
 
+#include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
@@ -703,4 +707,222 @@ TEST_CASE(
     CHECK(batch.results[0].is_error == false);
     CHECK(batch.results[1].is_error == true);
     CHECK(batch.results[2].is_error == false);
+}
+
+namespace {
+
+/// Deterministic scheduled fake tool: declares pi-style concurrency and sleeps
+/// on the loop executor so parallel/sequential interleavings are reproducible.
+class DelayedEvidenceTool final : public agent::AsyncAgentTool {
+public:
+    DelayedEvidenceTool(
+        std::string name,
+        agent::ToolConcurrency concurrency,
+        std::chrono::milliseconds delay = {},
+        std::string result_text = "tool result")
+        : definition_(ai::Tool{
+              std::move(name),
+              "Scheduled fake tool",
+              test::permissive_object_tool_argument_contract()}),
+          concurrency_(concurrency),
+          delay_(delay),
+          result_text_(std::move(result_text)) {}
+
+    const ai::Tool& definition() const override { return definition_; }
+
+    agent::ToolConcurrency concurrency() const noexcept override {
+        return concurrency_;
+    }
+
+    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
+        agent::ToolInvocation invocation,
+        std::stop_token) override {
+        (void)invocation;
+        ++invocations;
+        if (delay_.count() > 0) {
+            auto timer = boost::asio::steady_timer(
+                co_await boost::asio::this_coro::executor,
+                delay_);
+            co_await timer.async_wait(boost::asio::use_awaitable);
+        }
+        co_return agent::AsyncToolExecutionResult{
+            .content = std::vector<ai::Content>{ai::text_content(result_text_)},
+            .details = std::nullopt,
+            .is_error = false};
+    }
+
+    ai::Tool definition_;
+    agent::ToolConcurrency concurrency_;
+    std::chrono::milliseconds delay_;
+    std::string result_text_;
+    std::atomic<int> invocations{0};
+};
+
+/// Serializer for the tool-scheduling golden: richer than the lifecycle
+/// serializer because ordering evidence needs per-call ids and argument
+/// payloads, which the shared lifecycle golden intentionally omits.
+struct SchedulingSerializer {
+    int turn{0};
+
+    [[nodiscard]] util::JsonValue event_to_json(
+        const agent::AgentLifecycleEvent& event) {
+        util::JsonValue object{util::JsonValue::object_t{}};
+        auto& o = object.get_object();
+        if (std::holds_alternative<agent::AgentStartEvent>(event)) {
+            o.emplace("type", util::JsonValue("agent_start"));
+        } else if (const auto* end =
+                       std::get_if<agent::AgentEndEvent>(&event)) {
+            o.emplace("type", util::JsonValue("agent_end"));
+            o.emplace(
+                "messageCount",
+                util::JsonValue(static_cast<int>(end->messages.size())));
+        } else if (std::holds_alternative<agent::TurnStartEvent>(event)) {
+            ++turn;
+            o.emplace("type", util::JsonValue("turn_start"));
+            o.emplace("turn", util::JsonValue(turn));
+        } else if (const auto* end =
+                       std::get_if<agent::TurnEndEvent>(&event)) {
+            o.emplace("type", util::JsonValue("turn_end"));
+            const auto* assistant =
+                std::get_if<ai::AssistantMessage>(&end->message);
+            REQUIRE(assistant != nullptr);
+            o.emplace(
+                "stopReason",
+                util::JsonValue(ai::stop_reason_to_string(
+                    assistant->stop_reason)));
+            o.emplace(
+                "toolResults",
+                util::JsonValue(static_cast<int>(end->tool_results.size())));
+        } else if (const auto* start =
+                       std::get_if<agent::MessageStartEvent>(&event)) {
+            o.emplace("type", util::JsonValue("message_start"));
+            o.emplace("role", util::JsonValue(message_role(start->message)));
+            if (const auto* result =
+                    std::get_if<ai::ToolResultMessage>(&start->message)) {
+                o.emplace("toolCallId", util::JsonValue(result->tool_call_id));
+            }
+        } else if (const auto* update =
+                       std::get_if<agent::MessageUpdateEvent>(&event)) {
+            o.emplace("type", util::JsonValue("message_update"));
+            o.emplace(
+                "event",
+                util::JsonValue(stream_event_name(update->assistant_event)));
+        } else if (const auto* end =
+                       std::get_if<agent::MessageEndEvent>(&event)) {
+            o.emplace("type", util::JsonValue("message_end"));
+            o.emplace("role", util::JsonValue(message_role(end->message)));
+            if (const auto* result =
+                    std::get_if<ai::ToolResultMessage>(&end->message)) {
+                o.emplace("toolCallId", util::JsonValue(result->tool_call_id));
+            }
+        } else if (const auto* start =
+                       std::get_if<agent::ToolExecutionStartEvent>(&event)) {
+            o.emplace("type", util::JsonValue("tool_execution_start"));
+            o.emplace("toolCallId", util::JsonValue(start->tool_call_id));
+            o.emplace("toolName", util::JsonValue(start->tool_name));
+            o.emplace("args", start->args);
+        } else if (const auto* end =
+                       std::get_if<agent::ToolExecutionEndEvent>(&event)) {
+            o.emplace("type", util::JsonValue("tool_execution_end"));
+            o.emplace("toolCallId", util::JsonValue(end->tool_call_id));
+            o.emplace("toolName", util::JsonValue(end->tool_name));
+            o.emplace("isError", util::JsonValue(end->is_error));
+        }
+        return object;
+    }
+};
+
+[[nodiscard]] util::JsonValue scheduling_events_to_json(
+    const std::vector<agent::AgentLifecycleEvent>& events) {
+    SchedulingSerializer serializer;
+    util::JsonValue array{util::JsonValue::array_t{}};
+    for (const auto& event : events) {
+        array.get_array().push_back(serializer.event_to_json(event));
+    }
+    return array;
+}
+
+[[nodiscard]] ai::AssistantMessage tool_call_message(
+    std::initializer_list<std::pair<std::string, std::string>> calls,
+    ai::AssistantStopReason stop_reason = ai::AssistantStopReason::ToolUse) {
+    ai::AssistantMessage message;
+    message.stop_reason = stop_reason;
+    for (const auto& [id, name] : calls) {
+        (void)name;
+        message.content.push_back(ai::tool_call_content(
+            id, name, R"({"x":1})", util::JsonValue::object_t{{{"x", 1}}}));
+    }
+    return message;
+}
+
+} // namespace
+
+TEST_CASE(
+    "tool scheduling golden covers parallel default, sequential override, truncated fail-all, and terminate hint",
+    "[agent][fixture][issue355]") {
+    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    runtime->responses.push_back(tool_call_message({
+        {"call-1", "alpha"},
+        {"call-2", "beta"},
+    }));
+    auto truncated = tool_call_message(
+        {
+            {"call-3", "gamma"},
+            {"call-4", "delta"},
+        },
+        ai::AssistantStopReason::Length);
+    runtime->responses.push_back(std::move(truncated));
+    runtime->responses.push_back(tool_call_message({
+        {"call-5", "gamma"},
+        {"call-6", "delta"},
+    }));
+
+    agent::AsyncToolRegistry tools;
+    REQUIRE(tools.add(std::make_unique<DelayedEvidenceTool>(
+        "alpha", agent::ToolConcurrency::ParallelSafe, std::chrono::milliseconds{20}, "alpha result")));
+    REQUIRE(tools.add(std::make_unique<DelayedEvidenceTool>(
+        "beta", agent::ToolConcurrency::ParallelSafe, std::chrono::milliseconds{5}, "beta result")));
+    REQUIRE(tools.add(std::make_unique<DelayedEvidenceTool>(
+        "gamma", agent::ToolConcurrency::Exclusive, std::chrono::milliseconds{}, "gamma result")));
+    REQUIRE(tools.add(std::make_unique<DelayedEvidenceTool>(
+        "delta", agent::ToolConcurrency::ParallelSafe, std::chrono::milliseconds{}, "delta result")));
+
+    // The terminate hint applies only to the gamma/delta batch in turn 3, so
+    // turns 1 and 2 continue and the all-true hint ends the loop.
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.after_tool_call =
+        agent::adapt_sync_after_tool_call(
+            [](const agent::AfterToolCallContext& context)
+        -> util::Expected<agent::AfterToolCallResult> {
+        const bool terminate =
+            context.tool_call.name == "gamma" ||
+            context.tool_call.name == "delta";
+        return agent::AfterToolCallResult{
+            std::nullopt, std::nullopt, std::nullopt, terminate};
+    });
+
+    agent::AsyncAgentLoop loop(runtime, std::move(tools), std::move(options));
+    auto run = run_loop(loop, "schedule tools");
+
+    REQUIRE(run.result.has_value());
+    CHECK(run.result->turns == 3);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    CHECK(runtime->calls.size() == 3);
+
+    expect_json_equal(
+        scheduling_events_to_json(run.events),
+        "tool-scheduling.json");
+
+    // The truncated turn executed none of its tools; gamma/delta ran exactly
+    // once (turn 3) despite the Length stop in turn 2. Turn 2's request saw
+    // only turn 1's four messages; the two truncated error results appear in
+    // turn 3's request at indexes 5/6.
+    CHECK(runtime->calls[1].context.messages.size() == 4);
+    CHECK(runtime->calls[2].context.messages.size() == 7);
+    const auto& third_turn_messages = runtime->calls[2].context.messages;
+    CHECK(std::get<ai::ToolResultMessage>(third_turn_messages[5]).is_error);
+    CHECK(std::get<ai::ToolResultMessage>(third_turn_messages[6]).is_error);
+    CHECK(run.result->state.pending_tool_call_ids.empty());
 }
