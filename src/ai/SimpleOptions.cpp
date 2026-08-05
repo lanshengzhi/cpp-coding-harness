@@ -88,8 +88,14 @@ constexpr std::uint64_t kContextSafetyTokens = 4096;
             using Value = std::decay_t<decltype(value)>;
             if constexpr (std::is_same_v<Value, SystemMessage>) {
                 characters = value.content.size();
-            } else if constexpr (std::is_same_v<Value, UserMessage> ||
-                                 std::is_same_v<Value, ToolResultMessage> ||
+            } else if constexpr (std::is_same_v<Value, UserMessage>) {
+                if (const auto* text = std::get_if<std::string>(&value.content)) {
+                    characters = text->size();
+                } else {
+                    characters = estimated_content_characters(
+                        std::get<std::vector<Content>>(value.content));
+                }
+            } else if constexpr (std::is_same_v<Value, ToolResultMessage> ||
                                  std::is_same_v<Value, CustomMessage>) {
                 characters = estimated_content_characters(value.content);
             } else if constexpr (std::is_same_v<Value, AssistantMessage>) {
@@ -115,7 +121,9 @@ constexpr std::uint64_t kContextSafetyTokens = 4096;
                 }
             } else if constexpr (std::is_same_v<Value, BashExecutionMessage>) {
                 const auto converted = bash_execution_to_user_message(value);
-                characters = std::get<TextContent>(converted.content.front()).text.size();
+                characters = std::get<TextContent>(
+                    std::get<std::vector<Content>>(converted.content).front())
+                    .text.size();
             } else if constexpr (std::is_same_v<Value, BranchSummaryMessage>) {
                 characters = value.summary.size() + BRANCH_SUMMARY_PREFIX.size() +
                              BRANCH_SUMMARY_SUFFIX.size();

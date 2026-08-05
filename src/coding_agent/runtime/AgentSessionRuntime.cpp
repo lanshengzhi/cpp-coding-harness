@@ -234,9 +234,10 @@ namespace {
     auto expanded = prompt_processor->process(
         std::move(text), expand_prompt_templates);
     auto message = ai::user_text_message(std::move(expanded.text));
-    message.content.reserve(message.content.size() + images.size());
+    auto& blocks = std::get<std::vector<ai::Content>>(message.content);
+    blocks.reserve(blocks.size() + images.size());
     for (auto& image : images) {
-        message.content.emplace_back(std::move(image));
+        blocks.emplace_back(std::move(image));
     }
     return message;
 }

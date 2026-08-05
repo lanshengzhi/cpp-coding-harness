@@ -34,7 +34,11 @@ struct SystemMessage {
 };
 
 struct UserMessage {
-    std::vector<Content> content;
+    /// pi `UserMessage.content`: `string | (TextContent | ImageContent)[]`.
+    /// The string alternative arrives only from external callers and
+    /// pre-existing session files; internal construction sites build the
+    /// block-array alternative (pi parity map #102, spec #364).
+    std::variant<std::string, std::vector<Content>> content;
     TimestampMs timestamp{};
 };
 
@@ -107,9 +111,18 @@ using MessageVariant = std::variant<
 
 [[nodiscard]] inline UserMessage user_text_message(std::string text, TimestampMs timestamp = 0) {
     UserMessage message;
-    message.content.emplace_back(text_content(std::move(text)));
+    message.content = std::vector<Content>{text_content(std::move(text))};
     message.timestamp = timestamp;
     return message;
+}
+
+/// Presentation/read-only extraction of a user message's text across both
+/// content alternatives. Never rewrites the stored alternative.
+[[nodiscard]] inline std::string text_from_user_message(const UserMessage& message) {
+    if (const auto* text = std::get_if<std::string>(&message.content)) {
+        return *text;
+    }
+    return text_from_content(std::get<std::vector<Content>>(message.content));
 }
 
 [[nodiscard]] inline AssistantMessage assistant_text_message(std::string text, TimestampMs timestamp = 0) {

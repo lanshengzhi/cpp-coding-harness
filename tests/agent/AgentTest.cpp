@@ -257,7 +257,7 @@ TEST_CASE("stateful Agent retains a scripted fake-provider prompt in its passive
     CHECK(snapshot.thinking_level == "off");
     REQUIRE(snapshot.messages.size() == 2);
     REQUIRE(std::holds_alternative<ai::UserMessage>(snapshot.messages[0]));
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(snapshot.messages[0]).content) == "hello");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(snapshot.messages[0])) == "hello");
     REQUIRE(std::holds_alternative<ai::AssistantMessage>(snapshot.messages[1]));
     CHECK(ai::text_from_assistant_content(
               std::get<ai::AssistantMessage>(snapshot.messages[1]).content) ==
@@ -631,8 +631,8 @@ TEST_CASE("stateful Agent retains history while agent_end stays invocation-local
 
     const auto snapshot = subject.state();
     REQUIRE(snapshot.messages.size() == 4);
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(snapshot.messages[0]).content) == "first");
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(snapshot.messages[2]).content) == "second");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(snapshot.messages[0])) == "first");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(snapshot.messages[2])) == "second");
     const std::vector<std::size_t> expected_counts{2, 2};
     CHECK(invocation_message_counts == expected_counts);
     CHECK(subscription);
@@ -870,10 +870,10 @@ TEST_CASE(
     CHECK(state.input_queues.steering.messages.empty());
     CHECK(state.input_queues.follow_up.messages.empty());
     REQUIRE(state.messages.size() == 7);
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(state.messages[0]).content) == "prompt");
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(state.messages[1]).content) == "steer-one");
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(state.messages[3]).content) == "steer-two");
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(state.messages[5]).content) == "follow-up");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[0])) == "prompt");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[1])) == "steer-one");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[3])) == "steer-two");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[5])) == "follow-up");
 }
 
 TEST_CASE(
@@ -896,8 +896,10 @@ TEST_CASE(
     REQUIRE_FALSE(rejected_again);
     CHECK(rejected_again.error().message == "too many queued messages");
     REQUIRE(subject.state().input_queues.steering.messages.size() == 1);
-    CHECK(ai::text_from_content(
-        std::get<ai::UserMessage>(subject.state().input_queues.steering.messages.front()).content) == multibyte);
+    CHECK(ai::text_from_user_message(
+              std::get<ai::UserMessage>(
+                  subject.state().input_queues.steering.messages.front())) ==
+          multibyte);
 
     REQUIRE(subject.clear_steering_queue());
     auto rejected_bytes = subject.follow_up(ai::user_text_message(multibyte + "x"));
@@ -971,8 +973,8 @@ TEST_CASE("stateful Agent all queue modes preserve FIFO order", "[agent][statefu
     REQUIRE(run_prompt(subject, "prompt"));
     const auto state = subject.state();
     REQUIRE(state.messages.size() == 4);
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(state.messages[1]).content) == "first");
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(state.messages[2]).content) == "second");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[1])) == "first");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[2])) == "second");
 }
 
 TEST_CASE("stateful Agent drains all follow-up messages together in FIFO order", "[agent][stateful][issue44]") {
@@ -990,6 +992,6 @@ TEST_CASE("stateful Agent drains all follow-up messages together in FIFO order",
 
     const auto state = subject.state();
     REQUIRE(state.messages.size() == 5);
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(state.messages[2]).content) == "first follow-up");
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(state.messages[3]).content) == "second follow-up");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[2])) == "first follow-up");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[3])) == "second follow-up");
 }

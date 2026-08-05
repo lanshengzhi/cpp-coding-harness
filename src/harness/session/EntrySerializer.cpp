@@ -549,7 +549,17 @@ void redact_assistant_content(ai::AssistantContent& content) {
                 // Summary text is already plain; no further redaction needed
             } else if constexpr (std::is_same_v<T, ai::CompactionSummaryMessage>) {
                 // Summary text is already plain; no further redaction needed
+            } else if constexpr (std::is_same_v<T, ai::UserMessage>) {
+                if (auto* text = std::get_if<std::string>(&concrete.content)) {
+                    *text = util::redact_text(std::move(*text));
+                } else {
+                    for (auto& block :
+                         std::get<std::vector<ai::Content>>(concrete.content)) {
+                        redact_content(block);
+                    }
+                }
             } else {
+                // ToolResultMessage
                 for (auto& block : concrete.content) {
                     redact_content(block);
                 }

@@ -316,22 +316,25 @@ TEST_CASE(
     REQUIRE_FALSE(probe->messages.empty());
     const auto* user = std::get_if<ai::UserMessage>(&probe->messages.back());
     REQUIRE(user != nullptr);
-    REQUIRE(user->content.size() == 3);
-    CHECK(std::get<ai::TextContent>(user->content[0]).text ==
+    const auto& user_blocks = std::get<std::vector<ai::Content>>(user->content);
+    REQUIRE(user_blocks.size() == 3);
+    CHECK(std::get<ai::TextContent>(user_blocks[0]).text ==
         "<file name=\"/tmp/first\"></file>\ndescribe");
-    CHECK(std::get<ai::ImageContent>(user->content[1]).data == "first-data");
-    CHECK(std::get<ai::ImageContent>(user->content[2]).data == "second-data");
+    CHECK(std::get<ai::ImageContent>(user_blocks[1]).data == "first-data");
+    CHECK(std::get<ai::ImageContent>(user_blocks[2]).data == "second-data");
 
     const auto snapshot = session.created.session->snapshot();
     REQUIRE(snapshot.agent_state.messages.size() >= 2);
     const auto* persisted_user = std::get_if<ai::UserMessage>(
         &snapshot.agent_state.messages.front());
     REQUIRE(persisted_user != nullptr);
-    REQUIRE(persisted_user->content.size() == 3);
-    CHECK(std::get<ai::TextContent>(persisted_user->content[0]).text ==
-        std::get<ai::TextContent>(user->content[0]).text);
-    CHECK(std::get<ai::ImageContent>(persisted_user->content[1]).data == "first-data");
-    CHECK(std::get<ai::ImageContent>(persisted_user->content[2]).mime_type == "image/webp");
+    const auto& persisted_blocks =
+        std::get<std::vector<ai::Content>>(persisted_user->content);
+    REQUIRE(persisted_blocks.size() == 3);
+    CHECK(std::get<ai::TextContent>(persisted_blocks[0]).text ==
+        std::get<ai::TextContent>(user_blocks[0]).text);
+    CHECK(std::get<ai::ImageContent>(persisted_blocks[1]).data == "first-data");
+    CHECK(std::get<ai::ImageContent>(persisted_blocks[2]).mime_type == "image/webp");
 }
 
 TEST_CASE(

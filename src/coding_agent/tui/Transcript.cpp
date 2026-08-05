@@ -488,8 +488,14 @@ struct Transcript::Impl {
             return lines_result(std::move(*rendered));
         }
         if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
+            std::vector<ai::Content> blocks;
+            if (const auto* text = std::get_if<std::string>(&user->content)) {
+                blocks.emplace_back(ai::TextContent{*text, std::nullopt});
+            } else {
+                blocks = std::get<std::vector<ai::Content>>(user->content);
+            }
             return render_content(
-                user->content,
+                blocks,
                 "**You:**",
                 width,
                 ThemeToken::UserMessageText,

@@ -27,7 +27,8 @@ ai::AiContext responses_context() {
     ai::AiContext context;
     context.system_prompt = "system";
     context.messages.push_back(ai::UserMessage{
-        .content = {ai::text_content("hi"), ai::image_content("YWJj", "image/png")},
+        .content = std::vector<ai::Content>{
+            ai::text_content("hi"), ai::image_content("YWJj", "image/png")},
         .timestamp = 1,
     });
     ai::AssistantMessage assistant;
@@ -115,7 +116,7 @@ TEST_CASE(
     auto model = tests::make_model("text-only", "deepseek", "openai-responses");
     ai::AiContext context;
     context.messages.push_back(ai::UserMessage{
-        .content = {
+        .content = std::vector<ai::Content>{
             ai::text_content(std::string{"bad"} + "\xed\xa0\x80"),
             ai::image_content("YWJj", "image/png"),
         },
@@ -293,7 +294,7 @@ TEST_CASE("Anthropic conversion matches the frozen Kimi payload golden", "[ai][c
     ai::AiContext context;
     context.system_prompt = "system";
     context.messages.push_back(ai::UserMessage{
-        .content = {ai::image_content("YWJj", "image/png")},
+        .content = std::vector<ai::Content>{ai::image_content("YWJj", "image/png")},
         .timestamp = 1,
     });
     ai::AssistantMessage assistant;
@@ -389,4 +390,81 @@ TEST_CASE(
     const auto serialized = util::write_json(*payload);
     REQUIRE(serialized);
     CHECK(serialized->find("cache_control") == std::string::npos);
+}
+TEST_CASE(
+    "String-content user messages pass the non-vision image downgrade untouched",
+    "[ai][conversion][issue365]") {
+    auto model = tests::make_model("text-only", "deepseek", "openai-responses");
+    ai::AiContext context;
+    context.messages.push_back(ai::UserMessage{
+        .content = std::string{"plain string content"},
+        .timestamp = 1,
+    });
+    ai::ProviderStreamOptions options;
+    options.cache_retention = ai::CacheRetention::None;
+
+    const auto responses = ai::api::build_adapter_payload(
+        ai::api::AdapterKind::OpenAIResponses,
+        model,
+        context,
+        options);
+    REQUIRE(responses);
+    const auto responses_serialized = util::write_json(*responses);
+    REQUIRE(responses_serialized);
+    // The string alternative is emitted as exactly one sanitized input_text
+    // item and is never rewritten into the placeholder-carrying block shape.
+    CHECK(responses_serialized->find(
+              R"("content":[{"text":"plain string content","type":"input_text"}],"role":"user")") !=
+        std::string::npos);
+    CHECK(responses_serialized->find("(image omitted: model does not support images)") ==
+        std::string::npos);
+
+    const auto anthropic = ai::api::build_adapter_payload(
+        ai::api::AdapterKind::AnthropicMessages,
+        model,
+        context,
+        options);
+    REQUIRE(anthropic);
+    const auto anthropic_serialized = util::write_json(*anthropic);
+    REQUIRE(anthropic_serialized);
+    // Anthropic emits the string alternative as a raw JSON string, untouched
+    // by the non-vision image downgrade. (Cache-retention promotion of a
+    // trailing string is pinned by the T3 wire evidence, not here.)
+    CHECK(anthropic_serialized->find(R"("content":"plain string content","role":"user")") !=
+        std::string::npos);
+    CHECK(anthropic_serialized->find("(image omitted: model does not support images)") ==
+        std::string::npos);
+}
+
+TEST_CASE(
+    "Synthesized user messages still arrive as block arrays",
+    "[ai][conversion][issue365]") {
+    auto model = tests::make_model("text-only", "deepseek", "openai-responses");
+    ai::AiContext context;
+    ai::BashExecutionMessage bash;
+    bash.command = "echo hello";
+    bash.output = "hello\n";
+    bash.exit_code = 0;
+    bash.timestamp = 1;
+    context.messages.push_back(std::move(bash));
+    ai::ProviderStreamOptions options;
+
+    const auto payload = ai::api::build_adapter_payload(
+        ai::api::AdapterKind::OpenAIResponses,
+        model,
+        context,
+        options);
+    REQUIRE(payload);
+    const auto& input = payload->at("input").get<util::JsonValue::array_t>();
+    REQUIRE(input.size() == 1);
+    const auto& user_message = input.front().get<util::JsonValue::object_t>();
+    CHECK(user_message.at("role").get_string() == "user");
+    // The synthesized message keeps the block-array alternative: content is a
+    // JSON array, never a plain string.
+    REQUIRE(user_message.at("content").holds<util::JsonValue::array_t>());
+    const auto& blocks = user_message.at("content").get<util::JsonValue::array_t>();
+    REQUIRE(blocks.size() == 1);
+    const auto& block = blocks.front().get<util::JsonValue::object_t>();
+    CHECK(block.at("type").get_string() == "input_text");
+    CHECK(block.at("text").get_string().find("Ran `echo hello`") != std::string::npos);
 }

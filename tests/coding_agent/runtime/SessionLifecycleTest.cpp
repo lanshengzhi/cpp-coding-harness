@@ -38,7 +38,7 @@ std::string user_text_at(const std::vector<ai::MessageVariant>& messages, std::s
     REQUIRE(index < messages.size());
     const auto* user = std::get_if<ai::UserMessage>(&messages[index]);
     REQUIRE(user != nullptr);
-    return ai::text_from_content(user->content);
+    return ai::text_from_user_message(*user);
 }
 
 std::string assistant_text_at(const std::vector<ai::MessageVariant>& messages, std::size_t index) {

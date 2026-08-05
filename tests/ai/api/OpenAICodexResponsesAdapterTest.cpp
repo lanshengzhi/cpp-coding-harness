@@ -100,7 +100,7 @@ struct CodexHarness {
     ai::AiContext context;
     context.system_prompt = "system";
     context.messages.push_back(ai::UserMessage{
-        .content = {
+        .content = std::vector<ai::Content>{
             ai::text_content("hi"),
             ai::image_content("YWJj", "image/png"),
         },
@@ -501,12 +501,12 @@ TEST_CASE(
 
     ai::AiContext second_context;
     second_context.messages.push_back(ai::UserMessage{
-        .content = {ai::text_content("Say hello")},
+        .content = std::vector<ai::Content>{ai::text_content("Say hello")},
         .timestamp = 1,
     });
     second_context.messages.push_back(*first_run.result);
     second_context.messages.push_back(ai::UserMessage{
-        .content = {ai::text_content("Now finish")},
+        .content = std::vector<ai::Content>{ai::text_content("Now finish")},
         .timestamp = 2,
     });
     ai::SimpleStreamOptions second_options;
@@ -627,12 +627,12 @@ TEST_CASE(
 
     ai::AiContext second_context;
     second_context.messages.push_back(ai::UserMessage{
-        .content = {ai::text_content("Use the tool")},
+        .content = std::vector<ai::Content>{ai::text_content("Use the tool")},
         .timestamp = 1,
     });
     second_context.messages.push_back(*first_run.result);
     second_context.messages.push_back(ai::UserMessage{
-        .content = {ai::text_content("Now finish")},
+        .content = std::vector<ai::Content>{ai::text_content("Now finish")},
         .timestamp = 2,
     });
     ai::SimpleStreamOptions second_options;

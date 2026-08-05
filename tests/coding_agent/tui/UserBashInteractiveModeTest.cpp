@@ -1576,7 +1576,7 @@ TEST_CASE(
 
     ai::UserMessage before;
     before.timestamp = 1'700'000'000'000;
-    before.content = {ai::text_content("before bash")};
+    before.content = std::vector<ai::Content>{ai::text_content("before bash")};
     REQUIRE(store->append(ai::MessageVariant{before}));
 
     ai::BashExecutionMessage included;
@@ -1603,7 +1603,7 @@ TEST_CASE(
 
     ai::UserMessage after;
     after.timestamp = 1'700'000'000'004;
-    after.content = {ai::text_content("after bash")};
+    after.content = std::vector<ai::Content>{ai::text_content("after bash")};
     REQUIRE(store->append(ai::MessageVariant{after}));
 
     tests::ModelsSessionOptions options;
@@ -2159,7 +2159,7 @@ TEST_CASE(
     CHECK(shell_pointer->commands.size() == 3);
     for (const auto& request : client_pointer->requests) {
         const auto& user = std::get<ai::UserMessage>(request.context.messages.back());
-        CHECK(ai::text_from_content(user.content).starts_with("!"));
+        CHECK(ai::text_from_user_message(user).starts_with("!"));
     }
 
     REQUIRE(terminal.inject_input("\x04"));
@@ -2226,7 +2226,7 @@ TEST_CASE(
     REQUIRE(client_pointer->requests.size() == 1);
     const auto& skill_user = std::get<ai::UserMessage>(
         client_pointer->requests[0].context.messages.back());
-    CHECK(ai::text_from_content(skill_user.content).find("!echo skill-body") !=
+    CHECK(ai::text_from_user_message(skill_user).find("!echo skill-body") !=
         std::string::npos);
     CHECK(shell_pointer->commands.empty());
 
@@ -2235,7 +2235,7 @@ TEST_CASE(
     REQUIRE(client_pointer->requests.size() == 2);
     const auto& template_user = std::get<ai::UserMessage>(
         client_pointer->requests[1].context.messages.back());
-    CHECK(ai::text_from_content(template_user.content) == "!echo template-body target");
+    CHECK(ai::text_from_user_message(template_user) == "!echo template-body target");
     CHECK(shell_pointer->commands.empty());
 
     REQUIRE(terminal.inject_input("\x04"));

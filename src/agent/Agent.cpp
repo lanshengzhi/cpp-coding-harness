@@ -52,8 +52,13 @@ std::vector<std::string> tool_names(const std::vector<ai::Tool>& definitions) {
         [](const auto& current) -> std::size_t {
             if constexpr (std::is_same_v<std::decay_t<decltype(current)>, ai::UserMessage>) {
                 std::size_t size = 0;
-                for (const auto& block : current.content) {
-                    size += approximate_content_size(block);
+                if (const auto* text = std::get_if<std::string>(&current.content)) {
+                    size = text->size();
+                } else {
+                    for (const auto& block :
+                         std::get<std::vector<ai::Content>>(current.content)) {
+                        size += approximate_content_size(block);
+                    }
                 }
                 return size;
             } else if constexpr (std::is_same_v<std::decay_t<decltype(current)>, ai::AssistantMessage>) {

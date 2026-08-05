@@ -299,7 +299,7 @@ public:
         std::string prompt;
         for (auto it = context.messages.rbegin(); it != context.messages.rend(); ++it) {
             if (const auto* user = std::get_if<ai::UserMessage>(&*it)) {
-                prompt = ai::text_from_content(user->content);
+                prompt = ai::text_from_user_message(*user);
                 break;
             }
         }

@@ -82,7 +82,7 @@ struct RunResult {
     ai::AiContext context;
     context.system_prompt = "system";
     context.messages.push_back(ai::UserMessage{
-        .content = {
+        .content = std::vector<ai::Content>{
             ai::text_content("hi"),
             ai::image_content("YWJj", "image/png"),
         },

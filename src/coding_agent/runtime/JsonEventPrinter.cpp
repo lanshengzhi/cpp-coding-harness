@@ -233,16 +233,24 @@ void normalize_message_wire(util::JsonValue& message) {
                 concrete.from_id = bounded_redacted(std::move(concrete.from_id));
             } else if constexpr (std::is_same_v<T, ai::CompactionSummaryMessage>) {
                 concrete.summary = bounded_redacted(std::move(concrete.summary));
+            } else if constexpr (std::is_same_v<T, ai::UserMessage>) {
+                if (auto* text = std::get_if<std::string>(&concrete.content)) {
+                    *text = bounded_redacted(std::move(*text));
+                } else {
+                    for (auto& block :
+                         std::get<std::vector<ai::Content>>(concrete.content)) {
+                        make_safe(block);
+                    }
+                }
             } else {
+                // ToolResultMessage
                 for (auto& block : concrete.content) {
                     make_safe(block);
                 }
-                if constexpr (std::is_same_v<T, ai::ToolResultMessage>) {
-                    concrete.tool_call_id = bounded_redacted(std::move(concrete.tool_call_id));
-                    concrete.tool_name = bounded_redacted(std::move(concrete.tool_name));
-                    if (concrete.details) {
-                        concrete.details = safe_json_value(*concrete.details);
-                    }
+                concrete.tool_call_id = bounded_redacted(std::move(concrete.tool_call_id));
+                concrete.tool_name = bounded_redacted(std::move(concrete.tool_name));
+                if (concrete.details) {
+                    concrete.details = safe_json_value(*concrete.details);
                 }
             }
         },

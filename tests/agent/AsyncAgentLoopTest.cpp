@@ -507,12 +507,12 @@ TEST_CASE("async agent loop emits user message lifecycle before assistant respon
     const auto* user_start = std::get_if<agent::MessageStartEvent>(&run.events[index++]);
     REQUIRE(user_start);
     REQUIRE(std::holds_alternative<ai::UserMessage>(user_start->message));
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(user_start->message).content) == "hi");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(user_start->message)) == "hi");
 
     const auto* user_end = std::get_if<agent::MessageEndEvent>(&run.events[index++]);
     REQUIRE(user_end);
     REQUIRE(std::holds_alternative<ai::UserMessage>(user_end->message));
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(user_end->message).content) == "hi");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(user_end->message)) == "hi");
 
     const auto* assistant_start = std::get_if<agent::MessageStartEvent>(&run.events[index++]);
     REQUIRE(assistant_start);
@@ -540,7 +540,7 @@ TEST_CASE("async agent loop emits user message lifecycle before assistant respon
     REQUIRE(agent_end->messages.size() == 2);
     REQUIRE(std::holds_alternative<ai::UserMessage>(agent_end->messages[0]));
     REQUIRE(std::holds_alternative<ai::AssistantMessage>(agent_end->messages[1]));
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(agent_end->messages[0]).content) == "hi");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(agent_end->messages[0])) == "hi");
     CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(agent_end->messages[1]).content) == "hello user");
 
     CHECK(index == run.events.size());
@@ -1759,7 +1759,7 @@ TEST_CASE("agent_end contains only messages from the current invocation", "[agen
     REQUIRE(ended != nullptr);
     REQUIRE(ended->messages.size() == 2);
     REQUIRE(std::holds_alternative<ai::UserMessage>(ended->messages[0]));
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(ended->messages[0]).content) ==
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(ended->messages[0])) ==
           "current prompt");
     REQUIRE(std::holds_alternative<ai::AssistantMessage>(ended->messages[1]));
 }
@@ -1947,15 +1947,13 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
     REQUIRE(client.requests[1].context.system_prompt.has_value());
     CHECK(*client.requests[1].context.system_prompt == "replacement prompt");
     REQUIRE(client.requests[1].context.messages.size() == 1);
-    CHECK(ai::text_from_content(
-              std::get<ai::UserMessage>(client.requests[1].context.messages[0]).content) ==
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(client.requests[1].context.messages[0])) ==
           "replacement history");
     REQUIRE(client.requests[1].context.tools.size() == 1);
     CHECK(client.requests[1].context.tools[0].name == "read_file");
 
     REQUIRE(run.result->context.messages.size() == 2);
-    CHECK(ai::text_from_content(
-              std::get<ai::UserMessage>(run.result->context.messages[0]).content) ==
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(run.result->context.messages[0])) ==
           "replacement history");
     CHECK(ai::text_from_assistant_content(
               std::get<ai::AssistantMessage>(run.result->context.messages[1]).content) ==
@@ -1965,7 +1963,7 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
     const auto* ended = std::get_if<agent::AgentEndEvent>(&run.events.back());
     REQUIRE(ended != nullptr);
     REQUIRE(ended->messages.size() == 4);
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(ended->messages[0]).content) ==
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(ended->messages[0])) ==
           "read");
 }
 

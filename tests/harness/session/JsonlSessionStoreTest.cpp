@@ -34,7 +34,8 @@ std::string read_all(const std::filesystem::path& path) {
 
 std::string text_from_message(const ai::MessageVariant& message) {
     if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
-        const auto& text = std::get<ai::TextContent>(user->content.front());
+        const auto& text = std::get<ai::TextContent>(
+            std::get<std::vector<ai::Content>>(user->content).front());
         return text.text;
     }
     if (const auto* assistant = std::get_if<ai::AssistantMessage>(&message)) {

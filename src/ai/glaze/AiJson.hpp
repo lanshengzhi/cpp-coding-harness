@@ -69,9 +69,13 @@ struct ContentDto {
     std::optional<std::string> argumentError{std::nullopt};
 };
 
+/// Message `content` payload: pi `UserMessage.content` may carry either a
+/// plain string or a block array; every other role carries a block array.
+using MessageContentDto = std::variant<std::string, std::vector<ContentDto>>;
+
 struct MessageDto {
     std::string role;
-    std::optional<std::vector<ContentDto>> content{std::nullopt};
+    std::optional<MessageContentDto> content{std::nullopt};
     std::optional<std::string> api{std::nullopt};
     std::optional<std::string> provider{std::nullopt};
     std::optional<std::string> model{std::nullopt};
@@ -184,7 +188,7 @@ template <typename T>
 }
 
 [[nodiscard]] inline util::Expected<std::vector<Content>> required_content_from_dto(
-    const std::optional<std::vector<ContentDto>>& content,
+    const std::optional<MessageContentDto>& content,
     std::string_view role,
     std::string_view context) {
     if (!content) {
@@ -193,7 +197,36 @@ template <typename T>
             std::string{"missing required field 'content' for "} + std::string(role),
             context));
     }
-    return content_from_dto(*content, context);
+    if (const auto* text = std::get_if<std::string>(&*content)) {
+        return std::unexpected(json_contract_error(
+            "content must be a block array",
+            std::string{"content for "} + std::string(role) +
+                " must be a JSON array, found a JSON string",
+            context));
+    }
+    return content_from_dto(std::get<std::vector<ContentDto>>(*content), context);
+}
+
+/// User messages accept both alternatives and preserve the caller's choice:
+/// a JSON string loads as the string alternative, a JSON array as the block
+/// array. Never canonicalizes one into the other.
+[[nodiscard]] inline util::Expected<std::variant<std::string, std::vector<Content>>> user_content_from_dto(
+    const std::optional<MessageContentDto>& content,
+    std::string_view context) {
+    if (!content) {
+        return std::unexpected(json_contract_error(
+            "missing required JSON field",
+            "missing required field 'content' for user message",
+            context));
+    }
+    if (const auto* text = std::get_if<std::string>(&*content)) {
+        return std::variant<std::string, std::vector<Content>>{*text};
+    }
+    auto blocks = content_from_dto(std::get<std::vector<ContentDto>>(*content), context);
+    if (!blocks) {
+        return std::unexpected(blocks.error());
+    }
+    return std::variant<std::string, std::vector<Content>>{std::move(*blocks)};
 }
 
 [[nodiscard]] inline UsageDto to_dto(const Usage& usage) {
@@ -464,7 +497,7 @@ template <typename T>
 }
 
 [[nodiscard]] inline util::Expected<std::vector<AssistantContent>> required_assistant_content_from_dto(
-    const std::optional<std::vector<ContentDto>>& content,
+    const std::optional<MessageContentDto>& content,
     std::string_view role,
     std::string_view context) {
     if (!content) {
@@ -473,7 +506,14 @@ template <typename T>
             std::string(role) + " message is missing the 'content' field",
             context));
     }
-    return assistant_content_from_dto(*content, context);
+    if (const auto* text = std::get_if<std::string>(&*content)) {
+        return std::unexpected(json_contract_error(
+            "content must be a block array",
+            std::string(role) +
+                " message content must be a JSON array, found a JSON string",
+            context));
+    }
+    return assistant_content_from_dto(std::get<std::vector<ContentDto>>(*content), context);
 }
 
 [[nodiscard]] inline std::vector<ContentDto> to_content_dtos(const std::vector<Content>& content) {
@@ -582,10 +622,17 @@ template <typename T>
     };
 }
 
+[[nodiscard]] inline std::optional<MessageContentDto> to_dto_content(const UserMessage& message) {
+    if (const auto* text = std::get_if<std::string>(&message.content)) {
+        return MessageContentDto{*text};
+    }
+    return MessageContentDto{to_content_dtos(std::get<std::vector<Content>>(message.content))};
+}
+
 [[nodiscard]] inline MessageDto to_dto(const UserMessage& message) {
     return MessageDto{
         .role = "user",
-        .content = to_content_dtos(message.content),
+        .content = to_dto_content(message),
         .timestamp = message.timestamp,
     };
 }
@@ -695,7 +742,7 @@ template <typename T>
     }
 
     if (dto.role == "user") {
-        auto content = required_content_from_dto(dto.content, dto.role, context);
+        auto content = user_content_from_dto(dto.content, context);
         if (!content) {
             return std::unexpected(content.error());
         }
@@ -813,7 +860,7 @@ template <typename T>
         }
         std::vector<Content> content;
         if (dto.content) {
-            auto blocks = content_from_dto(*dto.content, context);
+            auto blocks = required_content_from_dto(dto.content, "custom message", context);
             if (!blocks) {
                 return std::unexpected(blocks.error());
             }

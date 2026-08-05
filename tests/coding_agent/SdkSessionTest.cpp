@@ -401,7 +401,7 @@ public:
             [](const ai::MessageVariant& message) {
                 const auto* user = std::get_if<ai::UserMessage>(&message);
                 return user != nullptr && std::ranges::any_of(
-                    user->content,
+                    std::get<std::vector<ai::Content>>(user->content),
                     [](const ai::Content& content) {
                         return std::holds_alternative<ai::ImageContent>(content);
                     });
@@ -1206,10 +1206,12 @@ TEST_CASE(
     REQUIRE(capture_ptr->captured_request.has_value());
     const auto& first_request_user = std::get<ai::UserMessage>(
         capture_ptr->captured_request->context.messages.front());
-    REQUIRE(first_request_user.content.size() == 2);
-    CHECK(std::get<ai::TextContent>(first_request_user.content[0]).text == "inspect one");
-    CHECK(std::get<ai::ImageContent>(first_request_user.content[1]).data == "cG5nLWxpdGVyYWw=");
-    CHECK(std::get<ai::ImageContent>(first_request_user.content[1]).mime_type == "image/png");
+    const auto& first_blocks =
+        std::get<std::vector<ai::Content>>(first_request_user.content);
+    REQUIRE(first_blocks.size() == 2);
+    CHECK(std::get<ai::TextContent>(first_blocks[0]).text == "inspect one");
+    CHECK(std::get<ai::ImageContent>(first_blocks[1]).data == "cG5nLWxpdGVyYWw=");
+    CHECK(std::get<ai::ImageContent>(first_blocks[1]).mime_type == "image/png");
 
     coding_agent::PromptOptions multiple_images;
     multiple_images.images = {
@@ -1226,27 +1228,32 @@ TEST_CASE(
     REQUIRE(capture_ptr->captured_request.has_value());
     const auto& second_request_user = std::get<ai::UserMessage>(
         capture_ptr->captured_request->context.messages[2]);
-    REQUIRE(second_request_user.content.size() == 3);
-    CHECK(std::get<ai::TextContent>(second_request_user.content[0]).text == "compare both");
-    CHECK(std::get<ai::ImageContent>(second_request_user.content[1]).mime_type == "image/webp");
-    CHECK(std::get<ai::ImageContent>(second_request_user.content[1]).data == "d2VicC1saXRlcmFs");
-    CHECK(std::get<ai::ImageContent>(second_request_user.content[2]).mime_type == "image/gif");
-    CHECK(std::get<ai::ImageContent>(second_request_user.content[2]).data == "Z2lmLWxpdGVyYWw=");
+    const auto& second_blocks =
+        std::get<std::vector<ai::Content>>(second_request_user.content);
+    REQUIRE(second_blocks.size() == 3);
+    CHECK(std::get<ai::TextContent>(second_blocks[0]).text == "compare both");
+    CHECK(std::get<ai::ImageContent>(second_blocks[1]).mime_type == "image/webp");
+    CHECK(std::get<ai::ImageContent>(second_blocks[1]).data == "d2VicC1saXRlcmFs");
+    CHECK(std::get<ai::ImageContent>(second_blocks[2]).mime_type == "image/gif");
+    CHECK(std::get<ai::ImageContent>(second_blocks[2]).data == "Z2lmLWxpdGVyYWw=");
 
     const auto snapshot = created->session->snapshot();
     REQUIRE(snapshot.agent_state.messages.size() == 4);
     const auto& live_user = std::get<ai::UserMessage>(snapshot.agent_state.messages[2]);
-    REQUIRE(live_user.content.size() == 3);
-    CHECK(std::get<ai::ImageContent>(live_user.content[1]).data == "d2VicC1saXRlcmFs");
-    CHECK(std::get<ai::ImageContent>(live_user.content[2]).data == "Z2lmLWxpdGVyYWw=");
+    const auto& live_blocks = std::get<std::vector<ai::Content>>(live_user.content);
+    REQUIRE(live_blocks.size() == 3);
+    CHECK(std::get<ai::ImageContent>(live_blocks[1]).data == "d2VicC1saXRlcmFs");
+    CHECK(std::get<ai::ImageContent>(live_blocks[2]).data == "Z2lmLWxpdGVyYWw=");
 
     auto durable = harness::session::JsonlSessionStore::load(paths.session_file);
     REQUIRE(durable.has_value());
     REQUIRE(durable->messages.size() == 4);
     const auto& persisted_user = std::get<ai::UserMessage>(durable->messages[2]);
-    REQUIRE(persisted_user.content.size() == 3);
-    CHECK(std::get<ai::ImageContent>(persisted_user.content[1]).mime_type == "image/webp");
-    CHECK(std::get<ai::ImageContent>(persisted_user.content[2]).mime_type == "image/gif");
+    const auto& persisted_blocks =
+        std::get<std::vector<ai::Content>>(persisted_user.content);
+    REQUIRE(persisted_blocks.size() == 3);
+    CHECK(std::get<ai::ImageContent>(persisted_blocks[1]).mime_type == "image/webp");
+    CHECK(std::get<ai::ImageContent>(persisted_blocks[2]).mime_type == "image/gif");
     created->session->close();
 
     auto resumed_capture = std::make_unique<CaptureChatClient>();
@@ -1261,9 +1268,11 @@ TEST_CASE(
     REQUIRE(resumed_capture_ptr->captured_request.has_value());
     const auto& resumed_user = std::get<ai::UserMessage>(
         resumed_capture_ptr->captured_request->context.messages[2]);
-    REQUIRE(resumed_user.content.size() == 3);
-    CHECK(std::get<ai::ImageContent>(resumed_user.content[1]).data == "d2VicC1saXRlcmFs");
-    CHECK(std::get<ai::ImageContent>(resumed_user.content[2]).data == "Z2lmLWxpdGVyYWw=");
+    const auto& resumed_blocks =
+        std::get<std::vector<ai::Content>>(resumed_user.content);
+    REQUIRE(resumed_blocks.size() == 3);
+    CHECK(std::get<ai::ImageContent>(resumed_blocks[1]).data == "d2VicC1saXRlcmFs");
+    CHECK(std::get<ai::ImageContent>(resumed_blocks[2]).data == "Z2lmLWxpdGVyYWw=");
     resumed->session->close();
 }
 
@@ -1293,8 +1302,9 @@ TEST_CASE(
     CHECK(model.max_tokens == 0);
     REQUIRE(ai::validate_model(model));
     const auto& user = std::get<ai::UserMessage>(capture_ptr->captured_request->context.messages.front());
-    REQUIRE(user.content.size() == 1);
-    CHECK(std::get<ai::TextContent>(user.content.front()).text == "text only");
+    const auto& user_blocks = std::get<std::vector<ai::Content>>(user.content);
+    REQUIRE(user_blocks.size() == 1);
+    CHECK(std::get<ai::TextContent>(user_blocks.front()).text == "text only");
     created->session->close();
 }
 
@@ -1323,8 +1333,9 @@ TEST_CASE("SDK AgentSession exposes incompatible image destinations as provider 
     CHECK(terminal.stop_reason == ai::AssistantStopReason::Error);
     CHECK(terminal.error_message == "image input is not supported");
     const auto& user = std::get<ai::UserMessage>(snapshot.agent_state.messages.front());
-    REQUIRE(user.content.size() == 2);
-    CHECK(std::get<ai::ImageContent>(user.content[1]).data == "cmVqZWN0LW1l");
+    REQUIRE(std::get<std::vector<ai::Content>>(user.content).size() == 2);
+    CHECK(std::get<ai::ImageContent>(std::get<std::vector<ai::Content>>(user.content)[1]).data ==
+        "cmVqZWN0LW1l");
     created->session->close();
 }
 
@@ -1362,14 +1373,10 @@ TEST_CASE(
     CHECK(completed.agent_state.input_queues.steering.messages.empty());
     CHECK(completed.agent_state.input_queues.follow_up.messages.empty());
     REQUIRE(completed.agent_state.messages.size() == 6);
-    CHECK(ai::text_from_content(
-              std::get<ai::UserMessage>(completed.agent_state.messages[0]).content) == "prompt");
-    CHECK(ai::text_from_content(
-              std::get<ai::UserMessage>(completed.agent_state.messages[1]).content) == "steer-one");
-    CHECK(ai::text_from_content(
-              std::get<ai::UserMessage>(completed.agent_state.messages[2]).content) == "steer-two");
-    CHECK(ai::text_from_content(
-              std::get<ai::UserMessage>(completed.agent_state.messages[4]).content) == "follow-up");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(completed.agent_state.messages[0])) == "prompt");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(completed.agent_state.messages[1])) == "steer-one");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(completed.agent_state.messages[2])) == "steer-two");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(completed.agent_state.messages[4])) == "follow-up");
 
     created->session->close();
     auto rejected = created->session->steer("after close");
@@ -1756,7 +1763,7 @@ TEST_CASE(
     REQUIRE(durable->messages.size() == 2);
     REQUIRE(std::holds_alternative<ai::UserMessage>(durable->messages[0]));
     REQUIRE(std::holds_alternative<ai::AssistantMessage>(durable->messages[1]));
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(durable->messages[0]).content) == "hello");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(durable->messages[0])) == "hello");
 
     session->close();
 }
@@ -3676,8 +3683,7 @@ TEST_CASE(
     CHECK(created->session->message_count() == 5);
     const auto recovered_snapshot = created->session->snapshot();
     CHECK(recovered_snapshot.agent_state.input_queues.steering.messages.empty());
-    CHECK(ai::text_from_content(
-              std::get<ai::UserMessage>(recovered_snapshot.agent_state.messages[3]).content) ==
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(recovered_snapshot.agent_state.messages[3])) ==
           "recover steering");
     REQUIRE(created->session->last_assistant_text().has_value());
     CHECK(*created->session->last_assistant_text() == "recovered after abort");
@@ -4104,7 +4110,7 @@ TEST_CASE("moved SDK session retains its owned prompt resource snapshot", "[sdk]
         return std::holds_alternative<ai::UserMessage>(message);
     });
     REQUIRE(user != messages.end());
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(*user).content) == "Review cached: target.cpp");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(*user)) == "Review cached: target.cpp");
 
     moved_session.close();
 }
@@ -4135,7 +4141,7 @@ TEST_CASE("SDK expand_prompt_templates false sends slash-shaped input raw to the
             return std::holds_alternative<ai::UserMessage>(message);
         });
         REQUIRE(user != messages.rend());
-        CHECK(ai::text_from_content(std::get<ai::UserMessage>(*user).content) == raw);
+        CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(*user)) == raw);
     }
 
     created->session->close();
@@ -4163,7 +4169,7 @@ TEST_CASE("SDK treats user bash prefixes as ordinary prompts", "[sdk][u4][prompt
             return std::holds_alternative<ai::UserMessage>(message);
         });
         REQUIRE(user != messages.rend());
-        CHECK(ai::text_from_content(std::get<ai::UserMessage>(*user).content) == raw);
+        CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(*user)) == raw);
     }
 
     created->session->close();
@@ -4952,7 +4958,7 @@ TEST_CASE(
     REQUIRE(durable_after_failure.has_value());
     REQUIRE(durable_after_failure->messages.size() == 1);
     REQUIRE(std::holds_alternative<ai::UserMessage>(durable_after_failure->messages[0]));
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(durable_after_failure->messages[0]).content) == "first");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(durable_after_failure->messages[0])) == "first");
 
     auto recovered = session->prompt_blocking("second");
     REQUIRE(recovered.has_value());
@@ -4966,9 +4972,9 @@ TEST_CASE(
     REQUIRE(std::holds_alternative<ai::UserMessage>(request_messages[0]));
     REQUIRE(std::holds_alternative<ai::AssistantMessage>(request_messages[1]));
     REQUIRE(std::holds_alternative<ai::UserMessage>(request_messages[2]));
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(request_messages[0]).content) == "first");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(request_messages[0])) == "first");
     CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(request_messages[1]).content) == "captured");
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(request_messages[2]).content) == "second");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(request_messages[2])) == "second");
 
     auto durable_after_recovery = harness::session::JsonlSessionStore::load(paths.session_file);
     REQUIRE(durable_after_recovery.has_value());
@@ -4976,7 +4982,7 @@ TEST_CASE(
     CHECK(std::holds_alternative<ai::UserMessage>(durable_after_recovery->messages[0]));
     CHECK(std::holds_alternative<ai::UserMessage>(durable_after_recovery->messages[1]));
     CHECK(std::holds_alternative<ai::AssistantMessage>(durable_after_recovery->messages[2]));
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(durable_after_recovery->messages[1]).content) == "second");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(durable_after_recovery->messages[1])) == "second");
 
     session->close();
     CHECK_FALSE(session->is_open());

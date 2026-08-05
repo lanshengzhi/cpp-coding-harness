@@ -285,8 +285,9 @@ ai::MessageVariant user_msg(std::string text) {
 std::string first_user_text(const std::vector<ai::MessageVariant>& msgs) {
     for (const auto& m : msgs) {
         if (const auto* u = std::get_if<ai::UserMessage>(&m)) {
-            if (!u->content.empty()) {
-                if (const auto* t = std::get_if<ai::TextContent>(&u->content.front())) {
+            const auto& blocks = std::get<std::vector<ai::Content>>(u->content);
+            if (!blocks.empty()) {
+                if (const auto* t = std::get_if<ai::TextContent>(&blocks.front())) {
                     return t->text;
                 }
             }

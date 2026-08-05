@@ -272,16 +272,24 @@ struct InteractiveStartupDiagnostics {
 [[nodiscard]] std::optional<std::string> queued_editor_text(
     const ai::MessageVariant& message) {
     const auto* user = std::get_if<ai::UserMessage>(&message);
-    if (user == nullptr ||
-        std::any_of(
-            user->content.begin(),
-            user->content.end(),
-            [](const auto& block) {
-                return !std::holds_alternative<ai::TextContent>(block);
-            })) {
+    if (user == nullptr) {
         return std::nullopt;
     }
-    auto text = ai::text_from_content(user->content);
+    std::string text;
+    if (const auto* value = std::get_if<std::string>(&user->content)) {
+        text = *value;
+    } else {
+        const auto& blocks = std::get<std::vector<ai::Content>>(user->content);
+        if (std::any_of(
+                blocks.begin(),
+                blocks.end(),
+                [](const auto& block) {
+                    return !std::holds_alternative<ai::TextContent>(block);
+                })) {
+            return std::nullopt;
+        }
+        text = ai::text_from_content(blocks);
+    }
     if (text.empty()) return std::nullopt;
     return text;
 }

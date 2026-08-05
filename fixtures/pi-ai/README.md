@@ -280,6 +280,7 @@ the C++ surface, and the committed evidence. Resolution records: [#326]
 | 35 | Raw-stop-reason capture: the Anthropic adapter records the pre-mapping `message_delta.stop_reason` onto the message before `mapStopReason`, including values the mapper normalizes and rejects; the Responses family records the raw terminal `status` as `rawStopReason` (pi `finalizeResponse`); never invented where pi does not set it | `api/anthropic-messages.ts:709-711`; `api/openai-responses-shared.ts:567`; `types.ts:411` | `src/ai/api/AnthropicMessagesAdapter.cpp` (raw capture before mapping), `Message.hpp` (`raw_stop_reason`), `src/ai/api/Termination.*` | `AnthropicMessagesAdapterTest` `[issue374]` "captures the raw stop reason before mapping" (end_turn/pause_turn/future_reason), `AnthropicMessagesAdapterTest` `[issue375]` differential `wire/anthropic-messages-kimi-refusal-ts-events.json` (rejected `refusal` preserved), full-payload snapshots (Responses `rawStopReason` = terminal `status`; Kimi `rawStopReason` = `tool_use`) |
 | 36 | `"pending"` accepted and emitted by the message JSON mapping in both directions; `rawStopReason` round-trips through the glaze surface under pi's key with absence preserved | `types.ts:391,411` | `glaze/AiJson.hpp`, `Message.hpp` | `MessageContractTest` `[issue374]` round-trip and absence cases |
 | 37 | Unknown-stop-reason policy checked-and-aligned: unknown/unsupported reasons error on both sides (pi `Unhandled stop reason` throw; C++ terminal error) — no behavior change, regression-locked; no frozen pi test exercises the path, so the row pins it via the C++ seams | `api/openai-responses-shared.ts:753`; `api/anthropic-messages.ts:1349` | `src/ai/api/Termination.*` unknown → error | `AnthropicMessagesAdapterTest` `[issue374]` `future_reason` raw-capture case (mapped to error), termination-matrix unknown cases (`ProviderPolicyTest` → `termination/matrix.json`), "unknown stop reasons still error" regression lock |
+| 38 | `UserMessage.content` passive sum type `string \| (TextContent \| ImageContent)[]`: the string alternative and the block-array alternative stay distinguishable end to end — JSON round-trip preserves the caller's choice (empty string vs empty array distinct), no normalization anywhere, the non-vision image downgrade applies only under the `Array.isArray` guard (string passes through untouched), Responses-family emits a string as exactly one sanitized `input_text` item unconditionally and omits an empty block array, Anthropic emits a non-blank string as a raw sanitized JSON string / drops blank strings / promotes a trailing string user message to a cache-marked block array under cache retention, and internal construction sites keep building the block-array alternative | `types.ts:393-397`; `openai-responses-shared.ts:185-209`; `anthropic-messages.ts:1131-1160,1268-1276`; `transform-messages.ts:41` | `include/cch/ai/Message.hpp` (`UserMessage::content` variant), `glaze/AiJson.hpp` (string↔array JSON surface), `src/ai/api/MessageConversion.cpp` (transform + both adapter families + cache promotion) | `MessageContractTest` `[issue365]` (shape + four-way round-trip + session-style string load), `MessageConversionTest` `[issue365]` (string passes the non-vision downgrade untouched; synthesized messages still block arrays) — wire goldens for both adapter families land in T2/T3 (#366/#367) |
 
 ### Deferred Capabilities (absent from the surface — no placeholders, no compatibility shims)
 
@@ -317,10 +318,14 @@ The assistant-lifecycle classification was re-checked against reality while buil
 (#375): the end-of-stream wording on the Responses family is pi's observably reachable
 shared-processor guard ("OpenAI Responses stream ended before a terminal response event", row 34),
 and the unknown-stop-reason policy is confirmed unchanged and regression-locked (row 37). The
+`UserMessage.content` string-alternative classification (row 38, #365) was re-checked against
+reality while building it: the C++ public value, glaze JSON surface, history transform, and all
+three scoped adapters now carry both alternatives with frozen-baseline behavior and no
+normalization, so the Supported classification is true rather than overclaimed. The
 full-payload differential also surfaced one usage drift, now aligned: the Anthropic adapter
 records `cacheWrite1h` on every `message_start`, defaulting to 0 when the provider omits
 `cache_creation` (pi `anthropic-messages.ts:582`), pinned by the refusal snapshot's
-`"cacheWrite1h": 0`. Full test suite: `1409 test(s), 0 failure(s)` at the #375 gate.
+`"cacheWrite1h": 0`. Full test suite: `1414 test(s), 0 failure(s)` at the #365 gate.
 
 ## Gate report
 

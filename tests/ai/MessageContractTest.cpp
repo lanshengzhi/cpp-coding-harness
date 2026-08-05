@@ -62,9 +62,114 @@ TEST_CASE("AI contracts are aggregate-friendly passive value types", "[ai][u3][c
     CHECK(*error.context == "message");
 }
 
+TEST_CASE(
+    "UserMessage content is a passive sum type with string and block-array alternatives",
+    "[ai][u3][contract][issue365]") {
+    static_assert(std::is_aggregate_v<ai::UserMessage>);
+    static_assert(std::is_same_v<
+                  decltype(ai::UserMessage::content),
+                  std::variant<std::string, std::vector<ai::Content>>>);
+
+    ai::UserMessage string_message{
+        .content = std::string{"plain text"},
+        .timestamp = 1718000000000,
+    };
+    REQUIRE(std::holds_alternative<std::string>(string_message.content));
+    CHECK(std::get<std::string>(string_message.content) == "plain text");
+
+    ai::UserMessage block_message{
+        .content = std::vector<ai::Content>{ai::text_content("block text")},
+        .timestamp = 1718000000001,
+    };
+    REQUIRE(std::holds_alternative<std::vector<ai::Content>>(block_message.content));
+    const auto& blocks = std::get<std::vector<ai::Content>>(block_message.content);
+    REQUIRE(blocks.size() == 1);
+    CHECK(std::get<ai::TextContent>(blocks[0]).text == "block text");
+}
+
+TEST_CASE(
+    "UserMessage string and block-array alternatives round-trip with four-way distinction",
+    "[ai][glaze][issue365]") {
+    const auto round_trip = [](ai::UserMessage message) -> ai::UserMessage {
+        auto json = ai::glaze::write_message_json(ai::MessageVariant{message});
+        REQUIRE(json);
+        auto parsed = ai::glaze::read_message_json(*json);
+        REQUIRE(parsed);
+        REQUIRE(std::holds_alternative<ai::UserMessage>(*parsed));
+        return std::get<ai::UserMessage>(std::move(*parsed));
+    };
+
+    const auto string_message = round_trip(ai::UserMessage{
+        .content = std::string{"hello model"},
+        .timestamp = 1718000000000,
+    });
+    REQUIRE(std::holds_alternative<std::string>(string_message.content));
+    CHECK(std::get<std::string>(string_message.content) == "hello model");
+
+    const auto block_message = round_trip(ai::UserMessage{
+        .content = std::vector<ai::Content>{ai::text_content("hello model")},
+        .timestamp = 1718000000001,
+    });
+    REQUIRE(std::holds_alternative<std::vector<ai::Content>>(block_message.content));
+    const auto& blocks = std::get<std::vector<ai::Content>>(block_message.content);
+    REQUIRE(blocks.size() == 1);
+    CHECK(std::get<ai::TextContent>(blocks[0]).text == "hello model");
+
+    const auto empty_string = round_trip(ai::UserMessage{
+        .content = std::string{},
+        .timestamp = 1718000000002,
+    });
+    REQUIRE(std::holds_alternative<std::string>(empty_string.content));
+    CHECK(std::get<std::string>(empty_string.content).empty());
+
+    const auto empty_array = round_trip(ai::UserMessage{
+        .content = std::vector<ai::Content>{},
+        .timestamp = 1718000000003,
+    });
+    REQUIRE(std::holds_alternative<std::vector<ai::Content>>(empty_array.content));
+    CHECK(std::get<std::vector<ai::Content>>(empty_array.content).empty());
+
+    // The JSON surface writes the string alternative as a JSON string and the
+    // vector alternative as a JSON array; empty string vs empty array stay
+    // distinct on the wire.
+    auto string_json = ai::glaze::write_message_json(ai::MessageVariant{
+        ai::UserMessage{.content = std::string{"hello model"}, .timestamp = 1718000000004}});
+    REQUIRE(string_json);
+    CHECK(string_json->find(R"("content":"hello model")") != std::string::npos);
+
+    auto array_json = ai::glaze::write_message_json(ai::MessageVariant{
+        ai::UserMessage{
+            .content = std::vector<ai::Content>{ai::text_content("hello model")},
+            .timestamp = 1718000000005}});
+    REQUIRE(array_json);
+    CHECK(array_json->find(R"("content":[{"type":"text")") != std::string::npos);
+
+    auto empty_string_json = ai::glaze::write_message_json(ai::MessageVariant{
+        ai::UserMessage{.content = std::string{}, .timestamp = 1718000000006}});
+    REQUIRE(empty_string_json);
+    CHECK(empty_string_json->find(R"("content":"")") != std::string::npos);
+
+    auto empty_array_json = ai::glaze::write_message_json(ai::MessageVariant{
+        ai::UserMessage{.content = std::vector<ai::Content>{}, .timestamp = 1718000000007}});
+    REQUIRE(empty_array_json);
+    CHECK(empty_array_json->find(R"("content":[])") != std::string::npos);
+}
+
+TEST_CASE(
+    "session-style user message JSON with string content loads the string alternative",
+    "[ai][glaze][issue365]") {
+    const auto parsed = ai::glaze::read_message_json(
+        R"({"role":"user","content":"resumed string message","timestamp":1718000000000})");
+    REQUIRE(parsed);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(*parsed));
+    const auto& user = std::get<ai::UserMessage>(*parsed);
+    REQUIRE(std::holds_alternative<std::string>(user.content));
+    CHECK(std::get<std::string>(user.content) == "resumed string message");
+}
+
 TEST_CASE("user text message serializes through explicit Glaze content tags", "[ai][u2][glaze]") {
     ai::MessageVariant original = ai::UserMessage{
-        .content = {ai::TextContent{
+        .content = std::vector<ai::Content>{ai::TextContent{
             .text = "hello model",
             .text_signature = "sig-1",
         }},
@@ -83,11 +188,11 @@ TEST_CASE("user text message serializes through explicit Glaze content tags", "[
 
     const auto& user = std::get<ai::UserMessage>(*parsed);
     CHECK(user.timestamp == 1718000000000);
-    REQUIRE(user.content.size() == 1);
-    REQUIRE(std::holds_alternative<ai::TextContent>(user.content[0]));
-    CHECK(std::get<ai::TextContent>(user.content[0]).text == "hello model");
-    REQUIRE(std::get<ai::TextContent>(user.content[0]).text_signature);
-    CHECK(*std::get<ai::TextContent>(user.content[0]).text_signature == "sig-1");
+    REQUIRE(std::get<std::vector<ai::Content>>(user.content).size() == 1);
+    REQUIRE(std::holds_alternative<ai::TextContent>(std::get<std::vector<ai::Content>>(user.content)[0]));
+    CHECK(std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(user.content)[0]).text == "hello model");
+    REQUIRE(std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(user.content)[0]).text_signature);
+    CHECK(*std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(user.content)[0]).text_signature == "sig-1");
 }
 
 TEST_CASE("assistant text and tool-call content round-trip in order with metadata", "[ai][u2][ae2]") {
@@ -404,8 +509,8 @@ TEST_CASE("bash_execution_to_user_message produces formatted text", "[ai][extend
 
     auto msg = ai::bash_execution_to_user_message(bash);
     CHECK(msg.timestamp == 1718000000001);
-    REQUIRE(msg.content.size() == 1);
-    const auto& text = std::get<ai::TextContent>(msg.content[0]);
+    REQUIRE(std::get<std::vector<ai::Content>>(msg.content).size() == 1);
+    const auto& text = std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(msg.content)[0]);
     CHECK(text.text.find("Ran `echo hello`") != std::string::npos);
     CHECK(text.text.find("```\nhello") != std::string::npos);
 }
@@ -418,7 +523,7 @@ TEST_CASE("bash_execution_to_user_message reports non-zero exit code", "[ai][ext
     bash.timestamp = 1718000000002;
 
     auto msg = ai::bash_execution_to_user_message(bash);
-    const auto& text = std::get<ai::TextContent>(msg.content[0]);
+    const auto& text = std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(msg.content)[0]);
     CHECK(text.text.find("Command exited with code 1") != std::string::npos);
 }
 
@@ -429,7 +534,7 @@ TEST_CASE("bash_execution_to_user_message reports cancellation", "[ai][extended]
     bash.cancelled = true;
 
     auto msg = ai::bash_execution_to_user_message(bash);
-    const auto& text = std::get<ai::TextContent>(msg.content[0]);
+    const auto& text = std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(msg.content)[0]);
     CHECK(text.text.find("(command cancelled)") != std::string::npos);
 }
 
@@ -441,7 +546,7 @@ TEST_CASE("bash_execution_to_user_message reports truncation with path", "[ai][e
     bash.full_output_path = "/tmp/bash-output-12345.txt";
 
     auto msg = ai::bash_execution_to_user_message(bash);
-    const auto& text = std::get<ai::TextContent>(msg.content[0]);
+    const auto& text = std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(msg.content)[0]);
     CHECK(text.text.find("[Output truncated. Full output: /tmp/bash-output-12345.txt]") != std::string::npos);
 }
 
@@ -453,7 +558,7 @@ TEST_CASE("compaction_summary_to_user_message wraps with prefix and suffix", "[a
 
     auto msg = ai::compaction_summary_to_user_message(compaction);
     CHECK(msg.timestamp == 1718000000003);
-    const auto& text = std::get<ai::TextContent>(msg.content[0]);
+    const auto& text = std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(msg.content)[0]);
     CHECK(text.text.find(std::string{ai::COMPACTION_SUMMARY_PREFIX} + "Previous 20 messages compacted" + std::string{ai::COMPACTION_SUMMARY_SUFFIX}) != std::string::npos);
 }
 
@@ -465,7 +570,7 @@ TEST_CASE("branch_summary_to_user_message wraps with prefix and suffix", "[ai][e
 
     auto msg = ai::branch_summary_to_user_message(branch);
     CHECK(msg.timestamp == 1718000000004);
-    const auto& text = std::get<ai::TextContent>(msg.content[0]);
+    const auto& text = std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(msg.content)[0]);
     CHECK(text.text.find(std::string{ai::BRANCH_SUMMARY_PREFIX} + "Branch work completed" + std::string{ai::BRANCH_SUMMARY_SUFFIX}) != std::string::npos);
 }
 
@@ -491,11 +596,11 @@ TEST_CASE(
     auto msg = ai::custom_message_to_user_message(custom);
 
     CHECK(msg.timestamp == 1718000000005);
-    REQUIRE(msg.content.size() == 3);
-    CHECK(std::get<ai::TextContent>(msg.content[0]).text == "part1");
-    CHECK(std::get<ai::ImageContent>(msg.content[1]).data == "aW1hZ2U=");
-    CHECK(std::get<ai::ImageContent>(msg.content[1]).mime_type == "image/png");
-    CHECK(std::get<ai::TextContent>(msg.content[2]).text == "part2");
+    REQUIRE(std::get<std::vector<ai::Content>>(msg.content).size() == 3);
+    CHECK(std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(msg.content)[0]).text == "part1");
+    CHECK(std::get<ai::ImageContent>(std::get<std::vector<ai::Content>>(msg.content)[1]).data == "aW1hZ2U=");
+    CHECK(std::get<ai::ImageContent>(std::get<std::vector<ai::Content>>(msg.content)[1]).mime_type == "image/png");
+    CHECK(std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(msg.content)[2]).text == "part2");
 }
 
 TEST_CASE("custom_message_to_user_message preserves empty content", "[ai][extended][convert][issue22]") {
@@ -505,6 +610,6 @@ TEST_CASE("custom_message_to_user_message preserves empty content", "[ai][extend
 
     auto msg = ai::custom_message_to_user_message(custom);
 
-    CHECK(msg.content.empty());
+    CHECK(std::get<std::vector<ai::Content>>(msg.content).empty());
     CHECK(msg.timestamp == 1718000000006);
 }

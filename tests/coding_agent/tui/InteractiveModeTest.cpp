@@ -383,7 +383,7 @@ public:
         std::vector<std::string> users;
         for (const auto& message : request.context.messages) {
             if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
-                users.push_back(ai::text_from_content(user->content));
+                users.push_back(ai::text_from_user_message(*user));
             }
         }
         observed_users.push_back(std::move(users));
@@ -437,7 +437,7 @@ public:
              message != request.context.messages.rend();
              ++message) {
             if (const auto* user = std::get_if<ai::UserMessage>(&*message)) {
-                prompt = ai::text_from_content(user->content);
+                prompt = ai::text_from_user_message(*user);
                 break;
             }
         }
@@ -710,7 +710,7 @@ public:
              message != request.context.messages.rend();
              ++message) {
             if (const auto* user = std::get_if<ai::UserMessage>(&*message)) {
-                prompt = ai::text_from_content(user->content);
+                prompt = ai::text_from_user_message(*user);
                 break;
             }
         }
@@ -752,7 +752,7 @@ public:
              message != request.context.messages.rend();
              ++message) {
             if (const auto* user = std::get_if<ai::UserMessage>(&*message)) {
-                prompt = ai::text_from_content(user->content);
+                prompt = ai::text_from_user_message(*user);
                 break;
             }
         }
@@ -889,7 +889,7 @@ TEST_CASE(
     const auto png_data = std::string{tests::kTinyPngBase64};
     ai::UserMessage user;
     user.timestamp = 1'700'000'000'000;
-    user.content = {
+    user.content = std::vector<ai::Content>{
         ai::text_content("user before"),
         ai::image_content(png_data, "image/png"),
         ai::text_content("user after"),
@@ -1011,10 +1011,12 @@ TEST_CASE(
     const auto* live_user = std::get_if<ai::UserMessage>(
         &authoritative_after[authoritative_before.size()]);
     REQUIRE(live_user != nullptr);
-    REQUIRE(live_user->content.size() == 2);
-    CHECK(std::get<ai::ImageContent>(live_user->content[1]).data == png_data);
+    REQUIRE(std::get<std::vector<ai::Content>>(live_user->content).size() == 2);
+    CHECK(std::get<ai::ImageContent>(std::get<std::vector<ai::Content>>(live_user->content)[1]).data == png_data);
     CHECK(std::get<ai::ImageContent>(
-        std::get<ai::UserMessage>(authoritative_after[0]).content[1]).data == png_data);
+        std::get<std::vector<ai::Content>>(
+            std::get<ai::UserMessage>(authoritative_after[0]).content)[1])
+        .data == png_data);
     CHECK(std::get<ai::ImageContent>(
         std::get<ai::ToolResultMessage>(authoritative_after[2]).content[1]).data == png_data);
     CHECK(std::get<ai::ImageContent>(
@@ -1063,7 +1065,9 @@ TEST_CASE(
     const auto fallback_after = fallback_session->session->snapshot().agent_state.messages;
     REQUIRE(fallback_after.size() == fallback_before.size());
     CHECK(std::get<ai::ImageContent>(
-        std::get<ai::UserMessage>(fallback_after[0]).content[1]).data == png_data);
+        std::get<std::vector<ai::Content>>(
+            std::get<ai::UserMessage>(fallback_after[0]).content)[1])
+        .data == png_data);
 
     REQUIRE(fallback_terminal.inject_input("\x04"));
     drain_ready(fallback_io);
@@ -1269,7 +1273,7 @@ TEST_CASE(
     REQUIRE(snapshot.agent_state.messages.size() >= 2);
     const auto* user = std::get_if<ai::UserMessage>(&snapshot.agent_state.messages[0]);
     REQUIRE(user != nullptr);
-    std::istringstream paths{ai::text_from_content(user->content)};
+    std::istringstream paths{ai::text_from_user_message(*user)};
     std::vector<std::filesystem::path> inserted_paths;
     for (std::filesystem::path path; paths >> path;) inserted_paths.push_back(std::move(path));
     REQUIRE(inserted_paths.size() == 4);
@@ -1342,7 +1346,7 @@ TEST_CASE(
 
     const auto snapshot = created->session->snapshot();
     const auto& user = std::get<ai::UserMessage>(snapshot.agent_state.messages[0]);
-    const auto pasted_text = ai::text_from_content(user.content);
+    const auto pasted_text = ai::text_from_user_message(user);
     CHECK(pasted_text == "aclipboard textb");
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -1379,8 +1383,8 @@ TEST_CASE(
     REQUIRE(failed_terminal.inject_input("\r"));
     drain_ready(failed_io);
     const auto failed_snapshot = failed_session->session->snapshot();
-    CHECK(ai::text_from_content(
-        std::get<ai::UserMessage>(failed_snapshot.agent_state.messages[0]).content) ==
+    CHECK(ai::text_from_user_message(
+        std::get<ai::UserMessage>(failed_snapshot.agent_state.messages[0])) ==
         "unchanged");
     CHECK(visible_screen(failed_terminal).find("clipboard image unavailable") == std::string::npos);
     REQUIRE(failed_terminal.inject_input("\x04"));
@@ -2333,10 +2337,10 @@ TEST_CASE(
     CHECK(snapshot.agent_state.input_queues.max_messages == 2);
     CHECK(snapshot.agent_state.input_queues.max_bytes == 4);
     REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 2);
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(
-        snapshot.agent_state.input_queues.steering.messages[0]).content) == "é");
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(
-        snapshot.agent_state.input_queues.steering.messages[1]).content) == "é");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(
+        snapshot.agent_state.input_queues.steering.messages[0])) == "é");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(
+        snapshot.agent_state.input_queues.steering.messages[1])) == "é");
     screen = visible_screen(terminal);
     CHECK(screen.find("Unable to queue steering input: too many queued messages") !=
         std::string::npos);
@@ -2370,8 +2374,8 @@ TEST_CASE(
     drain_ready(io);
     snapshot = created->session->snapshot();
     REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 1);
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(
-        snapshot.agent_state.input_queues.steering.messages[0]).content) == "éé");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(
+        snapshot.agent_state.input_queues.steering.messages[0])) == "éé");
     screen = visible_screen(terminal);
     CHECK(screen.find("Unable to queue steering input: queued messages too large") !=
         std::string::npos);
@@ -2383,8 +2387,8 @@ TEST_CASE(
     drain_ready(io);
     snapshot = created->session->snapshot();
     REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 1);
-    CHECK(ai::text_from_content(std::get<ai::UserMessage>(
-        snapshot.agent_state.input_queues.steering.messages[0]).content) == "ok");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(
+        snapshot.agent_state.input_queues.steering.messages[0])) == "ok");
 
     client_pointer->release();
     drain_ready(io);

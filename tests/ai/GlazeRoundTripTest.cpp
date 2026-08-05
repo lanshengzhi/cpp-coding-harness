@@ -172,7 +172,7 @@ TEST_CASE("context JSON preserves a complete Tool Argument Contract unchanged", 
     REQUIRE(parsed->messages.size() == 1);
     REQUIRE(std::holds_alternative<ai::UserMessage>(parsed->messages[0]));
     const auto& user = std::get<ai::UserMessage>(parsed->messages[0]);
-    CHECK(ai::text_from_content(user.content) == "hello");
+    CHECK(ai::text_from_user_message(user) == "hello");
     REQUIRE(parsed->tools.size() == 1);
     CHECK(parsed->tools[0].name == "read_file");
 

@@ -143,8 +143,9 @@ TEST_CASE(
     REQUIRE_FALSE(snapshot.agent_state.messages.empty());
     const auto* user = std::get_if<cch::ai::UserMessage>(&snapshot.agent_state.messages.front());
     REQUIRE(user != nullptr);
-    REQUIRE(user->content.size() == 2);
-    CHECK(std::holds_alternative<cch::ai::ImageContent>(user->content[1]));
+    REQUIRE(std::get<std::vector<cch::ai::Content>>(user->content).size() == 2);
+    CHECK(std::holds_alternative<cch::ai::ImageContent>(
+        std::get<std::vector<cch::ai::Content>>(user->content)[1]));
 
     constexpr char kExit = '\x04';
     REQUIRE(::write(pty->master.get(), &kExit, 1) == 1);

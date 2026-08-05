@@ -301,8 +301,13 @@ constexpr std::string_view kUtf8Replacement = "\xef\xbf\xbd";
         flush_orphans();
         if (const auto* user = std::get_if<UserMessage>(&message)) {
             auto transformed = *user;
-            transformed.content = downgrade_images(
-                transformed.content, kUserImagePlaceholder, supports_images(model));
+            if (const auto* blocks =
+                    std::get_if<std::vector<Content>>(&transformed.content)) {
+                // pi `downgradeUnsupportedImages` guards on `Array.isArray`:
+                // the string alternative passes through untouched.
+                transformed.content = downgrade_images(
+                    *blocks, kUserImagePlaceholder, supports_images(model));
+            }
             result.emplace_back(std::move(transformed));
         } else if (const auto* bash = std::get_if<BashExecutionMessage>(&message)) {
             if (!bash->exclude_from_context) {
@@ -538,12 +543,25 @@ struct ParsedTextSignature {
     std::size_t message_index = 0;
     for (const auto& message : messages) {
         if (const auto* user = std::get_if<UserMessage>(&message)) {
-            auto content = response_content(user->content);
-            if (!content.empty()) {
+            if (const auto* text = std::get_if<std::string>(&user->content)) {
+                // pi `openai-responses-shared.ts`: a string alternative emits
+                // exactly one sanitized input_text item, unconditionally
+                // (empty string included).
                 result.emplace_back(util::JsonValue::object_t{
-                    {"content", std::move(content)},
+                    {"content", util::JsonValue::array_t{util::JsonValue::object_t{
+                        {"text", sanitize_text(*text)},
+                        {"type", "input_text"},
+                    }}},
                     {"role", "user"},
                 });
+            } else {
+                auto content = response_content(std::get<std::vector<Content>>(user->content));
+                if (!content.empty()) {
+                    result.emplace_back(util::JsonValue::object_t{
+                        {"content", std::move(content)},
+                        {"role", "user"},
+                    });
+                }
             }
         } else if (const auto* assistant = std::get_if<AssistantMessage>(&message)) {
             std::size_t text_index = 0;
@@ -836,12 +854,24 @@ struct ParsedTextSignature {
     util::JsonValue::array_t result;
     for (std::size_t index = 0; index < messages.size(); ++index) {
         if (const auto* user = std::get_if<UserMessage>(&messages[index])) {
-            auto content = anthropic_user_content(user->content);
-            if (!content.empty()) {
-                result.emplace_back(util::JsonValue::object_t{
-                    {"content", std::move(content)},
-                    {"role", "user"},
-                });
+            if (const auto* text = std::get_if<std::string>(&user->content)) {
+                // pi `anthropic-messages.ts`: a non-blank string alternative
+                // is sent as a raw sanitized JSON string; blank strings drop
+                // the message entirely.
+                if (!blank(*text)) {
+                    result.emplace_back(util::JsonValue::object_t{
+                        {"content", sanitize_text(*text)},
+                        {"role", "user"},
+                    });
+                }
+            } else {
+                auto content = anthropic_user_content(std::get<std::vector<Content>>(user->content));
+                if (!content.empty()) {
+                    result.emplace_back(util::JsonValue::object_t{
+                        {"content", std::move(content)},
+                        {"role", "user"},
+                    });
+                }
             }
         } else if (const auto* assistant = std::get_if<AssistantMessage>(&messages[index])) {
             util::JsonValue::array_t content;
@@ -939,10 +969,20 @@ void attach_cache_control_to_last_user(
     if (!object || object->at("role").get_string() != "user") {
         return;
     }
-    auto& content = object->at("content").get_array();
-    if (!content.empty()) {
-        content.back().get_object().insert_or_assign(
-            "cache_control", cache_control(retention));
+    auto& content = object->at("content");
+    if (auto* blocks = content.get_if<util::JsonValue::array_t>()) {
+        if (!blocks->empty()) {
+            blocks->back().get_object().insert_or_assign(
+                "cache_control", cache_control(retention));
+        }
+    } else if (auto* text = content.get_if<std::string>()) {
+        // pi `anthropic-messages.ts`: a trailing string user param is promoted
+        // to a one-element cache-marked block array under cache retention.
+        content = util::JsonValue{util::JsonValue::array_t{util::JsonValue::object_t{
+            {"cache_control", cache_control(retention)},
+            {"text", std::move(*text)},
+            {"type", "text"},
+        }}};
     }
 }
 
