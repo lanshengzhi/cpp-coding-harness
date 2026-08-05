@@ -156,14 +156,83 @@ const SessionEntry* SessionTree::root() const {
 
 // ── Context reconstruction ──
 
+namespace {
+
+/// Emit a message entry (or derived type) into the session context.
+void emitEntryMessage(SessionContext& ctx, const SessionEntry* entry) {
+    if (entry->kind == SessionEntryKind::Message) {
+        if (entry->message.has_value()) {
+            ctx.messages.push_back(*entry->message);
+        }
+    } else if (entry->kind == SessionEntryKind::BranchSummary) {
+        // pi projects branch_summary only when it carries a summary.
+        const auto* value = std::get_if<BranchSummaryEntryValue>(&entry->value);
+        if (value == nullptr || value->summary.empty()) {
+            return;
+        }
+        ai::BranchSummaryMessage bsm;
+        bsm.summary = value->summary;
+        bsm.from_id = value->from_id;
+        bsm.timestamp = entry->timestamp;
+        ctx.messages.emplace_back(std::move(bsm));
+    } else if (entry->kind == SessionEntryKind::CustomMessage) {
+        ai::CustomMessage cm;
+        if (const auto* value = std::get_if<CustomMessageEntryValue>(&entry->value)) {
+            cm.custom_type = value->custom_type;
+            if (const auto* text = std::get_if<std::string>(&value->content)) {
+                cm.content = {ai::TextContent{*text, std::nullopt}};
+            } else {
+                const auto& blocks =
+                    std::get<std::vector<CustomMessageEntryContentBlock>>(value->content);
+                cm.content.reserve(blocks.size());
+                for (const auto& block : blocks) {
+                    cm.content.push_back(std::visit(
+                        [](const auto& concrete) -> ai::Content { return concrete; },
+                        block));
+                }
+            }
+            cm.display = value->display;
+            cm.details = value->details;
+        }
+        cm.timestamp = entry->timestamp;
+        ctx.messages.emplace_back(std::move(cm));
+    }
+}
+
+/// Emit the messages of one entry after compaction context transforms:
+/// compaction entries project compactionSummary + retainedTail.
+void emitCompactionMessages(SessionContext& ctx, const SessionEntry* entry) {
+    const auto* value = std::get_if<CompactionEntryValue>(&entry->value);
+    const std::string summary_text = value != nullptr ? value->summary : std::string{};
+    const std::size_t tokens_before = value != nullptr ? value->tokens_before : 0;
+
+    ai::CompactionSummaryMessage csm;
+    csm.summary = summary_text;
+    csm.tokens_before = static_cast<decltype(csm.tokens_before)>(tokens_before);
+    csm.timestamp = entry->timestamp;
+    ctx.messages.emplace_back(std::move(csm));
+
+    if (value != nullptr && value->retained_tail.has_value()) {
+        for (const auto& message : *value->retained_tail) {
+            ctx.messages.push_back(message);
+        }
+    }
+}
+
+} // namespace
+
 SessionContext SessionTree::buildSessionContext() const {
-    SessionContext ctx;
-
     auto path = getBranch();
-    if (path.empty()) return ctx;
-
+    if (path.empty()) {
+        return SessionContext{};
+    }
     // Path is leaf-to-root. Reverse for chronological (root-to-leaf) processing.
     std::reverse(path.begin(), path.end());
+    return cch::harness::session::buildSessionContext(path);
+}
+
+SessionContext buildSessionContext(const std::vector<const SessionEntry*>& path) {
+    SessionContext ctx;
 
     // pi `deriveSessionContextState` (packages/agent/src/harness/session/
     // session.ts): one root-to-leaf pass over the path where the last entry of
@@ -274,64 +343,6 @@ SessionContext SessionTree::buildSessionContext() const {
     }
 
     return ctx;
-}
-
-void SessionTree::emitCompactionMessages(SessionContext& ctx, const SessionEntry* entry) {
-    const auto* value = std::get_if<CompactionEntryValue>(&entry->value);
-    const std::string summary_text = value != nullptr ? value->summary : std::string{};
-    const std::size_t tokens_before = value != nullptr ? value->tokens_before : 0;
-
-    ai::CompactionSummaryMessage csm;
-    csm.summary = summary_text;
-    csm.tokens_before = static_cast<decltype(csm.tokens_before)>(tokens_before);
-    csm.timestamp = entry->timestamp;
-    ctx.messages.emplace_back(std::move(csm));
-
-    if (value != nullptr && value->retained_tail.has_value()) {
-        for (const auto& message : *value->retained_tail) {
-            ctx.messages.push_back(message);
-        }
-    }
-}
-
-void SessionTree::emitEntryMessage(SessionContext& ctx, const SessionEntry* entry) {
-    if (entry->kind == SessionEntryKind::Message) {
-        if (entry->message.has_value()) {
-            ctx.messages.push_back(*entry->message);
-        }
-    } else if (entry->kind == SessionEntryKind::BranchSummary) {
-        // pi projects branch_summary only when it carries a summary.
-        const auto* value = std::get_if<BranchSummaryEntryValue>(&entry->value);
-        if (value == nullptr || value->summary.empty()) {
-            return;
-        }
-        ai::BranchSummaryMessage bsm;
-        bsm.summary = value->summary;
-        bsm.from_id = value->from_id;
-        bsm.timestamp = entry->timestamp;
-        ctx.messages.emplace_back(std::move(bsm));
-    } else if (entry->kind == SessionEntryKind::CustomMessage) {
-        ai::CustomMessage cm;
-        if (const auto* value = std::get_if<CustomMessageEntryValue>(&entry->value)) {
-            cm.custom_type = value->custom_type;
-            if (const auto* text = std::get_if<std::string>(&value->content)) {
-                cm.content = {ai::TextContent{*text, std::nullopt}};
-            } else {
-                const auto& blocks =
-                    std::get<std::vector<CustomMessageEntryContentBlock>>(value->content);
-                cm.content.reserve(blocks.size());
-                for (const auto& block : blocks) {
-                    cm.content.push_back(std::visit(
-                        [](const auto& concrete) -> ai::Content { return concrete; },
-                        block));
-                }
-            }
-            cm.display = value->display;
-            cm.details = value->details;
-        }
-        cm.timestamp = entry->timestamp;
-        ctx.messages.emplace_back(std::move(cm));
-    }
 }
 
 // ── Label and session-name projection ──

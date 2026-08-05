@@ -9,6 +9,7 @@
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/SkillFormatting.hpp"
 #include "coding_agent/runtime/UserBashOutputAccumulator.hpp"
+#include "harness/compaction/Compaction.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -180,6 +181,11 @@ util::ExpectedVoid AgentSessionRuntime::reject_if_busy() const {
             util::ErrorCode::Validation,
             "session is busy (prompt already in flight)"));
     }
+    if (compaction_active_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is busy (compaction already in flight)"));
+    }
     return {};
 }
 
@@ -271,6 +277,12 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
 
     prompt_active_ = true;
     active_stop_source_.emplace();
+    // A concurrent manual compaction awaits this signal after requesting run
+    // cancellation; it is cancelled exactly when the run settles (the same
+    // waiter-before-cancel ordering as PendingUserBashCommit).
+    prompt_settled_signal_.emplace(co_await boost::asio::this_coro::executor);
+    prompt_settled_signal_->expires_at(
+        std::chrono::steady_clock::time_point::max());
 
     util::ExpectedVoid result;
     try {
@@ -311,6 +323,9 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
     // context only after every completed Bash committed.
     flush_pending_user_bash();
     prompt_active_ = false;
+    if (prompt_settled_signal_) {
+        (void)prompt_settled_signal_->cancel();
+    }
     if (lifecycle_ == Lifecycle::Closing) {
         // The prompt awaitable is the existing observation seam for active
         // close: owned environment cleanup finishes before it settles. An
@@ -650,6 +665,184 @@ util::Expected<std::string> AgentSessionRuntime::set_thinking_level(
         }
     }
     return effective;
+}
+
+boost::asio::awaitable<util::Expected<coding_agent::CompactionResult>>
+AgentSessionRuntime::compact(std::string custom_instructions) {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        co_return std::unexpected(rejected.error());
+    }
+    if (compaction_active_) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "compaction is already in flight"));
+    }
+
+    // pi AgentSession.compact: abort the active run first, then wait for it
+    // to settle before compacting (the run settles with the ordinary aborted
+    // terminal; its assistant message is already committed to the store).
+    if (prompt_active_ && active_stop_source_) {
+        (void)active_stop_source_->request_stop();
+        if (prompt_settled_signal_) {
+            boost::system::error_code wait_error;
+            co_await prompt_settled_signal_->async_wait(
+                boost::asio::redirect_error(
+                    boost::asio::use_awaitable, wait_error));
+        }
+    }
+
+    compaction_active_ = true;
+    util::Expected<coding_agent::CompactionResult> result;
+    try {
+        result = co_await compact_impl(std::move(custom_instructions));
+    } catch (...) {
+        const auto failure = prompt_exception(std::current_exception());
+        result = std::unexpected(failure.error());
+    }
+    compaction_active_ = false;
+    co_return result;
+}
+
+namespace {
+
+[[nodiscard]] util::Error no_model_selected_error() {
+    // pi formatNoModelSelectedMessage's login-help tail is Native TUI
+    // presentation (auth-guidance); the C++ session carries only the core
+    // directive. The placeholder kDefaultModel is the C++ "no model" state.
+    return util::make_error(
+        util::ErrorCode::Validation,
+        "No model selected.\n\nThen use /model to select a model.");
+}
+
+} // namespace
+
+boost::asio::awaitable<util::Expected<coding_agent::CompactionResult>>
+AgentSessionRuntime::compact_impl(std::string custom_instructions) {
+    if (!agent_ || !session_.store) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session Agent is unavailable"));
+    }
+    const auto model = agent_->state().model;
+    if (model.id == agent::detail::kDefaultModel.id) {
+        co_return std::unexpected(no_model_selected_error());
+    }
+    auto* jsonl_store =
+        dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get());
+    if (jsonl_store == nullptr || !jsonl_store->path()) {
+        // In-memory sessions have no tree/entry surface: there is no session
+        // file to persist a CompactionEntry into or to rebuild context from.
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "compaction requires a persisted session file"));
+    }
+    const auto session_path = *jsonl_store->path();
+
+    auto tree = harness::session::JsonlSessionStore::open_as_tree(session_path);
+    if (!tree) {
+        co_return std::unexpected(tree.error());
+    }
+    auto branch = tree->getBranch();
+    // pi SessionManager.getBranch is root-to-leaf with the leaf last; the C++
+    // tree walks leaf-to-root, so reverse for the machinery.
+    std::reverse(branch.begin(), branch.end());
+
+    auto preparation = harness::session::prepare_compaction(
+        branch, harness::session::kDefaultCompactionSettings);
+    if (!preparation) {
+        co_return std::unexpected(preparation.error());
+    }
+    if (!*preparation) {
+        if (!branch.empty() &&
+            branch.back()->kind == harness::session::SessionEntryKind::Compaction) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Validation,
+                "Already compacted"));
+        }
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "Nothing to compact (session too small)"));
+    }
+    const auto& prep = **preparation;
+    // pi AgentSession.compact refuses when neither history nor turn prefix has
+    // messages to summarize (a session that fits the keepRecentTokens budget).
+    if (prep.messages_to_summarize.empty() && prep.turn_prefix_messages.empty()) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "Nothing to compact (session too small)"));
+    }
+
+    harness::session::SummarizationStreamFn summarization_stream =
+        [runtime = services_.model_runtime, model](
+            ai::AiContext context,
+            ai::SimpleStreamOptions options)
+            -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
+        if (!runtime) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Validation,
+                "model runtime is unavailable"));
+        }
+        co_return co_await runtime->stream_simple(
+            model, std::move(context), std::move(options), {});
+    };
+
+    harness::session::CompactionRunOptions run_options;
+    if (!custom_instructions.empty()) {
+        run_options.custom_instructions = std::move(custom_instructions);
+    }
+    run_options.thinking_level = agent_->state().thinking_level;
+    run_options.stop_token = std::stop_token{};
+    run_options.summarization_stream = std::move(summarization_stream);
+
+    auto result = co_await harness::session::compact(
+        prep, model, std::move(run_options));
+    if (!result) {
+        co_return std::unexpected(result.error());
+    }
+
+    // Persist the CompactionEntry with pi's full field set (summary,
+    // firstKeptEntryId, tokensBefore, retainedTail, details, usage; fromHook
+    // false for machinery-generated compactions).
+    if (auto appended = jsonl_store->append_compaction(
+            std::nullopt,
+            result->summary,
+            result->first_kept_entry_id,
+            result->tokens_before,
+            result->details,
+            /*from_hook=*/false,
+            result->retained_tail,
+            result->usage);
+        !appended) {
+        co_return std::unexpected(appended.error());
+    }
+
+    // Rebuild the live context from the persisted tree exactly like pi
+    // (`this.agent.state.messages = sessionContext.messages`): the next
+    // prompt's model context is compactionSummary + retained tail.
+    auto rebuilt = harness::session::JsonlSessionStore::open_as_tree(session_path);
+    if (!rebuilt) {
+        co_return std::unexpected(rebuilt.error());
+    }
+    auto context = rebuilt->buildSessionContext();
+    if (auto replaced = agent::detail::AgentMessageAccess::replace_messages(
+            *agent_, context.messages);
+        !replaced) {
+        co_return std::unexpected(replaced.error());
+    }
+
+    coding_agent::CompactionResult compaction_result;
+    compaction_result.summary = std::move(result->summary);
+    compaction_result.first_kept_entry_id =
+        std::move(result->first_kept_entry_id);
+    compaction_result.tokens_before = result->tokens_before;
+    std::size_t estimated_after = 0;
+    for (const auto& message : context.messages) {
+        estimated_after += harness::session::estimate_tokens(message);
+    }
+    compaction_result.estimated_tokens_after = estimated_after;
+    compaction_result.usage = result->usage;
+    compaction_result.details = result->details;
+    co_return compaction_result;
 }
 
 AgentSessionSnapshot AgentSessionRuntime::snapshot(

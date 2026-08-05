@@ -195,7 +195,9 @@ util::ExpectedVoid JsonlSessionStore::append_compaction(
     std::string first_kept_entry_id,
     std::size_t tokens_before,
     std::optional<util::JsonValue> details,
-    std::optional<bool> from_hook) {
+    std::optional<bool> from_hook,
+    std::vector<ai::MessageVariant> retained_tail,
+    std::optional<ai::Usage> usage) {
     EntrySerializer serializer;
     return impl_->append_serialized(serializer.serialize_compaction(
         std::move(parent_id),
@@ -203,7 +205,9 @@ util::ExpectedVoid JsonlSessionStore::append_compaction(
         std::move(first_kept_entry_id),
         tokens_before,
         std::move(details),
-        from_hook));
+        from_hook,
+        std::move(retained_tail),
+        usage));
 }
 
 util::ExpectedVoid JsonlSessionStore::append_branch_summary(

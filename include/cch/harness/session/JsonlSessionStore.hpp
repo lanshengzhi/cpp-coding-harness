@@ -58,7 +58,9 @@ public:
                                                         std::string first_kept_entry_id,
                                                         std::size_t tokens_before,
                                                         std::optional<util::JsonValue> details,
-                                                        std::optional<bool> from_hook);
+                                                        std::optional<bool> from_hook,
+                                                        std::vector<ai::MessageVariant> retained_tail = {},
+                                                        std::optional<ai::Usage> usage = std::nullopt);
     [[nodiscard]] util::ExpectedVoid append_branch_summary(std::optional<std::string> parent_id,
                                                             std::string from_id,
                                                             std::string summary,

@@ -662,4 +662,23 @@ util::ExpectedVoid detail::AgentMessageAccess::append_bash_execution(
     return {};
 }
 
+util::ExpectedVoid detail::AgentMessageAccess::replace_messages(
+    Agent& agent,
+    std::vector<ai::MessageVariant> messages) {
+    if (!agent.impl_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "agent is not initialized"));
+    }
+    if (agent.impl_->active_run) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "agent is busy (cannot replace session context)"));
+    }
+    agent.impl_->state.messages = std::move(messages);
+    agent.impl_->state.streaming_message.reset();
+    agent.impl_->state.pending_tool_call_ids.clear();
+    return {};
+}
+
 } // namespace cch::agent

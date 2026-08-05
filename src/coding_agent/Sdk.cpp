@@ -228,6 +228,14 @@ util::Expected<std::string> AgentSession::set_thinking_level(
     return impl_->runtime->set_thinking_level(level);
 }
 
+boost::asio::awaitable<util::Expected<CompactionResult>> AgentSession::compact(
+    std::string custom_instructions) {
+    // Same impl_ copying contract as prompt(): the lazy awaitable is safe to
+    // return even if the public handle moves or is destroyed first.
+    return detail::AgentSessionPromptAccess::compact(
+        *this, std::move(custom_instructions));
+}
+
 bool detail::AgentSessionInteractiveAccess::has_user_shell(
     const AgentSession& session) {
     return session.impl_ && session.impl_->runtime &&
@@ -304,6 +312,30 @@ boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::pro
             std::move(on_preflight_accepted));
     } catch (...) {
         co_return prompt_exception(std::current_exception());
+    }
+}
+
+boost::asio::awaitable<util::Expected<CompactionResult>>
+detail::AgentSessionPromptAccess::compact(
+    AgentSession& session,
+    std::string custom_instructions) {
+    return compact_impl(session.impl_, std::move(custom_instructions));
+}
+
+boost::asio::awaitable<util::Expected<CompactionResult>>
+detail::AgentSessionPromptAccess::compact_impl(
+    std::shared_ptr<AgentSession::Impl> impl,
+    std::string custom_instructions) {
+    if (!impl || !impl->runtime) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    try {
+        co_return co_await impl->runtime->compact(std::move(custom_instructions));
+    } catch (...) {
+        const auto failure = prompt_exception(std::current_exception());
+        co_return std::unexpected(failure.error());
     }
 }
 

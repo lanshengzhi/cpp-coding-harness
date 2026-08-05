@@ -33,6 +33,14 @@ public:
         bool expand_prompt_templates,
         std::move_only_function<util::ExpectedVoid()> on_preflight_accepted);
 
+    /// Manual compaction (pi `AgentSession.compact`). Same impl_ copying
+    /// contract as prompt(): the returned lazy awaitable survives moving or
+    /// destroying the public handle before its first co_await.
+    [[nodiscard]] static boost::asio::awaitable<util::Expected<CompactionResult>>
+    compact(
+        AgentSession& session,
+        std::string custom_instructions);
+
 private:
     [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> prompt_impl(
         std::shared_ptr<AgentSession::Impl> impl,
@@ -40,6 +48,11 @@ private:
         std::vector<ai::ImageContent> images,
         bool expand_prompt_templates,
         std::move_only_function<util::ExpectedVoid()> on_preflight_accepted);
+
+    [[nodiscard]] static boost::asio::awaitable<util::Expected<CompactionResult>>
+    compact_impl(
+        std::shared_ptr<AgentSession::Impl> impl,
+        std::string custom_instructions);
 };
 
 } // namespace cch::coding_agent::detail

@@ -3,6 +3,7 @@
 #include <cch/agent/Agent.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
+#include <cch/coding_agent/Sdk.hpp>
 #include <cch/coding_agent/Skill.hpp>
 #include <cch/util/Error.hpp>
 #include "coding_agent/prompt/PromptProcessor.hpp"
@@ -110,6 +111,18 @@ public:
     [[nodiscard]] util::Expected<std::string> set_thinking_level(
         std::string_view level);
 
+    // ── Compaction ────────────────────────────────────────────────────────
+
+    /// Manually compact the session context (pi `AgentSession.compact`):
+    /// aborts the active run first, waits for it to settle, then runs the
+    /// compaction machinery (`prepareCompaction`/`compact` in the harness
+    /// module) through the session's `ModelRuntime`, persists the resulting
+    /// `compaction` session entry, and rebuilds the live Agent context as
+    /// compactionSummary + retained tail. Only persisted sessions (with a
+    /// session file) have a tree/entry surface for compaction.
+    [[nodiscard]] boost::asio::awaitable<util::Expected<coding_agent::CompactionResult>>
+    compact(std::string custom_instructions);
+
     // ── State accessors ────────────────────────────────────────────────────
 
     [[nodiscard]] AgentSessionSnapshot snapshot(
@@ -140,7 +153,7 @@ public:
     }
     [[nodiscard]] bool is_busy() const {
         return lifecycle_ == Lifecycle::Closing || prompt_active_ ||
-            user_bash_active_;
+            user_bash_active_ || compaction_active_;
     }
     void close() noexcept;
 
@@ -178,6 +191,10 @@ private:
     [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> run_agent_loop(
         ai::UserMessage prompt,
         std::stop_source stop_source);
+    /// The compaction body with `compaction_active_` already set; the public
+    /// `compact` wrapper resets the flag on every exit path.
+    [[nodiscard]] boost::asio::awaitable<util::Expected<coding_agent::CompactionResult>>
+    compact_impl(std::string custom_instructions);
     [[nodiscard]] boost::asio::awaitable<void> finalize_close_after_active_work();
     [[nodiscard]] std::shared_ptr<harness::AsyncExecutionEnv> release_close_resources() noexcept;
     void finalize_close() noexcept;
@@ -192,9 +209,13 @@ private:
     Lifecycle lifecycle_{Lifecycle::Open};
     bool prompt_active_{false};
     bool user_bash_active_{false};
+    bool compaction_active_{false};
     std::vector<std::shared_ptr<PendingUserBashCommit>> pending_user_bash_;
     std::optional<std::stop_source> active_stop_source_;
     std::optional<std::stop_source> active_user_bash_stop_source_;
+    /// Released (cancelled) when the active prompt settles; a concurrent
+    /// manual compaction awaits it after requesting run cancellation.
+    std::optional<boost::asio::steady_timer> prompt_settled_signal_;
 };
 
 } // namespace cch::coding_agent::runtime

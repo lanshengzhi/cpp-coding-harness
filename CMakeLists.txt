@@ -190,6 +190,7 @@ add_library(cch_harness
     src/harness/WorkspaceFileSystemLegacy.cpp
     src/harness/WorkspaceFileSystemPi.cpp
     src/harness/WorkspaceFileSystemTemp.cpp
+    src/harness/compaction/Compaction.cpp
     src/harness/session/SessionJournal.cpp
     src/harness/session/EntrySerializer.cpp
     src/harness/session/InMemorySessionStore.cpp
@@ -380,6 +381,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/tui/UserBashPresentationTest.cpp
         tests/coding_agent/tui/UserBashSyntaxTest.cpp
         tests/coding_agent/SdkSessionTest.cpp
+        tests/coding_agent/AgentSessionCompactionTest.cpp
         tests/coding_agent/AgentSessionSnapshotTest.cpp
         tests/coding_agent/SkillIntegrationTest.cpp
         tests/coding_agent/runtime/JsonEventPrinterTest.cpp
@@ -392,6 +394,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/runtime/UserBashOutputAccumulatorTest.cpp
         tests/coding_agent/runtime/UserBashOverlapTest.cpp
         tests/harness/AsyncLocalExecutionEnvTest.cpp
+        tests/harness/compaction/CompactionTest.cpp
         tests/harness/session/InMemorySessionStoreTest.cpp
         tests/harness/session/JsonlSessionStoreTest.cpp
         tests/harness/session/SessionRoundTripGoldenTest.cpp

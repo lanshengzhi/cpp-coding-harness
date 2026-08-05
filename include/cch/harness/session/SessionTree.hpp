@@ -155,13 +155,6 @@ private:
 
     void restore_leaf_position();
 
-    /// Emit a message entry (or derived type) into the session context.
-    static void emitEntryMessage(SessionContext& ctx, const SessionEntry* entry);
-
-    /// Emit the messages of one entry after compaction context transforms:
-    /// compaction entries project compactionSummary + retainedTail.
-    static void emitCompactionMessages(SessionContext& ctx, const SessionEntry* entry);
-
     /// Get the effective parent ID for leaf-to-root traversal.
     /// Prefers explicit parent_id, falls back to inferred parent from linear ordering.
     [[nodiscard]] std::optional<std::string> effective_parent_id(std::string_view entry_id) const;
@@ -174,5 +167,13 @@ private:
     /// Inferred parent relationships for entries without explicit parent_id.
     std::unordered_map<std::string, std::string> inferred_parent_;
 };
+
+/// Reconstruct LLM context from a root-to-leaf entry path without a
+/// SessionTree (pi `buildSessionContext(pathEntries)` in
+/// harness/session/session.ts, which the compaction machinery also calls to
+/// estimate `tokensBefore`). The SessionTree member function delegates to
+/// this free function with the tree's leaf path.
+[[nodiscard]] SessionContext buildSessionContext(
+    const std::vector<const SessionEntry*>& path);
 
 } // namespace cch::harness::session

@@ -4,6 +4,7 @@
 #include <cch/agent/AgentTool.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Model.hpp>
+#include <cch/ai/Usage.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
@@ -13,6 +14,7 @@
 #include <cch/harness/ExecutionEnv.hpp>
 #include <cch/harness/session/SessionEntry.hpp>
 #include <cch/util/Error.hpp>
+#include <cch/util/JsonValue.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -213,6 +215,24 @@ struct PromptOptions {
     std::vector<ai::ImageContent> images;
 };
 
+// ── CompactionResult ─────────────────────────────────────────────────────────
+
+/// Result of a manual session compaction (pi `CompactionResult`).
+struct CompactionResult {
+    /// Summary text replacing the compacted history.
+    std::string summary;
+    /// Entry id where retained history starts (pi `firstKeptEntryId`).
+    std::string first_kept_entry_id;
+    /// Estimated context tokens before compaction (pi `tokensBefore`).
+    std::size_t tokens_before{0};
+    /// Estimated context tokens after compaction (pi `estimatedTokensAfter`).
+    std::optional<std::size_t> estimated_tokens_after{std::nullopt};
+    /// Usage from the summarization call(s), when reported.
+    std::optional<ai::Usage> usage{std::nullopt};
+    /// pi `CompactionDetails`: `{readFiles, modifiedFiles}`.
+    std::optional<util::JsonValue> details{std::nullopt};
+};
+
 // ── EventSubscription ────────────────────────────────────────────────────────
 
 /// RAII handle for a subscriber callback.
@@ -338,6 +358,20 @@ public:
     /// failure.
     [[nodiscard]] util::Expected<std::string> set_thinking_level(
         std::string_view level);
+
+    // ── Compaction ───────────────────────────────────────────────────────
+
+    /// Manually compact the session context (pi `AgentSession.compact`). The
+    /// active run is aborted first, then the pre-cut history is summarized
+    /// through `ModelRuntime::streamSimple` with `cacheRetention: "none"` and
+    /// a fresh session id, a `compaction` session entry is persisted, and the
+    /// live context is rebuilt as compactionSummary + retained tail. Returns
+    /// the compaction result, or an error when the session is closed, a
+    /// compaction is already in flight, no model is selected, the session has
+    /// nothing to compact (or was already compacted), or summarization fails
+    /// or is aborted.
+    [[nodiscard]] boost::asio::awaitable<util::Expected<CompactionResult>>
+    compact(std::string custom_instructions = {});
 
     // ── Event subscriptions ──────────────────────────────────────────────
 

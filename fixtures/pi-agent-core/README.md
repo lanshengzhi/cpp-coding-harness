@@ -6,8 +6,8 @@ tests in this repository against the C++ surface, so the gate's evidence is one 
 No fixture value is a live credential or derived from one; all strings are distinguishable
 dummy values (see [Sanitization rules](#sanitization-rules)).
 
-This file records only the capabilities landed so far (T01 [#350], T02 [#351], T03 [#352], T04 [#353], T05 [#354], T06 [#355], T07 [#356], T08 [#357]); the
-capability checklist grows with each subsequent ticket (T09–T14, blockers-first per parity map [#2]), and
+This file records only the capabilities landed so far (T01 [#350], T02 [#351], T03 [#352], T04 [#353], T05 [#354], T06 [#355], T07 [#356], T08 [#357], T09 [#358]); the
+capability checklist grows with each subsequent ticket (T10–T14, blockers-first per parity map [#2]), and
 rows below cover only what the ticket that last touched this file landed.
 
 ## Pinned baseline
@@ -163,6 +163,32 @@ auth configured). Using fp/fm.`) and continues through the resolution chain; the
 level flows into the Agent's per-turn `reasoning` option at the fake-`ModelRuntime` seam, and the
 session file persists only the `model_change {provider, modelId}` line (no auth material, #327).
 
+### Compaction machinery goldens (`summarization-request.json`, `compaction-persistence.jsonl`, `compaction-rebuild.json`)
+
+The committed compaction goldens ([#358]): the machinery lives in the harness module
+(`src/harness/compaction/`, mirroring pi `packages/agent/src/harness/compaction/compaction.ts`); the manual
+trigger lives in the session-assembly layer (`AgentSessionRuntime::compact`, mirroring pi
+`AgentSession.compact`), per the harness/AgentSession split. The trigger policy (overflow
+compact-and-retry-once, threshold) is T10's half; only the machinery and the manual trigger land here.
+
+- `summarization-request.json` — one summarization request captured through the recording fake
+  `ModelRuntime` at the stream seam: `cacheRetention: "none"` and a fresh session id (injected
+  deterministic `summarization-session-1`, proving each request isolates routing and avoids
+  unreusable cache writes exactly like pi's `completeSimpleWithRetries`), `maxTokens` 1600
+  (`floor(0.8 * reserveTokens)`), `reasoning` forwarding for a thinking model, the verbatim
+  `SUMMARIZATION_SYSTEM_PROMPT`, and the `<conversation>`-wrapped summarization prompt.
+- `compaction-persistence.jsonl` — the appended `compaction` entry line with pi's field set
+  (`summary`, `firstKeptEntryId`, `tokensBefore`, `retainedTail` messages, `details`
+  `{readFiles, modifiedFiles}`, `usage`, explicit `fromHook: false`), entry `id`/`timestamp`
+  normalized to placeholders (generated values, per the `thinking-persistence.json` precedent).
+- `compaction-rebuild.json` — the rebuilt context after compaction: `compactionSummary`
+  (summary + `tokensBefore`) plus the retained tail messages, so the next prompt resumes exactly
+  like pi (`agent.state.messages = sessionContext.messages`).
+
+`CompactionTest` `[issue358]` compares all three; `AgentSessionCompactionTest` `[issue358]` covers the
+manual-trigger lifecycle (idle persistence + context rebuild, abort-in-flight, too-small and
+in-memory rejections) through the scripted fake `Models` seam.
+
 ### Terminal matrix
 
 The six-category terminal matrix (`model_source`, `model_validation`, `provider`, `stream`,
@@ -225,6 +251,11 @@ surface, and the committed evidence. Resolution records: [#326]
 | 23 | Context projection per entry type matches pi: `custom` omitted from model context by default, `custom_message` → CustomMessage, `branch_summary` → branchSummary message (only when it carries a summary), `compaction` → compactionSummary + retained tail (pi `defaultContextEntryTransform` + `sessionEntryToContextMessages`), `label` → `getLabel` (last-wins, trimmed, clearable), `session_info` → session name (last non-blank trimmed name) | `packages/agent/src/harness/session/session.ts` `sessionEntryToContextMessages` / `defaultContextEntryTransform` / `HydratedSessionState` (`getLabel`, `getSessionName`) | `src/harness/session/SessionTree.{hpp,cpp}` (`buildSessionContext`, `emitCompactionMessages`, `emitEntryMessage`, `get_label`, `get_session_name`) | `SessionRoundTripGoldenTest` `[projection]` rows → `projection-context.json`, `projection-branch-context.json` |
 | 24 | Rebuilt session context drives into the Agent through the fake-`ModelRuntime` seam and the model sees exactly what pi's model sees: the recorded `streamSimple` context carries the projected messages, and the model-facing conversion matches pi `convertToLlm` byte-for-byte (custom → user text, branchSummary → user with `BRANCH_SUMMARY_PREFIX/SUFFIX`, compactionSummary → user with `COMPACTION_SUMMARY_PREFIX/SUFFIX`, bash excluded when `excludeFromContext`) | `packages/agent/src/harness/messages.ts` `convertToLlm` + prefix/suffix constants (verbatim `</summary>` branch suffix, `\n</summary>` compaction suffix) | `src/agent/AgentLoop.cpp` (context → `streamSimple`), `include/cch/ai/Message.hpp` (LLM conversion helpers + constants), `src/ai/api/MessageConversion.cpp` (adapter conversion) | `SessionRoundTripGoldenTest` `[agent][projection]` rows → `projection-context-llm.json`, `projection-branch-context-llm.json` |
 | 25 | `buildSessionContext` derives `thinkingLevel` (default `"off"`, last `thinking_level_change` wins), `model` (last `model_change` **or** assistant message's provider/model wins), and `activeToolNames` (last `active_tools_change` wins, copied) from the active branch exactly like pi's `deriveSessionContextState`; resume re-resolves only the derived `model_change {provider, modelId}` against the live runtime and produces pi's `restoreModelFromSession` fallback message when the model is gone (`model no longer exists`) or unauthenticated (`no auth configured`), then continues through the resolution chain; the derived thinking level and model flow into the Agent's turn options at the fake-`ModelRuntime` seam, and the session file persists only `provider`/`modelId` (no auth material, #327 / ADR 0031) | `packages/agent/src/harness/session/session.ts` `deriveSessionContextState`; `packages/coding-agent/src/core/model-resolver.ts` `restoreModelFromSession`; `packages/coding-agent/src/core/sdk.ts` (`hasThinkingEntry` gating, `modelFallbackMessage`) | `src/harness/session/SessionTree.{hpp,cpp}` (`buildSessionContext` derived state), `include/cch/harness/session/SessionResume.hpp` (`thinking_level`/`has_thinking_level_entry`), `src/coding_agent/runtime/SessionLifecycle.cpp` (resumed-entry gating), `src/coding_agent/runtime/SessionFactory.cpp` (`resume_restore_failure_reason`, `resume_model_unresolved` diagnostic) | `SessionTreeTest` `[issue357]` derived-state rows (every entry type, last-wins, assistant-message override, defaults); `SessionRoundTripGoldenTest` `[issue357]` → `derived-session-state.json` + turn-options seam; `ModelResolutionTest` `[issue357]` resume fallback-message rows (both reasons) + session-file containment row |
+| 26 | Compaction machinery (harness module, mirroring pi's harness/AgentSession split): `prepareCompaction` cut-point selection with `keepRecentTokens` 20000 and split-turn handling (valid cut points are user/assistant/bash/custom/branchSummary/compactionSummary messages and branch_summary/custom_message entries — never tool results; a cut at an assistant message splits its turn, summarizing the turn prefix separately), token estimation (chars/4, fixed 4800-char image estimate, last-assistant-usage context estimate), previous-summary iteration from the last compaction, and file-operation extraction (`read`/`write`/`edit` tool calls plus the previous pi-generated compaction's `{readFiles, modifiedFiles}` details) | `packages/agent/src/harness/compaction/compaction.ts` (`findCutPoint`, `findTurnStartIndex`, `findValidCutPoints`, `estimateTokens`, `estimateContextTokens`, `prepareCompaction`, `extractFileOperations`), `utils.ts` (`extractFileOpsFromMessage`, `computeFileLists`, `formatFileOperations`, `serializeConversation`) | `src/harness/compaction/Compaction.{hpp,cpp}` (`find_cut_point`, `find_turn_start_index`, `estimate_tokens`, `estimate_context_tokens`, `prepare_compaction`, `extract_file_ops_from_message`, `compute_file_lists`, `format_file_operations`, `serialize_conversation`), `src/harness/session/SessionTree.{hpp,cpp}` (path-based `buildSessionContext`) | `CompactionTest` `[issue358]`: cut-point/turn-start edge cases, split-turn preparation with prior details, previous-summary preparation, token/usage estimation rows, file-tags + details rows |
+| 27 | Summarization requests are issued through `streamSimple` with `cacheRetention: "none"` and a fresh session id per request (`completeSimpleWithRetries`), so compaction never pollutes the session's cache affinity; `maxTokens` = `min(floor(0.8 * reserveTokens), model.maxTokens)` for history and `0.5 * reserveTokens` for turn prefixes; `reasoning` forwards the thinking level only for reasoning models; aborted/error terminals map to pi's compaction errors; split-turn compactions combine history + prefix summaries and their usage | `packages/agent/src/harness/compaction/compaction.ts` (`completeSimpleWithRetries`, `generateSummaryWithUsage`, `generateTurnPrefixSummary`, `combineUsage`, `compact`) | `src/harness/compaction/Compaction.{hpp,cpp}` (`compact`, `generate_summary_with_usage`, `combine_usage`, verbatim `kSummarization*Prompt` constants), summarization seam wired to `ModelRuntime::stream_simple` by the session assembly | `CompactionTest` `[issue358]` → `summarization-request.json` (cacheRetention `none`, fresh session id, maxTokens 1600, reasoning); split-turn two-request test (distinct fresh session ids, combined usage); summarization-failed/aborted/invalid-session error rows |
+| 28 | Compaction persists a `CompactionEntry` with pi's fields (`summary`, `firstKeptEntryId`, `tokensBefore`, `retainedTail`, `details {readFiles, modifiedFiles}`, `usage`, explicit `fromHook: false`) and rebuilds the live context as compactionSummary + retained tail (`agent.state.messages = sessionContext.messages`), so the next prompt resumes exactly like pi | `packages/coding-agent/src/core/agent-session.ts` `compact` (`sessionManager.appendCompaction`, `buildSessionContext`, `estimateMessagesTokens`); `packages/agent/src/harness/session/session.ts` `appendCompaction` | `src/coding_agent/runtime/AgentSessionRuntime.cpp` (`compact_impl`: `append_compaction` + `open_as_tree`/`buildSessionContext` rebuild), `src/harness/session/JsonlSessionStore.cpp` (`append_compaction` with `retainedTail`/`usage`), `src/agent/Agent.cpp` (`AgentMessageAccess::replace_messages`), `include/cch/coding_agent/Sdk.hpp` (`CompactionResult`) | `CompactionTest` `[issue358]` → `compaction-persistence.jsonl`, `compaction-rebuild.json`; `AgentSessionCompactionTest` `[issue358]` idle persistence + next-prompt context at the stream seam |
+| 29 | Manual compaction trigger (`AgentSession.compact`) aborts the active run first (then waits for it to settle) and compacts; rejects when the session is closed, a compaction is in flight, no model is selected (`No model selected.\n\nThen use /model to select a model.` — login help is Native TUI presentation, ADR 0032), there is nothing to compact (`Nothing to compact (session too small)`), or the session was already compacted (`Already compacted`) | `packages/coding-agent/src/core/agent-session.ts` `compact` (`_disconnectFromAgent` + `abort()` + `waitForIdle`, `formatNoModelSelectedMessage`) | `src/coding_agent/runtime/AgentSessionRuntime.{hpp,cpp}` (`compact`, prompt-settled signal), `src/coding_agent/Sdk.cpp` (`AgentSession::compact` via `AgentSessionPromptAccess`) | `AgentSessionCompactionTest` `[issue358]`: idle compaction, abort-in-flight (gated prompt observes the cancellation and the run settles with the ordinary aborted terminal), too-small and in-memory rejections |
+| 30 | Compaction settings default to pi's `DEFAULT_COMPACTION_SETTINGS` (`enabled: true`, `reserveTokens: 16384`, `keepRecentTokens: 20000`); the machinery sits in the agent module (harness) and the trigger policy in session assembly; overflow compact-and-retry-once and threshold triggers are T10's half, not present here | `packages/agent/src/harness/compaction/compaction.ts` `DEFAULT_COMPACTION_SETTINGS` | `src/harness/compaction/Compaction.hpp` (`kDefaultCompactionSettings`), `src/coding_agent/runtime/AgentSessionRuntime.cpp` (uses the defaults) | `CompactionTest`/`AgentSessionCompactionTest` `[issue358]` cut-point rows at 20000 and lifecycle rows through the SDK |
 
 ### Recorded divergences preserved (unchanged by this ticket)
 
@@ -245,6 +276,15 @@ surface, and the committed evidence. Resolution records: [#326]
   ADR 0009 (narrowing it to pi's exact header is deferred to the coding-agent module).
 - C++ resume parsing requires assistant `usage` (the #17/#19 contract), which pi's type marks
   optional; pi-written sessions in practice always carry usage, and pi reads C++ files fine.
+- Compaction is confined to persisted (JsonlSessionStore-backed) sessions: in-memory SDK sessions
+  have no session file to persist a `CompactionEntry` into or to rebuild context from, so the
+  manual trigger rejects them (`compaction requires a persisted session file`). pi has no
+  in-memory session target, so this is a consequence of the C++ in-memory extension, not a pi
+  divergence.
+- The summarization prompt's user-message timestamp is 0 (deterministic); pi stamps `Date.now()`.
+  Provider wire messages never carry the timestamp, so this is not observable on the wire.
+- The manual-trigger no-model error omits pi's `getProviderLoginHelp()` tail (`/login` guidance is
+  Native TUI presentation, ADR 0032; the auth-guidance capability is a separate ticket).
 
 ## Gate notes
 
@@ -267,3 +307,4 @@ surface, and the committed evidence. Resolution records: [#326]
 [#355]: https://github.com/lanshengzhi/cpp-coding-harness/issues/355
 [#356]: https://github.com/lanshengzhi/cpp-coding-harness/issues/356
 [#357]: https://github.com/lanshengzhi/cpp-coding-harness/issues/357
+[#358]: https://github.com/lanshengzhi/cpp-coding-harness/issues/358
