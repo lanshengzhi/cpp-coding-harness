@@ -3,6 +3,7 @@
 #include <cch/agent/AgentTool.hpp>
 #include <cch/ai/Context.hpp>
 #include <cch/ai/Model.hpp>
+#include <cch/ai/RequestOptions.hpp>
 #include <cch/ai/Tool.hpp>
 #include <cch/util/Error.hpp>
 
@@ -172,7 +173,32 @@ struct AsyncAgentOptions {
     /// option (pi AgentOptions.sessionId / harness `sessionMetadata.id`). Empty
     /// means the host provided none.
     std::string session_id;
+    /// Thinking level for the run. Per turn it becomes the stream `reasoning`
+    /// option exactly like pi's harness consumer: `off` (or empty) forwards no
+    /// reasoning, any other of the seven levels is forwarded as the stream
+    /// reasoning (pi `createLoopConfig` / `agent-harness.ts`
+    /// `thinkingLevel === "off" ? undefined : thinkingLevel`).
     std::string thinking_level;
+    /// Per-turn `cacheRetention` streamSimple option. Unset (the default)
+    /// resolves to the pi-aligned `"short"` retention; compaction is the only
+    /// agent-core consumer that overrides it, with `"none"` and a fresh
+    /// session id (ADR 0033 / ADR 0034).
+    std::optional<ai::CacheRetention> cache_retention{std::nullopt};
+    /// Per-turn `timeoutMs` streamSimple option. Unset forwards the stream
+    /// default (30 s on the scoped adapters, matching pi's SDK defaults).
+    std::optional<std::uint64_t> timeout_ms{std::nullopt};
+    /// Per-turn `maxRetries` streamSimple option. 0 (the default) forwards the
+    /// stream default, which is no client-side retry on the scoped adapters;
+    /// transient-failure recovery lives in the agent-level turn auto-retry
+    /// capability (ADR 0034), not the stream layer.
+    std::uint32_t max_retries{0};
+    /// Per-turn `maxRetryDelayMs` streamSimple option. Unset resolves to the
+    /// pi default of 60000 ms at the Models layer.
+    std::optional<std::uint64_t> max_retry_delay_ms{std::nullopt};
+    /// Per-turn `headers` streamSimple option, merged with resolved auth and
+    /// lifecycle headers by Models before provider dispatch. Empty means the
+    /// host configured none.
+    ai::RequestHeaders headers{};
     std::optional<BeforeToolCallHook> before_tool_call;
     std::optional<AfterToolCallHook> after_tool_call;
     std::optional<TransformContextHook> transform_context;

@@ -54,12 +54,13 @@ public:
             terminal.stop_reason = ai::AssistantStopReason::Aborted;
             terminal.error_message = "Request was aborted";
             ++terminal_events;
+            last_terminal_failure = util::make_error(
+                util::ErrorCode::Cancelled, *terminal.error_message);
             if (sink) {
                 CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
                     .reason = terminal.stop_reason,
                     .error = terminal,
-                    .failure = util::make_error(
-                        util::ErrorCode::Cancelled, *terminal.error_message),
+                    .failure = last_terminal_failure,
                 }));
             }
             co_return terminal;
@@ -79,12 +80,15 @@ public:
                 ++terminal_events;
                 std::optional<util::Error> terminal_failure = std::nullopt;
                 if (response.error_message) {
-                    terminal_failure = util::make_error(
+                    const auto code =
                         response.stop_reason == ai::AssistantStopReason::Aborted
                             ? util::ErrorCode::Cancelled
-                            : util::ErrorCode::Stream,
-                        *response.error_message);
+                            : terminal_failure_code.value_or(
+                                  util::ErrorCode::Stream);
+                    terminal_failure = util::make_error(
+                        code, *response.error_message);
                 }
+                last_terminal_failure = terminal_failure;
                 CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
                     .reason = response.stop_reason,
                     .error = response,
@@ -113,6 +117,15 @@ public:
     std::vector<RecordedStreamSimpleCall> calls;
     /// Count of terminal (error/aborted) events delivered to the sink.
     int terminal_events{0};
+    /// Scripted terminal failure category for the #326 six-category channel.
+    /// When set, scripted error-terminal responses carry a failure of this
+    /// category instead of the derived Stream code; aborted terminals keep
+    /// Cancelled.
+    std::optional<util::ErrorCode> terminal_failure_code{std::nullopt};
+    /// The most recent terminal failure emitted on the sink, recorded so tests
+    /// can assert the six-category channel flowing through the single
+    /// `util::Expected` error value.
+    std::optional<util::Error> last_terminal_failure{std::nullopt};
     /// Scripted assistant responses consumed in FIFO order.
     std::deque<ai::AssistantMessage> responses;
     /// Scripted infrastructure failure returned through the Expected channel.

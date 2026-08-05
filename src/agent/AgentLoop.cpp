@@ -48,8 +48,39 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
 
 [[nodiscard]] bool is_valid_thinking_level(std::string_view level) {
     static const std::vector<std::string> allowed{
-        "off", "minimal", "low", "medium", "high", "xhigh"};
+        "off", "minimal", "low", "medium", "high", "xhigh", "max"};
     return std::find(allowed.begin(), allowed.end(), level) != allowed.end();
+}
+
+/// Per-turn `reasoning` streamSimple option (pi `agent-harness.ts`
+/// `createStreamFn` forwards `streamOptions.reasoning`, which
+/// `createLoopConfig` derives from the thinking level: `off` → undefined,
+/// otherwise the level). Empty or `off` forwards no reasoning; the other six
+/// levels map to the stream `ThinkingLevel`.
+[[nodiscard]] std::optional<ai::ThinkingLevel> stream_reasoning(
+    std::string_view level) {
+    if (level.empty() || level == "off") {
+        return std::nullopt;
+    }
+    if (level == "minimal") {
+        return ai::ThinkingLevel::Minimal;
+    }
+    if (level == "low") {
+        return ai::ThinkingLevel::Low;
+    }
+    if (level == "medium") {
+        return ai::ThinkingLevel::Medium;
+    }
+    if (level == "high") {
+        return ai::ThinkingLevel::High;
+    }
+    if (level == "xhigh") {
+        return ai::ThinkingLevel::XHigh;
+    }
+    if (level == "max") {
+        return ai::ThinkingLevel::Max;
+    }
+    return std::nullopt;
 }
 
 [[nodiscard]] util::ExpectedVoid apply_turn_update(
@@ -186,15 +217,27 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         }
 
         ai::SimpleStreamOptions stream_options;
-        // Every turn forwards the active prompt cancellation signal and the
-        // harness-consumer session id. `cacheRetention` stays unset so the
-        // pi-aligned default `"short"` applies (ADR 0033: compaction is the
+        // Every turn forwards the active prompt cancellation signal, the
+        // harness-consumer session id, and the remaining harness-consumer
+        // option set exactly as pi's `agent-harness.ts` `createStreamFn` does:
+        // `reasoning` (off → undefined), `cacheRetention` (unset so the
+        // pi-aligned default `"short"` applies; ADR 0033: compaction is the
         // only agent-core consumer that overrides it, with `"none"` and a
-        // fresh session id).
+        // fresh session id), `timeoutMs`, `maxRetries`, `maxRetryDelayMs`, and
+        // `headers`. `transport` stays fixed per adapter and
+        // `metadata`/`onPayload`/`onResponse`/`thinkingBudgets` stay omitted
+        // per #329 — none of them exist on the frozen `SimpleStreamOptions`
+        // caller surface.
         stream_options.stop_token = stop_token;
         if (!options_.session_id.empty()) {
             stream_options.session_id = options_.session_id;
         }
+        stream_options.reasoning = stream_reasoning(options_.thinking_level);
+        stream_options.cache_retention = options_.cache_retention;
+        stream_options.timeout_ms = options_.timeout_ms;
+        stream_options.max_retries = options_.max_retries;
+        stream_options.max_retry_delay_ms = options_.max_retry_delay_ms;
+        stream_options.headers = options_.headers;
 
         ai::AiContext request_context = context;
         {

@@ -1,0 +1,1 @@
+[{"type":"agent_start"},{"turn":1,"type":"turn_start"},{"role":"user","type":"message_start"},{"role":"user","type":"message_end"},{"role":"assistant","type":"message_start"},{"role":"assistant","type":"message_end"},{"stopReason":"aborted","toolResults":0,"type":"turn_end"},{"messageCount":2,"type":"agent_end"}]

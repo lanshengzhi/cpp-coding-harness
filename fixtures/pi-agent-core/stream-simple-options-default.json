@@ -1,0 +1,1 @@
+{"cacheRetention":"short","headers":{},"maxRetries":0,"maxRetryDelayMs":null,"model":{"api":"scripted-fake","id":"gpt-test","provider":"fake"},"reasoning":null,"sessionId":null,"signal":true,"timeoutMs":null}

@@ -315,6 +315,7 @@ if(CCH_BUILD_TESTS)
         tests/architecture/MoveOnlyCallbackTest.cpp
         tests/architecture/PublicHeaderBoundaryTest.cpp
         tests/agent/AgentTest.cpp
+        tests/agent/AgentCoreEvidenceTest.cpp
         tests/agent/AsyncAgentLoopTest.cpp
         tests/agent/ModelRuntimeSeamTest.cpp
         tests/agent/ToolCallExecutorTest.cpp

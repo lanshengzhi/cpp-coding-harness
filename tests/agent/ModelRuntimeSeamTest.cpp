@@ -147,6 +147,143 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Agent forwards the full harness-consumer option set through streamSimple each turn",
+    "[agent][streamSimple][issue351]") {
+    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    runtime->responses.push_back(ai::assistant_text_message("hello user"));
+
+    agent::AsyncAgentOptions options;
+    options.max_turns = 3;
+    options.model = tests::make_model("gpt-test");
+    options.session_id = "session-full";
+    options.cache_retention = ai::CacheRetention::Short;
+    options.timeout_ms = 60000;
+    options.max_retries = 2;
+    options.max_retry_delay_ms = 120000;
+    options.headers = {{std::string{"x-golden"}, std::string{"value"}}};
+    agent::Agent subject(
+        runtime,
+        agent::AsyncToolRegistry{},
+        std::move(options),
+        agent::AgentInitialState{.thinking_level = "high"});
+
+    REQUIRE(run_prompt(subject, "hi"));
+
+    REQUIRE(runtime->calls.size() == 1);
+    const auto& call = runtime->calls[0];
+    // The complete harness-consumer option set, per turn, exactly as pi's
+    // agent-harness.ts createStreamFn forwards it: reasoning (thinking level
+    // unless off), sessionId, cacheRetention, timeoutMs, maxRetries,
+    // maxRetryDelayMs, headers, signal.
+    CHECK(call.options.reasoning == ai::ThinkingLevel::High);
+    CHECK(call.options.session_id == "session-full");
+    CHECK(call.options.cache_retention == ai::CacheRetention::Short);
+    CHECK(call.options.timeout_ms == 60000);
+    CHECK(call.options.max_retries == 2);
+    CHECK(call.options.max_retry_delay_ms == 120000);
+    REQUIRE(call.options.headers.size() == 1);
+    const auto found = call.options.headers.find("x-golden");
+    REQUIRE(found != call.options.headers.end());
+    REQUIRE(found->second.has_value());
+    CHECK(*found->second == "value");
+    CHECK(call.options.stop_token != std::stop_token{});
+    CHECK_FALSE(call.options.stop_token.stop_requested());
+}
+
+TEST_CASE(
+    "default turns forward pi's harness-consumer defaults through streamSimple",
+    "[agent][streamSimple][issue351]") {
+    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    runtime->responses.push_back(ai::assistant_text_message("hello user"));
+
+    agent::AsyncAgentOptions options;
+    options.max_turns = 3;
+    options.model = tests::make_model("gpt-test");
+    // thinking_level stays off and every retry/header/timeout knob stays at
+    // its default; only the active prompt signal is forwarded.
+    agent::Agent subject(runtime, agent::AsyncToolRegistry{}, std::move(options));
+
+    REQUIRE(run_prompt(subject, "hi"));
+
+    REQUIRE(runtime->calls.size() == 1);
+    const auto& call = runtime->calls[0];
+    // off thinking forwards no reasoning (pi createLoopConfig off → undefined).
+    CHECK(call.options.reasoning == std::nullopt);
+    CHECK(call.options.session_id == std::nullopt);
+    // cacheRetention unset resolves to the pi-aligned "short" default (ADR
+    // 0033); the stream layer maps nullopt to Short.
+    CHECK(call.options.cache_retention == std::nullopt);
+    CHECK(ai::detail::resolve_cache_retention(
+              call.options.cache_retention, call.options.env) ==
+          ai::CacheRetention::Short);
+    CHECK(call.options.timeout_ms == std::nullopt);
+    CHECK(call.options.max_retries == 0);
+    CHECK(call.options.max_retry_delay_ms == std::nullopt);
+    CHECK(call.options.headers.empty());
+    CHECK(call.options.stop_token != std::stop_token{});
+    CHECK_FALSE(call.options.stop_token.stop_requested());
+}
+
+namespace {
+
+[[nodiscard]] ai::AssistantMessage terminal_message(
+    std::string error_message) {
+    auto terminal = ai::assistant_text_message("");
+    terminal.stop_reason = ai::AssistantStopReason::Error;
+    terminal.error_message = std::move(error_message);
+    return terminal;
+}
+
+void expect_terminal_matrix_row(
+    util::ErrorCode category,
+    const std::string& category_name) {
+    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    runtime->terminal_failure_code = category;
+    runtime->responses.push_back(
+        terminal_message("terminal " + category_name));
+
+    agent::AsyncAgentOptions options;
+    options.max_turns = 3;
+    options.model = tests::make_model("gpt-test");
+    agent::AsyncAgentLoop loop(runtime, agent::AsyncToolRegistry{}, std::move(options));
+
+    auto run = run_loop(loop, "hi");
+
+    // Exactly one terminal event plus an agreeing final AssistantMessage, with
+    // the category flowing through the single util::Expected error value (the
+    // #326 six-category channel; no second exception hierarchy).
+    REQUIRE(run.result.has_value());
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(run.result->context.messages.size() == 2);
+    const auto* final =
+        std::get_if<ai::AssistantMessage>(&run.result->context.messages.back());
+    REQUIRE(final != nullptr);
+    CHECK(final->stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(final->error_message.has_value());
+    CHECK(*final->error_message == "terminal " + category_name);
+    CHECK(runtime->terminal_events == 1);
+    REQUIRE(runtime->last_terminal_failure.has_value());
+    CHECK(runtime->last_terminal_failure->code == category);
+    CHECK(count_events<agent::TurnEndEvent>(run.events) == 1);
+    CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+}
+
+} // namespace
+
+TEST_CASE(
+    "six-category terminal matrix yields exactly one terminal event plus a final AssistantMessage each",
+    "[agent][streamSimple][terminal][issue351]") {
+    expect_terminal_matrix_row(
+        util::ErrorCode::ModelSource, "model_source");
+    expect_terminal_matrix_row(
+        util::ErrorCode::ModelValidation, "model_validation");
+    expect_terminal_matrix_row(util::ErrorCode::Provider, "provider");
+    expect_terminal_matrix_row(util::ErrorCode::Stream, "stream");
+    expect_terminal_matrix_row(util::ErrorCode::Auth, "auth");
+    expect_terminal_matrix_row(util::ErrorCode::OAuth, "oauth");
+}
+
+TEST_CASE(
     "recording fake ModelRuntime drives one successful turn end to end",
     "[agent][streamSimple][issue350]") {
     auto runtime = std::make_shared<tests::FakeModelRuntime>();

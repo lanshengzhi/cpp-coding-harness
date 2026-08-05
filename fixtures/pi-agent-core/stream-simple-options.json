@@ -1,0 +1,1 @@
+{"cacheRetention":"short","headers":{"x-golden":"value"},"maxRetries":2,"maxRetryDelayMs":120000,"model":{"api":"scripted-fake","id":"gpt-test","provider":"fake"},"reasoning":"high","sessionId":"session-golden","signal":true,"timeoutMs":60000}
