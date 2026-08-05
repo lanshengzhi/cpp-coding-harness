@@ -627,6 +627,7 @@ template <typename Headers>
         const auto* delta = object_member(event, "delta");
         if (delta) {
             if (const auto reason = string_member(*delta, "stop_reason")) {
+                assistant.raw_stop_reason = std::string{*reason};
                 std::optional<std::string_view> explanation;
                 if (const auto* details = object_member(*delta, "stop_details")) {
                     explanation = string_member(*details, "explanation");
@@ -928,6 +929,7 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> AnthropicMessagesAdapte
     assistant.api = model.api;
     assistant.provider = model.provider;
     assistant.model = model.id;
+    assistant.stop_reason = AssistantStopReason::Pending;
     assistant.timestamp = current_timestamp_ms();
 
     std::optional<util::Error> sink_failure;
@@ -1034,7 +1036,8 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> AnthropicMessagesAdapte
                     : "Anthropic stream ended without message_stop"),
                 guarded_sink);
         }
-        if (!attempt_state.termination) {
+        // pi: a stream whose accumulation ends still-pending is an error.
+        if (assistant.stop_reason == AssistantStopReason::Pending) {
             co_return complete_failure(
                 assistant,
                 stream_error("Anthropic stream ended without a stop reason"),

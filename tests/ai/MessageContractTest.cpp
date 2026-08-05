@@ -174,6 +174,52 @@ TEST_CASE("assistant text and tool-call content round-trip in order with metadat
     CHECK(round_trip.timestamp == 1718000000123);
 }
 
+TEST_CASE("assistant pending stop reason and raw stop reason round-trip", "[ai][glaze][issue374]") {
+    const auto parsed = ai::glaze::read_message_json(
+        R"({"role":"assistant","content":[{"type":"text","text":"in flight"}],"api":"anthropic-messages","provider":"kimi-coding","model":"kimi-for-coding","usage":{"input":1,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":1,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"pending","rawStopReason":"pause_turn","timestamp":1718000000000})");
+    REQUIRE(parsed);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(*parsed));
+    const auto& assistant = std::get<ai::AssistantMessage>(*parsed);
+    CHECK(assistant.stop_reason == ai::AssistantStopReason::Pending);
+    REQUIRE(assistant.raw_stop_reason);
+    CHECK(*assistant.raw_stop_reason == "pause_turn");
+
+    auto json = ai::glaze::write_message_json(*parsed);
+    REQUIRE(json);
+    CHECK(json->find(R"("stopReason":"pending")") != std::string::npos);
+    CHECK(json->find(R"("rawStopReason":"pause_turn")") != std::string::npos);
+
+    auto re_parsed = ai::glaze::read_message_json(*json);
+    REQUIRE(re_parsed);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(*re_parsed));
+    const auto& round_trip = std::get<ai::AssistantMessage>(*re_parsed);
+    CHECK(round_trip.stop_reason == ai::AssistantStopReason::Pending);
+    REQUIRE(round_trip.raw_stop_reason);
+    CHECK(*round_trip.raw_stop_reason == "pause_turn");
+}
+
+TEST_CASE("assistant message without rawStopReason round-trips as absence", "[ai][glaze][issue374]") {
+    ai::AssistantMessage assistant;
+    assistant.content.emplace_back(ai::TextContent{
+        .text = "answer",
+        .text_signature = std::nullopt,
+    });
+    assistant.api = "openai-responses";
+    assistant.provider = "deepseek";
+    assistant.model = "deepseek-v4-flash";
+    assistant.stop_reason = ai::AssistantStopReason::Stop;
+    assistant.timestamp = 1718000000000;
+
+    auto json = ai::glaze::write_message_json(ai::MessageVariant{assistant});
+    REQUIRE(json);
+    CHECK(json->find("rawStopReason") == std::string::npos);
+
+    auto parsed = ai::glaze::read_message_json(*json);
+    REQUIRE(parsed);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(*parsed));
+    CHECK(std::get<ai::AssistantMessage>(*parsed).raw_stop_reason == std::nullopt);
+}
+
 TEST_CASE("assistant JSON requires a supported stop reason", "[ai][u2][glaze][issue18]") {
     const auto missing = ai::glaze::read_message_json(
         R"({"role":"assistant","content":[{"type":"text","text":"answer"}],"api":"openai-completions","provider":"openai","model":"gpt-test","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"timestamp":1718000000000})");

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/ai/Auth.hpp>
+#include <cch/ai/StreamEvent.hpp>
 #include <cch/ai/providers/StreamTransport.hpp>
 #include "util/ExpectedMacros.hpp"
 
@@ -12,10 +13,31 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace cch::tests {
+
+/// Stop reasons of every non-terminal (partial) assistant event, in emission
+/// order. Terminal done/error events are excluded.
+[[nodiscard]] inline std::vector<ai::AssistantStopReason> partial_stop_reasons(
+    const std::vector<ai::AssistantStreamEvent>& events) {
+    std::vector<ai::AssistantStopReason> reasons;
+    for (const auto& event : events) {
+        std::visit(
+            [&reasons](const auto& concrete) {
+                using Event = std::decay_t<decltype(concrete)>;
+                if constexpr (!std::is_same_v<Event, ai::AssistantDoneEvent> &&
+                              !std::is_same_v<Event, ai::AssistantErrorEvent>) {
+                    reasons.push_back(concrete.partial.stop_reason);
+                }
+            },
+            event);
+    }
+    return reasons;
+}
 
 template <typename T>
 [[nodiscard]] T run_awaitable(boost::asio::awaitable<T> operation) {

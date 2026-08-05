@@ -28,6 +28,7 @@ namespace {
 
 using tests::EmptyAuthContext;
 using tests::EmptyCredentialStore;
+using tests::partial_stop_reasons;
 using tests::run_awaitable;
 using tests::ScriptedTransport;
 using tests::TransportAttempt;
@@ -450,6 +451,115 @@ TEST_CASE(
             CHECK(std::holds_alternative<ai::AssistantDoneEvent>(run.events.back()));
         }
     }
+}
+
+TEST_CASE(
+    "Kimi Anthropic Messages partials carry the pending stop reason",
+    "[ai][provider][anthropic][issue374]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    transport->attempts.push_back(TransportAttempt{.chunks = {
+        "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_pending\","
+        "\"usage\":{\"input_tokens\":1,\"output_tokens\":0}}}\n\n"
+        "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,"
+        "\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n"
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,"
+        "\"delta\":{\"type\":\"text_delta\",\"text\":\"hel\"}}\n\n"
+        "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n"
+        "event: message_delta\ndata: {\"type\":\"message_delta\","
+        "\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":1}}\n\n"
+        "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+    }});
+    const auto model = kimi_model();
+    auto models = make_models(transport, model);
+    REQUIRE(models);
+
+    auto run = run_models(*models, model, {}, authorized_options());
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
+    const std::vector<std::string> expected{
+        "start", "text_start", "text_delta", "text_end", "done"};
+    CHECK(event_names(run.events) == expected);
+    const auto partials = partial_stop_reasons(run.events);
+    REQUIRE(partials.size() == 4);
+    for (const auto reason : partials) {
+        CHECK(reason == ai::AssistantStopReason::Pending);
+    }
+}
+
+TEST_CASE(
+    "Kimi Anthropic Messages captures the raw stop reason before mapping",
+    "[ai][provider][anthropic][issue374]") {
+    struct Case {
+        std::string sse;
+        ai::AssistantStopReason mapped;
+        std::string raw;
+    };
+    const std::vector<Case> cases{
+        Case{
+            .sse = terminal_sse("end_turn"),
+            .mapped = ai::AssistantStopReason::Stop,
+            .raw = "end_turn",
+        },
+        // pause_turn is normalized to stop by the mapper; the raw provider
+        // value is still preserved verbatim.
+        Case{
+            .sse = terminal_sse("pause_turn"),
+            .mapped = ai::AssistantStopReason::Stop,
+            .raw = "pause_turn",
+        },
+        // Unknown reasons are rejected by the mapper; the raw value is
+        // captured before the rejection.
+        Case{
+            .sse = terminal_sse("future_reason"),
+            .mapped = ai::AssistantStopReason::Error,
+            .raw = "future_reason",
+        },
+    };
+
+    for (const auto& test_case : cases) {
+        auto transport = std::make_shared<ScriptedTransport>();
+        transport->attempts.push_back(TransportAttempt{.chunks = {test_case.sse}});
+        const auto model = kimi_model();
+        auto models = make_models(transport, model);
+        REQUIRE(models);
+
+        auto run = run_models(*models, model, {}, authorized_options());
+
+        REQUIRE(run.result);
+        CHECK(run.result->stop_reason == test_case.mapped);
+        REQUIRE(run.result->raw_stop_reason);
+        CHECK(*run.result->raw_stop_reason == test_case.raw);
+    }
+}
+
+TEST_CASE(
+    "Kimi Anthropic Messages stream ending still pending is a terminal error",
+    "[ai][provider][anthropic][issue374]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    transport->attempts.push_back(TransportAttempt{.chunks = {
+        "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_pending\","
+        "\"usage\":{\"input_tokens\":1,\"output_tokens\":0}}}\n\n"
+        "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+    }});
+    const auto model = kimi_model();
+    auto models = make_models(transport, model);
+    REQUIRE(models);
+
+    auto run = run_models(*models, model, {}, authorized_options());
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(run.result->error_message);
+    CHECK(run.result->error_message->contains(
+        "Anthropic stream ended without a stop reason"));
+    REQUIRE_FALSE(run.events.empty());
+    REQUIRE(std::holds_alternative<ai::AssistantErrorEvent>(run.events.back()));
+    const auto& terminal = std::get<ai::AssistantErrorEvent>(run.events.back());
+    CHECK(terminal.reason == ai::AssistantStopReason::Error);
+    CHECK(terminal.error.stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(terminal.error.error_message);
+    CHECK(*terminal.error.error_message == *run.result->error_message);
 }
 
 TEST_CASE(

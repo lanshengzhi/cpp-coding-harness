@@ -79,6 +79,7 @@ struct MessageDto {
     std::optional<std::string> responseId{std::nullopt};
     std::optional<UsageDto> usage{std::nullopt};
     std::optional<std::string> stopReason{std::nullopt};
+    std::optional<std::string> rawStopReason{std::nullopt};
     std::optional<std::string> errorMessage{std::nullopt};
     std::optional<std::vector<DiagnosticEntryDto>> diagnostics{std::nullopt};
     std::optional<std::string> toolCallId{std::nullopt};
@@ -112,6 +113,9 @@ struct ContextDto {
 }
 
 [[nodiscard]] inline std::optional<AssistantStopReason> stop_reason_from_json(std::string_view reason) {
+    if (reason == "pending") {
+        return AssistantStopReason::Pending;
+    }
     if (reason == "stop") {
         return AssistantStopReason::Stop;
     }
@@ -597,6 +601,7 @@ template <typename T>
         .responseId = message.response_id,
         .usage = to_dto(message.usage),
         .stopReason = stop_reason_to_json(message.stop_reason),
+        .rawStopReason = message.raw_stop_reason,
         .errorMessage = message.error_message,
         .diagnostics = message.diagnostics
             ? std::optional<std::vector<DiagnosticEntryDto>>{
@@ -754,6 +759,7 @@ template <typename T>
             .response_id = dto.responseId,
             .usage = std::move(*usage),
             .stop_reason = *stop_reason,
+            .raw_stop_reason = dto.rawStopReason,
             .error_message = dto.errorMessage,
             .diagnostics = std::move(diagnostics),
             .timestamp = dto.timestamp,

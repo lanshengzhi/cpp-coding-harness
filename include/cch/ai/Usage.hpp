@@ -30,6 +30,7 @@ struct Usage {
 [[nodiscard]] UsageCost calculate_cost(const Model& model, const Usage& usage);
 
 enum class AssistantStopReason {
+    Pending,
     Stop,
     ToolUse,
     Length,
@@ -39,6 +40,8 @@ enum class AssistantStopReason {
 
 [[nodiscard]] inline std::string stop_reason_to_string(AssistantStopReason reason) {
     switch (reason) {
+    case AssistantStopReason::Pending:
+        return "pending";
     case AssistantStopReason::Stop:
         return "stop";
     case AssistantStopReason::Length:

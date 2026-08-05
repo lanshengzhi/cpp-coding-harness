@@ -47,6 +47,7 @@ struct AssistantMessage {
     std::optional<std::string> response_id;
     Usage usage{};
     AssistantStopReason stop_reason{AssistantStopReason::Stop};
+    std::optional<std::string> raw_stop_reason;
     std::optional<std::string> error_message;
     std::optional<std::vector<DiagnosticEntry>> diagnostics;
     TimestampMs timestamp{};

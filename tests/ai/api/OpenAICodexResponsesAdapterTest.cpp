@@ -28,6 +28,7 @@ namespace {
 
 using tests::EmptyAuthContext;
 using tests::EmptyCredentialStore;
+using tests::partial_stop_reasons;
 using tests::run_awaitable;
 using tests::ScriptedTransport;
 using tests::ScriptedWebSocket;
@@ -1042,6 +1043,104 @@ TEST_CASE(
     REQUIRE(run.result->error_message);
     CHECK(run.result->error_message->find("Invalid Codex WebSocket JSON") != std::string::npos);
     CHECK(harness.http->requests.empty());
+}
+
+TEST_CASE(
+    "Codex WS partials carry the pending stop reason",
+    "[ai][provider][codex][issue374]") {
+    auto harness = make_codex_harness(codex_model());
+    auto session = std::make_shared<ScriptedWebSocket::Session>();
+    const auto message_item = [](std::string_view status, bool with_content) {
+        util::JsonValue::object_t item{
+            {"type", "message"},
+            {"id", "msg_1"},
+            {"role", "assistant"},
+            {"status", std::string{status}},
+            {"content",
+             with_content
+                 ? util::JsonValue{util::JsonValue::array_t{util::JsonValue{
+                       util::JsonValue::object_t{
+                           {"type", "output_text"},
+                           {"text", "Hi"},
+                           {"annotations", util::JsonValue{util::JsonValue::array_t{}}},
+                       }}}}
+                 : util::JsonValue{util::JsonValue::array_t{}}},
+            {"phase", "final_answer"},
+        };
+        return util::JsonValue{std::move(item)};
+    };
+    session->frames.push_back(json_string(util::JsonValue{util::JsonValue::object_t{
+        {"type", "response.created"},
+        {"response",
+         util::JsonValue{util::JsonValue::object_t{{"id", "resp_pending"}}}},
+    }}));
+    session->frames.push_back(json_string(util::JsonValue{util::JsonValue::object_t{
+        {"type", "response.output_item.added"},
+        {"output_index", 0.0},
+        {"item", message_item("in_progress", false)},
+    }}));
+    session->frames.push_back(json_string(util::JsonValue{util::JsonValue::object_t{
+        {"type", "response.output_text.delta"},
+        {"output_index", 0.0},
+        {"delta", "Hi"},
+    }}));
+    session->frames.push_back(json_string(util::JsonValue{util::JsonValue::object_t{
+        {"type", "response.output_item.done"},
+        {"output_index", 0.0},
+        {"item", message_item("completed", true)},
+    }}));
+    session->frames.push_back(simple_terminal());
+    harness.ws->connect_scripts.push_back(
+        ScriptedWebSocketTransport::ConnectScript{.session = session});
+
+    ai::SimpleStreamOptions options;
+    options.api_key = std::string{kCodexToken};
+    auto run = run_codex(*harness.models, codex_model(), {}, std::move(options));
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
+    // The Responses family never records a raw stop reason (pi doesn't).
+    CHECK_FALSE(run.result->raw_stop_reason);
+    const std::vector<std::string> expected{
+        "start", "text_start", "text_delta", "text_end", "done"};
+    CHECK(event_names(run.events) == expected);
+    const auto partials = partial_stop_reasons(run.events);
+    REQUIRE(partials.size() == 4);
+    for (const auto reason : partials) {
+        CHECK(reason == ai::AssistantStopReason::Pending);
+    }
+}
+
+TEST_CASE(
+    "Codex SSE stream ending still pending is a terminal error",
+    "[ai][provider][codex][issue374]") {
+    auto harness = make_codex_harness(codex_model());
+    harness.ws->connect_scripts.push_back(
+        ScriptedWebSocketTransport::ConnectScript{
+            .failure = util::make_error(
+                util::ErrorCode::Network,
+                "connect refused"),
+        });
+    harness.http->attempts.push_back(TransportAttempt{.chunks = {
+        "data: {\"type\":\"response.created\",\"response\":{\"id\":\"early\"}}\n\n",
+    }});
+
+    ai::SimpleStreamOptions options;
+    options.api_key = std::string{kCodexToken};
+    auto run = run_codex(*harness.models, codex_model(), {}, std::move(options));
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(run.result->error_message);
+    CHECK(run.result->error_message->contains(
+        "Codex stream ended without a stop reason"));
+    REQUIRE_FALSE(run.events.empty());
+    REQUIRE(std::holds_alternative<ai::AssistantErrorEvent>(run.events.back()));
+    const auto& terminal = std::get<ai::AssistantErrorEvent>(run.events.back());
+    CHECK(terminal.reason == ai::AssistantStopReason::Error);
+    CHECK(terminal.error.stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(terminal.error.error_message);
+    CHECK(*terminal.error.error_message == *run.result->error_message);
 }
 
 TEST_CASE(

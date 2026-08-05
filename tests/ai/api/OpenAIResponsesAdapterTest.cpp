@@ -26,6 +26,7 @@ namespace {
 
 using tests::EmptyAuthContext;
 using tests::EmptyCredentialStore;
+using tests::partial_stop_reasons;
 using tests::run_awaitable;
 using tests::ScriptedTransport;
 using tests::TransportAttempt;
@@ -285,6 +286,73 @@ TEST_CASE(
     CHECK_FALSE(deleted_headers.contains("Authorization"));
     CHECK_FALSE(deleted_headers.contains("Accept"));
     CHECK_FALSE(deleted_headers.contains("Content-Type"));
+}
+
+TEST_CASE(
+    "DeepSeek Responses partials carry the pending stop reason",
+    "[ai][provider][responses][issue374]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    transport->attempts.push_back(TransportAttempt{.chunks = {
+        "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_pending\"}}\n\n"
+        "data: {\"type\":\"response.output_item.added\",\"output_index\":0,"
+        "\"item\":{\"type\":\"message\",\"id\":\"msg_1\",\"role\":\"assistant\","
+        "\"status\":\"in_progress\",\"content\":[],\"phase\":\"final_answer\"}}\n\n"
+        "data: {\"type\":\"response.output_text.delta\",\"output_index\":0,\"delta\":\"Hi\"}\n\n"
+        "data: {\"type\":\"response.output_item.done\",\"output_index\":0,"
+        "\"item\":{\"type\":\"message\",\"id\":\"msg_1\",\"role\":\"assistant\",\"status\":\"completed\","
+        "\"content\":[{\"type\":\"output_text\",\"text\":\"Hi\",\"annotations\":[]}],\"phase\":\"final_answer\"}}\n\n"
+        "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_pending\","
+        "\"status\":\"completed\",\"usage\":{\"input_tokens\":5,\"output_tokens\":1,\"total_tokens\":6}}}\n\n",
+    }});
+    const auto model = deepseek_model();
+    auto models = make_models(transport, model);
+    REQUIRE(models);
+    ai::SimpleStreamOptions options;
+    options.api_key = "dummy-key";
+
+    auto run = run_models(*models, model, {}, std::move(options));
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
+    // The Responses family never records a raw stop reason (pi doesn't).
+    CHECK_FALSE(run.result->raw_stop_reason);
+    const std::vector<std::string> expected{
+        "start", "text_start", "text_delta", "text_end", "done"};
+    CHECK(event_names(run.events) == expected);
+    const auto partials = partial_stop_reasons(run.events);
+    REQUIRE(partials.size() == 4);
+    for (const auto reason : partials) {
+        CHECK(reason == ai::AssistantStopReason::Pending);
+    }
+}
+
+TEST_CASE(
+    "DeepSeek Responses stream ending still pending is a terminal error",
+    "[ai][provider][responses][issue374]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    transport->attempts.push_back(TransportAttempt{.chunks = {
+        "data: {\"type\":\"response.created\",\"response\":{\"id\":\"early\"}}\n\n",
+    }});
+    const auto model = deepseek_model();
+    auto models = make_models(transport, model);
+    REQUIRE(models);
+    ai::SimpleStreamOptions options;
+    options.api_key = "dummy-key";
+
+    auto run = run_models(*models, model, {}, std::move(options));
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(run.result->error_message);
+    CHECK(run.result->error_message->contains(
+        "OpenAI Responses stream ended without a stop reason"));
+    REQUIRE_FALSE(run.events.empty());
+    REQUIRE(std::holds_alternative<ai::AssistantErrorEvent>(run.events.back()));
+    const auto& terminal = std::get<ai::AssistantErrorEvent>(run.events.back());
+    CHECK(terminal.reason == ai::AssistantStopReason::Error);
+    CHECK(terminal.error.stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(terminal.error.error_message);
+    CHECK(*terminal.error.error_message == *run.result->error_message);
 }
 
 TEST_CASE(
