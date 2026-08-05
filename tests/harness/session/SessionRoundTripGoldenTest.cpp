@@ -499,3 +499,185 @@ TEST_CASE("pi branch projection drives rebuilt context into the Agent",
     }
     CHECK(llm_json == expected_llm_json);
 }
+
+// ── T08 (#357): derived session state — thinkingLevel / model / activeToolNames ──
+
+namespace {
+
+/// Serialize the pi-derived session state (`thinkingLevel`, `model
+/// {provider, modelId} | null`, `activeToolNames | null`) into the stable JSON
+/// object the committed golden pins.
+[[nodiscard]] util::JsonValue derived_state_to_json(
+    const harness::session::SessionContext& context) {
+    util::JsonValue::object_t out;
+    out.emplace("thinkingLevel", util::JsonValue{context.thinking_level});
+    if (context.provider.has_value() && context.model.has_value()) {
+        util::JsonValue::object_t model;
+        model.emplace("provider", util::JsonValue{*context.provider});
+        model.emplace("modelId", util::JsonValue{*context.model});
+        out.emplace("model", util::JsonValue{std::move(model)});
+    } else {
+        out.emplace("model", util::JsonValue{nullptr});
+    }
+    if (context.active_tool_names.has_value()) {
+        util::JsonValue::array_t tools;
+        for (const auto& name : *context.active_tool_names) {
+            tools.push_back(util::JsonValue{name});
+        }
+        out.emplace("activeToolNames", util::JsonValue{std::move(tools)});
+    } else {
+        out.emplace("activeToolNames", util::JsonValue{nullptr});
+    }
+    return util::JsonValue{std::move(out)};
+}
+
+/// One linear branch with a user root, a `model_change` (openai/gpt-4.1), a
+/// later assistant message (anthropic/claude-sonnet-4-5, pi's
+/// `createAssistantMessage` defaults), a `thinking_level_change` (high), and
+/// an `active_tools_change` — the pi harness "tracks model and thinking level
+/// changes in built context" scenario plus active tools.
+[[nodiscard]] harness::session::SessionContext derived_state_full_branch() {
+    harness::session::LoadedSession loaded;
+    loaded.metadata = harness::session::SessionMetadata{
+        .session_id = "derived-state",
+        .created_at = "2026-08-05T00:00:00Z",
+        .workspace = "/workspace",
+        .provider = "fake",
+        .model = "fake-model",
+    };
+
+    harness::session::SessionEntry user;
+    user.kind = harness::session::SessionEntryKind::Message;
+    user.entry_id = "user0001";
+    user.timestamp = 1784678401000;
+    user.message = ai::MessageVariant{ai::user_text_message("1")};
+    loaded.entries.push_back(std::move(user));
+
+    harness::session::SessionEntry model;
+    model.kind = harness::session::SessionEntryKind::ModelChange;
+    model.entry_id = "model001";
+    model.parent_id = "user0001";
+    model.value = harness::session::ModelChangeValue{.provider = "openai", .model_id = "gpt-4.1"};
+    loaded.entries.push_back(std::move(model));
+
+    harness::session::SessionEntry assistant;
+    assistant.kind = harness::session::SessionEntryKind::Message;
+    assistant.entry_id = "msg0002";
+    assistant.parent_id = "model001";
+    assistant.timestamp = 1784678402000;
+    auto assistant_message = ai::assistant_text_message("a");
+    assistant_message.api = "anthropic-messages";
+    assistant_message.provider = "anthropic";
+    assistant_message.model = "claude-sonnet-4-5";
+    assistant_message.timestamp = 1784678402000;
+    assistant.message = ai::MessageVariant{std::move(assistant_message)};
+    loaded.entries.push_back(std::move(assistant));
+
+    harness::session::SessionEntry thinking;
+    thinking.kind = harness::session::SessionEntryKind::ThinkingLevelChange;
+    thinking.entry_id = "think001";
+    thinking.parent_id = "msg0002";
+    thinking.value = harness::session::ThinkingLevelChangeValue{.thinking_level = "high"};
+    loaded.entries.push_back(std::move(thinking));
+
+    harness::session::SessionEntry tools;
+    tools.kind = harness::session::SessionEntryKind::ActiveToolsChange;
+    tools.entry_id = "tools001";
+    tools.parent_id = "think001";
+    tools.value = harness::session::ActiveToolsChangeValue{
+        .active_tool_names = {"read", "bash", "edit", "write"}};
+    loaded.entries.push_back(std::move(tools));
+
+    harness::session::SessionTree tree(std::move(loaded));
+    return tree.buildSessionContext();
+}
+
+} // namespace
+
+TEST_CASE(
+    "derived session state golden pins thinkingLevel/model/activeToolNames",
+    "[harness][session][issue357][golden]") {
+    const auto full_branch = derived_state_full_branch();
+    // The assistant message lands after the model_change, so its provider/model
+    // wins (pi harness test "tracks model and thinking level changes in built
+    // context": loaded.model === the assistant's anthropic/claude-sonnet-4-5).
+    CHECK(full_branch.thinking_level == "high");
+    REQUIRE(full_branch.provider.has_value());
+    CHECK(*full_branch.provider == "anthropic");
+    REQUIRE(full_branch.model.has_value());
+    CHECK(*full_branch.model == "claude-sonnet-4-5");
+    REQUIRE(full_branch.active_tool_names.has_value());
+
+    // The empty-branch defaults come from a header-only tree.
+    harness::session::LoadedSession empty;
+    empty.metadata = harness::session::SessionMetadata{
+        .session_id = "derived-state-empty",
+        .created_at = "2026-08-05T00:00:00Z",
+        .workspace = "/workspace",
+        .provider = "fake",
+        .model = "fake-model",
+    };
+    harness::session::SessionTree empty_tree(std::move(empty));
+    const auto empty_context = empty_tree.buildSessionContext();
+    CHECK(empty_context.thinking_level == "off");
+    CHECK_FALSE(empty_context.provider.has_value());
+    CHECK_FALSE(empty_context.model.has_value());
+    CHECK_FALSE(empty_context.active_tool_names.has_value());
+
+    util::JsonValue golden{util::JsonValue::object_t{}};
+    golden.get_object().emplace("fullBranch", derived_state_to_json(full_branch));
+    golden.get_object().emplace("defaults", derived_state_to_json(empty_context));
+
+    auto serialized = util::write_json(golden);
+    REQUIRE(serialized);
+    const auto expected = read_fixture_text("derived-session-state.json");
+    if (*serialized != expected) {
+        std::cerr << "\n[SessionRoundTripGoldenTest] fixture mismatch: derived-session-state.json"
+                  << "\n--- expected ---\n"
+                  << expected << "\n--- actual ---\n"
+                  << *serialized << "\n--- end ---\n";
+    }
+    CHECK(*serialized == expected);
+}
+
+TEST_CASE(
+    "derived thinking level and model flow into the Agent's turn options at the fake-ModelRuntime seam",
+    "[harness][session][issue357][agent][projection]") {
+    // The derived state of a resumed branch feeds the Agent construction: the
+    // derived model identity becomes the per-turn model and the derived
+    // thinking level becomes the per-turn `reasoning` stream option.
+    const auto context = derived_state_full_branch();
+    REQUIRE(context.provider.has_value());
+    REQUIRE(context.model.has_value());
+    REQUIRE(context.thinking_level == "high");
+
+    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    runtime->responses.push_back(ai::assistant_text_message("hello user"));
+    agent::AsyncToolRegistry tools;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 3;
+    // The re-resolved model identity (the derived provider/model with a full
+    // thinking map so the derived "high" level survives the creation clamp).
+    auto resolved_model = tests::make_full_thinking_model(*context.model);
+    resolved_model.provider = *context.provider;
+    options.model = std::move(resolved_model);
+    options.session_id = "session-derived";
+    agent::Agent subject(runtime, std::move(tools), std::move(options),
+        agent::AgentInitialState{
+            .messages = context.messages,
+            .thinking_level = context.thinking_level,
+        });
+
+    REQUIRE(run_prompt(subject, "hi"));
+
+    REQUIRE(runtime->calls.size() == 1);
+    const auto& call = runtime->calls[0];
+    // The derived model identity (from the last assistant message on the
+    // branch) is the recorded per-turn model.
+    CHECK(call.model.id == *context.model);
+    CHECK(call.model.provider == *context.provider);
+    // The derived thinking level is the recorded per-turn `reasoning` option
+    // (pi `createLoopConfig`: any non-"off" level forwards as reasoning).
+    REQUIRE(call.options.reasoning.has_value());
+    CHECK(*call.options.reasoning == ai::ThinkingLevel::High);
+}

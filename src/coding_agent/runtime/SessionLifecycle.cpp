@@ -409,7 +409,13 @@ util::Expected<OpenSession> publish_resume_session(
     session.metadata = target.resume.metadata;
     session.history = target.resume.history;
     session.context_model = target.resume.model;
-    session.context_thinking_level = target.resume.thinking_level;
+    // A resumed `thinking_level_change` entry wins over the settings default
+    // and DEFAULT_THINKING_LEVEL (pi sdk.ts `hasThinkingEntry`); without an
+    // entry the runtime falls back to the settings default.
+    session.context_thinking_level =
+        target.resume.has_thinking_level_entry
+            ? std::optional<std::string>{target.resume.thinking_level}
+            : std::nullopt;
     session.topology = target.resume.topology;
     session.stored_provider = session.metadata.provider;
     session.stored_model = session.metadata.model;

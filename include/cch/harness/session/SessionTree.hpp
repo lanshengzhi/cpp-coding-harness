@@ -18,12 +18,23 @@ namespace cch::harness::session {
 struct SessionContext {
     /// Messages ready for LLM consumption, in chronological order.
     std::vector<ai::MessageVariant> messages;
-    /// Current model provider from the nearest ModelChangeEntry on the path.
+    /// Current model provider derived from the last `model_change` or assistant
+    /// message on the path (pi `model: {provider, modelId} | null`); nullopt
+    /// when the branch carries neither.
     std::optional<std::string> provider;
-    /// Current model id from the nearest ModelChangeEntry on the path.
+    /// Current model id derived from the last `model_change` or assistant
+    /// message on the path.
     std::optional<std::string> model;
-    /// Current thinking level from the nearest ThinkingLevelChangeEntry on the path.
-    std::optional<std::string> thinking_level;
+    /// pi `thinkingLevel` derived state: `"off"` by default, updated by the
+    /// last `thinking_level_change` on the path (pi `deriveSessionContextState`).
+    std::string thinking_level{"off"};
+    /// True when the path carries a `thinking_level_change` entry (pi sdk.ts
+    /// `hasThinkingEntry` gates resumed-level restoration: an entry wins over
+    /// the settings `defaultThinkingLevel`).
+    bool has_thinking_level_entry{false};
+    /// pi `activeToolNames: string[] | null`: a copy of the last
+    /// `active_tools_change` on the path; nullopt when the branch carries none.
+    std::optional<std::vector<std::string>> active_tool_names;
 };
 
 /// In-memory session tree index and navigation capability.
@@ -90,9 +101,11 @@ public:
     /// Reconstruct LLM context from the current leaf path.
     /// Walks leaf-to-root, handles CompactionEntry (summary→kept messages→
     /// post-compaction, including pi's `retainedTail` projection), converts
-    /// BranchSummaryEntry/CustomMessageEntry to message types, and extracts
-    /// model/thinking-level state. Custom entries are omitted from model
-    /// context by default (pi `sessionEntryToContextMessages`).
+    /// BranchSummaryEntry/CustomMessageEntry to message types, and derives
+    /// thinkingLevel/model/activeToolNames per pi `deriveSessionContextState`
+    /// (last entry of each kind wins; assistant messages carry provider/model).
+    /// Custom entries are omitted from model context by default (pi
+    /// `sessionEntryToContextMessages`).
     [[nodiscard]] SessionContext buildSessionContext() const;
 
     // ── Label and session-name projection ──

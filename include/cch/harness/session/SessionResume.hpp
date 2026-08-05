@@ -26,7 +26,13 @@ struct SessionResumeResult {
     std::optional<std::string> provider;
     /// Stored `model_change` model id.
     std::optional<std::string> model;
-    std::optional<std::string> thinking_level;
+    /// Derived `thinkingLevel` from the active path (pi "off" default; the
+    /// last `thinking_level_change` entry wins).
+    std::string thinking_level{"off"};
+    /// True when the active path carries a `thinking_level_change` entry (pi
+    /// sdk.ts `hasThinkingEntry` gates resumed-level restoration against the
+    /// settings `defaultThinkingLevel`).
+    bool has_thinking_level_entry{false};
     SessionTopology topology{SessionTopology::Linear};
 };
 

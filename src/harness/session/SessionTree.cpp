@@ -165,24 +165,44 @@ SessionContext SessionTree::buildSessionContext() const {
     // Path is leaf-to-root. Reverse for chronological (root-to-leaf) processing.
     std::reverse(path.begin(), path.end());
 
-    // Extract model and thinking level from the path (closest to leaf wins).
-    for (auto it = path.rbegin(); it != path.rend(); ++it) {
-        const auto& entry = **it;
-        if (entry.kind == SessionEntryKind::ModelChange) {
-            if (const auto* model = std::get_if<ModelChangeValue>(&entry.value)) {
+    // pi `deriveSessionContextState` (packages/agent/src/harness/session/
+    // session.ts): one root-to-leaf pass over the path where the last entry of
+    // each kind wins, so the entry closest to the leaf is authoritative.
+    // Assistant messages carry provider/model and override an earlier
+    // `model_change`, exactly like pi (`entry.message.role === "assistant"`).
+    for (const auto* entry : path) {
+        switch (entry->kind) {
+        case SessionEntryKind::ThinkingLevelChange:
+            if (const auto* thinking =
+                    std::get_if<ThinkingLevelChangeValue>(&entry->value)) {
+                ctx.thinking_level = thinking->thinking_level;
+                ctx.has_thinking_level_entry = true;
+            }
+            break;
+        case SessionEntryKind::ModelChange:
+            if (const auto* model =
+                    std::get_if<ModelChangeValue>(&entry->value)) {
                 ctx.provider = model->provider;
                 ctx.model = model->model_id;
-                break;
             }
-        }
-    }
-    for (auto it = path.rbegin(); it != path.rend(); ++it) {
-        const auto& entry = **it;
-        if (entry.kind == SessionEntryKind::ThinkingLevelChange) {
-            if (const auto* thinking = std::get_if<ThinkingLevelChangeValue>(&entry.value)) {
-                ctx.thinking_level = thinking->thinking_level;
-                break;
+            break;
+        case SessionEntryKind::Message:
+            if (entry->message.has_value()) {
+                if (const auto* assistant =
+                        std::get_if<ai::AssistantMessage>(&*entry->message)) {
+                    ctx.provider = assistant->provider;
+                    ctx.model = assistant->model;
+                }
             }
+            break;
+        case SessionEntryKind::ActiveToolsChange:
+            if (const auto* tools =
+                    std::get_if<ActiveToolsChangeValue>(&entry->value)) {
+                ctx.active_tool_names = tools->active_tool_names;
+            }
+            break;
+        default:
+            break;
         }
     }
 

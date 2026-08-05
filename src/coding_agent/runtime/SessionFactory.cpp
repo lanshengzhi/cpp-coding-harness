@@ -531,6 +531,25 @@ void refresh_availability_sync(
     return agent::detail::kDefaultModel;
 }
 
+/// pi `restoreModelFromSession` restore check: the stored `model_change`
+/// identity must resolve in the live runtime catalog AND its provider must
+/// have configured auth (`restoredModel && hasConfiguredAuth`). Returns pi's
+/// failure reason ("model no longer exists" | "no auth configured") or
+/// nullopt when the restore succeeds.
+[[nodiscard]] std::optional<std::string> resume_restore_failure_reason(
+    const ModelRuntime& runtime,
+    const std::string& provider,
+    const std::string& model_id) {
+    auto restored = runtime.model(provider, model_id);
+    if (!restored) {
+        return std::string{"model no longer exists"};
+    }
+    if (!runtime.has_configured_auth(restored->provider)) {
+        return std::string{"no auth configured"};
+    }
+    return std::nullopt;
+}
+
 /// Resolve the SDK public path's initial model: explicit request model, then
 /// resume re-resolution against the live runtime, then settings defaults, then
 /// the runtime default (pi `createAgentSession` chain). Resume and settings
@@ -539,24 +558,31 @@ void refresh_availability_sync(
 [[nodiscard]] ai::Model resolve_sdk_public_model(
     const AssemblyPlan& plan,
     const ModelRuntime& runtime,
-    bool is_resume,
     const std::optional<std::string>& stored_provider,
     const std::optional<std::string>& stored_model,
+    const std::optional<std::string>& resume_restore_reason,
     const coding_agent::UserSettings& settings,
     std::vector<SdkDiagnostic>& diagnostics) {
     if (plan.requested_model) {
         return *plan.requested_model;
     }
-    if (is_resume && stored_provider && stored_model) {
-        if (auto model = runtime.model(*stored_provider, *stored_model);
-            model && runtime.has_configured_auth(model->provider)) {
-            return *model;
-        }
+    if (resume_restore_reason) {
+        // pi `restoreModelFromSession` fallback message; the chain continues
+        // below (settings default, then the runtime default) and the message
+        // completes with the resolved model in run_assembly.
         diagnostics.push_back(make_diag(
             SdkDiagnostic::Severity::Warning,
             "resume_model_unresolved",
-            "Could not restore model " + *stored_provider + "/" + *stored_model +
-                "; falling back to settings and runtime defaults"));
+            std::format(
+                "Could not restore model {}/{} ({}).",
+                *stored_provider, *stored_model, *resume_restore_reason)));
+    } else if (stored_provider && stored_model) {
+        // A restored model wins immediately (pi `restoreModelFromSession`:
+        // `restoredModel && hasConfiguredAuth`).
+        if (auto restored = runtime.model(*stored_provider, *stored_model);
+            restored && runtime.has_configured_auth(restored->provider)) {
+            return *restored;
+        }
     }
     if (settings.default_provider && settings.default_model) {
         if (auto model = runtime.model(
@@ -827,6 +853,7 @@ struct SessionTargetNormalizationOptions {
     bool is_resume,
     const std::optional<std::string>& stored_provider,
     const std::optional<std::string>& stored_model,
+    const std::optional<std::string>& resume_restore_reason,
     const coding_agent::UserSettings& settings,
     std::vector<SdkDiagnostic>& diagnostics) {
     const auto& selection = plan.cli_selection;
@@ -849,18 +876,22 @@ struct SessionTargetNormalizationOptions {
 
     // 3. Resume: re-resolve the stored model_change identity against the live
     // runtime catalog and require configured auth (pi `restoreModelFromSession`:
-    // `restoredModel && hasConfiguredAuth`). A model that no longer resolves or
-    // has no auth fails through normal diagnostics without silent substitution.
-    if (is_resume && stored_provider && stored_model) {
+    // `restoredModel && hasConfiguredAuth`). A restored model wins immediately;
+    // a missing/unauthenticated model produces pi's fallback message (reason
+    // precomputed in run_assembly) and the chain continues through settings
+    // and runtime defaults without silent substitution.
+    if (resume_restore_reason) {
+        diagnostics.push_back(make_diag(
+            SdkDiagnostic::Severity::Warning,
+            "resume_model_unresolved",
+            std::format(
+                "Could not restore model {}/{} ({}).",
+                *stored_provider, *stored_model, *resume_restore_reason)));
+    } else if (stored_provider && stored_model) {
         if (auto restored = runtime.model(*stored_provider, *stored_model);
             restored && runtime.has_configured_auth(restored->provider)) {
             return *restored;
         }
-        diagnostics.push_back(make_diag(
-            SdkDiagnostic::Severity::Warning,
-            "resume_model_unresolved",
-            "Could not restore model " + *stored_provider + "/" + *stored_model +
-                "; falling back to settings and runtime defaults"));
     }
 
     // 4. Scoped models: the saved default when it is in scope, else the first
@@ -1061,6 +1092,18 @@ struct SessionTargetNormalizationOptions {
         stored_model = prepared_resume.resume.model;
     }
 
+    // Resume: record why the stored `model_change {provider, modelId}` cannot
+    // be restored against the live runtime (pi `restoreModelFromSession`: the
+    // restored model must exist AND its provider must have configured auth).
+    // The fallback message completes with the resolved model after the chain
+    // runs; an explicit `--model`/request model skips the restore check and
+    // never produces the diagnostic.
+    std::optional<std::string> resume_restore_reason;
+    if (is_resume && stored_provider && stored_model) {
+        resume_restore_reason = resume_restore_failure_reason(
+            *runtime, *stored_provider, *stored_model);
+    }
+
     std::string resolved_provider;
     std::string resolved_model;
     ai::Model request_model;
@@ -1082,7 +1125,8 @@ struct SessionTargetNormalizationOptions {
             }
         } else {
             auto resolved = resolve_cli_request_model(
-                plan, *runtime, is_resume, stored_provider, stored_model, settings, diagnostics);
+                plan, *runtime, is_resume, stored_provider, stored_model,
+                resume_restore_reason, settings, diagnostics);
             if (!resolved) {
                 return std::unexpected(resolved.error());
             }
@@ -1124,9 +1168,22 @@ struct SessionTargetNormalizationOptions {
         // Public SDK path: the initial model comes from the explicit request
         // model, resume re-resolution, settings defaults, or the runtime default.
         request_model = resolve_sdk_public_model(
-            plan, *runtime, is_resume, stored_provider, stored_model, settings, diagnostics);
+            plan, *runtime, stored_provider, stored_model,
+            resume_restore_reason, settings, diagnostics);
         resolved_provider = request_model.provider;
         resolved_model = request_model.id;
+    }
+
+    // pi `restoreModelFromSession`: once the chain lands on the fallback
+    // model, the resume fallback message completes with the resolved identity
+    // (`Could not restore model p/m (reason). Using fp/fm.`).
+    if (resume_restore_reason) {
+        for (auto& diagnostic : diagnostics) {
+            if (diagnostic.code == "resume_model_unresolved") {
+                diagnostic.message += std::format(
+                    " Using {}/{}.", request_model.provider, request_model.id);
+            }
+        }
     }
 
     // Resume: explicit provider/model overrides are allowed but warned.

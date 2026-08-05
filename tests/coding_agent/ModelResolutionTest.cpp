@@ -20,6 +20,7 @@
 #include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
+#include "support/ModelFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "util/Json.hpp"
 
@@ -182,6 +183,19 @@ constexpr std::string_view kKeyedPlainProvider = R"({
         });
 }
 
+/// The message of the first diagnostic with `code`, for asserting pi's exact
+/// fallback-message text.
+[[nodiscard]] std::optional<std::string> diagnostic_message(
+    const std::vector<coding_agent::SdkDiagnostic>& diagnostics,
+    std::string_view code) {
+    for (const auto& diagnostic : diagnostics) {
+        if (diagnostic.code == code) {
+            return diagnostic.message;
+        }
+    }
+    return std::nullopt;
+}
+
 /// The canonical `thinking_level_change` entry-shape projection: the fields
 /// this ticket owns (type, thinkingLevel). Generic tree metadata (id,
 /// timestamp, parentId null-vs-omitted) is pinned by the T07 session-wire
@@ -320,8 +334,8 @@ TEST_CASE("CLI model resolution: resume re-resolves the stored model identity", 
 }
 
 TEST_CASE(
-    "CLI model resolution: resume without configured auth falls back with a diagnostic",
-    "[sdk][model-resolution][resume][issue353]") {
+    "CLI model resolution: resume without configured auth falls back with pi's message",
+    "[sdk][model-resolution][resume][issue357]") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
@@ -336,15 +350,103 @@ TEST_CASE(
 
     // The stored identity's provider loses its auth between create and resume:
     // pi restoreModelFromSession requires `restoredModel && hasConfiguredAuth`,
-    // so the chain falls back to the first available model with configured auth.
+    // so the chain falls back to the first available model with configured auth
+    // and the diagnostic carries pi's "no auth configured" reason plus the
+    // resolved fallback identity.
     fixture.write_models(kKeylessBetaKeyedAlpha);
 
     auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
     REQUIRE(resumed.has_value());
     CHECK(resumed->provider == "alpha");
     CHECK(resumed->model == "alpha-1");
-    CHECK(has_diagnostic(resumed->diagnostics, "resume_model_unresolved"));
+    const auto message = diagnostic_message(resumed->diagnostics, "resume_model_unresolved");
+    REQUIRE(message.has_value());
+    CHECK(*message ==
+          "Could not restore model beta/beta-1 (no auth configured). Using alpha/alpha-1.");
     resumed->session->close();
+}
+
+TEST_CASE(
+    "CLI model resolution: resume with a missing model falls back with pi's message",
+    "[sdk][model-resolution][resume][issue357]") {
+    Fixture fixture;
+    fixture.write_models(kTwoKeyedProviders);
+
+    {
+        auto request = cli_request(fixture);
+        request.provider = "beta";
+        request.model = "beta-1";
+        auto created = coding_agent::create_agent_session(std::move(request));
+        REQUIRE(created.has_value());
+        created->session->close();
+    }
+
+    // The stored model disappears from the catalog between create and resume:
+    // pi restoreModelFromSession reports "model no longer exists", the chain
+    // continues through the runtime default, and the message names the resolved
+    // fallback identity.
+    fixture.write_models(R"({
+      "providers": {
+        "gamma": {
+          "baseUrl": "https://gamma.example/v1",
+          "api": "openai-responses",
+          "apiKey": "dummy-gamma-key",
+          "models": [{"id": "gamma-1"}]
+        }
+      }
+    })");
+
+    auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
+    REQUIRE(resumed.has_value());
+    CHECK(resumed->provider == "gamma");
+    CHECK(resumed->model == "gamma-1");
+    const auto message = diagnostic_message(resumed->diagnostics, "resume_model_unresolved");
+    REQUIRE(message.has_value());
+    CHECK(*message ==
+          "Could not restore model beta/beta-1 (model no longer exists). Using gamma/gamma-1.");
+    resumed->session->close();
+}
+
+TEST_CASE(
+    "session files persist only model_change provider/modelId, never auth material",
+    "[sdk][model-resolution][resume][issue357]") {
+    Fixture fixture;
+    fixture.write_models(kTwoKeyedProviders);
+
+    {
+        auto request = cli_request(fixture);
+        request.provider = "beta";
+        request.model = "beta-1";
+        auto created = coding_agent::create_agent_session(std::move(request));
+        REQUIRE(created.has_value());
+        created->session->close();
+    }
+
+    auto loaded = harness::session::JsonlSessionStore::load(fixture.session_file);
+    REQUIRE(loaded.has_value());
+    const harness::session::SessionEntry* model_change = nullptr;
+    for (const auto& entry : loaded->entries) {
+        if (entry.kind == harness::session::SessionEntryKind::ModelChange) {
+            model_change = &entry;
+            break;
+        }
+    }
+    REQUIRE(model_change != nullptr);
+    const auto& value =
+        std::get<harness::session::ModelChangeValue>(model_change->value);
+    CHECK(value.provider == "beta");
+    CHECK(value.model_id == "beta-1");
+    // The persisted line carries exactly the pi `{provider, modelId}` identity:
+    // no baseUrl, key-source, environment template, or any authentication
+    // material ever reaches the session file (#327 / ADR 0031).
+    const auto& line = model_change->raw_line;
+    CHECK(line.find(R"("type":"model_change")") != std::string::npos);
+    CHECK(line.find(R"("provider":"beta")") != std::string::npos);
+    CHECK(line.find(R"("modelId":"beta-1")") != std::string::npos);
+    CHECK(line.find("apiKey") == std::string::npos);
+    CHECK(line.find("baseUrl") == std::string::npos);
+    CHECK(line.find("dummy") == std::string::npos);
+    CHECK(line.find("token") == std::string::npos);
 }
 
 TEST_CASE(
@@ -439,6 +541,39 @@ TEST_CASE(
     REQUIRE(resumed.has_value());
     CHECK(resumed->provider == "alpha");
     CHECK(resumed->model == "alpha-1");
+    CHECK_FALSE(has_diagnostic(resumed->diagnostics, "resume_model_unresolved"));
+    resumed->session->close();
+}
+
+TEST_CASE(
+    "SDK public path resume re-resolves a non-default stored model identity",
+    "[sdk][model-resolution][resume][issue357]") {
+    Fixture fixture;
+    fixture.write_models(kTwoKeyedProviders);
+
+    {
+        // Explicitly request beta-1 so the stored model_change is not the
+        // runtime default (alpha-1): resume must re-resolve the recorded
+        // identity, not fall through to the first available model.
+        coding_agent::CreateAgentSessionOptions options;
+        options.session_target = coding_agent::ExplicitNewSessionTarget{fixture.session_file};
+        options.workspace = fixture.workspace.path();
+        options.model = tests::make_model("beta-1", "beta");
+        auto created = coding_agent::create_agent_session(std::move(options));
+        REQUIRE(created.has_value());
+        CHECK(created->provider == "beta");
+        CHECK(created->model == "beta-1");
+        created->session->close();
+    }
+
+    coding_agent::CreateAgentSessionOptions options;
+    options.session_target = coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
+    options.workspace = fixture.workspace.path();
+
+    auto resumed = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(resumed.has_value());
+    CHECK(resumed->provider == "beta");
+    CHECK(resumed->model == "beta-1");
     CHECK_FALSE(has_diagnostic(resumed->diagnostics, "resume_model_unresolved"));
     resumed->session->close();
 }

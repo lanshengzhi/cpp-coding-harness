@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 #include <variant>
+#include <vector>
 
 using namespace cch;
 
@@ -319,7 +320,11 @@ TEST_CASE("buildSessionContext linear tree returns all messages", "[harness][ses
     REQUIRE(ctx.messages.size() == 2);
     CHECK(first_user_text(ctx.messages) == "first");
     CHECK_FALSE(ctx.model.has_value());
-    CHECK_FALSE(ctx.thinking_level.has_value());
+    // pi derived state: thinkingLevel defaults to "off", activeToolNames to
+    // null, and no thinking entry means no resumed-entry gate.
+    CHECK(ctx.thinking_level == "off");
+    CHECK_FALSE(ctx.has_thinking_level_entry);
+    CHECK_FALSE(ctx.active_tool_names.has_value());
 }
 
 TEST_CASE("buildSessionContext extracts model and thinking level", "[harness][session][tree]") {
@@ -339,8 +344,108 @@ TEST_CASE("buildSessionContext extracts model and thinking level", "[harness][se
     auto ctx = tree.buildSessionContext();
     CHECK(ctx.model == "gpt-4o");
     CHECK(ctx.thinking_level == "high");
+    CHECK(ctx.has_thinking_level_entry);
     REQUIRE(ctx.messages.size() == 1);
     CHECK(first_user_text(ctx.messages) == "hello");
+}
+
+TEST_CASE(
+    "buildSessionContext derives thinkingLevel/model/activeToolNames over every entry type",
+    "[harness][session][tree][issue357]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "ctx-derived-full.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    // One linear branch carrying every entry type. Inert kinds (label, custom,
+    // custom_message, branch_summary, session_info, compaction) never disturb
+    // the derived state; the last derived-state entry of each kind wins
+    // (pi `deriveSessionContextState`). The assistant message lands after the
+    // `model_change`, so its provider/model override the earlier entry.
+    REQUIRE(store->append(user_msg("root")));
+    REQUIRE(store->append_compaction(std::nullopt, "minimal summary", "", 1234, std::nullopt, std::nullopt));
+    REQUIRE(store->append_label_change(std::nullopt, "", "checkpoint"));
+    REQUIRE(store->append_custom_entry(std::nullopt, "extension.meta", util::JsonValue{42}));
+    REQUIRE(store->append_custom_message_entry(
+        std::nullopt, "extension.msg", "injected", true, std::nullopt));
+    REQUIRE(store->append_branch_summary(std::nullopt, "from-leaf", "explored", std::nullopt, std::nullopt));
+    REQUIRE(store->append_session_info(std::nullopt, "review name"));
+    REQUIRE(store->append_model_change(std::nullopt, "openai", "gpt-4.1"));
+    REQUIRE(store->append_thinking_level_change(std::nullopt, "high"));
+    REQUIRE(store->append_active_tools_change(
+        std::nullopt, {"read", "bash", "edit", "write"}));
+
+    ai::AssistantMessage assistant = ai::assistant_text_message("hi");
+    assistant.api = "anthropic-messages";
+    assistant.provider = "anthropic";
+    assistant.model = "claude-sonnet-4-5";
+    assistant.timestamp = 1784678402000;
+    REQUIRE(store->append(ai::MessageVariant{std::move(assistant)}));
+
+    // Point the leaf at the last message so the branch covers the whole chain
+    // (all eleven entry kinds participate in topology).
+    auto pre = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(pre);
+    REQUIRE(pre->entries.size() >= 11);
+    const auto assistant_id = pre->entries.back().entry_id;
+    auto leaf_store = harness::session::JsonlSessionStore::open_existing(path);
+    REQUIRE(leaf_store);
+    REQUIRE(leaf_store->append_leaf(std::nullopt, assistant_id));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    harness::session::SessionTree tree(std::move(*loaded));
+    auto ctx = tree.buildSessionContext();
+
+    // pi derived state: the last `thinking_level_change` wins and gates resume
+    // restoration; the last assistant message's provider/model overrides the
+    // earlier `model_change`; the last `active_tools_change` is copied.
+    CHECK(ctx.thinking_level == "high");
+    CHECK(ctx.has_thinking_level_entry);
+    REQUIRE(ctx.provider.has_value());
+    CHECK(*ctx.provider == "anthropic");
+    REQUIRE(ctx.model.has_value());
+    CHECK(*ctx.model == "claude-sonnet-4-5");
+    REQUIRE(ctx.active_tool_names.has_value());
+    const std::vector<std::string> expected_tools{"read", "bash", "edit", "write"};
+    CHECK(*ctx.active_tool_names == expected_tools);
+}
+
+TEST_CASE(
+    "buildSessionContext last model_change wins over an earlier assistant message",
+    "[harness][session][tree][issue357]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "ctx-derived-model.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(user_msg("root")));
+
+    ai::AssistantMessage assistant = ai::assistant_text_message("earlier");
+    assistant.api = "anthropic-messages";
+    assistant.provider = "anthropic";
+    assistant.model = "claude-sonnet-4-5";
+    assistant.timestamp = 1784678402000;
+    REQUIRE(store->append(ai::MessageVariant{std::move(assistant)}));
+
+    // The `model_change` closest to the leaf wins over the earlier assistant
+    // message; an explicit "off" thinking entry and an empty tools entry stay
+    // engaged (pi: entries update the derived state, they never clear it).
+    REQUIRE(store->append_model_change(std::nullopt, "openai", "gpt-4.1"));
+    REQUIRE(store->append_thinking_level_change(std::nullopt, "off"));
+    REQUIRE(store->append_active_tools_change(std::nullopt, {}));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    harness::session::SessionTree tree(std::move(*loaded));
+    auto ctx = tree.buildSessionContext();
+
+    REQUIRE(ctx.provider.has_value());
+    CHECK(*ctx.provider == "openai");
+    REQUIRE(ctx.model.has_value());
+    CHECK(*ctx.model == "gpt-4.1");
+    CHECK(ctx.thinking_level == "off");
+    CHECK(ctx.has_thinking_level_entry);
+    REQUIRE(ctx.active_tool_names.has_value());
+    CHECK(ctx.active_tool_names->empty());
 }
 
 TEST_CASE("buildSessionContext compaction skips pre-kept messages", "[harness][session][tree]") {
@@ -585,6 +690,9 @@ TEST_CASE("buildSessionContext empty tree returns empty context", "[harness][ses
     auto ctx = tree.buildSessionContext();
     CHECK(ctx.messages.empty());
     CHECK_FALSE(ctx.model.has_value());
+    CHECK(ctx.thinking_level == "off");
+    CHECK_FALSE(ctx.has_thinking_level_entry);
+    CHECK_FALSE(ctx.active_tool_names.has_value());
 }
 
 TEST_CASE("buildSessionContext respects branch navigation", "[harness][session][tree]") {

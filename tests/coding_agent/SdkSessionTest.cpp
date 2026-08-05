@@ -380,7 +380,10 @@ public:
         ai::AssistantEventSink /*sink*/) override {
         captured_request = request;
         ai::AssistantMessage msg;
-        msg.provider = "capture";
+        // Mirror the real adapters (assistant.provider = model.provider): the
+        // provider must resolve in the models seam's catalog so resume's
+        // derived model re-resolves against the live runtime (T08).
+        msg.provider = request.model.provider;
         msg.api = "capture";
         msg.model = request.model.id;
         msg.stop_reason = ai::AssistantStopReason::Stop;
@@ -762,7 +765,10 @@ private:
     ai::AssistantStopReason reason,
     std::string error_message) {
     ai::AssistantMessage terminal;
-    terminal.provider = "scripted-fake";
+    // Mirror the real adapters (assistant.provider = model.provider): the
+    // provider must resolve in the models seam's catalog so resume's derived
+    // model re-resolves against the live runtime (T08).
+    terminal.provider = request.model.provider;
     terminal.api = "scripted-fake";
     terminal.model = request.model.id;
     terminal.stop_reason = reason;
@@ -775,7 +781,10 @@ private:
     const ai::StreamChatRequest& request,
     ai::AssistantEventSink& sink) {
     auto message = ai::assistant_text_message("recovered");
-    message.provider = "scripted-fake";
+    // Mirror the real adapters (assistant.provider = model.provider): the
+    // provider must resolve in the models seam's catalog so resume's derived
+    // model re-resolves against the live runtime (T08).
+    message.provider = request.model.provider;
     message.api = "scripted-fake";
     message.model = request.model.id;
     message.timestamp = 1718000000123;

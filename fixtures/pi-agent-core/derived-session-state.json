@@ -1,0 +1,1 @@
+{"defaults":{"activeToolNames":null,"model":null,"thinkingLevel":"off"},"fullBranch":{"activeToolNames":["read","bash","edit","write"],"model":{"modelId":"claude-sonnet-4-5","provider":"anthropic"},"thinkingLevel":"high"}}
