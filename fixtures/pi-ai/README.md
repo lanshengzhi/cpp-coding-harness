@@ -127,6 +127,18 @@ shared by all three scoped adapters:
   `.sse`/`-ws.json` frames and full-payload snapshots (the request never depends on the
   response), so no duplicate event snapshots are committed; the capture scenarios re-derive and
   pin the request bytes.
+- `wire/anthropic-messages-kimi-string-ts-request.json` +
+  `anthropic-messages-kimi-blank-string-ts-request.json` +
+  `anthropic-messages-kimi-string-cache-ts-request.json` (#367): request-only differential
+  fixtures for the `UserMessage.content` string alternative on the anthropic-messages (Kimi)
+  adapter — a non-blank string goes out as a raw sanitized JSON string and a blank string drops
+  the message entirely (both captured under an explicit `cacheRetention: "none"`, since pi
+  resolves an absent retention to the `"short"` default), and under `"short"` a trailing string
+  user param is promoted to a one-element cache-marked block array (`anthropic-messages.ts:
+  1131-1160, 1268-1276`; frozen-suite coverage in `cache-retention.test.ts` "should add
+  cache_control to string user messages"). Same request-only strategy as the #366 fixtures:
+  happy-path response frames and full-payload snapshots are reused, no duplicate event
+  snapshots are committed.
 
 All `-ts-events.json` fixtures are **full-payload** assistant event snapshots (#370, extended
 with terminal-outcome scenarios by #375), not name-only arrays: every event carries its

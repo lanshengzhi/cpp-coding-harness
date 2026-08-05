@@ -827,6 +827,93 @@ async function captureCodexEmptyStringWs(): Promise<void> {
 	);
 }
 
+// ── T3 (issue #367): Anthropic string-alternative requests (Kimi path) ──────
+// Request-only differential fixtures mirroring #366. Note pi resolves an
+// absent cacheRetention to the `"short"` default (`resolveCacheRetention`),
+// so the raw-string and blank-drop behaviors are captured under an explicit
+// `cacheRetention: "none"`; the promotion behavior under `"short"` (pi
+// `anthropic-messages.ts:1131-1160, 1268-1276`; frozen-suite coverage in
+// `cache-retention.test.ts` "should add cache_control to string user
+// messages").
+
+/** Context: a single string user message (Kimi). */
+function kimiStringContext(text: string): any {
+	return {
+		systemPrompt: "system",
+		messages: [{ role: "user", content: text, timestamp: 1 }],
+		tools: [LOOKUP_TOOL],
+	};
+}
+
+async function captureKimiString(): Promise<void> {
+	const recorded: RecordedRequest[] = [];
+	await collectEvents(
+		streamSimpleAnthropic(kimiModel(), kimiStringContext("hello"), {
+			headers: { Authorization: "Bearer dummy-kimi-oauth" },
+			temperature: 0.5,
+			maxTokens: 256,
+			reasoning: "high",
+			cacheRetention: "none",
+			timeoutMs: 4321,
+			fetch: sseFetch(readFixture("wire/anthropic-messages-kimi.sse"), recorded),
+		} as any),
+	);
+	if (recorded.length !== 1) {
+		throw new Error(`kimi string: expected 1 request, got ${recorded.length}`);
+	}
+	captureRequestFixture(
+		"wire/anthropic-messages-kimi-string-ts-request.json",
+		JSON.parse(recorded[0].body),
+		"kimi string",
+	);
+}
+
+async function captureKimiBlankString(): Promise<void> {
+	const recorded: RecordedRequest[] = [];
+	await collectEvents(
+		streamSimpleAnthropic(kimiModel(), kimiStringContext("   "), {
+			headers: { Authorization: "Bearer dummy-kimi-oauth" },
+			temperature: 0.5,
+			maxTokens: 256,
+			reasoning: "high",
+			cacheRetention: "none",
+			timeoutMs: 4321,
+			fetch: sseFetch(readFixture("wire/anthropic-messages-kimi.sse"), recorded),
+		} as any),
+	);
+	if (recorded.length !== 1) {
+		throw new Error(`kimi blank-string: expected 1 request, got ${recorded.length}`);
+	}
+	captureRequestFixture(
+		"wire/anthropic-messages-kimi-blank-string-ts-request.json",
+		JSON.parse(recorded[0].body),
+		"kimi blank-string",
+	);
+}
+
+async function captureKimiStringCache(): Promise<void> {
+	const recorded: RecordedRequest[] = [];
+	await collectEvents(
+		streamSimpleAnthropic(kimiModel(), kimiStringContext("hello"), {
+			headers: { Authorization: "Bearer dummy-kimi-oauth" },
+			temperature: 0.5,
+			maxTokens: 256,
+			reasoning: "high",
+			cacheRetention: "short",
+			timeoutMs: 4321,
+			fetch: sseFetch(readFixture("wire/anthropic-messages-kimi.sse"), recorded),
+		} as any),
+	);
+	if (recorded.length !== 1) {
+		throw new Error(`kimi string-cache: expected 1 request, got ${recorded.length}`);
+	}
+	captureRequestFixture(
+		"wire/anthropic-messages-kimi-string-cache-ts-request.json",
+		JSON.parse(recorded[0].body),
+		"kimi string-cache",
+	);
+}
+
 await captureDeepseek();
 await captureResponsesNoTerminal();
 await captureKimi();
@@ -837,3 +924,6 @@ await captureDeepseekStringContent();
 await captureDeepseekEmptyString();
 await captureCodexStringContentWs();
 await captureCodexEmptyStringWs();
+await captureKimiString();
+await captureKimiBlankString();
+await captureKimiStringCache();

@@ -161,6 +161,27 @@ struct RunResult {
     return context;
 }
 
+[[nodiscard]] ai::AiContext string_user_context(std::string text) {
+    ai::AiContext context;
+    context.system_prompt = "system";
+    context.messages.push_back(ai::UserMessage{
+        .content = std::move(text),
+        .timestamp = 1,
+    });
+    context.tools.push_back(ai::Tool{
+        .name = "lookup",
+        .description = "Look up a value",
+        .parameters = util::JsonValue::object_t{
+            {"properties", util::JsonValue::object_t{
+                {"q", util::JsonValue::object_t{{"type", "string"}}},
+            }},
+            {"required", util::JsonValue::array_t{"q"}},
+            {"type", "object"},
+        },
+    });
+    return context;
+}
+
 [[nodiscard]] RunResult run_models(
     ai::Models& models,
     const ai::Model& model,
@@ -322,6 +343,140 @@ TEST_CASE(
         expected_request.pop_back();
     }
     CHECK(request.body == expected_request);
+}
+
+TEST_CASE(
+    "Kimi sends a non-blank string user message as a raw JSON string",
+    "[ai][provider][anthropic][issue367]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    const auto sse = read_fixture_text("wire/anthropic-messages-kimi.sse");
+    REQUIRE_FALSE(sse.empty());
+    transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
+    const auto model = kimi_model();
+    auto models = make_models(transport, model);
+    REQUIRE(models);
+    auto options = authorized_options();
+    options.temperature = 0.5;
+    options.max_tokens = 256;
+    options.reasoning = ai::ThinkingLevel::High;
+    options.cache_retention = ai::CacheRetention::None;
+    options.timeout_ms = 4321;
+
+    auto run = run_models(*models, model, string_user_context("hello"), std::move(options));
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    tests::check_pi_event_snapshot(
+        run.events,
+        "wire/anthropic-messages-kimi-ts-events.json");
+
+    REQUIRE(transport->requests.size() == 1);
+    const auto& request = transport->requests.front();
+    auto expected_request = read_fixture_text(
+        "wire/anthropic-messages-kimi-string-ts-request.json");
+    REQUIRE_FALSE(expected_request.empty());
+    if (expected_request.back() == '\n') {
+        expected_request.pop_back();
+    }
+    CHECK(request.body == expected_request);
+    const auto body = util::read_json<util::JsonValue>(request.body);
+    REQUIRE(body);
+    // Under cacheRetention "none" the string alternative goes out as a raw
+    // sanitized JSON string, not a block array (pi `anthropic-messages.ts:1131-1160`).
+    const auto& messages = body->at("messages").get_array();
+    REQUIRE(messages.size() == 1);
+    CHECK(messages[0].at("role").get_string() == "user");
+    CHECK(messages[0].at("content").get_string() == "hello");
+    CHECK_FALSE(body->at("system").get_array()[0].get_object().contains("cache_control"));
+}
+
+TEST_CASE(
+    "Kimi drops a blank string user message",
+    "[ai][provider][anthropic][issue367]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    const auto sse = read_fixture_text("wire/anthropic-messages-kimi.sse");
+    REQUIRE_FALSE(sse.empty());
+    transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
+    const auto model = kimi_model();
+    auto models = make_models(transport, model);
+    REQUIRE(models);
+    auto options = authorized_options();
+    options.temperature = 0.5;
+    options.max_tokens = 256;
+    options.reasoning = ai::ThinkingLevel::High;
+    options.cache_retention = ai::CacheRetention::None;
+    options.timeout_ms = 4321;
+
+    auto run = run_models(*models, model, string_user_context("   "), std::move(options));
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    tests::check_pi_event_snapshot(
+        run.events,
+        "wire/anthropic-messages-kimi-ts-events.json");
+
+    REQUIRE(transport->requests.size() == 1);
+    const auto& request = transport->requests.front();
+    auto expected_request = read_fixture_text(
+        "wire/anthropic-messages-kimi-blank-string-ts-request.json");
+    REQUIRE_FALSE(expected_request.empty());
+    if (expected_request.back() == '\n') {
+        expected_request.pop_back();
+    }
+    CHECK(request.body == expected_request);
+    const auto body = util::read_json<util::JsonValue>(request.body);
+    REQUIRE(body);
+    // A whitespace-only string is trimmed and dropped (pi `anthropic-messages.ts:1131-1160`).
+    CHECK(body->at("messages").get_array().empty());
+}
+
+TEST_CASE(
+    "Kimi promotes a trailing string user message under cache retention",
+    "[ai][provider][anthropic][issue367]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    const auto sse = read_fixture_text("wire/anthropic-messages-kimi.sse");
+    REQUIRE_FALSE(sse.empty());
+    transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
+    const auto model = kimi_model();
+    auto models = make_models(transport, model);
+    REQUIRE(models);
+    auto options = authorized_options();
+    options.temperature = 0.5;
+    options.max_tokens = 256;
+    options.reasoning = ai::ThinkingLevel::High;
+    options.cache_retention = ai::CacheRetention::Short;
+    options.timeout_ms = 4321;
+
+    auto run = run_models(*models, model, string_user_context("hello"), std::move(options));
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    tests::check_pi_event_snapshot(
+        run.events,
+        "wire/anthropic-messages-kimi-ts-events.json");
+
+    REQUIRE(transport->requests.size() == 1);
+    const auto& request = transport->requests.front();
+    auto expected_request = read_fixture_text(
+        "wire/anthropic-messages-kimi-string-cache-ts-request.json");
+    REQUIRE_FALSE(expected_request.empty());
+    if (expected_request.back() == '\n') {
+        expected_request.pop_back();
+    }
+    CHECK(request.body == expected_request);
+    const auto body = util::read_json<util::JsonValue>(request.body);
+    REQUIRE(body);
+    // A trailing string user param is promoted to a one-element cache-marked
+    // block array under cache retention (pi `anthropic-messages.ts:1268-1276`;
+    // frozen-suite coverage in `cache-retention.test.ts`).
+    const auto& messages = body->at("messages").get_array();
+    REQUIRE(messages.size() == 1);
+    const auto& content = messages[0].at("content").get_array();
+    REQUIRE(content.size() == 1);
+    CHECK(content[0].at("type").get_string() == "text");
+    CHECK(content[0].at("text").get_string() == "hello");
+    const auto& cache = content[0].at("cache_control").get_object();
+    CHECK(cache.at("type").get_string() == "ephemeral");
 }
 
 TEST_CASE(
