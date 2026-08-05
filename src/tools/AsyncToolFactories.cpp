@@ -1,5 +1,6 @@
 #include <cch/tools/ToolFactories.hpp>
 
+#include "tools/EditDiff.hpp"
 #include "util/BoundedText.hpp"
 #include "util/Json.hpp"
 #include "util/OutputLimiter.hpp"
@@ -238,31 +239,37 @@ public:
     }
 };
 
-class AsyncEditFileTool final : public AsyncToolBase {
+class AsyncEditTool final : public AsyncToolBase {
 public:
     using AsyncToolBase::AsyncToolBase;
 
     const ai::Tool& definition() const override {
         static const auto edit_entry_schema = object_schema(
             {
-                {"oldText", typed_schema("string", "Exact text for one targeted replacement.")},
+                {"oldText", typed_schema("string",
+                    "Exact text for one targeted replacement. It must be unique in the original file "
+                    "and must not overlap with any other edits[].oldText in the same call.")},
                 {"newText", typed_schema("string", "Replacement text for this targeted edit.")},
             },
             {"oldText", "newText"});
         static const auto edits_schema = [] {
-            auto schema = array_schema(edit_entry_schema, "One or more targeted replacements");
+            auto schema = array_schema(edit_entry_schema,
+                "One or more targeted replacements. Each edit is matched against the original file, "
+                "not incrementally. Do not include overlapping or nested edits. If two changes touch "
+                "the same block or nearby lines, merge them into one edit instead.");
             // Execution requires at least one replacement, so the contract does too.
             schema.get_object().emplace("minItems", 1);
             return schema;
         }();
         static const ai::Tool tool{
-            "edit_file",
-            "Replace exact text regions inside a workspace file with one or more edits. "
-            "Each edit is matched against the original file, not incrementally. "
-            "Overlapping edits are rejected.",
+            "edit",
+            "Edit a single file using exact text replacement. Every edits[].oldText must match a "
+            "unique, non-overlapping region of the original file. If two changes affect the same "
+            "block or nearby lines, merge them into one edit instead of emitting overlapping edits. "
+            "Do not include large unchanged regions just to connect distant changes.",
             object_schema(
                 {
-                    {"path", typed_schema("string", "Workspace-relative file path")},
+                    {"path", typed_schema("string", "Path to the file to edit (relative or absolute)")},
                     {"edits", edits_schema},
                 },
                 {"path", "edits"}),
@@ -275,95 +282,66 @@ public:
         std::stop_token stop_token) override {
         auto parsed = parse_invocation_args<EditFileArgs>(invocation);
         if (!parsed || parsed->path.empty()) {
-            co_return error_result("invalid edit_file arguments: missing path");
+            co_return error_result("invalid edit arguments: missing path");
         }
         if (parsed->edits.empty()) {
-            co_return error_result("invalid edit_file arguments: edits must contain at least one replacement");
+            co_return error_result("Edit tool input is invalid. edits must contain at least one replacement.");
         }
         if (auto environment = env(); !environment) {
             co_return std::unexpected(environment.error());
         }
-        // Read the original file
+
+        // pi edit.ts: strip the BOM, detect and preserve the dominant line
+        // ending, then apply every edit against the LF-normalized content.
         auto read = co_await env_->readTextFile(parsed->path, stop_token);
         if (!read) {
             co_return error_result_from(read.error());
         }
-        const std::string original = *read;
-        // Validate all edits against the original content
-        std::string working = original;
-        std::vector<std::pair<std::string, std::string>> applied;
+        const auto [bom, text] = tools::strip_bom(*read);
+        const auto original_ending = tools::detect_line_ending(text);
+        const auto normalized_content = tools::normalize_to_lf(text);
+        std::vector<tools::EditReplacement> replacements;
+        replacements.reserve(parsed->edits.size());
         for (const auto& edit : parsed->edits) {
-            if (edit.oldText.empty()) {
-                co_return error_result("invalid edit_file arguments: empty oldText in edits");
-            }
-            // Count occurrences
-            std::size_t pos = 0;
-            std::size_t count = 0;
-            std::size_t match_pos = std::string::npos;
-            while ((pos = working.find(edit.oldText, pos)) != std::string::npos) {
-                if (count == 0) match_pos = pos;
-                ++count;
-                pos += edit.oldText.length();
-            }
-            if (count == 0) {
-                co_return error_result("edit_file: oldText not found in file: '" +
-                    util::bounded_redacted_text(edit.oldText, 50, "...") + "'");
-            }
-            if (count > 1) {
-                co_return error_result("edit_file: oldText matches " + std::to_string(count) +
-                    " occurrences, must be unique. Text: '" +
-                    util::bounded_redacted_text(edit.oldText, 40, "...") + "'");
-            }
-            // Apply replacement
-            working.replace(match_pos, edit.oldText.length(), edit.newText);
-            applied.emplace_back(edit.oldText, edit.newText);
+            replacements.push_back(tools::EditReplacement{
+                .old_text = edit.oldText,
+                .new_text = edit.newText,
+            });
         }
-        // Write back
-        auto written = co_await env_->writeFile(parsed->path, working, stop_token);
+        auto applied = tools::apply_edits_to_normalized_content(
+            normalized_content, replacements, parsed->path);
+        if (!applied) {
+            co_return error_result(applied.error().message);
+        }
+
+        const std::string final_content =
+            bom + tools::restore_line_endings(applied->new_content, original_ending);
+        auto written = co_await env_->writeFile(parsed->path, final_content, stop_token);
         if (!written) {
             co_return error_result_from(written.error());
         }
-        // Build a simple result message
-        std::string result_text = "Successfully replaced " + std::to_string(applied.size()) + " block(s) in " + parsed->path + ".";
-        // Generate a basic line-diff preview
-        if (original != working) {
-            result_text += "\n--- before\n+++ after\n";
-            // Simple line-by-line diff: show first changed region
-            auto orig_lines = split_lines(original);
-            auto new_lines = split_lines(working);
-            std::size_t i = 0;
-            while (i < orig_lines.size() && i < new_lines.size() && orig_lines[i] == new_lines[i]) ++i;
-            if (i < orig_lines.size() || i < new_lines.size()) {
-                // Show context: up to 3 lines before and after the first change
-                std::size_t ctx_start = (i > 3) ? i - 3 : 0;
-                std::size_t ctx_end_orig = std::min(i + 3, orig_lines.size());
-                std::size_t ctx_end_new = std::min(i + 3, new_lines.size());
-                for (std::size_t j = ctx_start; j < ctx_end_orig && j < orig_lines.size(); ++j) {
-                    result_text += (j >= i && (j - i < new_lines.size() - i) ? "-" : " ") + orig_lines[j] + "\n";
-                }
-                for (std::size_t j = ctx_start; j < ctx_end_new && j < new_lines.size(); ++j) {
-                    result_text += (j >= i ? "+" : " ") + new_lines[j] + "\n";
-                }
-            }
+
+        // pi edit.ts details: the display diff, a unified patch, and the first
+        // changed new-file line number.
+        const auto diff_result = tools::generate_diff_string(
+            applied->base_content, applied->new_content);
+        const std::string patch = tools::generate_unified_patch(
+            parsed->path, applied->base_content, applied->new_content);
+        util::JsonValue details{util::JsonValue::object_t{}};
+        auto& detail_object = details.get_object();
+        detail_object.emplace("diff", util::JsonValue(diff_result.diff));
+        detail_object.emplace("patch", util::JsonValue(patch));
+        if (diff_result.first_changed_line) {
+            detail_object.emplace(
+                "firstChangedLine",
+                util::JsonValue(*diff_result.first_changed_line));
         }
         co_return agent::AsyncToolExecutionResult{
-            .content = std::vector<ai::Content>{ai::text_content(result_text)},
-            .details = std::nullopt,
+            .content = std::vector<ai::Content>{ai::text_content(
+                "Successfully replaced " + std::to_string(parsed->edits.size()) +
+                " block(s) in " + parsed->path + ".")},
+            .details = std::move(details),
         };
-    }
-
-private:
-    static std::vector<std::string> split_lines(const std::string& text) {
-        std::vector<std::string> lines;
-        std::size_t start = 0;
-        for (std::size_t i = 0; i < text.size(); ++i) {
-            if (text[i] == '\n') {
-                lines.push_back(text.substr(start, i - start));
-                start = i + 1;
-            }
-        }
-        if (start < text.size()) lines.push_back(text.substr(start));
-        return lines;
     }
 };
 
@@ -473,8 +451,8 @@ std::unique_ptr<agent::AsyncAgentTool> make_async_write_file_tool(std::shared_pt
     return std::make_unique<AsyncWriteFileTool>(std::move(env));
 }
 
-std::unique_ptr<agent::AsyncAgentTool> make_async_edit_file_tool(std::shared_ptr<harness::AsyncExecutionEnv> env) {
-    return std::make_unique<AsyncEditFileTool>(std::move(env));
+std::unique_ptr<agent::AsyncAgentTool> make_async_edit_tool(std::shared_ptr<harness::AsyncExecutionEnv> env) {
+    return std::make_unique<AsyncEditTool>(std::move(env));
 }
 
 std::unique_ptr<agent::AsyncAgentTool> make_async_bash_tool(std::shared_ptr<harness::AsyncExecutionEnv> env) {

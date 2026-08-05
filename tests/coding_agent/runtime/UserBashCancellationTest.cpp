@@ -69,7 +69,7 @@ public:
     options.builtin_tools = {
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     return coding_agent::create_agent_session(std::move(options), std::move(shell));

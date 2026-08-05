@@ -286,7 +286,7 @@ TranscriptResult run_transcript(
     options.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     auto created = coding_agent::create_agent_session(std::move(options));
@@ -475,7 +475,7 @@ TEST_CASE("RPC mode flushes direct events while a prompt is running", "[coding-a
     options.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     auto created = coding_agent::create_agent_session(std::move(options));
@@ -628,7 +628,7 @@ TEST_CASE("RPC mode keeps one event stream after a weak subscriber failure", "[c
     options.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     auto created = coding_agent::create_agent_session(std::move(options));
@@ -843,7 +843,7 @@ TEST_CASE("RPC mode returns a correlated error when a busy session rejects promp
     options.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     auto created = coding_agent::create_agent_session(std::move(options));

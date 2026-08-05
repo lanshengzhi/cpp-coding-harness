@@ -19,6 +19,7 @@
 #include <cch/agent/Agent.hpp>
 #include <cch/ai/Content.hpp>
 #include "agent/AgentLoop.hpp"
+#include "agent/ToolCallExecutor.hpp"
 #include "ai/SimpleOptions.hpp"
 #include "support/FakeModelRuntime.hpp"
 #include "support/ModelFixture.hpp"
@@ -567,4 +568,139 @@ TEST_CASE(
     CHECK(runtime->terminal_events == 1);
     expect_json_equal(
         lifecycle_events_to_json(run.events), "loop-terminal-aborted.json");
+}
+
+namespace {
+
+/// A deterministic fake tool whose result carries content plus optional
+/// details, so the committed tool-result shape golden covers both.
+class DetailsTool final : public agent::AsyncAgentTool {
+public:
+    DetailsTool(
+        std::string name,
+        std::string result_text,
+        util::JsonValue contract)
+        : definition_(ai::Tool{
+              std::move(name),
+              "Fake tool",
+              std::move(contract)}),
+          result_text_(std::move(result_text)) {}
+
+    const ai::Tool& definition() const override { return definition_; }
+
+    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
+        agent::ToolInvocation,
+        std::stop_token) override {
+        agent::AsyncToolExecutionResult result;
+        result.content.push_back(ai::text_content(result_text_));
+        result.details = util::JsonValue::object_t{
+            {"note", "golden-details"},
+        };
+        co_return result;
+    }
+
+private:
+    ai::Tool definition_;
+    std::string result_text_;
+};
+
+/// Serialize one tool result into pi's `ToolResultMessage` wire shape:
+/// role, toolCallId, toolName, content, details (omitted when absent),
+/// isError, timestamp.
+[[nodiscard]] util::JsonValue tool_result_to_json(
+    const ai::ToolResultMessage& result) {
+    util::JsonValue object{util::JsonValue::object_t{}};
+    auto& o = object.get_object();
+    o.emplace("role", util::JsonValue("toolResult"));
+    o.emplace("toolCallId", util::JsonValue(result.tool_call_id));
+    o.emplace("toolName", util::JsonValue(result.tool_name));
+    util::JsonValue content{util::JsonValue::array_t{}};
+    for (const auto& block : result.content) {
+        if (const auto* text = std::get_if<ai::TextContent>(&block)) {
+            util::JsonValue text_block{util::JsonValue::object_t{}};
+            text_block.get_object().emplace("type", util::JsonValue("text"));
+            text_block.get_object().emplace("text", util::JsonValue(text->text));
+            content.get_array().push_back(std::move(text_block));
+        }
+    }
+    o.emplace("content", std::move(content));
+    if (result.details) {
+        o.emplace("details", *result.details);
+    }
+    o.emplace("isError", util::JsonValue(result.is_error));
+    o.emplace("timestamp", util::JsonValue(static_cast<int>(result.timestamp)));
+    return object;
+}
+
+} // namespace
+
+TEST_CASE(
+    "tool-result shape golden groups is_error exactly as pi's toolResult message",
+    "[agent][fixture][tool-result][issue354]") {
+    // One assistant message carrying three tool calls: a success, a call whose
+    // arguments fail JSON Schema validation, and a sibling success. The batch
+    // result groups each call's ToolResultMessage with is_error, and the
+    // failing call never takes down its siblings (ADR 0008).
+    const auto contract = util::JsonValue::object_t{
+        {"type", "object"},
+        {"properties", util::JsonValue::object_t{
+            {"path", util::JsonValue::object_t{{"type", "string"}}},
+        }},
+        {"required", util::JsonValue::array_t{"path"}},
+        {"additionalProperties", false},
+    };
+
+    agent::AsyncToolRegistry tools;
+    REQUIRE(tools.add(std::make_unique<DetailsTool>(
+        "read", "tool says ok", contract)));
+    REQUIRE(tools.add(std::make_unique<DetailsTool>(
+        "write", "wrote 5 bytes", contract)));
+
+    agent::ToolCallExecutor executor{tools, agent::ToolCallExecutorOptions{}};
+    auto calls = {
+        ai::tool_call_content("call-ok", "read", R"({"path":"a.txt"})",
+            *util::read_json<util::JsonValue>(R"({"path":"a.txt"})")),
+        ai::tool_call_content("call-bad", "read", R"({"path":{}})",
+            *util::read_json<util::JsonValue>(R"({"path":{}})")),
+        ai::tool_call_content("call-sibling", "write", R"({"path":"b.txt"})",
+            *util::read_json<util::JsonValue>(R"({"path":"b.txt"})")),
+    };
+    ai::AssistantMessage assistant;
+    assistant.stop_reason = ai::AssistantStopReason::ToolUse;
+    for (const auto& call : calls) {
+        assistant.content.emplace_back(call);
+    }
+
+    boost::asio::io_context io;
+    std::optional<util::Expected<agent::ToolCallBatchResult>> result;
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            agent::AgentEventSink sink{
+                [](const agent::AgentLifecycleEvent&) { return util::ExpectedVoid{}; }};
+            result = co_await executor.execute(
+                agent::ToolCallBatchRequest{assistant, {}},
+                sink);
+            co_return;
+        },
+        boost::asio::detached);
+    io.run();
+    REQUIRE(result.has_value());
+    REQUIRE(result->has_value());
+    const auto& batch = **result;
+    REQUIRE(batch.results.size() == 3);
+
+    util::JsonValue golden{util::JsonValue::object_t{}};
+    util::JsonValue results{util::JsonValue::array_t{}};
+    for (const auto& tool_result : batch.results) {
+        results.get_array().push_back(tool_result_to_json(tool_result));
+    }
+    golden.get_object().emplace("toolResults", std::move(results));
+    expect_json_equal(golden, "tool-result-shape.json");
+
+    // The committed golden also pins the isolation fact: the middle call is
+    // an error while both siblings completed normally.
+    CHECK(batch.results[0].is_error == false);
+    CHECK(batch.results[1].is_error == true);
+    CHECK(batch.results[2].is_error == false);
 }

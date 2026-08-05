@@ -366,7 +366,7 @@ session->close();
 - One persistent event-subscription path via move-only `agent::AgentEventSink`; prompt progress is not returned or delivered through per-prompt sinks.
 - Host-provided execution environments remain host-owned and are not cleaned up by session close; custom tools passed by `unique_ptr` transfer ownership to the session.
 - `ModelRuntime` is the sole public model/auth runtime seam: a `std::shared_ptr` injected through `CreateAgentSessionOptions` (default-created from the Agent Config Directory when absent); request authentication resolves through `Models` immediately before each Provider call.
-- Built-in tool selection with safe defaults: `read`, `write`, and `edit_file` by default; `bash` requires explicit opt-in.
+- Built-in tool selection with safe defaults: `read`, `write`, and `edit` by default; `bash` requires explicit opt-in.
 - Custom tool registration via existing `agent::AsyncAgentTool` contracts; duplicate tool names fail creation.
 - Programmatic skills and prompt templates; host resources take precedence over project-discovered duplicates.
 - Per-prompt `PromptOptions::expand_prompt_templates` (default `true`); `false` bypasses skill and prompt-template expansion and sends raw text to the agent loop. Resulting message count and last assistant text are queried through `AgentSession` state accessors.
@@ -421,11 +421,11 @@ User settings follow pi's two-scope `settings.json` contract (ADR 0031): a globa
 
 ## Tools
 
-The built-in tools are:
+The built-in tools are pi's default set with pi names (`read`/`bash`/`edit`/`write`; `grep`/`find`/`ls` are absent with no placeholder):
 
-- `read_file`: read a text file inside the workspace, with optional line offset/limit. Appends a continuation hint when output is truncated.
-- `write_file`: create or overwrite a file inside the workspace; creates parent directories implicitly.
-- `edit_file`: perform one or more exact replacements via an `edits[]` array of `{oldText, newText}` pairs; zero or multiple matches per edit are rejected. Multiple disjoint edits in one call are applied together.
+- `read`: read a text file inside the workspace, with optional line offset/limit. Appends a continuation hint when output is truncated.
+- `write`: create or overwrite a file inside the workspace; creates parent directories implicitly.
+- `edit`: perform one or more exact replacements via an `edits[]` array of `{oldText, newText}` pairs using pi's edit-diff semantics (edit-diff.ts): every edit is matched against the original file (not incrementally), exact match first then fuzzy-normalized matching (NFKC, per-line trailing whitespace stripped, smart quotes/dashes/spaces normalized), the dominant line ending (CRLF vs LF) and a UTF-8 BOM are preserved, zero/multiple matches per edit are rejected with pi's messages, overlapping edits are rejected, and an unchanged result is an error. The result carries `Successfully replaced N block(s) in <path>.` plus details with the display diff, a unified patch, and the first changed new-file line number.
 - `bash`: run a shell command inside the workspace only when `--enable-bash` is passed. Accepts a timeout in seconds and strips ANSI escape sequences from output. On supported Unix platforms, local execution resolves an expanded configured `shellPath`, otherwise `/bin/bash`, PATH `bash`, then PATH `sh`, and invokes it with `-c` rather than as a login shell. A stale configured path fails only the attempted execution; it does not prevent Session startup.
 
 The registry owns tool capabilities directly. In default sequential execution, every call starts its Tool Execution lifecycle before the executor parses and clones the raw arguments, applies the recorded pi-baseline recursive coercion profile, and validates the tool's JSON Schema before policy hooks or capability invocation. The executable profile covers primitive and union types, nested objects and arrays (including tuple items and dynamic properties), value and collection constraints, composition, and baseline-recognized formats. Unknown formats and members remain annotations unless a required vocabulary makes support mandatory. Malformed JSON, unknown tools, invalid or unsupported dialects and vocabularies, unresolved references, unsupported executable constructs, and schema-invalid values become bounded error Tool Call Outcomes for only their calls; annotations and extension members do not disable recognized assertions. Parser excerpts in malformed-argument diagnostics are secret-redacted before UTF-8-safe truncation, so the same safe diagnostic flows through tool lifecycle events, model context, and Session persistence.

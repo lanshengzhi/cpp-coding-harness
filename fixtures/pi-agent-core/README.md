@@ -6,7 +6,7 @@ tests in this repository against the C++ surface, so the gate's evidence is one 
 No fixture value is a live credential or derived from one; all strings are distinguishable
 dummy values (see [Sanitization rules](#sanitization-rules)).
 
-This file records only the capabilities landed so far (T01 [#350], T02 [#351]); the capability
+This file records only the capabilities landed so far (T01 [#350], T02 [#351], T05 [#354]); the capability
 checklist grows with each subsequent ticket (T03–T14, blockers-first per parity map [#2]), and
 rows below cover only what this ticket touches.
 
@@ -46,6 +46,16 @@ identity is included because the fake records it with the call.
 
 `transport` stays fixed per adapter (the C++ `SimpleStreamOptions` has no transport member, per
 #329) and `metadata`/`onPayload`/`onResponse`/`thinkingBudgets` are absent with no placeholder.
+
+### Tool-result shape golden (`tool-result-shape.json`)
+
+The committed tool-result shape golden ([#354]): one assistant message carrying three tool calls run
+through the `ToolCallExecutor` — a success, a call whose arguments fail JSON Schema validation
+(ADR 0007, `is_error: true` with the bounded contract diagnostic), and a sibling success. Each
+result is serialized in pi's `ToolResultMessage` wire shape (`role`, `toolCallId`, `toolName`,
+`content`, `details` omitted when absent, `isError`, `timestamp`), proving `is_error` grouping and
+per-call failure isolation (ADR 0008) in one committed artifact. Timestamps are the deterministic
+executor-level default `0` (the Agent loop stamps real time on commitment).
 
 ### Loop lifecycle goldens (`loop-*.json`)
 
@@ -89,6 +99,12 @@ surface, and the committed evidence. Resolution records: [#326]
 | 3 | Terminal-error-event contract: exactly one `error`/`aborted` terminal event plus a final `AssistantMessage` with agreeing `stopReason`/`errorMessage` (incl. terminal-before-start synthesized start) | #326; `packages/agent/src/agent-loop.ts` `streamAssistantResponse` (`done`/`error` → `message_start` synthesis) | `src/agent/AgentLoop.cpp` (synthesize-start + terminal turn), `tests/support/FakeModelRuntime.hpp` (exactly-one-terminal script) | `ModelRuntimeSeamTest` terminal/aborted/matrix rows; `AgentCoreEvidenceTest` → `loop-terminal-error.json`, `loop-terminal-aborted.json` |
 | 4 | Six-category channel (`model_source`, `model_validation`, `provider`, `stream`, `auth`, `oauth`) through the single `util::Expected` error value; no second exception hierarchy | #326 | `include/cch/util/Error.hpp` (`ErrorCode` six categories), `tests/support/FakeModelRuntime.hpp` (`terminal_failure_code`/`last_terminal_failure`) | `ModelRuntimeSeamTest` `"six-category terminal matrix yields exactly one terminal event plus a final AssistantMessage each"` |
 | 5 | Loop lifecycle order: `agent_start` → `turn_start` → `message_start/update/end` → `tool_execution_*` → `turn_end` → prepare-next-turn → stop-after-turn → steering → follow-up → `agent_end`; tool-call and follow-up continuation; `agent_end.messages` invocation-local | ADR 0014; `packages/agent/src/agent-loop.ts` `runLoop` | `src/agent/AgentLoop.cpp` | `AgentCoreEvidenceTest` → `loop-lifecycle.json`, `loop-terminal-error.json`, `loop-terminal-aborted.json`; existing `AsyncAgentLoopTest`/`AgentTest` ordering suites |
+| 6 | Built-in model-facing tool set is exactly `read`/`bash`/`edit`/`write` with pi names; `edit` replaces `edit_file` (no `edit_file` surface remains anywhere, including serialization/legacy paths); `grep`/`find`/`ls` absent with no placeholder | `packages/agent/src/harness/tools/index.ts` (read/bash/edit/write); `edit.ts` `createEditTool` (`name: "edit"`); `packages/coding-agent/src/core/tools/{grep,find,ls}.ts` (Deferred) | `include/cch/tools/ToolFactories.hpp` (`make_async_edit_tool`), `src/tools/AsyncToolFactories.cpp`, `include/cch/coding_agent/Sdk.hpp` (`SdkBuiltinTools::edit`) | `AsyncToolsTest` `"async edit tool …"` suite; `ArchitectureSurfaceScanTest`; `SdkSessionTest` tool-registry rows |
+| 7 | `edit` implements pi's edit-diff semantics: every edit matched against the original file (not incrementally), exact-then-fuzzy matching (NFKC, per-line trailing whitespace stripped, smart quotes/dashes/spaces normalized), CRLF/LF detection and restoration, BOM preservation, overlap rejection, pi's not-found/duplicate/empty/no-change messages, and details `{diff, patch, firstChangedLine}` | `packages/agent/src/harness/tools/edit-diff.ts` (`applyEditsToNormalizedContent`, `fuzzyFindText`, `normalizeForFuzzyMatch`, `generateDiffString`, `generateUnifiedPatch`, `detectLineEnding`, `stripBom`) and `edit.ts` `createEditTool` | `src/tools/EditDiff.{hpp,cpp}`, `src/tools/AsyncToolFactories.cpp` (`AsyncEditTool`) | `AsyncToolsTest` pi-shaped scenarios: disjoint edits + details shape, overlap rejection, missing/duplicate messages, BOM+CRLF preservation, fuzzy smart-quote/dash matching, empty/no-change errors, contract/execution agreement |
+| 8 | Tool arguments validated against each tool's JSON Schema as the executable contract before policy hooks and execution; malformed/schema-invalid args fail as error tool results for their calls | ADR 0007; `edit.ts` TypeBox schemas | `src/agent/ToolArgumentPreparation.{hpp,cpp}` (`prepare_tool_arguments`), `src/agent/ToolCallExecutor.cpp` (validation before hooks/execution) | `ToolCallExecutorTest` `[tool-arguments]` suite (coercion, boundaries, formats, malformed-JSON redaction); `AgentCoreEvidenceTest` → `tool-result-shape.json` (validation failure row) |
+| 9 | Tool results group with `is_error` exactly as pi's `ToolResultMessage` shape; committed golden proves it | `packages/ai/src/types.ts` `ToolResultMessage` (`isError`, role `toolResult`, `toolCallId`, `toolName`, `content`, `details?`, `timestamp`) | `include/cch/ai/Message.hpp` (`ToolResultMessage`), `src/ai/glaze/AiJson.hpp` (`to_dto`), `src/agent/ToolCallExecutor.cpp` | `AgentCoreEvidenceTest` `"tool-result shape golden …"` → `tool-result-shape.json` |
+| 10 | Per-call failure isolation (Tool Call Outcome): one failing call produces an error result while sibling calls in the same assistant message complete normally; batch termination only from all-true explicit termination | ADR 0008; `packages/agent/src/types.ts` `AgentToolResult.terminate` | `src/agent/ToolCallExecutor.cpp` (sequential + bounded parallel), `src/agent/AgentLoop.cpp` | `AgentCoreEvidenceTest` → `tool-result-shape.json`; `ToolCallExecutorTest` isolation/termination rows |
+| 11 | Concrete `bash` tool registration stays gated by `--enable-bash` authorization; user Bash stays independent (ADR 0026) | ADR 0026; `packages/agent/src/harness/tools/bash.ts` (tool exists; authorization is assembly policy) | `include/cch/coding_agent/Sdk.hpp` (`SdkBuiltinTools::bash`), `src/cli/CliParse.cpp` (`--enable-bash`), `src/coding_agent/runtime/SessionFactory.cpp` | `SdkSessionTest` `"SDK disabled bash is absent …"/"SDK enabled bash appears …"`; `SessionFactoryUserShellTest` |
 
 ### Recorded divergences preserved (unchanged by this ticket)
 
@@ -114,3 +130,4 @@ surface, and the committed evidence. Resolution records: [#326]
 [#349]: https://github.com/lanshengzhi/cpp-coding-harness/issues/349
 [#350]: https://github.com/lanshengzhi/cpp-coding-harness/issues/350
 [#351]: https://github.com/lanshengzhi/cpp-coding-harness/issues/351
+[#354]: https://github.com/lanshengzhi/cpp-coding-harness/issues/354

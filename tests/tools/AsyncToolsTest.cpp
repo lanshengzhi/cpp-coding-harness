@@ -180,7 +180,7 @@ TEST_CASE("built-in tools default to exclusive execution", "[tools][async]") {
 
     auto read = tools::make_async_read_file_tool(env);
     auto write = tools::make_async_write_file_tool(env);
-    auto edit = tools::make_async_edit_file_tool(env);
+    auto edit = tools::make_async_edit_tool(env);
     auto bash = tools::make_async_bash_tool(env);
 
     CHECK(read->concurrency() == agent::ToolConcurrency::Exclusive);
@@ -206,89 +206,186 @@ TEST_CASE("async read_file tool uses Glaze typed args and workspace guard", "[to
     CHECK(ai::text_from_content(result->content) == "line2");
 }
 
-TEST_CASE("async edit_file tool returns error for duplicate oldText matches", "[tools][async]") {
+TEST_CASE("async edit tool applies disjoint edits and returns pi-shaped diff details", "[tools][async][issue354]") {
     tests::TempWorkspace workspace;
-    workspace.write("note.txt", "same\nsame\n");
+    workspace.write("edit.txt", "alpha\nbeta\ngamma\ndelta\n");
     auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
-    auto tool = tools::make_async_edit_file_tool(env);
-
-    auto result = run_tool([&]() {
-        return tool->execute(invocation("edit_file",
-            R"({"path":"note.txt","edits":[{"oldText":"same","newText":"new"}]})"), std::stop_token{});
-    });
-
-    REQUIRE(result);
-    CHECK(result->is_error);
-    CHECK(ai::text_from_content(result->content).find("2 occurrences") != std::string::npos);
-    CHECK(workspace.read("note.txt") == "same\nsame\n");
-}
-
-TEST_CASE("async edit_file tool supports edits[] array with multiple replacements", "[tools][async]") {
-    tests::TempWorkspace workspace;
-    workspace.write("note.txt", "hello world\nfoo bar\nbaz qux\n");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
-    auto tool = tools::make_async_edit_file_tool(env);
+    auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
         return tool->execute(
-            invocation("edit_file",
-                R"({"path":"note.txt","edits":[{"oldText":"hello","newText":"hi"},)"
-                R"({"oldText":"baz","newText":"zip"}]})"),
+            invocation("edit",
+                R"({"path":"edit.txt","edits":[{"oldText":"alpha\n","newText":"ALPHA\n"},)"
+                R"({"oldText":"gamma\n","newText":"GAMMA\n"}]})"),
             std::stop_token{});
     });
 
     REQUIRE(result);
     CHECK_FALSE(result->is_error);
-    CHECK(ai::text_from_content(result->content).find("replaced 2 block") != std::string::npos);
-    // The edit tool reads and writes the exact file content, so the
-    // trailing newline is preserved.
-    CHECK(workspace.read("note.txt") == "hi world\nfoo bar\nzip qux\n");
+    // pi edit.ts content line and details shape: diff, patch, firstChangedLine.
+    CHECK(ai::text_from_content(result->content) ==
+          "Successfully replaced 2 block(s) in edit.txt.");
+    REQUIRE(result->details);
+    const auto& details = result->details->get_object();
+    const auto diff = details.at("diff").get_string();
+    const auto patch = details.at("patch").get_string();
+    // The display diff pins the exact pi generateDiffString output: removed
+    // and added lines with line numbers, unchanged lines as context.
+    CHECK(diff ==
+          "-1 alpha\n"
+          "+1 ALPHA\n"
+          " 2 beta\n"
+          "-3 gamma\n"
+          "+3 GAMMA\n"
+          " 4 delta\n");
+    CHECK(details.at("firstChangedLine").get_number() == 1);
+    // The unified patch is a standard two-file patch that applies.
+    CHECK(patch ==
+          "--- edit.txt\n"
+          "+++ edit.txt\n"
+          "@@ -1,4 +1,4 @@\n"
+          "-alpha\n"
+          "+ALPHA\n"
+          " beta\n"
+          "-gamma\n"
+          "+GAMMA\n"
+          " delta\n");
+    CHECK(workspace.read("edit.txt") == "ALPHA\nbeta\nGAMMA\ndelta\n");
 }
 
-TEST_CASE("async edit_file tool rejects empty edits array", "[tools][async]") {
+TEST_CASE("async edit tool matches every edit against the original and rejects overlaps", "[tools][async][issue354]") {
+    tests::TempWorkspace workspace;
+    workspace.write("edit.txt", "one\ntwo\nthree\n");
+    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
+    auto tool = tools::make_async_edit_tool(env);
+
+    auto result = run_tool([&]() {
+        return tool->execute(
+            invocation("edit",
+                R"({"path":"edit.txt","edits":[{"oldText":"one\ntwo\n","newText":"ONE\nTWO\n"},)"
+                R"({"oldText":"two\nthree\n","newText":"TWO\nTHREE\n"}]})"),
+            std::stop_token{});
+    });
+
+    REQUIRE(result);
+    CHECK(result->is_error);
+    CHECK(ai::text_from_content(result->content).find("overlap") != std::string::npos);
+    // The failed call never touches the file.
+    CHECK(workspace.read("edit.txt") == "one\ntwo\nthree\n");
+}
+
+TEST_CASE("async edit tool rejects missing and duplicate target text with pi messages", "[tools][async][issue354]") {
+    tests::TempWorkspace workspace;
+    workspace.write("edit.txt", "foo foo foo");
+    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
+    auto tool = tools::make_async_edit_tool(env);
+
+    auto missing = run_tool([&]() {
+        return tool->execute(invocation("edit",
+            R"({"path":"edit.txt","edits":[{"oldText":"bar","newText":"baz"}]})"), std::stop_token{});
+    });
+    REQUIRE(missing);
+    CHECK(missing->is_error);
+    CHECK(ai::text_from_content(missing->content).find(
+        "Could not find the exact text in edit.txt.") != std::string::npos);
+
+    auto duplicate = run_tool([&]() {
+        return tool->execute(invocation("edit",
+            R"({"path":"edit.txt","edits":[{"oldText":"foo","newText":"bar"}]})"), std::stop_token{});
+    });
+    REQUIRE(duplicate);
+    CHECK(duplicate->is_error);
+    CHECK(ai::text_from_content(duplicate->content).find(
+        "Found 3 occurrences of the text in edit.txt.") != std::string::npos);
+    CHECK(workspace.read("edit.txt") == "foo foo foo");
+}
+
+TEST_CASE("async edit tool preserves BOM and CRLF line endings", "[tools][async][issue354]") {
+    tests::TempWorkspace workspace;
+    workspace.write("edit.txt", "\xef\xbb\bfone\r\ntwo\r\n");
+    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
+    auto tool = tools::make_async_edit_tool(env);
+
+    auto result = run_tool([&]() {
+        return tool->execute(invocation("edit",
+            R"({"path":"edit.txt","edits":[{"oldText":"two","newText":"TWO"}]})"), std::stop_token{});
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    CHECK(workspace.read("edit.txt") == "\xef\xbb\bfone\r\nTWO\r\n");
+}
+
+TEST_CASE("async edit tool fuzzy-matches smart-quote and dash variants", "[tools][async][issue354]") {
+    tests::TempWorkspace workspace;
+    // The file carries smart quotes, an em dash, and trailing line
+    // whitespace; the edit uses ASCII forms without the trailing space,
+    // matching pi's fuzzy normalization.
+    workspace.write("note.txt", "say \xe2\x80\x9chello\xe2\x80\x9d world\xe2\x80\x94today   \n");
+    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
+    auto tool = tools::make_async_edit_tool(env);
+
+    auto result = run_tool([&]() {
+        return tool->execute(invocation("edit",
+            R"({"path":"note.txt","edits":[{"oldText":"say \"hello\" world-today","newText":"fixed"}]})"),
+            std::stop_token{});
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    // The fuzzy replacement rewrites only the matched line and keeps the
+    // unchanged parts of the file byte-identical.
+    CHECK(workspace.read("note.txt") == "fixed\n");
+}
+
+TEST_CASE("async edit tool rejects empty oldText with pi's message", "[tools][async][issue354]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "content\n");
     auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
-    auto tool = tools::make_async_edit_file_tool(env);
+    auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
-        return tool->execute(invocation("edit_file",
-            R"({"path":"note.txt","edits":[]})"), std::stop_token{});
+        return tool->execute(invocation("edit",
+            R"({"path":"note.txt","edits":[{"oldText":"","newText":"x"}]})"), std::stop_token{});
     });
 
     REQUIRE(result);
     CHECK(result->is_error);
-    CHECK(ai::text_from_content(result->content).find("at least one") != std::string::npos);
+    CHECK(ai::text_from_content(result->content).find(
+        "oldText must not be empty in note.txt.") != std::string::npos);
+    CHECK(workspace.read("note.txt") == "content\n");
 }
 
-TEST_CASE("async edit_file tool rejects oldText not found", "[tools][async]") {
+TEST_CASE("async edit tool rejects no-change edits with pi's message", "[tools][async][issue354]") {
     tests::TempWorkspace workspace;
-    workspace.write("note.txt", "hello world\n");
+    workspace.write("note.txt", "same\n");
     auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
-    auto tool = tools::make_async_edit_file_tool(env);
+    auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
-        return tool->execute(invocation("edit_file",
-            R"({"path":"note.txt","edits":[{"oldText":"nonexistent","newText":"x"}]})"), std::stop_token{});
+        return tool->execute(invocation("edit",
+            R"({"path":"note.txt","edits":[{"oldText":"same","newText":"same"}]})"), std::stop_token{});
     });
 
     REQUIRE(result);
     CHECK(result->is_error);
-    CHECK(ai::text_from_content(result->content).find("not found") != std::string::npos);
+    CHECK(ai::text_from_content(result->content).find(
+        "No changes made to note.txt.") != std::string::npos);
+    CHECK(workspace.read("note.txt") == "same\n");
 }
 
-TEST_CASE("edit_file declared contract validation and execution acceptance agree", "[tools][async][issue77]") {
+TEST_CASE("edit declared contract validation and execution acceptance agree", "[tools][async][issue77][issue354]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "hello world\n");
     auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
-    auto tool = tools::make_async_edit_file_tool(env);
+    auto tool = tools::make_async_edit_tool(env);
 
     // The agent loop validates every call with prepare_tool_arguments before
     // execution (ADR 0007); execution must accept exactly what it accepts.
     auto contract_accepts = [&](const std::string& json) {
         ai::ToolCallContent call{
             .id = "call-1",
-            .name = "edit_file",
+            .name = "edit",
             .arguments = std::nullopt,
             .raw_arguments = json,
             .thought_signature = std::nullopt,
@@ -298,7 +395,7 @@ TEST_CASE("edit_file declared contract validation and execution acceptance agree
     };
     auto execution_accepts = [&](const std::string& json) {
         auto result = run_tool([&]() {
-            return tool->execute(invocation("edit_file", json), std::stop_token{});
+            return tool->execute(invocation("edit", json), std::stop_token{});
         });
         REQUIRE(result);
         return !result->is_error;

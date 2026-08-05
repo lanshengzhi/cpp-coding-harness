@@ -104,7 +104,7 @@ tests::ModelsSessionOptions fake_in_memory_options(
     options.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     return options;

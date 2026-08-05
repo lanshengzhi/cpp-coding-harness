@@ -206,6 +206,7 @@ target_link_libraries(cch_harness
 
 add_library(cch_tools
     src/tools/AsyncToolFactories.cpp
+    src/tools/EditDiff.cpp
 )
 cch_target_defaults(cch_tools)
 target_link_libraries(cch_tools
@@ -214,6 +215,8 @@ target_link_libraries(cch_tools
         cch_harness
         cch_ai
         cch_util
+    PRIVATE
+        utf8proc::utf8proc
 )
 
 add_library(cch_coding_agent_runtime

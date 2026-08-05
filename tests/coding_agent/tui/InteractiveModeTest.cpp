@@ -53,7 +53,7 @@ namespace {
     options.builtin_tools = {
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     return options;
@@ -939,7 +939,7 @@ TEST_CASE(
     resume_options.builtin_tools = {
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     auto resumed = coding_agent::create_agent_session(std::move(resume_options));
@@ -1034,7 +1034,7 @@ TEST_CASE(
     fallback_resume.builtin_tools = {
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     auto fallback_session = coding_agent::create_agent_session(std::move(fallback_resume));
@@ -1174,7 +1174,7 @@ TEST_CASE(
     resume.builtin_tools = {
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     auto created = coding_agent::create_agent_session(std::move(resume));
@@ -1596,7 +1596,7 @@ TEST_CASE(
     resume.builtin_tools = {
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     auto resumed = coding_agent::create_agent_session(std::move(resume));

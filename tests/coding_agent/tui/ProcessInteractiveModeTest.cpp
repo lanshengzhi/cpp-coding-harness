@@ -89,7 +89,7 @@ TEST_CASE(
     options.builtin_tools = {
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     auto created = cch::coding_agent::create_agent_session(std::move(options));

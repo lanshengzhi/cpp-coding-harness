@@ -743,7 +743,7 @@ struct SessionTargetNormalizationOptions {
     plan.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = true,
         .write = true,
-        .edit_file = true,
+        .edit = true,
         .bash = request.enable_bash,
     };
 
@@ -1187,9 +1187,9 @@ struct SessionTargetNormalizationOptions {
             return std::unexpected(added.error());
         }
     }
-    if (plan.builtin_tools.edit_file) {
-        builtin_names.insert("edit_file");
-        if (auto added = tools.add(tools::make_async_edit_file_tool(exec_env)); !added) {
+    if (plan.builtin_tools.edit) {
+        builtin_names.insert("edit");
+        if (auto added = tools.add(tools::make_async_edit_tool(exec_env)); !added) {
             cleanup_on_failure();
             return std::unexpected(added.error());
         }

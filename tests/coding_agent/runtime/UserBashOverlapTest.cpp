@@ -133,7 +133,7 @@ TEST_CASE(
     options.builtin_tools = {
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     auto created = coding_agent::create_agent_session(
@@ -214,7 +214,7 @@ TEST_CASE(
     options.builtin_tools = {
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     auto created = coding_agent::create_agent_session(
@@ -284,7 +284,7 @@ TEST_CASE(
     options.builtin_tools = {
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     auto created = coding_agent::create_agent_session(
@@ -347,7 +347,7 @@ TEST_CASE(
     options.builtin_tools = {
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     auto created = coding_agent::create_agent_session(
@@ -410,7 +410,7 @@ TEST_CASE(
     options.builtin_tools = {
         .read = true,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     auto created = coding_agent::create_agent_session(
@@ -493,7 +493,7 @@ TEST_CASE(
     options.builtin_tools = {
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     auto created = coding_agent::create_agent_session(
@@ -564,7 +564,7 @@ TEST_CASE(
     options.builtin_tools = {
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     auto created = coding_agent::create_agent_session(
@@ -629,7 +629,7 @@ TEST_CASE(
     options.builtin_tools = {
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     auto created = coding_agent::create_agent_session(

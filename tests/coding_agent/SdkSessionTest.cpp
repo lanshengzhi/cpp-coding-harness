@@ -1994,7 +1994,7 @@ TEST_CASE(
     opts.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = false,
         .write = false,
-        .edit_file = false,
+        .edit = false,
         .bash = false,
     };
     opts.custom_tools.push_back(std::make_unique<FakeEchoTool>(tool_execution_count));
@@ -4417,7 +4417,7 @@ TEST_CASE("SDK default built-in tools exclude bash", "[sdk][u4]") {
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
     opts.models = ai::providers::make_scripted_fake_models();
-    // Default builtin_tools: read=true, write=true, edit_file=true, bash=false
+    // Default builtin_tools: read=true, write=true, edit=true, bash=false
 
     auto create_result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(create_result.has_value());
@@ -5196,7 +5196,7 @@ TEST_CASE("SDK disabled bash is absent from the model-visible tool registry", "[
     CHECK_FALSE(tool_registry_contains(capture_ptr->captured_request->context, "bash"));
     CHECK(tool_registry_contains(capture_ptr->captured_request->context, "read"));
     CHECK(tool_registry_contains(capture_ptr->captured_request->context, "write"));
-    CHECK(tool_registry_contains(capture_ptr->captured_request->context, "edit_file"));
+    CHECK(tool_registry_contains(capture_ptr->captured_request->context, "edit"));
     result->session->close();
 }
 

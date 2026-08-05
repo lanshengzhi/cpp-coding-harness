@@ -59,11 +59,11 @@ struct SdkDiagnostic {
 // ── Built-in tool selection ──────────────────────────────────────────────────
 
 /// Which built-in tools to register.
-/// Defaults match the safe-tool posture: read, write, edit_file; bash opt-in.
+/// Defaults match the safe-tool posture: read, write, edit; bash opt-in.
 struct SdkBuiltinTools {
     bool read{true};
     bool write{true};
-    bool edit_file{true};
+    bool edit{true};
     bool bash{false};
 };
 
