@@ -178,10 +178,13 @@ struct AsyncAgentOptions {
     /// option (pi AgentOptions.sessionId / harness `sessionMetadata.id`). Empty
     /// means the host provided none.
     std::string session_id;
-    /// Thinking level for the run. Per turn it becomes the stream `reasoning`
-    /// option exactly like pi's harness consumer: `off` (or empty) forwards no
-    /// reasoning, any other of the seven levels is forwarded as the stream
-    /// reasoning (pi `createLoopConfig` / `agent-harness.ts`
+    /// Thinking level for the run. Empty means the pi `DEFAULT_THINKING_LEVEL`
+    /// ("medium") is requested; the loop normalizes it and clamps the request
+    /// against the active model's supported set at construction and on model
+    /// switch (ADR 0034 / #352). Per turn the effective level becomes the
+    /// stream `reasoning` option exactly like pi's harness consumer: `off`
+    /// forwards no reasoning, any other of the seven levels is forwarded as
+    /// the stream reasoning (pi `createLoopConfig` / `agent-harness.ts`
     /// `thinkingLevel === "off" ? undefined : thinkingLevel`).
     std::string thinking_level;
     /// Per-turn `cacheRetention` streamSimple option. Unset (the default)

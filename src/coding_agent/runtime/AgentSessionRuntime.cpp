@@ -144,7 +144,12 @@ AgentSessionRuntime::AgentSessionRuntime(
     // state. AgentSession retains product metadata and durable storage only.
     agent::AgentInitialState initial_state;
     initial_state.messages = std::move(session_.history);
-    initial_state.thinking_level = session_.context_thinking_level.value_or("off");
+    // Fresh sessions request pi's DEFAULT_THINKING_LEVEL ("medium"); the Agent
+    // clamps it against the active model at construction (#352). The full
+    // settings/resume resolution chain lands with the T04 model-resolution
+    // ticket; until then a resumed `thinking_level_change` (if any) wins.
+    initial_state.thinking_level =
+        session_.context_thinking_level.value_or("medium");
 
     // Construct Agent last: it holds the factory-owned ModelRuntime (the sole
     // injectable seam per #326) and takes sole ownership of the move-only tool

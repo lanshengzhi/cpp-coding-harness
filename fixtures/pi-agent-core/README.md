@@ -6,9 +6,9 @@ tests in this repository against the C++ surface, so the gate's evidence is one 
 No fixture value is a live credential or derived from one; all strings are distinguishable
 dummy values (see [Sanitization rules](#sanitization-rules)).
 
-This file records only the capabilities landed so far (T01 [#350], T02 [#351], T05 [#354], T06 [#355]); the
-capability checklist grows with each subsequent ticket (T03–T14, blockers-first per parity map [#2]), and
-rows below cover only what this ticket touches.
+This file records only the capabilities landed so far (T01 [#350], T02 [#351], T03 [#352], T05 [#354], T06 [#355]); the
+capability checklist grows with each subsequent ticket (T04, T07–T14, blockers-first per parity map [#2]), and
+rows below cover only what the ticket that last touched this file landed.
 
 ## Pinned baseline
 
@@ -75,6 +75,19 @@ hook effect), serialized canonically and byte-compared.
 - `loop-terminal-aborted.json` (#351): the `aborted` terminal ordering under cancellation
   (ADR 0020) — same shape with `stopReason: "aborted"`.
 
+### Thinking-level clamp golden (`thinking-level-clamp.json`)
+
+The committed thinking clamp/resolution golden ([#352]): the per-turn `reasoning` option as the C++
+Agent's creation-time and model-switch clamping produces it, captured through the recording fake
+`ModelRuntime`. Two turns pin both required clamp points in one artifact:
+
+- turn 1: a partial-map reasoning model (`gpt-partial`, off/low/high/xhigh mapped, `max` absent →
+  supported off..xhigh) with the requested `"max"` level — **creation-time clamp** yields
+  `reasoning: "xhigh"` on the wire;
+- turn 2: the prepare-next-turn hook switches to a non-reasoning model (`gpt-basic`), which
+  **re-clamps** `"xhigh"` to `"off"` — `reasoning` is undefined, so an unsupported level never
+  reaches the wire.
+
 ### Terminal matrix
 
 The six-category terminal matrix (`model_source`, `model_validation`, `provider`, `stream`,
@@ -127,6 +140,10 @@ surface, and the committed evidence. Resolution records: [#326]
 | 13 | Tool calls in one assistant message execute in parallel by default (pi `toolExecution` default `"parallel"`, no explicit cap); a per-tool sequential override — any call to a tool whose adapter declares `Exclusive` (pi `executionMode: "sequential"`) — serializes the whole batch through the sequential path; bounded caps (incl. 0 = no cap) and sequential policy stay available | `packages/agent/src/harness/types.ts` (`toolExecution` default `"parallel"`); `packages/agent/src/agent-loop.ts` `executeToolCalls` (`hasSequentialToolCall`); `packages/agent/src/types.ts` `AgentTool.executionMode` | `include/cch/agent/AgentContext.hpp` (`BoundedParallelToolExecution` default `0`, `ToolExecutionPolicy`), `src/agent/ToolCallExecutor.cpp` (`execute()` routing) | `AsyncAgentLoopTest` `"default tool execution runs a parallel-safe batch concurrently"`, `"tool execution policy defaults to bounded parallel"`, `"an exclusive tool serializes the whole batch with full per-call lifecycle…"`, `"bounded parallel zero means no explicit concurrency cap"`; `ToolCallExecutorTest` `"default policy executes parallel-safe calls concurrently"`, `"an exclusive tool serializes the whole batch with full per-call lifecycle"` |
 | 14 | A `length`-truncated assistant message fails every one of its tool calls with pi's verbatim error result and executes none of them; hooks do not fire and the batch never terminates | `packages/agent/src/agent-loop.ts` `failToolCallsFromTruncatedMessage` (verbatim message, `terminate: false`) | `src/agent/AgentLoop.cpp` (length branch before the executor seam) | `AsyncAgentLoopTest` `"length-truncated fail-all matches pi's message and emits source-order errors"`, `"length-truncated tool calls emit errors without crossing the executor seam"`; `AgentCoreEvidenceTest` → `tool-scheduling.json` turn 2 |
 | 15 | All-true `terminate` batch hint ends the loop exactly like pi: batch terminates iff every finalized result carries an explicit terminate hint; error results carry no implicit ban (ADR 0008) but plain failure outcomes never terminate | `packages/agent/src/agent-loop.ts` `shouldTerminateToolBatch` (`every(result.terminate === true)`); ADR 0008 | `src/agent/ToolCallExecutor.cpp` (`make_batch_result`), `src/agent/AgentLoop.cpp` (`has_more_tool_calls`) | `AsyncAgentLoopTest` `"all-true terminate batch ends the loop after one turn"`, `"an error result with an explicit terminate hint still terminates the batch"`, `"terminate batch continues when one call declines"`; `ToolCallExecutorTest` `"an error result with an explicit terminate hint terminates the batch"`, `"batch termination requires every call to carry the hint"`; `AgentCoreEvidenceTest` → `tool-scheduling.json` turn 3 |
+| 16 | Seven-level thinking set including `"max"` with `"medium"` as the default (pi `DEFAULT_THINKING_LEVEL`), replacing the legacy `"off"` default; an unset level requests `"medium"` | `packages/coding-agent/src/core/defaults.ts` (`DEFAULT_THINKING_LEVEL: "medium"`); `model-resolver.ts`; ADR 0034 | `include/cch/agent/Agent.hpp` (`AgentInitialState::thinking_level` default), `src/agent/AgentLoop.cpp` (constructor normalizes empty → `"medium"`), `src/coding_agent/runtime/AgentSessionRuntime.cpp` (fresh-session fallback) | `ModelRuntimeSeamTest` `"the Agent holds kDefaultModel…"` (default `"medium"` clamps to `"off"` on a non-reasoning model); `AgentTest` thinking-state suites; `stream-simple-options-default.json` (clamped default turn) |
+| 17 | Creation-time and model-switch clamping via `getSupportedThinkingLevels`/`clampThinkingLevel` (null = unsupported; xhigh/max require explicit mapping); an unsupported level can never reach the wire | `packages/ai/src/models.ts` `getSupportedThinkingLevels`/`clampThinkingLevel`; `packages/coding-agent/src/core/sdk.ts` (creation clamp) and `agent-session.ts` (re-clamp on model switch / `setThinkingLevel`) | `include/cch/ai/Model.hpp` + `src/ai/SimpleOptions.cpp` (`clamp_thinking_level_string`), `src/agent/AgentLoop.cpp` (constructor clamp + `apply_turn_update` re-clamp) | `ModelRuntimeSeamTest` `"creation-time thinking clamping covers every level against full, partial, and null thinking maps"` (7×3 matrix), `"model switch re-clamps…"`; `SimpleOptionsTest` string-level clamp; `AgentCoreEvidenceTest` → `thinking-level-clamp.json` |
+| 18 | Per turn, thinking `off` produces an undefined `reasoning` option and any other (clamped) level forwards as-is | `agent-harness.ts` `createStreamFn`; `agent.ts` `createLoopConfig` (`thinkingLevel === "off" ? undefined : thinkingLevel`) | `src/agent/AgentLoop.cpp` (`stream_reasoning`) | `ModelRuntimeSeamTest` option-forwarding tests; `AgentCoreEvidenceTest` → `stream-simple-options-default.json` (clamped default, no reasoning) |
+| 19 | The Agent holds the concrete unknown `kDefaultModel` with no special-casing until a real model resolves; streaming against it fails through normal provider lookup exactly like pi | `packages/agent/src/agent.ts` (`DEFAULT_MODEL`); `sdk.ts` `if (!model) thinkingLevel = "off"` | `include/cch/agent/AgentContext.hpp` (`kDefaultModel`, `AsyncAgentOptions::model` default), `src/agent/AgentLoop.cpp` (no placeholder substitution) | `ModelRuntimeSeamTest` `"the Agent holds kDefaultModel with no special-casing…"` |
 
 ### Recorded divergences preserved (unchanged by this ticket)
 
@@ -156,5 +173,6 @@ surface, and the committed evidence. Resolution records: [#326]
 [#349]: https://github.com/lanshengzhi/cpp-coding-harness/issues/349
 [#350]: https://github.com/lanshengzhi/cpp-coding-harness/issues/350
 [#351]: https://github.com/lanshengzhi/cpp-coding-harness/issues/351
+[#352]: https://github.com/lanshengzhi/cpp-coding-harness/issues/352
 [#354]: https://github.com/lanshengzhi/cpp-coding-harness/issues/354
 [#355]: https://github.com/lanshengzhi/cpp-coding-harness/issues/355

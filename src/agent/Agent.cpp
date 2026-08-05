@@ -134,7 +134,10 @@ struct Agent::Impl {
         AgentInitialState initial_state)
         : loop(std::move(runtime), std::move(tools), std::move(options)) {
         state.messages = std::move(initial_state.messages);
-        state.thinking_level = std::move(initial_state.thinking_level);
+        // The loop clamps the requested level against the active model at
+        // construction; live state reflects the effective (clamped) level so
+        // `state()` and the wire never diverge (#352).
+        state.thinking_level = loop.current_thinking_level();
         state.input_queues.max_messages = loop.max_queued_messages();
         state.input_queues.max_bytes = loop.max_queued_bytes();
         state.input_queues.steering.mode = loop.steering_mode();

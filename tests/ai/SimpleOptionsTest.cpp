@@ -39,6 +39,34 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "string-level clamp matches pi clampThinkingLevel across the seven-level set",
+    "[ai][simple-options][issue352]") {
+    auto partial = tests::make_model("partial", "deepseek", "openai-responses");
+    partial.reasoning = true;
+    partial.thinking_level_map = ai::ThinkingLevelMap{
+        {ai::ModelThinkingLevel::Off, std::nullopt},
+        {ai::ModelThinkingLevel::Low, "low"},
+        {ai::ModelThinkingLevel::XHigh, "xhigh"},
+    };
+
+    // Off is explicitly unsupported (null); xhigh is mapped; max is absent
+    // and therefore unsupported. The supported set is minimal..xhigh.
+    CHECK(ai::clamp_thinking_level_string(partial, "off") == "minimal");
+    CHECK(ai::clamp_thinking_level_string(partial, "max") == "xhigh");
+    CHECK(ai::clamp_thinking_level_string(partial, "medium") == "medium");
+
+    // A non-reasoning model supports only "off"; every other request clamps
+    // down to it (pi `getSupportedThinkingLevels` returns ["off"]).
+    const auto basic = tests::make_model("basic");
+    CHECK(ai::clamp_thinking_level_string(basic, "medium") == "off");
+    CHECK(ai::clamp_thinking_level_string(basic, "off") == "off");
+    CHECK(ai::clamp_thinking_level_string(basic, "max") == "off");
+
+    // Invalid names pass through unchanged: validation owns rejection.
+    CHECK(ai::clamp_thinking_level_string(basic, "turbo") == "turbo");
+}
+
+TEST_CASE(
     "Simple request options are move-only and clamp output to context",
     "[ai][simple-options][issue339]") {
     static_assert(!std::is_copy_constructible_v<ai::SimpleStreamOptions>);

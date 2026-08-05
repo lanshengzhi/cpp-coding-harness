@@ -70,4 +70,12 @@ struct Model {
     const Model& model,
     ModelThinkingLevel requested);
 
+/// Clamp a wire-name thinking level ("off".."max") to the model's supported
+/// set and return the clamped wire name (pi-ai `clampThinkingLevel` applied to
+/// the agent-level string vocabulary). An unparseable request is returned
+/// unchanged so validation owns rejection of invalid level names.
+[[nodiscard]] std::string clamp_thinking_level_string(
+    const Model& model,
+    std::string_view requested);
+
 } // namespace cch::ai

@@ -1,5 +1,6 @@
 #include "SimpleOptions.hpp"
 
+#include "ai/ModelThinkingLevel.hpp"
 #include "util/Json.hpp"
 
 #include <algorithm>
@@ -200,6 +201,18 @@ ModelThinkingLevel clamp_thinking_level(
         }
     }
     return available.empty() ? ModelThinkingLevel::Off : available.front();
+}
+
+std::string clamp_thinking_level_string(
+    const Model& model,
+    std::string_view requested) {
+    if (const auto parsed = detail::parse_model_thinking_level(requested)) {
+        const auto clamped = clamp_thinking_level(model, *parsed);
+        if (const auto name = detail::model_thinking_level_name(clamped)) {
+            return std::string{*name};
+        }
+    }
+    return std::string{requested};
 }
 
 namespace detail {

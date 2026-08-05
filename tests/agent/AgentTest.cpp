@@ -952,7 +952,9 @@ TEST_CASE("stateful Agent retains applied run-state updates after a later policy
         if (prepared_turns == 1) {
             return agent::AgentLoopTurnUpdate{
                 .context = std::nullopt,
-                .model = tests::make_model("model-new"),
+                // The new model supports thinking, so the "high" update
+                // survives model-switch re-clamping (#352).
+                .model = tests::make_full_thinking_model("model-new"),
                 .thinking_level = std::string{"high"},
             };
         }
@@ -1023,7 +1025,9 @@ TEST_CASE("stateful Agent retains its configured thinking state across a run", "
     initial_state.thinking_level = "high";
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
-    options.model = tests::make_model("fake-model");
+    // A full-map reasoning model supports "high", so the configured level
+    // survives creation-time clamping (#352).
+    options.model = tests::make_full_thinking_model("fake-model");
     agent::Agent subject(
         client,
         std::move(tools),

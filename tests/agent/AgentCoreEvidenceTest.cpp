@@ -412,7 +412,10 @@ TEST_CASE(
 
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
-    options.model = tests::make_model("gpt-test");
+    // Full-map reasoning model: the requested "high" survives creation-time
+    // clamping, so the golden's reasoning field proves option forwarding rather
+    // than clamp fallback (#352).
+    options.model = tests::make_full_thinking_model("gpt-test");
     options.session_id = "session-golden";
     options.cache_retention = ai::CacheRetention::Short;
     options.timeout_ms = 60000;
@@ -442,9 +445,11 @@ TEST_CASE(
     auto runtime = std::make_shared<tests::FakeModelRuntime>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
 
-    // Every knob at its default: off thinking (no reasoning), no session id,
-    // no timeout/retries/headers. Only the active prompt signal is forwarded,
-    // and cacheRetention resolves to the pi "short" default.
+    // Every knob at its default: the unset level requested pi's
+    // DEFAULT_THINKING_LEVEL ("medium") and was clamped at creation to the
+    // non-reasoning model's only supported level ("off", no reasoning), no
+    // session id, no timeout/retries/headers. Only the active prompt signal is
+    // forwarded, and cacheRetention resolves to the pi "short" default.
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
@@ -473,7 +478,10 @@ TEST_CASE(
     int prepare_calls = 0;
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
-    options.model = tests::make_model("gpt-test");
+    // Full-map reasoning model so the requested "medium" (and the "high"
+    // prepare-next-turn flip) survives clamping; the golden proves per-turn
+    // reasoning forwarding on the wire, not clamp fallback (#352).
+    options.model = tests::make_full_thinking_model("gpt-test");
     // prepare-next-turn runs after turn_end: its first update flips the
     // thinking level from medium to high, so the recorded per-turn reasoning
     // for calls 2/3 proves the update landed before the next stream call.
@@ -572,6 +580,60 @@ TEST_CASE(
     CHECK(runtime->terminal_events == 1);
     expect_json_equal(
         lifecycle_events_to_json(run.events), "loop-terminal-aborted.json");
+}
+
+TEST_CASE(
+    "thinking-level clamp golden covers creation and model-switch clamping",
+    "[agent][fixture][issue352]") {
+    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    runtime->responses.push_back(ai::assistant_text_message("first reply"));
+    runtime->responses.push_back(ai::assistant_text_message("second reply"));
+
+    // Partial map (off/low/high/xhigh mapped, "max" absent): the supported
+    // set is off..xhigh, so the requested "max" clamps to "xhigh" at
+    // creation. The prepare-next-turn hook then switches to a non-reasoning
+    // model, which must re-clamp "xhigh" to "off" so turn 2 forwards no
+    // reasoning — an unsupported level never reaches the wire (#352).
+    const ai::ThinkingLevelMap partial_map{
+        {ai::ModelThinkingLevel::Off, "off"},
+        {ai::ModelThinkingLevel::Low, "low"},
+        {ai::ModelThinkingLevel::High, "high"},
+        {ai::ModelThinkingLevel::XHigh, "xhigh"},
+    };
+    agent::AsyncAgentOptions options;
+    options.max_turns = 3;
+    options.model = tests::make_reasoning_model("gpt-partial", partial_map);
+    options.prepare_next_turn =
+        agent::adapt_sync_prepare_next_turn(
+            [](const agent::PrepareNextTurnContext&)
+                -> util::Expected<
+                    std::optional<agent::AgentLoopTurnUpdate>> {
+                return agent::AgentLoopTurnUpdate{
+                    .model = tests::make_model("gpt-basic"),
+                };
+            });
+    options.validate_turn_update =
+        agent::adapt_sync_validate_turn_update(
+            [](const agent::AgentLoopTurnUpdate&)
+                -> util::ExpectedVoid { return {}; });
+
+    agent::Agent subject(
+        runtime,
+        agent::AsyncToolRegistry{},
+        std::move(options),
+        agent::AgentInitialState{.thinking_level = "max"});
+
+    REQUIRE(run_prompt(subject, "think hard"));
+    REQUIRE(run_prompt(subject, "switch model"));
+
+    REQUIRE(runtime->calls.size() == 2);
+    expect_json_equal(
+        stream_calls_to_json(runtime->calls),
+        "thinking-level-clamp.json");
+    // The wire-level facts the golden pins, asserted directly as well:
+    CHECK(runtime->calls[0].options.reasoning == ai::ThinkingLevel::XHigh);
+    CHECK(runtime->calls[1].options.reasoning == std::nullopt);
+    CHECK(subject.state().thinking_level == "off");
 }
 
 namespace {

@@ -116,6 +116,14 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
         state.thinking_level = *update.thinking_level;
     }
 
+    // Re-clamp the active thinking level against the current model after any
+    // model switch or level change so an unsupported level can never be
+    // forwarded to the stream (pi agent-session.ts re-clamps on model switch
+    // and on every setThinkingLevel). Idempotent when neither changed.
+    options.thinking_level = ai::clamp_thinking_level_string(
+        options.model, options.thinking_level);
+    state.thinking_level = options.thinking_level;
+
     return {};
 }
 
@@ -130,6 +138,17 @@ AsyncAgentLoop::AsyncAgentLoop(
       options_(std::move(options)) {
     // options_.model is concrete (kDefaultModel default); no placeholder
     // substitution happens anywhere in the loop.
+    // An unset thinking level requests pi's DEFAULT_THINKING_LEVEL ("medium",
+    // ADR 0034 / #352) and the request is clamped to the model's supported set
+    // at creation, so an unsupported level can never be forwarded to the
+    // stream (pi agent-session.ts clamps creation-time levels via
+    // clampThinkingLevel; while the Agent still holds kDefaultModel the
+    // effective level clamps to "off").
+    if (options_.thinking_level.empty()) {
+        options_.thinking_level = "medium";
+    }
+    options_.thinking_level = ai::clamp_thinking_level_string(
+        options_.model, options_.thinking_level);
 }
 
 boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::run(

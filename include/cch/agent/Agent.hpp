@@ -24,7 +24,12 @@ class AgentPromptAccess;
 /// Agent's run options and owned tool registry.
 struct AgentInitialState {
     std::vector<ai::MessageVariant> messages;
-    std::string thinking_level{"off"};
+    /// Requested thinking level before model-aware clamping, defaulting to pi's
+    /// `DEFAULT_THINKING_LEVEL` ("medium", ADR 0034 / #352). The Agent clamps
+    /// this against the active model's supported set at creation, so the
+    /// effective level can differ (e.g. "off" while the Agent still holds
+    /// `kDefaultModel`, which supports no reasoning).
+    std::string thinking_level{"medium"};
 };
 
 /// RAII handle for one weak Agent lifecycle observer.

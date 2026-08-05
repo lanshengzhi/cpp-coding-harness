@@ -154,7 +154,9 @@ TEST_CASE(
 
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
-    options.model = tests::make_model("gpt-test");
+    // Full-map reasoning model so the requested "high" survives creation-time
+    // clamping and reaches the stream (#352).
+    options.model = tests::make_full_thinking_model("gpt-test");
     options.session_id = "session-full";
     options.cache_retention = ai::CacheRetention::Short;
     options.timeout_ms = 60000;
@@ -199,8 +201,10 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    // thinking_level stays off and every retry/header/timeout knob stays at
-    // its default; only the active prompt signal is forwarded.
+    // The unset level requested pi's DEFAULT_THINKING_LEVEL ("medium") and was
+    // clamped at creation to the non-reasoning model's only supported level
+    // ("off", #352); every retry/header/timeout knob stays at its default and
+    // only the active prompt signal is forwarded.
     agent::Agent subject(runtime, agent::AsyncToolRegistry{}, std::move(options));
 
     REQUIRE(run_prompt(subject, "hi"));
@@ -402,4 +406,193 @@ TEST_CASE(
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[0])) == "first");
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[2])) == "second");
     REQUIRE(runtime->calls.size() == 2);
+}
+
+namespace {
+
+/// Partial-map reasoning model shared by the clamp tests: low/high/xhigh carry
+/// explicit mappings and "max" is absent, so the supported set is off..xhigh
+/// (a missing xhigh/max mapping means unsupported, pi
+/// `getSupportedThinkingLevels`).
+[[nodiscard]] ai::ThinkingLevelMap partial_thinking_map() {
+    return ai::ThinkingLevelMap{
+        {ai::ModelThinkingLevel::Off, "off"},
+        {ai::ModelThinkingLevel::Low, "low"},
+        {ai::ModelThinkingLevel::High, "high"},
+        {ai::ModelThinkingLevel::XHigh, "xhigh"},
+    };
+}
+
+/// The per-turn wire reasoning pi's harness consumer derives from a clamped
+/// level: "off" forwards no reasoning, every other level forwards as the
+/// stream `ThinkingLevel` (agent-harness.ts `off → undefined`).
+[[nodiscard]] std::optional<ai::ThinkingLevel> wire_reasoning(
+    std::string_view level) {
+    if (level == "off") {
+        return std::nullopt;
+    }
+    if (level == "minimal") {
+        return ai::ThinkingLevel::Minimal;
+    }
+    if (level == "low") {
+        return ai::ThinkingLevel::Low;
+    }
+    if (level == "medium") {
+        return ai::ThinkingLevel::Medium;
+    }
+    if (level == "high") {
+        return ai::ThinkingLevel::High;
+    }
+    if (level == "xhigh") {
+        return ai::ThinkingLevel::XHigh;
+    }
+    if (level == "max") {
+        return ai::ThinkingLevel::Max;
+    }
+    return std::nullopt;
+}
+
+/// Run one turn with the requested level against the given model and assert
+/// that creation-time clamping produced the expected effective level both in
+/// run state and in the reasoning option recorded at the fake ModelRuntime
+/// seam (an unsupported level can never reach the wire, #352).
+void expect_creation_clamp(
+    const ai::Model& model,
+    std::string_view requested,
+    std::string_view expected_level) {
+    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    runtime->responses.push_back(ai::assistant_text_message("ok"));
+
+    agent::AsyncAgentOptions options;
+    options.max_turns = 3;
+    options.model = model;
+    options.thinking_level = std::string{requested};
+    agent::AsyncAgentLoop loop(runtime, agent::AsyncToolRegistry{}, std::move(options));
+    auto run = run_loop(loop, "hi");
+
+    REQUIRE(run.result.has_value());
+    CHECK(run.result->state.thinking_level == expected_level);
+    REQUIRE(runtime->calls.size() == 1);
+    CHECK(runtime->calls[0].options.reasoning == wire_reasoning(expected_level));
+}
+
+} // namespace
+
+TEST_CASE(
+    "creation-time thinking clamping covers every level against full, partial, and null thinking maps",
+    "[agent][streamSimple][issue352]") {
+    // Full map: every seven-level name mapped, so nothing clamps.
+    const auto full_map = tests::make_full_thinking_model("gpt-full");
+    // Partial map: "max" absent, so the supported set is off..xhigh.
+    const auto partial_map = tests::make_reasoning_model(
+        "gpt-partial", partial_thinking_map());
+    // Null map on a reasoning model: no mapping at all, so xhigh/max require
+    // an explicit mapping (pi) and clamp down to the supported off..high set.
+    auto null_map = tests::make_model("gpt-null");
+    null_map.reasoning = true;
+
+    constexpr std::string_view kLevels[] = {
+        "off", "minimal", "low", "medium", "high", "xhigh", "max"};
+
+    for (const auto requested : kLevels) {
+        expect_creation_clamp(full_map, requested, requested);
+        const auto expected_partial =
+            requested == "max" ? std::string_view{"xhigh"} : requested;
+        expect_creation_clamp(partial_map, requested, expected_partial);
+        const auto expected_null =
+            (requested == "xhigh" || requested == "max")
+                ? std::string_view{"high"}
+                : requested;
+        expect_creation_clamp(null_map, requested, expected_null);
+    }
+}
+
+TEST_CASE(
+    "model switch re-clamps the thinking level so an unsupported level never reaches the wire",
+    "[agent][streamSimple][issue352]") {
+    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    runtime->responses.push_back(ai::assistant_text_message("first"));
+    runtime->responses.push_back(ai::assistant_text_message("second"));
+
+    agent::AsyncAgentOptions options;
+    options.max_turns = 3;
+    options.model = tests::make_reasoning_model(
+        "gpt-partial", partial_thinking_map());
+    // The host switches to a non-reasoning model after turn 1; the active
+    // "max" level (already clamped to "xhigh" at creation) must re-clamp to
+    // the new model's only supported level ("off") before turn 2 (pi
+    // agent-session.ts re-clamps on model switch).
+    options.prepare_next_turn =
+        agent::adapt_sync_prepare_next_turn(
+            [](const agent::PrepareNextTurnContext&)
+                -> util::Expected<
+                    std::optional<agent::AgentLoopTurnUpdate>> {
+                return agent::AgentLoopTurnUpdate{
+                    .model = tests::make_model("gpt-basic"),
+                };
+            });
+    options.validate_turn_update =
+        agent::adapt_sync_validate_turn_update(
+            [](const agent::AgentLoopTurnUpdate&)
+                -> util::ExpectedVoid { return {}; });
+
+    agent::Agent subject(
+        runtime,
+        agent::AsyncToolRegistry{},
+        std::move(options),
+        // The Agent requests the level from its initial state; "max" clamps
+        // to the partial model's top supported level at creation.
+        agent::AgentInitialState{.thinking_level = "max"});
+    REQUIRE(run_prompt(subject, "first"));
+    REQUIRE(run_prompt(subject, "second"));
+
+    REQUIRE(runtime->calls.size() == 2);
+    CHECK(runtime->calls[0].options.reasoning == ai::ThinkingLevel::XHigh);
+    CHECK(runtime->calls[1].options.reasoning == std::nullopt);
+    CHECK(subject.state().model.id == "gpt-basic");
+    CHECK(subject.state().thinking_level == "off");
+}
+
+TEST_CASE(
+    "the Agent holds kDefaultModel with no special-casing until a real model resolves",
+    "[agent][streamSimple][issue352]") {
+    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    runtime->responses.push_back(ai::assistant_text_message("ok"));
+
+    // No model configured: the loop forwards the concrete unknown kDefaultModel
+    // exactly as configured, and the unset level requests pi's
+    // DEFAULT_THINKING_LEVEL ("medium") which clamps to kDefaultModel's only
+    // supported level ("off") — a fresh Agent's first turn carries no
+    // reasoning, matching pi's `if (!model) thinkingLevel = "off"`.
+    agent::AsyncAgentLoop loop(runtime, agent::AsyncToolRegistry{}, {});
+    auto run = run_loop(loop, "hi");
+
+    REQUIRE(run.result.has_value());
+    REQUIRE(runtime->calls.size() == 1);
+    CHECK(runtime->calls[0].model.id == "unknown");
+    CHECK(runtime->calls[0].model.provider == "unknown");
+    CHECK(run.result->state.model.id == "unknown");
+    CHECK(run.result->state.thinking_level == "off");
+    CHECK(runtime->calls[0].options.reasoning == std::nullopt);
+}
+
+TEST_CASE(
+    "the Agent's live state reflects the clamped thinking level at creation",
+    "[agent][streamSimple][issue352]") {
+    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    runtime->responses.push_back(ai::assistant_text_message("ok"));
+
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_reasoning_model(
+        "gpt-partial", partial_thinking_map());
+    // "max" requests clamp to the partial model's top supported level
+    // ("xhigh") at construction; live state reports the effective level before
+    // any turn runs.
+    agent::Agent subject(
+        runtime,
+        agent::AsyncToolRegistry{},
+        std::move(options),
+        agent::AgentInitialState{.thinking_level = "max"});
+
+    CHECK(subject.state().thinking_level == "xhigh");
 }

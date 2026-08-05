@@ -2038,7 +2038,10 @@ TEST_CASE("prepareNextTurn no update leaves model and thinking level unchanged",
 
     REQUIRE(run.result);
     CHECK(run.result->state.model.id == "gpt-test");
-    CHECK(run.result->state.thinking_level.empty());
+    // The unset level requested pi's DEFAULT_THINKING_LEVEL ("medium") and was
+    // clamped at creation against the non-reasoning model's only supported
+    // level (#352). The no-update turn leaves that clamped level unchanged.
+    CHECK(run.result->state.thinking_level == "off");
 }
 
 TEST_CASE("prepareNextTurn valid thinking level is preserved in state", "[agent][async][u8]") {
@@ -2049,7 +2052,9 @@ TEST_CASE("prepareNextTurn valid thinking level is preserved in state", "[agent]
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
-    options.model = tests::make_model("gpt-test");
+    // A full-map reasoning model supports "high", so the level-only update
+    // passes through creation and re-clamp unchanged (#352).
+    options.model = tests::make_full_thinking_model("gpt-test");
     options.prepare_next_turn =
         agent::adapt_sync_prepare_next_turn(
             [](const agent::PrepareNextTurnContext&)
