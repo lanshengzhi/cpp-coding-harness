@@ -139,6 +139,13 @@ void apply_usage(
         model_id && *model_id != model.id) {
         assistant.response_model = std::string{*model_id};
     }
+    // pi's `finalizeResponse` records the raw wire status as `rawStopReason`
+    // for every terminal Responses event, including failures
+    // (openai-responses-shared.ts).
+    if (const auto status = stream::string_member(*response, "status");
+        status && !status->empty()) {
+        assistant.raw_stop_reason = *status;
+    }
     apply_usage(model, *response, assistant);
     if (event_type == "response.failed") {
         const auto* error = stream::object_member(*response, "error");

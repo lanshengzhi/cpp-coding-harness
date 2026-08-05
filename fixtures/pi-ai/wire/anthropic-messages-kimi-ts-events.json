@@ -1,15 +1,567 @@
 [
-  "start",
-  "text_start",
-  "text_delta",
-  "text_end",
-  "thinking_start",
-  "thinking_delta",
-  "thinking_end",
-  "thinking_start",
-  "thinking_end",
-  "toolcall_start",
-  "toolcall_delta",
-  "toolcall_end",
-  "done"
+  {
+    "type": "start",
+    "partial": {
+      "role": "assistant",
+      "content": [],
+      "api": "anthropic-messages",
+      "provider": "kimi-coding",
+      "model": "kimi-for-coding",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "pending",
+      "timestamp": 0
+    }
+  },
+  {
+    "type": "text_start",
+    "contentIndex": 0,
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello"
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "kimi-coding",
+      "model": "kimi-for-coding",
+      "usage": {
+        "input": 100,
+        "output": 1,
+        "cacheRead": 20,
+        "cacheWrite": 10,
+        "totalTokens": 131,
+        "cost": {
+          "input": 0.00009499999999999999,
+          "output": 0.000004,
+          "cacheRead": 0.0000038,
+          "cacheWrite": 0.000007599999999999999,
+          "total": 0.00011039999999999999
+        },
+        "cacheWrite1h": 4
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "responseId": "msg_kimi"
+    }
+  },
+  {
+    "type": "text_delta",
+    "contentIndex": 0,
+    "delta": " world",
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello world"
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "kimi-coding",
+      "model": "kimi-for-coding",
+      "usage": {
+        "input": 100,
+        "output": 1,
+        "cacheRead": 20,
+        "cacheWrite": 10,
+        "totalTokens": 131,
+        "cost": {
+          "input": 0.00009499999999999999,
+          "output": 0.000004,
+          "cacheRead": 0.0000038,
+          "cacheWrite": 0.000007599999999999999,
+          "total": 0.00011039999999999999
+        },
+        "cacheWrite1h": 4
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "responseId": "msg_kimi"
+    }
+  },
+  {
+    "type": "text_end",
+    "contentIndex": 0,
+    "content": "Hello world",
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello world"
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "kimi-coding",
+      "model": "kimi-for-coding",
+      "usage": {
+        "input": 100,
+        "output": 1,
+        "cacheRead": 20,
+        "cacheWrite": 10,
+        "totalTokens": 131,
+        "cost": {
+          "input": 0.00009499999999999999,
+          "output": 0.000004,
+          "cacheRead": 0.0000038,
+          "cacheWrite": 0.000007599999999999999,
+          "total": 0.00011039999999999999
+        },
+        "cacheWrite1h": 4
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "responseId": "msg_kimi"
+    }
+  },
+  {
+    "type": "thinking_start",
+    "contentIndex": 1,
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello world"
+        },
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "dummy-signature"
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "kimi-coding",
+      "model": "kimi-for-coding",
+      "usage": {
+        "input": 100,
+        "output": 1,
+        "cacheRead": 20,
+        "cacheWrite": 10,
+        "totalTokens": 131,
+        "cost": {
+          "input": 0.00009499999999999999,
+          "output": 0.000004,
+          "cacheRead": 0.0000038,
+          "cacheWrite": 0.000007599999999999999,
+          "total": 0.00011039999999999999
+        },
+        "cacheWrite1h": 4
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "responseId": "msg_kimi"
+    }
+  },
+  {
+    "type": "thinking_delta",
+    "contentIndex": 1,
+    "delta": " more",
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello world"
+        },
+        {
+          "type": "thinking",
+          "thinking": "plan more",
+          "thinkingSignature": "dummy-signature"
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "kimi-coding",
+      "model": "kimi-for-coding",
+      "usage": {
+        "input": 100,
+        "output": 1,
+        "cacheRead": 20,
+        "cacheWrite": 10,
+        "totalTokens": 131,
+        "cost": {
+          "input": 0.00009499999999999999,
+          "output": 0.000004,
+          "cacheRead": 0.0000038,
+          "cacheWrite": 0.000007599999999999999,
+          "total": 0.00011039999999999999
+        },
+        "cacheWrite1h": 4
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "responseId": "msg_kimi"
+    }
+  },
+  {
+    "type": "thinking_end",
+    "contentIndex": 1,
+    "content": "plan more",
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello world"
+        },
+        {
+          "type": "thinking",
+          "thinking": "plan more",
+          "thinkingSignature": "dummy-signature-tail"
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "kimi-coding",
+      "model": "kimi-for-coding",
+      "usage": {
+        "input": 100,
+        "output": 1,
+        "cacheRead": 20,
+        "cacheWrite": 10,
+        "totalTokens": 131,
+        "cost": {
+          "input": 0.00009499999999999999,
+          "output": 0.000004,
+          "cacheRead": 0.0000038,
+          "cacheWrite": 0.000007599999999999999,
+          "total": 0.00011039999999999999
+        },
+        "cacheWrite1h": 4
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "responseId": "msg_kimi"
+    }
+  },
+  {
+    "type": "thinking_start",
+    "contentIndex": 2,
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello world"
+        },
+        {
+          "type": "thinking",
+          "thinking": "plan more",
+          "thinkingSignature": "dummy-signature-tail"
+        },
+        {
+          "type": "thinking",
+          "thinking": "[Reasoning redacted]",
+          "thinkingSignature": "dummy-redacted",
+          "redacted": true
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "kimi-coding",
+      "model": "kimi-for-coding",
+      "usage": {
+        "input": 100,
+        "output": 1,
+        "cacheRead": 20,
+        "cacheWrite": 10,
+        "totalTokens": 131,
+        "cost": {
+          "input": 0.00009499999999999999,
+          "output": 0.000004,
+          "cacheRead": 0.0000038,
+          "cacheWrite": 0.000007599999999999999,
+          "total": 0.00011039999999999999
+        },
+        "cacheWrite1h": 4
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "responseId": "msg_kimi"
+    }
+  },
+  {
+    "type": "thinking_end",
+    "contentIndex": 2,
+    "content": "[Reasoning redacted]",
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello world"
+        },
+        {
+          "type": "thinking",
+          "thinking": "plan more",
+          "thinkingSignature": "dummy-signature-tail"
+        },
+        {
+          "type": "thinking",
+          "thinking": "[Reasoning redacted]",
+          "thinkingSignature": "dummy-redacted",
+          "redacted": true
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "kimi-coding",
+      "model": "kimi-for-coding",
+      "usage": {
+        "input": 100,
+        "output": 1,
+        "cacheRead": 20,
+        "cacheWrite": 10,
+        "totalTokens": 131,
+        "cost": {
+          "input": 0.00009499999999999999,
+          "output": 0.000004,
+          "cacheRead": 0.0000038,
+          "cacheWrite": 0.000007599999999999999,
+          "total": 0.00011039999999999999
+        },
+        "cacheWrite1h": 4
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "responseId": "msg_kimi"
+    }
+  },
+  {
+    "type": "toolcall_start",
+    "contentIndex": 3,
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello world"
+        },
+        {
+          "type": "thinking",
+          "thinking": "plan more",
+          "thinkingSignature": "dummy-signature-tail"
+        },
+        {
+          "type": "thinking",
+          "thinking": "[Reasoning redacted]",
+          "thinkingSignature": "dummy-redacted",
+          "redacted": true
+        },
+        {
+          "type": "toolCall",
+          "id": "toolu_test",
+          "name": "edit",
+          "arguments": {}
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "kimi-coding",
+      "model": "kimi-for-coding",
+      "usage": {
+        "input": 100,
+        "output": 1,
+        "cacheRead": 20,
+        "cacheWrite": 10,
+        "totalTokens": 131,
+        "cost": {
+          "input": 0.00009499999999999999,
+          "output": 0.000004,
+          "cacheRead": 0.0000038,
+          "cacheWrite": 0.000007599999999999999,
+          "total": 0.00011039999999999999
+        },
+        "cacheWrite1h": 4
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "responseId": "msg_kimi"
+    }
+  },
+  {
+    "type": "toolcall_delta",
+    "contentIndex": 3,
+    "delta": "{\"path\":\"A\\H\",\"text\":\"col1\tcol2\"}",
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello world"
+        },
+        {
+          "type": "thinking",
+          "thinking": "plan more",
+          "thinkingSignature": "dummy-signature-tail"
+        },
+        {
+          "type": "thinking",
+          "thinking": "[Reasoning redacted]",
+          "thinkingSignature": "dummy-redacted",
+          "redacted": true
+        },
+        {
+          "type": "toolCall",
+          "id": "toolu_test",
+          "name": "edit",
+          "arguments": {
+            "path": "A\\H",
+            "text": "col1\tcol2"
+          }
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "kimi-coding",
+      "model": "kimi-for-coding",
+      "usage": {
+        "input": 100,
+        "output": 1,
+        "cacheRead": 20,
+        "cacheWrite": 10,
+        "totalTokens": 131,
+        "cost": {
+          "input": 0.00009499999999999999,
+          "output": 0.000004,
+          "cacheRead": 0.0000038,
+          "cacheWrite": 0.000007599999999999999,
+          "total": 0.00011039999999999999
+        },
+        "cacheWrite1h": 4
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "responseId": "msg_kimi"
+    }
+  },
+  {
+    "type": "toolcall_end",
+    "contentIndex": 3,
+    "toolCall": {
+      "type": "toolCall",
+      "id": "toolu_test",
+      "name": "edit",
+      "arguments": {
+        "path": "A\\H",
+        "text": "col1\tcol2"
+      }
+    },
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello world"
+        },
+        {
+          "type": "thinking",
+          "thinking": "plan more",
+          "thinkingSignature": "dummy-signature-tail"
+        },
+        {
+          "type": "thinking",
+          "thinking": "[Reasoning redacted]",
+          "thinkingSignature": "dummy-redacted",
+          "redacted": true
+        },
+        {
+          "type": "toolCall",
+          "id": "toolu_test",
+          "name": "edit",
+          "arguments": {
+            "path": "A\\H",
+            "text": "col1\tcol2"
+          }
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "kimi-coding",
+      "model": "kimi-for-coding",
+      "usage": {
+        "input": 100,
+        "output": 1,
+        "cacheRead": 20,
+        "cacheWrite": 10,
+        "totalTokens": 131,
+        "cost": {
+          "input": 0.00009499999999999999,
+          "output": 0.000004,
+          "cacheRead": 0.0000038,
+          "cacheWrite": 0.000007599999999999999,
+          "total": 0.00011039999999999999
+        },
+        "cacheWrite1h": 4
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "responseId": "msg_kimi"
+    }
+  },
+  {
+    "type": "done",
+    "reason": "toolUse",
+    "message": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello world"
+        },
+        {
+          "type": "thinking",
+          "thinking": "plan more",
+          "thinkingSignature": "dummy-signature-tail"
+        },
+        {
+          "type": "thinking",
+          "thinking": "[Reasoning redacted]",
+          "thinkingSignature": "dummy-redacted",
+          "redacted": true
+        },
+        {
+          "type": "toolCall",
+          "id": "toolu_test",
+          "name": "edit",
+          "arguments": {
+            "path": "A\\H",
+            "text": "col1\tcol2"
+          }
+        }
+      ],
+      "api": "anthropic-messages",
+      "provider": "kimi-coding",
+      "model": "kimi-for-coding",
+      "usage": {
+        "input": 100,
+        "output": 30,
+        "cacheRead": 20,
+        "cacheWrite": 10,
+        "totalTokens": 160,
+        "cost": {
+          "input": 0.00009499999999999999,
+          "output": 0.00011999999999999999,
+          "cacheRead": 0.0000038,
+          "cacheWrite": 0.000007599999999999999,
+          "total": 0.00022639999999999997
+        },
+        "cacheWrite1h": 4,
+        "reasoning": 7
+      },
+      "stopReason": "toolUse",
+      "timestamp": 0,
+      "responseId": "msg_kimi",
+      "rawStopReason": "tool_use"
+    }
+  }
 ]

@@ -1,14 +1,694 @@
 [
-  "start",
-  "thinking_start",
-  "thinking_delta",
-  "thinking_end",
-  "text_start",
-  "text_delta",
-  "text_end",
-  "toolcall_start",
-  "toolcall_delta",
-  "toolcall_delta",
-  "toolcall_end",
-  "done"
+  {
+    "type": "start",
+    "partial": {
+      "role": "assistant",
+      "content": [],
+      "api": "openai-codex-responses",
+      "provider": "openai-codex",
+      "model": "gpt-5.5-codex",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "diagnostics": [
+        {
+          "type": "provider_transport_failure",
+          "timestamp": 0,
+          "error": {
+            "name": "Error",
+            "message": "connect refused"
+          },
+          "details": {
+            "configuredTransport": "auto",
+            "fallbackTransport": "sse",
+            "eventsEmitted": false,
+            "phase": "before_message_stream_start",
+            "requestBytes": 618
+          }
+        }
+      ]
+    }
+  },
+  {
+    "type": "thinking_start",
+    "contentIndex": 0,
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": ""
+        }
+      ],
+      "api": "openai-codex-responses",
+      "provider": "openai-codex",
+      "model": "gpt-5.5-codex",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "diagnostics": [
+        {
+          "type": "provider_transport_failure",
+          "timestamp": 0,
+          "error": {
+            "name": "Error",
+            "message": "connect refused"
+          },
+          "details": {
+            "configuredTransport": "auto",
+            "fallbackTransport": "sse",
+            "eventsEmitted": false,
+            "phase": "before_message_stream_start",
+            "requestBytes": 618
+          }
+        }
+      ],
+      "responseId": "resp_codex"
+    }
+  },
+  {
+    "type": "thinking_delta",
+    "contentIndex": 0,
+    "delta": "plan",
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan"
+        }
+      ],
+      "api": "openai-codex-responses",
+      "provider": "openai-codex",
+      "model": "gpt-5.5-codex",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "diagnostics": [
+        {
+          "type": "provider_transport_failure",
+          "timestamp": 0,
+          "error": {
+            "name": "Error",
+            "message": "connect refused"
+          },
+          "details": {
+            "configuredTransport": "auto",
+            "fallbackTransport": "sse",
+            "eventsEmitted": false,
+            "phase": "before_message_stream_start",
+            "requestBytes": 618
+          }
+        }
+      ],
+      "responseId": "resp_codex"
+    }
+  },
+  {
+    "type": "thinking_end",
+    "contentIndex": 0,
+    "content": "plan",
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "{\"encrypted_content\":\"dummy-encrypted\",\"id\":\"rs_1\",\"summary\":[{\"text\":\"plan\",\"type\":\"summary_text\"}],\"type\":\"reasoning\"}"
+        }
+      ],
+      "api": "openai-codex-responses",
+      "provider": "openai-codex",
+      "model": "gpt-5.5-codex",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "diagnostics": [
+        {
+          "type": "provider_transport_failure",
+          "timestamp": 0,
+          "error": {
+            "name": "Error",
+            "message": "connect refused"
+          },
+          "details": {
+            "configuredTransport": "auto",
+            "fallbackTransport": "sse",
+            "eventsEmitted": false,
+            "phase": "before_message_stream_start",
+            "requestBytes": 618
+          }
+        }
+      ],
+      "responseId": "resp_codex"
+    }
+  },
+  {
+    "type": "text_start",
+    "contentIndex": 1,
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "{\"encrypted_content\":\"dummy-encrypted\",\"id\":\"rs_1\",\"summary\":[{\"text\":\"plan\",\"type\":\"summary_text\"}],\"type\":\"reasoning\"}"
+        },
+        {
+          "type": "text",
+          "text": ""
+        }
+      ],
+      "api": "openai-codex-responses",
+      "provider": "openai-codex",
+      "model": "gpt-5.5-codex",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "stop",
+      "timestamp": 0,
+      "diagnostics": [
+        {
+          "type": "provider_transport_failure",
+          "timestamp": 0,
+          "error": {
+            "name": "Error",
+            "message": "connect refused"
+          },
+          "details": {
+            "configuredTransport": "auto",
+            "fallbackTransport": "sse",
+            "eventsEmitted": false,
+            "phase": "before_message_stream_start",
+            "requestBytes": 618
+          }
+        }
+      ],
+      "responseId": "resp_codex"
+    }
+  },
+  {
+    "type": "text_delta",
+    "contentIndex": 1,
+    "delta": "Hello",
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "{\"encrypted_content\":\"dummy-encrypted\",\"id\":\"rs_1\",\"summary\":[{\"text\":\"plan\",\"type\":\"summary_text\"}],\"type\":\"reasoning\"}"
+        },
+        {
+          "type": "text",
+          "text": "Hello"
+        }
+      ],
+      "api": "openai-codex-responses",
+      "provider": "openai-codex",
+      "model": "gpt-5.5-codex",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "stop",
+      "timestamp": 0,
+      "diagnostics": [
+        {
+          "type": "provider_transport_failure",
+          "timestamp": 0,
+          "error": {
+            "name": "Error",
+            "message": "connect refused"
+          },
+          "details": {
+            "configuredTransport": "auto",
+            "fallbackTransport": "sse",
+            "eventsEmitted": false,
+            "phase": "before_message_stream_start",
+            "requestBytes": 618
+          }
+        }
+      ],
+      "responseId": "resp_codex"
+    }
+  },
+  {
+    "type": "text_end",
+    "contentIndex": 1,
+    "content": "Hello",
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "{\"encrypted_content\":\"dummy-encrypted\",\"id\":\"rs_1\",\"summary\":[{\"text\":\"plan\",\"type\":\"summary_text\"}],\"type\":\"reasoning\"}"
+        },
+        {
+          "type": "text",
+          "text": "Hello",
+          "textSignature": "{\"id\":\"msg_1\",\"phase\":\"final_answer\",\"v\":1}"
+        }
+      ],
+      "api": "openai-codex-responses",
+      "provider": "openai-codex",
+      "model": "gpt-5.5-codex",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "stop",
+      "timestamp": 0,
+      "diagnostics": [
+        {
+          "type": "provider_transport_failure",
+          "timestamp": 0,
+          "error": {
+            "name": "Error",
+            "message": "connect refused"
+          },
+          "details": {
+            "configuredTransport": "auto",
+            "fallbackTransport": "sse",
+            "eventsEmitted": false,
+            "phase": "before_message_stream_start",
+            "requestBytes": 618
+          }
+        }
+      ],
+      "responseId": "resp_codex"
+    }
+  },
+  {
+    "type": "toolcall_start",
+    "contentIndex": 2,
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "{\"encrypted_content\":\"dummy-encrypted\",\"id\":\"rs_1\",\"summary\":[{\"text\":\"plan\",\"type\":\"summary_text\"}],\"type\":\"reasoning\"}"
+        },
+        {
+          "type": "text",
+          "text": "Hello",
+          "textSignature": "{\"id\":\"msg_1\",\"phase\":\"final_answer\",\"v\":1}"
+        },
+        {
+          "type": "toolCall",
+          "id": "call_1|fc_1",
+          "name": "lookup",
+          "arguments": {}
+        }
+      ],
+      "api": "openai-codex-responses",
+      "provider": "openai-codex",
+      "model": "gpt-5.5-codex",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "stop",
+      "timestamp": 0,
+      "diagnostics": [
+        {
+          "type": "provider_transport_failure",
+          "timestamp": 0,
+          "error": {
+            "name": "Error",
+            "message": "connect refused"
+          },
+          "details": {
+            "configuredTransport": "auto",
+            "fallbackTransport": "sse",
+            "eventsEmitted": false,
+            "phase": "before_message_stream_start",
+            "requestBytes": 618
+          }
+        }
+      ],
+      "responseId": "resp_codex"
+    }
+  },
+  {
+    "type": "toolcall_delta",
+    "contentIndex": 2,
+    "delta": "{\"q\":",
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "{\"encrypted_content\":\"dummy-encrypted\",\"id\":\"rs_1\",\"summary\":[{\"text\":\"plan\",\"type\":\"summary_text\"}],\"type\":\"reasoning\"}"
+        },
+        {
+          "type": "text",
+          "text": "Hello",
+          "textSignature": "{\"id\":\"msg_1\",\"phase\":\"final_answer\",\"v\":1}"
+        },
+        {
+          "type": "toolCall",
+          "id": "call_1|fc_1",
+          "name": "lookup",
+          "arguments": {}
+        }
+      ],
+      "api": "openai-codex-responses",
+      "provider": "openai-codex",
+      "model": "gpt-5.5-codex",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "stop",
+      "timestamp": 0,
+      "diagnostics": [
+        {
+          "type": "provider_transport_failure",
+          "timestamp": 0,
+          "error": {
+            "name": "Error",
+            "message": "connect refused"
+          },
+          "details": {
+            "configuredTransport": "auto",
+            "fallbackTransport": "sse",
+            "eventsEmitted": false,
+            "phase": "before_message_stream_start",
+            "requestBytes": 618
+          }
+        }
+      ],
+      "responseId": "resp_codex"
+    }
+  },
+  {
+    "type": "toolcall_delta",
+    "contentIndex": 2,
+    "delta": "\"x\"}",
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "{\"encrypted_content\":\"dummy-encrypted\",\"id\":\"rs_1\",\"summary\":[{\"text\":\"plan\",\"type\":\"summary_text\"}],\"type\":\"reasoning\"}"
+        },
+        {
+          "type": "text",
+          "text": "Hello",
+          "textSignature": "{\"id\":\"msg_1\",\"phase\":\"final_answer\",\"v\":1}"
+        },
+        {
+          "type": "toolCall",
+          "id": "call_1|fc_1",
+          "name": "lookup",
+          "arguments": {
+            "q": "x"
+          }
+        }
+      ],
+      "api": "openai-codex-responses",
+      "provider": "openai-codex",
+      "model": "gpt-5.5-codex",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "stop",
+      "timestamp": 0,
+      "diagnostics": [
+        {
+          "type": "provider_transport_failure",
+          "timestamp": 0,
+          "error": {
+            "name": "Error",
+            "message": "connect refused"
+          },
+          "details": {
+            "configuredTransport": "auto",
+            "fallbackTransport": "sse",
+            "eventsEmitted": false,
+            "phase": "before_message_stream_start",
+            "requestBytes": 618
+          }
+        }
+      ],
+      "responseId": "resp_codex"
+    }
+  },
+  {
+    "type": "toolcall_end",
+    "contentIndex": 2,
+    "toolCall": {
+      "type": "toolCall",
+      "id": "call_1|fc_1",
+      "name": "lookup",
+      "arguments": {
+        "q": "x"
+      }
+    },
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "{\"encrypted_content\":\"dummy-encrypted\",\"id\":\"rs_1\",\"summary\":[{\"text\":\"plan\",\"type\":\"summary_text\"}],\"type\":\"reasoning\"}"
+        },
+        {
+          "type": "text",
+          "text": "Hello",
+          "textSignature": "{\"id\":\"msg_1\",\"phase\":\"final_answer\",\"v\":1}"
+        },
+        {
+          "type": "toolCall",
+          "id": "call_1|fc_1",
+          "name": "lookup",
+          "arguments": {
+            "q": "x"
+          }
+        }
+      ],
+      "api": "openai-codex-responses",
+      "provider": "openai-codex",
+      "model": "gpt-5.5-codex",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "stop",
+      "timestamp": 0,
+      "diagnostics": [
+        {
+          "type": "provider_transport_failure",
+          "timestamp": 0,
+          "error": {
+            "name": "Error",
+            "message": "connect refused"
+          },
+          "details": {
+            "configuredTransport": "auto",
+            "fallbackTransport": "sse",
+            "eventsEmitted": false,
+            "phase": "before_message_stream_start",
+            "requestBytes": 618
+          }
+        }
+      ],
+      "responseId": "resp_codex"
+    }
+  },
+  {
+    "type": "done",
+    "reason": "toolUse",
+    "message": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "{\"encrypted_content\":\"dummy-encrypted\",\"id\":\"rs_1\",\"summary\":[{\"text\":\"plan\",\"type\":\"summary_text\"}],\"type\":\"reasoning\"}"
+        },
+        {
+          "type": "text",
+          "text": "Hello",
+          "textSignature": "{\"id\":\"msg_1\",\"phase\":\"final_answer\",\"v\":1}"
+        },
+        {
+          "type": "toolCall",
+          "id": "call_1|fc_1",
+          "name": "lookup",
+          "arguments": {
+            "q": "x"
+          }
+        }
+      ],
+      "api": "openai-codex-responses",
+      "provider": "openai-codex",
+      "model": "gpt-5.5-codex",
+      "usage": {
+        "input": 90,
+        "output": 30,
+        "cacheRead": 20,
+        "cacheWrite": 10,
+        "reasoning": 7,
+        "totalTokens": 150,
+        "cost": {
+          "input": 0.00017999999999999998,
+          "output": 0.00011999999999999999,
+          "cacheRead": 0.000019999999999999998,
+          "cacheWrite": 0.00003,
+          "total": 0.00035
+        }
+      },
+      "stopReason": "toolUse",
+      "timestamp": 0,
+      "diagnostics": [
+        {
+          "type": "provider_transport_failure",
+          "timestamp": 0,
+          "error": {
+            "name": "Error",
+            "message": "connect refused"
+          },
+          "details": {
+            "configuredTransport": "auto",
+            "fallbackTransport": "sse",
+            "eventsEmitted": false,
+            "phase": "before_message_stream_start",
+            "requestBytes": 618
+          }
+        }
+      ],
+      "responseId": "resp_codex",
+      "rawStopReason": "completed"
+    }
+  }
 ]

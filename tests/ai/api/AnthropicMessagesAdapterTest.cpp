@@ -4,6 +4,7 @@
 #include "ai/providers/KimiCatalog.hpp"
 #include "ai/providers/KimiProvider.hpp"
 #include "support/ModelFixture.hpp"
+#include "support/PiEventSnapshot.hpp"
 #include "support/PiFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"
 #include "util/Json.hpp"
@@ -299,16 +300,9 @@ TEST_CASE(
     CHECK(tool.arguments->at("path").get_string() == "A\\H");
     CHECK(tool.arguments->at("text").get_string() == "col1\tcol2");
 
-    const auto expected_event_snapshot = tests::read_pi_fixture(
+    tests::check_pi_event_snapshot(
+        run.events,
         "wire/anthropic-messages-kimi-ts-events.json");
-    REQUIRE(expected_event_snapshot);
-    const auto* expected_event_values = expected_event_snapshot->get_if<util::JsonValue::array_t>();
-    REQUIRE(expected_event_values);
-    std::vector<std::string> expected_events;
-    for (const auto& value : *expected_event_values) {
-        expected_events.push_back(value.get_string());
-    }
-    CHECK(event_names(run.events) == expected_events);
 
     REQUIRE(transport->requests.size() == 1);
     const auto& request = transport->requests.front();
@@ -634,8 +628,10 @@ TEST_CASE(
     const auto* tool = std::get_if<ai::ToolCallContent>(&run.result->content.front());
     REQUIRE(tool);
     CHECK(tool->raw_arguments == "{\"q\":");
+    // pi's `parseStreamingJson` (partial-json) drops the trailing key with no
+    // value instead of completing it to `null`; a partial `{"q":` parses to {}.
     REQUIRE(tool->arguments);
-    CHECK(tool->arguments->at("q").holds<util::JsonValue::null_t>());
+    CHECK(tool->arguments->get_object().empty());
     CHECK(tool->arguments_valid);
     CHECK_FALSE(tool->argument_error);
 }

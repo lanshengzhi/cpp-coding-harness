@@ -3,6 +3,7 @@
 #include <cch/ai/providers/StreamTransport.hpp>
 #include "support/AdapterProviderFixture.hpp"
 #include "support/ModelFixture.hpp"
+#include "support/PiEventSnapshot.hpp"
 #include "support/PiFixture.hpp"
 #include "support/ScriptedWebSocket.hpp"
 #include "support/StreamAdapterFixture.hpp"
@@ -284,17 +285,9 @@ TEST_CASE(
     REQUIRE(tool.arguments);
     CHECK(tool.arguments->at("q").get_string() == "x");
 
-    const auto expected_event_snapshot = tests::read_pi_fixture(
+    tests::check_pi_event_snapshot(
+        run.events,
         "wire/openai-codex-responses-ws-ts-events.json");
-    REQUIRE(expected_event_snapshot);
-    const auto* expected_event_values =
-        expected_event_snapshot->get_if<util::JsonValue::array_t>();
-    REQUIRE(expected_event_values);
-    std::vector<std::string> expected_events;
-    for (const auto& value : *expected_event_values) {
-        expected_events.push_back(value.get_string());
-    }
-    CHECK(event_names(run.events) == expected_events);
 
     REQUIRE(harness.ws->requests.size() == 1);
     const auto& connect = harness.ws->requests.front();
@@ -349,17 +342,9 @@ TEST_CASE(
     CHECK(run.result->usage.cache_write == 10);
     REQUIRE(run.result->content.size() == 3);
     CHECK(std::get<ai::TextContent>(run.result->content[1]).text == "Hello");
-    const auto expected_event_snapshot = tests::read_pi_fixture(
+    tests::check_pi_event_snapshot(
+        run.events,
         "wire/openai-codex-responses-ts-events.json");
-    REQUIRE(expected_event_snapshot);
-    const auto* expected_event_values =
-        expected_event_snapshot->get_if<util::JsonValue::array_t>();
-    REQUIRE(expected_event_values);
-    std::vector<std::string> expected_events;
-    for (const auto& value : *expected_event_values) {
-        expected_events.push_back(value.get_string());
-    }
-    CHECK(event_names(run.events) == expected_events);
 
     REQUIRE(run.result->diagnostics);
     REQUIRE(run.result->diagnostics->size() == 1);
@@ -1046,8 +1031,8 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Codex WS partials carry the pending stop reason",
-    "[ai][provider][codex][issue374]") {
+    "Codex WS partials start pending and flip to stop at final_answer",
+    "[ai][provider][codex][issue374][issue370]") {
     auto harness = make_codex_harness(codex_model());
     auto session = std::make_shared<ScriptedWebSocket::Session>();
     const auto message_item = [](std::string_view status, bool with_content) {
@@ -1099,16 +1084,23 @@ TEST_CASE(
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
-    // The Responses family never records a raw stop reason (pi doesn't).
-    CHECK_FALSE(run.result->raw_stop_reason);
+    // The Responses family records the raw terminal status as rawStopReason
+    // (pi's finalizeResponse), matching the strengthened event snapshot.
+    REQUIRE(run.result->raw_stop_reason);
+    CHECK(*run.result->raw_stop_reason == "completed");
     const std::vector<std::string> expected{
         "start", "text_start", "text_delta", "text_end", "done"};
     CHECK(event_names(run.events) == expected);
-    const auto partials = partial_stop_reasons(run.events);
-    REQUIRE(partials.size() == 4);
-    for (const auto reason : partials) {
-        CHECK(reason == ai::AssistantStopReason::Pending);
-    }
+    // pi's `applyMessagePhaseStopReason`: partials are constructed `pending`
+    // and flip to `stop` once a message item with `phase: "final_answer"`
+    // arrives (openai-responses-shared.ts).
+    const std::vector<ai::AssistantStopReason> expected_partials{
+        ai::AssistantStopReason::Pending,
+        ai::AssistantStopReason::Stop,
+        ai::AssistantStopReason::Stop,
+        ai::AssistantStopReason::Stop,
+    };
+    CHECK(partial_stop_reasons(run.events) == expected_partials);
 }
 
 TEST_CASE(

@@ -277,10 +277,19 @@ void apply_codex_usage(
     // error, and queued/in_progress/missing/unknown all normalize to stop.
     const auto status = stream::string_member(*response, "status");
     std::string_view normalized = "done";
+    // pi's `CODEX_RESPONSE_STATUSES` set includes queued/in_progress, which
+    // `mapStopReason` maps to `stop` (same as this "done" fallback); the
+    // normalized status is recorded as `rawStopReason` for every recognized
+    // status (mapCodexEvents wraps it before the shared `finalizeResponse`
+    // reads it); unrecognized statuses stay unset.
     if (status &&
         (*status == "completed" || *status == "incomplete" ||
-         *status == "failed" || *status == "cancelled")) {
-        normalized = *status;
+         *status == "failed" || *status == "cancelled" ||
+         *status == "queued" || *status == "in_progress")) {
+        assistant.raw_stop_reason = *status;
+        if (*status != "queued" && *status != "in_progress") {
+            normalized = *status;
+        }
     }
     auto termination = map_responses_termination(
         normalized,

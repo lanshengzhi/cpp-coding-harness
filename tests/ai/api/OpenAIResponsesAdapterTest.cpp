@@ -3,6 +3,7 @@
 #include <cch/ai/providers/StreamTransport.hpp>
 #include "support/AdapterProviderFixture.hpp"
 #include "support/ModelFixture.hpp"
+#include "support/PiEventSnapshot.hpp"
 #include "support/PiFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"
 #include "util/Json.hpp"
@@ -199,17 +200,9 @@ TEST_CASE(
     CHECK(tool.arguments_valid);
     REQUIRE(tool.arguments);
     CHECK(tool.arguments->at("q").get_string() == "x");
-    const auto expected_event_snapshot = tests::read_pi_fixture(
+    tests::check_pi_event_snapshot(
+        run.events,
         "wire/openai-responses-deepseek-ts-events.json");
-    REQUIRE(expected_event_snapshot);
-    const auto* expected_event_values =
-        expected_event_snapshot->get_if<util::JsonValue::array_t>();
-    REQUIRE(expected_event_values);
-    std::vector<std::string> expected_events;
-    for (const auto& value : *expected_event_values) {
-        expected_events.push_back(value.get_string());
-    }
-    CHECK(event_names(run.events) == expected_events);
 
     REQUIRE(transport->requests.size() == 1);
     const auto& request = transport->requests.front();
@@ -289,8 +282,8 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "DeepSeek Responses partials carry the pending stop reason",
-    "[ai][provider][responses][issue374]") {
+    "DeepSeek Responses partials start pending and flip to stop at final_answer",
+    "[ai][provider][responses][issue374][issue370]") {
     auto transport = std::make_shared<ScriptedTransport>();
     transport->attempts.push_back(TransportAttempt{.chunks = {
         "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_pending\"}}\n\n"
@@ -314,16 +307,23 @@ TEST_CASE(
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
-    // The Responses family never records a raw stop reason (pi doesn't).
-    CHECK_FALSE(run.result->raw_stop_reason);
+    // The Responses family records the raw terminal status as rawStopReason
+    // (pi's finalizeResponse), matching the strengthened event snapshot.
+    REQUIRE(run.result->raw_stop_reason);
+    CHECK(*run.result->raw_stop_reason == "completed");
     const std::vector<std::string> expected{
         "start", "text_start", "text_delta", "text_end", "done"};
     CHECK(event_names(run.events) == expected);
-    const auto partials = partial_stop_reasons(run.events);
-    REQUIRE(partials.size() == 4);
-    for (const auto reason : partials) {
-        CHECK(reason == ai::AssistantStopReason::Pending);
-    }
+    // pi's `applyMessagePhaseStopReason`: partials are constructed `pending`
+    // and flip to `stop` once a message item with `phase: "final_answer"`
+    // arrives (openai-responses-shared.ts).
+    const std::vector<ai::AssistantStopReason> expected_partials{
+        ai::AssistantStopReason::Pending,
+        ai::AssistantStopReason::Stop,
+        ai::AssistantStopReason::Stop,
+        ai::AssistantStopReason::Stop,
+    };
+    CHECK(partial_stop_reasons(run.events) == expected_partials);
 }
 
 TEST_CASE(
@@ -448,8 +448,10 @@ TEST_CASE(
     const auto* tool = std::get_if<ai::ToolCallContent>(&run.result->content.front());
     REQUIRE(tool);
     CHECK(tool->raw_arguments == "{\"q\":");
+    // pi's `parseStreamingJson` (partial-json) drops the trailing key with no
+    // value instead of completing it to `null`; a partial `{"q":` parses to {}.
     REQUIRE(tool->arguments);
-    CHECK(tool->arguments->at("q").holds<util::JsonValue::null_t>());
+    CHECK(tool->arguments->get_object().empty());
     CHECK(tool->arguments_valid);
     CHECK_FALSE(tool->argument_error);
     const std::vector<std::string> expected_events{
@@ -460,7 +462,7 @@ TEST_CASE(
     const auto& partial_tool = std::get<ai::ToolCallContent>(
         delta->partial.content.front());
     REQUIRE(partial_tool.arguments);
-    CHECK(partial_tool.arguments->at("q").holds<util::JsonValue::null_t>());
+    CHECK(partial_tool.arguments->get_object().empty());
 }
 
 TEST_CASE(

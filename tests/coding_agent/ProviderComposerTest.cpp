@@ -1,15 +1,21 @@
 #include <cch/ai/Model.hpp>
 #include <cch/ai/Provider.hpp>
+#include "ai/glaze/ModelJson.hpp"
 #include "coding_agent/ModelConfig.hpp"
 #include "coding_agent/ProviderComposer.hpp"
+#include "support/JsonCompare.hpp"
+#include "support/PiFixture.hpp"
 #include "support/TempWorkspace.hpp"
+#include "util/Json.hpp"
 
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
 #include <filesystem>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 using namespace cch;
@@ -67,6 +73,56 @@ TEST_CASE("builtin_providers ships the Codex 7 and Kimi 4 catalogs", "[coding_ag
     CHECK(kimi_coding->api == "anthropic-messages");
     CHECK(kimi_coding->compat.has_value());
     CHECK(kimi_coding->compat->allow_empty_signature == true);
+}
+
+TEST_CASE(
+    "builtin catalogs match the frozen baseline shard values",
+    "[coding_agent][provider-composer][issue370]") {
+    // The committed shard goldens (fixtures/pi-ai/models/*-shard.json) are
+    // verbatim copies of the frozen-baseline pi shards (byte-hashes pinned in
+    // the pi-ai fixture README). Every built-in catalog model must serialize
+    // to exactly its baseline shard entry, except the deferred Codex catalog
+    // compat flags (supportsOpenAIGrammarTools / supportsToolSearch), which
+    // are absent from the C++ surface and are stripped from the golden entry.
+    const auto check_shard = [](const std::vector<ai::Model>& models,
+                                std::string_view shard_fixture,
+                                std::string_view api) {
+        const auto shard = tests::read_pi_fixture(shard_fixture);
+        REQUIRE(shard);
+        const auto* by_api = shard->get_if<util::JsonValue::object_t>();
+        REQUIRE(by_api);
+        const auto found = by_api->find(std::string{api});
+        REQUIRE(found != by_api->end());
+        const auto* golden = found->second.get_if<util::JsonValue::object_t>();
+        REQUIRE(golden);
+
+        REQUIRE(models.size() == golden->size());
+        for (const auto& model : models) {
+            const auto golden_entry = golden->find(model.id);
+            REQUIRE(golden_entry != golden->end());
+            auto expected = golden_entry->second;
+            if (!model.compat) {
+                expected.get_object().erase("compat");
+            }
+            auto serialized = ai::glaze::write_model_json(model);
+            REQUIRE(serialized);
+            const auto actual = util::read_json<util::JsonValue>(*serialized);
+            REQUIRE(actual);
+            if (auto mismatch = tests::json_mismatch(expected, *actual); mismatch) {
+                // The vendored fallback test header has no INFO macro; print
+                // the diff to stderr so it appears in the failure output.
+                std::cerr << "CATALOG SHARD MISMATCH (" << shard_fixture << ")"
+                          << ":\n" << *mismatch << "\n";
+                CHECK(false);
+            }
+        }
+    };
+
+    const auto builtins = coding_agent::builtin_providers(composer_options());
+    const auto codex = builtins.at("openai-codex");
+    check_shard(codex->models(), "models/openai-codex-shard.json", "openai-codex-responses");
+    const auto kimi = builtins.at("kimi-coding");
+    check_shard(kimi->models(), "models/kimi-coding-shard.json", "anthropic-messages");
 }
 
 TEST_CASE("built-in without models.json config is used untouched", "[coding_agent][provider-composer][issue345]") {

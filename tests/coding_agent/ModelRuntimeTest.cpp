@@ -3,6 +3,7 @@
 #include <cch/coding_agent/AuthStorage.hpp>
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/PiEventSnapshot.hpp"
 #include "support/PiFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"
 #include "support/TempWorkspace.hpp"
@@ -170,26 +171,6 @@ private:
     return context;
 }
 
-[[nodiscard]] std::vector<std::string> event_names(
-    const std::vector<ai::AssistantStreamEvent>& events) {
-    std::vector<std::string> result;
-    for (const auto& event : events) {
-        if (std::holds_alternative<ai::AssistantStartEvent>(event)) result.push_back("start");
-        else if (std::holds_alternative<ai::ThinkingStartEvent>(event)) result.push_back("thinking_start");
-        else if (std::holds_alternative<ai::ThinkingDeltaEvent>(event)) result.push_back("thinking_delta");
-        else if (std::holds_alternative<ai::ThinkingEndEvent>(event)) result.push_back("thinking_end");
-        else if (std::holds_alternative<ai::TextStartEvent>(event)) result.push_back("text_start");
-        else if (std::holds_alternative<ai::TextDeltaEvent>(event)) result.push_back("text_delta");
-        else if (std::holds_alternative<ai::TextEndEvent>(event)) result.push_back("text_end");
-        else if (std::holds_alternative<ai::ToolCallStartEvent>(event)) result.push_back("toolcall_start");
-        else if (std::holds_alternative<ai::ToolCallDeltaEvent>(event)) result.push_back("toolcall_delta");
-        else if (std::holds_alternative<ai::ToolCallEndEvent>(event)) result.push_back("toolcall_end");
-        else if (std::holds_alternative<ai::AssistantDoneEvent>(event)) result.push_back("done");
-        else result.push_back("error");
-    }
-    return result;
-}
-
 } // namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -317,16 +298,9 @@ TEST_CASE("ModelRuntime config-only provider streams the frozen deepseek wire pa
     CHECK(result->stop_reason == ai::AssistantStopReason::ToolUse);
     CHECK(result->response_id == "resp_deepseek");
 
-    const auto expected_events = tests::read_pi_fixture(
+    tests::check_pi_event_snapshot(
+        events,
         "wire/openai-responses-deepseek-ts-events.json");
-    REQUIRE(expected_events);
-    const auto* values = expected_events->get_if<util::JsonValue::array_t>();
-    REQUIRE(values);
-    std::vector<std::string> expected_names;
-    for (const auto& value : *values) {
-        expected_names.push_back(value.get_string());
-    }
-    CHECK(event_names(events) == expected_names);
 
     REQUIRE(transport->requests.size() == 1);
     const auto& request = transport->requests.front();

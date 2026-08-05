@@ -6,6 +6,7 @@
 // terminal/error policy differs, which stays in each adapter.
 
 #include <cch/ai/Provider.hpp>
+#include "PartialJson.hpp"
 #include "ai/providers/ProviderError.hpp"
 #include "ai/providers/RetryPolicy.hpp"
 #include "ai/providers/StreamEmit.hpp"
@@ -151,149 +152,11 @@ template <typename Headers>
         providers::bounded_provider_error_detail(std::move(detail)));
 }
 
-[[nodiscard]] inline std::string repair_json_strings(std::string_view json) {
-    std::string repaired;
-    repaired.reserve(json.size());
-    bool in_string = false;
-    for (std::size_t index = 0; index < json.size(); ++index) {
-        const auto character = static_cast<unsigned char>(json[index]);
-        if (!in_string) {
-            repaired.push_back(static_cast<char>(character));
-            if (character == '"') {
-                in_string = true;
-            }
-            continue;
-        }
-        if (character == '"') {
-            repaired.push_back('"');
-            in_string = false;
-            continue;
-        }
-        if (character == '\\') {
-            if (index + 1 >= json.size()) {
-                repaired += "\\\\";
-                continue;
-            }
-            const auto next = json[index + 1];
-            const bool simple_escape = next == '"' || next == '\\' || next == '/' ||
-                                       next == 'b' || next == 'f' || next == 'n' ||
-                                       next == 'r' || next == 't';
-            if (simple_escape) {
-                repaired.push_back('\\');
-                repaired.push_back(next);
-                ++index;
-                continue;
-            }
-            if (next == 'u' && index + 5 < json.size() &&
-                std::ranges::all_of(
-                    json.substr(index + 2, 4),
-                    [](char digit) {
-                        return (digit >= '0' && digit <= '9') ||
-                               (digit >= 'a' && digit <= 'f') ||
-                               (digit >= 'A' && digit <= 'F');
-                    })) {
-                repaired.append(json.substr(index, 6));
-                index += 5;
-                continue;
-            }
-            repaired += "\\\\";
-            continue;
-        }
-        switch (character) {
-        case '\b':
-            repaired += "\\b";
-            break;
-        case '\f':
-            repaired += "\\f";
-            break;
-        case '\n':
-            repaired += "\\n";
-            break;
-        case '\r':
-            repaired += "\\r";
-            break;
-        case '\t':
-            repaired += "\\t";
-            break;
-        default:
-            if (character < 0x20U) {
-                constexpr char kHex[] = "0123456789abcdef";
-                repaired += "\\u00";
-                repaired.push_back(kHex[(character >> 4U) & 0x0fU]);
-                repaired.push_back(kHex[character & 0x0fU]);
-            } else {
-                repaired.push_back(static_cast<char>(character));
-            }
-            break;
-        }
-    }
-    return repaired;
-}
-
-[[nodiscard]] inline std::string complete_partial_json(std::string json) {
-    std::vector<char> closing;
-    bool in_string = false;
-    bool escaped = false;
-    for (const auto character : json) {
-        if (in_string) {
-            if (escaped) {
-                escaped = false;
-            } else if (character == '\\') {
-                escaped = true;
-            } else if (character == '"') {
-                in_string = false;
-            }
-            continue;
-        }
-        if (character == '"') {
-            in_string = true;
-        } else if (character == '{') {
-            closing.push_back('}');
-        } else if (character == '[') {
-            closing.push_back(']');
-        } else if ((character == '}' || character == ']') && !closing.empty()) {
-            closing.pop_back();
-        }
-    }
-    if (escaped) {
-        json.push_back('\\');
-    }
-    if (in_string) {
-        json.push_back('"');
-    }
-    while (!json.empty() &&
-           (json.back() == ' ' || json.back() == '\t' ||
-            json.back() == '\r' || json.back() == '\n')) {
-        json.pop_back();
-    }
-    if (!json.empty() && json.back() == ':') {
-        json += "null";
-    } else if (!json.empty() && json.back() == ',') {
-        json.pop_back();
-    }
-    for (auto iterator = closing.rbegin(); iterator != closing.rend(); ++iterator) {
-        json.push_back(*iterator);
-    }
-    return json;
-}
-
 [[nodiscard]] inline util::JsonValue parse_streaming_arguments(
     std::string_view raw_arguments) {
-    if (raw_arguments.empty()) {
-        return util::JsonValue::object_t{};
-    }
-    if (auto parsed = util::read_json<util::JsonValue>(raw_arguments)) {
-        return std::move(*parsed);
-    }
-    auto repaired = repair_json_strings(raw_arguments);
-    if (auto parsed = util::read_json<util::JsonValue>(repaired)) {
-        return std::move(*parsed);
-    }
-    if (auto parsed = util::read_json<util::JsonValue>(
-            complete_partial_json(std::move(repaired)))) {
-        return std::move(*parsed);
-    }
-    return util::JsonValue::object_t{};
+    // Streaming-tolerant argument parsing matching pi's `parseStreamingJson`
+    // (partial-json semantics), shared with the Anthropic adapter.
+    return parse_streaming_json(raw_arguments);
 }
 
 [[nodiscard]] inline util::ExpectedVoid finalize_tool_arguments(ToolCallContent& tool) {
@@ -363,6 +226,21 @@ template <typename Headers>
     return util::write_json(util::JsonValue{std::move(signature)});
 }
 
+inline void apply_message_phase_stop_reason(
+    AssistantMessage& assistant,
+    const JsonObject& item) {
+    // pi's `applyMessagePhaseStopReason` (openai-responses-shared.ts): a
+    // message output item whose `phase` is `final_answer` flips the running
+    // partial from `pending` to `stop` before the item is surfaced.
+    if (const auto type = string_member(item, "type");
+        type && *type == "message") {
+        if (const auto phase = string_member(item, "phase");
+            phase && *phase == "final_answer") {
+            assistant.stop_reason = AssistantStopReason::Stop;
+        }
+    }
+}
+
 [[nodiscard]] inline util::ExpectedVoid emit_start(
     AssistantEventSink& sink,
     AssistantMessage& assistant,
@@ -401,6 +279,7 @@ template <typename Headers>
         });
     }
     if (*type == "message") {
+        apply_message_phase_stop_reason(assistant, item);
         const auto content_index = assistant.content.size();
         assistant.content.emplace_back(TextContent{});
         slots.emplace(index, OutputSlot{
@@ -420,7 +299,9 @@ template <typename Headers>
             .id = std::string{string_member(item, "call_id").value_or("")} + "|" +
                   std::string{string_member(item, "id").value_or("")},
             .name = std::string{string_member(item, "name").value_or("")},
-            .arguments = std::nullopt,
+            // pi constructs every tool call with an empty arguments object
+            // (parseStreamingJson("")) and fills it from the raw arguments.
+            .arguments = util::JsonValue{util::JsonValue::object_t{}},
             .raw_arguments = arguments,
             .thought_signature = std::nullopt,
             .arguments_valid = true,
@@ -592,6 +473,7 @@ template <typename Headers>
         return {};
     }
     if (type == "message" && slot.kind == OutputSlot::Kind::Text) {
+        apply_message_phase_stop_reason(assistant, *item);
         auto& block = std::get<TextContent>(assistant.content[slot.content_index]);
         block.text = joined_message_text(*item);
         auto signature = text_signature(*item);

@@ -7,6 +7,7 @@
 #include "ai/providers/RetryPolicy.hpp"
 #include "ai/providers/SseParser.hpp"
 #include "ai/providers/StreamEmit.hpp"
+#include "PartialJson.hpp"
 #include "util/ExpectedMacros.hpp"
 #include "util/Json.hpp"
 
@@ -209,148 +210,6 @@ template <typename Headers>
         error.detail);
 }
 
-[[nodiscard]] std::string repair_json_strings(std::string_view json) {
-    std::string repaired;
-    repaired.reserve(json.size());
-    bool in_string = false;
-    for (std::size_t index = 0; index < json.size(); ++index) {
-        const auto character = static_cast<unsigned char>(json[index]);
-        if (!in_string) {
-            repaired.push_back(static_cast<char>(character));
-            if (character == '"') {
-                in_string = true;
-            }
-            continue;
-        }
-        if (character == '"') {
-            repaired.push_back('"');
-            in_string = false;
-            continue;
-        }
-        if (character == '\\') {
-            if (index + 1 >= json.size()) {
-                repaired += "\\\\";
-                continue;
-            }
-            const auto next = json[index + 1];
-            const bool simple_escape = next == '"' || next == '\\' || next == '/' ||
-                                       next == 'b' || next == 'f' || next == 'n' ||
-                                       next == 'r' || next == 't';
-            if (simple_escape) {
-                repaired.push_back('\\');
-                repaired.push_back(next);
-                ++index;
-                continue;
-            }
-            if (next == 'u' && index + 5 < json.size() &&
-                std::ranges::all_of(json.substr(index + 2, 4), [](char digit) {
-                    return (digit >= '0' && digit <= '9') ||
-                           (digit >= 'a' && digit <= 'f') ||
-                           (digit >= 'A' && digit <= 'F');
-                })) {
-                repaired.append(json.substr(index, 6));
-                index += 5;
-                continue;
-            }
-            repaired += "\\\\";
-            continue;
-        }
-        switch (character) {
-        case '\b':
-            repaired += "\\b";
-            break;
-        case '\f':
-            repaired += "\\f";
-            break;
-        case '\n':
-            repaired += "\\n";
-            break;
-        case '\r':
-            repaired += "\\r";
-            break;
-        case '\t':
-            repaired += "\\t";
-            break;
-        default:
-            if (character < 0x20U) {
-                constexpr char kHex[] = "0123456789abcdef";
-                repaired += "\\u00";
-                repaired.push_back(kHex[(character >> 4U) & 0x0fU]);
-                repaired.push_back(kHex[character & 0x0fU]);
-            } else {
-                repaired.push_back(static_cast<char>(character));
-            }
-            break;
-        }
-    }
-    return repaired;
-}
-
-[[nodiscard]] std::string complete_partial_json(std::string json) {
-    std::vector<char> closing;
-    bool in_string = false;
-    bool escaped = false;
-    for (const auto character : json) {
-        if (in_string) {
-            if (escaped) {
-                escaped = false;
-            } else if (character == '\\') {
-                escaped = true;
-            } else if (character == '"') {
-                in_string = false;
-            }
-            continue;
-        }
-        if (character == '"') {
-            in_string = true;
-        } else if (character == '{') {
-            closing.push_back('}');
-        } else if (character == '[') {
-            closing.push_back(']');
-        } else if ((character == '}' || character == ']') && !closing.empty()) {
-            closing.pop_back();
-        }
-    }
-    if (escaped) {
-        json.push_back('\\');
-    }
-    if (in_string) {
-        json.push_back('"');
-    }
-    while (!json.empty() &&
-           (json.back() == ' ' || json.back() == '\t' ||
-            json.back() == '\r' || json.back() == '\n')) {
-        json.pop_back();
-    }
-    if (!json.empty() && json.back() == ':') {
-        json += "null";
-    } else if (!json.empty() && json.back() == ',') {
-        json.pop_back();
-    }
-    for (auto iterator = closing.rbegin(); iterator != closing.rend(); ++iterator) {
-        json.push_back(*iterator);
-    }
-    return json;
-}
-
-[[nodiscard]] util::JsonValue parse_streaming_arguments(std::string_view raw_arguments) {
-    if (raw_arguments.empty()) {
-        return util::JsonValue::object_t{};
-    }
-    if (auto parsed = util::read_json<util::JsonValue>(raw_arguments)) {
-        return std::move(*parsed);
-    }
-    auto repaired = repair_json_strings(raw_arguments);
-    if (auto parsed = util::read_json<util::JsonValue>(repaired)) {
-        return std::move(*parsed);
-    }
-    if (auto parsed = util::read_json<util::JsonValue>(
-            complete_partial_json(std::move(repaired)))) {
-        return std::move(*parsed);
-    }
-    return util::JsonValue::object_t{};
-}
-
 [[nodiscard]] util::Expected<util::JsonValue> parse_event_json(
     const providers::SseEvent& event) {
     if (auto parsed = util::read_json<util::JsonValue>(event.data)) {
@@ -532,7 +391,7 @@ template <typename Headers>
         slot.partial_arguments += partial;
         auto& block = std::get<ToolCallContent>(assistant.content[slot.content_index]);
         block.raw_arguments = slot.partial_arguments;
-        block.arguments = parse_streaming_arguments(block.raw_arguments);
+        block.arguments = parse_streaming_json(block.raw_arguments);
         block.arguments_valid = true;
         block.argument_error = std::nullopt;
         return providers::emit(sink, ToolCallDeltaEvent{
@@ -577,7 +436,7 @@ template <typename Headers>
     }
     auto& block = std::get<ToolCallContent>(assistant.content[slot.content_index]);
     block.raw_arguments = slot.partial_arguments;
-    block.arguments = parse_streaming_arguments(block.raw_arguments);
+    block.arguments = parse_streaming_json(block.raw_arguments);
     block.arguments_valid = true;
     block.argument_error = std::nullopt;
     return providers::emit(sink, ToolCallEndEvent{
@@ -771,7 +630,7 @@ void finalize_partial_tools(AssistantMessage& assistant) {
         if (!tool) {
             continue;
         }
-        tool->arguments = parse_streaming_arguments(tool->raw_arguments);
+        tool->arguments = parse_streaming_json(tool->raw_arguments);
         tool->arguments_valid = true;
         tool->argument_error = std::nullopt;
     }

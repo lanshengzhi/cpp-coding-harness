@@ -318,6 +318,7 @@ if(CCH_BUILD_TESTS)
         tests/ai/api/AnthropicMessagesAdapterTest.cpp
         tests/ai/api/OpenAICodexResponsesAdapterTest.cpp
         tests/ai/api/OpenAIResponsesAdapterTest.cpp
+        tests/ai/api/PartialJsonTest.cpp
         tests/ai/providers/SseParserTest.cpp
         tests/ai/providers/BoostBeastWebSocketTransportTest.cpp
         tests/cli/CliSmokeTest.cpp
