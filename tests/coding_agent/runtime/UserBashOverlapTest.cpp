@@ -1,5 +1,3 @@
-#include <cch/ai/ChatClient.hpp>
-#include "support/ModelsFixture.hpp"
 #include <cch/ai/Content.hpp>
 #include <cch/coding_agent/Sdk.hpp>
 #include <cch/harness/session/SessionResume.hpp>
@@ -7,7 +5,7 @@
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "harness/session/SessionJournalTestHooks.hpp"
 #include "support/FakeUserShell.hpp"
-#include "support/GatedChatClient.hpp"
+#include "support/GatedChatProvider.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/UserBashTestHooks.hpp"
 
@@ -47,19 +45,22 @@ using tests::spawn_prompt;
 
 /// First request answers with a read tool call; the post-tool-result request
 /// gates until release(); later requests answer immediately.
-class ToolCallThenGatedChatClient final : public ai::StreamingChatClient {
+class ToolCallThenGatedProvider final : public tests::ScriptedProvider {
 public:
-    explicit ToolCallThenGatedChatClient(std::string read_path)
-        : read_path_(std::move(read_path)) {}
+    explicit ToolCallThenGatedProvider(std::string read_path)
+        : ScriptedProvider("sdk-host"),
+          read_path_(std::move(read_path)) {}
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink) override {
-        requests.push_back(request);
+        requests.push_back(tests::RecordedProviderRequest{model, context, options});
         auto response = ai::assistant_text_message("tool cycle complete");
         response.provider = "tool-gated-fake";
         response.api = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         response.timestamp = now_ms();
 
         if (requests.size() == 1) {
@@ -92,7 +93,7 @@ public:
         if (gate_) (void)gate_->cancel();
     }
 
-    std::vector<ai::StreamChatRequest> requests;
+    std::vector<tests::RecordedProviderRequest> requests;
 
 private:
     std::string read_path_;
@@ -100,7 +101,7 @@ private:
 };
 
 [[nodiscard]] bool context_has_bash_command(
-    const ai::StreamChatRequest& request,
+    const tests::RecordedProviderRequest& request,
     std::string_view command) {
     for (const auto& message : request.context.messages) {
         const auto* bash = std::get_if<ai::BashExecutionMessage>(&message);
@@ -115,7 +116,7 @@ TEST_CASE(
     "User Bash completed during an Agent run commits once after the whole run settles",
     "[coding_agent][runtime][issue87]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<tests::GatedChatClient>();
+    auto client = std::make_shared<tests::GatedChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -129,7 +130,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -196,7 +197,7 @@ TEST_CASE(
     "an ordinary Prompt is admitted during active User Bash and orders deterministically",
     "[coding_agent][runtime][issue87]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<tests::GatedChatClient>();
+    auto client = std::make_shared<tests::GatedChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -210,7 +211,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -260,7 +261,7 @@ TEST_CASE(
     "a second User Bash is rejected before runtime mutation and the Session stays usable",
     "[coding_agent][runtime][issue87]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<tests::GatedChatClient>();
+    auto client = std::make_shared<tests::GatedChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -280,7 +281,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -329,7 +330,7 @@ TEST_CASE(
     "[coding_agent][runtime][issue87]") {
     tests::TempWorkspace workspace;
     const auto session_path = workspace.path() / "overlap.jsonl";
-    auto client = std::make_unique<tests::GatedChatClient>();
+    auto client = std::make_shared<tests::GatedChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -343,7 +344,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{session_path};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -392,7 +393,7 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "note contents");
     const auto note_path = (workspace.path() / "note.txt").string();
-    auto client = std::make_unique<ToolCallThenGatedChatClient>(note_path);
+    auto client = std::make_shared<ToolCallThenGatedProvider>(note_path);
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -406,7 +407,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = true,
         .write = false,
@@ -475,7 +476,7 @@ TEST_CASE(
     "[coding_agent][runtime][issue87]") {
     tests::TempWorkspace workspace;
     const auto session_path = workspace.path() / "overlap-failure.jsonl";
-    auto client = std::make_unique<tests::GatedChatClient>();
+    auto client = std::make_shared<tests::GatedChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -489,7 +490,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{session_path};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -546,7 +547,7 @@ TEST_CASE(
     "[coding_agent][runtime][issue87]") {
     tests::TempWorkspace workspace;
     const auto session_path = workspace.path() / "close-overlap.jsonl";
-    auto client = std::make_unique<tests::GatedChatClient>();
+    auto client = std::make_shared<tests::GatedChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -560,7 +561,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{session_path};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -611,7 +612,7 @@ TEST_CASE(
     "Session Close cancels an overlapping User Bash and finalizes after the last work settles",
     "[coding_agent][runtime][issue87]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<tests::GatedChatClient>();
+    auto client = std::make_shared<tests::GatedChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -625,7 +626,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,

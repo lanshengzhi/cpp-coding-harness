@@ -3,8 +3,8 @@
 #include "../../include/cch/agent/Agent.hpp"
 #include "../../include/cch/agent/AgentContext.hpp"
 #include "../../include/cch/agent/AgentEvent.hpp"
-#include "../../include/cch/ai/ChatClient.hpp"
 #include <cch/ai/RequestOptions.hpp>
+#include "../../include/cch/ai/StreamEvent.hpp"
 #include "../../include/cch/ai/providers/StreamTransport.hpp"
 
 #include <memory>

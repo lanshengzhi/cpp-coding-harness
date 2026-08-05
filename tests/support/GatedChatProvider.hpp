@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/ai/ChatClient.hpp>
+#include "support/ModelsFixture.hpp"
 #include <cch/ai/Content.hpp>
 
 #include <boost/asio/io_context.hpp>
@@ -25,12 +25,16 @@ inline void drain_ready(boost::asio::io_context& io) {
 
 /// Gates every provider request until release(); each later request re-arms
 /// the gate so steering/follow-up continuations stay observable.
-class GatedChatClient final : public ai::StreamingChatClient {
+class GatedChatProvider final : public ScriptedProvider {
 public:
+    GatedChatProvider() : ScriptedProvider("sdk-host") {}
+
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink) override {
-        requests.push_back(request);
+        requests.push_back(RecordedProviderRequest{model, context, options});
         const auto turn = requests.size();
 
         const auto executor = co_await boost::asio::this_coro::executor;
@@ -44,7 +48,7 @@ public:
         auto response = ai::assistant_text_message(std::format("turn {}", turn));
         response.provider = "gated-fake";
         response.api = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         response.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
         co_return response;
@@ -54,7 +58,7 @@ public:
         if (gate_) (void)gate_->cancel();
     }
 
-    std::vector<ai::StreamChatRequest> requests;
+    std::vector<RecordedProviderRequest> requests;
 
 private:
     std::optional<boost::asio::steady_timer> gate_;

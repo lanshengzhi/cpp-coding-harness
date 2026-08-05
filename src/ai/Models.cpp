@@ -1026,15 +1026,4 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> Models::stream_simple(
     co_return message;
 }
 
-boost::asio::awaitable<util::Expected<AssistantMessage>> Models::stream(
-    const StreamChatRequest& request,
-    AssistantEventSink sink) {
-    CCH_TRY(message, co_await stream_simple(
-        request.model,
-        request.context,
-        SimpleStreamOptions{.stop_token = request.stop_token},
-        std::move(sink)));
-    co_return message;
-}
-
 } // namespace cch::ai

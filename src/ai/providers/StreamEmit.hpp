@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/ai/ChatClient.hpp>
+#include <cch/ai/StreamEvent.hpp>
 
 #include <exception>
 

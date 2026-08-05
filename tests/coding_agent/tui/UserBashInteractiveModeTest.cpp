@@ -1,4 +1,3 @@
-#include <cch/ai/ChatClient.hpp>
 #include "support/ModelsFixture.hpp"
 #include <cch/ai/Content.hpp>
 #include <cch/agent/AgentTool.hpp>
@@ -13,7 +12,7 @@
 #include "coding_agent/tui/Theme.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/FakeUserShell.hpp"
-#include "support/GatedChatClient.hpp"
+#include "support/GatedChatProvider.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/TextHelpers.hpp"
 #include "util/Redactor.hpp"
@@ -46,20 +45,23 @@ namespace {
 
 using tests::count_occurrences;
 
-class RecordingChatClient final : public ai::StreamingChatClient {
+class RecordingChatProvider final : public tests::ScriptedProvider {
 public:
+    RecordingChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink) override {
-        requests.push_back(request);
+        requests.push_back(tests::RecordedProviderRequest{model, context, options});
         auto response = ai::assistant_text_message("provider reply");
         response.api = "fake";
         response.provider = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         co_return response;
     }
 
-    std::vector<ai::StreamChatRequest> requests;
+    std::vector<tests::RecordedProviderRequest> requests;
 };
 
 void drain_ready(boost::asio::io_context& io) {
@@ -112,25 +114,28 @@ void drain_ready(boost::asio::io_context& io) {
 
 /// First request emits partial output, gates, and answers cancellation with an
 /// aborted outcome; later requests answer immediately so recovery is visible.
-class AbortAwareGatedChatClient final : public ai::StreamingChatClient {
+class AbortAwareGatedChatProvider final : public tests::ScriptedProvider {
 public:
+    AbortAwareGatedChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink sink) override {
         ++request_count;
         if (request_count > 1) {
             auto recovered = ai::assistant_text_message("recovery reply");
             recovered.provider = "abort-gated-fake";
             recovered.api = "fake";
-            recovered.model = request.model.id;
+            recovered.model = model.id;
             co_return recovered;
         }
 
-        const auto stop_token = request.stop_token;
+        const auto stop_token = options.stop_token;
         auto partial = ai::assistant_text_message("");
         partial.provider = "abort-gated-fake";
         partial.api = "fake";
-        partial.model = request.model.id;
+        partial.model = model.id;
         partial.content.clear();
         if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
             co_return std::unexpected(emitted.error());
@@ -195,17 +200,20 @@ private:
 
 /// First request calls the gated "delayed" tool; later requests answer the
 /// aborted settle path so a closing run can unwind deterministically.
-class ToolCallThenAbortChatClient final : public ai::StreamingChatClient {
+class ToolCallThenAbortChatProvider final : public tests::ScriptedProvider {
 public:
+    ToolCallThenAbortChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink sink) override {
         ++request_count;
-        if (request.stop_token.stop_requested() || request_count > 1) {
+        if (options.stop_token.stop_requested() || request_count > 1) {
             auto aborted = ai::assistant_text_message("");
             aborted.provider = "tool-abort-fake";
             aborted.api = "fake";
-            aborted.model = request.model.id;
+            aborted.model = model.id;
             aborted.stop_reason = ai::AssistantStopReason::Aborted;
             aborted.error_message = "close prompt aborted";
             if (auto emitted = sink(ai::AssistantErrorEvent{
@@ -221,7 +229,7 @@ public:
         auto response = ai::assistant_text_message("");
         response.provider = "tool-abort-fake";
         response.api = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         response.content.clear();
         response.content.emplace_back(ai::tool_call_content(
             "delayed-call",
@@ -299,7 +307,7 @@ TEST_CASE(
     "focused User Bash commits included and excluded results through the private composition",
     "[coding_agent][tui][issue85]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<RecordingChatClient>();
+    auto client = std::make_shared<RecordingChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -319,7 +327,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -399,7 +407,7 @@ TEST_CASE(
     "only non-empty focused editor prefixes enter the private User Shell path",
     "[coding_agent][tui][issue85]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<RecordingChatClient>();
+    auto client = std::make_shared<RecordingChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -407,7 +415,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -457,7 +465,7 @@ TEST_CASE(
     std::filesystem::create_directories(spill_dir);
     tests::EnvVarGuard tmpdir{"TMPDIR", spill_dir.string()};
     const auto session_path = workspace.path() / "user-bash.jsonl";
-    auto client = std::make_unique<RecordingChatClient>();
+    auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
@@ -478,7 +486,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{session_path};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -583,7 +591,7 @@ TEST_CASE(
     "User Shell infrastructure failure creates no Bash message and leaves the Session usable",
     "[coding_agent][tui][issue85][issue98]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<RecordingChatClient>();
+    auto client = std::make_shared<RecordingChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
@@ -600,7 +608,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -652,7 +660,7 @@ TEST_CASE(
     "User Shell progress callback failure creates no Bash message and leaves the Session usable",
     "[coding_agent][runtime][issue85][issue96]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<RecordingChatClient>();
+    auto client = std::make_shared<RecordingChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
@@ -666,7 +674,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -728,7 +736,7 @@ TEST_CASE(
     "private User Bash cancellation commits one cancelled terminal outcome without events",
     "[coding_agent][runtime][issue85]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<RecordingChatClient>();
+    auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
@@ -741,7 +749,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -803,7 +811,7 @@ TEST_CASE(
     tests::EnvVarGuard tmpdir{
         "TMPDIR",
         (workspace.path() / "missing" / "deeper").string()};
-    auto client = std::make_unique<RecordingChatClient>();
+    auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
     const std::string bulk(60 * 1024, 'y');
@@ -817,7 +825,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -871,7 +879,7 @@ TEST_CASE(
     "User Bash overlaps an active Agent run through the Native TUI",
     "[coding_agent][tui][issue87]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<tests::GatedChatClient>();
+    auto client = std::make_shared<tests::GatedChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -891,7 +899,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -988,7 +996,7 @@ TEST_CASE(
     "[coding_agent][tui][issue88]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto client = std::make_unique<AbortAwareGatedChatClient>();
+    auto client = std::make_shared<AbortAwareGatedChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -1008,7 +1016,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -1114,7 +1122,7 @@ TEST_CASE(
     "[coding_agent][tui][issue88][issue93][issue94]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto client = std::make_unique<RecordingChatClient>();
+    auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
@@ -1127,7 +1135,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -1219,7 +1227,7 @@ TEST_CASE(
     "[coding_agent][tui][issue88]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto client = std::make_unique<RecordingChatClient>();
+    auto client = std::make_shared<RecordingChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -1239,7 +1247,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -1308,7 +1316,7 @@ TEST_CASE(
     "[coding_agent][tui][issue88]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto client = std::make_unique<ToolCallThenAbortChatClient>();
+    auto client = std::make_shared<ToolCallThenAbortChatProvider>();
     auto tool = std::make_unique<GatedCloseTool>();
     auto* tool_pointer = tool.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
@@ -1323,7 +1331,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.custom_tools.push_back(std::move(tool));
     options.builtin_tools = {
         .read = false,
@@ -1389,7 +1397,7 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     config.write("keybindings.json", R"({"app.exit":"f6"})");
-    auto client = std::make_unique<ToolCallThenAbortChatClient>();
+    auto client = std::make_shared<ToolCallThenAbortChatProvider>();
     auto tool = std::make_unique<GatedCloseTool>();
     auto* tool_pointer = tool.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
@@ -1404,7 +1412,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.custom_tools.push_back(std::move(tool));
     options.builtin_tools = {
         .read = false,
@@ -1464,7 +1472,7 @@ TEST_CASE(
     "committed User Bash blocks preview the output tail and expand through the effective action",
     "[coding_agent][tui][issue89]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<RecordingChatClient>();
+    auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     std::string many_lines;
@@ -1488,7 +1496,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -1609,7 +1617,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::make_unique<RecordingChatClient>());
+    options.models = cch::tests::models_from_provider(std::make_shared<RecordingChatProvider>());
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -1668,7 +1676,7 @@ TEST_CASE(
     "live User Bash blocks stream through one status block with a loader and effective hints",
     "[coding_agent][tui][issue89][issue99]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<RecordingChatClient>();
+    auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
@@ -1688,7 +1696,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -1761,7 +1769,7 @@ TEST_CASE(
     "User Bash blocks style model-context inclusion through theme tokens",
     "[coding_agent][tui][issue89]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<RecordingChatClient>();
+    auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
@@ -1780,7 +1788,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -1837,7 +1845,7 @@ TEST_CASE(
     "[coding_agent][tui][issue89][issue94][issue98]") {
     tests::TempWorkspace workspace;
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
-    auto client = std::make_unique<RecordingChatClient>();
+    auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
@@ -1850,7 +1858,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -1926,7 +1934,7 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     config.write("keybindings.json", R"({"app.interrupt":"f5","app.tools.expand":"f7"})");
-    auto client = std::make_unique<RecordingChatClient>();
+    auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     std::string many_lines;
@@ -1950,7 +1958,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -1999,7 +2007,7 @@ TEST_CASE(
     "the collapsed User Bash block renders at most 20 visual lines on a narrow terminal",
     "[coding_agent][tui][issue89]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<RecordingChatClient>();
+    auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     std::string wide_output;
@@ -2018,7 +2026,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -2071,7 +2079,7 @@ TEST_CASE(
     "focused User Bash dispatch trims, parses prefixes, and falls through like the pi baseline",
     "[coding_agent][tui][issue89]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<RecordingChatClient>();
+    auto client = std::make_shared<RecordingChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -2097,7 +2105,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -2185,7 +2193,7 @@ TEST_CASE(
         "description: Template whose expansion begins with a bang.\n"
         "---\n"
         "!echo template-body $ARGUMENTS\n");
-    auto client = std::make_unique<RecordingChatClient>();
+    auto client = std::make_shared<RecordingChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -2193,7 +2201,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.load_project_resources = true;
     options.default_project_trust = coding_agent::DefaultProjectTrust::Always;
     options.builtin_tools = {
@@ -2248,13 +2256,13 @@ TEST_CASE(
     "/help documents User Bash input prefixes without a pseudo-command or hotkey action",
     "[coding_agent][tui][issue89]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<RecordingChatClient>();
+    auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
 
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,

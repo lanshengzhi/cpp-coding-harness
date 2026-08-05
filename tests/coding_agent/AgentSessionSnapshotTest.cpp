@@ -56,13 +56,13 @@ struct TestPaths {
 [[nodiscard]] tests::ModelsSessionOptions new_session_options(
     const TestPaths& paths,
     coding_agent::SessionTarget target,
-    std::unique_ptr<ai::StreamingChatClient> client =
-        ai::providers::make_scripted_fake_stream()) {
+    std::shared_ptr<ai::Provider> client =
+        ai::providers::make_scripted_fake_provider()) {
     tests::ModelsSessionOptions options;
     options.session_target = std::move(target);
     options.workspace = paths.workspace.path();
     options.model = cch::tests::sdk_request_model("fake", "fake-model");
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     return options;
 }
 
@@ -78,15 +78,19 @@ struct TestPaths {
     return coding_agent::create_agent_session(std::move(request));
 }
 
-class GatedSnapshotChatClient final : public ai::StreamingChatClient {
+class GatedSnapshotChatProvider final : public tests::ScriptedProvider {
 public:
+    GatedSnapshotChatProvider() : ScriptedProvider("sdk-host") {}
+
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext&,
+        ai::ProviderStreamOptions,
         ai::AssistantEventSink sink) override {
         auto partial = ai::assistant_text_message("");
         partial.provider = "snapshot-fake";
         partial.api = "fake";
-        partial.model = request.model.id;
+        partial.model = model.id;
         partial.content.clear();
         if (sink) {
             if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
@@ -106,7 +110,7 @@ public:
         auto response = ai::assistant_text_message("released");
         response.provider = "snapshot-fake";
         response.api = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         co_return response;
     }
 
@@ -122,15 +126,19 @@ private:
     std::optional<boost::asio::steady_timer> gate_;
 };
 
-class CapturingSnapshotChatClient final : public ai::StreamingChatClient {
+class CapturingSnapshotChatProvider final : public tests::ScriptedProvider {
 public:
+    CapturingSnapshotChatProvider() : ScriptedProvider("sdk-host") {}
+
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext&,
+        ai::ProviderStreamOptions,
         ai::AssistantEventSink) override {
         auto response = ai::assistant_text_message("captured");
         response.provider = "snapshot-fake";
         response.api = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         co_return response;
     }
 };
@@ -195,7 +203,7 @@ TEST_CASE(
     "SDK active snapshot copies running and streaming state on the prompt executor",
     "[sdk][snapshot][async][issue42]") {
     TestPaths paths;
-    auto client = std::make_unique<GatedSnapshotChatClient>();
+    auto client = std::make_shared<GatedSnapshotChatProvider>();
     auto* client_ptr = client.get(); // options/session owns it until this test closes the session
 
     auto created = coding_agent::create_agent_session(new_session_options(
@@ -274,7 +282,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     options.workspace = paths.workspace.path();
-    options.models = cch::tests::models_from_stream(std::make_unique<CapturingSnapshotChatClient>());
+    options.models = cch::tests::models_from_provider(std::make_shared<CapturingSnapshotChatProvider>());
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
 

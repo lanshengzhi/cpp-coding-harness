@@ -311,7 +311,7 @@ if(CCH_BUILD_TESTS)
         tests/support/ComplexToolSchemaFixture.hpp
         tests/support/ImageFixture.hpp
         tests/support/PseudoTerminal.hpp
-        tests/support/GatedChatClient.hpp
+        tests/support/GatedChatProvider.hpp
         tests/support/FakeModelRuntime.hpp
         tests/support/StreamAdapterFixture.hpp
         tests/support/ToolArgumentCompatibilityFixture.hpp

@@ -279,12 +279,16 @@ struct RunResult {
 
 RunResult run_models(
     ai::Models& models,
-    ai::StreamChatRequest request,
+    ai::Model model,
+    ai::AiContext context = {},
+    ai::SimpleStreamOptions options = {},
     bool fail_sink = false,
     util::ErrorCode sink_error_code = util::ErrorCode::Unknown) {
     std::vector<ai::AssistantStreamEvent> events;
-    auto result = run_awaitable(models.stream(
-        request,
+    auto result = run_awaitable(models.stream_simple(
+        std::move(model),
+        std::move(context),
+        std::move(options),
         [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
             events.push_back(event);
             if (fail_sink) {
@@ -349,8 +353,7 @@ TEST_CASE("Models selects a long-lived Provider by Model provider identity", "[a
     REQUIRE(models.set_provider(first));
     REQUIRE(models.set_provider(second));
 
-    ai::StreamChatRequest request;
-    request.model = tests::make_model("chosen-model", "second", "private-api");
+    ai::Model request = tests::make_model("chosen-model", "second", "private-api");
     auto run = run_models(models, std::move(request));
 
     REQUIRE(run.result);
@@ -382,8 +385,7 @@ TEST_CASE("Models normalizes provider lookup and model validation failures", "[a
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
 
-    ai::StreamChatRequest missing_request;
-    missing_request.model = tests::make_model("model", "missing", "api");
+    ai::Model missing_request = tests::make_model("model", "missing", "api");
     auto missing = run_models(models, std::move(missing_request));
     REQUIRE(missing.result);
     CHECK(missing.result->stop_reason == ai::AssistantStopReason::Error);
@@ -394,8 +396,7 @@ TEST_CASE("Models normalizes provider lookup and model validation failures", "[a
 
     auto provider = std::make_shared<RecordingProvider>("known");
     REQUIRE(models.set_provider(provider));
-    ai::StreamChatRequest invalid_request;
-    invalid_request.model = tests::make_model("", "known", "api");
+    ai::Model invalid_request = tests::make_model("", "known", "api");
     auto invalid = run_models(models, std::move(invalid_request));
     REQUIRE(invalid.result);
     const auto& invalid_terminal = require_terminal_error(invalid);
@@ -448,12 +449,11 @@ TEST_CASE("Models applies explicit stored and ambient API key precedence", "[ai]
         "provider", ai::ProviderAuth{.api_key = std::move(api_key)});
     REQUIRE(models.set_provider(provider));
 
-    ai::StreamChatRequest explicit_request;
-    explicit_request.model = tests::make_model("model", "provider", "api");
+    ai::Model explicit_request = tests::make_model("model", "provider", "api");
     std::vector<ai::AssistantStreamEvent> explicit_events;
     auto explicit_result = run_awaitable(models.stream_simple(
-        explicit_request.model,
-        explicit_request.context,
+        explicit_request,
+        {},
         ai::SimpleStreamOptions{.api_key = "explicit-key"},
         [&explicit_events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
             explicit_events.push_back(event);
@@ -463,15 +463,13 @@ TEST_CASE("Models applies explicit stored and ambient API key precedence", "[ai]
     REQUIRE(provider->seen_options.size() == 1);
     CHECK(provider->seen_options.back().auth.api_key == "explicit-key");
 
-    ai::StreamChatRequest stored_request;
-    stored_request.model = tests::make_model("model", "provider", "api");
+    ai::Model stored_request = tests::make_model("model", "provider", "api");
     REQUIRE(run_models(models, std::move(stored_request)).result);
     REQUIRE(provider->seen_options.size() == 2);
     CHECK(provider->seen_options.back().auth.api_key == "stored-key");
 
     credentials->records.clear();
-    ai::StreamChatRequest ambient_request;
-    ambient_request.model = tests::make_model("model", "provider", "api");
+    ai::Model ambient_request = tests::make_model("model", "provider", "api");
     REQUIRE(run_models(models, std::move(ambient_request)).result);
     REQUIRE(provider->seen_options.size() == 3);
     CHECK(provider->seen_options.back().auth.api_key == "ambient-key");
@@ -494,8 +492,7 @@ TEST_CASE("Models never falls back after a stored credential type mismatch", "[a
     REQUIRE(models.set_provider(std::make_shared<RecordingProvider>(
         "provider", ai::ProviderAuth{.api_key = std::move(api_key)})));
 
-    ai::StreamChatRequest request;
-    request.model = tests::make_model("model", "provider", "api");
+    ai::Model request = tests::make_model("model", "provider", "api");
     auto run = run_models(models, std::move(request));
 
     REQUIRE(run.result);
@@ -546,8 +543,7 @@ TEST_CASE("Models refreshes OAuth under the store mutation and checkAuth never r
     CHECK(refresh_count == 0);
     CHECK(credentials->modify_count == 0);
 
-    ai::StreamChatRequest request;
-    request.model = tests::make_model("model", "provider", "api");
+    ai::Model request = tests::make_model("model", "provider", "api");
     auto run = run_models(models, std::move(request));
     REQUIRE(run.result);
     CHECK(refresh_count == 1);
@@ -583,8 +579,7 @@ TEST_CASE("Models preserves stored OAuth when refresh fails", "[ai][models][auth
     REQUIRE(models.set_provider(std::make_shared<RecordingProvider>(
         "provider", ai::ProviderAuth{.oauth = std::move(oauth)})));
 
-    ai::StreamChatRequest request;
-    request.model = tests::make_model("model", "provider", "api");
+    ai::Model request = tests::make_model("model", "provider", "api");
     auto run = run_models(models, std::move(request));
 
     REQUIRE(run.result);
@@ -617,9 +612,8 @@ TEST_CASE("Models merges Model headers after resolved auth headers case insensit
         "provider", ai::ProviderAuth{.api_key = std::move(api_key)});
     REQUIRE(models.set_provider(provider));
 
-    ai::StreamChatRequest request;
-    request.model = tests::make_model("model", "provider", "api");
-    request.model.headers = ai::ModelHeaders{{"x-test", "model"}};
+    ai::Model request = tests::make_model("model", "provider", "api");
+    request.headers = ai::ModelHeaders{{"x-test", "model"}};
     REQUIRE(run_models(models, std::move(request)).result);
 
     REQUIRE(provider->seen_options.size() == 1);
@@ -824,8 +818,7 @@ TEST_CASE("Models converts throwing callbacks into its single error channel", "[
     REQUIRE(auth_models.set_provider(std::make_shared<RecordingProvider>(
         "auth-provider",
         ai::ProviderAuth{.api_key = std::move(throwing_auth)})));
-    ai::StreamChatRequest auth_request;
-    auth_request.model = tests::make_model("model", "auth-provider", "api");
+    ai::Model auth_request = tests::make_model("model", "auth-provider", "api");
 
     auto auth_run = run_models(auth_models, std::move(auth_request));
 
@@ -838,8 +831,7 @@ TEST_CASE("Models converts throwing callbacks into its single error channel", "[
     auto throwing_provider = std::make_shared<RecordingProvider>("provider");
     throwing_provider->throw_stream = true;
     REQUIRE(provider_models.set_provider(throwing_provider));
-    ai::StreamChatRequest provider_request;
-    provider_request.model = tests::make_model("model", "provider", "api");
+    ai::Model provider_request = tests::make_model("model", "provider", "api");
 
     auto provider_run = run_models(provider_models, std::move(provider_request));
 
@@ -850,10 +842,11 @@ TEST_CASE("Models converts throwing callbacks into its single error channel", "[
 
     auto sink_models = make_models(credentials, auth_context);
     REQUIRE(sink_models.set_provider(std::make_shared<RecordingProvider>("sink-provider")));
-    ai::StreamChatRequest sink_request;
-    sink_request.model = tests::make_model("model", "sink-provider", "api");
-    auto sink_result = run_awaitable(sink_models.stream(
-        sink_request,
+    ai::Model sink_request = tests::make_model("model", "sink-provider", "api");
+    auto sink_result = run_awaitable(sink_models.stream_simple(
+        std::move(sink_request),
+        {},
+        {},
         [](const ai::AssistantStreamEvent&) -> util::ExpectedVoid {
             throw std::runtime_error{"sink callback threw"};
         }));
@@ -870,8 +863,7 @@ TEST_CASE("Models categorizes throwing credential store and OAuth callbacks", "[
     throwing_store->throw_read = true;
     auto store_models = make_models(throwing_store, auth_context);
     REQUIRE(store_models.set_provider(std::make_shared<RecordingProvider>("store-provider")));
-    ai::StreamChatRequest store_request;
-    store_request.model = tests::make_model("model", "store-provider", "api");
+    ai::Model store_request = tests::make_model("model", "store-provider", "api");
 
     auto store_run = run_models(store_models, std::move(store_request));
 
@@ -899,8 +891,7 @@ TEST_CASE("Models categorizes throwing credential store and OAuth callbacks", "[
     REQUIRE(refresh_models.set_provider(std::make_shared<RecordingProvider>(
         "refresh-provider",
         ai::ProviderAuth{.oauth = std::move(refresh_auth)})));
-    ai::StreamChatRequest refresh_request;
-    refresh_request.model = tests::make_model("model", "refresh-provider", "api");
+    ai::Model refresh_request = tests::make_model("model", "refresh-provider", "api");
 
     auto refresh_run = run_models(refresh_models, std::move(refresh_request));
 
@@ -924,8 +915,7 @@ TEST_CASE("Models categorizes throwing credential store and OAuth callbacks", "[
     REQUIRE(derivation_models.set_provider(std::make_shared<RecordingProvider>(
         "derivation-provider",
         ai::ProviderAuth{.oauth = std::move(derivation_auth)})));
-    ai::StreamChatRequest derivation_request;
-    derivation_request.model = tests::make_model("model", "derivation-provider", "api");
+    ai::Model derivation_request = tests::make_model("model", "derivation-provider", "api");
 
     auto derivation_run = run_models(derivation_models, std::move(derivation_request));
 
@@ -943,8 +933,7 @@ TEST_CASE("Models normalizes Provider stream failures and propagates sink failur
     provider->stream_failure = util::make_error(util::ErrorCode::Stream, "serialization failed");
     REQUIRE(models.set_provider(provider));
 
-    ai::StreamChatRequest request;
-    request.model = tests::make_model("model", "provider", "api");
+    ai::Model request = tests::make_model("model", "provider", "api");
     auto normalized = run_models(models, request);
     REQUIRE(normalized.result);
     const auto& terminal = require_terminal_error(normalized);
@@ -955,6 +944,8 @@ TEST_CASE("Models normalizes Provider stream failures and propagates sink failur
     auto sink_failure = run_models(
         models,
         std::move(request),
+        {},
+        {},
         true,
         util::ErrorCode::Stream);
     REQUIRE_FALSE(sink_failure.result);
@@ -972,10 +963,12 @@ TEST_CASE("Models cancellation is one aborted terminal value", "[ai][models][iss
     std::stop_source stop;
     stop.request_stop();
 
-    ai::StreamChatRequest request;
-    request.model = tests::make_model("model", "provider", "api");
-    request.stop_token = stop.get_token();
-    auto run = run_models(models, std::move(request));
+    ai::Model request = tests::make_model("model", "provider", "api");
+    auto run = run_models(
+        models,
+        std::move(request),
+        {},
+        ai::SimpleStreamOptions{.stop_token = stop.get_token()});
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Aborted);
@@ -1013,8 +1006,7 @@ TEST_CASE("Models sanitizes Provider-emitted terminal errors", "[ai][models][iss
     auto models = make_models(credentials, auth_context);
     REQUIRE(models.set_provider(std::make_shared<UnsafeTerminalProvider>()));
 
-    ai::StreamChatRequest request;
-    request.model = tests::make_model("model", "unsafe-terminal", "api");
+    ai::Model request = tests::make_model("model", "unsafe-terminal", "api");
     auto run = run_models(models, std::move(request));
 
     REQUIRE(run.result);
@@ -1036,8 +1028,7 @@ TEST_CASE("Models suppresses duplicate Provider terminals and returns the first 
     auto models = make_models(credentials, auth_context);
     REQUIRE(models.set_provider(std::make_shared<DuplicateTerminalProvider>()));
 
-    ai::StreamChatRequest request;
-    request.model = tests::make_model("model", "duplicate", "api");
+    ai::Model request = tests::make_model("model", "duplicate", "api");
     auto run = run_models(models, std::move(request));
 
     REQUIRE(run.result);

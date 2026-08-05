@@ -152,7 +152,7 @@ This section is the checkable form of AGENTS.md guardrail 5.
 
 10.5. `bash` runs with a sanitized environment that omits API-key, token, secret, password, and OpenAI-looking variables. Extend the filter; never bypass it.
 
-10.6. Credential values may appear in the credential-store layer (`cch::ai` `Credential`/`CredentialStore`, coding-agent `AuthStorage`), in `AuthResult` and short-lived request auth carried by trusted in-process authentication and Provider capabilities, and in transport request headers. They flow from credential-store/auth resolution through `Models` into the Provider's transport authorization (ADR 0029, ADR 0030). `Model`, `StreamChatRequest`, message, and Session Entry contracts remain credential-free (ADR 0019). The legacy `coding_agent::AuthEntry` remains confined to the pre-#345 loader; added or modified request paths use the new carriers.
+10.6. Credential values may appear in the credential-store layer (`cch::ai` `Credential`/`CredentialStore`, coding-agent `AuthStorage`), in `AuthResult` and short-lived request auth carried by trusted in-process authentication and Provider capabilities, and in transport request headers. They flow from credential-store/auth resolution through `Models` into the Provider's transport authorization (ADR 0029, ADR 0030). `Model`, the `streamSimple` request surface (`Model` argument + `ProviderStreamOptions`), message, and Session Entry contracts remain credential-free (ADR 0019); the legacy `StreamChatRequest` aggregate is removed (ADR 0034). The legacy `coding_agent::AuthEntry` remains confined to the pre-#345 loader; added or modified request paths use the new carriers.
 
 ## 11. Tests
 

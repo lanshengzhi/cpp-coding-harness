@@ -78,13 +78,17 @@ struct TestPaths {
 /// and optionally gates one request until `release_gate()` — a stopped request
 /// completes with exactly one aborted terminal event plus the agreeing final
 /// AssistantMessage (the #326 terminal contract).
-class CompactionScriptedClient final : public ai::StreamingChatClient {
+class CompactionScriptedProvider final : public tests::ScriptedProvider {
 public:
+    CompactionScriptedProvider() : ScriptedProvider("sdk-host") {}
+
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink sink) override {
         ++request_count;
-        requests.push_back(request);
+        requests.push_back(tests::RecordedProviderRequest{model, context, options});
         if (gate_request_number &&
             request_count == *gate_request_number) {
             gate_.emplace(co_await boost::asio::this_coro::executor);
@@ -93,13 +97,13 @@ public:
             co_await gate_->async_wait(
                 boost::asio::redirect_error(boost::asio::use_awaitable, error));
         }
-        if (request.stop_token.stop_requested()) {
+        if (options.stop_token.stop_requested()) {
             auto terminal = ai::assistant_text_message(aborted_content);
             terminal.stop_reason = ai::AssistantStopReason::Aborted;
             terminal.error_message = "Request was aborted";
             terminal.provider = "sdk-host";
             terminal.api = "fake";
-            terminal.model = request.model.id;
+            terminal.model = model.id;
             terminal.timestamp = 1718000000123;
             if (sink) {
                 CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
@@ -118,7 +122,7 @@ public:
         responses.pop_front();
         response.provider = "sdk-host";
         response.api = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         // Session files require real epoch timestamps on assistant messages;
         // stamp the same deterministic value the other SDK fake clients use.
         response.timestamp = 1718000000123;
@@ -139,7 +143,7 @@ public:
     std::optional<int> gate_request_number;
     /// Content for an aborted terminal response (deterministic partial text).
     std::string aborted_content;
-    std::vector<ai::StreamChatRequest> requests;
+    std::vector<tests::RecordedProviderRequest> requests;
     std::deque<ai::AssistantMessage> responses;
     std::optional<boost::asio::steady_timer> gate_;
 };
@@ -174,12 +178,12 @@ template <typename T>
 /// [u2, a2, u3, a3] and summarizes [u1, a1]. Returns the created session.
 struct SessionUnderTest {
     std::unique_ptr<coding_agent::AgentSession> session;
-    CompactionScriptedClient* client{nullptr};
+    CompactionScriptedProvider* client{nullptr};
 };
 
 [[nodiscard]] SessionUnderTest make_big_session(const TestPaths& paths) {
     const std::string big(20000, 'x');
-    auto client = std::make_unique<CompactionScriptedClient>();
+    auto client = std::make_shared<CompactionScriptedProvider>();
     auto* client_ptr = client.get();
     client_ptr->responses.push_back(big_assistant("a1 " + big));
     client_ptr->responses.push_back(big_assistant("a2 " + big));
@@ -188,7 +192,7 @@ struct SessionUnderTest {
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     options.workspace = paths.workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
 
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
@@ -297,7 +301,7 @@ TEST_CASE(
     "[coding_agent][compaction][issue358]") {
     TestPaths paths;
     const std::string big(20000, 'x');
-    auto client = std::make_unique<CompactionScriptedClient>();
+    auto client = std::make_shared<CompactionScriptedProvider>();
     auto* client_ptr = client.get();
     client_ptr->responses.push_back(big_assistant("a1 " + big));
     client_ptr->responses.push_back(big_assistant("a2 " + big));
@@ -312,7 +316,7 @@ TEST_CASE(
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     options.workspace = paths.workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
 
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
@@ -361,7 +365,7 @@ TEST_CASE(
 
     // The in-flight prompt request observed the abort.
     REQUIRE(client_ptr->requests.size() >= 3);
-    CHECK(client_ptr->requests[2].stop_token.stop_requested());
+    CHECK(client_ptr->requests[2].options.stop_token.stop_requested());
     CHECK_FALSE(session->is_busy());
     CHECK(session->message_count() == 5);
 
@@ -380,12 +384,12 @@ TEST_CASE(
     "[coding_agent][compaction][issue358]") {
     // A small session fits the keepRecentTokens budget: nothing to summarize.
     TestPaths paths;
-    auto client = std::make_unique<CompactionScriptedClient>();
+    auto client = std::make_shared<CompactionScriptedProvider>();
     client->responses.push_back(ai::assistant_text_message("small reply"));
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     options.workspace = paths.workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
     REQUIRE(created->session->prompt_blocking("small prompt").has_value());
@@ -398,12 +402,12 @@ TEST_CASE(
     // In-memory sessions have no session file to persist a CompactionEntry
     // into or to rebuild context from.
     TestPaths in_memory_paths;
-    auto memory_client = std::make_unique<CompactionScriptedClient>();
+    auto memory_client = std::make_shared<CompactionScriptedProvider>();
     memory_client->responses.push_back(ai::assistant_text_message("memory reply"));
     tests::ModelsSessionOptions memory_options;
     memory_options.session_target = coding_agent::InMemorySessionTarget{};
     memory_options.workspace = in_memory_paths.workspace.path();
-    memory_options.models = cch::tests::models_from_stream(std::move(memory_client));
+    memory_options.models = cch::tests::models_from_provider(std::move(memory_client));
     auto memory_created = coding_agent::create_agent_session(std::move(memory_options));
     REQUIRE(memory_created.has_value());
     auto memory_rejected = run_awaitable(memory_created->session->compact());
@@ -428,20 +432,24 @@ TEST_CASE(
 /// compaction entry (satisfying pi's `assistantIsFromBeforeCompaction`
 /// guard), serves overflow error terminals with a configurable message, and
 /// records every request for context-rebuild assertions.
-class TriggerPolicyScriptedClient final : public ai::StreamingChatClient {
+class TriggerPolicyScriptedProvider final : public tests::ScriptedProvider {
 public:
+    TriggerPolicyScriptedProvider() : ScriptedProvider("sdk-host") {}
+
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink sink) override {
         ++request_count;
-        requests.push_back(request);
-        if (request.stop_token.stop_requested()) {
+        requests.push_back(tests::RecordedProviderRequest{model, context, options});
+        if (options.stop_token.stop_requested()) {
             auto terminal = ai::assistant_text_message(aborted_content);
             terminal.stop_reason = ai::AssistantStopReason::Aborted;
             terminal.error_message = "Request was aborted";
             terminal.provider = "sdk-host";
             terminal.api = "fake";
-            terminal.model = request.model.id;
+            terminal.model = model.id;
             terminal.timestamp = wall_clock_ms() + request_count;
             if (sink) {
                 CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
@@ -460,7 +468,7 @@ public:
         responses.pop_front();
         response.provider = "sdk-host";
         response.api = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         response.timestamp = wall_clock_ms() + request_count;
         if (sink) {
             if (response.stop_reason == ai::AssistantStopReason::Error ||
@@ -484,7 +492,7 @@ public:
     int request_count{0};
     /// Content for an aborted terminal response (deterministic partial text).
     std::string aborted_content;
-    std::vector<ai::StreamChatRequest> requests;
+    std::vector<tests::RecordedProviderRequest> requests;
     std::deque<ai::AssistantMessage> responses;
 };
 
@@ -518,14 +526,14 @@ public:
 
 struct TriggerSessionUnderTest {
     std::unique_ptr<coding_agent::AgentSession> session;
-    TriggerPolicyScriptedClient* client{nullptr};
+    TriggerPolicyScriptedProvider* client{nullptr};
 };
 
 [[nodiscard]] TriggerSessionUnderTest make_trigger_session(
     const TestPaths& paths,
     std::deque<ai::AssistantMessage> responses,
     std::uint64_t context_window = 128000) {
-    auto client = std::make_unique<TriggerPolicyScriptedClient>();
+    auto client = std::make_shared<TriggerPolicyScriptedProvider>();
     auto* client_ptr = client.get();
     client_ptr->responses = std::move(responses);
 
@@ -533,7 +541,7 @@ struct TriggerSessionUnderTest {
     options.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     options.workspace = paths.workspace.path();
     options.model = trigger_model(context_window);
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
 
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());

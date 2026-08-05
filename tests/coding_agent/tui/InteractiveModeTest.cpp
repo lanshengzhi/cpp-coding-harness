@@ -3,7 +3,6 @@
 #include "support/ImageFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/ai/ChatClient.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/coding_agent/Sdk.hpp>
 #include <cch/harness/session/JsonlSessionStore.hpp>
@@ -45,11 +44,11 @@ namespace {
 
 [[nodiscard]] tests::ModelsSessionOptions session_options(
     const tests::TempWorkspace& workspace,
-    std::unique_ptr<ai::StreamingChatClient> client) {
+    std::shared_ptr<ai::Provider> client) {
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -119,10 +118,13 @@ public:
     bool text_error{false};
 };
 
-class FailOnceChatClient final : public ai::StreamingChatClient {
+class FailOnceChatProvider final : public tests::ScriptedProvider {
 public:
+    FailOnceChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink) override {
         if (calls++ == 0) {
             co_return std::unexpected(util::make_error(
@@ -136,7 +138,7 @@ public:
         auto response = ai::assistant_text_message("recovered");
         response.provider = "fake";
         response.api = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         co_return response;
     }
 
@@ -228,35 +230,37 @@ private:
     tui::TerminalModeState modes_;
 };
 
-class AbortAwareInteractiveChatClient final : public ai::StreamingChatClient {
+class AbortAwareInteractiveChatProvider final : public tests::ScriptedProvider {
 public:
-    AbortAwareInteractiveChatClient() = default;
-    AbortAwareInteractiveChatClient(AbortAwareInteractiveChatClient&&) = delete;
-    AbortAwareInteractiveChatClient& operator=(AbortAwareInteractiveChatClient&&) = delete;
-    ~AbortAwareInteractiveChatClient() override = default;
-    AbortAwareInteractiveChatClient(const AbortAwareInteractiveChatClient&) = delete;
-    AbortAwareInteractiveChatClient& operator=(const AbortAwareInteractiveChatClient&) = delete;
+    AbortAwareInteractiveChatProvider() : ScriptedProvider("sdk-host") {}
+    AbortAwareInteractiveChatProvider(AbortAwareInteractiveChatProvider&&) = delete;
+    AbortAwareInteractiveChatProvider& operator=(AbortAwareInteractiveChatProvider&&) = delete;
+    ~AbortAwareInteractiveChatProvider() override = default;
+    AbortAwareInteractiveChatProvider(const AbortAwareInteractiveChatProvider&) = delete;
+    AbortAwareInteractiveChatProvider& operator=(const AbortAwareInteractiveChatProvider&) = delete;
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink sink) override {
         ++request_count;
         if (request_count > 1) {
-            recovery_uses_fresh_token = first_stop_token && request.stop_token != *first_stop_token;
-            recovery_stop_requested = request.stop_token.stop_requested();
+            recovery_uses_fresh_token = first_stop_token && options.stop_token != *first_stop_token;
+            recovery_stop_requested = options.stop_token.stop_requested();
             auto recovered = ai::assistant_text_message("recovered after TUI abort");
             recovered.provider = "abort-aware-fake";
             recovered.api = "fake";
-            recovered.model = request.model.id;
+            recovered.model = model.id;
             co_return recovered;
         }
 
-        const auto stop_token = request.stop_token;
+        const auto stop_token = options.stop_token;
         first_stop_token = stop_token;
         auto partial = ai::assistant_text_message("");
         partial.provider = "abort-aware-fake";
         partial.api = "fake";
-        partial.model = request.model.id;
+        partial.model = model.id;
         partial.content.clear();
         if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
             co_return std::unexpected(emitted.error());
@@ -322,23 +326,25 @@ private:
     std::optional<boost::asio::steady_timer> gate_;
 };
 
-class GatedChatClient final : public ai::StreamingChatClient {
+class GatedChatProvider final : public tests::ScriptedProvider {
 public:
-    GatedChatClient() = default;
-    GatedChatClient(GatedChatClient&&) = delete;
-    GatedChatClient& operator=(GatedChatClient&&) = delete;
-    ~GatedChatClient() override = default;
-    GatedChatClient(const GatedChatClient&) = delete;
-    GatedChatClient& operator=(const GatedChatClient&) = delete;
+    GatedChatProvider() : ScriptedProvider("sdk-host") {}
+    GatedChatProvider(GatedChatProvider&&) = delete;
+    GatedChatProvider& operator=(GatedChatProvider&&) = delete;
+    ~GatedChatProvider() override = default;
+    GatedChatProvider(const GatedChatProvider&) = delete;
+    GatedChatProvider& operator=(const GatedChatProvider&) = delete;
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink sink) override {
         auto partial = ai::assistant_text_message("");
         partial.content.clear();
         partial.provider = "fake";
         partial.api = "fake";
-        partial.model = request.model.id;
+        partial.model = model.id;
         if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
             co_return std::unexpected(emitted.error());
         }
@@ -353,7 +359,7 @@ public:
         auto response = ai::assistant_text_message("released");
         response.provider = "fake";
         response.api = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         co_return response;
     }
 
@@ -367,21 +373,23 @@ private:
     std::optional<boost::asio::steady_timer> gate_;
 };
 
-class TurnGatedChatClient final : public ai::StreamingChatClient {
+class TurnGatedChatProvider final : public tests::ScriptedProvider {
 public:
-    TurnGatedChatClient() = default;
-    TurnGatedChatClient(TurnGatedChatClient&&) = delete;
-    TurnGatedChatClient& operator=(TurnGatedChatClient&&) = delete;
-    ~TurnGatedChatClient() override = default;
-    TurnGatedChatClient(const TurnGatedChatClient&) = delete;
-    TurnGatedChatClient& operator=(const TurnGatedChatClient&) = delete;
+    TurnGatedChatProvider() : ScriptedProvider("sdk-host") {}
+    TurnGatedChatProvider(TurnGatedChatProvider&&) = delete;
+    TurnGatedChatProvider& operator=(TurnGatedChatProvider&&) = delete;
+    ~TurnGatedChatProvider() override = default;
+    TurnGatedChatProvider(const TurnGatedChatProvider&) = delete;
+    TurnGatedChatProvider& operator=(const TurnGatedChatProvider&) = delete;
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink) override {
         ++request_count;
         std::vector<std::string> users;
-        for (const auto& message : request.context.messages) {
+        for (const auto& message : context.messages) {
             if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
                 users.push_back(ai::text_from_user_message(*user));
             }
@@ -398,7 +406,7 @@ public:
         auto response = ai::assistant_text_message(std::format("turn {}", request_count));
         response.provider = "turn-gated-fake";
         response.api = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         if (first_request_errors && request_count == 1) {
             response.stop_reason = ai::AssistantStopReason::Error;
             response.error_message = "accepted queued error";
@@ -418,23 +426,26 @@ private:
     std::optional<boost::asio::steady_timer> gate_;
 };
 
-class RepeatedReadCallChatClient final : public ai::StreamingChatClient {
+class RepeatedReadCallChatProvider final : public tests::ScriptedProvider {
 public:
+    RepeatedReadCallChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink sink) override {
         auto response = ai::assistant_text_message("tool cycle complete");
         response.provider = "tool-fake";
         response.api = "fake";
-        response.model = request.model.id;
-        if (!request.context.messages.empty() &&
-            std::holds_alternative<ai::ToolResultMessage>(request.context.messages.back())) {
+        response.model = model.id;
+        if (!context.messages.empty() &&
+            std::holds_alternative<ai::ToolResultMessage>(context.messages.back())) {
             co_return response;
         }
 
         std::string prompt;
-        for (auto message = request.context.messages.rbegin();
-             message != request.context.messages.rend();
+        for (auto message = context.messages.rbegin();
+             message != context.messages.rend();
              ++message) {
             if (const auto* user = std::get_if<ai::UserMessage>(&*message)) {
                 prompt = ai::text_from_user_message(*user);
@@ -681,18 +692,21 @@ private:
     std::optional<boost::asio::steady_timer> gate_;
 };
 
-class AbortThroughToolChatClient final : public ai::StreamingChatClient {
+class AbortThroughToolChatProvider final : public tests::ScriptedProvider {
 public:
+    AbortThroughToolChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink sink) override {
         ++request_count;
-        if (request.stop_token.stop_requested()) {
-            completion_stop_token = request.stop_token;
+        if (options.stop_token.stop_requested()) {
+            completion_stop_token = options.stop_token;
             auto aborted = ai::assistant_text_message("");
             aborted.provider = "tool-abort-fake";
             aborted.api = "fake";
-            aborted.model = request.model.id;
+            aborted.model = model.id;
             aborted.stop_reason = ai::AssistantStopReason::Aborted;
             aborted.error_message = "tool prompt aborted";
             if (auto emitted = sink(ai::AssistantErrorEvent{
@@ -706,8 +720,8 @@ public:
         }
 
         std::string prompt;
-        for (auto message = request.context.messages.rbegin();
-             message != request.context.messages.rend();
+        for (auto message = context.messages.rbegin();
+             message != context.messages.rend();
              ++message) {
             if (const auto* user = std::get_if<ai::UserMessage>(&*message)) {
                 prompt = ai::text_from_user_message(*user);
@@ -718,15 +732,15 @@ public:
             auto recovered = ai::assistant_text_message("recovered after tool abort");
             recovered.provider = "tool-abort-fake";
             recovered.api = "fake";
-            recovered.model = request.model.id;
+            recovered.model = model.id;
             co_return recovered;
         }
 
-        first_stop_token = request.stop_token;
+        first_stop_token = options.stop_token;
         auto response = ai::assistant_text_message("");
         response.provider = "tool-abort-fake";
         response.api = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         response.content.clear();
         response.content.emplace_back(ai::tool_call_content(
             "delayed-call",
@@ -742,14 +756,17 @@ public:
     std::optional<std::stop_token> completion_stop_token;
 };
 
-class AcceptedOutcomeChatClient final : public ai::StreamingChatClient {
+class AcceptedOutcomeChatProvider final : public tests::ScriptedProvider {
 public:
+    AcceptedOutcomeChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink) override {
         std::string prompt;
-        for (auto message = request.context.messages.rbegin();
-             message != request.context.messages.rend();
+        for (auto message = context.messages.rbegin();
+             message != context.messages.rend();
              ++message) {
             if (const auto* user = std::get_if<ai::UserMessage>(&*message)) {
                 prompt = ai::text_from_user_message(*user);
@@ -761,7 +778,7 @@ public:
             prompt == "recover" ? "recovered after accepted outcomes" : "partial response");
         response.provider = "outcome-fake";
         response.api = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         if (prompt == "provider error") {
             response.stop_reason = ai::AssistantStopReason::Error;
             response.error_message = "accepted provider failure";
@@ -789,23 +806,25 @@ public:
     }
 };
 
-class IncrementalGatedChatClient final : public ai::StreamingChatClient {
+class IncrementalGatedChatProvider final : public tests::ScriptedProvider {
 public:
-    IncrementalGatedChatClient() = default;
-    IncrementalGatedChatClient(IncrementalGatedChatClient&&) = delete;
-    IncrementalGatedChatClient& operator=(IncrementalGatedChatClient&&) = delete;
-    ~IncrementalGatedChatClient() override = default;
-    IncrementalGatedChatClient(const IncrementalGatedChatClient&) = delete;
-    IncrementalGatedChatClient& operator=(const IncrementalGatedChatClient&) = delete;
+    IncrementalGatedChatProvider() : ScriptedProvider("sdk-host") {}
+    IncrementalGatedChatProvider(IncrementalGatedChatProvider&&) = delete;
+    IncrementalGatedChatProvider& operator=(IncrementalGatedChatProvider&&) = delete;
+    ~IncrementalGatedChatProvider() override = default;
+    IncrementalGatedChatProvider(const IncrementalGatedChatProvider&) = delete;
+    IncrementalGatedChatProvider& operator=(const IncrementalGatedChatProvider&) = delete;
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink sink) override {
         auto partial = ai::assistant_text_message("");
         partial.content.clear();
         partial.provider = "fake";
         partial.api = "incremental-fake";
-        partial.model = request.model.id;
+        partial.model = model.id;
         if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
             co_return std::unexpected(emitted.error());
         }
@@ -1082,7 +1101,7 @@ TEST_CASE(
     tests::TempWorkspace config_directory;
     auto options = session_options(
         workspace,
-        std::make_unique<RepeatedReadCallChatClient>());
+        std::make_shared<RepeatedReadCallChatProvider>());
     options.custom_tools.push_back(std::make_unique<ImageReadTool>(
         std::string{tests::kTinyPngBase64}));
     auto created = coding_agent::create_agent_session(std::move(options));
@@ -1222,7 +1241,7 @@ TEST_CASE(
     tests::TempWorkspace config_directory;
     auto options = session_options(
         workspace,
-        ai::providers::make_scripted_fake_stream());
+        ai::providers::make_scripted_fake_provider());
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
 
@@ -1311,7 +1330,7 @@ TEST_CASE(
     tests::TempWorkspace config_directory;
     auto options = session_options(
         workspace,
-        ai::providers::make_scripted_fake_stream());
+        ai::providers::make_scripted_fake_provider());
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
 
@@ -1355,7 +1374,7 @@ TEST_CASE(
 
     auto failed_options = session_options(
         workspace,
-        ai::providers::make_scripted_fake_stream());
+        ai::providers::make_scripted_fake_provider());
     auto failed_session = coding_agent::create_agent_session(std::move(failed_options));
     REQUIRE(failed_session);
     auto failed_reader = std::make_unique<FakeClipboardReader>();
@@ -1563,7 +1582,7 @@ TEST_CASE(
 
     auto create = session_options(
         workspace,
-        ai::providers::make_scripted_fake_stream());
+        ai::providers::make_scripted_fake_provider());
     create.session_target = coding_agent::ExplicitNewSessionTarget{session_file};
     auto fresh = coding_agent::create_agent_session(std::move(create));
     REQUIRE(fresh);
@@ -1631,7 +1650,7 @@ TEST_CASE(
     tests::TempWorkspace config;
     auto options = session_options(
         workspace,
-        std::make_unique<RepeatedReadCallChatClient>());
+        std::make_shared<RepeatedReadCallChatProvider>());
     auto tool = std::make_unique<GatedPartialReadTool>();
     auto* tool_pointer = tool.get();
     options.custom_tools.push_back(std::move(tool));
@@ -1709,7 +1728,7 @@ TEST_CASE(
     "[coding_agent][tui][abort][issue61]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto client = std::make_unique<AbortAwareInteractiveChatClient>();
+    auto client = std::make_shared<AbortAwareInteractiveChatProvider>();
     auto* client_pointer = client.get();
     auto created = coding_agent::create_agent_session(session_options(
         workspace,
@@ -1788,7 +1807,7 @@ TEST_CASE(
     config.write(
         "keybindings.json",
         R"({"app.interrupt":"f7","app.exit":"f6"})");
-    auto client = std::make_unique<AbortAwareInteractiveChatClient>();
+    auto client = std::make_shared<AbortAwareInteractiveChatProvider>();
     auto* client_pointer = client.get();
     auto created = coding_agent::create_agent_session(session_options(
         workspace,
@@ -1832,7 +1851,7 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     config.write("keybindings.json", R"({"app.interrupt":"f7"})");
-    auto client = std::make_unique<AbortThroughToolChatClient>();
+    auto client = std::make_shared<AbortThroughToolChatProvider>();
     auto* client_pointer = client.get();
     auto options = session_options(workspace, std::move(client));
     auto tool = std::make_unique<DelayedCancellationTool>();
@@ -1914,7 +1933,7 @@ TEST_CASE(
     tests::TempWorkspace config;
     auto created = coding_agent::create_agent_session(session_options(
         workspace,
-        ai::providers::make_scripted_fake_stream()));
+        ai::providers::make_scripted_fake_provider()));
     REQUIRE(created);
     std::vector<coding_agent::EventSubscription> failing_subscriptions;
     for (std::size_t index = 0; index < 16; ++index) {
@@ -1983,7 +2002,7 @@ TEST_CASE(
     const auto session_file = workspace.path() / "persistence-recovery.jsonl";
     auto options = session_options(
         workspace,
-        ai::providers::make_scripted_fake_stream());
+        ai::providers::make_scripted_fake_provider());
     options.session_target = coding_agent::ExplicitNewSessionTarget{session_file};
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
@@ -2030,7 +2049,7 @@ TEST_CASE(
     tests::TempWorkspace config;
     auto created = coding_agent::create_agent_session(session_options(
         workspace,
-        std::make_unique<AcceptedOutcomeChatClient>()));
+        std::make_shared<AcceptedOutcomeChatProvider>()));
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 20});
@@ -2092,7 +2111,7 @@ TEST_CASE(
     tests::TempWorkspace config;
     auto created = coding_agent::create_agent_session(session_options(
         workspace,
-        ai::providers::make_scripted_fake_stream()));
+        ai::providers::make_scripted_fake_provider()));
     REQUIRE(created);
 
     FailingStartTerminal terminal;
@@ -2127,7 +2146,7 @@ TEST_CASE(
     tests::TempWorkspace config;
     auto created = coding_agent::create_agent_session(session_options(
         workspace,
-        ai::providers::make_scripted_fake_stream()));
+        ai::providers::make_scripted_fake_provider()));
     REQUIRE(created);
 
     FailingCleanupTerminal terminal;
@@ -2164,7 +2183,7 @@ TEST_CASE(
     tests::TempWorkspace config;
     auto created = coding_agent::create_agent_session(session_options(
         workspace,
-        ai::providers::make_scripted_fake_stream()));
+        ai::providers::make_scripted_fake_provider()));
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 60, .rows = 10});
@@ -2210,7 +2229,7 @@ TEST_CASE(
     "[coding_agent][tui][queues][issue62]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto client = std::make_unique<TurnGatedChatClient>();
+    auto client = std::make_shared<TurnGatedChatProvider>();
     auto* client_pointer = client.get();
     auto options = session_options(workspace, std::move(client));
     options.max_queued_messages = 3;
@@ -2295,7 +2314,7 @@ TEST_CASE(
     "[coding_agent][tui][queues][limits][issue62]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto client = std::make_unique<TurnGatedChatClient>();
+    auto client = std::make_shared<TurnGatedChatProvider>();
     auto* client_pointer = client.get();
     auto options = session_options(workspace, std::move(client));
     options.max_queued_messages = 2;
@@ -2408,7 +2427,7 @@ TEST_CASE(
     "[coding_agent][tui][queues][error][issue62]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto client = std::make_unique<TurnGatedChatClient>();
+    auto client = std::make_shared<TurnGatedChatProvider>();
     auto* client_pointer = client.get();
     client_pointer->first_request_errors = true;
     auto created = coding_agent::create_agent_session(session_options(
@@ -2474,7 +2493,7 @@ TEST_CASE(
     "[coding_agent][tui][queues][abort][issue62]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto client = std::make_unique<AbortAwareInteractiveChatClient>();
+    auto client = std::make_shared<AbortAwareInteractiveChatProvider>();
     auto* client_pointer = client.get();
     auto created = coding_agent::create_agent_session(session_options(
         workspace,
@@ -2540,7 +2559,7 @@ TEST_CASE(
     "[coding_agent][tui][async][issue58][issue62]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto client = std::make_unique<GatedChatClient>();
+    auto client = std::make_shared<GatedChatProvider>();
     auto* client_pointer = client.get();
     auto created = coding_agent::create_agent_session(session_options(
         workspace,
@@ -2594,7 +2613,7 @@ TEST_CASE(
     "[coding_agent][tui][streaming][issue58]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto client = std::make_unique<IncrementalGatedChatClient>();
+    auto client = std::make_shared<IncrementalGatedChatProvider>();
     auto* client_pointer = client.get();
     auto created = coding_agent::create_agent_session(session_options(workspace, std::move(client)));
     REQUIRE(created);
@@ -2641,7 +2660,7 @@ TEST_CASE(
     "[coding_agent][tui][async][issue58]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto client = std::make_unique<GatedChatClient>();
+    auto client = std::make_shared<GatedChatProvider>();
     auto* client_pointer = client.get();
     auto created = coding_agent::create_agent_session(session_options(workspace, std::move(client)));
     REQUIRE(created);
@@ -2689,7 +2708,7 @@ TEST_CASE(
     tests::TempWorkspace config;
     auto created = coding_agent::create_agent_session(session_options(
         workspace,
-        ai::providers::make_scripted_fake_stream()));
+        ai::providers::make_scripted_fake_provider()));
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
@@ -2773,7 +2792,7 @@ TEST_CASE(
         "Expanded project prompt: $ARGUMENTS\n");
     auto options = session_options(
         workspace,
-        ai::providers::make_scripted_fake_stream());
+        ai::providers::make_scripted_fake_provider());
     options.load_project_resources = true;
     options.default_project_trust = coding_agent::DefaultProjectTrust::Always;
     auto created = coding_agent::create_agent_session(std::move(options));
@@ -2845,7 +2864,7 @@ TEST_CASE(
     config.write("keybindings.json", R"({"app.exit":"f6"})");
     auto created = coding_agent::create_agent_session(session_options(
         workspace,
-        ai::providers::make_scripted_fake_stream()));
+        ai::providers::make_scripted_fake_provider()));
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
@@ -2901,7 +2920,7 @@ TEST_CASE(
     tests::TempWorkspace config;
     auto created = coding_agent::create_agent_session(session_options(
         workspace,
-        std::make_unique<FailOnceChatClient>()));
+        std::make_shared<FailOnceChatProvider>()));
     REQUIRE(created);
 
     tui::VirtualTerminal terminal({.columns = 100, .rows = 12});

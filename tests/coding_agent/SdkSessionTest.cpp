@@ -104,25 +104,27 @@ struct SubscriberLifetimeToken {};
     });
 }
 
-class LifetimeTrackedChatClient final : public ai::StreamingChatClient {
+class LifetimeTrackedChatProvider final : public tests::ScriptedProvider {
 public:
-    explicit LifetimeTrackedChatClient(std::shared_ptr<SdkOwnedLifetimeCounts> counts)
-        : counts_(std::move(counts)) {}
-    LifetimeTrackedChatClient(LifetimeTrackedChatClient&&) = delete;
-    LifetimeTrackedChatClient& operator=(LifetimeTrackedChatClient&&) = delete;
-    ~LifetimeTrackedChatClient() override {
+    explicit LifetimeTrackedChatProvider(std::shared_ptr<SdkOwnedLifetimeCounts> counts)
+        : ScriptedProvider("sdk-host"), counts_(std::move(counts)) {}
+    LifetimeTrackedChatProvider(LifetimeTrackedChatProvider&&) = delete;
+    LifetimeTrackedChatProvider& operator=(LifetimeTrackedChatProvider&&) = delete;
+    ~LifetimeTrackedChatProvider() override {
         ++counts_->destroyed_clients;
     }
-    LifetimeTrackedChatClient(const LifetimeTrackedChatClient&) = delete;
-    LifetimeTrackedChatClient& operator=(const LifetimeTrackedChatClient&) = delete;
+    LifetimeTrackedChatProvider(const LifetimeTrackedChatProvider&) = delete;
+    LifetimeTrackedChatProvider& operator=(const LifetimeTrackedChatProvider&) = delete;
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink) override {
         auto response = ai::assistant_text_message("tracked");
         response.provider = "tracked-fake";
         response.api = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         co_return response;
     }
 
@@ -372,21 +374,24 @@ private:
 
 /// A host chat client that records the request so tests can inspect the tool
 /// registry sent to the model.
-class CaptureChatClient final : public ai::StreamingChatClient {
+class CaptureChatProvider final : public tests::ScriptedProvider {
 public:
-    std::optional<ai::StreamChatRequest> captured_request;
+    CaptureChatProvider() : ScriptedProvider("sdk-host") {}
+    std::optional<tests::RecordedProviderRequest> captured_request;
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink /*sink*/) override {
-        captured_request = request;
+        captured_request = tests::RecordedProviderRequest{model, context, options};
         ai::AssistantMessage msg;
         // Mirror the real adapters (assistant.provider = model.provider): the
         // provider must resolve in the models seam's catalog so resume's
         // derived model re-resolves against the live runtime (T08).
-        msg.provider = request.model.provider;
+        msg.provider = model.provider;
         msg.api = "capture";
-        msg.model = request.model.id;
+        msg.model = model.id;
         msg.stop_reason = ai::AssistantStopReason::Stop;
         msg.content.emplace_back(ai::TextContent{"captured", std::nullopt});
         msg.timestamp = 1718000000123;
@@ -394,14 +399,17 @@ public:
     }
 };
 
-class ImageRejectingChatClient final : public ai::StreamingChatClient {
+class ImageRejectingChatProvider final : public tests::ScriptedProvider {
 public:
+    ImageRejectingChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink /*sink*/) override {
         ++request_count;
         const bool has_image = std::ranges::any_of(
-            request.context.messages,
+            context.messages,
             [](const ai::MessageVariant& message) {
                 const auto* user = std::get_if<ai::UserMessage>(&message);
                 return user != nullptr && std::ranges::any_of(
@@ -419,27 +427,29 @@ public:
         auto response = ai::assistant_text_message("text accepted");
         response.provider = "image-rejecting-fake";
         response.api = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         co_return response;
     }
 
     int request_count{0};
 };
 
-class MalformedArgumentsChatClient final : public ai::StreamingChatClient {
+class MalformedArgumentsChatProvider final : public tests::ScriptedProvider {
 public:
-    explicit MalformedArgumentsChatClient(std::string secret)
-        : secret_(std::move(secret)) {}
+    explicit MalformedArgumentsChatProvider(std::string secret)
+        : ScriptedProvider("sdk-host"), secret_(std::move(secret)) {}
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink /*sink*/) override {
-        requests.push_back(request);
+        requests.push_back(tests::RecordedProviderRequest{model, context, options});
 
         ai::AssistantMessage response;
         response.provider = "fake";
         response.api = "issue33-fake";
-        response.model = request.model.id;
+        response.model = model.id;
         response.timestamp = 1718000000123;
         if (requests.size() > 1) {
             response.content.emplace_back(ai::text_content("recovered after malformed call"));
@@ -473,17 +483,20 @@ public:
         co_return response;
     }
 
-    std::vector<ai::StreamChatRequest> requests;
+    std::vector<tests::RecordedProviderRequest> requests;
 
 private:
     std::string secret_;
 };
 
-class PreflightRejectingChatClient final : public ai::StreamingChatClient {
+class PreflightRejectingChatProvider final : public tests::ScriptedProvider {
 public:
+    PreflightRejectingChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& /*request*/,
-        ai::AssistantEventSink /*sink*/) override {
+        const ai::Model&,
+        const ai::AiContext&,
+        ai::ProviderStreamOptions,
+        ai::AssistantEventSink  /*sink*/) override {
         co_return std::unexpected(util::make_error(
             util::ErrorCode::Provider,
             "provider rejected in-memory prompt"));
@@ -494,26 +507,28 @@ struct PreflightCancellationObservation {
     bool stop_requested{false};
 };
 
-class PreflightCancellationChatClient final : public ai::StreamingChatClient {
+class PreflightCancellationChatProvider final : public tests::ScriptedProvider {
 public:
-    explicit PreflightCancellationChatClient(
+    explicit PreflightCancellationChatProvider(
         std::shared_ptr<PreflightCancellationObservation> observation)
-        : observation_(std::move(observation)) {}
-    PreflightCancellationChatClient(PreflightCancellationChatClient&&) = delete;
-    PreflightCancellationChatClient& operator=(PreflightCancellationChatClient&&) = delete;
-    ~PreflightCancellationChatClient() override = default;
-    PreflightCancellationChatClient(const PreflightCancellationChatClient&) = delete;
-    PreflightCancellationChatClient& operator=(const PreflightCancellationChatClient&) = delete;
+        : ScriptedProvider("sdk-host"), observation_(std::move(observation)) {}
+    PreflightCancellationChatProvider(PreflightCancellationChatProvider&&) = delete;
+    PreflightCancellationChatProvider& operator=(PreflightCancellationChatProvider&&) = delete;
+    ~PreflightCancellationChatProvider() override = default;
+    PreflightCancellationChatProvider(const PreflightCancellationChatProvider&) = delete;
+    PreflightCancellationChatProvider& operator=(const PreflightCancellationChatProvider&) = delete;
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink sink) override {
-        observation_->stop_requested = request.stop_token.stop_requested();
+        observation_->stop_requested = options.stop_token.stop_requested();
         auto response = ai::assistant_text_message(
             observation_->stop_requested ? "" : "not cancelled");
         response.provider = "preflight-cancellation-fake";
         response.api = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         if (observation_->stop_requested) {
             response.stop_reason = ai::AssistantStopReason::Aborted;
             response.error_message = "prompt aborted";
@@ -546,10 +561,13 @@ private:
     std::shared_ptr<PreflightCancellationObservation> observation_;
 };
 
-class ExecutorCapturingChatClient final : public ai::StreamingChatClient {
+class ExecutorCapturingChatProvider final : public tests::ScriptedProvider {
 public:
+    ExecutorCapturingChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink /*sink*/) override {
         auto executor = co_await boost::asio::this_coro::executor;
         execution_context = &boost::asio::query(
@@ -559,7 +577,7 @@ public:
         auto response = ai::assistant_text_message("async response");
         response.provider = "executor-capturing-fake";
         response.api = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         co_return response;
     }
 
@@ -567,10 +585,13 @@ public:
     int request_count{0};
 };
 
-class GatedSdkChatClient final : public ai::StreamingChatClient {
+class GatedSdkChatProvider final : public tests::ScriptedProvider {
 public:
+    GatedSdkChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink /*sink*/) override {
         auto executor = co_await boost::asio::this_coro::executor;
         gate.emplace(executor);
@@ -585,7 +606,7 @@ public:
         auto response = ai::assistant_text_message("released");
         response.provider = "gated-fake";
         response.api = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         co_return response;
     }
 
@@ -602,45 +623,48 @@ public:
 
 /// A controllable conforming fake that retains optional partial output and
 /// completes a stopped provider request through one aborted terminal event.
-class AbortAwareSdkChatClient final : public ai::StreamingChatClient {
+class AbortAwareSdkChatProvider final : public tests::ScriptedProvider {
 public:
-    explicit AbortAwareSdkChatClient(
+    explicit AbortAwareSdkChatProvider(
         bool emit_partial,
         std::shared_ptr<SdkOwnedLifetimeCounts> lifetime_counts = {})
-        : emit_partial_(emit_partial),
+        : ScriptedProvider("sdk-host"),
+          emit_partial_(emit_partial),
           lifetime_counts_(std::move(lifetime_counts)) {}
-    AbortAwareSdkChatClient(AbortAwareSdkChatClient&&) = delete;
-    AbortAwareSdkChatClient& operator=(AbortAwareSdkChatClient&&) = delete;
-    ~AbortAwareSdkChatClient() override {
+    AbortAwareSdkChatProvider(AbortAwareSdkChatProvider&&) = delete;
+    AbortAwareSdkChatProvider& operator=(AbortAwareSdkChatProvider&&) = delete;
+    ~AbortAwareSdkChatProvider() override {
         if (lifetime_counts_) {
             ++lifetime_counts_->destroyed_clients;
         }
     }
-    AbortAwareSdkChatClient(const AbortAwareSdkChatClient&) = delete;
-    AbortAwareSdkChatClient& operator=(const AbortAwareSdkChatClient&) = delete;
+    AbortAwareSdkChatProvider(const AbortAwareSdkChatProvider&) = delete;
+    AbortAwareSdkChatProvider& operator=(const AbortAwareSdkChatProvider&) = delete;
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink sink) override {
         ++request_count;
-        stop_possible = request.stop_token.stop_possible();
+        stop_possible = options.stop_token.stop_possible();
         if (request_count > 1) {
-            recovery_stop_requested = request.stop_token.stop_requested();
+            recovery_stop_requested = options.stop_token.stop_requested();
             recovery_uses_fresh_token =
-                first_stop_token && request.stop_token != *first_stop_token;
+                first_stop_token && options.stop_token != *first_stop_token;
             auto recovered = ai::assistant_text_message("recovered after abort");
             recovered.provider = "abort-aware-fake";
             recovered.api = "fake";
-            recovered.model = request.model.id;
+            recovered.model = model.id;
             recovered.timestamp = 1718000000123;
             co_return recovered;
         }
 
-        first_stop_token = request.stop_token;
+        first_stop_token = options.stop_token;
         auto partial = ai::assistant_text_message("");
         partial.provider = "abort-aware-fake";
         partial.api = "fake";
-        partial.model = request.model.id;
+        partial.model = model.id;
         partial.timestamp = 1718000000123;
         partial.content.clear();
         if (sink) {
@@ -677,19 +701,19 @@ public:
         gate.emplace(executor);
         gate->expires_at(std::chrono::steady_clock::time_point::max());
         started = true;
-        std::stop_callback cancellation{request.stop_token, [this] {
+        std::stop_callback cancellation{options.stop_token, [this] {
             if (gate) {
                 gate->cancel();
             }
         }};
 
         boost::system::error_code error;
-        if (!request.stop_token.stop_requested()) {
+        if (!options.stop_token.stop_requested()) {
             co_await gate->async_wait(
                 boost::asio::redirect_error(boost::asio::use_awaitable, error));
         }
 
-        if (request.stop_token.stop_requested()) {
+        if (options.stop_token.stop_requested()) {
             partial.stop_reason = ai::AssistantStopReason::Aborted;
             partial.error_message = "prompt aborted";
             if (sink) {
@@ -707,7 +731,7 @@ public:
         auto released = ai::assistant_text_message("released without abort");
         released.provider = "abort-aware-fake";
         released.api = "fake";
-        released.model = request.model.id;
+        released.model = model.id;
         released.timestamp = 1718000000123;
         co_return released;
     }
@@ -729,19 +753,21 @@ private:
 /// A conforming host-provided client whose accepted call emits one terminal
 /// error event before any assistant start event and returns the same final
 /// AssistantMessage through the value alternative.
-class TerminalBeforeStartChatClient final : public ai::StreamingChatClient {
+class TerminalBeforeStartChatProvider final : public tests::ScriptedProvider {
 public:
-    TerminalBeforeStartChatClient(ai::AssistantStopReason reason, std::string diagnostic)
-        : reason_(reason), diagnostic_(std::move(diagnostic)) {}
+    TerminalBeforeStartChatProvider(ai::AssistantStopReason reason, std::string diagnostic)
+        : ScriptedProvider("sdk-host"), reason_(reason), diagnostic_(std::move(diagnostic)) {}
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink sink) override {
         ++request_count;
         ai::AssistantMessage terminal;
         terminal.provider = "host";
         terminal.api = "host";
-        terminal.model = request.model.id;
+        terminal.model = model.id;
         terminal.stop_reason = reason_;
         terminal.error_message = diagnostic_;
         terminal.timestamp = 1718000000123;
@@ -762,16 +788,16 @@ private:
 };
 
 [[nodiscard]] ai::AssistantMessage scripted_terminal(
-    const ai::StreamChatRequest& request,
+    const ai::Model& model,
     ai::AssistantStopReason reason,
     std::string error_message) {
     ai::AssistantMessage terminal;
     // Mirror the real adapters (assistant.provider = model.provider): the
     // provider must resolve in the models seam's catalog so resume's derived
     // model re-resolves against the live runtime (T08).
-    terminal.provider = request.model.provider;
+    terminal.provider = model.provider;
     terminal.api = "scripted-fake";
-    terminal.model = request.model.id;
+    terminal.model = model.id;
     terminal.stop_reason = reason;
     terminal.error_message = std::move(error_message);
     terminal.timestamp = 1718000000123;
@@ -779,15 +805,15 @@ private:
 }
 
 [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> emit_recovered_text(
-    const ai::StreamChatRequest& request,
+    const ai::Model& model,
     ai::AssistantEventSink& sink) {
     auto message = ai::assistant_text_message("recovered");
     // Mirror the real adapters (assistant.provider = model.provider): the
     // provider must resolve in the models seam's catalog so resume's derived
     // model re-resolves against the live runtime (T08).
-    message.provider = request.model.provider;
+    message.provider = model.provider;
     message.api = "scripted-fake";
-    message.model = request.model.id;
+    message.model = model.id;
     message.timestamp = 1718000000123;
 
     auto partial = message;
@@ -815,36 +841,41 @@ private:
 
 /// Preflight gate mirroring the removed wire adapter's API-key check: without
 /// a key the stream rejects before the wrapped transport-side client runs.
-class ApiKeyGatedChatClient final : public ai::StreamingChatClient {
+class ApiKeyGatedChatProvider final : public tests::ScriptedProvider {
 public:
-    ApiKeyGatedChatClient(
-        std::unique_ptr<ai::StreamingChatClient> inner,
+    ApiKeyGatedChatProvider(
+        std::shared_ptr<ai::Provider> inner,
         std::optional<std::string> api_key)
-        : inner_(std::move(inner)), api_key_(std::move(api_key)) {}
+        : ScriptedProvider("sdk-host"), inner_(std::move(inner)), api_key_(std::move(api_key)) {}
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink sink) override {
         if (!api_key_) {
             co_return std::unexpected(util::make_error(
                 util::ErrorCode::Provider,
                 "missing API key"));
         }
-        co_return co_await inner_->stream(request, std::move(sink));
+        co_return co_await inner_->stream(model, context, std::move(options), std::move(sink));
     }
 
 private:
-    std::unique_ptr<ai::StreamingChatClient> inner_;
+    std::shared_ptr<ai::Provider> inner_;
     std::optional<std::string> api_key_;
 };
 
 /// Stand-in for the transport seam behind the preflight gate: reaching it at
 /// all is the failure mode the gate test asserts against.
-class TransportStandInChatClient final : public ai::StreamingChatClient {
+class TransportStandInChatProvider final : public tests::ScriptedProvider {
 public:
+    TransportStandInChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& /*request*/,
-        ai::AssistantEventSink /*sink*/) override {
+        const ai::Model&,
+        const ai::AiContext&,
+        ai::ProviderStreamOptions,
+        ai::AssistantEventSink  /*sink*/) override {
         ++request_count;
         co_return std::unexpected(util::make_error(
             util::ErrorCode::Network,
@@ -857,20 +888,22 @@ public:
 /// First call starts the assistant stream and then fails with a scripted
 /// network-class terminal whose message matches the transport detail the
 /// removed wire adapter surfaced; later calls recover with plain text.
-class RecoveringFailureChatClient final : public ai::StreamingChatClient {
+class RecoveringFailureChatProvider final : public tests::ScriptedProvider {
 public:
-    explicit RecoveringFailureChatClient(std::string failure_message)
-        : failure_message_(std::move(failure_message)) {}
+    explicit RecoveringFailureChatProvider(std::string failure_message)
+        : ScriptedProvider("sdk-host"), failure_message_(std::move(failure_message)) {}
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink sink) override {
         ++request_count;
         if (request_count > 1) {
-            co_return co_await emit_recovered_text(request, sink);
+            co_return co_await emit_recovered_text(model, sink);
         }
         auto terminal = scripted_terminal(
-            request, ai::AssistantStopReason::Error, failure_message_);
+            model, ai::AssistantStopReason::Error, failure_message_);
         CCH_TRY_VOID(ai::providers::emit(sink, ai::AssistantStartEvent{.partial = terminal}));
         CCH_TRY_VOID(ai::providers::emit(sink, ai::AssistantErrorEvent{
             .reason = terminal.stop_reason,
@@ -890,17 +923,20 @@ private:
 /// cancellation-class terminal carrying the accumulated call; no tool-call
 /// end event is emitted because the stream broke mid-call. Later calls
 /// recover with plain text.
-class PartialToolCallAbortChatClient final : public ai::StreamingChatClient {
+class PartialToolCallAbortChatProvider final : public tests::ScriptedProvider {
 public:
+    PartialToolCallAbortChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink sink) override {
         ++request_count;
         if (request_count > 1) {
-            co_return co_await emit_recovered_text(request, sink);
+            co_return co_await emit_recovered_text(model, sink);
         }
         auto partial = scripted_terminal(
-            request, ai::AssistantStopReason::Aborted, "transport operation was cancelled");
+            model, ai::AssistantStopReason::Aborted, "transport operation was cancelled");
         partial.content.clear();
         CCH_TRY_VOID(ai::providers::emit(sink, ai::AssistantStartEvent{.partial = partial}));
         partial.content.emplace_back(ai::ToolCallContent{
@@ -946,14 +982,17 @@ public:
 /// Streams one thinking block, one text block, and a partial tool call whose
 /// arguments stay malformed, then fails with a terminal error carrying all
 /// three accumulated content items.
-class PartialContentFailureChatClient final : public ai::StreamingChatClient {
+class PartialContentFailureChatProvider final : public tests::ScriptedProvider {
 public:
+    PartialContentFailureChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink sink) override {
         ++request_count;
         auto partial = scripted_terminal(
-            request, ai::AssistantStopReason::Error, "provider stream ended mid-chunk");
+            model, ai::AssistantStopReason::Error, "provider stream ended mid-chunk");
         partial.content.clear();
         CCH_TRY_VOID(ai::providers::emit(sink, ai::AssistantStartEvent{.partial = partial}));
 
@@ -1036,16 +1075,19 @@ public:
 
 /// Emits two text deltas that each carry the normalized usage snapshot the
 /// removed wire adapter derived from the chunk-level usage fields.
-class UsageSnapshotsChatClient final : public ai::StreamingChatClient {
+class UsageSnapshotsChatProvider final : public tests::ScriptedProvider {
 public:
+    UsageSnapshotsChatProvider() : ScriptedProvider("sdk-host") {}
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink sink) override {
         ++request_count;
         auto message = ai::assistant_text_message("ab");
         message.provider = "scripted-fake";
         message.api = "scripted-fake";
-        message.model = request.model.id;
+        message.model = model.id;
         message.timestamp = 1718000000123;
 
         const ai::Usage first_snapshot{
@@ -1196,13 +1238,13 @@ TEST_CASE(
     "SDK AgentSession preserves image prompts through live state persistence and resume",
     "[sdk][live-state][incremental-persistence][issue43]") {
     TestPaths paths;
-    auto capture = std::make_unique<CaptureChatClient>();
+    auto capture = std::make_shared<CaptureChatProvider>();
     auto* capture_ptr = capture.get();
 
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     options.workspace = paths.workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(capture));
+    options.models = cch::tests::models_from_provider(std::move(capture));
 
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
@@ -1266,12 +1308,12 @@ TEST_CASE(
     CHECK(std::get<ai::ImageContent>(persisted_blocks[2]).mime_type == "image/gif");
     created->session->close();
 
-    auto resumed_capture = std::make_unique<CaptureChatClient>();
+    auto resumed_capture = std::make_shared<CaptureChatProvider>();
     auto* resumed_capture_ptr = resumed_capture.get();
     tests::ModelsSessionOptions resume_options;
     resume_options.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
     resume_options.workspace = paths.workspace.path();
-    resume_options.models = cch::tests::models_from_stream(std::move(resumed_capture));
+    resume_options.models = cch::tests::models_from_provider(std::move(resumed_capture));
     auto resumed = coding_agent::create_agent_session(std::move(resume_options));
     REQUIRE(resumed.has_value());
     REQUIRE(resumed->session->prompt_blocking("continue").has_value());
@@ -1290,12 +1332,12 @@ TEST_CASE(
     "SDK AgentSession keeps text-only prompts and a truthful opaque-host Model",
     "[sdk][issue43][issue336]") {
     TestPaths paths;
-    auto capture = std::make_unique<CaptureChatClient>();
+    auto capture = std::make_shared<CaptureChatProvider>();
     auto* capture_ptr = capture.get();
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = paths.workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(capture));
+    options.models = cch::tests::models_from_provider(std::move(capture));
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
 
@@ -1320,12 +1362,12 @@ TEST_CASE(
 
 TEST_CASE("SDK AgentSession exposes incompatible image destinations as provider failures", "[sdk][issue43]") {
     TestPaths paths;
-    auto rejecting_client = std::make_unique<ImageRejectingChatClient>();
+    auto rejecting_client = std::make_shared<ImageRejectingChatProvider>();
     auto* rejecting_client_ptr = rejecting_client.get();
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = paths.workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(rejecting_client));
+    options.models = cch::tests::models_from_provider(std::move(rejecting_client));
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
 
@@ -1398,12 +1440,12 @@ TEST_CASE(
     "SDK AgentSession accepts and clears queued input while a prompt is streaming",
     "[coding_agent][queue][issue44]") {
     TestPaths paths;
-    auto client = std::make_unique<GatedSdkChatClient>();
+    auto client = std::make_shared<GatedSdkChatProvider>();
     auto* client_ptr = client.get();
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = paths.workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
 
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
@@ -1686,7 +1728,7 @@ TEST_CASE(
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::make_unique<PreflightRejectingChatClient>());
+    opts.models = cch::tests::models_from_provider(std::make_shared<PreflightRejectingChatProvider>());
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -1721,15 +1763,15 @@ TEST_CASE(
     "SDK persists a terminal error when provider setup rejects before transport",
     "[sdk][incremental-persistence][provider-preflight-rejection][issue14]") {
     TestPaths paths;
-    auto inner = std::make_unique<TransportStandInChatClient>();
+    auto inner = std::make_shared<TransportStandInChatProvider>();
     auto* inner_ptr = inner.get();
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
     opts.model = cch::tests::sdk_request_model("fake", "fake-model");
-    opts.models = cch::tests::models_from_stream(
-        std::make_unique<ApiKeyGatedChatClient>(std::move(inner), std::nullopt));
+    opts.models = cch::tests::models_from_provider(
+        std::make_shared<ApiKeyGatedChatProvider>(std::move(inner), std::nullopt));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -1782,14 +1824,14 @@ TEST_CASE(
     "SDK persists the latest normalized provider usage snapshot",
     "[sdk][live-state][incremental-persistence][issue20]") {
     TestPaths paths;
-    auto client = std::make_unique<UsageSnapshotsChatClient>();
+    auto client = std::make_shared<UsageSnapshotsChatProvider>();
     auto* client_ptr = client.get();
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
     opts.model = cch::tests::sdk_request_model("fake", "fake-model");
-    opts.models = cch::tests::models_from_stream(std::move(client));
+    opts.models = cch::tests::models_from_provider(std::move(client));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -1869,7 +1911,7 @@ TEST_CASE(
     TestPaths paths;
     // The scripted terminal message matches the transport detail the removed
     // wire adapter surfaced for this network-class failure.
-    auto client = std::make_unique<RecoveringFailureChatClient>(
+    auto client = std::make_shared<RecoveringFailureChatProvider>(
         "could not resolve api.example: Name or service not known");
     auto* client_ptr = client.get();
 
@@ -1877,7 +1919,7 @@ TEST_CASE(
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
     opts.model = cch::tests::sdk_request_model("fake", "fake-model");
-    opts.models = cch::tests::models_from_stream(std::move(client));
+    opts.models = cch::tests::models_from_provider(std::move(client));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -1965,12 +2007,12 @@ TEST_CASE(
     CHECK_FALSE(static_cast<bool>(*subscription));
     session->close();
 
-    auto capture = std::make_unique<CaptureChatClient>();
+    auto capture = std::make_shared<CaptureChatProvider>();
     auto* capture_ptr = capture.get();
     tests::ModelsSessionOptions resume;
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
     resume.workspace = paths.workspace.path();
-    resume.models = cch::tests::models_from_stream(std::move(capture));
+    resume.models = cch::tests::models_from_provider(std::move(capture));
 
     auto reopened = coding_agent::create_agent_session(std::move(resume));
     REQUIRE(reopened.has_value());
@@ -1993,14 +2035,14 @@ TEST_CASE(
     "[sdk][live-state][incremental-persistence][issue33]") {
     TestPaths paths;
     const std::string secret = "sk-FAKEPARSEREXCERPTCREDENTIAL123456";
-    auto client = std::make_unique<MalformedArgumentsChatClient>(secret);
+    auto client = std::make_shared<MalformedArgumentsChatProvider>(secret);
     auto* client_ptr = client.get();
     auto tool_execution_count = std::make_shared<std::size_t>(0);
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::move(client));
+    opts.models = cch::tests::models_from_provider(std::move(client));
     opts.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = false,
         .write = false,
@@ -2077,7 +2119,7 @@ TEST_CASE(
     "SDK completes a cancellation-class failure as a durable aborted turn and remains reusable",
     "[sdk][live-state][incremental-persistence][issue13]") {
     TestPaths paths;
-    auto client = std::make_unique<PartialToolCallAbortChatClient>();
+    auto client = std::make_shared<PartialToolCallAbortChatProvider>();
     auto* client_ptr = client.get();
     auto tool_execution_count = std::make_shared<std::size_t>(0);
 
@@ -2085,7 +2127,7 @@ TEST_CASE(
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
     opts.model = cch::tests::sdk_request_model("fake", "fake-model");
-    opts.models = cch::tests::models_from_stream(std::move(client));
+    opts.models = cch::tests::models_from_provider(std::move(client));
     opts.custom_tools.push_back(std::make_unique<FakeEchoTool>(tool_execution_count));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
@@ -2176,12 +2218,12 @@ TEST_CASE(
     CHECK(*session->last_assistant_text() == "recovered");
     session->close();
 
-    auto capture = std::make_unique<CaptureChatClient>();
+    auto capture = std::make_shared<CaptureChatProvider>();
     auto* capture_ptr = capture.get();
     tests::ModelsSessionOptions resume;
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
     resume.workspace = paths.workspace.path();
-    resume.models = cch::tests::models_from_stream(std::move(capture));
+    resume.models = cch::tests::models_from_provider(std::move(capture));
 
     auto reopened = coding_agent::create_agent_session(std::move(resume));
     REQUIRE(reopened.has_value());
@@ -2201,7 +2243,7 @@ TEST_CASE(
     "SDK recovers a host provider error terminal emitted before any assistant start",
     "[sdk][live-state][incremental-persistence][issue15]") {
     TestPaths paths;
-    auto client = std::make_unique<TerminalBeforeStartChatClient>(
+    auto client = std::make_shared<TerminalBeforeStartChatProvider>(
         ai::AssistantStopReason::Error,
         "host transport lost before response start");
     auto* client_ptr = client.get();
@@ -2209,7 +2251,7 @@ TEST_CASE(
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::move(client));
+    opts.models = cch::tests::models_from_provider(std::move(client));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -2301,14 +2343,14 @@ TEST_CASE(
     "SDK recovers a host provider aborted terminal emitted before any assistant start",
     "[sdk][live-state][incremental-persistence][issue15]") {
     TestPaths paths;
-    auto client = std::make_unique<TerminalBeforeStartChatClient>(
+    auto client = std::make_shared<TerminalBeforeStartChatProvider>(
         ai::AssistantStopReason::Aborted,
         "host cancelled before response start");
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::move(client));
+    opts.models = cch::tests::models_from_provider(std::move(client));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -2373,7 +2415,7 @@ TEST_CASE(
     "SDK preserves a partial provider stream failure across live state durable history and resume",
     "[sdk][live-state][incremental-persistence][issue12]") {
     TestPaths paths;
-    auto client = std::make_unique<PartialContentFailureChatClient>();
+    auto client = std::make_shared<PartialContentFailureChatProvider>();
     auto* client_ptr = client.get();
     auto tool_execution_count = std::make_shared<std::size_t>(0);
 
@@ -2381,7 +2423,7 @@ TEST_CASE(
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
     opts.model = cch::tests::sdk_request_model("fake", "fake-model");
-    opts.models = cch::tests::models_from_stream(std::move(client));
+    opts.models = cch::tests::models_from_provider(std::move(client));
     opts.custom_tools.push_back(std::make_unique<FakeEchoTool>(tool_execution_count));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
@@ -2474,12 +2516,12 @@ TEST_CASE(
 
     session->close();
 
-    auto capture = std::make_unique<CaptureChatClient>();
+    auto capture = std::make_shared<CaptureChatProvider>();
     auto* capture_ptr = capture.get();
     tests::ModelsSessionOptions resume;
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
     resume.workspace = paths.workspace.path();
-    resume.models = cch::tests::models_from_stream(std::move(capture));
+    resume.models = cch::tests::models_from_provider(std::move(capture));
 
     auto reopened = coding_agent::create_agent_session(std::move(resume));
     REQUIRE(reopened.has_value());
@@ -3170,13 +3212,13 @@ TEST_CASE("SDK resume re-resolves the stored model against the live runtime", "[
 TEST_CASE("SDK async prompt runs on the awaiting host executor", "[sdk][u3][async]") {
     TestPaths paths;
 
-    auto client = std::make_unique<ExecutorCapturingChatClient>();
+    auto client = std::make_shared<ExecutorCapturingChatProvider>();
     auto* client_ptr = client.get();
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::move(client));
+    opts.models = cch::tests::models_from_provider(std::move(client));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3277,13 +3319,13 @@ TEST_CASE("SDK stashed prompt awaitable survives a moved-from session handle", "
 TEST_CASE("SDK async prompt rejects overlap before session mutation", "[sdk][u3][async]") {
     TestPaths paths;
 
-    auto client = std::make_unique<GatedSdkChatClient>();
+    auto client = std::make_shared<GatedSdkChatProvider>();
     auto* client_ptr = client.get();
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::move(client));
+    opts.models = cch::tests::models_from_provider(std::move(client));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3344,7 +3386,7 @@ TEST_CASE(
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::make_unique<PreflightCancellationChatClient>(observation));
+    opts.models = cch::tests::models_from_provider(std::make_shared<PreflightCancellationChatProvider>(observation));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3389,7 +3431,7 @@ TEST_CASE(
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::make_unique<LifetimeTrackedChatClient>(counts));
+    opts.models = cch::tests::models_from_provider(std::make_shared<LifetimeTrackedChatProvider>(counts));
     opts.custom_tools.push_back(std::make_unique<LifetimeTrackedTool>(counts));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
@@ -3429,13 +3471,13 @@ TEST_CASE(
     "[sdk][u3][async][lifecycle][issue41]") {
     TestPaths paths;
 
-    auto client = std::make_unique<AbortAwareSdkChatClient>(false);
+    auto client = std::make_shared<AbortAwareSdkChatProvider>(false);
     auto* client_ptr = client.get();
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::move(client));
+    opts.models = cch::tests::models_from_provider(std::move(client));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3495,13 +3537,13 @@ TEST_CASE(
     "[sdk][u3][async][abort][lifecycle][issue41]") {
     TestPaths paths;
     auto counts = std::make_shared<SdkOwnedLifetimeCounts>();
-    auto client = std::make_unique<AbortAwareSdkChatClient>(false, counts);
+    auto client = std::make_shared<AbortAwareSdkChatProvider>(false, counts);
     auto* client_ptr = client.get();
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::move(client));
+    opts.models = cch::tests::models_from_provider(std::move(client));
     opts.custom_tools.push_back(std::make_unique<LifetimeTrackedTool>(counts));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
@@ -3552,7 +3594,7 @@ TEST_CASE(
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::make_unique<TerminalBeforeStartChatClient>(
+    opts.models = cch::tests::models_from_provider(std::make_shared<TerminalBeforeStartChatProvider>(
         ai::AssistantStopReason::Error,
         "terminal failure"));
 
@@ -3575,7 +3617,7 @@ TEST_CASE(
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::make_unique<CaptureChatClient>());
+    opts.models = cch::tests::models_from_provider(std::make_shared<CaptureChatProvider>());
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3597,13 +3639,13 @@ TEST_CASE(
     "[sdk][u3][async][abort][issue39]") {
     TestPaths paths;
 
-    auto client = std::make_unique<AbortAwareSdkChatClient>(false);
+    auto client = std::make_shared<AbortAwareSdkChatProvider>(false);
     auto* client_ptr = client.get();
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::move(client));
+    opts.models = cch::tests::models_from_provider(std::move(client));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3718,13 +3760,13 @@ TEST_CASE(
     "[sdk][u3][async][abort][issue39]") {
     TestPaths paths;
 
-    auto client = std::make_unique<AbortAwareSdkChatClient>(true);
+    auto client = std::make_shared<AbortAwareSdkChatProvider>(true);
     auto* client_ptr = client.get();
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::move(client));
+    opts.models = cch::tests::models_from_provider(std::move(client));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3790,7 +3832,7 @@ TEST_CASE("SDK async prompt retains fake provider failure as a terminal value", 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::make_unique<PreflightRejectingChatClient>());
+    opts.models = cch::tests::models_from_provider(std::make_shared<PreflightRejectingChatProvider>());
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3823,7 +3865,7 @@ TEST_CASE("SDK async prompt defers callback close until quiescence", "[sdk][u3][
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::make_unique<ExecutorCapturingChatClient>());
+    opts.models = cch::tests::models_from_provider(std::make_shared<ExecutorCapturingChatProvider>());
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -3860,13 +3902,13 @@ TEST_CASE("SDK async prompt defers callback close until quiescence", "[sdk][u3][
 TEST_CASE("SDK blocking prompt rejects same-session callback self-wait", "[sdk][u3][blocking]") {
     TestPaths paths;
 
-    auto client = std::make_unique<ExecutorCapturingChatClient>();
+    auto client = std::make_shared<ExecutorCapturingChatProvider>();
     auto* client_ptr = client.get();
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::InMemorySessionTarget{};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::move(client));
+    opts.models = cch::tests::models_from_provider(std::move(client));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -4105,13 +4147,13 @@ TEST_CASE("SDK host-provided templates are accessible", "[sdk][u4]") {
 
 TEST_CASE("moved SDK session retains its owned prompt resource snapshot", "[sdk][u4][prompt-processing]") {
     TestPaths paths;
-    auto capture = std::make_unique<CaptureChatClient>();
+    auto capture = std::make_shared<CaptureChatProvider>();
     auto* capture_ptr = capture.get();
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::move(capture));
+    opts.models = cch::tests::models_from_provider(std::move(capture));
     opts.prompt_templates.push_back(host_template("review", "Review cached: $1"));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
@@ -4133,13 +4175,13 @@ TEST_CASE("moved SDK session retains its owned prompt resource snapshot", "[sdk]
 
 TEST_CASE("SDK expand_prompt_templates false sends slash-shaped input raw to the provider", "[sdk][u4][prompt-processing]") {
     TestPaths paths;
-    auto capture = std::make_unique<CaptureChatClient>();
+    auto capture = std::make_shared<CaptureChatProvider>();
     auto* capture_ptr = capture.get();
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::move(capture));
+    opts.models = cch::tests::models_from_provider(std::move(capture));
     opts.skills.push_back(host_skill("cached"));
     opts.prompt_templates.push_back(host_template("review", "expanded: $1"));
 
@@ -4165,13 +4207,13 @@ TEST_CASE("SDK expand_prompt_templates false sends slash-shaped input raw to the
 
 TEST_CASE("SDK treats user bash prefixes as ordinary prompts", "[sdk][u4][prompt-processing][user-bash]") {
     TestPaths paths;
-    auto capture = std::make_unique<CaptureChatClient>();
+    auto capture = std::make_shared<CaptureChatProvider>();
     auto* capture_ptr = capture.get();
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::move(capture));
+    opts.models = cch::tests::models_from_provider(std::move(capture));
 
     auto created = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(created.has_value());
@@ -4856,7 +4898,7 @@ TEST_CASE(
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::make_unique<AbortAwareSdkChatClient>(false, counts));
+    opts.models = cch::tests::models_from_provider(std::make_shared<AbortAwareSdkChatProvider>(false, counts));
     opts.execution_env = env;
     opts.custom_tools.push_back(std::make_unique<LifetimeTrackedTool>(counts));
 
@@ -4931,13 +4973,13 @@ TEST_CASE(
     "SDK persistence failure retains live history and permits later durable appends",
     "[sdk][live-state][persistence-failure][issue14]") {
     TestPaths paths;
-    auto capture = std::make_unique<CaptureChatClient>();
+    auto capture = std::make_shared<CaptureChatProvider>();
     auto* capture_ptr = capture.get();
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::move(capture));
+    opts.models = cch::tests::models_from_provider(std::move(capture));
 
     auto result = coding_agent::create_agent_session(std::move(opts));
     REQUIRE(result.has_value());
@@ -5194,13 +5236,13 @@ TEST_CASE("SDK disabled bash is absent from the model-visible tool registry", "[
     agent_dir.write(
         "settings.json",
         R"({"shellPath":"/configured/but-unauthorized","shellCommandPrefix":"export SHOULD_NOT_AUTHORIZE=1"})");
-    auto capture = std::make_unique<CaptureChatClient>();
+    auto capture = std::make_shared<CaptureChatProvider>();
     auto* capture_ptr = capture.get();
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::move(capture));
+    opts.models = cch::tests::models_from_provider(std::move(capture));
     opts.builtin_tools.bash = false;
 
     auto result = coding_agent::create_agent_session(std::move(opts));
@@ -5218,13 +5260,13 @@ TEST_CASE("SDK disabled bash is absent from the model-visible tool registry", "[
 
 TEST_CASE("SDK enabled bash appears in the model-visible tool registry", "[sdk][assembly]") {
     TestPaths paths;
-    auto capture = std::make_unique<CaptureChatClient>();
+    auto capture = std::make_shared<CaptureChatProvider>();
     auto* capture_ptr = capture.get();
 
     tests::ModelsSessionOptions opts;
     opts.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     opts.workspace = paths.workspace.path();
-    opts.models = cch::tests::models_from_stream(std::move(capture));
+    opts.models = cch::tests::models_from_provider(std::move(capture));
     opts.builtin_tools.bash = true;
 
     auto result = coding_agent::create_agent_session(std::move(opts));

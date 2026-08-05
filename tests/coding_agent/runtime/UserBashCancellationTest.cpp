@@ -1,5 +1,3 @@
-#include <cch/ai/ChatClient.hpp>
-#include "support/ModelsFixture.hpp"
 #include <cch/ai/Content.hpp>
 #include <cch/coding_agent/Sdk.hpp>
 #include <cch/harness/session/SessionResume.hpp>
@@ -7,7 +5,7 @@
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/FakeUserShell.hpp"
-#include "support/GatedChatClient.hpp"
+#include "support/GatedChatProvider.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/UserBashTestHooks.hpp"
 
@@ -36,25 +34,29 @@ using tests::spawn_prompt;
 
 /// Answers every provider request immediately so cancellation recovery paths
 /// can run without gate choreography.
-class ImmediateChatClient final : public ai::StreamingChatClient {
+class ImmediateChatProvider final : public tests::ScriptedProvider {
 public:
+    ImmediateChatProvider() : ScriptedProvider("sdk-host") {}
+
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink) override {
-        requests.push_back(request);
+        requests.push_back(tests::RecordedProviderRequest{model, context, options});
         auto response = ai::assistant_text_message("immediate reply");
         response.provider = "immediate-fake";
         response.api = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         co_return response;
     }
 
-    std::vector<ai::StreamChatRequest> requests;
+    std::vector<tests::RecordedProviderRequest> requests;
 };
 
 [[nodiscard]] util::Expected<coding_agent::CreateAgentSessionResult> make_session(
     const std::filesystem::path& workspace,
-    std::unique_ptr<ai::StreamingChatClient> client,
+    std::shared_ptr<ai::Provider> client,
     std::unique_ptr<tests::FakeUserShell> shell,
     std::optional<std::filesystem::path> session_path = std::nullopt) {
     tests::ModelsSessionOptions options;
@@ -65,7 +67,7 @@ public:
         options.session_target = coding_agent::InMemorySessionTarget{};
     }
     options.workspace = workspace;
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.builtin_tools = {
         .read = false,
         .write = false,
@@ -81,7 +83,7 @@ TEST_CASE(
     "User Bash progress and committed messages preserve the raw command",
     "[coding_agent][runtime][issue96]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<ImmediateChatClient>();
+    auto client = std::make_shared<ImmediateChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
@@ -140,7 +142,7 @@ TEST_CASE(
     std::filesystem::create_directories(spill_directory, directory_error);
     REQUIRE_FALSE(directory_error);
     tests::EnvVarGuard tmpdir{"TMPDIR", spill_directory.string()};
-    auto client = std::make_unique<ImmediateChatClient>();
+    auto client = std::make_shared<ImmediateChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     shell->enqueue({
         .updates = {std::string(60 * 1024, 'x')},
@@ -172,7 +174,7 @@ TEST_CASE(
     "User Bash shell error diagnostics pass through raw",
     "[coding_agent][runtime][issue96]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<ImmediateChatClient>();
+    auto client = std::make_shared<ImmediateChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     const std::string message = "spawn\x1b[31m failed api_key=message-secret";
     const std::string detail = "detail\t雪 api_key=detail-secret";
@@ -210,7 +212,7 @@ TEST_CASE(
     "[coding_agent][runtime][issue88]") {
     tests::TempWorkspace workspace;
     const auto session_path = workspace.path() / "cancel-idle.jsonl";
-    auto client = std::make_unique<ImmediateChatClient>();
+    auto client = std::make_shared<ImmediateChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -284,7 +286,7 @@ TEST_CASE(
     "repeated User Bash cancellation coalesces and a later command gets a fresh stop source",
     "[coding_agent][runtime][issue88]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<ImmediateChatClient>();
+    auto client = std::make_shared<ImmediateChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
@@ -345,7 +347,7 @@ TEST_CASE(
     "User Bash infrastructure failure commits no message and the Session stays usable",
     "[coding_agent][runtime][issue88]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<ImmediateChatClient>();
+    auto client = std::make_shared<ImmediateChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -400,7 +402,7 @@ TEST_CASE(
     "User Bash cancelled during an active run defers commitment without duplicating the outcome",
     "[coding_agent][runtime][issue88]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<tests::GatedChatClient>();
+    auto client = std::make_shared<tests::GatedChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
@@ -455,7 +457,7 @@ TEST_CASE(
     "[coding_agent][runtime][issue88]") {
     tests::TempWorkspace workspace;
     const auto session_path = workspace.path() / "close-bash.jsonl";
-    auto client = std::make_unique<ImmediateChatClient>();
+    auto client = std::make_shared<ImmediateChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({

@@ -27,13 +27,19 @@ using namespace cch;
 
 namespace {
 
+struct FakeRequest {
+    ai::Model model;
+    ai::AiContext context;
+    ai::SimpleStreamOptions options;
+};
+
 struct RunResult {
     util::Expected<ai::AssistantMessage> result;
     std::vector<ai::AssistantStreamEvent> events;
 };
 
 RunResult run_fake(
-    ai::StreamChatRequest request,
+    FakeRequest request,
     std::optional<std::size_t> fail_at_event = std::nullopt) {
     boost::asio::io_context io;
     auto models = ai::providers::make_scripted_fake_models();
@@ -44,8 +50,10 @@ RunResult run_fake(
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            result = co_await models->stream(
-                request,
+            result = co_await models->stream_simple(
+                std::move(request.model),
+                std::move(request.context),
+                std::move(request.options),
                 [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
                     events.push_back(event);
                     if (fail_at_event && events.size() - 1 == *fail_at_event) {
@@ -68,8 +76,8 @@ RunResult run_fake(
     };
 }
 
-ai::StreamChatRequest request_with(ai::MessageVariant message) {
-    ai::StreamChatRequest request;
+FakeRequest request_with(ai::MessageVariant message) {
+    FakeRequest request;
     request.model = tests::make_model("fake-model", "fake", "scripted-fake");
     request.context.messages.push_back(std::move(message));
     return request;
@@ -327,7 +335,7 @@ TEST_CASE(
 TEST_CASE(
     "scripted fake Models normalizes static request failures into a terminal value",
     "[ai][provider][fake][issue23][issue338]") {
-    ai::StreamChatRequest request;
+    FakeRequest request;
     auto run = run_fake(std::move(request));
 
     REQUIRE(run.result);
@@ -342,7 +350,7 @@ TEST_CASE(
     std::stop_source stop_source;
     CHECK(stop_source.request_stop());
     auto request = request_with(ai::user_text_message("hello"));
-    request.stop_token = stop_source.get_token();
+    request.options.stop_token = stop_source.get_token();
 
     auto run = run_fake(std::move(request));
 

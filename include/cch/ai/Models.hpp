@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cch/ai/Auth.hpp>
-#include <cch/ai/ChatClient.hpp>
 #include <cch/ai/CredentialStore.hpp>
 #include <cch/ai/Provider.hpp>
 #include <cch/ai/RequestOptions.hpp>
@@ -19,14 +18,14 @@ namespace cch::ai {
 
 /// Runtime collection of long-lived Providers plus live authentication and
 /// request-time stream delegation.
-class Models final : public StreamingChatClient {
+class Models final {
 public:
     Models(
         std::shared_ptr<CredentialStore> credentials,
         std::shared_ptr<AuthContext> auth_context);
     Models(Models&&) noexcept;
     Models& operator=(Models&&) noexcept;
-    ~Models() override;
+    ~Models();
     Models(const Models&) = delete;
     Models& operator=(const Models&) = delete;
 
@@ -76,10 +75,6 @@ public:
         AiContext context,
         SimpleStreamOptions options,
         AssistantEventSink sink);
-    /// The borrowed request must outlive the returned awaitable.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<AssistantMessage>> stream(
-        const StreamChatRequest& request,
-        AssistantEventSink sink) override;
 
     struct Impl;
 

@@ -105,17 +105,20 @@ constexpr std::string_view kKeylessAlphaKeyedBeta = R"({
 /// auth-category terminal (exactly one `error` terminal event plus the
 /// agreeing final AssistantMessage — the #326 terminal contract), driving the
 /// request-time guidance through the session's stream seam.
-class AuthTerminalClient final : public ai::StreamingChatClient {
+class AuthTerminalProvider final : public tests::ScriptedProvider {
 public:
-    AuthTerminalClient(util::ErrorCode code,
-                       std::string message,
-                       std::string content = {})
-        : code_(code),
+    AuthTerminalProvider(util::ErrorCode code,
+                         std::string message,
+                         std::string content = {})
+        : ScriptedProvider("sdk-host"),
+          code_(code),
           message_(std::move(message)),
           content_(std::move(content)) {}
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext&,
+        ai::ProviderStreamOptions,
         ai::AssistantEventSink sink) override {
         ++request_count;
         auto terminal = ai::assistant_text_message(content_);
@@ -123,7 +126,7 @@ public:
         terminal.error_message = message_;
         terminal.provider = "sdk-host";
         terminal.api = "fake";
-        terminal.model = request.model.id;
+        terminal.model = model.id;
         // Session files require real epoch timestamps on assistant messages.
         terminal.timestamp = 1718000000123;
         if (sink) {
@@ -149,14 +152,14 @@ private:
 /// session-assembly composition").
 [[nodiscard]] util::Expected<coding_agent::CreateAgentSessionResult>
 create_scripted_session(
-    std::unique_ptr<ai::StreamingChatClient> client,
+    std::shared_ptr<ai::Provider> client,
     const std::filesystem::path& session_file,
     const std::filesystem::path& workspace) {
     tests::ModelsSessionOptions options;
     options.session_target =
         coding_agent::ExplicitNewSessionTarget{session_file};
     options.workspace = workspace;
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
     options.model = cch::tests::sdk_request_model("sdk-host", "sdk-model");
     return coding_agent::create_agent_session(std::move(options));
 }
@@ -277,7 +280,7 @@ TEST_CASE(
     "request-time no-key branch surfaces pi's verbatim guidance through the terminal assistant message",
     "[coding_agent][re-auth-guidance][issue360]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<AuthTerminalClient>(
+    auto client = std::make_shared<AuthTerminalProvider>(
         util::ErrorCode::Auth, "Provider is not configured: sdk-host");
     auto created = create_scripted_session(
         std::move(client),
@@ -306,7 +309,7 @@ TEST_CASE(
     "request-time OAuth branch surfaces pi's verbatim re-auth guidance for dead credentials",
     "[coding_agent][re-auth-guidance][issue360]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<AuthTerminalClient>(
+    auto client = std::make_shared<AuthTerminalProvider>(
         util::ErrorCode::OAuth, "OAuth refresh failed for sdk-host");
     auto created = create_scripted_session(
         std::move(client),
@@ -486,7 +489,7 @@ TEST_CASE(
     // compaction outcome.
     tests::TempWorkspace workspace;
     const std::string big(20000, 'x');
-    auto client = std::make_unique<AuthTerminalClient>(
+    auto client = std::make_shared<AuthTerminalProvider>(
         util::ErrorCode::Auth,
         "Provider is not configured: sdk-host",
         "a" + big);

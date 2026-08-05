@@ -298,16 +298,10 @@ TEST_CASE(
         CHECK(members.find(member) == std::string::npos);
     }
 
-    const auto chat_client = read_text(
-        source_root / "include" / "cch" / "ai" / "ChatClient.hpp");
-    const auto request_begin = chat_client.find("struct StreamChatRequest {");
-    REQUIRE(request_begin != std::string::npos);
-    const auto request_end = chat_client.find("\n};", request_begin);
-    REQUIRE(request_end != std::string::npos);
-    const auto stream_request = chat_client.substr(request_begin, request_end - request_begin);
-    CHECK(stream_request.find("api_key") == std::string::npos);
-    CHECK(stream_request.find("headers") == std::string::npos);
-    CHECK(stream_request.find("transform_headers") == std::string::npos);
+    // The legacy StreamChatRequest aggregate surface is gone with its header
+    // (ADR 0034 / #362): the option surface above is the only request shape.
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "include" / "cch" / "ai" / "ChatClient.hpp"));
 
     const std::vector<std::string> forbidden_option_types{
         "OpenAIResponsesOptions",
@@ -408,11 +402,11 @@ TEST_CASE(
     CHECK(model_header.find("OpenAIResponsesCompat") == std::string::npos);
     CHECK(model_header.find("JsonValue") == std::string::npos);
 
-    // Every request has one complete authoritative Model. Provider construction
-    // retains no default Model fallback while Agent state stays concrete.
-    const auto request_header = read_text(source_root / "include" / "cch" / "ai" / "ChatClient.hpp");
-    CHECK(request_header.find("Model model") != std::string::npos);
-    CHECK(request_header.find("std::optional<Model> model") == std::string::npos);
+    // Every request has one complete authoritative Model on the frozen
+    // Provider seam. The legacy request aggregate that once carried a Model is
+    // gone (ADR 0034 / #362) and Provider construction retains no default.
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "include" / "cch" / "ai" / "ChatClient.hpp"));
     CHECK_FALSE(std::filesystem::exists(
         source_root / "include" / "cch" / "ai" / "ProviderRegistry.hpp"));
     const auto provider_header = read_text(source_root / "include" / "cch" / "ai" / "Provider.hpp");
@@ -768,6 +762,43 @@ TEST_CASE("active source tree does not retain legacy sync contracts", "[architec
         CHECK(text.find("src/tools/Tools.hpp") == std::string::npos);
         CHECK(text.find("make_read_file_tool") == std::string::npos);
         CHECK(text.find("make_bash_tool") == std::string::npos);
+    }
+}
+
+TEST_CASE(
+    "legacy chat-client surface stays removed with no shims",
+    "[architecture][ai][agent][issue362]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+
+    // The legacy headers themselves are gone (staged deletion #362): no
+    // compatibility copy, alias, or fallback read may reintroduce them.
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "include" / "cch" / "ai" / "ChatClient.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "ai" / "ChatClient.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "tests" / "support" / "GatedChatClient.hpp"));
+
+    // Build the needles dynamically so this test file does not match itself.
+    const std::vector<std::string> needles{
+        std::string{"Streaming"} + "ChatClient",
+        std::string{"Stream"} + "ChatRequest",
+        std::string{"OpenAI"} + "ChatClient",
+        std::string{"make_scripted_fake"} + "_stream",
+        std::string{"models_from"} + "_stream",
+        std::string{"Gated"} + "ChatClient",
+        "edit_file",
+    };
+    const auto files = files_under({"include", "src", "tests"});
+    REQUIRE_FALSE(files.empty());
+    for (const auto& file : files) {
+        if (file.filename() == "ArchitectureSurfaceScanTest.cpp") {
+            continue;
+        }
+        const auto text = read_text(file);
+        for (const auto& needle : needles) {
+            CHECK(text.find(needle) == std::string::npos);
+        }
     }
 }
 

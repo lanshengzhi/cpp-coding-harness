@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cch/ai/Auth.hpp>
-#include <cch/ai/ChatClient.hpp>
 #include <cch/ai/CredentialStore.hpp>
 #include <cch/ai/Model.hpp>
 #include <cch/ai/Models.hpp>
@@ -68,7 +67,7 @@ struct ModelRuntimeAuthStatus {
 /// `CreateAgentSessionOptions` and into the stateful Agent (the sole injectable
 /// seam per #326); runtimes are reusable across sessions with no dispose
 /// ceremony.
-class ModelRuntime : public ai::StreamingChatClient {
+class ModelRuntime {
 public:
     /// Construct and refresh a ModelRuntime from the Agent Config Directory.
     /// Filesystem I/O is synchronous; provider recomposition is synchronous.
@@ -77,7 +76,7 @@ public:
 
     ModelRuntime(ModelRuntime&&) noexcept;
     ModelRuntime& operator=(ModelRuntime&&) noexcept;
-    ~ModelRuntime() override;
+    ~ModelRuntime();
     ModelRuntime(const ModelRuntime&) = delete;
     ModelRuntime& operator=(const ModelRuntime&) = delete;
 
@@ -180,10 +179,6 @@ public:
         ai::AiContext context,
         ai::SimpleStreamOptions options,
         ai::AssistantEventSink sink);
-    /// The borrowed request must outlive the returned awaitable.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
-        ai::AssistantEventSink sink) override;
 
     // ── Provider registration ──────────────────────────────────────────────
 

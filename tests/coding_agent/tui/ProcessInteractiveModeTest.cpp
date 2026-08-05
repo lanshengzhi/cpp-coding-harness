@@ -85,7 +85,7 @@ TEST_CASE(
     cch::tests::ModelsSessionOptions options;
     options.session_target = cch::coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(cch::ai::providers::make_scripted_fake_stream());
+    options.models = cch::tests::models_from_provider(cch::ai::providers::make_scripted_fake_provider());
     options.builtin_tools = {
         .read = false,
         .write = false,

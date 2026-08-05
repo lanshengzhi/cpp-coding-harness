@@ -95,20 +95,24 @@ struct TestPaths {
 /// FIFO scripted client for the retry lifecycle tests. Records every request,
 /// serves queued responses in order, and stamps every assistant message with
 /// the same deterministic identity/timestamp the other SDK fake clients use.
-class RetryScriptedClient final : public ai::StreamingChatClient {
+class RetryScriptedProvider final : public tests::ScriptedProvider {
 public:
+    RetryScriptedProvider() : ScriptedProvider("sdk-host") {}
+
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
         ai::AssistantEventSink sink) override {
         ++request_count;
-        requests.push_back(request);
-        if (request.stop_token.stop_requested()) {
+        requests.push_back(tests::RecordedProviderRequest{model, context, options});
+        if (options.stop_token.stop_requested()) {
             auto terminal = ai::assistant_text_message("");
             terminal.stop_reason = ai::AssistantStopReason::Aborted;
             terminal.error_message = "Request was aborted";
             terminal.provider = "sdk-host";
             terminal.api = "fake";
-            terminal.model = request.model.id;
+            terminal.model = model.id;
             terminal.timestamp = 1718000000123;
             if (sink) {
                 CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
@@ -127,7 +131,7 @@ public:
         responses.pop_front();
         response.provider = "sdk-host";
         response.api = "fake";
-        response.model = request.model.id;
+        response.model = model.id;
         response.timestamp = 1718000000123;
         if (sink) {
             if (response.stop_reason == ai::AssistantStopReason::Error ||
@@ -149,7 +153,7 @@ public:
     }
 
     int request_count{0};
-    std::vector<ai::StreamChatRequest> requests;
+    std::vector<tests::RecordedProviderRequest> requests;
     std::deque<ai::AssistantMessage> responses;
 };
 
@@ -206,7 +210,7 @@ private:
 
 struct RetrySessionUnderTest {
     std::unique_ptr<coding_agent::AgentSession> session;
-    RetryScriptedClient* client{nullptr};
+    RetryScriptedProvider* client{nullptr};
 };
 
 [[nodiscard]] RetrySessionUnderTest make_retry_session(
@@ -224,7 +228,7 @@ struct RetrySessionUnderTest {
     if (!settings_json.empty()) {
         paths.write_settings(settings_json);
     }
-    auto client = std::make_unique<RetryScriptedClient>();
+    auto client = std::make_shared<RetryScriptedProvider>();
     auto* client_ptr = client.get();
     client_ptr->responses = std::move(responses);
 
@@ -233,7 +237,7 @@ struct RetrySessionUnderTest {
     options.workspace = paths.workspace.path();
     options.model = tests::sdk_request_model("sdk-host", "gpt-test");
     options.custom_tools = std::move(custom_tools);
-    options.models = cch::tests::models_from_stream(std::move(client));
+    options.models = cch::tests::models_from_provider(std::move(client));
 
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());

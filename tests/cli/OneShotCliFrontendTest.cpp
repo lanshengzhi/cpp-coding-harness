@@ -28,22 +28,27 @@ protected:
 /// A host client whose accepted call streams a partial text delta, terminates
 /// with one error/aborted event carrying the final Assistant Message, and
 /// returns that same message as a successful C++ value.
-class TerminalOutcomeChatClient final : public ai::StreamingChatClient {
+class TerminalOutcomeChatProvider final : public tests::ScriptedProvider {
 public:
-    TerminalOutcomeChatClient(
+    TerminalOutcomeChatProvider(
         ai::AssistantStopReason reason,
         std::string diagnostic,
         std::string partial = "partial draft")
-        : reason_(reason), diagnostic_(std::move(diagnostic)), partial_(std::move(partial)) {}
+        : ScriptedProvider("sdk-host"),
+          reason_(reason),
+          diagnostic_(std::move(diagnostic)),
+          partial_(std::move(partial)) {}
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext&,
+        ai::ProviderStreamOptions,
         ai::AssistantEventSink sink) override {
         ++request_count;
         ai::AssistantMessage terminal;
         terminal.provider = "host";
         terminal.api = "host";
-        terminal.model = request.model.id;
+        terminal.model = model.id;
         terminal.stop_reason = reason_;
         terminal.error_message = diagnostic_;
         terminal.content.emplace_back(ai::text_content(partial_));
@@ -69,16 +74,20 @@ private:
     std::string partial_;
 };
 
-class CapturingChatClient final : public ai::StreamingChatClient {
+class CapturingChatProvider final : public tests::ScriptedProvider {
 public:
+    CapturingChatProvider() : ScriptedProvider("sdk-host") {}
+
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions,
         ai::AssistantEventSink sink) override {
-        messages = request.context.messages;
+        messages = context.messages;
         ai::AssistantMessage message;
         message.provider = "host";
         message.api = "host";
-        message.model = request.model.id;
+        message.model = model.id;
         message.stop_reason = ai::AssistantStopReason::Stop;
         message.content.emplace_back(ai::text_content("captured"));
         if (sink) {
@@ -122,9 +131,9 @@ CreatedSession make_session(const tests::TempWorkspace& workspace) {
 
 CreatedSession make_session(
     const tests::TempWorkspace& workspace,
-    std::unique_ptr<ai::StreamingChatClient> chat_client) {
+    std::shared_ptr<ai::Provider> chat_client) {
     auto options = fake_in_memory_options(workspace.path());
-    options.models = cch::tests::models_from_stream(std::move(chat_client));
+    options.models = cch::tests::models_from_provider(std::move(chat_client));
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created.has_value());
     return CreatedSession{std::move(*created)};
@@ -290,7 +299,7 @@ TEST_CASE(
     "one-shot frontend sends initial CLI images after the complete text block",
     "[cli][frontend][issue63]") {
     tests::TempWorkspace workspace;
-    auto client = std::make_unique<CapturingChatClient>();
+    auto client = std::make_shared<CapturingChatProvider>();
     auto* probe = client.get();
     auto session = make_session(workspace, std::move(client));
 
@@ -343,7 +352,7 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     auto session = make_session(
         workspace,
-        std::make_unique<TerminalOutcomeChatClient>(
+        std::make_shared<TerminalOutcomeChatProvider>(
             ai::AssistantStopReason::Error, "host transport lost"));
 
     std::istringstream input;
@@ -371,7 +380,7 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     auto session = make_session(
         workspace,
-        std::make_unique<TerminalOutcomeChatClient>(
+        std::make_shared<TerminalOutcomeChatProvider>(
             ai::AssistantStopReason::Aborted, "host cancelled the request"));
 
     std::istringstream input;
@@ -402,7 +411,7 @@ TEST_CASE(
     diagnostic += std::string(9000, 'x');
     auto session = make_session(
         workspace,
-        std::make_unique<TerminalOutcomeChatClient>(
+        std::make_shared<TerminalOutcomeChatProvider>(
             ai::AssistantStopReason::Error, diagnostic));
 
     std::istringstream input;
@@ -435,7 +444,7 @@ TEST_CASE(
     partial += std::string(9000, 'x');
     auto session = make_session(
         workspace,
-        std::make_unique<TerminalOutcomeChatClient>(
+        std::make_shared<TerminalOutcomeChatProvider>(
             ai::AssistantStopReason::Error,
             "transport failed",
             partial));
@@ -537,7 +546,7 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     auto session = make_session(
         workspace,
-        std::make_unique<TerminalOutcomeChatClient>(
+        std::make_shared<TerminalOutcomeChatProvider>(
             ai::AssistantStopReason::Error, "host transport lost"));
 
     std::istringstream input;

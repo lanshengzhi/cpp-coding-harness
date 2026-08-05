@@ -66,50 +66,80 @@ inline ai::ProviderAuth fixture_auth() {
     return ai::ProviderAuth{.api_key = std::move(api_key)};
 }
 
-class FixtureProvider final : public ai::Provider {
+} // namespace detail
+
+/// One recorded provider request — the post-`streamSimple` shape: the concrete
+/// Model argument, the conversation context, and the per-turn options. The
+/// legacy request aggregate is gone (ADR 0034 / #362); scripted provider fakes
+/// record this instead.
+struct RecordedProviderRequest {
+    ai::Model model;
+    ai::AiContext context;
+    ai::ProviderStreamOptions options;
+};
+
+/// Base for scripted `ai::Provider` fakes used across the SDK/session/TUI/CLI
+/// test suites: fixed identity and an always-configured API-key auth.
+/// Subclasses implement the frozen `Provider::stream` surface only.
+class ScriptedProvider : public ai::Provider {
 public:
-    FixtureProvider(
-        std::string provider_id,
-        std::shared_ptr<ai::StreamingChatClient> stream)
-        : provider_id_(std::move(provider_id)),
-          stream_(std::move(stream)),
-          auth_(fixture_auth()) {}
+    explicit ScriptedProvider(std::string provider_id)
+        : provider_id_(std::move(provider_id)), auth_(detail::fixture_auth()) {}
 
     [[nodiscard]] std::string_view id() const noexcept override { return provider_id_; }
     [[nodiscard]] std::string_view name() const noexcept override { return provider_id_; }
     [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
     [[nodiscard]] std::vector<ai::Model> models() const override { return {}; }
 
+protected:
+    const std::string& provider_id() const noexcept { return provider_id_; }
+    ai::ProviderAuth& provider_auth() noexcept { return auth_; }
+
+private:
+    std::string provider_id_;
+    ai::ProviderAuth auth_;
+};
+
+namespace detail {
+
+/// Registers one scripted provider under an alias id. `Models::set_provider`
+/// keys by `provider->id()`, so the canonical "sdk-host"/"fake" aliases the
+/// session layer may query share the same underlying fake provider.
+class IdAliasProvider final : public ai::Provider {
+public:
+    IdAliasProvider(std::string id, std::shared_ptr<ai::Provider> inner)
+        : id_(std::move(id)), inner_(std::move(inner)) {}
+
+    [[nodiscard]] std::string_view id() const noexcept override { return id_; }
+    [[nodiscard]] std::string_view name() const noexcept override { return inner_->name(); }
+    [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return inner_->auth(); }
+    [[nodiscard]] std::vector<ai::Model> models() const override { return inner_->models(); }
+
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
         const ai::Model& model,
         const ai::AiContext& context,
         ai::ProviderStreamOptions options,
         ai::AssistantEventSink sink) override {
-        ai::StreamChatRequest request;
-        request.context = context;
-        request.stop_token = options.stop_token;
-        request.model = model;
-        CCH_TRY(message, co_await stream_->stream(request, std::move(sink)));
-        co_return message;
+        co_return co_await inner_->stream(
+            model, context, std::move(options), std::move(sink));
     }
 
 private:
-    std::string provider_id_;
-    std::shared_ptr<ai::StreamingChatClient> stream_;
-    ai::ProviderAuth auth_;
+    std::string id_;
+    std::shared_ptr<ai::Provider> inner_;
 };
 
 } // namespace detail
 
-inline std::shared_ptr<ai::Models> models_from_stream(
-    std::unique_ptr<ai::StreamingChatClient> stream,
-    std::string provider_id = "sdk-host") {
+inline std::shared_ptr<ai::Models> models_from_provider(
+    std::shared_ptr<ai::Provider> provider) {
     auto models = std::make_shared<ai::Models>(
         std::make_shared<detail::FixtureCredentialStore>(),
         std::make_shared<detail::FixtureAuthContext>());
-    auto shared_stream = std::shared_ptr<ai::StreamingChatClient>{std::move(stream)};
+    // Registered under the canonical ids the session layer may query; aliases
+    // share the same underlying fake provider.
     std::vector<std::string> provider_ids{
-        std::move(provider_id),
+        std::string{provider->id()},
         "sdk-host",
         "fake",
     };
@@ -117,8 +147,11 @@ inline std::shared_ptr<ai::Models> models_from_stream(
         if (models->provider(id)) {
             continue;
         }
-        if (auto added = models->set_provider(
-                std::make_shared<detail::FixtureProvider>(id, shared_stream)); !added) {
+        auto to_register =
+            id == provider->id()
+                ? provider
+                : std::make_shared<detail::IdAliasProvider>(id, provider);
+        if (auto added = models->set_provider(std::move(to_register)); !added) {
             return nullptr;
         }
     }

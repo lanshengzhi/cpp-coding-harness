@@ -30,10 +30,14 @@ struct TranscriptResult {
     std::string session_id;
 };
 
-class FailingChatClient final : public ai::StreamingChatClient {
+class FailingChatProvider final : public tests::ScriptedProvider {
 public:
+    FailingChatProvider() : ScriptedProvider("sdk-host") {}
+
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest&,
+        const ai::Model&,
+        const ai::AiContext&,
+        ai::ProviderStreamOptions,
         ai::AssistantEventSink) override {
         co_return std::unexpected(util::make_error(
             util::ErrorCode::Provider,
@@ -41,12 +45,16 @@ public:
     }
 };
 
-class BusyProbeChatClient final : public ai::StreamingChatClient {
+class BusyProbeChatProvider final : public tests::ScriptedProvider {
 public:
+    BusyProbeChatProvider() : ScriptedProvider("sdk-host") {}
+
     std::function<void()> on_stream;
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest&,
+        const ai::Model&,
+        const ai::AiContext&,
+        ai::ProviderStreamOptions,
         ai::AssistantEventSink) override {
         on_stream();
         co_return ai::assistant_text_message("outer completed");
@@ -55,19 +63,21 @@ public:
 
 /// A host client whose first accepted call terminates with an error/aborted
 /// outcome (partial content preserved) while later calls answer normally.
-class TerminalThenRecoverChatClient final : public ai::StreamingChatClient {
+class TerminalThenRecoverChatProvider final : public tests::ScriptedProvider {
 public:
-    explicit TerminalThenRecoverChatClient(ai::AssistantStopReason reason)
-        : reason_(reason) {}
+    explicit TerminalThenRecoverChatProvider(ai::AssistantStopReason reason)
+        : ScriptedProvider("sdk-host"), reason_(reason) {}
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext&,
+        ai::ProviderStreamOptions,
         ai::AssistantEventSink sink) override {
         ++request_count;
         ai::AssistantMessage message;
         message.provider = "host";
         message.api = "host";
-        message.model = request.model.id;
+        message.model = model.id;
         if (request_count == 1) {
             message.stop_reason = reason_;
             message.error_message = "host transport lost";
@@ -109,18 +119,21 @@ private:
 
 /// A host client whose accepted call terminates with an error outcome
 /// carrying a caller-chosen diagnostic, emitted before any start event.
-class SecretDiagnosticChatClient final : public ai::StreamingChatClient {
+class SecretDiagnosticChatProvider final : public tests::ScriptedProvider {
 public:
-    explicit SecretDiagnosticChatClient(std::string terminal_diagnostic)
-        : diagnostic_(std::move(terminal_diagnostic)) {}
+    explicit SecretDiagnosticChatProvider(std::string terminal_diagnostic)
+        : ScriptedProvider("sdk-host"),
+          diagnostic_(std::move(terminal_diagnostic)) {}
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
+        const ai::Model& model,
+        const ai::AiContext&,
+        ai::ProviderStreamOptions,
         ai::AssistantEventSink sink) override {
         ai::AssistantMessage terminal;
         terminal.provider = "host";
         terminal.api = "host";
-        terminal.model = request.model.id;
+        terminal.model = model.id;
         terminal.stop_reason = ai::AssistantStopReason::Error;
         terminal.error_message = diagnostic_;
         if (sink) {
@@ -269,7 +282,8 @@ int count_responses(
 
 TranscriptResult run_transcript(
     std::string input,
-    std::unique_ptr<ai::StreamingChatClient> chat_client = ai::providers::make_scripted_fake_stream(),
+    std::shared_ptr<ai::Provider> chat_client =
+        ai::providers::make_scripted_fake_provider(),
     bool close_before_run = false,
     bool in_memory = false) {
     cch::tests::TempWorkspace workspace;
@@ -282,7 +296,7 @@ TranscriptResult run_transcript(
             workspace.path() / "rpc-session.jsonl"};
     }
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(chat_client));
+    options.models = cch::tests::models_from_provider(std::move(chat_client));
     options.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = false,
         .write = false,
@@ -366,7 +380,7 @@ TEST_CASE("RPC mode omits sessionFile for an in-memory session", "[coding-agent]
     const auto result = run_transcript(
         "{\"id\":\"state-1\",\"type\":\"get_state\"}\n"
         "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n",
-        ai::providers::make_scripted_fake_stream(),
+        ai::providers::make_scripted_fake_provider(),
         false,
         true);
 
@@ -464,14 +478,14 @@ TEST_CASE("RPC mode treats user bash prefixes as ordinary prompts", "[coding-age
 
 TEST_CASE("RPC mode flushes direct events while a prompt is running", "[coding-agent][runtime][rpc]") {
     cch::tests::TempWorkspace workspace;
-    auto chat_client = std::make_unique<BusyProbeChatClient>();
+    auto chat_client = std::make_shared<BusyProbeChatProvider>();
     auto* stream_probe = chat_client.get();
 
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{
         workspace.path() / "rpc-flush-session.jsonl"};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(chat_client));
+    options.models = cch::tests::models_from_provider(std::move(chat_client));
     options.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = false,
         .write = false,
@@ -600,7 +614,7 @@ TEST_CASE("RPC mode reports accepted prompt failures only through events", "[cod
         "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"fail\"}\n"
         "{\"id\":\"later\",\"type\":\"get_state\"}\n"
         "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n",
-        std::make_unique<FailingChatClient>());
+        std::make_shared<FailingChatProvider>());
 
     REQUIRE(result.exit_code == 0);
     const auto response_index = find_response_index(result.records, "prompt", "prompt-1");
@@ -704,7 +718,7 @@ TEST_CASE("RPC mode reports an accepted error terminal outcome only through even
         "{\"id\":\"prompt-2\",\"type\":\"prompt\",\"message\":\"again\"}\n"
         "{\"id\":\"last-1\",\"type\":\"get_last_assistant_text\"}\n"
         "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n",
-        std::make_unique<TerminalThenRecoverChatClient>(ai::AssistantStopReason::Error));
+        std::make_shared<TerminalThenRecoverChatProvider>(ai::AssistantStopReason::Error));
 
     REQUIRE(result.exit_code == 0);
 
@@ -754,7 +768,7 @@ TEST_CASE("RPC mode reports an accepted aborted terminal outcome only through ev
     const auto result = run_transcript(
         "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
         "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n",
-        std::make_unique<TerminalThenRecoverChatClient>(ai::AssistantStopReason::Aborted));
+        std::make_shared<TerminalThenRecoverChatProvider>(ai::AssistantStopReason::Aborted));
 
     REQUIRE(result.exit_code == 0);
     const auto response_index = find_response_index(result.records, "prompt", "prompt-1");
@@ -782,7 +796,7 @@ TEST_CASE("RPC mode redacts and bounds terminal diagnostics in event records", "
     const auto result = run_transcript(
         "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
         "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n",
-        std::make_unique<SecretDiagnosticChatClient>(diagnostic));
+        std::make_shared<SecretDiagnosticChatProvider>(diagnostic));
 
     REQUIRE(result.exit_code == 0);
     const auto message_end_index = find_assistant_message_end_index(result.records);
@@ -817,7 +831,7 @@ TEST_CASE("RPC mode returns a correlated error when a closed session rejects pro
     const auto result = run_transcript(
         "{\"id\":\"prompt-1\",\"type\":\"prompt\",\"message\":\"hello\"}\n"
         "{\"id\":\"stop-1\",\"type\":\"shutdown\"}\n",
-        ai::providers::make_scripted_fake_stream(),
+        ai::providers::make_scripted_fake_provider(),
         true);
 
     REQUIRE(result.exit_code == 0);
@@ -832,14 +846,14 @@ TEST_CASE("RPC mode returns a correlated error when a closed session rejects pro
 
 TEST_CASE("RPC mode returns a correlated error when a busy session rejects prompt preflight", "[coding-agent][runtime][rpc]") {
     cch::tests::TempWorkspace workspace;
-    auto chat_client = std::make_unique<BusyProbeChatClient>();
+    auto chat_client = std::make_shared<BusyProbeChatProvider>();
     auto* busy_probe = chat_client.get();
 
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{
         workspace.path() / "rpc-busy-session.jsonl"};
     options.workspace = workspace.path();
-    options.models = cch::tests::models_from_stream(std::move(chat_client));
+    options.models = cch::tests::models_from_provider(std::move(chat_client));
     options.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = false,
         .write = false,

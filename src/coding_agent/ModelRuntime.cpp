@@ -502,13 +502,6 @@ ModelRuntime::stream_simple(
         std::move(sink));
 }
 
-boost::asio::awaitable<util::Expected<ai::AssistantMessage>>
-ModelRuntime::stream(
-    const ai::StreamChatRequest& request,
-    ai::AssistantEventSink sink) {
-    co_return co_await impl_->models->stream(request, std::move(sink));
-}
-
 util::ExpectedVoid ModelRuntime::register_native_provider(
     std::shared_ptr<ai::Provider> provider_value) {
     if (!provider_value || provider_value->id().empty()) {

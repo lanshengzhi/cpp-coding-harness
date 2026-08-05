@@ -360,23 +360,6 @@ private:
     ai::ProviderAuth auth_;
 };
 
-class ScriptedFakeStream final : public ai::StreamingChatClient {
-public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
-        const ai::StreamChatRequest& request,
-        ai::AssistantEventSink sink) override {
-        CCH_TRY(message, co_await provider_.stream(
-            request.model,
-            request.context,
-            ai::ProviderStreamOptions{.stop_token = request.stop_token},
-            std::move(sink)));
-        co_return message;
-    }
-
-private:
-    ScriptedFakeProvider provider_{"fake"};
-};
-
 } // namespace
 
 std::shared_ptr<ai::Provider> make_scripted_fake_provider(
@@ -395,10 +378,6 @@ std::shared_ptr<ai::Models> make_scripted_fake_models() {
         return nullptr;
     }
     return models;
-}
-
-std::unique_ptr<ai::StreamingChatClient> make_scripted_fake_stream() {
-    return std::make_unique<ScriptedFakeStream>();
 }
 
 } // namespace cch::ai::providers

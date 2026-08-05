@@ -110,14 +110,6 @@ public:
         co_return std::move(*result);
     }
 
-    /// Non-simple streaming is delegated unchanged (no caller in the session
-    /// layer uses it; kept so the decorator remains a complete runtime).
-    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>>
-    stream(const ai::StreamChatRequest& request,
-           ai::AssistantEventSink sink) override {
-        co_return co_await wrapped_->stream(request, std::move(sink));
-    }
-
 private:
     /// pi `_getRequiredRequestAuth` branch selection from a terminal failure:
     /// an `oauth`-category failure (refresh/derivation — dead credentials)

@@ -3,7 +3,6 @@
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/agent/AgentTool.hpp>
 #include <cch/agent/ToolRegistry.hpp>
-#include <cch/ai/ChatClient.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Context.hpp>
 #include <cch/ai/Message.hpp>
@@ -108,7 +107,6 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
                   coding_agent::AgentSessionSnapshot>);
     static_assert(std::is_move_constructible_v<ai::MessageVariant>);
     static_assert(std::is_move_constructible_v<ai::Content>);
-    static_assert(std::is_abstract_v<ai::StreamingChatClient>);
     static_assert(std::is_abstract_v<ai::Provider>);
     static_assert(std::is_abstract_v<ai::providers::StreamTransport>);
     static_assert(std::is_abstract_v<harness::AsyncExecutionEnv>);
