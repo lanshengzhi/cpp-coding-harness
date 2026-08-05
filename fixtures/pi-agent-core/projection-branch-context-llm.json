@@ -1,0 +1,32 @@
+[
+	{
+		"role": "user",
+		"content": [
+			{
+				"type": "text",
+				"text": "one"
+			}
+		],
+		"timestamp": 1784678401000
+	},
+	{
+		"role": "user",
+		"content": [
+			{
+				"type": "text",
+				"text": "The following is a summary of a branch that this conversation came back from:\n\n<summary>\nexplored the alternative path</summary>"
+			}
+		],
+		"timestamp": 1785955032085
+	},
+	{
+		"role": "user",
+		"content": [
+			{
+				"type": "text",
+				"text": "after"
+			}
+		],
+		"timestamp": 1784678401000
+	}
+]

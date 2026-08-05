@@ -13,6 +13,13 @@
 namespace cch::harness::session {
 namespace {
 
+/// Wire nullable string: `std::monostate` serializes as explicit JSON `null`
+/// (pi root entries carry `parentId: null`; a root leaf carries
+/// `targetId: null`), engaged string as the value. Absent fields are
+/// represented by `std::optional` nullopt, which Glaze omits — this keeps
+/// pi's null-vs-missing distinction on the wire.
+using NullableString = std::variant<std::monostate, std::string>;
+
 struct WriteHeaderDto {
     std::string type{"session"};
     int version{3};
@@ -36,59 +43,68 @@ struct ReadHeaderDto {
     std::optional<std::string> cwd;
 };
 
+// All entry DTOs declare fields in pi's exact wire order (pi builds entries
+// as `{...{id, parentId, timestamp}, type, ...fields}`, so JSON.stringify
+// emits `id, parentId, timestamp, type, <fields>`); Glaze writes members in
+// declaration order, which is what makes the golden byte-identical.
+
 struct MessageEntryDto {
-    std::string type{"message"};
-    std::string entryId;
     std::string id;
-    std::optional<std::string> parentId;
-    std::optional<std::string> leafId;
+    NullableString parentId;
     std::optional<std::string> timestamp;
+    std::string type{"message"};
     ai::glaze::MessageDto message;
+    // Legacy read tolerance: pre-pi C++ files carried `entryId`/`leafId`.
+    std::optional<std::string> entryId;
+    std::optional<std::string> leafId;
 };
 
 struct ModelChangeDto {
-    std::string type{"model_change"};
     std::string id;
-    std::optional<std::string> parentId;
+    NullableString parentId;
     std::string timestamp;
+    std::string type{"model_change"};
     std::string provider;
     std::string modelId;
 };
 
 struct ThinkingLevelChangeDto {
-    std::string type{"thinking_level_change"};
     std::string id;
-    std::optional<std::string> parentId;
+    NullableString parentId;
     std::string timestamp;
+    std::string type{"thinking_level_change"};
     std::string thinkingLevel;
 };
 
 struct ActiveToolsChangeDto {
-    std::string type{"active_tools_change"};
     std::string id;
-    std::optional<std::string> parentId;
+    NullableString parentId;
     std::string timestamp;
+    std::string type{"active_tools_change"};
+    std::vector<std::string> activeToolNames;
+    // Legacy read tolerance: pre-pi C++ files carried `tools`.
     std::optional<std::vector<std::string>> tools;
-    std::optional<std::vector<std::string>> activeToolNames;
 };
 
 struct CustomDto {
-    std::string type{"custom"};
     std::string id;
-    std::optional<std::string> parentId;
+    NullableString parentId;
     std::string timestamp;
+    std::string type{"custom"};
     std::string customType;
-    glz::raw_json data{"null"};
+    // pi `data?` — omitted when absent, explicit `null` when the caller
+    // passed null; both must round-trip.
+    std::optional<glz::raw_json> data;
 };
 
 using CustomMessageContentDto =
     std::variant<std::string, std::vector<ai::glaze::ContentDto>>;
 
 struct CustomMessageDto {
-    std::string type{"custom_message"};
     std::string id;
-    std::optional<std::string> parentId;
+    NullableString parentId;
     std::string timestamp;
+    std::string type{"custom_message"};
     std::string customType;
     CustomMessageContentDto content;
     bool display{true};
@@ -96,51 +112,54 @@ struct CustomMessageDto {
 };
 
 struct LabelDto {
-    std::string type{"label"};
     std::string id;
-    std::optional<std::string> parentId;
+    NullableString parentId;
     std::string timestamp;
+    std::string type{"label"};
     std::string targetId;
     std::optional<std::string> label;
 };
 
 struct CompactionDto {
-    std::string type{"compaction"};
     std::string id;
-    std::optional<std::string> parentId;
+    NullableString parentId;
     std::string timestamp;
+    std::string type{"compaction"};
     std::string summary;
-    std::string firstKeptEntryId;
+    std::optional<std::string> firstKeptEntryId;
     std::size_t tokensBefore{0};
+    std::optional<std::vector<ai::glaze::MessageDto>> retainedTail;
     std::optional<glz::raw_json> details;
+    std::optional<ai::glaze::UsageDto> usage;
     std::optional<bool> fromHook;
 };
 
 struct BranchSummaryDto {
-    std::string type{"branch_summary"};
     std::string id;
-    std::optional<std::string> parentId;
+    NullableString parentId;
     std::string timestamp;
+    std::string type{"branch_summary"};
     std::string fromId;
     std::string summary;
     std::optional<glz::raw_json> details;
+    std::optional<ai::glaze::UsageDto> usage;
     std::optional<bool> fromHook;
 };
 
 struct SessionInfoDto {
-    std::string type{"session_info"};
     std::string id;
-    std::optional<std::string> parentId;
+    NullableString parentId;
     std::string timestamp;
+    std::string type{"session_info"};
     std::optional<std::string> name;
 };
 
 struct LeafDto {
-    std::string type{"leaf"};
     std::string id;
-    std::optional<std::string> parentId;
+    NullableString parentId;
     std::string timestamp;
-    std::optional<std::string> targetId;
+    std::string type{"leaf"};
+    NullableString targetId;
 };
 
 [[nodiscard]] util::Error session_error(std::string message, std::string detail = {}) {
@@ -203,6 +222,53 @@ template <typename T>
     oss << std::put_time(&gm, "%Y-%m-%dT%H:%M:%S");
     oss << '.' << std::setfill('0') << std::setw(3) << ms.count() << 'Z';
     return oss.str();
+}
+
+[[nodiscard]] std::int64_t ms_since_epoch() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+}
+
+/// Inverse of `parse_iso_timestamp_ms`: render an epoch-millisecond timestamp
+/// as pi's exact ISO-8601 UTC form with three-digit milliseconds (`Z` suffix).
+[[nodiscard]] std::string format_iso_timestamp_ms(std::int64_t ms) {
+    const std::int64_t days = ms >= 0 ? ms / 86400000 : (ms - 86399999) / 86400000;
+    const std::int64_t day_ms = ms - days * 86400000;
+    const std::int64_t z = days + 719468;
+    const std::int64_t era = (z >= 0 ? z : z - 146096) / 146097;
+    const unsigned doe = static_cast<unsigned>(z - era * 146097);
+    const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    const std::int64_t y = static_cast<std::int64_t>(yoe) + era * 400;
+    const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    const unsigned mp = (5 * doy + 2) / 153;
+    const unsigned day = doy - (153 * mp + 2) / 5 + 1;
+    const unsigned month = mp < 10 ? mp + 3 : mp - 9;
+    const std::int64_t year = y + (month <= 2 ? 1 : 0);
+    const unsigned hour = static_cast<unsigned>(day_ms / 3600000);
+    const unsigned minute = static_cast<unsigned>((day_ms / 60000) % 60);
+    const unsigned second = static_cast<unsigned>((day_ms / 1000) % 60);
+    const unsigned millis = static_cast<unsigned>(day_ms % 1000);
+    std::ostringstream oss;
+    oss << std::setfill('0') << std::setw(4) << year << '-' << std::setw(2) << month
+        << '-' << std::setw(2) << day << 'T' << std::setw(2) << hour << ':'
+        << std::setw(2) << minute << ':' << std::setw(2) << second << '.'
+        << std::setw(3) << millis << 'Z';
+    return oss.str();
+}
+
+[[nodiscard]] NullableString nullable_string(const std::optional<std::string>& value) {
+    if (value) {
+        return NullableString{*value};
+    }
+    return NullableString{std::monostate{}};
+}
+
+[[nodiscard]] std::optional<std::string> optional_from_nullable(const NullableString& value) {
+    if (const auto* text = std::get_if<std::string>(&value)) {
+        return *text;
+    }
+    return std::nullopt;
 }
 
 [[nodiscard]] std::optional<int> parse_fixed_int(std::string_view text, std::size_t offset, std::size_t count) {
@@ -311,11 +377,12 @@ template <typename T>
 [[nodiscard]] MessageEntryDto to_dto(
     std::string entry_id,
     const ai::MessageVariant& message,
-    std::optional<std::string> parent_id = std::nullopt) {
+    std::optional<std::string> parent_id = std::nullopt,
+    std::int64_t timestamp = 0) {
     MessageEntryDto dto;
-    dto.type = "message";
-    dto.entryId = std::move(entry_id);
-    dto.parentId = std::move(parent_id);
+    dto.id = std::move(entry_id);
+    dto.parentId = nullable_string(parent_id);
+    dto.timestamp = format_iso_timestamp_ms(timestamp);
     dto.message = ai::glaze::to_message_dto(message);
     return dto;
 }
@@ -364,7 +431,7 @@ void populate_tree_fields(SessionEntry& entry, const util::JsonValue& value) {
 template <typename Dto>
 void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
     entry.entry_id = dto.id;
-    entry.parent_id = dto.parentId;
+    entry.parent_id = optional_from_nullable(dto.parentId);
     if constexpr (requires { dto.timestamp; }) {
         using TimestampField = std::remove_cvref_t<decltype(dto.timestamp)>;
         if constexpr (std::is_same_v<TimestampField, std::optional<std::string>>) {
@@ -397,10 +464,7 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
     if (dto.tools.has_value()) {
         return *dto.tools;
     }
-    if (auto active_tool_names = dto.activeToolNames) {
-        return *active_tool_names;
-    }
-    return {};
+    return dto.activeToolNames;
 }
 
 [[nodiscard]] util::Expected<CustomMessageEntryContent> custom_message_content_from_dto(
@@ -636,8 +700,8 @@ util::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<std
 
             SessionEntry entry;
             entry.kind = SessionEntryKind::Message;
-            entry.entry_id = !dto->entryId.empty() ? dto->entryId : dto->id;
-            entry.parent_id = dto->parentId;
+            entry.entry_id = !dto->id.empty() ? dto->id : dto->entryId.value_or("");
+            entry.parent_id = optional_from_nullable(dto->parentId);
             entry.leaf_id = dto->leafId;
             if (dto->timestamp.has_value()) {
                 entry.timestamp = parse_iso_timestamp_ms(*dto->timestamp);
@@ -691,7 +755,7 @@ util::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<std
                 populate_tree_fields_from_dto(entry, *dto);
                 entry.value = CustomEntryValue{
                     .custom_type = std::move(dto->customType),
-                    .data = optional_json_field(entry.payload, "data").value_or(util::JsonValue{}),
+                    .data = optional_json_field(entry.payload, "data"),
                 };
                 break;
             }
@@ -730,12 +794,35 @@ util::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<std
                 if (!dto) {
                     return std::unexpected(dto.error());
                 }
+                std::optional<std::vector<ai::MessageVariant>> retained_tail;
+                if (dto->retainedTail.has_value()) {
+                    std::vector<ai::MessageVariant> tail;
+                    tail.reserve(dto->retainedTail->size());
+                    for (const auto& message_dto : *dto->retainedTail) {
+                        auto message = ai::glaze::message_from_dto(message_dto, stored_line);
+                        if (!message) {
+                            return std::unexpected(message.error());
+                        }
+                        tail.push_back(std::move(*message));
+                    }
+                    retained_tail = std::move(tail);
+                }
+                std::optional<ai::Usage> usage;
+                if (dto->usage.has_value()) {
+                    auto parsed_usage = ai::glaze::detail::usage_from_dto(*dto->usage, stored_line);
+                    if (!parsed_usage) {
+                        return std::unexpected(parsed_usage.error());
+                    }
+                    usage = std::move(*parsed_usage);
+                }
                 populate_tree_fields_from_dto(entry, *dto);
                 entry.value = CompactionEntryValue{
                     .summary = std::move(dto->summary),
                     .first_kept_entry_id = std::move(dto->firstKeptEntryId),
                     .tokens_before = dto->tokensBefore,
+                    .retained_tail = std::move(retained_tail),
                     .details = optional_json_field(entry.payload, "details"),
+                    .usage = std::move(usage),
                     .from_hook = dto->fromHook,
                 };
                 break;
@@ -745,11 +832,20 @@ util::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<std
                 if (!dto) {
                     return std::unexpected(dto.error());
                 }
+                std::optional<ai::Usage> usage;
+                if (dto->usage.has_value()) {
+                    auto parsed_usage = ai::glaze::detail::usage_from_dto(*dto->usage, stored_line);
+                    if (!parsed_usage) {
+                        return std::unexpected(parsed_usage.error());
+                    }
+                    usage = std::move(*parsed_usage);
+                }
                 populate_tree_fields_from_dto(entry, *dto);
                 entry.value = BranchSummaryEntryValue{
                     .from_id = std::move(dto->fromId),
                     .summary = std::move(dto->summary),
                     .details = optional_json_field(entry.payload, "details"),
+                    .usage = std::move(usage),
                     .from_hook = dto->fromHook,
                 };
                 break;
@@ -760,7 +856,7 @@ util::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<std
                     return std::unexpected(dto.error());
                 }
                 populate_tree_fields_from_dto(entry, *dto);
-                entry.value = SessionInfoEntryValue{.name = std::move(dto->name).value_or(std::string{})};
+                entry.value = SessionInfoEntryValue{.name = std::move(dto->name)};
                 break;
             }
             case SessionEntryKind::Leaf: {
@@ -769,7 +865,7 @@ util::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<std
                     return std::unexpected(dto.error());
                 }
                 populate_tree_fields_from_dto(entry, *dto);
-                entry.value = LeafEntryValue{.target_id = std::move(dto->targetId)};
+                entry.value = LeafEntryValue{.target_id = optional_from_nullable(dto->targetId)};
                 break;
             }
             case SessionEntryKind::Header:
@@ -805,7 +901,7 @@ util::Expected<EntrySerializer::SerializedMessageEntry> EntrySerializer::seriali
     std::optional<std::string> parent_id) const {
     auto redacted = redacted_message(message);
     auto entry_id = generate_entry_id();
-    auto entry_json = util::write_json(to_dto(entry_id, redacted, std::move(parent_id)));
+    auto entry_json = util::write_json(to_dto(entry_id, redacted, std::move(parent_id), ms_since_epoch()));
     if (!entry_json) {
         return std::unexpected(entry_json.error());
     }
@@ -821,7 +917,7 @@ util::Expected<std::string> EntrySerializer::serialize_model_change(
     std::string model_id) const {
     ModelChangeDto dto;
     dto.id = generate_entry_id();
-    dto.parentId = std::move(parent_id);
+    dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
     dto.provider = std::move(provider);
     dto.modelId = std::move(model_id);
@@ -833,7 +929,7 @@ util::Expected<std::string> EntrySerializer::serialize_thinking_level_change(
     std::string thinking_level) const {
     ThinkingLevelChangeDto dto;
     dto.id = generate_entry_id();
-    dto.parentId = std::move(parent_id);
+    dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
     dto.thinkingLevel = std::move(thinking_level);
     return serialize_tree_entry(dto);
@@ -844,27 +940,28 @@ util::Expected<std::string> EntrySerializer::serialize_active_tools_change(
     std::vector<std::string> tools) const {
     ActiveToolsChangeDto dto;
     dto.id = generate_entry_id();
-    dto.parentId = std::move(parent_id);
+    dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
-    dto.tools = std::move(tools);
+    dto.activeToolNames = std::move(tools);
     return serialize_tree_entry(dto);
 }
 
 util::Expected<std::string> EntrySerializer::serialize_custom_entry(
     std::optional<std::string> parent_id,
     std::string custom_type,
-    util::JsonValue data) const {
-    auto data_json = util::write_json(data);
-    if (!data_json) {
-        return std::unexpected(session_error("failed to serialize custom entry data"));
-    }
-
+    std::optional<util::JsonValue> data) const {
     CustomDto dto;
     dto.id = generate_entry_id();
-    dto.parentId = std::move(parent_id);
+    dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
     dto.customType = std::move(custom_type);
-    dto.data = glz::raw_json{std::move(*data_json)};
+    if (data) {
+        auto data_json = util::write_json(*data);
+        if (!data_json) {
+            return std::unexpected(session_error("failed to serialize custom entry data"));
+        }
+        dto.data = glz::raw_json{std::move(*data_json)};
+    }
     return serialize_tree_entry(dto);
 }
 
@@ -881,7 +978,7 @@ util::Expected<std::string> EntrySerializer::serialize_custom_message_entry(
 
     CustomMessageDto dto;
     dto.id = generate_entry_id();
-    dto.parentId = std::move(parent_id);
+    dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
     dto.customType = std::move(custom_type);
     dto.content = custom_message_content_to_dto(std::move(content));
@@ -902,7 +999,7 @@ util::Expected<std::string> EntrySerializer::serialize_label_change(
     std::optional<std::string> label) const {
     LabelDto dto;
     dto.id = generate_entry_id();
-    dto.parentId = std::move(parent_id);
+    dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
     dto.targetId = std::move(target_id);
     dto.label = std::move(label);
@@ -912,23 +1009,36 @@ util::Expected<std::string> EntrySerializer::serialize_label_change(
 util::Expected<std::string> EntrySerializer::serialize_compaction(
     std::optional<std::string> parent_id,
     std::string summary,
-    std::string first_kept_entry_id,
+    std::optional<std::string> first_kept_entry_id,
     std::size_t tokens_before,
     std::optional<util::JsonValue> details,
-    std::optional<bool> from_hook) const {
+    std::optional<bool> from_hook,
+    std::vector<ai::MessageVariant> retained_tail,
+    std::optional<ai::Usage> usage) const {
     CompactionDto dto;
     dto.id = generate_entry_id();
-    dto.parentId = std::move(parent_id);
+    dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
     dto.summary = std::move(summary);
     dto.firstKeptEntryId = std::move(first_kept_entry_id);
     dto.tokensBefore = tokens_before;
+    if (!retained_tail.empty()) {
+        std::vector<ai::glaze::MessageDto> tail;
+        tail.reserve(retained_tail.size());
+        for (const auto& message : retained_tail) {
+            tail.push_back(ai::glaze::to_message_dto(message));
+        }
+        dto.retainedTail = std::move(tail);
+    }
     if (details) {
         auto details_json = util::write_json(*details);
         if (!details_json) {
             return std::unexpected(session_error("failed to serialize compaction details"));
         }
         dto.details = glz::raw_json{std::move(*details_json)};
+    }
+    if (usage) {
+        dto.usage = ai::glaze::detail::to_dto(*usage);
     }
     dto.fromHook = from_hook;
     return serialize_tree_entry(dto);
@@ -939,10 +1049,11 @@ util::Expected<std::string> EntrySerializer::serialize_branch_summary(
     std::string from_id,
     std::string summary,
     std::optional<util::JsonValue> details,
-    std::optional<bool> from_hook) const {
+    std::optional<bool> from_hook,
+    std::optional<ai::Usage> usage) const {
     BranchSummaryDto dto;
     dto.id = generate_entry_id();
-    dto.parentId = std::move(parent_id);
+    dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
     dto.fromId = std::move(from_id);
     dto.summary = std::move(summary);
@@ -953,16 +1064,19 @@ util::Expected<std::string> EntrySerializer::serialize_branch_summary(
         }
         dto.details = glz::raw_json{std::move(*details_json)};
     }
+    if (usage) {
+        dto.usage = ai::glaze::detail::to_dto(*usage);
+    }
     dto.fromHook = from_hook;
     return serialize_tree_entry(dto);
 }
 
 util::Expected<std::string> EntrySerializer::serialize_session_info(
     std::optional<std::string> parent_id,
-    std::string name) const {
+    std::optional<std::string> name) const {
     SessionInfoDto dto;
     dto.id = generate_entry_id();
-    dto.parentId = std::move(parent_id);
+    dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
     dto.name = std::move(name);
     return serialize_tree_entry(dto);
@@ -970,13 +1084,194 @@ util::Expected<std::string> EntrySerializer::serialize_session_info(
 
 util::Expected<std::string> EntrySerializer::serialize_leaf(
     std::optional<std::string> parent_id,
-    std::string target_id) const {
+    std::optional<std::string> target_id) const {
     LeafDto dto;
     dto.id = generate_entry_id();
-    dto.parentId = std::move(parent_id);
+    dto.parentId = nullable_string(parent_id);
     dto.timestamp = generate_iso_timestamp();
-    dto.targetId = std::move(target_id);
+    dto.targetId = nullable_string(target_id);
     return serialize_tree_entry(dto);
+}
+
+util::Expected<std::string> EntrySerializer::serialize_entry(const SessionEntry& entry) const {
+    // Round-trip writer: re-emits a parsed entry byte-identically (pi field
+    // presence, null-vs-missing, ordering) using the stored id/timestamp so a
+    // parsed pi line round-trips exactly. No redaction here — redaction is
+    // append-time policy; round-trip fidelity is the contract.
+    struct IdOnly {
+        std::string id;
+        NullableString parentId;
+        std::string timestamp;
+    };
+    const auto base_fields = [&]() {
+        return IdOnly{
+            entry.entry_id,
+            nullable_string(entry.parent_id),
+            format_iso_timestamp_ms(static_cast<std::int64_t>(entry.timestamp)),
+        };
+    };
+    auto base = base_fields();
+
+    switch (entry.kind) {
+    case SessionEntryKind::Message: {
+        if (!entry.message.has_value()) {
+            return std::unexpected(session_error("message entry has no message value"));
+        }
+        MessageEntryDto dto;
+        dto.id = std::move(base.id);
+        dto.parentId = std::move(base.parentId);
+        dto.timestamp = std::move(base.timestamp);
+        dto.message = ai::glaze::to_message_dto(*entry.message);
+        return serialize_tree_entry(dto);
+    }
+    case SessionEntryKind::ModelChange: {
+        const auto& value = std::get<ModelChangeValue>(entry.value);
+        ModelChangeDto dto;
+        dto.id = std::move(base.id);
+        dto.parentId = std::move(base.parentId);
+        dto.timestamp = std::move(base.timestamp);
+        dto.provider = value.provider;
+        dto.modelId = value.model_id;
+        return serialize_tree_entry(dto);
+    }
+    case SessionEntryKind::ThinkingLevelChange: {
+        const auto& value = std::get<ThinkingLevelChangeValue>(entry.value);
+        ThinkingLevelChangeDto dto;
+        dto.id = std::move(base.id);
+        dto.parentId = std::move(base.parentId);
+        dto.timestamp = std::move(base.timestamp);
+        dto.thinkingLevel = value.thinking_level;
+        return serialize_tree_entry(dto);
+    }
+    case SessionEntryKind::ActiveToolsChange: {
+        const auto& value = std::get<ActiveToolsChangeValue>(entry.value);
+        ActiveToolsChangeDto dto;
+        dto.id = std::move(base.id);
+        dto.parentId = std::move(base.parentId);
+        dto.timestamp = std::move(base.timestamp);
+        dto.activeToolNames = value.active_tool_names;
+        return serialize_tree_entry(dto);
+    }
+    case SessionEntryKind::Custom: {
+        const auto& value = std::get<CustomEntryValue>(entry.value);
+        CustomDto dto;
+        dto.id = std::move(base.id);
+        dto.parentId = std::move(base.parentId);
+        dto.timestamp = std::move(base.timestamp);
+        dto.customType = value.custom_type;
+        if (value.data) {
+            auto data_json = util::write_json(*value.data);
+            if (!data_json) {
+                return std::unexpected(session_error("failed to serialize custom entry data"));
+            }
+            dto.data = glz::raw_json{std::move(*data_json)};
+        }
+        return serialize_tree_entry(dto);
+    }
+    case SessionEntryKind::CustomMessage: {
+        const auto& value = std::get<CustomMessageEntryValue>(entry.value);
+        CustomMessageDto dto;
+        dto.id = std::move(base.id);
+        dto.parentId = std::move(base.parentId);
+        dto.timestamp = std::move(base.timestamp);
+        dto.customType = value.custom_type;
+        dto.content = custom_message_content_to_dto(value.content);
+        dto.display = value.display;
+        if (value.details) {
+            auto details_json = util::write_json(*value.details);
+            if (!details_json) {
+                return std::unexpected(session_error("failed to serialize custom message details"));
+            }
+            dto.details = glz::raw_json{std::move(*details_json)};
+        }
+        return serialize_tree_entry(dto);
+    }
+    case SessionEntryKind::Label: {
+        const auto& value = std::get<LabelEntryValue>(entry.value);
+        LabelDto dto;
+        dto.id = std::move(base.id);
+        dto.parentId = std::move(base.parentId);
+        dto.timestamp = std::move(base.timestamp);
+        dto.targetId = value.target_id;
+        dto.label = value.label;
+        return serialize_tree_entry(dto);
+    }
+    case SessionEntryKind::Compaction: {
+        const auto& value = std::get<CompactionEntryValue>(entry.value);
+        CompactionDto dto;
+        dto.id = std::move(base.id);
+        dto.parentId = std::move(base.parentId);
+        dto.timestamp = std::move(base.timestamp);
+        dto.summary = value.summary;
+        dto.firstKeptEntryId = value.first_kept_entry_id;
+        dto.tokensBefore = value.tokens_before;
+        if (value.retained_tail.has_value()) {
+            std::vector<ai::glaze::MessageDto> tail;
+            tail.reserve(value.retained_tail->size());
+            for (const auto& message : *value.retained_tail) {
+                tail.push_back(ai::glaze::to_message_dto(message));
+            }
+            dto.retainedTail = std::move(tail);
+        }
+        if (value.details) {
+            auto details_json = util::write_json(*value.details);
+            if (!details_json) {
+                return std::unexpected(session_error("failed to serialize compaction details"));
+            }
+            dto.details = glz::raw_json{std::move(*details_json)};
+        }
+        if (value.usage) {
+            dto.usage = ai::glaze::detail::to_dto(*value.usage);
+        }
+        dto.fromHook = value.from_hook;
+        return serialize_tree_entry(dto);
+    }
+    case SessionEntryKind::BranchSummary: {
+        const auto& value = std::get<BranchSummaryEntryValue>(entry.value);
+        BranchSummaryDto dto;
+        dto.id = std::move(base.id);
+        dto.parentId = std::move(base.parentId);
+        dto.timestamp = std::move(base.timestamp);
+        dto.fromId = value.from_id;
+        dto.summary = value.summary;
+        if (value.details) {
+            auto details_json = util::write_json(*value.details);
+            if (!details_json) {
+                return std::unexpected(session_error("failed to serialize branch summary details"));
+            }
+            dto.details = glz::raw_json{std::move(*details_json)};
+        }
+        if (value.usage) {
+            dto.usage = ai::glaze::detail::to_dto(*value.usage);
+        }
+        dto.fromHook = value.from_hook;
+        return serialize_tree_entry(dto);
+    }
+    case SessionEntryKind::SessionInfo: {
+        const auto& value = std::get<SessionInfoEntryValue>(entry.value);
+        SessionInfoDto dto;
+        dto.id = std::move(base.id);
+        dto.parentId = std::move(base.parentId);
+        dto.timestamp = std::move(base.timestamp);
+        dto.name = value.name;
+        return serialize_tree_entry(dto);
+    }
+    case SessionEntryKind::Leaf: {
+        const auto& value = std::get<LeafEntryValue>(entry.value);
+        LeafDto dto;
+        dto.id = std::move(base.id);
+        dto.parentId = std::move(base.parentId);
+        dto.timestamp = std::move(base.timestamp);
+        dto.targetId = nullable_string(value.target_id);
+        return serialize_tree_entry(dto);
+    }
+    case SessionEntryKind::Header:
+    case SessionEntryKind::Unknown:
+        return std::unexpected(session_error(
+            "cannot round-trip entry",
+            "kind does not serialize as a tree entry"));
+    }
+    return std::unexpected(session_error("unreachable"));
 }
 
 } // namespace cch::harness::session

@@ -1,0 +1,28 @@
+[
+	{
+		"role": "user",
+		"content": [
+			{
+				"type": "text",
+				"text": "one"
+			}
+		],
+		"timestamp": 1784678401000
+	},
+	{
+		"role": "branchSummary",
+		"summary": "explored the alternative path",
+		"fromId": "c946c057",
+		"timestamp": 1785955032085
+	},
+	{
+		"role": "user",
+		"content": [
+			{
+				"type": "text",
+				"text": "after"
+			}
+		],
+		"timestamp": 1784678401000
+	}
+]

@@ -394,6 +394,7 @@ if(CCH_BUILD_TESTS)
         tests/harness/AsyncLocalExecutionEnvTest.cpp
         tests/harness/session/InMemorySessionStoreTest.cpp
         tests/harness/session/JsonlSessionStoreTest.cpp
+        tests/harness/session/SessionRoundTripGoldenTest.cpp
         tests/harness/session/SessionTreeTest.cpp
         tests/tools/AsyncToolsTest.cpp
         tests/tui/ContainerTest.cpp

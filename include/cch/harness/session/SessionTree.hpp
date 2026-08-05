@@ -89,9 +89,21 @@ public:
 
     /// Reconstruct LLM context from the current leaf path.
     /// Walks leaf-to-root, handles CompactionEntry (summary→kept messages→
-    /// post-compaction), converts BranchSummaryEntry/CustomMessageEntry to
-    /// message types, and extracts model/thinking-level state.
+    /// post-compaction, including pi's `retainedTail` projection), converts
+    /// BranchSummaryEntry/CustomMessageEntry to message types, and extracts
+    /// model/thinking-level state. Custom entries are omitted from model
+    /// context by default (pi `sessionEntryToContextMessages`).
     [[nodiscard]] SessionContext buildSessionContext() const;
+
+    // ── Label and session-name projection ──
+
+    /// pi `getLabel`: the label of the most recent label entry targeting
+    /// `entry_id` (a later label with an empty/absent label clears it).
+    [[nodiscard]] std::optional<std::string> get_label(std::string_view entry_id) const;
+
+    /// pi `getSessionName`: the trimmed name of the last `session_info` entry,
+    /// or nullopt when absent or blank.
+    [[nodiscard]] std::optional<std::string> get_session_name() const;
 
     // ── Branch summary hook ──
 
@@ -132,6 +144,10 @@ private:
 
     /// Emit a message entry (or derived type) into the session context.
     static void emitEntryMessage(SessionContext& ctx, const SessionEntry* entry);
+
+    /// Emit the messages of one entry after compaction context transforms:
+    /// compaction entries project compactionSummary + retainedTail.
+    static void emitCompactionMessages(SessionContext& ctx, const SessionEntry* entry);
 
     /// Get the effective parent ID for leaf-to-root traversal.
     /// Prefers explicit parent_id, falls back to inferred parent from linear ordering.

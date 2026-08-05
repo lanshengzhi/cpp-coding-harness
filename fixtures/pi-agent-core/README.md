@@ -6,8 +6,8 @@ tests in this repository against the C++ surface, so the gate's evidence is one 
 No fixture value is a live credential or derived from one; all strings are distinguishable
 dummy values (see [Sanitization rules](#sanitization-rules)).
 
-This file records only the capabilities landed so far (T01 [#350], T02 [#351], T03 [#352], T04 [#353], T05 [#354], T06 [#355]); the
-capability checklist grows with each subsequent ticket (T07–T14, blockers-first per parity map [#2]), and
+This file records only the capabilities landed so far (T01 [#350], T02 [#351], T03 [#352], T04 [#353], T05 [#354], T06 [#355], T07 [#356]); the
+capability checklist grows with each subsequent ticket (T08–T14, blockers-first per parity map [#2]), and
 rows below cover only what the ticket that last touched this file landed.
 
 ## Pinned baseline
@@ -96,9 +96,50 @@ whose resolution chain landed the first available model with configured auth (a 
 
 - the `thinking_level_change` entry shape the session file carries (`type` + `thinkingLevel`; the
   generated `id`/`timestamp` and the generic `parentId` null-vs-omitted tree metadata are stripped
-  here and pinned by the T07 session-wire contract);
+  here and pinned by the T07 session-wire contract — see `session-roundtrip.jsonl` below);
 - the settings default write (`defaultThinkingLevel: "high"` in the global `settings.json`), so
   resume restores the level exactly like pi.
+
+### Session wire round-trip golden (`session-roundtrip.jsonl`)
+
+The committed 11-entry-type JSONL round-trip golden ([#356]): a session built with the frozen pi
+`createJsonlSessionStore`/`createSessionRepository` (`packages/agent/src/harness/session/`), dumped as
+JSONL, and byte-compared by `SessionRoundTripGoldenTest` — every entry line parses and re-serializes
+byte-identically (`EntrySerializer::serialize_entry`), proving pi's exact field presence,
+null-vs-missing distinctions, ordering (`id, parentId, timestamp, type, …`), and active-path
+semantics: root `parentId: null` (not absent), `leaf.targetId: null` for a root move, a label
+cleared by an undefined label, `custom.data` absent vs explicit `null`, `compaction`
+`firstKeptEntryId`/`retainedTail`/`usage`/`fromHook` absent-vs-present, and `active_tools_change`
+carrying pi's `activeToolNames` field. Per-entry-type projection machinery is complete here; the
+derived-state completion of `buildSessionContext` (`thinkingLevel`/`model`/`activeToolNames`) and
+#327 resume re-resolution belong to T08 [#357].
+
+Coverage per entry type: `message` (user + assistant with usage), `model_change`,
+`thinking_level_change`, `active_tools_change`, `label` (set + cleared), `custom` (data object /
+explicit null / absent), `custom_message` (string content + details, block content incl. an image,
+`display: false`), `compaction` (full: `firstKeptEntryId` + `retainedTail` + `usage` + `details` +
+`fromHook`; minimal: `summary` + `tokensBefore`), `branch_summary` (`usage` + `details` + `fromHook`),
+`session_info` (sanitized name), `leaf` (target string + explicit null). Captured at pi baseline
+`83114817`; entry ids/timestamps are pi's capture-time values (structure is the contract).
+
+### Context projection fixtures (`projection-*.json`, `projection-*-session.jsonl`)
+
+pi's `buildContext` and `convertToLlm` for two deterministic branches, captured from the frozen pi
+tests and compared by `SessionRoundTripGoldenTest`:
+
+- `projection-session.jsonl` + `projection-context.json` (+ `projection-context-llm.json`): a branch
+  whose compaction carries `retainedTail`, followed by a `custom` entry, two `custom_message`
+  entries (string + blocks), and a post-compaction message. Context = `compactionSummary` +
+  retained tail, the `custom` entry **omitted by default**, `custom_message` → CustomMessage,
+  post-compaction message last.
+- `projection-branch-session.jsonl` + `projection-branch-context.json` (+ `-llm`): a branch with a
+  `branch_summary` (from `moveTo`) and a post-move message. Context includes the branchSummary
+  message.
+
+The C++ `SessionTree::buildSessionContext` is compared against `projection-context.json`, and the
+model-facing conversion (pi `convertToLlm` semantics, verbatim prefix/suffix constants) against
+`projection-context-llm.json`, both driven into the Agent through the recording fake `ModelRuntime`
+so the model sees exactly what pi's model sees.
 
 ### Terminal matrix
 
@@ -158,6 +199,9 @@ surface, and the committed evidence. Resolution records: [#326]
 | 19 | The Agent holds the concrete unknown `kDefaultModel` with no special-casing until a real model resolves; streaming against it fails through normal provider lookup exactly like pi | `packages/agent/src/agent.ts` (`DEFAULT_MODEL`); `sdk.ts` `if (!model) thinkingLevel = "off"` | `include/cch/agent/AgentContext.hpp` (`kDefaultModel`, `AsyncAgentOptions::model` default), `src/agent/AgentLoop.cpp` (no placeholder substitution) | `ModelRuntimeSeamTest` `"the Agent holds kDefaultModel with no special-casing…"` |
 | 20 | The first real model resolves through pi's exact precedence chain — CLI `--model`/`--provider` → scoped models (`--models`/`enabledModels`, new sessions only; saved default in scope wins) → resumed session `model_change {provider, modelId}` re-resolved against the live runtime → settings `defaultProvider`/`defaultModel` → first available model with configured auth → `kDefaultModel`; the settings-default and resume levels require configured auth (`model && hasConfiguredAuth`) and the final fallback is availability-based, so nothing configured never silently wins | `packages/coding-agent/src/core/model-resolver.ts` `findInitialModel`/`restoreModelFromSession`; `main.ts` `buildSessionOptions`; `sdk.ts` | `src/coding_agent/runtime/SessionFactory.cpp` (`resolve_cli_request_model`, `resolve_sdk_public_model`, `runtime_default_model`, live availability refresh), `include/cch/coding_agent/ModelRuntime.hpp` (`has_configured_auth`, `get_available`) | `ModelResolutionTest` (`[model-resolution]`/`[issue353]`): one test per precedence level — CLI `--model`, scoped first/`saved-in-scope`, resume restore, resume-without-auth fallback + `resume_model_unresolved` diagnostic, unauthenticated settings default skipped, first-available-with-auth (CLI + SDK public), nothing-configured → `kDefaultModel` streaming failure `"Unknown provider: unknown"` |
 | 21 | Thinking-level changes persist as a `thinking_level_change` session entry plus the global settings default (`supportsThinking() || level !== "off"`), so resume restores the level exactly like pi — session creation resolves the level as resumed `thinking_level_change` → settings `defaultThinkingLevel` → `DEFAULT_THINKING_LEVEL`, clamped against the resolved first real model (T03 clamping applied through the resolution path) | `packages/coding-agent/src/core/agent-session.ts` `setThinkingLevel` (`appendThinkingLevelChange` + `setDefaultThinkingLevel` gated on `supportsThinking()`); `packages/coding-agent/src/core/settings-manager.ts` `setDefaultThinkingLevel`; `sdk.ts` thinking-level chain | `src/coding_agent/runtime/AgentSessionRuntime.{hpp,cpp}` (`set_thinking_level`, config `default_thinking_level`), `include/cch/agent/Agent.hpp` + `src/agent/Agent.cpp` (`Agent::set_thinking_level` clamp), `src/coding_agent/SettingsManager.cpp` (`set_default_thinking_level`), `src/coding_agent/Sdk.cpp` (`AgentSession::set_thinking_level`), `include/cch/coding_agent/Sdk.hpp` | `ModelResolutionTest` `[thinking-persistence]`/`[issue353]` (entry + settings write, resume restore, resumed-without-entry uses settings default, fresh session requests settings default, reasoning-model `off` gate, clamp + invalid + no-op); `AgentCoreEvidenceTest`-style golden `thinking-persistence.json`; `SettingsManagerTest` `[issue353]`; `ModelRuntimeSeamTest` `[issue353]` |
+| 22 | Full pi v3 session wire contract: all eleven entry types (`message`, `thinking_level_change`, `model_change`, `active_tools_change`, `compaction`, `branch_summary`, `custom`, `custom_message`, `label`, `session_info`, `leaf`) round-trip with pi's exact field presence, null-vs-missing distinctions, ordering (`id, parentId, timestamp, type, …`), and active-path semantics (root `parentId: null`, `leaf.targetId: null`, label clear via undefined label, `custom.data` absent vs `null`, `compaction` `firstKeptEntryId`/`retainedTail`/`usage`/`fromHook` absent-vs-present, `activeToolNames` wire field); committed golden proves byte-level interoperability | `packages/agent/src/harness/session/session.ts` (entry shapes), `jsonl-store.ts` `appendEntry` (JSON.stringify semantics), `harness/types.ts` (entry types incl. `CompactionEntry.retainedTail/usage`, `CustomEntry.data?`, `LeafEntry.targetId: string \| null`) | `include/cch/harness/session/SessionEntry.hpp` (value structs), `src/harness/session/EntrySerializer.{hpp,cpp}` (DTOs in pi field order, `NullableString` null-vs-missing, `serialize_entry` round-trip writer), `src/harness/session/JsonlSessionStore.cpp` (append path) | `SessionRoundTripGoldenTest` `[issue356][golden]` (byte-exact re-serialization of every golden line) + `[issue356]` field/null/active-path rows → `session-roundtrip.jsonl` |
+| 23 | Context projection per entry type matches pi: `custom` omitted from model context by default, `custom_message` → CustomMessage, `branch_summary` → branchSummary message (only when it carries a summary), `compaction` → compactionSummary + retained tail (pi `defaultContextEntryTransform` + `sessionEntryToContextMessages`), `label` → `getLabel` (last-wins, trimmed, clearable), `session_info` → session name (last non-blank trimmed name) | `packages/agent/src/harness/session/session.ts` `sessionEntryToContextMessages` / `defaultContextEntryTransform` / `HydratedSessionState` (`getLabel`, `getSessionName`) | `src/harness/session/SessionTree.{hpp,cpp}` (`buildSessionContext`, `emitCompactionMessages`, `emitEntryMessage`, `get_label`, `get_session_name`) | `SessionRoundTripGoldenTest` `[projection]` rows → `projection-context.json`, `projection-branch-context.json` |
+| 24 | Rebuilt session context drives into the Agent through the fake-`ModelRuntime` seam and the model sees exactly what pi's model sees: the recorded `streamSimple` context carries the projected messages, and the model-facing conversion matches pi `convertToLlm` byte-for-byte (custom → user text, branchSummary → user with `BRANCH_SUMMARY_PREFIX/SUFFIX`, compactionSummary → user with `COMPACTION_SUMMARY_PREFIX/SUFFIX`, bash excluded when `excludeFromContext`) | `packages/agent/src/harness/messages.ts` `convertToLlm` + prefix/suffix constants (verbatim `</summary>` branch suffix, `\n</summary>` compaction suffix) | `src/agent/AgentLoop.cpp` (context → `streamSimple`), `include/cch/ai/Message.hpp` (LLM conversion helpers + constants), `src/ai/api/MessageConversion.cpp` (adapter conversion) | `SessionRoundTripGoldenTest` `[agent][projection]` rows → `projection-context-llm.json`, `projection-branch-context-llm.json` |
 
 ### Recorded divergences preserved (unchanged by this ticket)
 
@@ -171,6 +215,13 @@ surface, and the committed evidence. Resolution records: [#326]
   `Exclusive`, the built-ins stay exclusive because their shared execution environment has no
   concurrent-use contract); a batch containing such a tool runs through pi's sequential override.
   This is the C++-flavored expression of pi's `executionMode`, not a scheduling divergence.
+- The C++ session header carries `provider`/`model` extension fields beyond pi's v3 header
+  (`type`/`version`/`id`/`timestamp`/`cwd`/`parentSession?`/`metadata?`). pi's `parseHeader`
+  tolerates unknown fields, and #327 resume re-resolution derives the model from `model_change`,
+  so the header values are not authoritative; this is recorded as a tolerated C++ extension per
+  ADR 0009 (narrowing it to pi's exact header is deferred to the coding-agent module).
+- C++ resume parsing requires assistant `usage` (the #17/#19 contract), which pi's type marks
+  optional; pi-written sessions in practice always carry usage, and pi reads C++ files fine.
 
 ## Gate notes
 
@@ -191,3 +242,5 @@ surface, and the committed evidence. Resolution records: [#326]
 [#353]: https://github.com/lanshengzhi/cpp-coding-harness/issues/353
 [#354]: https://github.com/lanshengzhi/cpp-coding-harness/issues/354
 [#355]: https://github.com/lanshengzhi/cpp-coding-harness/issues/355
+[#356]: https://github.com/lanshengzhi/cpp-coding-harness/issues/356
+[#357]: https://github.com/lanshengzhi/cpp-coding-harness/issues/357

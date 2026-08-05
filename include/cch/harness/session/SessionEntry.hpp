@@ -51,7 +51,10 @@ struct ActiveToolsChangeValue {
 
 struct CustomEntryValue {
     std::string custom_type;
-    util::JsonValue data;
+    /// pi `data?: T` — absent (omitted on the wire) vs explicit null are both
+    /// representable: nullopt = absent, engaged = the JSON value (including an
+    /// explicit JSON null).
+    std::optional<util::JsonValue> data;
 };
 
 using CustomMessageEntryContentBlock = std::variant<ai::TextContent, ai::ImageContent>;
@@ -72,9 +75,14 @@ struct LabelEntryValue {
 
 struct CompactionEntryValue {
     std::string summary;
-    std::string first_kept_entry_id;
+    /// pi `firstKeptEntryId?: string` — nullopt is omitted on the wire.
+    std::optional<std::string> first_kept_entry_id;
     std::size_t tokens_before{0};
+    /// pi `retainedTail?: AgentMessage[]` — recent messages kept on the entry
+    /// itself; context rebuild projects compactionSummary + retained tail.
+    std::optional<std::vector<ai::MessageVariant>> retained_tail;
     std::optional<util::JsonValue> details;
+    std::optional<ai::Usage> usage;
     std::optional<bool> from_hook;
 };
 
@@ -82,11 +90,13 @@ struct BranchSummaryEntryValue {
     std::string from_id;
     std::string summary;
     std::optional<util::JsonValue> details;
+    std::optional<ai::Usage> usage;
     std::optional<bool> from_hook;
 };
 
 struct SessionInfoEntryValue {
-    std::string name;
+    /// pi `name?: string` — nullopt is omitted on the wire.
+    std::optional<std::string> name;
 };
 
 struct LeafEntryValue {

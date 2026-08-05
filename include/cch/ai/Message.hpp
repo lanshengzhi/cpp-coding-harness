@@ -155,7 +155,9 @@ inline constexpr std::string_view COMPACTION_SUMMARY_PREFIX =
 inline constexpr std::string_view COMPACTION_SUMMARY_SUFFIX = "\n</summary>";
 inline constexpr std::string_view BRANCH_SUMMARY_PREFIX =
     "The following is a summary of a branch that this conversation came back from:\n\n<summary>\n";
-inline constexpr std::string_view BRANCH_SUMMARY_SUFFIX = "\n</summary>";
+// pi `packages/agent/src/harness/messages.ts` `BRANCH_SUMMARY_SUFFIX` is
+// exactly `</summary>` (no leading newline; the compaction suffix does carry one).
+inline constexpr std::string_view BRANCH_SUMMARY_SUFFIX = "</summary>";
 
 // ── LLM conversion helpers (produce UserMessage from extended types) ──
 

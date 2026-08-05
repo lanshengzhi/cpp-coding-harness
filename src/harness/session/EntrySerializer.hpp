@@ -47,7 +47,7 @@ public:
     [[nodiscard]] util::Expected<std::string> serialize_custom_entry(
         std::optional<std::string> parent_id,
         std::string custom_type,
-        util::JsonValue data) const;
+        std::optional<util::JsonValue> data) const;
 
     [[nodiscard]] util::Expected<std::string> serialize_custom_message_entry(
         std::optional<std::string> parent_id,
@@ -64,25 +64,33 @@ public:
     [[nodiscard]] util::Expected<std::string> serialize_compaction(
         std::optional<std::string> parent_id,
         std::string summary,
-        std::string first_kept_entry_id,
+        std::optional<std::string> first_kept_entry_id,
         std::size_t tokens_before,
         std::optional<util::JsonValue> details,
-        std::optional<bool> from_hook) const;
+        std::optional<bool> from_hook,
+        std::vector<ai::MessageVariant> retained_tail = {},
+        std::optional<ai::Usage> usage = std::nullopt) const;
 
     [[nodiscard]] util::Expected<std::string> serialize_branch_summary(
         std::optional<std::string> parent_id,
         std::string from_id,
         std::string summary,
         std::optional<util::JsonValue> details,
-        std::optional<bool> from_hook) const;
+        std::optional<bool> from_hook,
+        std::optional<ai::Usage> usage = std::nullopt) const;
 
     [[nodiscard]] util::Expected<std::string> serialize_session_info(
         std::optional<std::string> parent_id,
-        std::string name) const;
+        std::optional<std::string> name) const;
 
     [[nodiscard]] util::Expected<std::string> serialize_leaf(
         std::optional<std::string> parent_id,
-        std::string target_id) const;
+        std::optional<std::string> target_id) const;
+
+    /// Round-trip writer: re-emit a parsed `SessionEntry` as its pi wire line
+    /// (byte-identical to the source line for pi-captured files) using the
+    /// stored entry id/timestamp. Header and Unknown entries are rejected.
+    [[nodiscard]] util::Expected<std::string> serialize_entry(const SessionEntry& entry) const;
 };
 
 } // namespace cch::harness::session

@@ -1,0 +1,7 @@
+{"type":"session","version":3,"id":"projection-branch","timestamp":"2026-08-05T18:37:12.083Z","cwd":"/workspace"}
+{"id":"c946c057","parentId":null,"timestamp":"2026-08-05T18:37:12.084Z","type":"message","message":{"role":"user","content":[{"type":"text","text":"one"}],"timestamp":1784678401000}}
+{"id":"24b6819f","parentId":"c946c057","timestamp":"2026-08-05T18:37:12.084Z","type":"custom","customType":"extension.meta","data":{"count":42}}
+{"id":"d451f610","parentId":"24b6819f","timestamp":"2026-08-05T18:37:12.084Z","type":"custom_message","customType":"extension.msg","content":"injected text","display":true}
+{"id":"4c7eacf5","parentId":"d451f610","timestamp":"2026-08-05T18:37:12.085Z","type":"leaf","targetId":"c946c057"}
+{"id":"d78bb056","parentId":"c946c057","timestamp":"2026-08-05T18:37:12.085Z","type":"branch_summary","fromId":"c946c057","summary":"explored the alternative path","details":{"modifiedFiles":["b.txt"]},"fromHook":false}
+{"id":"9be9baa6","parentId":"d78bb056","timestamp":"2026-08-05T18:37:12.085Z","type":"message","message":{"role":"user","content":[{"type":"text","text":"after"}],"timestamp":1784678401000}}

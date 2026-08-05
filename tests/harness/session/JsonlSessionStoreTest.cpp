@@ -622,7 +622,7 @@ TEST_CASE("v3 session header writes and loads correctly", "[harness][session][u9
     CHECK(raw.find("\"version\":3") != std::string::npos);
 }
 
-TEST_CASE("serializer wire test keeps current JSONL field names", "[harness][session][wire]") {
+TEST_CASE("serializer wire test keeps pi JSONL field names", "[harness][session][wire]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "wire-fields.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -641,7 +641,7 @@ TEST_CASE("serializer wire test keeps current JSONL field names", "[harness][ses
     const auto raw = read_all(path);
     CHECK(raw.find(R"("modelId":"gpt-4o")") != std::string::npos);
     CHECK(raw.find(R"("thinkingLevel":"high")") != std::string::npos);
-    CHECK(raw.find(R"("tools":["read"])") != std::string::npos);
+    CHECK(raw.find(R"("activeToolNames":["read"])") != std::string::npos);
     CHECK(raw.find(R"("customType":"my-ext")") != std::string::npos);
     CHECK(raw.find(R"("targetId":"target-entry")") != std::string::npos);
     CHECK(raw.find(R"("firstKeptEntryId":"first-kept")") != std::string::npos);
@@ -649,6 +649,8 @@ TEST_CASE("serializer wire test keeps current JSONL field names", "[harness][ses
     CHECK(raw.find(R"("fromId":"from-entry")") != std::string::npos);
     CHECK(raw.find(R"("name":"Session name")") != std::string::npos);
     CHECK(raw.find(R"("targetId":"leaf-target")") != std::string::npos);
+    // pi always writes the base fields with explicit null for a root parent.
+    CHECK(raw.find(R"("parentId":null)") != std::string::npos);
 }
 
 TEST_CASE("entry IDs are 8-char random hex", "[harness][session][u9]") {
@@ -754,7 +756,10 @@ TEST_CASE("custom entry round-trips", "[harness][session][u9]") {
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::Custom);
     const auto& value = require_entry_value<harness::session::CustomEntryValue>(loaded->entries[1]);
     CHECK(value.custom_type == "my-ext");
-    CHECK(value.data.get<util::JsonValue::object_t>().at("count").get<double>() == 42.0);
+    REQUIRE(value.data.has_value());
+    CHECK(value.data->get<util::JsonValue::object_t>().at("count").get<double>() == 42.0);
+    // pi `data?` is present on the wire for a provided value.
+    CHECK(read_all(path).find(R"("data":{"count":42,"name":"test"})") != std::string::npos);
 }
 
 TEST_CASE("custom_message entry round-trips", "[harness][session][u9]") {
@@ -872,8 +877,11 @@ TEST_CASE("compaction entry round-trips", "[harness][session][u9]") {
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::Compaction);
     const auto& value = require_entry_value<harness::session::CompactionEntryValue>(loaded->entries[1]);
     CHECK(value.summary == "summary text");
-    CHECK(value.first_kept_entry_id == "first-kept");
+    REQUIRE(value.first_kept_entry_id.has_value());
+    CHECK(*value.first_kept_entry_id == "first-kept");
     CHECK(value.tokens_before == 50000);
+    CHECK_FALSE(value.retained_tail.has_value());
+    CHECK_FALSE(value.usage.has_value());
     REQUIRE(value.details.has_value());
     const auto& read_files = value.details->get<util::JsonValue::object_t>()
         .at("readFiles")
@@ -899,6 +907,7 @@ TEST_CASE("branch_summary entry round-trips", "[harness][session][u9]") {
     const auto& value = require_entry_value<harness::session::BranchSummaryEntryValue>(loaded->entries[1]);
     CHECK(value.from_id == "branch-id");
     CHECK(value.summary == "branch explored X");
+    CHECK_FALSE(value.usage.has_value());
     REQUIRE(value.details.has_value());
     const auto& modified_files = value.details->get<util::JsonValue::object_t>()
         .at("modifiedFiles")
@@ -920,7 +929,8 @@ TEST_CASE("session_info entry round-trips", "[harness][session][u9]") {
     REQUIRE(loaded->entries.size() == 2);
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::SessionInfo);
     const auto& value = require_entry_value<harness::session::SessionInfoEntryValue>(loaded->entries[1]);
-    CHECK(value.name == "Refactor auth module");
+    REQUIRE(value.name.has_value());
+    CHECK(*value.name == "Refactor auth module");
 }
 
 TEST_CASE("leaf entry round-trips as typed value", "[harness][session][u9]") {

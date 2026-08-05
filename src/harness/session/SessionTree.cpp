@@ -186,7 +186,7 @@ SessionContext SessionTree::buildSessionContext() const {
         }
     }
 
-    // Find the compaction entry closest to the leaf.
+    // Find the compaction entry closest to the leaf (pi's last-wins scan).
     const SessionEntry* compaction = nullptr;
     for (auto it = path.rbegin(); it != path.rend(); ++it) {
         if ((*it)->kind == SessionEntryKind::Compaction) {
@@ -195,54 +195,83 @@ SessionContext SessionTree::buildSessionContext() const {
         }
     }
 
-    if (compaction != nullptr) {
-        std::string first_kept_id;
-        std::string summary_text;
-        if (const auto* value = std::get_if<CompactionEntryValue>(&compaction->value)) {
-            first_kept_id = value->first_kept_entry_id;
-            summary_text = value->summary;
-        }
-
-        // Emit the compaction summary as a CompactionSummaryMessage.
-        if (!summary_text.empty()) {
-            ai::CompactionSummaryMessage csm;
-            csm.summary = summary_text;
-            csm.timestamp = compaction->timestamp;
-            if (const auto* value = std::get_if<CompactionEntryValue>(&compaction->value)) {
-                csm.tokens_before = static_cast<decltype(csm.tokens_before)>(value->tokens_before);
-            }
-            ctx.messages.emplace_back(std::move(csm));
-        }
-
-        // Collect entry IDs to skip before the first kept entry.
-        std::set<std::string> skip_ids;
-        bool found_kept = false;
-        for (const auto* entry : path) {
-            if (entry->entry_id == first_kept_id) {
-                found_kept = true;
-            }
-            if (!found_kept) {
-                skip_ids.insert(entry->entry_id);
-            }
-            if (entry == compaction) {
-                skip_ids.erase(compaction->entry_id);
-                break;
-            }
-        }
-
-        // Emit messages: skip pre-kept, include kept and post-compaction.
-        for (const auto* entry : path) {
-            if (skip_ids.count(entry->entry_id) > 0) continue;
-            emitEntryMessage(ctx, entry);
-        }
-    } else {
+    if (compaction == nullptr) {
         // No compaction on path: emit all messages in order.
         for (const auto* entry : path) {
             emitEntryMessage(ctx, entry);
         }
+        return ctx;
+    }
+
+    const auto compaction_index = static_cast<std::size_t>(
+        std::find(path.begin(), path.end(), compaction) - path.begin());
+
+    // pi `defaultContextEntryTransform`: the compaction entry plus whatever
+    // follows it on the path. With `retainedTail` present the retained
+    // messages live on the entry itself; without it, the pre-compaction
+    // entries from `firstKeptEntryId` onward are kept in the file and emitted.
+    const bool has_retained_tail = std::get_if<CompactionEntryValue>(&compaction->value) != nullptr &&
+        std::get<CompactionEntryValue>(compaction->value).retained_tail.has_value();
+
+    // Emit the compaction entry: compactionSummary + retainedTail (pi
+    // `sessionEntryToContextMessages` compaction branch).
+    emitCompactionMessages(ctx, compaction);
+
+    if (has_retained_tail) {
+        // Post-compaction entries only — the retained tail comes from the
+        // entry, the pre-compaction history is replaced by the summary.
+        for (std::size_t i = compaction_index + 1; i < path.size(); ++i) {
+            emitEntryMessage(ctx, path[i]);
+        }
+        return ctx;
+    }
+
+    std::string first_kept_id;
+    if (const auto* value = std::get_if<CompactionEntryValue>(&compaction->value)) {
+        first_kept_id = value->first_kept_entry_id.value_or("");
+    }
+
+    // Collect entry IDs to skip before the first kept entry.
+    std::set<std::string> skip_ids;
+    bool found_kept = false;
+    for (const auto* entry : path) {
+        if (entry->entry_id == first_kept_id) {
+            found_kept = true;
+        }
+        if (!found_kept) {
+            skip_ids.insert(entry->entry_id);
+        }
+        if (entry == compaction) {
+            skip_ids.erase(compaction->entry_id);
+            break;
+        }
+    }
+
+    // Emit messages: skip pre-kept, include kept and post-compaction.
+    for (const auto* entry : path) {
+        if (skip_ids.count(entry->entry_id) > 0) continue;
+        emitEntryMessage(ctx, entry);
     }
 
     return ctx;
+}
+
+void SessionTree::emitCompactionMessages(SessionContext& ctx, const SessionEntry* entry) {
+    const auto* value = std::get_if<CompactionEntryValue>(&entry->value);
+    const std::string summary_text = value != nullptr ? value->summary : std::string{};
+    const std::size_t tokens_before = value != nullptr ? value->tokens_before : 0;
+
+    ai::CompactionSummaryMessage csm;
+    csm.summary = summary_text;
+    csm.tokens_before = static_cast<decltype(csm.tokens_before)>(tokens_before);
+    csm.timestamp = entry->timestamp;
+    ctx.messages.emplace_back(std::move(csm));
+
+    if (value != nullptr && value->retained_tail.has_value()) {
+        for (const auto& message : *value->retained_tail) {
+            ctx.messages.push_back(message);
+        }
+    }
 }
 
 void SessionTree::emitEntryMessage(SessionContext& ctx, const SessionEntry* entry) {
@@ -251,11 +280,14 @@ void SessionTree::emitEntryMessage(SessionContext& ctx, const SessionEntry* entr
             ctx.messages.push_back(*entry->message);
         }
     } else if (entry->kind == SessionEntryKind::BranchSummary) {
-        ai::BranchSummaryMessage bsm;
-        if (const auto* value = std::get_if<BranchSummaryEntryValue>(&entry->value)) {
-            bsm.summary = value->summary;
-            bsm.from_id = value->from_id;
+        // pi projects branch_summary only when it carries a summary.
+        const auto* value = std::get_if<BranchSummaryEntryValue>(&entry->value);
+        if (value == nullptr || value->summary.empty()) {
+            return;
         }
+        ai::BranchSummaryMessage bsm;
+        bsm.summary = value->summary;
+        bsm.from_id = value->from_id;
         bsm.timestamp = entry->timestamp;
         ctx.messages.emplace_back(std::move(bsm));
     } else if (entry->kind == SessionEntryKind::CustomMessage) {
@@ -280,6 +312,61 @@ void SessionTree::emitEntryMessage(SessionContext& ctx, const SessionEntry* entr
         cm.timestamp = entry->timestamp;
         ctx.messages.emplace_back(std::move(cm));
     }
+}
+
+// ── Label and session-name projection ──
+
+std::optional<std::string> SessionTree::get_label(std::string_view entry_id) const {
+    // pi `HydratedSessionState.applyProjection`: labels apply in store order,
+    // later entries win; a label entry whose trimmed label is empty clears
+    // (pi `const label = entry.label?.trim(); if (label) set; else delete`).
+    std::optional<std::string> current;
+    for (const auto& entry : entries_) {
+        if (entry.kind != SessionEntryKind::Label) {
+            continue;
+        }
+        const auto* value = std::get_if<LabelEntryValue>(&entry.value);
+        if (value == nullptr || value->target_id != entry_id) {
+            continue;
+        }
+        if (value->label.has_value()) {
+            auto label = *value->label;
+            const auto first = label.find_first_not_of(" \t\r\n");
+            if (first != std::string::npos) {
+                const auto last = label.find_last_not_of(" \t\r\n");
+                current = label.substr(first, last - first + 1);
+            } else {
+                current = std::nullopt;
+            }
+        } else {
+            current = std::nullopt;
+        }
+    }
+    return current;
+}
+
+std::optional<std::string> SessionTree::get_session_name() const {
+    // pi `getSessionName`: scan from the end, return the last `session_info`
+    // entry's trimmed name when non-empty.
+    for (auto it = entries_.rbegin(); it != entries_.rend(); ++it) {
+        if (it->kind != SessionEntryKind::SessionInfo) {
+            continue;
+        }
+        const auto* value = std::get_if<SessionInfoEntryValue>(&it->value);
+        if (value == nullptr || !value->name.has_value()) {
+            continue;
+        }
+        auto trimmed = *value->name;
+        // pi trims surrounding whitespace (and its append path already
+        // collapses newlines); mirror the trim here.
+        const auto first = trimmed.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos) {
+            continue;
+        }
+        const auto last = trimmed.find_last_not_of(" \t\r\n");
+        return trimmed.substr(first, last - first + 1);
+    }
+    return std::nullopt;
 }
 
 // ── Branch summary hook ──
@@ -332,6 +419,7 @@ util::ExpectedVoid SessionTree::branchWithSummary(
             .from_id = std::string{ctx.from_leaf_id},
             .summary = data.summary,
             .details = data.details,
+            .usage = std::nullopt,
             .from_hook = std::nullopt,
         };
 

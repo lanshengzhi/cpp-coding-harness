@@ -1,0 +1,85 @@
+[
+	{
+		"role": "user",
+		"content": [
+			{
+				"type": "text",
+				"text": "The conversation history before this point was compacted into the following summary:\n\n<summary>\ncompacted history summary\n</summary>"
+			}
+		],
+		"timestamp": 1785955032072
+	},
+	{
+		"role": "user",
+		"content": [
+			{
+				"type": "text",
+				"text": "three"
+			}
+		],
+		"timestamp": 1784678401000
+	},
+	{
+		"role": "assistant",
+		"content": [
+			{
+				"type": "text",
+				"text": "four"
+			}
+		],
+		"api": "anthropic-messages",
+		"provider": "anthropic",
+		"model": "claude-sonnet-4-5",
+		"stopReason": "stop",
+		"usage": {
+			"input": 10,
+			"output": 20,
+			"cacheRead": 30,
+			"cacheWrite": 40,
+			"totalTokens": 100,
+			"cost": {
+				"input": 0.1,
+				"output": 0.2,
+				"cacheRead": 0.3,
+				"cacheWrite": 0.4,
+				"total": 1
+			}
+		},
+		"timestamp": 1784678402000
+	},
+	{
+		"role": "user",
+		"content": [
+			{
+				"type": "text",
+				"text": "injected text"
+			}
+		],
+		"timestamp": 1785955032074
+	},
+	{
+		"role": "user",
+		"content": [
+			{
+				"type": "text",
+				"text": "block one"
+			},
+			{
+				"type": "image",
+				"data": "cG5nLWJ5dGVz",
+				"mimeType": "image/png"
+			}
+		],
+		"timestamp": 1785955032074
+	},
+	{
+		"role": "user",
+		"content": [
+			{
+				"type": "text",
+				"text": "five"
+			}
+		],
+		"timestamp": 1784678401000
+	}
+]
