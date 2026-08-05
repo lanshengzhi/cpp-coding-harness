@@ -134,7 +134,9 @@ and diagnostics), so partial-content, index, and metadata drift fails the differ
 ## Differential evidence
 
 Deterministic goldens captured from the frozen pi tests and pi source, with the TS sides pinned as
-snapshots in this repository (a node sidecar is an optional enhancement, not a gate requirement):
+snapshots in this repository. The node sidecar that (re)generates them is committed at
+`capture/capture-ts-events.mts` (see [Capturing the TS event snapshots](#capturing-the-ts-event-snapshots)) —
+still not a gate requirement, but reproducible:
 
 - Request payload bytes: the `*-ts-request.json` fixtures are the exact bodies the frozen TS
   `buildParams`/`convertResponsesMessages`/`buildRequestBody` produce at the baseline; the C++
