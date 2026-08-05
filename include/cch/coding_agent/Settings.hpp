@@ -3,6 +3,7 @@
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/util/Error.hpp>
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -11,6 +12,17 @@
 #include <vector>
 
 namespace cch::coding_agent {
+
+/// pi `compaction` — nested automatic-compaction settings. Every field is
+/// optional: a missing field falls back to pi's `DEFAULT_COMPACTION_SETTINGS`
+/// (`enabled: true`, `reserveTokens: 16384`, `keepRecentTokens: 20000`) when
+/// the trigger policy resolves them. Field names are pi's wire names
+/// (`reserveTokens`/`keepRecentTokens`) in camelCase.
+struct UserCompactionSettings {
+    std::optional<bool> enabled{std::nullopt};
+    std::optional<std::uint64_t> reserve_tokens{std::nullopt};
+    std::optional<std::uint64_t> keep_recent_tokens{std::nullopt};
+};
 
 /// User settings following pi's two-scope `settings.json` contract (ADR 0031).
 /// All fields are optional — CLI flags and built-in defaults fill any gaps.
@@ -42,6 +54,9 @@ struct UserSettings {
     std::optional<std::string> shell_command_prefix{std::nullopt};
     /// pi `theme` — Native TUI theme selected by name.
     std::optional<std::string> theme{std::nullopt};
+    /// pi `compaction` — nested automatic-compaction settings consumed by the
+    /// session-assembly trigger policy.
+    std::optional<UserCompactionSettings> compaction{std::nullopt};
 };
 
 /// One `settings.json` scope (pi `SettingsScope`).

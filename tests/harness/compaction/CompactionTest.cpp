@@ -992,3 +992,122 @@ TEST_CASE(
     CHECK(text.find("[Tool result]:") != std::string::npos);
     CHECK(text.find("[... 3000 more characters truncated]") != std::string::npos);
 }
+
+// ── T10 trigger-policy machinery (#359): shouldCompact + isContextOverflow ──
+
+TEST_CASE(
+    "shouldCompact mirrors pi's threshold arithmetic",
+    "[harness][compaction][issue359]") {
+    using harness::session::CompactionSettings;
+    using harness::session::should_compact;
+
+    const CompactionSettings defaults;
+    // Disabled settings never compact.
+    CompactionSettings disabled = defaults;
+    disabled.enabled = false;
+    CHECK_FALSE(should_compact(100000, 128000, disabled));
+    // At the boundary: `contextTokens > contextWindow - reserveTokens` is a
+    // strict greater-than (111616 is not over 128000 - 16384 = 111616).
+    CHECK_FALSE(should_compact(111616, 128000, defaults));
+    CHECK(should_compact(111617, 128000, defaults));
+    // Custom reserveTokens shifts the boundary.
+    CompactionSettings tight = defaults;
+    tight.reserve_tokens = 1024;
+    CHECK_FALSE(should_compact(126976, 128000, tight));
+    CHECK(should_compact(126977, 128000, tight));
+    // An unknown (zero) context window follows pi's JS arithmetic exactly:
+    // `contextTokens > 0 - reserveTokens` is true for any context value
+    // (pi `contextWindow ?? 0`; catalog models always carry a window, so this
+    // only ever bites the C++ placeholders, which the session policy gates on).
+    CHECK(should_compact(0, 0, defaults));
+    CHECK(should_compact(1, 0, defaults));
+    // A window smaller than the reserve still leaves the threshold negative,
+    // so any context triggers (pi: `contextWindow - reserveTokens < 0`).
+    CHECK(should_compact(1, 4096, defaults));
+}
+
+TEST_CASE(
+    "isContextOverflow detects provider overflow errors, silent usage overflow, and length-stop overflow",
+    "[harness][compaction][issue359]") {
+    using harness::session::is_context_overflow;
+
+    constexpr std::size_t kWindow = 128000;
+
+    // Case 1: error terminals matching provider overflow patterns.
+    const auto overflow_error = [](std::string message) {
+        auto terminal = ai::assistant_text_message("");
+        terminal.stop_reason = ai::AssistantStopReason::Error;
+        terminal.error_message = std::move(message);
+        return terminal;
+    };
+    CHECK(is_context_overflow(overflow_error("prompt is too long: 213462 tokens > 200000 maximum"), kWindow));
+    CHECK(is_context_overflow(overflow_error("413 {\"error\":{\"type\":\"request_too_large\"}}"), kWindow));
+    CHECK(is_context_overflow(overflow_error("Your input exceeds the context window of this model"), kWindow));
+    CHECK(is_context_overflow(overflow_error("Requested token count exceeds the model's maximum context length of 131072 tokens"), kWindow));
+    CHECK(is_context_overflow(overflow_error("Input length (265330) exceeds model's maximum context length (262144)."), kWindow));
+    CHECK(is_context_overflow(overflow_error("The input token count (1196265) exceeds the maximum number of tokens allowed (1048575)"), kWindow));
+    CHECK(is_context_overflow(overflow_error("This model's maximum prompt length is 131072 but the request contains 537812 tokens"), kWindow));
+    CHECK(is_context_overflow(overflow_error("Please reduce the length of the messages or completion"), kWindow));
+    CHECK(is_context_overflow(overflow_error("This endpoint's maximum context length is 200000 tokens"), kWindow));
+    CHECK(is_context_overflow(overflow_error("Input length 265330 exceeds the maximum allowed input length of 262144 tokens."), kWindow));
+    CHECK(is_context_overflow(overflow_error("The input (265330 tokens) is longer than the model's context length (262144 tokens)."), kWindow));
+    CHECK(is_context_overflow(overflow_error("prompt token count of 1000 exceeds the limit of 500"), kWindow));
+    CHECK(is_context_overflow(overflow_error("the request exceeds the available context size, try increasing it"), kWindow));
+    CHECK(is_context_overflow(overflow_error("tokens to keep from the initial prompt is greater than the context length"), kWindow));
+    CHECK(is_context_overflow(overflow_error("invalid params, context window exceeds limit"), kWindow));
+    CHECK(is_context_overflow(overflow_error("Your request exceeded model token limit: 1000 (requested: 500)"), kWindow));
+    CHECK(is_context_overflow(overflow_error("Prompt contains 1000 tokens ... too large for model with 500 maximum context length"), kWindow));
+    CHECK(is_context_overflow(overflow_error("Prompt has 1,000 tokens, but the configured context size is 500 tokens"), kWindow));
+    CHECK(is_context_overflow(overflow_error("model_context_window_exceeded"), kWindow));
+    CHECK(is_context_overflow(overflow_error("prompt too long; exceeded max context length by 100 tokens"), kWindow));
+    CHECK(is_context_overflow(overflow_error("Range of input length should be [1, 1000]"), kWindow));
+    CHECK(is_context_overflow(overflow_error("request failed: context length exceeded"), kWindow));
+    CHECK(is_context_overflow(overflow_error("too many tokens"), kWindow));
+    CHECK(is_context_overflow(overflow_error("token limit exceeded"), kWindow));
+    CHECK(is_context_overflow(overflow_error("400 (no body)"), kWindow));
+    CHECK(is_context_overflow(overflow_error("413 status code (no body)"), kWindow));
+
+    // Non-overflow errors must not match, even when an overflow pattern would
+    // (e.g. Bedrock throttling carrying "Too many tokens").
+    CHECK_FALSE(is_context_overflow(overflow_error("Throttling error: Too many tokens, please wait before trying again."), kWindow));
+    CHECK_FALSE(is_context_overflow(overflow_error("Service unavailable: too many requests"), kWindow));
+    CHECK_FALSE(is_context_overflow(overflow_error("Rate limit exceeded: too many tokens"), kWindow));
+    CHECK_FALSE(is_context_overflow(overflow_error("a generic stream failure"), kWindow));
+    // An overflow-pattern error message without the error terminal is not an
+    // overflow error.
+    auto plain = ai::assistant_text_message("prompt is too long");
+    CHECK_FALSE(is_context_overflow(plain, kWindow));
+
+    // Case 2: silent overflow — a successful response whose input usage
+    // exceeds the window (z.ai style).
+    auto silent = ai::assistant_text_message("ok");
+    silent.stop_reason = ai::AssistantStopReason::Stop;
+    silent.usage.input = 129000;
+    silent.usage.cache_read = 0;
+    silent.usage.total_tokens = 129000;
+    CHECK(is_context_overflow(silent, kWindow));
+    silent.usage.input = 1000;
+    silent.usage.cache_read = 128000;
+    CHECK(is_context_overflow(silent, kWindow));
+    silent.usage.cache_read = 0;
+    CHECK_FALSE(is_context_overflow(silent, kWindow));
+
+    // Case 3: length-stop overflow — the server truncated the input to fill
+    // the window, leaving zero room for output (Xiaomi MiMo style).
+    auto length = ai::assistant_text_message("");
+    length.stop_reason = ai::AssistantStopReason::Length;
+    length.usage.input = 127000;
+    length.usage.output = 0;
+    CHECK(is_context_overflow(length, kWindow));
+    length.usage.input = 126000; // >= 99% of 128000 = 126720
+    CHECK_FALSE(is_context_overflow(length, kWindow));
+    length.usage.input = 127000;
+    length.usage.output = 1;
+    CHECK_FALSE(is_context_overflow(length, kWindow));
+
+    // An unknown (zero) window disables the usage-based cases but keeps the
+    // error-pattern detection (pi's truthiness gate on `contextWindow`).
+    CHECK(is_context_overflow(overflow_error("prompt is too long"), 0));
+    CHECK_FALSE(is_context_overflow(silent, 0));
+    CHECK_FALSE(is_context_overflow(length, 0));
+}

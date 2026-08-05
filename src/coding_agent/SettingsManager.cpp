@@ -3,6 +3,7 @@
 #include "util/Json.hpp"
 
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -150,6 +151,47 @@ void migrate_settings(JsonObject& settings) {
            value == "max";
 }
 
+/// Parse pi's nested `compaction` object (`{enabled, reserveTokens,
+/// keepRecentTokens}`). Each field is optional; unknown or mistyped fields
+/// are ignored (a mistyped field falls back to the pi default at resolution,
+/// mirroring pi's `settings.compaction?.enabled ?? true` reads).
+[[nodiscard]] util::Expected<UserCompactionSettings> parse_compaction_settings(
+    const util::JsonValue& value) {
+    const auto* object = value.get_if<JsonObject>();
+    if (object == nullptr) {
+        return std::unexpected(settings_file_error(
+            "invalid compaction",
+            {},
+            "compaction must be an object"));
+    }
+    UserCompactionSettings settings;
+    const auto enabled = object->find("enabled");
+    if (enabled != object->end()) {
+        if (const auto* parsed = enabled->second.get_if<bool>()) {
+            settings.enabled = *parsed;
+        }
+    }
+    const auto reserve = object->find("reserveTokens");
+    if (reserve != object->end()) {
+        if (const auto* parsed = reserve->second.get_if<double>()) {
+            if (*parsed >= 0) {
+                settings.reserve_tokens =
+                    static_cast<std::uint64_t>(*parsed);
+            }
+        }
+    }
+    const auto keep = object->find("keepRecentTokens");
+    if (keep != object->end()) {
+        if (const auto* parsed = keep->second.get_if<double>()) {
+            if (*parsed >= 0) {
+                settings.keep_recent_tokens =
+                    static_cast<std::uint64_t>(*parsed);
+            }
+        }
+    }
+    return settings;
+}
+
 /// Parse one scope into `UserSettings`. `allow_default_project_trust` is true
 /// only for the global scope; a project-scope `defaultProjectTrust` is ignored
 /// (global-only). Unknown fields are ignored for forward compatibility and
@@ -210,6 +252,13 @@ void migrate_settings(JsonObject& settings) {
     }
     if (const auto* value = string_field(object, "theme")) {
         settings.theme = *value;
+    }
+    if (const auto found = object.find("compaction"); found != object.end()) {
+        if (auto parsed = parse_compaction_settings(found->second); parsed) {
+            settings.compaction = std::move(*parsed);
+        } else {
+            return std::unexpected(parsed.error());
+        }
     }
     return settings;
 }
@@ -561,6 +610,25 @@ struct SettingsManager::Impl {
         if (project.shell_path) merged.shell_path = project.shell_path;
         if (project.shell_command_prefix) merged.shell_command_prefix = project.shell_command_prefix;
         if (project.theme) merged.theme = project.theme;
+        if (project.compaction) {
+            // Per-field deep merge: a project-scope field wins, fields the
+            // project scope does not set keep the global scope value (pi
+            // deep-merge semantics for the nested `compaction` object).
+            auto merged_compaction =
+                merged.compaction.value_or(UserCompactionSettings{});
+            if (project.compaction->enabled) {
+                merged_compaction.enabled = project.compaction->enabled;
+            }
+            if (project.compaction->reserve_tokens) {
+                merged_compaction.reserve_tokens =
+                    project.compaction->reserve_tokens;
+            }
+            if (project.compaction->keep_recent_tokens) {
+                merged_compaction.keep_recent_tokens =
+                    project.compaction->keep_recent_tokens;
+            }
+            merged.compaction = merged_compaction;
+        }
         return merged;
     }
 

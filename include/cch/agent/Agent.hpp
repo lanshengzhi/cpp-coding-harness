@@ -153,6 +153,16 @@ private:
         AgentEventCommitter commitment,
         std::stop_source stop_source);
 
+    /// Continue the loop without a new user message (pi `agent.continue()` /
+    /// `runAgentLoopContinue`), used by the session assembly's overflow
+    /// compact-and-retry-once. The live message list's last message must not
+    /// be an assistant message (the session removes the failed error message
+    /// before continuing); the loop rejects the empty and assistant-terminal
+    /// cases with pi's continuation errors.
+    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> continue_run(
+        AgentEventCommitter commitment,
+        std::stop_source stop_source);
+
     std::shared_ptr<Impl> impl_;
 };
 

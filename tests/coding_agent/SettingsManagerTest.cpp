@@ -449,3 +449,58 @@ TEST_CASE("SettingsManager never loads secrets or secret-reference fields", "[se
     CHECK(content.find("sk-super-secret-value") != std::string::npos);
     CHECK(manager.settings().default_model == "gpt-5.5");
 }
+
+TEST_CASE("SettingsManager loads and deep-merges the compaction settings object", "[settings][two-scope][issue359]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({
+        "compaction": { "enabled": false, "reserveTokens": 8192 }
+    })");
+    dirs.write_project(R"({
+        "compaction": { "keepRecentTokens": 4096 }
+    })");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.errors().empty());
+    REQUIRE(manager.settings().compaction.has_value());
+    // Per-field deep merge: the project scope wins per field, global fields
+    // the project scope does not set are kept.
+    CHECK(manager.settings().compaction->enabled == false);
+    CHECK(manager.settings().compaction->reserve_tokens == 8192);
+    CHECK(manager.settings().compaction->keep_recent_tokens == 4096);
+    // The project scope alone carries only its own field.
+    REQUIRE(manager.project_settings().compaction.has_value());
+    CHECK_FALSE(manager.project_settings().compaction->enabled.has_value());
+    CHECK_FALSE(manager.project_settings().compaction->reserve_tokens.has_value());
+    CHECK(manager.project_settings().compaction->keep_recent_tokens == 4096);
+}
+
+TEST_CASE("SettingsManager compaction fields are optional and mistyped values fall back to defaults", "[settings][two-scope][issue359]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({
+        "compaction": { "enabled": "yes", "reserveTokens": -1, "keepRecentTokens": 10000 }
+    })");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.errors().empty());
+    REQUIRE(manager.settings().compaction.has_value());
+    // Mistyped fields are ignored, leaving them absent (the pi default at
+    // resolution); the valid field is kept.
+    CHECK_FALSE(manager.settings().compaction->enabled.has_value());
+    CHECK_FALSE(manager.settings().compaction->reserve_tokens.has_value());
+    CHECK(manager.settings().compaction->keep_recent_tokens == 10000);
+}
+
+TEST_CASE("SettingsManager rejects a non-object compaction field", "[settings][two-scope][issue359]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"compaction": "enabled"})");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE_FALSE(manager.errors().empty());
+    CHECK(manager.errors()[0].message.find("compaction") != std::string::npos);
+}

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <exception>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -309,6 +310,79 @@ struct Agent::Impl {
             });
     }
 
+    /// Shared execution body for `prompt` and `continue_run`: installs the
+    /// run-stop source, drives the loop through `run_loop_call` with the
+    /// run-scoped event sink and stop token, and settles run state on every
+    /// exit path. `run_loop_call` is built by the caller (a friend context)
+    /// because the loop's private input-queue kinds are not reachable here.
+    [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> run_loop(
+        std::shared_ptr<Impl> impl,
+        std::move_only_function<boost::asio::awaitable<util::Expected<AsyncAgentRunResult>>(
+            AgentEventSink sink, std::stop_token token)> run_loop_call,
+        AgentEventCommitter commitment,
+        std::stop_source stop_source) {
+        impl->active_run = true;
+        impl->active_stop_source.emplace(std::move(stop_source));
+        impl->state.is_running = true;
+        impl->state.streaming_message.reset();
+        impl->state.pending_tool_call_ids.clear();
+        impl->invocation_message_offset = impl->state.messages.size();
+        // Subscription changes made from callbacks take effect on the next run.
+        // Shared entries keep this run's move-only sinks alive without copying.
+        const auto run_subscribers = impl->subscribers;
+
+        const auto finish_run = [impl] {
+            impl->state.model = impl->loop.current_model();
+            impl->state.thinking_level = impl->loop.current_thinking_level();
+            impl->state.streaming_message.reset();
+            impl->state.pending_tool_call_ids.clear();
+            impl->state.is_running = false;
+            impl->active_stop_source.reset();
+            impl->active_run = false;
+            impl->remove_unregistered_subscribers();
+        };
+
+        std::optional<util::Error> commitment_failure;
+        std::optional<util::Expected<AsyncAgentRunResult>> result;
+        try {
+            result = co_await run_loop_call(
+                [impl, run_subscribers, &commitment, &commitment_failure](
+                    const AgentLifecycleEvent& event) {
+                    return impl->process_event(
+                        event, run_subscribers, commitment, commitment_failure);
+                },
+                impl->active_stop_source->get_token());
+        } catch (const std::exception& exception) {
+            finish_run();
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Unknown,
+                "agent run failed",
+                exception.what()));
+        } catch (...) {
+            finish_run();
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Unknown,
+                "agent run failed",
+                "unknown exception"));
+        }
+
+        if (*result) {
+            impl->state.model = (*result)->state.model;
+            if (!(*result)->state.thinking_level.empty()) {
+                impl->state.thinking_level = (*result)->state.thinking_level;
+            }
+        }
+        finish_run();
+
+        if (commitment_failure) {
+            co_return std::unexpected(std::move(*commitment_failure));
+        }
+        if (!*result) {
+            co_return std::unexpected(result->error());
+        }
+        co_return util::ExpectedVoid{};
+    }
+
     AsyncAgentLoop loop;
     AgentState state;
     bool active_run{false};
@@ -417,89 +491,92 @@ boost::asio::awaitable<util::ExpectedVoid> Agent::prompt(
             util::ErrorCode::Validation,
             "agent is busy (prompt already in flight)"));
     }
-
-    impl->active_run = true;
-    impl->active_stop_source.emplace(std::move(stop_source));
-    impl->state.is_running = true;
-    impl->state.streaming_message.reset();
-    impl->state.pending_tool_call_ids.clear();
-    impl->invocation_message_offset = impl->state.messages.size();
-    // Subscription changes made from callbacks take effect on the next run.
-    // Shared entries keep this run's move-only sinks alive without copying.
-    const auto run_subscribers = impl->subscribers;
-
-    const auto finish_run = [impl] {
-        impl->state.model = impl->loop.current_model();
-        impl->state.thinking_level = impl->loop.current_thinking_level();
-        impl->state.streaming_message.reset();
-        impl->state.pending_tool_call_ids.clear();
-        impl->state.is_running = false;
-        impl->active_stop_source.reset();
-        impl->active_run = false;
-        impl->remove_unregistered_subscribers();
-    };
-
-    std::optional<util::Error> commitment_failure;
-    std::optional<util::Expected<AsyncAgentRunResult>> result;
-    try {
-        result = co_await impl->loop.continue_with(
-            impl->state.messages,
-            std::move(user_message),
-            [impl, run_subscribers, &commitment, &commitment_failure](
-                const AgentLifecycleEvent& event) {
-                return impl->process_event(
-                    event, run_subscribers, commitment, commitment_failure);
-            },
-            impl->active_stop_source->get_token(),
-            [impl](AsyncAgentLoop::InputQueueKind queue_kind) {
-                auto& queue = queue_kind == AsyncAgentLoop::InputQueueKind::Steering
-                    ? impl->state.input_queues.steering.messages
-                    : impl->state.input_queues.follow_up.messages;
-                const auto mode = queue_kind == AsyncAgentLoop::InputQueueKind::Steering
-                    ? impl->state.input_queues.steering.mode
-                    : impl->state.input_queues.follow_up.mode;
-                if (queue.empty()) {
-                    return std::vector<ai::MessageVariant>{};
-                }
-                if (mode == InputQueueMode::All) {
-                    auto drained = std::move(queue);
-                    queue.clear();
+    co_return co_await Impl::run_loop(
+        impl,
+        [impl, user_message = std::move(user_message)](
+            AgentEventSink sink,
+            std::stop_token token) mutable {
+            return impl->loop.continue_with(
+                impl->state.messages,
+                std::move(user_message),
+                std::move(sink),
+                token,
+                [impl](AsyncAgentLoop::InputQueueKind queue_kind) {
+                    auto& queue =
+                        queue_kind == AsyncAgentLoop::InputQueueKind::Steering
+                            ? impl->state.input_queues.steering.messages
+                            : impl->state.input_queues.follow_up.messages;
+                    const auto mode =
+                        queue_kind == AsyncAgentLoop::InputQueueKind::Steering
+                            ? impl->state.input_queues.steering.mode
+                            : impl->state.input_queues.follow_up.mode;
+                    if (queue.empty()) {
+                        return std::vector<ai::MessageVariant>{};
+                    }
+                    if (mode == InputQueueMode::All) {
+                        auto drained = std::move(queue);
+                        queue.clear();
+                        return drained;
+                    }
+                    std::vector<ai::MessageVariant> drained;
+                    drained.push_back(std::move(queue.front()));
+                    queue.erase(queue.begin());
                     return drained;
-                }
-                std::vector<ai::MessageVariant> drained;
-                drained.push_back(std::move(queue.front()));
-                queue.erase(queue.begin());
-                return drained;
-            });
-    } catch (const std::exception& exception) {
-        finish_run();
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
-            "agent run failed",
-            exception.what()));
-    } catch (...) {
-        finish_run();
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
-            "agent run failed",
-            "unknown exception"));
-    }
+                });
+        },
+        std::move(commitment),
+        std::move(stop_source));
+}
 
-    if (*result) {
-        impl->state.model = (*result)->state.model;
-        if (!(*result)->state.thinking_level.empty()) {
-            impl->state.thinking_level = (*result)->state.thinking_level;
-        }
+boost::asio::awaitable<util::ExpectedVoid> Agent::continue_run(
+    AgentEventCommitter commitment,
+    std::stop_source stop_source) {
+    auto impl = impl_;
+    if (!impl) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "agent is not initialized"));
     }
-    finish_run();
-
-    if (commitment_failure) {
-        co_return std::unexpected(std::move(*commitment_failure));
+    if (impl->active_run) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "agent is busy (prompt already in flight)"));
     }
-    if (!*result) {
-        co_return std::unexpected(result->error());
-    }
-    co_return util::ExpectedVoid{};
+    co_return co_await Impl::run_loop(
+        impl,
+        [impl](
+            AgentEventSink sink,
+            std::stop_token token) {
+            return impl->loop.continue_with(
+                impl->state.messages,
+                std::nullopt,
+                std::move(sink),
+                token,
+                [impl](AsyncAgentLoop::InputQueueKind queue_kind) {
+                    auto& queue =
+                        queue_kind == AsyncAgentLoop::InputQueueKind::Steering
+                            ? impl->state.input_queues.steering.messages
+                            : impl->state.input_queues.follow_up.messages;
+                    const auto mode =
+                        queue_kind == AsyncAgentLoop::InputQueueKind::Steering
+                            ? impl->state.input_queues.steering.mode
+                            : impl->state.input_queues.follow_up.mode;
+                    if (queue.empty()) {
+                        return std::vector<ai::MessageVariant>{};
+                    }
+                    if (mode == InputQueueMode::All) {
+                        auto drained = std::move(queue);
+                        queue.clear();
+                        return drained;
+                    }
+                    std::vector<ai::MessageVariant> drained;
+                    drained.push_back(std::move(queue.front()));
+                    queue.erase(queue.begin());
+                    return drained;
+                });
+        },
+        std::move(commitment),
+        std::move(stop_source));
 }
 
 void Agent::abort() {
@@ -678,6 +755,26 @@ util::ExpectedVoid detail::AgentMessageAccess::replace_messages(
     agent.impl_->state.messages = std::move(messages);
     agent.impl_->state.streaming_message.reset();
     agent.impl_->state.pending_tool_call_ids.clear();
+    return {};
+}
+
+util::ExpectedVoid detail::AgentMessageAccess::pop_trailing_assistant(
+    Agent& agent) {
+    if (!agent.impl_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "agent is not initialized"));
+    }
+    if (agent.impl_->active_run) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "agent is busy (cannot mutate session context)"));
+    }
+    auto& messages = agent.impl_->state.messages;
+    if (!messages.empty() &&
+        std::holds_alternative<ai::AssistantMessage>(messages.back())) {
+        messages.pop_back();
+    }
     return {};
 }
 

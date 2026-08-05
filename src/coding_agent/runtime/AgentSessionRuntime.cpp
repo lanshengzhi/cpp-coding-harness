@@ -42,6 +42,26 @@ namespace {
     return std::nullopt;
 }
 
+/// The most recent assistant message in live history (pi
+/// `_findLastAssistantMessage`), which the automatic compaction policy checks
+/// after each completed loop run.
+[[nodiscard]] std::optional<ai::AssistantMessage> last_assistant_message_from(
+    const std::vector<ai::MessageVariant>& history) {
+    for (auto it = history.rbegin(); it != history.rend(); ++it) {
+        if (const auto* am = std::get_if<ai::AssistantMessage>(&*it)) {
+            return *am;
+        }
+    }
+    return std::nullopt;
+}
+
+/// pi's verbatim overflow-recovery failure message (`agent-session.ts`
+/// `_checkCompaction`: a second overflow after one compact-and-retry
+/// attempt).
+inline constexpr std::string_view kOverflowRecoveryFailedMessage =
+    "Context overflow recovery failed after one compact-and-retry attempt. "
+    "Try reducing context or switching to a larger-context model.";
+
 [[nodiscard]] util::ExpectedVoid prompt_exception(std::exception_ptr exception) {
     try {
         std::rethrow_exception(exception);
@@ -307,6 +327,23 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
             }
         }
         if (run_agent) {
+            // pi AgentSession.prompt pre-send compaction check (catches
+            // aborted responses and unhandled error terminals from the
+            // previous run): the last assistant message may still push context
+            // over the threshold. The user's new prompt below is the
+            // continuation, so no retry is performed here (pi: "do not call
+            // agent.continue() here").
+            const auto last_assistant =
+                last_assistant_message_from(agent_->state().messages);
+            if (last_assistant) {
+                const auto preflight_outcome = co_await check_auto_compaction(
+                    *last_assistant, /*skip_aborted_check=*/false);
+                (void)preflight_outcome;
+            }
+            // pi resets the overflow-recovery attempt when a new user message
+            // starts; the pre-prompt check above still observes the previous
+            // attempt's state.
+            overflow_recovery_attempted_ = false;
             result = co_await run_agent_loop(
                 std::move(user_message),
                 *active_stop_source_);
@@ -533,7 +570,44 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
         *agent_,
         std::move(prompt),
         commitment.sink(),
-        std::move(stop_source));
+        stop_source);
+    if (!result) {
+        co_return commitment.conclude(std::move(result));
+    }
+
+    // T10 automatic compaction trigger policy (pi `_handlePostAgentRun` /
+    // `_checkCompaction`): after a completed loop, an overflow terminal
+    // compacts and retries the turn exactly once; a second overflow fails
+    // with pi's verbatim recovery message; threshold compaction never
+    // retries. The check re-runs after every retry exactly like pi's
+    // `while (await this._handlePostAgentRun()) await this.agent.continue()`.
+    for (;;) {
+        const auto last_assistant =
+            last_assistant_message_from(agent_->state().messages);
+        if (!last_assistant) {
+            break;
+        }
+        const auto outcome = co_await check_auto_compaction(
+            *last_assistant, /*skip_aborted_check=*/true);
+        if (outcome == AutoCompactionOutcome::OverflowRecoveryFailed) {
+            // The run's messages (including the second overflow error) are
+            // persisted through the commitment; the prompt fails with pi's
+            // verbatim recovery message (the failure the `compaction_end`
+            // event carries in pi).
+            co_return commitment.conclude(std::optional<util::ExpectedVoid>{
+                std::unexpected(util::make_error(
+                    util::ErrorCode::Stream,
+                    std::string{kOverflowRecoveryFailedMessage}))});
+        }
+        if (outcome != AutoCompactionOutcome::OverflowRetry) {
+            break;
+        }
+        result = co_await agent::detail::AgentPromptAccess::continue_run(
+            *agent_, commitment.sink(), stop_source);
+        if (!result) {
+            break;
+        }
+    }
     co_return commitment.conclude(std::move(result));
 }
 
@@ -738,6 +812,7 @@ AgentSessionRuntime::compact_impl(std::string custom_instructions) {
     }
     const auto session_path = *jsonl_store->path();
 
+    const auto settings = effective_compaction_settings();
     auto tree = harness::session::JsonlSessionStore::open_as_tree(session_path);
     if (!tree) {
         co_return std::unexpected(tree.error());
@@ -747,8 +822,7 @@ AgentSessionRuntime::compact_impl(std::string custom_instructions) {
     // tree walks leaf-to-root, so reverse for the machinery.
     std::reverse(branch.begin(), branch.end());
 
-    auto preparation = harness::session::prepare_compaction(
-        branch, harness::session::kDefaultCompactionSettings);
+    auto preparation = harness::session::prepare_compaction(branch, settings);
     if (!preparation) {
         co_return std::unexpected(preparation.error());
     }
@@ -771,6 +845,32 @@ AgentSessionRuntime::compact_impl(std::string custom_instructions) {
             util::ErrorCode::Validation,
             "Nothing to compact (session too small)"));
     }
+
+    co_return co_await execute_compaction(
+        prep, settings, std::move(custom_instructions));
+}
+
+boost::asio::awaitable<util::Expected<coding_agent::CompactionResult>>
+AgentSessionRuntime::execute_compaction(
+    const harness::session::CompactionPreparation& preparation,
+    const harness::session::CompactionSettings& settings,
+    std::string custom_instructions) {
+    if (!agent_ || !session_.store) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session Agent is unavailable"));
+    }
+    auto* jsonl_store =
+        dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get());
+    if (jsonl_store == nullptr || !jsonl_store->path()) {
+        // In-memory sessions have no tree/entry surface: there is no session
+        // file to persist a CompactionEntry into or to rebuild context from.
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "compaction requires a persisted session file"));
+    }
+    const auto session_path = *jsonl_store->path();
+    const auto model = agent_->state().model;
 
     harness::session::SummarizationStreamFn summarization_stream =
         [runtime = services_.model_runtime, model](
@@ -795,7 +895,7 @@ AgentSessionRuntime::compact_impl(std::string custom_instructions) {
     run_options.summarization_stream = std::move(summarization_stream);
 
     auto result = co_await harness::session::compact(
-        prep, model, std::move(run_options));
+        preparation, model, std::move(run_options));
     if (!result) {
         co_return std::unexpected(result.error());
     }
@@ -843,6 +943,219 @@ AgentSessionRuntime::compact_impl(std::string custom_instructions) {
     compaction_result.usage = result->usage;
     compaction_result.details = result->details;
     co_return compaction_result;
+}
+
+boost::asio::awaitable<bool> AgentSessionRuntime::run_auto_compaction(
+    bool will_retry) {
+    const auto settings = effective_compaction_settings();
+    if (!agent_ || !session_.store) {
+        co_return false;
+    }
+    const auto model = agent_->state().model;
+    if (model.id == agent::detail::kDefaultModel.id) {
+        co_return false;
+    }
+    auto* jsonl_store =
+        dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get());
+    if (jsonl_store == nullptr || !jsonl_store->path()) {
+        // In-memory sessions have no tree/entry surface (same confinement as
+        // the manual trigger): auto-compaction is skipped silently.
+        co_return false;
+    }
+    const auto session_path = *jsonl_store->path();
+
+    auto tree = harness::session::JsonlSessionStore::open_as_tree(session_path);
+    if (!tree) {
+        co_return false;
+    }
+    auto branch = tree->getBranch();
+    std::reverse(branch.begin(), branch.end());
+
+    auto preparation = harness::session::prepare_compaction(branch, settings);
+    if (!preparation || !*preparation) {
+        co_return false;
+    }
+    const auto& prep = **preparation;
+    // pi's coding-agent `prepareCompaction` returns undefined when there is
+    // nothing to summarize; the same guard skips the auto trigger.
+    if (prep.messages_to_summarize.empty() && prep.turn_prefix_messages.empty()) {
+        co_return false;
+    }
+
+    auto result = co_await execute_compaction(prep, settings, {});
+    if (!result) {
+        co_return false;
+    }
+
+    if (will_retry) {
+        // The rebuilt context can still end in the failed error assistant
+        // message (it lives in the retained tail); drop it so the
+        // continuation's last message is the user prompt (pi
+        // `_runAutoCompaction` willRetry branch).
+        if (auto popped =
+                agent::detail::AgentMessageAccess::pop_trailing_assistant(*agent_);
+            !popped) {
+            co_return false;
+        }
+    }
+    co_return will_retry;
+}
+
+boost::asio::awaitable<AgentSessionRuntime::AutoCompactionOutcome>
+AgentSessionRuntime::check_auto_compaction(
+    const ai::AssistantMessage& assistant_message,
+    bool skip_aborted_check) {
+    const auto settings = effective_compaction_settings();
+    if (!settings.enabled) {
+        co_return AutoCompactionOutcome::None;
+    }
+    if (skip_aborted_check &&
+        assistant_message.stop_reason == ai::AssistantStopReason::Aborted) {
+        co_return AutoCompactionOutcome::None;
+    }
+
+    const auto& model = agent_->state().model;
+    const std::size_t context_window =
+        static_cast<std::size_t>(model.context_window);
+    const bool same_model =
+        model.id == assistant_message.model &&
+        model.provider == assistant_message.provider;
+
+    // Skip compaction checks when the assistant message predates the latest
+    // compaction boundary: a stale pre-compaction usage/error must not
+    // retrigger compaction on the first prompt after compaction (pi
+    // `_checkCompaction` `assistantIsFromBeforeCompaction`).
+    const auto compaction_timestamp = latest_compaction_timestamp();
+    if (compaction_timestamp &&
+        assistant_message.timestamp <= *compaction_timestamp) {
+        co_return AutoCompactionOutcome::None;
+    }
+
+    // Case 1: Overflow. An error terminal (or a successful response whose
+    // usage already exceeds the window) compacts; only the error terminal
+    // retries, because continue() cannot continue from a completed assistant
+    // message. Overflow never routes to turn auto-retry: this branch consumes
+    // it before any retry policy (T12's boundary).
+    if (same_model && harness::session::is_context_overflow(
+                          assistant_message, context_window)) {
+        const bool will_retry =
+            assistant_message.stop_reason != ai::AssistantStopReason::Stop;
+        if (!will_retry) {
+            if (co_await run_auto_compaction(false)) {
+                co_return AutoCompactionOutcome::Compacted;
+            }
+            co_return AutoCompactionOutcome::None;
+        }
+        if (overflow_recovery_attempted_) {
+            co_return AutoCompactionOutcome::OverflowRecoveryFailed;
+        }
+        overflow_recovery_attempted_ = true;
+        // The overflow error message is saved to session history but must not
+        // be re-sent to the model on the retry (pi removes it from agent
+        // state before compacting).
+        if (auto popped =
+                agent::detail::AgentMessageAccess::pop_trailing_assistant(*agent_);
+            !popped) {
+            co_return AutoCompactionOutcome::None;
+        }
+        if (co_await run_auto_compaction(true)) {
+            co_return AutoCompactionOutcome::OverflowRetry;
+        }
+        co_return AutoCompactionOutcome::None;
+    }
+
+    // Case 2: Threshold — `contextTokens > contextWindow - reserveTokens`
+    // compacts with no retry. For error messages or all-zero usage, estimate
+    // from the last valid response so persistent API errors still compact.
+    // A model without a known context window (0) has no threshold to compact
+    // against: pi's catalog models always carry a window, while the C++
+    // placeholders (kDefaultModel and the test sentinel) carry none, so this
+    // is a recorded C++ divergence that keeps unknown-window sessions from
+    // compacting on every turn (error-based overflow still fires above,
+    // independent of the window, exactly like pi's `isContextOverflow`).
+    if (context_window == 0) {
+        co_return AutoCompactionOutcome::None;
+    }
+    const std::size_t direct_context_tokens =
+        harness::session::calculate_context_tokens(assistant_message.usage);
+    std::size_t context_tokens = direct_context_tokens;
+    if (assistant_message.stop_reason == ai::AssistantStopReason::Error ||
+        direct_context_tokens == 0) {
+        const auto estimate =
+            harness::session::estimate_context_tokens(agent_->state().messages);
+        if (!estimate.last_usage_index) {
+            // No usage data at all: nothing to base a threshold decision on.
+            co_return AutoCompactionOutcome::None;
+        }
+        if (compaction_timestamp) {
+            // The usage source must be post-compaction: kept pre-compaction
+            // messages carry stale usage reflecting the old (larger) context
+            // and would falsely trigger compaction right after one finished.
+            const auto& usage_message =
+                agent_->state().messages[*estimate.last_usage_index];
+            const auto* usage_assistant =
+                std::get_if<ai::AssistantMessage>(&usage_message);
+            if (usage_assistant != nullptr &&
+                usage_assistant->timestamp <= *compaction_timestamp) {
+                co_return AutoCompactionOutcome::None;
+            }
+        }
+        context_tokens = estimate.tokens;
+    }
+    if (harness::session::should_compact(
+            context_tokens, context_window, settings)) {
+        if (co_await run_auto_compaction(false)) {
+            co_return AutoCompactionOutcome::Compacted;
+        }
+    }
+    co_return AutoCompactionOutcome::None;
+}
+
+harness::session::CompactionSettings
+AgentSessionRuntime::effective_compaction_settings() const {
+    harness::session::CompactionSettings settings =
+        harness::session::kDefaultCompactionSettings;
+    if (!services_.settings_manager) {
+        return settings;
+    }
+    const auto& configured = services_.settings_manager->settings().compaction;
+    if (!configured) {
+        return settings;
+    }
+    if (configured->enabled) {
+        settings.enabled = *configured->enabled;
+    }
+    if (configured->reserve_tokens) {
+        settings.reserve_tokens =
+            static_cast<std::size_t>(*configured->reserve_tokens);
+    }
+    if (configured->keep_recent_tokens) {
+        settings.keep_recent_tokens =
+            static_cast<std::size_t>(*configured->keep_recent_tokens);
+    }
+    return settings;
+}
+
+std::optional<ai::TimestampMs>
+AgentSessionRuntime::latest_compaction_timestamp() const {
+    auto* jsonl_store =
+        dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get());
+    if (jsonl_store == nullptr || !jsonl_store->path()) {
+        return std::nullopt;
+    }
+    auto tree =
+        harness::session::JsonlSessionStore::open_as_tree(*jsonl_store->path());
+    if (!tree) {
+        return std::nullopt;
+    }
+    // getBranch is leaf-to-root; the first compaction encountered is the
+    // latest on the active path (pi `getLatestCompactionEntry`).
+    for (const auto* entry : tree->getBranch()) {
+        if (entry->kind == harness::session::SessionEntryKind::Compaction) {
+            return entry->timestamp;
+        }
+    }
+    return std::nullopt;
 }
 
 AgentSessionSnapshot AgentSessionRuntime::snapshot(

@@ -6,8 +6,8 @@ tests in this repository against the C++ surface, so the gate's evidence is one 
 No fixture value is a live credential or derived from one; all strings are distinguishable
 dummy values (see [Sanitization rules](#sanitization-rules)).
 
-This file records only the capabilities landed so far (T01 [#350], T02 [#351], T03 [#352], T04 [#353], T05 [#354], T06 [#355], T07 [#356], T08 [#357], T09 [#358]); the
-capability checklist grows with each subsequent ticket (T10–T14, blockers-first per parity map [#2]), and
+This file records only the capabilities landed so far (T01 [#350], T02 [#351], T03 [#352], T04 [#353], T05 [#354], T06 [#355], T07 [#356], T08 [#357], T09 [#358], T10 [#359]); the
+capability checklist grows with each subsequent ticket (T11–T14, blockers-first per parity map [#2]), and
 rows below cover only what the ticket that last touched this file landed.
 
 ## Pinned baseline
@@ -189,6 +189,19 @@ compact-and-retry-once, threshold) is T10's half; only the machinery and the man
 manual-trigger lifecycle (idle persistence + context rebuild, abort-in-flight, too-small and
 in-memory rejections) through the scripted fake `Models` seam.
 
+### Automatic trigger fixture (`overflow-recovery-message.txt`)
+
+The committed automatic-trigger golden ([#359]): the verbatim overflow-recovery failure message the
+session prompt fails with when a second context overflow follows one compact-and-retry attempt,
+byte-compared by `AgentSessionCompactionTest` `[issue359]`. The trigger policy lives in the
+session-assembly layer (`AgentSessionRuntime::check_auto_compaction`/`run_auto_compaction`, mirroring
+pi `AgentSession._checkCompaction`/`_runAutoCompaction` on top of the T09 machinery): overflow error
+terminals compact and retry the turn exactly once (the error message stays in session history but is
+dropped from the retry's live context), a second overflow fails with the verbatim message, threshold
+compaction (`contextTokens > contextWindow - reserveTokens`, `enabled`/`reserveTokens` 16384/
+`keepRecentTokens` 20000 from the `compaction` settings object with pi defaults) compacts with no
+retry, and the pre-prompt check catches aborted/over-threshold responses before the next prompt.
+
 ### Terminal matrix
 
 The six-category terminal matrix (`model_source`, `model_validation`, `provider`, `stream`,
@@ -256,6 +269,9 @@ surface, and the committed evidence. Resolution records: [#326]
 | 28 | Compaction persists a `CompactionEntry` with pi's fields (`summary`, `firstKeptEntryId`, `tokensBefore`, `retainedTail`, `details {readFiles, modifiedFiles}`, `usage`, explicit `fromHook: false`) and rebuilds the live context as compactionSummary + retained tail (`agent.state.messages = sessionContext.messages`), so the next prompt resumes exactly like pi | `packages/coding-agent/src/core/agent-session.ts` `compact` (`sessionManager.appendCompaction`, `buildSessionContext`, `estimateMessagesTokens`); `packages/agent/src/harness/session/session.ts` `appendCompaction` | `src/coding_agent/runtime/AgentSessionRuntime.cpp` (`compact_impl`: `append_compaction` + `open_as_tree`/`buildSessionContext` rebuild), `src/harness/session/JsonlSessionStore.cpp` (`append_compaction` with `retainedTail`/`usage`), `src/agent/Agent.cpp` (`AgentMessageAccess::replace_messages`), `include/cch/coding_agent/Sdk.hpp` (`CompactionResult`) | `CompactionTest` `[issue358]` → `compaction-persistence.jsonl`, `compaction-rebuild.json`; `AgentSessionCompactionTest` `[issue358]` idle persistence + next-prompt context at the stream seam |
 | 29 | Manual compaction trigger (`AgentSession.compact`) aborts the active run first (then waits for it to settle) and compacts; rejects when the session is closed, a compaction is in flight, no model is selected (`No model selected.\n\nThen use /model to select a model.` — login help is Native TUI presentation, ADR 0032), there is nothing to compact (`Nothing to compact (session too small)`), or the session was already compacted (`Already compacted`) | `packages/coding-agent/src/core/agent-session.ts` `compact` (`_disconnectFromAgent` + `abort()` + `waitForIdle`, `formatNoModelSelectedMessage`) | `src/coding_agent/runtime/AgentSessionRuntime.{hpp,cpp}` (`compact`, prompt-settled signal), `src/coding_agent/Sdk.cpp` (`AgentSession::compact` via `AgentSessionPromptAccess`) | `AgentSessionCompactionTest` `[issue358]`: idle compaction, abort-in-flight (gated prompt observes the cancellation and the run settles with the ordinary aborted terminal), too-small and in-memory rejections |
 | 30 | Compaction settings default to pi's `DEFAULT_COMPACTION_SETTINGS` (`enabled: true`, `reserveTokens: 16384`, `keepRecentTokens: 20000`); the machinery sits in the agent module (harness) and the trigger policy in session assembly; overflow compact-and-retry-once and threshold triggers are T10's half, not present here | `packages/agent/src/harness/compaction/compaction.ts` `DEFAULT_COMPACTION_SETTINGS` | `src/harness/compaction/Compaction.hpp` (`kDefaultCompactionSettings`), `src/coding_agent/runtime/AgentSessionRuntime.cpp` (uses the defaults) | `CompactionTest`/`AgentSessionCompactionTest` `[issue358]` cut-point rows at 20000 and lifecycle rows through the SDK |
+| 31 | Automatic compaction trigger policy (session assembly, pi `_checkCompaction`/`_runAutoCompaction`): context-overflow terminal errors compact and retry the turn exactly once (the overflow error message stays in session history but is removed from live state before the retry, and again after the context rebuild); a second overflow in the same prompt fails with pi's verbatim `Context overflow recovery failed after one compact-and-retry attempt…` message; a successful response whose usage already exceeds the window compacts without retrying (`willRetry = stopReason !== "stop"`); threshold compaction fires at `contextTokens > contextWindow − reserveTokens` and never retries; overflow never routes to turn auto-retry (T12's boundary); the post-run check runs after every retry exactly like pi's `while (await this._handlePostAgentRun()) await this.agent.continue()`, and the pre-prompt check (skipAbortedCheck=false) catches aborted/over-threshold responses before the next prompt | `packages/coding-agent/src/core/agent-session.ts` `_checkCompaction`, `_runAutoCompaction`, `_handlePostAgentRun`, `_overflowRecoveryAttempted` reset on user `message_start`; `packages/agent/src/agent.ts` `continue()` / `agent-loop.ts` `runAgentLoopContinue` | `src/coding_agent/runtime/AgentSessionRuntime.{hpp,cpp}` (`check_auto_compaction`, `run_auto_compaction`, post-run loop in `run_agent_loop`, pre-prompt check in `run_prompt`, `overflow_recovery_attempted_`), `src/agent/Agent.{hpp,cpp}` (`continue_run`), `src/agent/AgentLoop.{hpp,cpp}` (user-message-less `continue_with`), `src/agent/AgentMessageAccess.hpp` (`pop_trailing_assistant`) | `AgentSessionCompactionTest` `[issue359]`: overflow compact-and-retry-once (retry request context at the fake-`ModelRuntime` seam: compactionSummary + retained tail, overflowing user message last, no error terminal), second-overflow verbatim failure → `overflow-recovery-message.txt`, threshold compaction with no retry, disabled-settings suppression, pre-prompt aborted-response compaction |
+| 32 | Overflow detection + threshold arithmetic: `isContextOverflow` — provider error-message patterns (excluding rate-limit/throttling patterns that would false-positive), silent overflow when `usage.input + usage.cacheRead` exceeds the window, and length-stop zero-output fill — plus `shouldCompact` (`contextTokens > contextWindow - reserveTokens`, disabled settings never compact) | `packages/ai/src/utils/overflow.ts` `isContextOverflow`/`OVERFLOW_PATTERNS`/`NON_OVERFLOW_PATTERNS`; `packages/agent/src/harness/compaction/compaction.ts` `shouldCompact` | `src/harness/compaction/Compaction.{hpp,cpp}` (`is_context_overflow`, `should_compact`) | `CompactionTest` `[issue359]`: per-pattern overflow matrix + non-overflow exclusions + silent/length usage cases + unknown-window gate; threshold boundary rows (strict `>`, custom reserveTokens, zero-window arithmetic) |
+| 33 | Compaction settings surface: the nested `compaction {enabled, reserveTokens, keepRecentTokens}` settings object loads from both scopes with per-field deep merge (project wins per field), mistyped values fall back to the pi defaults at resolution, and the trigger policy resolves the effective settings exactly like pi `getCompactionSettings` | `packages/coding-agent/src/core/settings-manager.ts` `getCompactionSettings`/`getCompactionReserveTokens`/`getCompactionKeepRecentTokens` (`settings.compaction?.x ?? default`) | `include/cch/coding_agent/Settings.hpp` (`UserCompactionSettings`, `UserSettings::compaction`), `src/coding_agent/SettingsManager.cpp` (parse + per-field merge), `src/coding_agent/runtime/AgentSessionRuntime.cpp` (`effective_compaction_settings`) | `SettingsManagerTest` `[issue359]` (load/merge/mistyped-fallback/reject); `AgentSessionCompactionTest` `[issue359]` disabled-settings path |
 
 ### Recorded divergences preserved (unchanged by this ticket)
 
@@ -285,6 +301,18 @@ surface, and the committed evidence. Resolution records: [#326]
   Provider wire messages never carry the timestamp, so this is not observable on the wire.
 - The manual-trigger no-model error omits pi's `getProviderLoginHelp()` tail (`/login` guidance is
   Native TUI presentation, ADR 0032; the auth-guidance capability is a separate ticket).
+- Threshold compaction treats an unknown (zero) `contextWindow` as no window instead of pi's
+  `contextWindow ?? 0` arithmetic (which would compact on every turn, since any context exceeds
+  `0 - reserveTokens`). pi's catalog models always carry a window, while the C++ placeholders
+  (`kDefaultModel` and the test sentinel) carry none; error-based overflow still fires independent
+  of the window, exactly like pi's `isContextOverflow` truthiness gate.
+- The second-overflow recovery failure surfaces as the prompt error rather than a `compaction_end`
+  event: the C++ session has no compaction event channel yet, so the prompt fails with pi's verbatim
+  message and the second overflow error stays in live state and session history (pi reports the
+  same failure through the event while completing the run).
+- `overflow_recovery_attempted_` resets when a new user prompt starts instead of on every user
+  `message_start` / non-error assistant `message_end`. The C++ loop runs to completion per prompt
+  before the policy is consulted, so every reachable overflow sequence resets identically to pi.
 
 ## Gate notes
 
@@ -308,3 +336,4 @@ surface, and the committed evidence. Resolution records: [#326]
 [#356]: https://github.com/lanshengzhi/cpp-coding-harness/issues/356
 [#357]: https://github.com/lanshengzhi/cpp-coding-harness/issues/357
 [#358]: https://github.com/lanshengzhi/cpp-coding-harness/issues/358
+[#359]: https://github.com/lanshengzhi/cpp-coding-harness/issues/359

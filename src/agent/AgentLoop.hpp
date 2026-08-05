@@ -48,6 +48,17 @@ public:
         AgentEventSink sink = {},
         std::stop_token stop_token = {});
 
+    /// Continue the loop without a new user message (pi `agent.continue()` /
+    /// `runAgentLoopContinue`), used by the session assembly's overflow
+    /// compact-and-retry-once: the context already ends in a user or tool
+    /// result message. Rejects an empty history and a history whose last
+    /// message is an assistant message (pi's "Cannot continue from message
+    /// role: assistant").
+    [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> continue_with(
+        std::vector<ai::MessageVariant> history,
+        AgentEventSink sink = {},
+        std::stop_token stop_token = {});
+
 private:
     friend class Agent;
 
@@ -57,7 +68,7 @@ private:
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> continue_with(
         std::vector<ai::MessageVariant> history,
-        ai::UserMessage user_message,
+        std::optional<ai::UserMessage> user_message,
         AgentEventSink sink,
         std::stop_token stop_token,
         InputQueueDrainer drain_queued_messages);

@@ -42,6 +42,27 @@ inline constexpr CompactionSettings kDefaultCompactionSettings{};
 /// the component sum.
 [[nodiscard]] std::size_t calculate_context_tokens(const ai::Usage& usage);
 
+/// Return whether context usage exceeds the configured compaction threshold
+/// (pi `shouldCompact`): disabled settings never compact, otherwise
+/// `contextTokens > contextWindow - reserveTokens`. The comparison is signed
+/// so an unknown (zero) context window behaves exactly like pi's JS
+/// arithmetic instead of underflowing.
+[[nodiscard]] bool should_compact(
+    std::size_t context_tokens,
+    std::size_t context_window,
+    const CompactionSettings& settings);
+
+/// Detect a context-overflow assistant message (pi `isContextOverflow` in
+/// `packages/ai/src/utils/overflow.ts`): an `error` terminal whose message
+/// matches a provider overflow pattern (excluding rate-limit/throttling
+/// patterns), a silent overflow whose `input + cacheRead` usage exceeds the
+/// context window, or a `length` terminal whose zero-output usage fills the
+/// window. `context_window` 0 disables the usage-based cases, mirroring pi's
+/// truthiness gate.
+[[nodiscard]] bool is_context_overflow(
+    const ai::AssistantMessage& message,
+    std::size_t context_window);
+
 /// Estimate token count for one message using pi's conservative character
 /// heuristic (chars/4, `estimateTokens` in harness/compaction/compaction.ts).
 /// Images count as a fixed 4800 chars; unknown roles estimate 0.

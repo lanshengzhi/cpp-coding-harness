@@ -11,6 +11,7 @@
 #include "coding_agent/runtime/SessionEventCommitment.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 #include "coding_agent/runtime/UserBash.hpp"
+#include "harness/compaction/Compaction.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -123,6 +124,34 @@ public:
     [[nodiscard]] boost::asio::awaitable<util::Expected<coding_agent::CompactionResult>>
     compact(std::string custom_instructions);
 
+    /// Outcome of the automatic compaction trigger policy (pi
+    /// `AgentSession._checkCompaction`), consulted after each completed loop
+    /// run and before each new prompt.
+    enum class AutoCompactionOutcome {
+        /// No compaction decision applied; the run is finished.
+        None,
+        /// Overflow compacted with retry; the session loop must continue.
+        OverflowRetry,
+        /// A second overflow after one compact-and-retry attempt; the prompt
+        /// fails with pi's verbatim recovery message.
+        OverflowRecoveryFailed,
+        /// Compacted without retry (threshold, or overflow whose answer
+        /// already completed); the run is finished.
+        Compacted,
+    };
+
+    /// Automatic compaction trigger policy (pi `_checkCompaction`): overflow
+    /// terminal errors route to compact-and-retry-once (a second overflow in
+    /// the same prompt fails with pi's verbatim recovery message), threshold
+    /// (`contextTokens > contextWindow − reserveTokens`) compacts with no
+    /// retry, and overflow never routes to turn auto-retry. `skip_aborted_check`
+    /// mirrors pi: the post-run check skips aborted messages while the
+    /// pre-prompt check does not (so an aborted response still triggers the
+    /// threshold path before the next prompt). Requires an idle Agent.
+    [[nodiscard]] boost::asio::awaitable<AutoCompactionOutcome> check_auto_compaction(
+        const ai::AssistantMessage& assistant_message,
+        bool skip_aborted_check);
+
     // ── State accessors ────────────────────────────────────────────────────
 
     [[nodiscard]] AgentSessionSnapshot snapshot(
@@ -195,6 +224,27 @@ private:
     /// `compact` wrapper resets the flag on every exit path.
     [[nodiscard]] boost::asio::awaitable<util::Expected<coding_agent::CompactionResult>>
     compact_impl(std::string custom_instructions);
+    /// Auto-compaction body (pi `_runAutoCompaction`): prepare, summarize
+    /// through the session's `ModelRuntime`, persist, and rebuild context.
+    /// Returns whether the run should continue (`will_retry`). Skips silently
+    /// when the session is unpersisted, has no model, has nothing to compact,
+    /// or summarization fails (pi returns false in every such case).
+    [[nodiscard]] boost::asio::awaitable<bool> run_auto_compaction(bool will_retry);
+    /// Shared compaction execution for the manual trigger and the auto policy:
+    /// summarize `preparation` through the session's `ModelRuntime`, persist
+    /// the `compaction` entry, and rebuild the live Agent context as
+    /// compactionSummary + retained tail.
+    [[nodiscard]] boost::asio::awaitable<util::Expected<coding_agent::CompactionResult>>
+    execute_compaction(
+        const harness::session::CompactionPreparation& preparation,
+        const harness::session::CompactionSettings& settings,
+        std::string custom_instructions);
+    /// Resolve the effective compaction settings from the merged settings
+    /// scope with pi's `DEFAULT_COMPACTION_SETTINGS` applied to missing fields.
+    [[nodiscard]] harness::session::CompactionSettings effective_compaction_settings() const;
+    /// Timestamp of the latest `compaction` entry on the active branch, or
+    /// nullopt when none exists (pi `getLatestCompactionEntry`).
+    [[nodiscard]] std::optional<ai::TimestampMs> latest_compaction_timestamp() const;
     [[nodiscard]] boost::asio::awaitable<void> finalize_close_after_active_work();
     [[nodiscard]] std::shared_ptr<harness::AsyncExecutionEnv> release_close_resources() noexcept;
     void finalize_close() noexcept;
@@ -210,6 +260,11 @@ private:
     bool prompt_active_{false};
     bool user_bash_active_{false};
     bool compaction_active_{false};
+    /// pi `_overflowRecoveryAttempted`: true from the first overflow
+    /// compact-and-retry until a new user message starts (or a non-error
+    /// assistant message completes in pi); a second overflow while true fails
+    /// with pi's verbatim recovery message.
+    bool overflow_recovery_attempted_{false};
     std::vector<std::shared_ptr<PendingUserBashCommit>> pending_user_bash_;
     std::optional<std::stop_source> active_stop_source_;
     std::optional<std::stop_source> active_user_bash_stop_source_;

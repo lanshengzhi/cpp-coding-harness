@@ -10,6 +10,7 @@
 #include <cch/coding_agent/Sdk.hpp>
 #include <cch/harness/session/JsonlSessionStore.hpp>
 #include <cch/util/Error.hpp>
+#include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "util/ExpectedMacros.hpp"
@@ -26,8 +27,10 @@
 
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <optional>
 #include <string>
@@ -408,4 +411,349 @@ TEST_CASE(
     CHECK(memory_rejected.error().message ==
           "compaction requires a persisted session file");
     memory_created->session->close();
+}
+
+// ── T10 automatic trigger policy (#359) ─────────────────────────────────────
+
+/// Milliseconds since the epoch, matching session-entry timestamps.
+[[nodiscard]] ai::TimestampMs wall_clock_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+}
+
+/// FIFO scripted client for the automatic-trigger tests. Stamps every
+/// assistant response with an increasing wall-clock timestamp (`now + seq`)
+/// so a message served after a compaction is strictly newer than the
+/// compaction entry (satisfying pi's `assistantIsFromBeforeCompaction`
+/// guard), serves overflow error terminals with a configurable message, and
+/// records every request for context-rebuild assertions.
+class TriggerPolicyScriptedClient final : public ai::StreamingChatClient {
+public:
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::StreamChatRequest& request,
+        ai::AssistantEventSink sink) override {
+        ++request_count;
+        requests.push_back(request);
+        if (request.stop_token.stop_requested()) {
+            auto terminal = ai::assistant_text_message(aborted_content);
+            terminal.stop_reason = ai::AssistantStopReason::Aborted;
+            terminal.error_message = "Request was aborted";
+            terminal.provider = "sdk-host";
+            terminal.api = "fake";
+            terminal.model = request.model.id;
+            terminal.timestamp = wall_clock_ms() + request_count;
+            if (sink) {
+                CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
+                    .reason = terminal.stop_reason,
+                    .error = terminal,
+                    .failure = util::make_error(
+                        util::ErrorCode::Cancelled, "Request was aborted"),
+                }));
+            }
+            co_return terminal;
+        }
+        if (responses.empty()) {
+            co_return ai::assistant_text_message("default fake response");
+        }
+        auto response = std::move(responses.front());
+        responses.pop_front();
+        response.provider = "sdk-host";
+        response.api = "fake";
+        response.model = request.model.id;
+        response.timestamp = wall_clock_ms() + request_count;
+        if (sink) {
+            if (response.stop_reason == ai::AssistantStopReason::Error ||
+                response.stop_reason == ai::AssistantStopReason::Aborted) {
+                // Terminal-before-start: no assistant start event; the loop
+                // synthesizes one from the authoritative final message.
+                CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
+                    .reason = response.stop_reason,
+                    .error = response,
+                    .failure = util::make_error(
+                        util::ErrorCode::Stream,
+                        response.error_message.value_or("terminal error")),
+                }));
+            } else {
+                CCH_TRY_VOID(sink(ai::AssistantStartEvent{response}));
+            }
+        }
+        co_return response;
+    }
+
+    int request_count{0};
+    /// Content for an aborted terminal response (deterministic partial text).
+    std::string aborted_content;
+    std::vector<ai::StreamChatRequest> requests;
+    std::deque<ai::AssistantMessage> responses;
+};
+
+/// The context-overflow error terminal providers return when input exceeds
+/// the context window (a pattern from pi's OVERFLOW_PATTERNS).
+[[nodiscard]] ai::AssistantMessage overflow_terminal() {
+    auto terminal = ai::assistant_text_message("");
+    terminal.stop_reason = ai::AssistantStopReason::Error;
+    terminal.error_message =
+        "Your input exceeds the context window of this model";
+    return terminal;
+}
+
+/// An assistant message whose provider usage reports `total_tokens`.
+[[nodiscard]] ai::AssistantMessage usage_assistant(
+    std::string text,
+    std::int64_t total_tokens) {
+    auto message = ai::assistant_text_message(std::move(text));
+    message.usage = ai::Usage{};
+    message.usage.input = total_tokens;
+    message.usage.total_tokens = total_tokens;
+    return message;
+}
+
+/// Session request model with a configurable context window.
+[[nodiscard]] ai::Model trigger_model(std::uint64_t context_window) {
+    auto model = tests::sdk_request_model("sdk-host", "gpt-test");
+    model.context_window = context_window;
+    return model;
+}
+
+struct TriggerSessionUnderTest {
+    std::unique_ptr<coding_agent::AgentSession> session;
+    TriggerPolicyScriptedClient* client{nullptr};
+};
+
+[[nodiscard]] TriggerSessionUnderTest make_trigger_session(
+    const TestPaths& paths,
+    std::deque<ai::AssistantMessage> responses,
+    std::uint64_t context_window = 128000) {
+    auto client = std::make_unique<TriggerPolicyScriptedClient>();
+    auto* client_ptr = client.get();
+    client_ptr->responses = std::move(responses);
+
+    tests::ModelsSessionOptions options;
+    options.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    options.workspace = paths.workspace.path();
+    options.model = trigger_model(context_window);
+    options.models = cch::tests::models_from_stream(std::move(client));
+
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created.has_value());
+    return TriggerSessionUnderTest{
+        std::move(created->session),
+        client_ptr,
+    };
+}
+
+[[nodiscard]] std::string read_golden_text(std::string_view name) {
+    const std::string path = std::string{CCH_SOURCE_DIR} +
+                             "/fixtures/pi-agent-core/" +
+                             std::string{name};
+    std::ifstream input(path, std::ios::binary);
+    return std::string{
+        std::istreambuf_iterator<char>{input},
+        std::istreambuf_iterator<char>{}};
+}
+
+TEST_CASE(
+    "overflow terminal compacts and retries the turn exactly once; success continues normally",
+    "[coding_agent][compaction][issue359]") {
+    TestPaths paths;
+    const std::string big(19600, 'x');
+    auto under_test = make_trigger_session(
+        paths,
+        {
+            big_assistant("a1 " + big),
+            big_assistant("a2 " + big),
+            big_assistant("a3 " + big),
+            overflow_terminal(),
+            summarization_response(),
+            big_assistant("recovered"),
+        });
+    auto* session = under_test.session.get();
+    auto* client = under_test.client;
+
+    REQUIRE(session->prompt_blocking(big + " u1").has_value());
+    REQUIRE(session->prompt_blocking(big + " u2").has_value());
+    REQUIRE(session->prompt_blocking(big + " u3").has_value());
+    CHECK(session->message_count() == 6);
+
+    // The overflowing prompt succeeds after one compact-and-retry.
+    REQUIRE(session->prompt_blocking(big + " u4").has_value());
+
+    // Requests: 4 agent turns + 1 summarization + 1 retry turn — exactly one
+    // retry, and the summarization ran once.
+    REQUIRE(client->request_count == 6);
+    const auto& retry_request = client->requests[5];
+    // The retry sees compactionSummary + retained tail; the overflow error
+    // terminal is not re-sent (it stays in session history only).
+    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(
+        retry_request.context.messages[0]));
+    const auto* last_user =
+        std::get_if<ai::UserMessage>(&retry_request.context.messages.back());
+    REQUIRE(last_user != nullptr);
+    CHECK(ai::text_from_user_message(*last_user) == big + " u4");
+    for (const auto& message : retry_request.context.messages) {
+        const auto* assistant = std::get_if<ai::AssistantMessage>(&message);
+        if (assistant != nullptr) {
+            CHECK(assistant->stop_reason != ai::AssistantStopReason::Error);
+        }
+    }
+
+    // A compaction entry was persisted over the overflow.
+    const auto value = find_compaction_entry(paths);
+    REQUIRE(value.has_value());
+
+    // The retried success continues the session normally: the next prompt
+    // streams over the compacted context.
+    REQUIRE(session->prompt_blocking(big + " u5").has_value());
+    REQUIRE(client->request_count == 7);
+    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(
+        client->requests[6].context.messages[0]));
+
+    session->close();
+}
+
+TEST_CASE(
+    "a second overflow after the compact-and-retry fails with pi's verbatim recovery message",
+    "[coding_agent][compaction][issue359]") {
+    TestPaths paths;
+    const std::string big(19600, 'x');
+    auto under_test = make_trigger_session(
+        paths,
+        {
+            big_assistant("a1 " + big),
+            big_assistant("a2 " + big),
+            big_assistant("a3 " + big),
+            overflow_terminal(),
+            summarization_response(),
+            overflow_terminal(),
+        });
+    auto* session = under_test.session.get();
+    auto* client = under_test.client;
+
+    REQUIRE(session->prompt_blocking(big + " u1").has_value());
+    REQUIRE(session->prompt_blocking(big + " u2").has_value());
+    REQUIRE(session->prompt_blocking(big + " u3").has_value());
+
+    const auto failed = session->prompt_blocking(big + " u4");
+    REQUIRE_FALSE(failed.has_value());
+    // The verbatim overflow-recovery message, pinned by the committed golden.
+    CHECK(failed.error().message == read_golden_text("overflow-recovery-message.txt"));
+    CHECK(failed.error().message ==
+          "Context overflow recovery failed after one compact-and-retry attempt. "
+          "Try reducing context or switching to a larger-context model.");
+
+    // One compaction ran (4 turns + 1 summarization + 1 retry that overflowed
+    // again); no third attempt.
+    REQUIRE(client->request_count == 6);
+    // The second overflow error message stays in live state (pi keeps it; the
+    // failure is reported instead of retrying again).
+    CHECK(session->message_count() == 7);
+    const auto value = find_compaction_entry(paths);
+    REQUIRE(value.has_value());
+
+    session->close();
+}
+
+TEST_CASE(
+    "threshold compaction fires over contextWindow - reserveTokens and never retries",
+    "[coding_agent][compaction][issue359]") {
+    TestPaths paths;
+    const std::string big(19600, 'x');
+    // 30000 window: threshold boundary = 30000 - 16384 = 13616.
+    auto under_test = make_trigger_session(
+        paths,
+        {
+            big_assistant("a1 " + big),
+            big_assistant("a2 " + big),
+            big_assistant("a3 " + big),
+            usage_assistant("huge", 20000),
+            summarization_response(),
+        },
+        /*context_window=*/30000);
+    auto* session = under_test.session.get();
+    auto* client = under_test.client;
+
+    REQUIRE(session->prompt_blocking(big + " u1").has_value());
+    REQUIRE(session->prompt_blocking(big + " u2").has_value());
+    REQUIRE(session->prompt_blocking(big + " u3").has_value());
+
+    // The fourth prompt's response crosses the threshold: the session compacts
+    // and the turn is NOT retried (the completed answer stays).
+    REQUIRE(session->prompt_blocking(big + " u4").has_value());
+    REQUIRE(client->request_count == 5);
+    const auto value = find_compaction_entry(paths);
+    REQUIRE(value.has_value());
+
+    // No retry: the run completed on the response that crossed the threshold.
+    CHECK(std::holds_alternative<ai::AssistantMessage>(
+        session->snapshot().agent_state.messages.back()));
+    session->close();
+}
+
+TEST_CASE(
+    "disabled compaction settings suppress both automatic triggers",
+    "[coding_agent][compaction][issue359]") {
+    TestPaths paths;
+    paths.workspace.write(
+        "agent/settings.json",
+        R"({"compaction": {"enabled": false}})");
+    const tests::EnvVarGuard agent_dir{
+        "PI_CODING_AGENT_DIR",
+        (paths.workspace.path() / "agent").string()};
+
+    auto under_test = make_trigger_session(paths, {overflow_terminal()});
+    auto* session = under_test.session.get();
+    auto* client = under_test.client;
+
+    // The overflow error terminal completes the run normally: no compaction,
+    // no retry (pi's settings.enabled gate returns before any decision).
+    REQUIRE(session->prompt_blocking("u1").has_value());
+    REQUIRE(client->request_count == 1);
+    CHECK(session->message_count() == 2);
+    CHECK_FALSE(find_compaction_entry(paths).has_value());
+    session->close();
+}
+
+TEST_CASE(
+    "pre-prompt compaction check catches an aborted response over the threshold",
+    "[coding_agent][compaction][issue359]") {
+    TestPaths paths;
+    const std::string big(19600, 'x');
+    auto aborted = usage_assistant("", 20000);
+    aborted.stop_reason = ai::AssistantStopReason::Aborted;
+    aborted.error_message = "Request was aborted";
+    // 30000 window: threshold boundary = 13616.
+    auto under_test = make_trigger_session(
+        paths,
+        {
+            big_assistant("a1 " + big),
+            big_assistant("a2 " + big),
+            big_assistant("a3 " + big),
+            aborted,
+            summarization_response(),
+            big_assistant("after pre-prompt compaction"),
+        },
+        /*context_window=*/30000);
+    auto* session = under_test.session.get();
+    auto* client = under_test.client;
+
+    REQUIRE(session->prompt_blocking(big + " u1").has_value());
+    REQUIRE(session->prompt_blocking(big + " u2").has_value());
+    REQUIRE(session->prompt_blocking(big + " u3").has_value());
+
+    // The fourth run is aborted (user cancellation path); the post-run check
+    // skips aborted messages.
+    REQUIRE(session->prompt_blocking(big + " u4").has_value());
+    REQUIRE(client->request_count == 4);
+
+    // The next prompt's pre-send check (skipAbortedCheck=false) compacts the
+    // aborted response's over-threshold usage before the new prompt streams.
+    REQUIRE(session->prompt_blocking(big + " u5").has_value());
+    REQUIRE(client->request_count == 6);
+    REQUIRE(find_compaction_entry(paths).has_value());
+    // The u5 request runs on the compacted context.
+    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(
+        client->requests[5].context.messages[0]));
+
+    session->close();
 }

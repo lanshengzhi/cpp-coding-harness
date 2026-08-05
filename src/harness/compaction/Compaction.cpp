@@ -7,8 +7,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <random>
+#include <regex>
 #include <string>
 #include <utility>
 #include <variant>
@@ -358,6 +360,123 @@ std::size_t calculate_context_tokens(const ai::Usage& usage) {
     }
     return static_cast<std::size_t>(
         usage.input + usage.output + usage.cache_read + usage.cache_write);
+}
+
+namespace {
+
+/// Provider error-message patterns that indicate a context overflow (pi
+/// `OVERFLOW_PATTERNS` in `packages/ai/src/utils/overflow.ts`, translated to
+/// `std::regex` ECMAScript syntax).
+[[nodiscard]] const std::vector<std::regex>& overflow_patterns() {
+    static const std::vector<std::regex> patterns{
+        std::regex{R"(prompt is too long)", std::regex_constants::icase},
+        std::regex{R"(request_too_large)", std::regex_constants::icase},
+        std::regex{R"(input is too long for requested model)", std::regex_constants::icase},
+        std::regex{R"(exceeds the context window)", std::regex_constants::icase},
+        std::regex{R"(exceeds (?:the )?(?:model'?s )?maximum context length(?: of [\d,]+ tokens?|\s*\([\d,]+\)))", std::regex_constants::icase},
+        std::regex{R"(input token count.*exceeds the maximum)", std::regex_constants::icase},
+        std::regex{R"(maximum prompt length is \d+)", std::regex_constants::icase},
+        std::regex{R"(reduce the length of the messages)", std::regex_constants::icase},
+        std::regex{R"(maximum context length is \d+ tokens)", std::regex_constants::icase},
+        std::regex{R"(exceeds (?:the )?maximum allowed input length of [\d,]+ tokens?)", std::regex_constants::icase},
+        std::regex{R"(input \(\d+ tokens\) is longer than the model'?s context length \(\d+ tokens\))", std::regex_constants::icase},
+        std::regex{R"(exceeds the limit of \d+)", std::regex_constants::icase},
+        std::regex{R"(exceeds the available context size)", std::regex_constants::icase},
+        std::regex{R"(greater than the context length)", std::regex_constants::icase},
+        std::regex{R"(context window exceeds limit)", std::regex_constants::icase},
+        std::regex{R"(exceeded model token limit)", std::regex_constants::icase},
+        std::regex{R"(too large for model with \d+ maximum context length)", std::regex_constants::icase},
+        std::regex{R"(prompt has [\d,]+ tokens?, but the configured context size is [\d,]+ tokens?)", std::regex_constants::icase},
+        std::regex{R"(model_context_window_exceeded)", std::regex_constants::icase},
+        std::regex{R"(prompt too long; exceeded (?:max )?context length)", std::regex_constants::icase},
+        std::regex{R"(range of input length should be)", std::regex_constants::icase},
+        std::regex{R"(context[_ ]length[_ ]exceeded)", std::regex_constants::icase},
+        std::regex{R"(too many tokens)", std::regex_constants::icase},
+        std::regex{R"(token limit exceeded)", std::regex_constants::icase},
+        std::regex{R"(^4(?:00|13)\s*(?:status code)?\s*\(no body\))", std::regex_constants::icase},
+    };
+    return patterns;
+}
+
+/// Patterns that indicate a non-overflow error even when an overflow pattern
+/// also matches (pi `NON_OVERFLOW_PATTERNS`; e.g. Bedrock throttling errors
+/// containing "too many tokens").
+[[nodiscard]] const std::vector<std::regex>& non_overflow_patterns() {
+    static const std::vector<std::regex> patterns{
+        std::regex{R"(^(Throttling error|Service unavailable):)", std::regex_constants::icase},
+        std::regex{R"(rate limit)", std::regex_constants::icase},
+        std::regex{R"(too many requests)", std::regex_constants::icase},
+    };
+    return patterns;
+}
+
+[[nodiscard]] bool matches_any(
+    const std::vector<std::regex>& patterns,
+    const std::string& text) {
+    for (const auto& pattern : patterns) {
+        if (std::regex_search(text, pattern)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+bool should_compact(
+    std::size_t context_tokens,
+    std::size_t context_window,
+    const CompactionSettings& settings) {
+    if (!settings.enabled) {
+        return false;
+    }
+    // Signed comparison mirrors pi's JS arithmetic exactly: an unknown (zero)
+    // context window behaves like pi's `contextWindow ?? 0` (any non-empty
+    // context exceeds `0 - reserveTokens`), and a small window never underflows.
+    return static_cast<std::int64_t>(context_tokens) >
+        static_cast<std::int64_t>(context_window) -
+        static_cast<std::int64_t>(settings.reserve_tokens);
+}
+
+bool is_context_overflow(
+    const ai::AssistantMessage& message,
+    std::size_t context_window) {
+    // Case 1: error-based overflow — a provider error message matching an
+    // overflow pattern that is not also a known non-overflow pattern.
+    if (message.stop_reason == ai::AssistantStopReason::Error &&
+        message.error_message) {
+        const std::string text = *message.error_message;
+        if (!matches_any(non_overflow_patterns(), text) &&
+            matches_any(overflow_patterns(), text)) {
+            return true;
+        }
+    }
+
+    // Case 2: silent overflow (z.ai style) — a successful response whose
+    // input usage already exceeds the context window. A zero window disables
+    // the usage-based cases (pi's truthiness gate on `contextWindow`).
+    if (context_window != 0 &&
+        message.stop_reason == ai::AssistantStopReason::Stop) {
+        const std::int64_t input_tokens =
+            message.usage.input + message.usage.cache_read;
+        if (input_tokens > static_cast<std::int64_t>(context_window)) {
+            return true;
+        }
+    }
+
+    // Case 3: length-stop overflow (Xiaomi MiMo style) — the server truncated
+    // the oversized input to fill the window, leaving no room for output.
+    if (context_window != 0 &&
+        message.stop_reason == ai::AssistantStopReason::Length &&
+        message.usage.output == 0) {
+        const std::int64_t input_tokens =
+            message.usage.input + message.usage.cache_read;
+        if (input_tokens * 100 >= static_cast<std::int64_t>(context_window) * 99) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 std::size_t estimate_tokens(const ai::MessageVariant& message) {

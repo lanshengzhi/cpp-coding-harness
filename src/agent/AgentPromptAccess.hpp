@@ -24,6 +24,18 @@ public:
             std::move(commitment),
             std::move(stop_source));
     }
+
+    /// Continue the loop without a new user message (pi `agent.continue()` /
+    /// `runAgentLoopContinue`), used by the session assembly's overflow
+    /// compact-and-retry-once after compaction rebuilt the live context.
+    [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> continue_run(
+        Agent& agent,
+        AgentEventCommitter commitment,
+        std::stop_source stop_source) {
+        return agent.continue_run(
+            std::move(commitment),
+            std::move(stop_source));
+    }
 };
 
 } // namespace cch::agent::detail
