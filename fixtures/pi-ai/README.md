@@ -116,6 +116,17 @@ shared by all three scoped adapters:
   `message_delta.stop_reason` the mapper rejects (`refusal` preserved as `rawStopReason`). Both
   share the happy-path request goldens (the request never depends on the response), so no
   duplicate `-ts-request.json` is committed.
+- `wire/openai-responses-deepseek-string-content-ts-request.json` +
+  `openai-responses-deepseek-empty-string-ts-request.json` and
+  `wire/openai-codex-responses-string-content-ws.json` +
+  `openai-codex-responses-empty-string-ws.json` (#366): request-only differential fixtures for
+  the `UserMessage.content` string alternative on both Responses-family adapters — a string user
+  message becomes exactly one sanitized `input_text` item (empty string included), and an empty
+  block-array message is omitted entirely (`openai-responses-shared.ts:185-209`; frozen-suite
+  coverage in `openai-codex-stream.test.ts`). The response streams reuse the happy-path
+  `.sse`/`-ws.json` frames and full-payload snapshots (the request never depends on the
+  response), so no duplicate event snapshots are committed; the capture scenarios re-derive and
+  pin the request bytes.
 
 All `-ts-events.json` fixtures are **full-payload** assistant event snapshots (#370, extended
 with terminal-outcome scenarios by #375), not name-only arrays: every event carries its

@@ -142,6 +142,46 @@ struct CodexHarness {
     return context;
 }
 
+[[nodiscard]] ai::Tool lookup_tool() {
+    return ai::Tool{
+        .name = "lookup",
+        .description = "Look up a value",
+        .parameters = util::JsonValue::object_t{
+            {"properties", util::JsonValue::object_t{
+                {"q", util::JsonValue::object_t{{"type", "string"}}},
+            }},
+            {"required", util::JsonValue::array_t{"q"}},
+            {"type", "object"},
+        },
+    };
+}
+
+[[nodiscard]] ai::AiContext string_content_context() {
+    ai::AiContext context;
+    context.system_prompt = "system";
+    context.messages.push_back(ai::UserMessage{
+        .content = std::vector<ai::Content>{},
+        .timestamp = 1,
+    });
+    context.messages.push_back(ai::UserMessage{
+        .content = std::string{"hello"},
+        .timestamp = 2,
+    });
+    context.tools.push_back(lookup_tool());
+    return context;
+}
+
+[[nodiscard]] ai::AiContext empty_string_context() {
+    ai::AiContext context;
+    context.system_prompt = "system";
+    context.messages.push_back(ai::UserMessage{
+        .content = std::string{""},
+        .timestamp = 1,
+    });
+    context.tools.push_back(lookup_tool());
+    return context;
+}
+
 [[nodiscard]] std::string event_name(const ai::AssistantStreamEvent& event) {
     if (std::holds_alternative<ai::AssistantStartEvent>(event)) return "start";
     if (std::holds_alternative<ai::ThinkingStartEvent>(event)) return "thinking_start";
@@ -309,6 +349,132 @@ TEST_CASE(
     const auto& sent = harness.ws->sockets.front()->session()->sent_frames;
     REQUIRE(sent.size() == 1);
     CHECK(sent.front() == expected_request_bytes);
+    CHECK(harness.http->requests.empty());
+}
+
+TEST_CASE(
+    "Codex emits a string user message as one input_text and omits an empty block array (WS)",
+    "[ai][provider][codex][issue366]") {
+    auto harness = make_codex_harness(codex_model());
+    const auto ws_fixture = tests::read_pi_fixture(
+        "wire/openai-codex-responses-string-content-ws.json");
+    REQUIRE(ws_fixture);
+    const auto* ws_object = ws_fixture->get_if<util::JsonValue::object_t>();
+    REQUIRE(ws_object);
+    const auto request_found = ws_object->find("request");
+    const auto events_found = ws_object->find("events");
+    REQUIRE(request_found != ws_object->end());
+    REQUIRE(events_found != ws_object->end());
+    const auto* events = events_found->second.get_if<util::JsonValue::array_t>();
+    REQUIRE(events);
+    const auto expected_request_bytes = json_string(request_found->second);
+
+    auto session = std::make_shared<ScriptedWebSocket::Session>();
+    session->on_send = [events](ScriptedWebSocket& socket, std::string_view) {
+        for (const auto& event : *events) {
+            socket.session()->frames.push_back(json_string(event));
+        }
+    };
+    harness.ws->connect_scripts.push_back(
+        ScriptedWebSocketTransport::ConnectScript{.session = session});
+
+    ai::SimpleStreamOptions options;
+    options.api_key = std::string{kCodexToken};
+    options.temperature = 0.2;
+    options.max_tokens = 123;
+    options.reasoning = ai::ThinkingLevel::XHigh;
+    options.session_id = "session-1";
+    options.cache_retention = ai::CacheRetention::Long;
+    options.timeout_ms = 4321;
+    auto run = run_codex(
+        *harness.models,
+        codex_model(),
+        string_content_context(),
+        std::move(options));
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    tests::check_pi_event_snapshot(
+        run.events,
+        "wire/openai-codex-responses-ws-ts-events.json");
+
+    REQUIRE(harness.ws->sockets.size() == 1);
+    const auto& sent = harness.ws->sockets.front()->session()->sent_frames;
+    REQUIRE(sent.size() == 1);
+    CHECK(sent.front() == expected_request_bytes);
+    const auto body = util::read_json<util::JsonValue>(sent.front());
+    REQUIRE(body);
+    const auto& input = body->at("input").get_array();
+    // The empty block-array message is omitted; the string alternative becomes
+    // exactly one sanitized input_text item (pi `openai-responses-shared.ts:185-209`).
+    REQUIRE(input.size() == 1);
+    CHECK(input[0].at("role").get_string() == "user");
+    const auto& content = input[0].at("content").get_array();
+    REQUIRE(content.size() == 1);
+    CHECK(content[0].at("type").get_string() == "input_text");
+    CHECK(content[0].at("text").get_string() == "hello");
+    CHECK(harness.http->requests.empty());
+}
+
+TEST_CASE(
+    "Codex emits an empty string user message as one input_text (WS)",
+    "[ai][provider][codex][issue366]") {
+    auto harness = make_codex_harness(codex_model());
+    const auto ws_fixture = tests::read_pi_fixture(
+        "wire/openai-codex-responses-empty-string-ws.json");
+    REQUIRE(ws_fixture);
+    const auto* ws_object = ws_fixture->get_if<util::JsonValue::object_t>();
+    REQUIRE(ws_object);
+    const auto request_found = ws_object->find("request");
+    const auto events_found = ws_object->find("events");
+    REQUIRE(request_found != ws_object->end());
+    REQUIRE(events_found != ws_object->end());
+    const auto* events = events_found->second.get_if<util::JsonValue::array_t>();
+    REQUIRE(events);
+    const auto expected_request_bytes = json_string(request_found->second);
+
+    auto session = std::make_shared<ScriptedWebSocket::Session>();
+    session->on_send = [events](ScriptedWebSocket& socket, std::string_view) {
+        for (const auto& event : *events) {
+            socket.session()->frames.push_back(json_string(event));
+        }
+    };
+    harness.ws->connect_scripts.push_back(
+        ScriptedWebSocketTransport::ConnectScript{.session = session});
+
+    ai::SimpleStreamOptions options;
+    options.api_key = std::string{kCodexToken};
+    options.temperature = 0.2;
+    options.max_tokens = 123;
+    options.reasoning = ai::ThinkingLevel::XHigh;
+    options.session_id = "session-1";
+    options.cache_retention = ai::CacheRetention::Long;
+    options.timeout_ms = 4321;
+    auto run = run_codex(
+        *harness.models,
+        codex_model(),
+        empty_string_context(),
+        std::move(options));
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    tests::check_pi_event_snapshot(
+        run.events,
+        "wire/openai-codex-responses-ws-ts-events.json");
+
+    REQUIRE(harness.ws->sockets.size() == 1);
+    const auto& sent = harness.ws->sockets.front()->session()->sent_frames;
+    REQUIRE(sent.size() == 1);
+    CHECK(sent.front() == expected_request_bytes);
+    const auto body = util::read_json<util::JsonValue>(sent.front());
+    REQUIRE(body);
+    const auto& input = body->at("input").get_array();
+    // The empty string is still emitted as exactly one input_text item.
+    REQUIRE(input.size() == 1);
+    const auto& content = input[0].at("content").get_array();
+    REQUIRE(content.size() == 1);
+    CHECK(content[0].at("type").get_string() == "input_text");
+    CHECK(content[0].at("text").get_string() == "");
     CHECK(harness.http->requests.empty());
 }
 

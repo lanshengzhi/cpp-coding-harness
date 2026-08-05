@@ -102,6 +102,46 @@ struct RunResult {
     return context;
 }
 
+[[nodiscard]] ai::Tool lookup_tool() {
+    return ai::Tool{
+        .name = "lookup",
+        .description = "Look up a value",
+        .parameters = util::JsonValue::object_t{
+            {"properties", util::JsonValue::object_t{
+                {"q", util::JsonValue::object_t{{"type", "string"}}},
+            }},
+            {"required", util::JsonValue::array_t{"q"}},
+            {"type", "object"},
+        },
+    };
+}
+
+[[nodiscard]] ai::AiContext string_content_context() {
+    ai::AiContext context;
+    context.system_prompt = "system";
+    context.messages.push_back(ai::UserMessage{
+        .content = std::vector<ai::Content>{},
+        .timestamp = 1,
+    });
+    context.messages.push_back(ai::UserMessage{
+        .content = std::string{"hello"},
+        .timestamp = 2,
+    });
+    context.tools.push_back(lookup_tool());
+    return context;
+}
+
+[[nodiscard]] ai::AiContext empty_string_context() {
+    ai::AiContext context;
+    context.system_prompt = "system";
+    context.messages.push_back(ai::UserMessage{
+        .content = std::string{""},
+        .timestamp = 1,
+    });
+    context.tools.push_back(lookup_tool());
+    return context;
+}
+
 [[nodiscard]] RunResult run_models(
     ai::Models& models,
     const ai::Model& model,
@@ -223,6 +263,103 @@ TEST_CASE(
     }
     CHECK(request.body == expected_request_bytes);
     REQUIRE(util::read_json<util::JsonValue>(request.body));
+}
+
+TEST_CASE(
+    "DeepSeek Responses emits a string user message as one input_text and omits an empty block array",
+    "[ai][provider][responses][issue366]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    const auto sse = read_fixture_text("wire/openai-responses-deepseek.sse");
+    REQUIRE_FALSE(sse.empty());
+    transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
+    const auto model = deepseek_model();
+    auto models = make_models(transport, model);
+    REQUIRE(models);
+
+    ai::SimpleStreamOptions options;
+    options.api_key = "dummy-deepseek-key";
+    options.temperature = 0.2;
+    options.max_tokens = 123;
+    options.reasoning = ai::ThinkingLevel::High;
+    options.session_id = "session-1";
+    options.cache_retention = ai::CacheRetention::Long;
+    options.timeout_ms = 4321;
+    auto run = run_models(*models, model, string_content_context(), std::move(options));
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    tests::check_pi_event_snapshot(
+        run.events,
+        "wire/openai-responses-deepseek-ts-events.json");
+
+    REQUIRE(transport->requests.size() == 1);
+    const auto& request = transport->requests.front();
+    auto expected_request_bytes = read_fixture_text(
+        "wire/openai-responses-deepseek-string-content-ts-request.json");
+    REQUIRE_FALSE(expected_request_bytes.empty());
+    if (expected_request_bytes.back() == '\n') {
+        expected_request_bytes.pop_back();
+    }
+    CHECK(request.body == expected_request_bytes);
+    const auto body = util::read_json<util::JsonValue>(request.body);
+    REQUIRE(body);
+    const auto& input = body->at("input").get_array();
+    // The empty block-array message is omitted; the string alternative becomes
+    // exactly one sanitized input_text item (pi `openai-responses-shared.ts:185-209`).
+    REQUIRE(input.size() == 2);
+    CHECK(input[0].at("role").get_string() == "developer");
+    CHECK(input[1].at("role").get_string() == "user");
+    const auto& content = input[1].at("content").get_array();
+    REQUIRE(content.size() == 1);
+    CHECK(content[0].at("type").get_string() == "input_text");
+    CHECK(content[0].at("text").get_string() == "hello");
+}
+
+TEST_CASE(
+    "DeepSeek Responses emits an empty string user message as one input_text",
+    "[ai][provider][responses][issue366]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    const auto sse = read_fixture_text("wire/openai-responses-deepseek.sse");
+    REQUIRE_FALSE(sse.empty());
+    transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
+    const auto model = deepseek_model();
+    auto models = make_models(transport, model);
+    REQUIRE(models);
+
+    ai::SimpleStreamOptions options;
+    options.api_key = "dummy-deepseek-key";
+    options.temperature = 0.2;
+    options.max_tokens = 123;
+    options.reasoning = ai::ThinkingLevel::High;
+    options.session_id = "session-1";
+    options.cache_retention = ai::CacheRetention::Long;
+    options.timeout_ms = 4321;
+    auto run = run_models(*models, model, empty_string_context(), std::move(options));
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    tests::check_pi_event_snapshot(
+        run.events,
+        "wire/openai-responses-deepseek-ts-events.json");
+
+    REQUIRE(transport->requests.size() == 1);
+    const auto& request = transport->requests.front();
+    auto expected_request_bytes = read_fixture_text(
+        "wire/openai-responses-deepseek-empty-string-ts-request.json");
+    REQUIRE_FALSE(expected_request_bytes.empty());
+    if (expected_request_bytes.back() == '\n') {
+        expected_request_bytes.pop_back();
+    }
+    CHECK(request.body == expected_request_bytes);
+    const auto body = util::read_json<util::JsonValue>(request.body);
+    REQUIRE(body);
+    const auto& input = body->at("input").get_array();
+    // The empty string is still emitted as exactly one input_text item.
+    REQUIRE(input.size() == 2);
+    const auto& content = input[1].at("content").get_array();
+    REQUIRE(content.size() == 1);
+    CHECK(content[0].at("type").get_string() == "input_text");
+    CHECK(content[0].at("text").get_string() == "");
 }
 
 TEST_CASE(

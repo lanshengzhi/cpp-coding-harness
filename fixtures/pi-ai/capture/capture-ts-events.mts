@@ -651,9 +651,189 @@ async function captureCodexSseFallback(): Promise<void> {
 	}
 }
 
+// ── T2 (issue #366): UserMessage.content string-alternative requests ────────
+// Request-only differential fixtures: the response stream is response-driven
+// and already pinned by the happy-path full-payload snapshots, so these
+// scenarios capture only the request bytes the frozen pi adapter emits for
+// hand-built string/empty-content contexts; the C++ wire tests byte-compare
+// against the committed fixtures. Frozen-suite coverage of the behaviors:
+// `openai-codex-stream.test.ts` (string user content → one `input_text`).
+
+/** Asserts-or-writes a canonical (sorted-key) request fixture. */
+function captureRequestFixture(
+	relative: string,
+	value: unknown,
+	label: string,
+): void {
+	const canonical = canonicalStringify(value);
+	const target = path.join(fixtureDir, relative);
+	let existing: string | undefined;
+	try {
+		existing = readFileSync(target, "utf8");
+	} catch {
+		existing = undefined;
+	}
+	if (existing !== undefined) {
+		if (canonicalStringify(JSON.parse(existing)) !== canonical) {
+			throw new Error(
+				`${label}: ${relative} no longer matches the frozen request bytes\n` +
+					`expected: ${canonical}\nactual:   ${existing.trim()}`,
+			);
+		}
+		console.log(`verified ${relative}`);
+	} else {
+		writeFileSync(target, `${canonical}\n`);
+		console.log(`wrote ${relative}`);
+	}
+}
+
+/** Context: an empty block-array user message followed by a string one. */
+function stringContentContext(): any {
+	return {
+		systemPrompt: "system",
+		messages: [
+			{ role: "user", content: [], timestamp: 1 },
+			{ role: "user", content: "hello", timestamp: 2 },
+		],
+		tools: [LOOKUP_TOOL],
+	};
+}
+
+/** Context: a single empty-string user message. */
+function emptyStringContext(): any {
+	return {
+		systemPrompt: "system",
+		messages: [{ role: "user", content: "", timestamp: 1 }],
+		tools: [LOOKUP_TOOL],
+	};
+}
+
+async function captureDeepseekStringContent(): Promise<void> {
+	const recorded: RecordedRequest[] = [];
+	await collectEvents(
+		streamSimpleResponses(deepseekModel(), stringContentContext(), {
+			apiKey: "dummy-deepseek-key",
+			temperature: 0.2,
+			maxTokens: 123,
+			reasoning: "high",
+			sessionId: "session-1",
+			cacheRetention: "long",
+			timeoutMs: 4321,
+			fetch: sseFetch(readFixture("wire/openai-responses-deepseek.sse"), recorded),
+		} as any),
+	);
+	if (recorded.length !== 1) {
+		throw new Error(
+			`deepseek string-content: expected 1 request, got ${recorded.length}`,
+		);
+	}
+	captureRequestFixture(
+		"wire/openai-responses-deepseek-string-content-ts-request.json",
+		JSON.parse(recorded[0].body),
+		"deepseek string-content",
+	);
+}
+
+async function captureDeepseekEmptyString(): Promise<void> {
+	const recorded: RecordedRequest[] = [];
+	await collectEvents(
+		streamSimpleResponses(deepseekModel(), emptyStringContext(), {
+			apiKey: "dummy-deepseek-key",
+			temperature: 0.2,
+			maxTokens: 123,
+			reasoning: "high",
+			sessionId: "session-1",
+			cacheRetention: "long",
+			timeoutMs: 4321,
+			fetch: sseFetch(readFixture("wire/openai-responses-deepseek.sse"), recorded),
+		} as any),
+	);
+	if (recorded.length !== 1) {
+		throw new Error(
+			`deepseek empty-string: expected 1 request, got ${recorded.length}`,
+		);
+	}
+	captureRequestFixture(
+		"wire/openai-responses-deepseek-empty-string-ts-request.json",
+		JSON.parse(recorded[0].body),
+		"deepseek empty-string",
+	);
+}
+
+/** Codex WS capture for a string/empty-content context (issue #366). */
+async function captureCodexContentWs(
+	context: any,
+	relative: string,
+	label: string,
+): Promise<void> {
+	resetOpenAICodexWebSocketDebugStats();
+	closeOpenAICodexWebSocketSessions();
+	const wsFixture = JSON.parse(readFixture("wire/openai-codex-responses-ws.json"));
+	const frames = (wsFixture.events as unknown[]).map((event) =>
+		JSON.stringify(event),
+	);
+	(globalThis as any).WebSocket = class extends ScriptedWebSocket {
+		constructor(url: string, options: unknown) {
+			super(url, options, frames);
+		}
+	};
+	try {
+		await collectEvents(
+			streamSimpleCodex(codexModel(), context, {
+				apiKey: K_CODEX_TOKEN,
+				temperature: 0.2,
+				maxTokens: 123,
+				reasoning: "xhigh",
+				sessionId: "session-1",
+				cacheRetention: "long",
+				timeoutMs: 4321,
+			} as any),
+		);
+		const sockets = ScriptedWebSocket.instances;
+		if (sockets.length !== 1 || sockets[0].sentFrames.length !== 1) {
+			throw new Error(
+				`${label}: expected 1 socket with 1 sent frame, got ${sockets.length} sockets`,
+			);
+		}
+		captureRequestFixture(
+			relative,
+			{
+				request: JSON.parse(sockets[0].sentFrames[0]),
+				events: wsFixture.events,
+			},
+			label,
+		);
+	} finally {
+		ScriptedWebSocket.instances = [];
+		closeOpenAICodexWebSocketSessions();
+		resetOpenAICodexWebSocketDebugStats();
+		delete (globalThis as any).WebSocket;
+	}
+}
+
+async function captureCodexStringContentWs(): Promise<void> {
+	await captureCodexContentWs(
+		stringContentContext(),
+		"wire/openai-codex-responses-string-content-ws.json",
+		"codex string-content",
+	);
+}
+
+async function captureCodexEmptyStringWs(): Promise<void> {
+	await captureCodexContentWs(
+		emptyStringContext(),
+		"wire/openai-codex-responses-empty-string-ws.json",
+		"codex empty-string",
+	);
+}
+
 await captureDeepseek();
 await captureResponsesNoTerminal();
 await captureKimi();
 await captureKimiRefusal();
 await captureCodexWebSocket();
 await captureCodexSseFallback();
+await captureDeepseekStringContent();
+await captureDeepseekEmptyString();
+await captureCodexStringContentWs();
+await captureCodexEmptyStringWs();
