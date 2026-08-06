@@ -911,28 +911,31 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Keys.hpp is the pi-canonical event header and Input.hpp is fully absent",
-    "[architecture][tui][issue377]") {
+    "Input.hpp is the pi-canonical single-line component and the event surface stays in Keys.hpp",
+    "[architecture][tui][issue380]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
 
-    // The key/paste event surface claims the pi keys.ts name; the old
-    // event-header name is absent with no shim and no compatibility include.
-    CHECK_FALSE(std::filesystem::exists(
-        source_root / "include" / "cch" / "tui" / "Input.hpp"));
-    CHECK_FALSE(std::filesystem::exists(
-        source_root / "src" / "tui" / "Input.cpp"));
-    CHECK_FALSE(std::filesystem::exists(
-        source_root / "tests" / "tui" / "InputTest.cpp"));
+    // The single-line Input component claims the header name pi reserves for
+    // it (components/input.ts); the component and its tests exist.
+    CHECK(std::filesystem::exists(source_root / "include" / "cch" / "tui" / "Input.hpp"));
+    CHECK(std::filesystem::exists(source_root / "src" / "tui" / "Input.cpp"));
+    CHECK(std::filesystem::exists(source_root / "tests" / "tui" / "InputTest.cpp"));
+    const auto input_header = read_text(
+        source_root / "include" / "cch" / "tui" / "Input.hpp");
+    CHECK(input_header.find("class Input") != std::string::npos);
+    CHECK(input_header.find("InputSubmitSink") != std::string::npos);
+    CHECK(input_header.find("InputEscapeSink") != std::string::npos);
+    CHECK(input_header.find("handle_input") != std::string::npos);
+    CHECK(input_header.find("cursor_location") != std::string::npos);
 
-    for (const auto& file : files_under({"include", "src", "tests"})) {
-        if (file == source_root / "tests" / "architecture" / "ArchitectureSurfaceScanTest.cpp") {
-            continue;
-        }
-        const auto text = read_text(file);
-        CHECK(text.find("cch/tui/Input.hpp") == std::string::npos);
-        CHECK(text.find("#include \"tui/Input.hpp\"") == std::string::npos);
-    }
+    // The key/paste event surface is not duplicated in the component header.
+    CHECK(input_header.find("parse_key_id") == std::string::npos);
+    CHECK(input_header.find("key_id(") == std::string::npos);
+    CHECK(input_header.find("matches_key") == std::string::npos);
+    CHECK(input_header.find("struct PasteEvent") == std::string::npos);
+    CHECK(input_header.find("kMaxPasteBytes") == std::string::npos);
 
+    // The event surface stays in the pi keys.ts header.
     const auto keys_header = read_text(
         source_root / "include" / "cch" / "tui" / "Keys.hpp");
     CHECK(keys_header.find("parse_key_id") != std::string::npos);

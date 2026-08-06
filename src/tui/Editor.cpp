@@ -4,8 +4,7 @@
 
 #include "tui/InteractionUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
-
-#include <utf8proc.h>
+#include "tui/WordNavigation.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -83,30 +82,6 @@ using Document = std::vector<Line>;
         text += line_text(document[index]);
     }
     return text;
-}
-
-[[nodiscard]] bool is_word_segment(std::string_view segment) {
-    const auto [codepoint, bytes] = detail::decode_utf8(segment, 0);
-    if (bytes == 0) return false;
-    if (codepoint < 128) return std::isalnum(static_cast<unsigned char>(codepoint)) || codepoint == '_';
-    const auto category = utf8proc_category(static_cast<utf8proc_int32_t>(codepoint));
-    return category == UTF8PROC_CATEGORY_LU || category == UTF8PROC_CATEGORY_LL ||
-        category == UTF8PROC_CATEGORY_LT || category == UTF8PROC_CATEGORY_LM ||
-        category == UTF8PROC_CATEGORY_LO || category == UTF8PROC_CATEGORY_ND ||
-        category == UTF8PROC_CATEGORY_NL || category == UTF8PROC_CATEGORY_NO;
-}
-
-[[nodiscard]] bool is_printable(const KeyEvent& event) {
-    if (event.ctrl || event.alt || event.key.size() == 0) return false;
-    return event.key != "enter" && event.key != "tab" && event.key != "escape" &&
-        event.key != "backspace" && event.key != "delete" && event.key != "insert" &&
-        event.key != "clear" && event.key != "home" && event.key != "end" &&
-        event.key != "pageUp" && event.key != "pageDown" && event.key != "up" &&
-        event.key != "down" && event.key != "left" && event.key != "right";
-}
-
-[[nodiscard]] std::string_view printable_text(const KeyEvent& event) {
-    return event.key == "space" ? std::string_view{" "} : std::string_view{event.key};
 }
 
 [[nodiscard]] std::string trim_outer_whitespace(std::string text) {
@@ -809,11 +784,11 @@ struct Editor::Impl {
                     cursor.column = 0;
                     continue;
                 }
-                if (is_word_segment(document[cursor.line][cursor.column].text)) break;
+                if (detail::is_word_segment(document[cursor.line][cursor.column].text)) break;
                 ++cursor.column;
             }
             while (cursor.column < document[cursor.line].size() &&
-                   is_word_segment(document[cursor.line][cursor.column].text)) ++cursor.column;
+                   detail::is_word_segment(document[cursor.line][cursor.column].text)) ++cursor.column;
         } else {
             while (cursor.line > 0 || cursor.column > 0) {
                 if (cursor.column == 0) {
@@ -821,10 +796,10 @@ struct Editor::Impl {
                     cursor.column = document[cursor.line].size();
                     continue;
                 }
-                if (is_word_segment(document[cursor.line][cursor.column - 1].text)) break;
+                if (detail::is_word_segment(document[cursor.line][cursor.column - 1].text)) break;
                 --cursor.column;
             }
-            while (cursor.column > 0 && is_word_segment(document[cursor.line][cursor.column - 1].text)) --cursor.column;
+            while (cursor.column > 0 && detail::is_word_segment(document[cursor.line][cursor.column - 1].text)) --cursor.column;
         }
         last_yank_ring_index.reset();
     }
@@ -1389,8 +1364,8 @@ void Editor::handle_input(const InputEventVariant& input) {
             impl_->jump_direction.reset();
             return;
         }
-        if (is_printable(*event)) {
-            impl_->jump_to(printable_text(*event), *impl_->jump_direction);
+        if (detail::is_printable(*event)) {
+            impl_->jump_to(detail::printable_text(*event), *impl_->jump_direction);
             impl_->jump_direction.reset();
             return;
         }
@@ -1534,7 +1509,7 @@ void Editor::handle_input(const InputEventVariant& input) {
         impl_->submit();
         return;
     }
-    if (is_printable(*event)) impl_->insert_text(std::string(printable_text(*event)), true);
+    if (detail::is_printable(*event)) impl_->insert_text(std::string(detail::printable_text(*event)), true);
 }
 
 bool Editor::accepts_key_releases() const {

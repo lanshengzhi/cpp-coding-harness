@@ -70,6 +70,7 @@ add_library(cch_tui
     src/tui/Editor.cpp
     src/tui/Fuzzy.cpp
     src/tui/Image.cpp
+    src/tui/Input.cpp
     src/tui/InputDecoder.cpp
     src/tui/Keybindings.cpp
     src/tui/KeyboardProtocol.cpp
@@ -413,6 +414,7 @@ if(CCH_BUILD_TESTS)
         tests/tui/EditorTest.cpp
         tests/tui/FuzzyTest.cpp
         tests/tui/ImageTest.cpp
+        tests/tui/InputTest.cpp
         tests/tui/KeybindingsTest.cpp
         tests/tui/KeysTest.cpp
         tests/tui/LoaderTest.cpp

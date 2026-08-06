@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cch/tui/Keys.hpp>
 #include <cch/tui/Style.hpp>
 #include <cch/tui/Utils.hpp>
 #include <cch/util/Error.hpp>
@@ -13,6 +14,24 @@
 #include <utility>
 
 namespace cch::tui::detail {
+
+/// Printable keys: plain and shift-modified characters only. Named keys and
+/// ctrl/alt-modified events are handled by the keybinding actions or
+/// rejected, mirroring pi's control-character check.
+[[nodiscard]] inline bool is_printable(const KeyEvent& event) {
+    if (event.ctrl || event.alt || event.key.empty()) return false;
+    return event.key != "enter" && event.key != "tab" && event.key != "escape" &&
+        event.key != "backspace" && event.key != "delete" && event.key != "insert" &&
+        event.key != "clear" && event.key != "home" && event.key != "end" &&
+        event.key != "pageUp" && event.key != "pageDown" && event.key != "up" &&
+        event.key != "down" && event.key != "left" && event.key != "right";
+}
+
+/// The visible text a printable key event inserts ("space" renders as a
+/// space).
+[[nodiscard]] inline std::string_view printable_text(const KeyEvent& event) {
+    return event.key == "space" ? std::string_view{" "} : std::string_view{event.key};
+}
 
 struct VisibleRange {
     std::size_t begin{0};

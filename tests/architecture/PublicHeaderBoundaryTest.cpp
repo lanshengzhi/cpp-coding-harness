@@ -30,6 +30,7 @@
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Fuzzy.hpp>
 #include <cch/tui/Image.hpp>
+#include <cch/tui/Input.hpp>
 #include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Keys.hpp>
 #include <cch/tui/Loader.hpp>
