@@ -1,5 +1,7 @@
 #include <cch/tui/Tui.hpp>
 
+#include <cch/tui/Utils.hpp>
+
 #include "tui/InputDecoder.hpp"
 #include "tui/RenderUtils.hpp"
 #include "tui/TerminalImage.hpp"
@@ -98,13 +100,13 @@ constexpr std::size_t kInputDecodeChunkBytes = 4096;
     std::size_t column,
     std::size_t columns,
     std::size_t total_width) {
-    auto prefix = detail::truncate_text(line, column, "", true);
+    auto prefix = truncate_text(line, column, "", true);
     if (!prefix) return std::unexpected(prefix.error());
-    auto bounded_replacement = detail::truncate_text(replacement, columns, "", true);
+    auto bounded_replacement = truncate_text(replacement, columns, "", true);
     if (!bounded_replacement) return std::unexpected(bounded_replacement.error());
     auto suffix = line_suffix_from_column(line, column + columns);
     if (!suffix) return std::unexpected(suffix.error());
-    return detail::truncate_text(
+    return truncate_text(
         *prefix + *bounded_replacement + *suffix,
         total_width,
         "",
@@ -594,7 +596,7 @@ util::ExpectedVoid Tui::composite_overlays(
 
         std::size_t content_width = 0;
         for (const auto& line : materialized.lines) {
-            content_width = std::max(content_width, detail::visible_width(line));
+            content_width = std::max(content_width, visible_width(line));
         }
         const auto content_height = materialized.lines.size();
         const auto [offset_col, offset_row] = overlay->layout_position(
@@ -620,7 +622,7 @@ util::ExpectedVoid Tui::composite_overlays(
 
         std::size_t composited_width = 0;
         for (const auto& line : materialized.lines) {
-            composited_width = std::max(composited_width, detail::visible_width(line));
+            composited_width = std::max(composited_width, visible_width(line));
         }
         const auto overlay_width = std::min(composited_width, dimensions.columns - final_col);
         for (std::size_t row = 0; row < content_height; ++row) {

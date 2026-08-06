@@ -1,5 +1,7 @@
 #include <cch/tui/Markdown.hpp>
 
+#include <cch/tui/Utils.hpp>
+
 #include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
@@ -379,9 +381,9 @@ int append_text(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userd
 [[nodiscard]] std::string apply_style_hook(MarkdownStyleHook& hook, std::string text) {
     if (!hook) return text;
     const auto original = text;
-    const auto input_width = detail::visible_width(text);
+    const auto input_width = visible_width(text);
     auto styled = hook(std::move(text));
-    return detail::visible_width(styled) == input_width ? std::move(styled) : original;
+    return visible_width(styled) == input_width ? std::move(styled) : original;
 }
 
 [[nodiscard]] std::string apply_roles(
@@ -488,21 +490,21 @@ using RenderedLines = util::Expected<std::vector<std::string>>;
     std::string first_prefix,
     std::string continuation_prefix,
     std::size_t width) {
-    const auto prefix_width = detail::visible_width(first_prefix);
-    const auto continuation_width = detail::visible_width(continuation_prefix);
+    const auto prefix_width = visible_width(first_prefix);
+    const auto continuation_width = visible_width(continuation_prefix);
     if (prefix_width >= width || continuation_width >= width) {
         std::string unprefixed;
         for (std::size_t index = 0; index < logical_lines.size(); ++index) {
             if (index > 0) unprefixed += '\n';
             unprefixed += logical_lines[index];
         }
-        return detail::wrap_text(unprefixed, width);
+        return wrap_text(unprefixed, width);
     }
     std::vector<std::string> result;
     bool first = true;
     for (const auto& logical_line : logical_lines) {
         const auto available = width - (first ? prefix_width : continuation_width);
-        if (auto wrapped = detail::wrap_text(logical_line, available); wrapped) {
+        if (auto wrapped = wrap_text(logical_line, available); wrapped) {
             for (const auto& line : *wrapped) {
                 auto& prefix = first ? first_prefix : continuation_prefix;
                 result.push_back(prefix + line);
@@ -584,18 +586,18 @@ using RenderedLines = util::Expected<std::vector<std::string>>;
     if (!highlighted) code_lines = fallback_code_lines(code, context.style);
 
     std::vector<std::string> result;
-    if (auto wrapped_opening = detail::wrap_text(opening, width); wrapped_opening) {
+    if (auto wrapped_opening = wrap_text(opening, width); wrapped_opening) {
         result.insert(result.end(), wrapped_opening->begin(), wrapped_opening->end());
     } else {
         return std::unexpected(wrapped_opening.error());
     }
 
-    const auto configured_indent_width = detail::visible_width(context.style.code_block_indent);
+    const auto configured_indent_width = visible_width(context.style.code_block_indent);
     const auto indent = configured_indent_width < width ? context.style.code_block_indent : std::string{};
-    const auto code_width = width - detail::visible_width(indent);
+    const auto code_width = width - visible_width(indent);
     if (highlighted) {
         for (const auto& code_line : code_lines) {
-            if (auto wrapped = detail::wrap_text(code_line, code_width); !wrapped) {
+            if (auto wrapped = wrap_text(code_line, code_width); !wrapped) {
                 code_lines.clear();
                 highlighted = false;
                 break;
@@ -604,14 +606,14 @@ using RenderedLines = util::Expected<std::vector<std::string>>;
         if (!highlighted) code_lines = fallback_code_lines(code, context.style);
     }
     for (const auto& code_line : code_lines) {
-        if (auto wrapped = detail::wrap_text(code_line, code_width); wrapped) {
+        if (auto wrapped = wrap_text(code_line, code_width); wrapped) {
             for (const auto& line : *wrapped) result.push_back(indent + line);
         } else {
             return std::unexpected(wrapped.error());
         }
     }
 
-    if (auto wrapped_closing = detail::wrap_text(closing, width); wrapped_closing) {
+    if (auto wrapped_closing = wrap_text(closing, width); wrapped_closing) {
         result.insert(result.end(), wrapped_closing->begin(), wrapped_closing->end());
     } else {
         return std::unexpected(wrapped_closing.error());
@@ -632,7 +634,7 @@ using RenderedLines = util::Expected<std::vector<std::string>>;
         }
         if (item->task_item) marker += item->task_checked ? "[x] " : "[ ] ";
         auto styled_marker = apply_style_hook(context.style.list_marker, marker);
-        auto marker_width = detail::visible_width(styled_marker);
+        auto marker_width = visible_width(styled_marker);
         if (marker_width >= width) {
             styled_marker.clear();
             marker_width = 0;
@@ -644,7 +646,7 @@ using RenderedLines = util::Expected<std::vector<std::string>>;
                 item->inlines,
                 block_roles(false, context.quoted),
                 context.style);
-            if (auto item_lines = detail::wrap_text(item_text, width - marker_width); item_lines) {
+            if (auto item_lines = wrap_text(item_text, width - marker_width); item_lines) {
                 if (auto prefixed = add_prefix(
                         *item_lines,
                         styled_marker,
@@ -715,7 +717,7 @@ using RenderedLines = util::Expected<std::vector<std::string>>;
                 block.inlines,
                 block_roles(false, context.quoted),
                 context.style);
-            return detail::wrap_text(text, width);
+            return wrap_text(text, width);
         }
         case BlockKind::Heading: {
             auto roles = block_roles(true, context.quoted);
@@ -727,7 +729,7 @@ using RenderedLines = util::Expected<std::vector<std::string>>;
                            context.style) +
                        text;
             }
-            return detail::wrap_text(text, width);
+            return wrap_text(text, width);
         }
         case BlockKind::Rule: {
             std::string rule;
@@ -738,7 +740,7 @@ using RenderedLines = util::Expected<std::vector<std::string>>;
         case BlockKind::Code:
             return render_code(block, width, context);
         case BlockKind::Html:
-            return detail::wrap_text(
+            return wrap_text(
                 apply_roles(
                     block.text,
                     block_roles(false, context.quoted),
@@ -999,7 +1001,7 @@ util::Expected<RenderResult> Markdown::render(std::size_t width) {
     std::vector<std::string> result;
     const auto make_line = [&](std::string line) -> util::Expected<std::string> {
         line.insert(0, impl_->padding_x, ' ');
-        const auto visible = detail::visible_width(line);
+        const auto visible = visible_width(line);
         if (visible < width) line.append(width - visible, ' ');
         return detail::apply_background(impl_->background_hook, std::move(line), width, "Markdown");
     };

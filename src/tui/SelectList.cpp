@@ -1,5 +1,7 @@
 #include <cch/tui/SelectList.hpp>
 
+#include <cch/tui/Utils.hpp>
+
 #include "tui/InteractionUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
@@ -111,7 +113,7 @@ struct SelectList::Impl {
         const auto [minimum, maximum] = primary_bounds();
         std::size_t widest = 0;
         for (const auto& index : filtered_indices) {
-            widest = std::max(widest, detail::visible_width(display_value(items[index])) + kPrimaryColumnGap);
+            widest = std::max(widest, visible_width(display_value(items[index])) + kPrimaryColumnGap);
         }
         return std::clamp(widest, minimum, maximum);
     }
@@ -138,7 +140,7 @@ struct SelectList::Impl {
                     "the truncation callback threw an exception"));
             }
         }
-        return detail::truncate_text(transformed, max_width, "");
+        return truncate_text(transformed, max_width, "");
     }
 
     [[nodiscard]] util::Expected<std::string> render_item(
@@ -147,7 +149,7 @@ struct SelectList::Impl {
         std::size_t width,
         std::size_t primary_width) {
         const std::string prefix = is_selected ? "→ " : "  ";
-        const auto prefix_width = detail::visible_width(prefix);
+        const auto prefix_width = visible_width(prefix);
         std::string line;
 
         const auto description = item.description ? single_line(*item.description) : std::string{};
@@ -158,12 +160,12 @@ struct SelectList::Impl {
             const auto primary_limit = std::max<std::size_t>(1, effective_primary - kPrimaryColumnGap);
             auto primary = truncate_primary(item, is_selected, primary_limit, effective_primary);
             if (!primary) return std::unexpected(primary.error());
-            const auto primary_visible = detail::visible_width(*primary);
+            const auto primary_visible = visible_width(*primary);
             const auto spacing_size = std::max<std::size_t>(1, effective_primary - primary_visible);
             const auto description_start = prefix_width + primary_visible + spacing_size;
             const auto remaining = width > description_start + 2 ? width - description_start - 2 : 0;
             if (remaining > kMinDescriptionWidth) {
-                auto truncated_description = detail::truncate_text(description, remaining, "");
+                auto truncated_description = truncate_text(description, remaining, "");
                 if (!truncated_description) return std::unexpected(truncated_description.error());
                 const auto spacing = std::string(spacing_size, ' ');
                 if (is_selected) {
@@ -184,7 +186,7 @@ struct SelectList::Impl {
             auto primary = truncate_primary(item, is_selected, available, available);
             if (!primary) return std::unexpected(primary.error());
             line = prefix + *primary;
-            auto bounded = detail::truncate_text(line, width, "");
+            auto bounded = truncate_text(line, width, "");
             if (!bounded) return std::unexpected(bounded.error());
             line = std::move(*bounded);
         }
@@ -249,7 +251,7 @@ util::Expected<RenderResult> SelectList::render(std::size_t width) {
     }
     if (impl->callback_error) return std::unexpected(*impl->callback_error);
     if (impl->filtered_indices.empty()) {
-        auto message = detail::truncate_text("  No matching commands", width, "");
+        auto message = truncate_text("  No matching commands", width, "");
         if (!message) return std::unexpected(message.error());
         auto styled = detail::apply_text_style(impl->theme.no_match, std::move(*message), "SelectList no match");
         if (!styled) return std::unexpected(styled.error());
@@ -273,7 +275,7 @@ util::Expected<RenderResult> SelectList::render(std::size_t width) {
     }
     if (range.begin > 0 || range.end < impl->filtered_indices.size()) {
         auto text = std::format("  ({}/{})", impl->selected_index + 1, impl->filtered_indices.size());
-        auto bounded = detail::truncate_text(text, width, "");
+        auto bounded = truncate_text(text, width, "");
         if (!bounded) return std::unexpected(bounded.error());
         auto styled = detail::apply_text_style(impl->theme.scroll_info, std::move(*bounded), "SelectList scroll info");
         if (!styled) return std::unexpected(styled.error());

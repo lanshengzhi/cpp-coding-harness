@@ -3,9 +3,9 @@
 #include <cch/tui/Text.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
+#include <cch/tui/Utils.hpp>
 
 #include "tui/TerminalImage.hpp"
-#include "tui/UnicodeWidth.hpp"
 
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
@@ -201,7 +201,7 @@ TEST_CASE("Unsupported and malformed images render bounded themed fallback", "[t
     REQUIRE(rendered);
     CHECK(rendered->images.empty());
     REQUIRE(rendered->lines.size() == 1);
-    CHECK(cch::tui::detail::visible_width(rendered->lines[0]) <= 18);
+    CHECK(cch::tui::visible_width(rendered->lines[0]) <= 18);
     CHECK(rendered->lines[0].find("not base64") == std::string::npos);
     CHECK(rendered->lines[0].find("\x1b_G") == std::string::npos);
 }

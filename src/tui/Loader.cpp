@@ -1,5 +1,7 @@
 #include <cch/tui/Loader.hpp>
 
+#include <cch/tui/Utils.hpp>
+
 #include "tui/InteractionUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
@@ -301,7 +303,7 @@ util::Expected<RenderResult> Loader::render(std::size_t width) {
     auto line = std::string(" ");
     if (!frame.empty()) line += frame + " ";
     line += *styled_message;
-    auto bounded = detail::truncate_text(line, width, "");
+    auto bounded = truncate_text(line, width, "");
     if (!bounded) return std::unexpected(bounded.error());
     return RenderResult{.lines = {"", std::move(*bounded)}};
 }

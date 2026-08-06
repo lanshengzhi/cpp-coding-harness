@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/tui/Input.hpp>
+#include <cch/tui/Keys.hpp>
 #include <cch/util/Error.hpp>
 
 #include <memory>

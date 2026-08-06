@@ -27,9 +27,10 @@
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Container.hpp>
 #include <cch/tui/Editor.hpp>
-#include <cch/tui/Input.hpp>
+#include <cch/tui/Fuzzy.hpp>
 #include <cch/tui/Image.hpp>
 #include <cch/tui/Keybindings.hpp>
+#include <cch/tui/Keys.hpp>
 #include <cch/tui/Loader.hpp>
 #include <cch/tui/Markdown.hpp>
 #include <cch/tui/ProcessTerminal.hpp>
@@ -40,6 +41,7 @@
 #include <cch/tui/Text.hpp>
 #include <cch/tui/TruncatedText.hpp>
 #include <cch/tui/Tui.hpp>
+#include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 #include <cch/util/Error.hpp>
 
@@ -140,6 +142,19 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_final_v<tui::ProcessTerminal>);
     static_assert(std::is_aggregate_v<tui::KeyEvent>);
     static_assert(std::is_aggregate_v<tui::PasteEvent>);
+    static_assert(std::is_aggregate_v<tui::FuzzyMatch>);
+    static_assert(std::is_same_v<decltype(tui::fuzzy_match("", "")), tui::FuzzyMatch>);
+    static_assert(std::is_same_v<
+                  decltype(tui::fuzzy_match_indices("", "")),
+                  std::optional<std::vector<std::size_t>>>);
+    static_assert(std::is_same_v<decltype(tui::visible_width("")), std::size_t>);
+    static_assert(std::is_same_v<
+                  decltype(tui::wrap_text("", 1)),
+                  util::Expected<std::vector<std::string>>>);
+    static_assert(std::is_same_v<
+                  decltype(tui::slice_by_column("", 0, 1)),
+                  util::Expected<std::string>>);
+    static_assert(std::is_same_v<decltype(tui::strip_terminal_sequences("")), std::string>);
     static_assert(std::is_aggregate_v<tui::KeybindingDefinition>);
     static_assert(std::is_aggregate_v<tui::KeybindingOverride>);
     static_assert(std::is_aggregate_v<tui::KeybindingIssue>);

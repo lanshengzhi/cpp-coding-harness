@@ -2,7 +2,7 @@
 #include "coding_agent/tui/KeybindingHelp.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/tui/Input.hpp>
+#include <cch/tui/Keys.hpp>
 
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 

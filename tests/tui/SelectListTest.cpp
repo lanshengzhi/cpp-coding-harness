@@ -2,7 +2,7 @@
 #include <cch/tui/SelectList.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
-#include "tui/UnicodeWidth.hpp"
+#include <cch/tui/Utils.hpp>
 
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
@@ -125,8 +125,8 @@ TEST_CASE("SelectList normalizes and aligns descriptions within configured colum
     const auto second_description = rendered->lines[1].find("second description");
     REQUIRE(first_description != std::string::npos);
     REQUIRE(second_description != std::string::npos);
-    CHECK(cch::tui::detail::visible_width(rendered->lines[0].substr(0, first_description)) ==
-          cch::tui::detail::visible_width(rendered->lines[1].substr(0, second_description)));
+    CHECK(cch::tui::visible_width(rendered->lines[0].substr(0, first_description)) ==
+          cch::tui::visible_width(rendered->lines[1].substr(0, second_description)));
 }
 
 TEST_CASE("SelectList dispatches configured keys from its effective registry", "[tui][select-list][issue57]") {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/tui/Input.hpp>
+#include <cch/tui/Keys.hpp>
 
 #include <string>
 #include <string_view>

@@ -1,9 +1,8 @@
 #pragma once
 
 #include <cch/tui/Style.hpp>
+#include <cch/tui/Utils.hpp>
 #include <cch/util/Error.hpp>
-
-#include "tui/UnicodeWidth.hpp"
 
 #include <algorithm>
 #include <cstddef>

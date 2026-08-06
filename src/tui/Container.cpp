@@ -1,5 +1,7 @@
 #include <cch/tui/Container.hpp>
 
+#include <cch/tui/Utils.hpp>
+
 #include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
@@ -86,7 +88,7 @@ util::Expected<RenderResult> Box::render(std::size_t width) {
     const auto content_width = width - padding_x_ - padding_x_;
     RenderResult result;
     const auto make_line = [&](std::string line) -> util::Expected<std::string> {
-        const auto visible = detail::visible_width(line);
+        const auto visible = visible_width(line);
         if (visible < width) line.append(width - visible, ' ');
         return detail::apply_background(background_hook_, std::move(line), width, "Box");
     };

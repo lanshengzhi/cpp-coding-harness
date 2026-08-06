@@ -1,5 +1,7 @@
 #include <cch/tui/Image.hpp>
 
+#include <cch/tui/Utils.hpp>
+
 #include "tui/UnicodeWidth.hpp"
 
 #include <algorithm>
@@ -330,12 +332,12 @@ util::Expected<RenderResult> Image::render(std::size_t width) {
 
     const auto constraint_width = impl_->options.constraints.max_width.value_or(kDefaultMaxWidth);
     const auto fallback_width = std::max<std::size_t>(1, std::min(width, constraint_width));
-    auto truncated = detail::truncate_text(fallback, fallback_width);
+    auto truncated = truncate_text(fallback, fallback_width);
     if (!truncated) return std::unexpected(truncated.error());
     fallback = std::move(*truncated);
 
     if (impl_->options.fallback_style) {
-        const auto original_width = detail::visible_width(fallback);
+        const auto original_width = visible_width(fallback);
         try {
             fallback = impl_->options.fallback_style(std::move(fallback));
         } catch (const std::exception&) {
@@ -349,7 +351,7 @@ util::Expected<RenderResult> Image::render(std::size_t width) {
                 "TUI Image fallback style failed",
                 "the style callback threw an unknown exception"));
         }
-        if (detail::visible_width(fallback) != original_width) {
+        if (visible_width(fallback) != original_width) {
             return std::unexpected(util::make_error(
                 util::ErrorCode::Validation,
                 "TUI Image fallback style changed visible width"));

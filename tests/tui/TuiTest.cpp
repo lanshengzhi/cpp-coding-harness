@@ -1,9 +1,9 @@
-#include <cch/tui/Input.hpp>
+#include <cch/tui/Keys.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
+#include <cch/tui/Utils.hpp>
 
-#include "tui/UnicodeWidth.hpp"
 
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
@@ -204,7 +204,7 @@ TEST_CASE("Text accepts Unicode characters", "[tui][issue46][unicode]") {
     const auto result = text.render(2);
     REQUIRE(result);
     REQUIRE(result->lines.size() == 1);
-    CHECK(cch::tui::detail::visible_width(result->lines[0]) >= 1);
+    CHECK(cch::tui::visible_width(result->lines[0]) >= 1);
 }
 
 TEST_CASE("Tui rejects a Component line wider than its visible width", "[tui][issue45]") {

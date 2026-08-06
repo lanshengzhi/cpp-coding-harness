@@ -67,11 +67,12 @@ add_library(cch_tui
     src/tui/CancellableLoader.cpp
     src/tui/Container.cpp
     src/tui/Editor.cpp
+    src/tui/Fuzzy.cpp
     src/tui/Image.cpp
-    src/tui/Input.cpp
     src/tui/InputDecoder.cpp
     src/tui/Keybindings.cpp
     src/tui/KeyboardProtocol.cpp
+    src/tui/Keys.cpp
     src/tui/Loader.cpp
     src/tui/Markdown.cpp
     src/tui/Overlay.cpp
@@ -83,6 +84,7 @@ add_library(cch_tui
     src/tui/TruncatedText.cpp
     src/tui/Tui.cpp
     src/tui/UnicodeWidth.cpp
+    src/tui/Utils.cpp
     src/tui/VirtualTerminal.cpp
 )
 cch_target_defaults(cch_tui)
@@ -407,9 +409,10 @@ if(CCH_BUILD_TESTS)
         tests/tools/AsyncToolsTest.cpp
         tests/tui/ContainerTest.cpp
         tests/tui/EditorTest.cpp
+        tests/tui/FuzzyTest.cpp
         tests/tui/ImageTest.cpp
-        tests/tui/InputTest.cpp
         tests/tui/KeybindingsTest.cpp
+        tests/tui/KeysTest.cpp
         tests/tui/LoaderTest.cpp
         tests/tui/MarkdownTest.cpp
         tests/tui/OverlayTest.cpp
@@ -420,6 +423,7 @@ if(CCH_BUILD_TESTS)
         tests/tui/TruncatedTextTest.cpp
         tests/tui/TuiTest.cpp
         tests/tui/UnicodeWidthTest.cpp
+        tests/tui/UtilsTest.cpp
         tests/harness/WorkspaceFileSystemTest.cpp
         tests/util/BoundedTextTest.cpp
         tests/util/ExpectedErrorTest.cpp

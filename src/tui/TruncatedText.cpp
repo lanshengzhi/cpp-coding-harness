@@ -1,5 +1,7 @@
 #include <cch/tui/TruncatedText.hpp>
 
+#include <cch/tui/Utils.hpp>
+
 #include "tui/UnicodeWidth.hpp"
 
 #include <format>
@@ -50,7 +52,7 @@ util::Expected<RenderResult> TruncatedText::render(std::size_t width) {
     const auto newline_position = normalized->find('\n');
     const auto single_line = std::string_view(*normalized).substr(0, newline_position);
     const auto available_width = width - padding_x_ - padding_x_;
-    auto truncated = detail::truncate_text(single_line, available_width, ellipsis_);
+    auto truncated = truncate_text(single_line, available_width, ellipsis_);
     if (!truncated) return std::unexpected(truncated.error());
 
     std::vector<std::string> result;
@@ -60,7 +62,7 @@ util::Expected<RenderResult> TruncatedText::render(std::size_t width) {
 
     std::string padded(padding_x_, ' ');
     padded += *truncated;
-    const auto visible = detail::visible_width(padded);
+    const auto visible = visible_width(padded);
     if (visible < width) padded.append(width - visible, ' ');
     auto prepared = detail::prepare_rendered_line(padded, width);
     if (!prepared) return std::unexpected(prepared.error());

@@ -1,5 +1,7 @@
 #include <cch/tui/Editor.hpp>
 
+#include <cch/tui/Utils.hpp>
+
 #include "tui/InteractionUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
@@ -610,7 +612,7 @@ struct Editor::Impl {
             std::size_t used = 0;
             std::string rendered;
             for (std::size_t index = 0; index < line.size(); ++index) {
-                const auto segment_width = detail::visible_width(line[index].text);
+                const auto segment_width = visible_width(line[index].text);
                 if (used != 0 && used + segment_width > width) {
                     result.push_back({.logical_line = line_index, .start = start, .end = index, .text = std::move(rendered)});
                     start = index;
@@ -809,7 +811,7 @@ util::Expected<RenderResult> Editor::render(std::size_t width) {
     const auto end = std::min(visual.size(), impl_->scroll_offset + visible_count);
     for (std::size_t index = impl_->scroll_offset; index < end; ++index) {
         auto line = visual[index].text;
-        const auto line_width = detail::visible_width(line);
+        const auto line_width = visible_width(line);
         if (line_width < width) line.append(width - line_width, ' ');
         result.push_back(std::move(line));
     }
@@ -1011,7 +1013,7 @@ std::optional<CursorPosition> Editor::cursor_location() const {
     // Since visual lines may split single wide segments, we use the visual
     // line's text width from its start to the cursor's proportional position.
     const auto& vl = visual[visual_row];
-    const auto vl_text_width = detail::visible_width(vl.text);
+    const auto vl_text_width = visible_width(vl.text);
     // Compute the column as the cursor's position within this visual line,
     // relative to the visual line's segment range.
     const auto cursor_in_line = impl_->cursor.column - vl.start;
@@ -1021,7 +1023,7 @@ std::optional<CursorPosition> Editor::cursor_location() const {
         // Sum visible widths of segments that are fully within this visual line
         const auto seg_end = vl.start + cursor_in_line;
         for (std::size_t i = vl.start; i < seg_end && i < impl_->document[vl.logical_line].size(); ++i) {
-            col += detail::visible_width(impl_->document[vl.logical_line][i].text);
+            col += visible_width(impl_->document[vl.logical_line][i].text);
         }
         // Cap at the visual line's text width
         col = std::min(col, vl_text_width);

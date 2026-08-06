@@ -60,8 +60,8 @@ TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issu
     const auto tui_sources = cmake_command_block(cmake, "add_library(cch_tui");
     CHECK(block_mentions(tui_sources, "src/tui/CancellableLoader.cpp"));
     CHECK(block_mentions(tui_sources, "src/tui/Image.cpp"));
-    CHECK(block_mentions(tui_sources, "src/tui/Input.cpp"));
     CHECK(block_mentions(tui_sources, "src/tui/InputDecoder.cpp"));
+    CHECK(block_mentions(tui_sources, "src/tui/Keys.cpp"));
     CHECK(block_mentions(tui_sources, "src/tui/Keybindings.cpp"));
     CHECK(block_mentions(tui_sources, "src/tui/Loader.cpp"));
     CHECK(block_mentions(tui_sources, "src/tui/Markdown.cpp"));

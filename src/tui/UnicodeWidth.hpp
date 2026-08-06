@@ -13,7 +13,6 @@ namespace cch::tui::detail {
 
 [[nodiscard]] std::size_t codepoint_width(char32_t codepoint);
 [[nodiscard]] std::size_t grapheme_width(std::string_view cluster);
-[[nodiscard]] std::size_t visible_width(std::string_view text);
 
 struct AnsiCode {
     std::string code;
@@ -60,15 +59,28 @@ struct TerminalToken {
 
 [[nodiscard]] util::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::string_view text);
 
-[[nodiscard]] util::Expected<std::vector<std::string>> wrap_text(
-    std::string_view text,
-    std::size_t width);
+/// Shared width-module helpers (used by the public utility surface and by
+/// `prepare_rendered_line`).
+[[nodiscard]] inline util::Error invalid_terminal_text(std::string message, std::string detail = {}) {
+    return util::make_error(util::ErrorCode::Validation, std::move(message), std::move(detail));
+}
 
-[[nodiscard]] util::Expected<std::string> truncate_text(
-    std::string_view text,
-    std::size_t max_width,
-    std::string_view ellipsis = "...",
-    bool pad = false);
+[[nodiscard]] inline std::string normalized_text(const std::vector<TerminalToken>& tokens) {
+    std::string result;
+    for (const auto& token : tokens) result += token.text;
+    return result;
+}
+
+[[nodiscard]] inline util::Expected<std::size_t> token_width(const std::vector<TerminalToken>& tokens) {
+    std::size_t width = 0;
+    for (const auto& token : tokens) {
+        if (token.kind == TerminalTokenKind::Newline) {
+            return std::unexpected(invalid_terminal_text("Rendered terminal line contains a newline"));
+        }
+        width += token.width;
+    }
+    return width;
+}
 
 [[nodiscard]] std::pair<char32_t, std::size_t> decode_utf8(
     std::string_view text,

@@ -1,6 +1,6 @@
 #include "InputDecoder.hpp"
 
-#include <cch/tui/Input.hpp>
+#include <cch/tui/Keys.hpp>
 #include "tui/InputInternal.hpp"
 
 #include <algorithm>

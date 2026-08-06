@@ -909,3 +909,98 @@ TEST_CASE(
     CHECK(factory_header.find("std::shared_ptr<ai::Models> models") !=
           std::string::npos);
 }
+
+TEST_CASE(
+    "Keys.hpp is the pi-canonical event header and Input.hpp is fully absent",
+    "[architecture][tui][issue377]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+
+    // The key/paste event surface claims the pi keys.ts name; the old
+    // event-header name is absent with no shim and no compatibility include.
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "include" / "cch" / "tui" / "Input.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "tui" / "Input.cpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "tests" / "tui" / "InputTest.cpp"));
+
+    for (const auto& file : files_under({"include", "src", "tests"})) {
+        if (file == source_root / "tests" / "architecture" / "ArchitectureSurfaceScanTest.cpp") {
+            continue;
+        }
+        const auto text = read_text(file);
+        CHECK(text.find("cch/tui/Input.hpp") == std::string::npos);
+        CHECK(text.find("#include \"tui/Input.hpp\"") == std::string::npos);
+    }
+
+    const auto keys_header = read_text(
+        source_root / "include" / "cch" / "tui" / "Keys.hpp");
+    CHECK(keys_header.find("parse_key_id") != std::string::npos);
+    CHECK(keys_header.find("key_id(") != std::string::npos);
+    CHECK(keys_header.find("matches_key") != std::string::npos);
+    CHECK(keys_header.find("PasteEvent") != std::string::npos);
+    CHECK(keys_header.find("kMaxPasteBytes") != std::string::npos);
+}
+
+TEST_CASE(
+    "width-utils subset is public through Utils.hpp and the detail header stays private",
+    "[architecture][tui][issue377]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto utils_header = read_text(
+        source_root / "include" / "cch" / "tui" / "Utils.hpp");
+
+    for (const auto& symbol : {
+             "visible_width",
+             "wrap_text",
+             "truncate_text",
+             "slice_by_column",
+             "strip_terminal_sequences",
+         }) {
+        CHECK(utils_header.find(symbol) != std::string::npos);
+    }
+
+    // The private detail header is consumed only inside the TUI module and by
+    // its dedicated detail test; general tests consume the public header.
+    for (const auto& file : files_under({"include", "tests"})) {
+        if (file == source_root / "tests" / "tui" / "UnicodeWidthTest.cpp") {
+            continue;
+        }
+        if (file == source_root / "tests" / "architecture" / "ArchitectureSurfaceScanTest.cpp") {
+            continue;
+        }
+        const auto text = read_text(file);
+        CHECK(text.find("tui/UnicodeWidth.hpp") == std::string::npos);
+    }
+
+    // No stale detail-namespace references to the promoted subset remain.
+    for (const auto& file : files_under({"include", "src", "tests"})) {
+        if (file == source_root / "tests" / "architecture" / "ArchitectureSurfaceScanTest.cpp") {
+            continue;
+        }
+        const auto text = read_text(file);
+        CHECK(text.find("detail::visible_width") == std::string::npos);
+        CHECK(text.find("detail::wrap_text") == std::string::npos);
+        CHECK(text.find("detail::truncate_text") == std::string::npos);
+    }
+}
+
+TEST_CASE(
+    "Fuzzy is a public module with scoring, matched indices, and a ranking filter",
+    "[architecture][tui][issue377]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto fuzzy_header = read_text(
+        source_root / "include" / "cch" / "tui" / "Fuzzy.hpp");
+
+    CHECK(fuzzy_header.find("fuzzy_match(") != std::string::npos);
+    CHECK(fuzzy_header.find("fuzzy_match_indices") != std::string::npos);
+    CHECK(fuzzy_header.find("fuzzy_filter") != std::string::npos);
+
+    // SettingsList consumes the public module; the private helpers are gone.
+    const auto settings_list = read_text(
+        source_root / "src" / "tui" / "SettingsList.cpp");
+    CHECK(settings_list.find("cch/tui/Fuzzy.hpp") != std::string::npos);
+    CHECK(settings_list.find("fuzzy_filter(") != std::string::npos);
+    CHECK(settings_list.find("fuzzy_tokens") == std::string::npos);
+    CHECK(settings_list.find("casefold_text") == std::string::npos);
+    CHECK(settings_list.find("match_fuzzy_query") == std::string::npos);
+}

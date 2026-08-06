@@ -1,21 +1,21 @@
 #include <cch/tui/SettingsList.hpp>
 
+#include <cch/tui/Fuzzy.hpp>
+#include <cch/tui/Utils.hpp>
+
 #include "tui/InteractionUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
-
-#include <utf8proc.h>
 
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
-#include <cstdlib>
 #include <exception>
 #include <format>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -31,97 +31,6 @@ namespace {
         event.key != "pageUp" && event.key != "pageDown" && event.key != "up" &&
         event.key != "down" && event.key != "left" && event.key != "right" &&
         event.key != "space";
-}
-
-[[nodiscard]] std::string casefold_text(std::string_view text) {
-    utf8proc_uint8_t* mapped = nullptr;
-    const auto size = utf8proc_map(
-        reinterpret_cast<const utf8proc_uint8_t*>(text.data()),
-        static_cast<utf8proc_ssize_t>(text.size()),
-        &mapped,
-        static_cast<utf8proc_option_t>(UTF8PROC_STABLE | UTF8PROC_COMPOSE | UTF8PROC_CASEFOLD));
-    if (size < 0 || mapped == nullptr) {
-        std::free(mapped);
-        return std::string(text);
-    }
-    std::string result(reinterpret_cast<const char*>(mapped), static_cast<std::size_t>(size));
-    std::free(mapped);
-    return result;
-}
-
-[[nodiscard]] std::optional<double> match_fuzzy_query(
-    std::string_view normalized_query,
-    std::string_view normalized_text) {
-    if (normalized_query.empty()) return 0.0;
-    if (normalized_query.size() > normalized_text.size()) return std::nullopt;
-    std::size_t query_index = 0;
-    std::optional<std::size_t> previous;
-    double score = 0.0;
-    std::size_t consecutive = 0;
-    for (std::size_t index = 0;
-         index < normalized_text.size() && query_index < normalized_query.size();
-         ++index) {
-        if (normalized_text[index] != normalized_query[query_index]) continue;
-        const auto boundary = index == 0 ||
-            std::string_view(" -_./:").find(normalized_text[index - 1]) != std::string_view::npos;
-        if (previous && *previous + 1 == index) {
-            ++consecutive;
-            score -= static_cast<double>(consecutive * 5);
-        } else {
-            consecutive = 0;
-            if (previous) score += static_cast<double>((index - *previous - 1) * 2);
-        }
-        if (boundary) score -= 10.0;
-        score += static_cast<double>(index) * 0.1;
-        previous = index;
-        ++query_index;
-    }
-    if (query_index != normalized_query.size()) return std::nullopt;
-    if (normalized_query == normalized_text) score -= 100.0;
-    return score;
-}
-
-[[nodiscard]] std::optional<std::string> swapped_alpha_numeric(std::string_view query) {
-    const auto split = std::find_if(query.begin(), query.end(), [](unsigned char value) {
-        return std::isdigit(value) != 0;
-    });
-    if (split != query.begin() && split != query.end() &&
-        std::all_of(query.begin(), split, [](unsigned char value) { return std::isalpha(value) != 0; }) &&
-        std::all_of(split, query.end(), [](unsigned char value) { return std::isdigit(value) != 0; })) {
-        return std::string(split, query.end()) + std::string(query.begin(), split);
-    }
-    const auto letters = std::find_if(query.begin(), query.end(), [](unsigned char value) {
-        return std::isalpha(value) != 0;
-    });
-    if (letters != query.begin() && letters != query.end() &&
-        std::all_of(query.begin(), letters, [](unsigned char value) { return std::isdigit(value) != 0; }) &&
-        std::all_of(letters, query.end(), [](unsigned char value) { return std::isalpha(value) != 0; })) {
-        return std::string(letters, query.end()) + std::string(query.begin(), letters);
-    }
-    return std::nullopt;
-}
-
-[[nodiscard]] std::optional<double> fuzzy_score(std::string_view query, std::string_view text) {
-    const auto normalized_query = casefold_text(query);
-    const auto normalized_text = casefold_text(text);
-    if (auto primary = match_fuzzy_query(normalized_query, normalized_text)) return primary;
-    const auto swapped = swapped_alpha_numeric(normalized_query);
-    if (!swapped) return std::nullopt;
-    if (auto matched = match_fuzzy_query(*swapped, normalized_text)) return *matched + 5.0;
-    return std::nullopt;
-}
-
-[[nodiscard]] std::vector<std::string> fuzzy_tokens(std::string_view query) {
-    std::vector<std::string> tokens;
-    std::size_t begin = 0;
-    for (std::size_t index = 0; index <= query.size(); ++index) {
-        const auto separator = index == query.size() || query[index] == '/' ||
-            std::isspace(static_cast<unsigned char>(query[index])) != 0;
-        if (!separator) continue;
-        if (index > begin) tokens.emplace_back(query.substr(begin, index - begin));
-        begin = index + 1;
-    }
-    return tokens;
 }
 
 [[nodiscard]] std::string without_spaces(std::string text) {
@@ -180,29 +89,12 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
     }
 
     void apply_filter() {
-        filtered_indices.clear();
-        const auto tokens = fuzzy_tokens(search);
-        std::vector<std::pair<double, std::size_t>> matches;
-        for (std::size_t index = 0; index < items.size(); ++index) {
-            double total_score = 0.0;
-            bool all_match = true;
-            for (const auto& token : tokens) {
-                if (auto score = fuzzy_score(token, items[index].label)) {
-                    total_score += *score;
-                } else {
-                    all_match = false;
-                    break;
-                }
-            }
-            if (all_match) matches.emplace_back(total_score, index);
-        }
-        std::stable_sort(matches.begin(), matches.end(), [](const auto& left, const auto& right) {
-            return left.first < right.first;
-        });
-        for (const auto& [score, index] : matches) {
-            (void)score;
-            filtered_indices.push_back(index);
-        }
+        std::vector<std::size_t> indices(items.size());
+        std::iota(indices.begin(), indices.end(), 0);
+        filtered_indices = fuzzy_filter(
+            std::move(indices),
+            search,
+            [&](std::size_t index) -> std::string { return items[index].label; });
         selected_index = 0;
     }
 
@@ -282,7 +174,7 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
     }
 
     [[nodiscard]] util::Expected<std::string> hint_line(std::string text, std::size_t width) {
-        auto bounded = detail::truncate_text(text, width, "");
+        auto bounded = truncate_text(text, width, "");
         if (!bounded) return std::unexpected(bounded.error());
         return detail::apply_text_style(theme.hint, std::move(*bounded), "SettingsList hint");
     }
@@ -343,7 +235,7 @@ util::Expected<RenderResult> SettingsList::render(std::size_t width) {
 
     std::vector<std::string> lines;
     if (impl->search_enabled) {
-        auto query = detail::truncate_text("> " + impl->search, width, "");
+        auto query = truncate_text("> " + impl->search, width, "");
         if (!query) return std::unexpected(query.error());
         lines.push_back(std::move(*query));
         lines.emplace_back();
@@ -362,19 +254,19 @@ util::Expected<RenderResult> SettingsList::render(std::size_t width) {
         const auto range = detail::centered_visible_range(displayed.size(), impl->selected_index, impl->max_visible);
         std::size_t max_label_width = 0;
         for (const auto& item : impl->items) {
-            max_label_width = std::max(max_label_width, detail::visible_width(item.label));
+            max_label_width = std::max(max_label_width, visible_width(item.label));
         }
         max_label_width = std::min<std::size_t>(30, max_label_width);
         for (std::size_t index = range.begin; index < range.end; ++index) {
             const auto& item = impl->items[displayed[index]];
             const auto selected = index == impl->selected_index;
             auto prefix = selected ? impl->theme.cursor : std::string("  ");
-            auto bounded_prefix = detail::truncate_text(prefix, width, "");
+            auto bounded_prefix = truncate_text(prefix, width, "");
             if (!bounded_prefix) return std::unexpected(bounded_prefix.error());
             prefix = std::move(*bounded_prefix);
-            const auto prefix_width = detail::visible_width(prefix);
+            const auto prefix_width = visible_width(prefix);
             const auto label_limit = width > prefix_width ? std::min(max_label_width, width - prefix_width) : 0;
-            auto label = detail::truncate_text(item.label, label_limit, "", true);
+            auto label = truncate_text(item.label, label_limit, "", true);
             if (!label) return std::unexpected(label.error());
             auto styled_label = detail::apply_selection_style(
                 impl->theme.label,
@@ -383,10 +275,10 @@ util::Expected<RenderResult> SettingsList::render(std::size_t width) {
                 "SettingsList label");
             if (!styled_label) return std::unexpected(styled_label.error());
             std::string line = prefix + *styled_label;
-            if (detail::visible_width(line) + 2 < width) {
+            if (visible_width(line) + 2 < width) {
                 line += "  ";
-                const auto value_width = width - detail::visible_width(line);
-                auto value = detail::truncate_text(item.current_value, value_width, "");
+                const auto value_width = width - visible_width(line);
+                auto value = truncate_text(item.current_value, value_width, "");
                 if (!value) return std::unexpected(value.error());
                 auto styled_value = detail::apply_selection_style(
                     impl->theme.value,
@@ -396,7 +288,7 @@ util::Expected<RenderResult> SettingsList::render(std::size_t width) {
                 if (!styled_value) return std::unexpected(styled_value.error());
                 line += *styled_value;
             }
-            auto bounded = detail::truncate_text(line, width, "");
+            auto bounded = truncate_text(line, width, "");
             if (!bounded) return std::unexpected(bounded.error());
             lines.push_back(std::move(*bounded));
         }
@@ -411,7 +303,7 @@ util::Expected<RenderResult> SettingsList::render(std::size_t width) {
         if (selected != nullptr && selected->description) {
             lines.emplace_back();
             const auto description_width = width > 4 ? width - 4 : 1;
-            auto wrapped = detail::wrap_text(*selected->description, description_width);
+            auto wrapped = wrap_text(*selected->description, description_width);
             if (!wrapped) return std::unexpected(wrapped.error());
             for (const auto& line : *wrapped) {
                 auto styled = detail::apply_text_style(
@@ -419,7 +311,7 @@ util::Expected<RenderResult> SettingsList::render(std::size_t width) {
                     "  " + line,
                     "SettingsList description");
                 if (!styled) return std::unexpected(styled.error());
-                auto bounded = detail::truncate_text(*styled, width, "");
+                auto bounded = truncate_text(*styled, width, "");
                 if (!bounded) return std::unexpected(bounded.error());
                 lines.push_back(std::move(*bounded));
             }
@@ -526,7 +418,7 @@ std::optional<CursorPosition> SettingsList::cursor_location() const {
     if (!impl_->focused || !impl_->search_enabled || impl_->submenu) return std::nullopt;
     const auto width = std::max<std::size_t>(1, impl_->render_width);
     return CursorPosition{
-        .column = std::min<std::size_t>(2 + detail::visible_width(impl_->search), width - 1),
+        .column = std::min<std::size_t>(2 + visible_width(impl_->search), width - 1),
         .row = 0,
     };
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/tui/Component.hpp>
+#include <cch/tui/Utils.hpp>
 
 #include "tui/UnicodeWidth.hpp"
 
