@@ -995,6 +995,9 @@ AgentSessionRuntime::compact(std::string custom_instructions) {
             util::ErrorCode::Validation,
             "compaction is already in flight"));
     }
+    // Claim the in-flight guard before any await so concurrent compact()
+    // calls reject here instead of interleaving at the summarization await.
+    compaction_active_ = true;
 
     // pi AgentSession.compact: abort the active run first, then wait for it
     // to settle before compacting (the run settles with the ordinary aborted
@@ -1009,7 +1012,6 @@ AgentSessionRuntime::compact(std::string custom_instructions) {
         }
     }
 
-    compaction_active_ = true;
     util::Expected<coding_agent::CompactionResult> result;
     try {
         result = co_await compact_impl(std::move(custom_instructions));
