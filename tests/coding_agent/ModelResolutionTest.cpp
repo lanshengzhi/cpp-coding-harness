@@ -145,17 +145,6 @@ constexpr std::string_view kKeyedReasoningProvider = R"({
 })";
 
 /// One keyed non-reasoning provider.
-constexpr std::string_view kKeyedPlainProvider = R"({
-  "providers": {
-    "deepseek": {
-      "baseUrl": "https://api.deepseek.example/v1",
-      "api": "openai-responses",
-      "apiKey": "dummy-deepseek-key",
-      "models": [{"id": "deepseek-v4-flash"}]
-    }
-  }
-})";
-
 [[nodiscard]] coding_agent::runtime::AgentSessionCreationRequest cli_request(
     const Fixture& fixture) {
     coding_agent::runtime::AgentSessionCreationRequest request;

@@ -86,12 +86,6 @@ struct TestPaths {
     }
 };
 
-[[nodiscard]] const tests::EnvVarGuard& agent_dir_guard(const TestPaths& paths) {
-    static thread_local tests::EnvVarGuard guard{"PI_CODING_AGENT_DIR"};
-    guard.set((paths.workspace.path() / "agent").string());
-    return guard;
-}
-
 /// FIFO scripted client for the retry lifecycle tests. Records every request,
 /// serves queued responses in order, and stamps every assistant message with
 /// the same deterministic identity/timestamp the other SDK fake clients use.
@@ -441,7 +435,7 @@ TEST_CASE(
 
     // Quota/billing/provider-limit patterns never retry: the error terminal
     // is the run's outcome with no session events.
-    for (const std::string& message :
+    for (const std::string message :
          {"insufficient_quota", "quota exceeded", "Monthly usage limit reached",
           "You have exceeded your available balance", "billing_error",
           "FreeUsageLimitError"}) {

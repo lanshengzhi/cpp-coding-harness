@@ -29,7 +29,7 @@ TEST_CASE(
     "isRetryableAssistantError retries transient provider and network patterns",
     "[ai][retry][issue361]") {
     // Generic provider load / HTTP status / server-side transients.
-    for (const std::string& message :
+    for (const std::string message :
          {"overloaded", "model overloaded; retry later",
           "Rate limit reached", "rate-limit hit", "rate_limit exceeded",
           "too many requests", "HTTP 429 Too Many Requests", "429",
@@ -40,7 +40,7 @@ TEST_CASE(
         CHECK(ai::is_retryable_assistant_error(error_terminal(message)));
     }
     // Network / proxy / fetch / WebSocket transport failures.
-    for (const std::string& message :
+    for (const std::string message :
          {"network error", "network_error", "connection error",
           "connection refused", "connection lost",
           "the other side closed the connection", "fetch failed",
@@ -53,7 +53,7 @@ TEST_CASE(
         CHECK(ai::is_retryable_assistant_error(error_terminal(message)));
     }
     // Premature stream endings and explicit retry guidance.
-    for (const std::string& message :
+    for (const std::string message :
          {"stream ended without a stop reason",
           "Anthropic stream ended before message_stop",
           "stream ended before a terminal response event",
@@ -73,7 +73,7 @@ TEST_CASE(
 TEST_CASE(
     "isRetryableAssistantError never retries quota, billing, or provider-limit patterns",
     "[ai][retry][issue361]") {
-    for (const std::string& message :
+    for (const std::string message :
          {"GoUsageLimitError", "FreeUsageLimitError",
           "Monthly usage limit reached", "available balance",
           "insufficient_quota", "out of budget", "quota exceeded",
