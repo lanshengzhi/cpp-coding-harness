@@ -1,7 +1,5 @@
 # AGENTS.md
 
-Repository guidance for Matt's engineering skills and coding agents.
-
 ## Start Gate
 
 1. Inspect the working tree with `git status --short`.
@@ -10,7 +8,7 @@ Repository guidance for Matt's engineering skills and coding agents.
    - Fetch the referenced GitHub issue or PRD through `gh`.
    - Read `CONTEXT.md` and relevant accepted ADRs when domain language or architecture is involved.
    - Read `README.md`, `CMakeLists.txt`, and the related code and tests for implementation work.
-4. Stop exploring once the behavior, authoritative seam, constraints, and validation path are clear.
+4. Stop exploring once you can name the behavior, the authoritative seam, the constraints, and the validation path.
 
 ## Guardrails
 
@@ -41,6 +39,7 @@ Code-level conventions (style, naming, error handling, async, tests, CMake) live
 - For documentation-only changes, check headings, links, tracker references, and clear agent-facing English; no C++ build is required.
 - Use fake-provider tests by default. Do not use live API keys or network validation unless the user explicitly requests it.
 - `/implement` includes review and a task-scoped commit on the current branch. Do not push, merge, switch branches, create worktrees, or delete branches unless the user explicitly asks.
+- Closing an issue: tick its met acceptance criteria and remove in-flight state labels (`needs-*`, `ready-for-*`), then run `scripts/verify-closed-issue.sh <n>`. The close is done when the script exits 0.
 
 ## Agent skills
 
@@ -50,8 +49,8 @@ Issues and specs live in GitHub Issues. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-The tracker uses Matt's canonical triage labels. See `docs/agents/triage-labels.md`.
+The tracker uses the canonical triage labels. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
-This is a single-context repo: use root `CONTEXT.md` and `docs/adr/`. See `docs/agents/domain.md`.
+See `docs/agents/domain.md`: how to consume `CONTEXT.md` and `docs/adr/` in this single-context repo.
