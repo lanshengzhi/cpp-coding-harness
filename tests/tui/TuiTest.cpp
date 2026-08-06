@@ -293,12 +293,16 @@ TEST_CASE("Tui decodes the supported legacy special key vocabulary", "[tui][inpu
         std::string_view raw;
         std::string_view identifier;
     };
-    constexpr std::array<RawKey, 25> kKeys{{
+    constexpr std::array<RawKey, 32> kKeys{{
         {"\t", "tab"}, {"\r", "enter"}, {" ", "space"}, {"\x7f", "backspace"},
+        {std::string_view{"\x00", 1}, "ctrl+space"},
         {"\x1b[A", "up"}, {"\x1b[B", "down"}, {"\x1b[C", "right"}, {"\x1b[D", "left"},
         {"\x1b[H", "home"}, {"\x1b[F", "end"}, {"\x1b[2~", "insert"}, {"\x1b[3~", "delete"},
         {"\x1b[5~", "pageUp"}, {"\x1b[6~", "pageDown"}, {"\x1b[E", "clear"},
         {"\x1bOP", "f1"}, {"\x1b[24~", "f12"}, {"\x1b[Z", "shift+tab"},
+        {"\x1b[2$", "shift+insert"}, {"\x1b[3$", "shift+delete"},
+        {"\x1b[5$", "shift+pageUp"}, {"\x1b[6$", "shift+pageDown"},
+        {"\x1b[7$", "shift+home"}, {"\x1b[8$", "shift+end"},
         {"\x1b[2^", "ctrl+insert"}, {"\x1b[e", "shift+clear"}, {"\x1bOe", "ctrl+clear"},
         {"\x1b" "B", "alt+left"}, {"\x1b" "F", "alt+right"},
         {"\x1b" "b", "alt+left"}, {"A", "shift+a"},

@@ -20,8 +20,12 @@
 namespace cch::tui {
 namespace {
 
-// Behavioral baseline: pi 864b35c select-list.ts. Semantic page keys are the
-// ticket-required extension to that baseline interaction.
+// Behavioral baseline: pi 83114817 packages/tui/src/components/select-list.ts.
+// The 32-column default primary width, 2-column gap, 10-column minimum
+// description width, and the tui.select.up/down/confirm/cancel interactions
+// are aligned with the frozen baseline; semantic page keys
+// (tui.select.pageUp/pageDown) remain the recorded C++ extension (pi's
+// select-list only pages via up/down at this baseline).
 constexpr std::size_t kDefaultPrimaryColumnWidth = 32;
 constexpr std::size_t kPrimaryColumnGap = 2;
 constexpr std::size_t kMinDescriptionWidth = 10;

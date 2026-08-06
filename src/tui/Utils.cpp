@@ -13,6 +13,12 @@
 #include <vector>
 
 namespace cch::tui {
+namespace {
+
+/// The ANSI SGR reset pi's truncateToWidth always emits around the ellipsis.
+constexpr std::string_view kSgrReset{"\x1b[0m"};
+
+} // namespace
 
 std::size_t visible_width(std::string_view text) {
     auto tokens = detail::tokenize_terminal_output(text);
@@ -212,8 +218,14 @@ util::Expected<std::string> truncate_text(
         result += token.text;
         collected_width += token.width;
     }
+    // pi's finalizeTruncatedResult always wraps the ellipsis in SGR resets,
+    // styled or not (utils.ts at the frozen baseline); the line-end reset
+    // already closes active styles, so only add the pre reset when nothing
+    // is active.
     result += style.get_line_end_reset();
+    if (!result.ends_with(kSgrReset)) result += kSgrReset;
     result += ellipsis;
+    if (!ellipsis.empty()) result += kSgrReset;
     if (pad) result.append(max_width - collected_width - ellipsis_width, ' ');
     return result;
 }

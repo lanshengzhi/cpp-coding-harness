@@ -1,0 +1,223 @@
+
+{
+  "visibleWidth": [
+    {
+      "name": "plain",
+      "input": "hello",
+      "output": 5
+    },
+    {
+      "name": "ansi",
+      "input": "\u001b[31mabc\u001b[0m",
+      "output": 3
+    },
+    {
+      "name": "cjk",
+      "input": "你好",
+      "output": 4
+    },
+    {
+      "name": "emoji",
+      "input": "a😀b",
+      "output": 4
+    },
+    {
+      "name": "flag",
+      "input": "🇩🇪",
+      "output": 2
+    },
+    {
+      "name": "combining",
+      "input": "é",
+      "output": 1
+    },
+    {
+      "name": "osc8",
+      "input": "\u001b]8;;https://x\u001b\\link\u001b]8;;\u001b\\",
+      "output": 4
+    },
+    {
+      "name": "tab",
+      "input": "a\tb",
+      "output": 5
+    }
+  ],
+  "truncate": [
+    {
+      "name": "plain",
+      "input": "abcdef",
+      "width": 4,
+      "ellipsis": "...",
+      "pad": false,
+      "output": "a\u001b[0m...\u001b[0m"
+    },
+    {
+      "name": "ansi",
+      "input": "\u001b[31mabcdef\u001b[0m",
+      "width": 4,
+      "ellipsis": "...",
+      "pad": false,
+      "output": "\u001b[31ma\u001b[0m...\u001b[0m"
+    },
+    {
+      "name": "fits",
+      "input": "abc",
+      "width": 8,
+      "ellipsis": "...",
+      "pad": false,
+      "output": "abc"
+    },
+    {
+      "name": "pad",
+      "input": "abc",
+      "width": 8,
+      "ellipsis": "",
+      "pad": true,
+      "output": "abc     "
+    },
+    {
+      "name": "no-ellipsis",
+      "input": "abcdef",
+      "width": 4,
+      "ellipsis": "",
+      "pad": false,
+      "output": "abcd\u001b[0m"
+    },
+    {
+      "name": "cjk",
+      "input": "你好世界",
+      "width": 5,
+      "ellipsis": "",
+      "pad": false,
+      "output": "你好\u001b[0m"
+    },
+    {
+      "name": "zero",
+      "input": "abc",
+      "width": 0,
+      "ellipsis": "...",
+      "pad": false,
+      "output": ""
+    }
+  ],
+  "wrap": [
+    {
+      "name": "plain",
+      "input": "hello world foo bar",
+      "width": 8,
+      "output": [
+        "hello",
+        "world",
+        "foo bar"
+      ]
+    },
+    {
+      "name": "long-word",
+      "input": "supercalifragilistic",
+      "width": 6,
+      "output": [
+        "superc",
+        "alifra",
+        "gilist",
+        "ic"
+      ]
+    },
+    {
+      "name": "ansi",
+      "input": "\u001b[31mred\u001b[0m and blue",
+      "width": 10,
+      "output": [
+        "\u001b[31mred\u001b[0m and",
+        "blue"
+      ]
+    },
+    {
+      "name": "newlines",
+      "input": "one\ntwo",
+      "width": 20,
+      "output": [
+        "one",
+        "two"
+      ]
+    },
+    {
+      "name": "wide-grapheme",
+      "input": "ab 😀 cd",
+      "width": 3,
+      "output": [
+        "ab",
+        "😀",
+        "cd"
+      ]
+    }
+  ],
+  "slice": [
+    {
+      "name": "plain",
+      "input": "abcdef",
+      "start": 1,
+      "length": 3,
+      "strict": false,
+      "output": "bcd"
+    },
+    {
+      "name": "ansi",
+      "input": "\u001b[31mabcdef\u001b[0m",
+      "start": 1,
+      "length": 3,
+      "strict": false,
+      "output": "\u001b[31mbcd"
+    },
+    {
+      "name": "wide-strict",
+      "input": "a你b",
+      "start": 0,
+      "length": 2,
+      "strict": true,
+      "output": "a"
+    },
+    {
+      "name": "wide-lenient",
+      "input": "a你b",
+      "start": 0,
+      "length": 2,
+      "strict": false,
+      "output": "a你"
+    },
+    {
+      "name": "empty",
+      "input": "abc",
+      "start": 4,
+      "length": 2,
+      "strict": false,
+      "output": ""
+    }
+  ],
+  "strip": [
+    {
+      "name": "sgr",
+      "input": "\u001b[31mred\u001b[0m text",
+      "output": "red text"
+    },
+    {
+      "name": "osc8",
+      "input": "\u001b]8;;https://x\u001b\\link\u001b]8;;\u001b\\",
+      "output": "link"
+    },
+    {
+      "name": "osc-title",
+      "input": "\u001b]0;title\u0007body",
+      "output": "body"
+    },
+    {
+      "name": "apc",
+      "input": "\u001b_Ga=T;AAAA\u001b\\img",
+      "output": "img"
+    },
+    {
+      "name": "newlines",
+      "input": "a\nb",
+      "output": "a\nb"
+    }
+  ]
+}

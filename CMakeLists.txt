@@ -420,8 +420,10 @@ if(CCH_BUILD_TESTS)
         tests/tui/LoaderTest.cpp
         tests/tui/MarkdownTest.cpp
         tests/tui/OverlayTest.cpp
+        tests/tui/PiTuiDifferentialTest.cpp
         tests/tui/ProcessTerminalTest.cpp
         tests/tui/RenderDifferentialTest.cpp
+        tests/tui/ScreenStateGoldenTest.cpp
         tests/tui/SelectListTest.cpp
         tests/tui/SettingsListTest.cpp
         tests/tui/TerminalImageTest.cpp

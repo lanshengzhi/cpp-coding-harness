@@ -22,7 +22,11 @@
 namespace cch::tui {
 namespace {
 
-// Behavioral baseline: pi 864b35c loader.ts and cancellable-loader.ts.
+// Behavioral baseline: pi 83114817 packages/tui/src/components/loader.ts and
+// cancellable-loader.ts. The 10 braille frames and 80 ms default interval
+// are unchanged from the previous pin; the injected AnimationTimer
+// remains the recorded C++ divergence from pi's self-animating
+// setInterval (ADR 0035).
 constexpr std::chrono::milliseconds kDefaultInterval{80};
 const std::vector<std::string> kDefaultFrames{
     "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏",

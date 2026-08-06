@@ -1,3 +1,5 @@
+#include <cch/tui/Keybindings.hpp>
+
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
 #include "support/TextHelpers.hpp"
@@ -1100,5 +1102,78 @@ TEST_CASE(
         }
         const auto text = read_text(file);
         CHECK(text.find("\"tui/TerminalImage.hpp\"") == std::string::npos);
+    }
+}
+
+TEST_CASE(
+    "deferred pi-tui capabilities are absent with no placeholder surface",
+    "[architecture][tui][issue386]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+
+    // ADR 0035 defers the entire alt-screen/viewport half and the extension
+    // seams with no placeholder surface: no headers, no symbols, no settings.
+    const auto scan = [&](const std::string& needle) {
+        for (const auto& file : files_under({"include/cch/tui", "src/tui"})) {
+            const auto text = read_text(file);
+            CHECK(text.find(needle) == std::string::npos);
+        }
+    };
+    for (const auto& symbol : {
+             "TuiAltScreen",
+             "ViewportTUI",
+             "setLayoutRoot",
+             "LAYOUT_NODE",
+             "ScrollView",
+             "HStack",
+             "VStack",
+             "AltScreenFlashContainer",
+             "EditorComponent",
+             "addInputListener",
+             "getOsc8LinkAtColumn",
+             "Marked",
+             "StdinBuffer",
+             "PI_TUI_WRITE_LOG",
+             "fullRedraws",
+             "onDebug",
+             "?2031",
+             "uiMode",
+         }) {
+        scan(symbol);
+    }
+
+    // No layout/alt-screen headers exist anywhere in the public surface.
+    for (const auto& name : {
+             "Layout.hpp",
+             "LayoutNode.hpp",
+             "ScrollView.hpp",
+             "Stack.hpp",
+             "HStack.hpp",
+             "VStack.hpp",
+             "TuiAltScreen.hpp",
+             "AltScreenFlash.hpp",
+             "EditorComponent.hpp",
+             "StdinBuffer.hpp",
+             "TerminalColors.hpp",
+         }) {
+        CHECK_FALSE(std::filesystem::exists(source_root / "include" / "cch" / "tui" / name));
+    }
+
+    // The seven known-but-unassembled pi ids never enter the resolved
+    // builtin registry: the assembled table is exactly pi's 30 actions.
+    const auto definitions = cch::tui::builtin_tui_keybinding_definitions();
+    CHECK(definitions.size() == 30);
+    for (const auto& definition : definitions) {
+        CHECK_FALSE(cch::tui::is_known_unassembled_tui_keybinding(definition.id));
+    }
+    for (const auto& id : {
+             "tui.input.copy",
+             "tui.altScreen.pageUp",
+             "tui.altScreen.pageDown",
+             "tui.altScreen.previousPrompt",
+             "tui.altScreen.nextPrompt",
+             "tui.altScreen.top",
+             "tui.altScreen.bottom",
+         }) {
+        CHECK(cch::tui::is_known_unassembled_tui_keybinding(id));
     }
 }

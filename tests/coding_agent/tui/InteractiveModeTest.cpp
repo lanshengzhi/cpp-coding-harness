@@ -1380,7 +1380,10 @@ TEST_CASE(
     const auto snapshot = created->session->snapshot();
     const auto& user = std::get<ai::UserMessage>(snapshot.agent_state.messages[0]);
     const auto pasted_text = ai::text_from_user_message(user);
-    CHECK(pasted_text == "aclipboard textb");
+    // Typed uppercase letters keep their case (pi's "shift+letter produces
+    // uppercase" contract; the decoder canonicalizes identifiers to
+    // lowercase but inserted text preserves the typed case).
+    CHECK(pasted_text == "Aclipboard textB");
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
     REQUIRE(run_result);

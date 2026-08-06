@@ -220,6 +220,10 @@ _Avoid_: UI library, widget set, interactive frontend
 The TUI Toolkit's single decode of raw terminal escape sequences into typed KeyEvent/PasteEvent values at the terminal edge, with action matching against pi's `modifier+key` identifier grammar and full keyboard-protocol coverage (legacy, modifyOtherKeys, Kitty CSI-u with event types and alternate keys). An Intentional Divergence from pi's raw-string matching that preserves the observable sequence-to-action contract; paste input remains size-bounded.
 _Avoid_: Raw string matching, per-consumer escape parsing
 
+**Resolved Keybinding Registry**:
+The immutable, resolution-time keybinding table consumed by dispatch, help, and hints alike: the 30 assembled `tui.*` actions (21 `tui.editor.*`, 3 `tui.input.*`, 6 `tui.select.*`) with pi's default keys at the parity baseline, one startup `keybindings.json` read with replace-all-defaults and empty-array unbind, and bounded redacted diagnostics. `tui.input.copy` and the six `tui.altScreen.*` ids are recognized-but-unassembled: diagnosed as known-but-unbound, never no-op bindings, because their only active behavior is alt-screen selection copy.
+_Avoid_: Mutable global manager, no-op bindings, per-consumer key tables
+
 **Terminal-Owned Image Placement**:
 The TUI Toolkit's inline-image model in which components emit protocol-neutral image regions alongside their rendered lines and the Terminal owns physical placement and removal in absolute cell regions, including protocol selection (Kitty/iTerm2), cell-size math, animation-id reuse, and fallback text. An Intentional Divergence from pi's escape-sequences-in-lines with identical placement, sizing, and fallback outcomes.
 _Avoid_: Escape sequences in render lines, component-owned protocol bytes

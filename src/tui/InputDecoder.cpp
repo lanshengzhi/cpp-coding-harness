@@ -305,7 +305,11 @@ std::optional<KeyEvent> parse_raw_sequence(std::string_view sequence) {
     if (sequence == "\x1b") return *parse_key_id("escape");
     if (sequence == "\t") return *parse_key_id("tab");
     if (sequence == "\r" || sequence == "\n") return *parse_key_id("enter");
-    if (sequence == "\0") return *parse_key_id("ctrl+space");
+    // The `\x00` literal in a C++ string is empty, so compare the byte
+    // explicitly (pi keys.ts: `data === "\x00"` → ctrl+space).
+    if (sequence.size() == 1 && sequence.front() == '\0') {
+        return *parse_key_id("ctrl+space");
+    }
     if (sequence == " ") return *parse_key_id("space");
     if (sequence == "\x7f" || sequence == "\x08") return *parse_key_id("backspace");
     if (sequence == "\x1b\x1b") return *parse_key_id("ctrl+alt+[");
@@ -387,6 +391,17 @@ std::optional<std::size_t> escape_sequence_length(std::string_view pending, bool
         for (std::size_t index = 2; index < pending.size(); ++index) {
             const auto value = static_cast<unsigned char>(pending[index]);
             if (value >= 0x40 && value <= 0x7e) return index + 1;
+        }
+        // The legacy shift-modifier sequences (\x1b[2$ shift+insert,
+        // \x1b[3$ shift+delete, \x1b[5$ shift+pageUp, \x1b[6$
+        // shift+pageDown, \x1b[7$ shift+home, \x1b[8$ shift+end) end in
+        // '$' — an ECMA-48 intermediate byte, not a final — so the scan
+        // above never completes them. Accept exactly pi's six '$'-final
+        // forms (keys.ts LEGACY_SEQUENCE_KEY_IDS); any other '$' stays an
+        // intermediate byte of a longer CSI.
+        if (pending.size() == 4 && pending[2] >= '2' && pending[2] <= '8' &&
+            pending[2] != '4' && pending[3] == '$') {
+            return 4;
         }
         return std::nullopt;
     }

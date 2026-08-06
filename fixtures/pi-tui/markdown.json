@@ -1,0 +1,151 @@
+
+{
+  "styles": {
+    "heading": {
+      "prefix": "\u001b[36m",
+      "suffix": "\u001b[39m"
+    },
+    "bold": {
+      "prefix": "\u001b[1m",
+      "suffix": "\u001b[22m"
+    },
+    "italic": {
+      "prefix": "\u001b[3m",
+      "suffix": "\u001b[23m"
+    },
+    "strikethrough": {
+      "prefix": "\u001b[9m",
+      "suffix": "\u001b[29m"
+    },
+    "underline": {
+      "prefix": "\u001b[4m",
+      "suffix": "\u001b[24m"
+    },
+    "code": {
+      "prefix": "\u001b[33m",
+      "suffix": "\u001b[39m"
+    },
+    "codeBlock": {
+      "prefix": "\u001b[32m",
+      "suffix": "\u001b[39m"
+    },
+    "codeBlockBorder": {
+      "prefix": "\u001b[2m",
+      "suffix": "\u001b[22m"
+    },
+    "quote": {
+      "prefix": "\u001b[3m",
+      "suffix": "\u001b[23m"
+    },
+    "quoteBorder": {
+      "prefix": "\u001b[34m",
+      "suffix": "\u001b[39m"
+    },
+    "hr": {
+      "prefix": "\u001b[2m",
+      "suffix": "\u001b[22m"
+    },
+    "listBullet": {
+      "prefix": "\u001b[35m",
+      "suffix": "\u001b[39m"
+    },
+    "link": {
+      "prefix": "\u001b[4m",
+      "suffix": "\u001b[24m"
+    },
+    "linkUrl": {
+      "prefix": "\u001b[2m",
+      "suffix": "\u001b[22m"
+    }
+  },
+  "cases": [
+    {
+      "name": "plain-paragraph",
+      "markdown": "A plain paragraph with some words to wrap across lines.",
+      "width": 20,
+      "lines": [
+        "A plain paragraph   ",
+        "with some words to  ",
+        "wrap across lines.  "
+      ]
+    },
+    {
+      "name": "inline-styles",
+      "markdown": "Text with *emphasis*, **strong**, ~~gone~~, and `code`.",
+      "width": 40,
+      "lines": [
+        "Text with \u001b[3memphasis\u001b[23m, \u001b[1mstrong\u001b[22m, \u001b[9mgone\u001b[29m, and   ",
+        "\u001b[33mcode\u001b[39m.                                   "
+      ]
+    },
+    {
+      "name": "strict-strikethrough",
+      "markdown": "~~valid~~ ~~ still open and `~~code~~` inside.",
+      "width": 40,
+      "lines": [
+        "\u001b[9mvalid\u001b[29m ~~ still open and \u001b[33m~~code~~\u001b[39m inside."
+      ]
+    },
+    {
+      "name": "fenced-code",
+      "markdown": "```cpp\nint answer = 42;\n```",
+      "width": 24,
+      "lines": [
+        "\u001b[2m```cpp\u001b[22m                  ",
+        "  \u001b[32mint answer = 42;\u001b[39m      ",
+        "\u001b[2m```\u001b[22m                     "
+      ]
+    },
+    {
+      "name": "streamed-fence-trim",
+      "markdown": "```cpp\nint answer = 42;\n``",
+      "width": 24,
+      "lines": [
+        "\u001b[2m```cpp\u001b[22m                  ",
+        "  \u001b[32mint answer = 42;\u001b[39m      ",
+        "\u001b[2m```\u001b[22m                     "
+      ]
+    },
+    {
+      "name": "list",
+      "markdown": "- first item\n- second item",
+      "width": 24,
+      "lines": [
+        "\u001b[35m- \u001b[39mfirst item            ",
+        "\u001b[35m- \u001b[39msecond item           "
+      ]
+    },
+    {
+      "name": "quote",
+      "markdown": "> quoted words",
+      "width": 24,
+      "lines": [
+        "\u001b[34m│ \u001b[39m\u001b[3m\u001b[3mquoted words\u001b[23m\u001b[23m          "
+      ]
+    },
+    {
+      "name": "rule",
+      "markdown": "---",
+      "width": 24,
+      "lines": [
+        "\u001b[2m────────────────────────\u001b[22m"
+      ]
+    },
+    {
+      "name": "link",
+      "markdown": "[site](https://example.com)",
+      "width": 40,
+      "lines": [
+        "\u001b]8;;https://example.com\u001b\\\u001b[4m\u001b[4msite\u001b[24m\u001b[24m\u001b]8;;\u001b\\                                    "
+      ]
+    },
+    {
+      "name": "html-passthrough",
+      "markdown": "<div>plain html</div>",
+      "width": 40,
+      "lines": [
+        "<div>plain html</div>                   "
+      ]
+    }
+  ]
+}

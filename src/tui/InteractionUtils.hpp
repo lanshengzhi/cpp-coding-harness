@@ -28,9 +28,19 @@ namespace cch::tui::detail {
 }
 
 /// The visible text a printable key event inserts ("space" renders as a
-/// space).
-[[nodiscard]] inline std::string_view printable_text(const KeyEvent& event) {
-    return event.key == "space" ? std::string_view{" "} : std::string_view{event.key};
+/// space). A shift-modified single ASCII letter renders uppercase, matching
+/// pi's "shift+letter produces uppercase" legacy contract (the decoder
+/// canonicalizes letters to lowercase for the identifier grammar; the
+/// inserted text must preserve the typed case).
+[[nodiscard]] inline std::string printable_text(const KeyEvent& event) {
+    if (event.key == "space") return " ";
+    if (event.shift && event.key.size() == 1) {
+        const auto letter = static_cast<unsigned char>(event.key.front());
+        if (letter >= 'a' && letter <= 'z') {
+            return std::string(1, static_cast<char>(letter - 'a' + 'A'));
+        }
+    }
+    return event.key;
 }
 
 struct VisibleRange {

@@ -1,0 +1,1518 @@
+
+{
+  "corpus": [
+    {
+      "sequence": "\u001b[A",
+      "expected": {
+        "id": "up",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bOA",
+      "expected": {
+        "id": "up",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[B",
+      "expected": {
+        "id": "down",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bOB",
+      "expected": {
+        "id": "down",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[C",
+      "expected": {
+        "id": "right",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bOC",
+      "expected": {
+        "id": "right",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[D",
+      "expected": {
+        "id": "left",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bOD",
+      "expected": {
+        "id": "left",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[H",
+      "expected": {
+        "id": "home",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bOH",
+      "expected": {
+        "id": "home",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[F",
+      "expected": {
+        "id": "end",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bOF",
+      "expected": {
+        "id": "end",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[E",
+      "expected": {
+        "id": "clear",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bOE",
+      "expected": {
+        "id": "clear",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[2~",
+      "expected": {
+        "id": "insert",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[3~",
+      "expected": {
+        "id": "delete",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[5~",
+      "expected": {
+        "id": "pageUp",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[[5~",
+      "expected": {
+        "id": "pageUp",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[6~",
+      "expected": {
+        "id": "pageDown",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[[6~",
+      "expected": {
+        "id": "pageDown",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[Z",
+      "expected": {
+        "id": "shift+tab",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[1;1H",
+      "expected": {
+        "id": "home",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[1;1F",
+      "expected": {
+        "id": "end",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[a",
+      "expected": {
+        "id": "shift+up",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[b",
+      "expected": {
+        "id": "shift+down",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[c",
+      "expected": {
+        "id": "shift+right",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[d",
+      "expected": {
+        "id": "shift+left",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[e",
+      "expected": {
+        "id": "shift+clear",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[2$",
+      "expected": {
+        "id": "shift+insert",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[3$",
+      "expected": {
+        "id": "shift+delete",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[5$",
+      "expected": {
+        "id": "shift+pageUp",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[6$",
+      "expected": {
+        "id": "shift+pageDown",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[7$",
+      "expected": {
+        "id": "shift+home",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[8$",
+      "expected": {
+        "id": "shift+end",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bOa",
+      "expected": {
+        "id": "ctrl+up",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bOb",
+      "expected": {
+        "id": "ctrl+down",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bOc",
+      "expected": {
+        "id": "ctrl+right",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bOd",
+      "expected": {
+        "id": "ctrl+left",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bOe",
+      "expected": {
+        "id": "ctrl+clear",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[2^",
+      "expected": {
+        "id": "ctrl+insert",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[3^",
+      "expected": {
+        "id": "ctrl+delete",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[5^",
+      "expected": {
+        "id": "ctrl+pageUp",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[6^",
+      "expected": {
+        "id": "ctrl+pageDown",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[7^",
+      "expected": {
+        "id": "ctrl+home",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[8^",
+      "expected": {
+        "id": "ctrl+end",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bOP",
+      "expected": {
+        "id": "f1",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bOQ",
+      "expected": {
+        "id": "f2",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bOR",
+      "expected": {
+        "id": "f3",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bOS",
+      "expected": {
+        "id": "f4",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[11~",
+      "expected": {
+        "id": "f1",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[12~",
+      "expected": {
+        "id": "f2",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[13~",
+      "expected": {
+        "id": "f3",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[14~",
+      "expected": {
+        "id": "f4",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[[A",
+      "expected": {
+        "id": "f1",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[[B",
+      "expected": {
+        "id": "f2",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[[C",
+      "expected": {
+        "id": "f3",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[[D",
+      "expected": {
+        "id": "f4",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[[E",
+      "expected": {
+        "id": "f5",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[15~",
+      "expected": {
+        "id": "f5",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[17~",
+      "expected": {
+        "id": "f6",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[18~",
+      "expected": {
+        "id": "f7",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[19~",
+      "expected": {
+        "id": "f8",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[20~",
+      "expected": {
+        "id": "f9",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[21~",
+      "expected": {
+        "id": "f10",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[23~",
+      "expected": {
+        "id": "f11",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[24~",
+      "expected": {
+        "id": "f12",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bb",
+      "expected": {
+        "id": "alt+left",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bf",
+      "expected": {
+        "id": "alt+right",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bp",
+      "expected": {
+        "id": "alt+up",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bn",
+      "expected": {
+        "id": "alt+down",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001bOM",
+      "expected": {
+        "id": "enter",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\t",
+      "expected": {
+        "id": "tab",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\r",
+      "expected": {
+        "id": "enter",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": " ",
+      "expected": {
+        "id": "space",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "",
+      "expected": {
+        "id": "backspace",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\b",
+      "expected": {
+        "id": "backspace",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u0000",
+      "expected": {
+        "id": "ctrl+space",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001c",
+      "expected": {
+        "id": "ctrl+\\",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001d",
+      "expected": {
+        "id": "ctrl+]",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001f",
+      "expected": {
+        "id": "ctrl+-",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b\u001b",
+      "expected": {
+        "id": "ctrl+alt+[",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b\u001c",
+      "expected": {
+        "id": "ctrl+alt+\\",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b\u001d",
+      "expected": {
+        "id": "ctrl+alt+]",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b\u001f",
+      "expected": {
+        "id": "ctrl+alt+-",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b",
+      "expected": {
+        "id": "alt+backspace",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b\b",
+      "expected": {
+        "id": "alt+backspace",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "a",
+      "expected": {
+        "id": "a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "5",
+      "expected": {
+        "id": "5",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "!",
+      "expected": {
+        "id": "!",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u0001",
+      "expected": {
+        "id": "ctrl+a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001a",
+      "expected": {
+        "id": "ctrl+z",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[97u",
+      "expected": {
+        "id": "a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[97;1u",
+      "expected": {
+        "id": "a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[97;2u",
+      "expected": {
+        "id": "shift+a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[97;3u",
+      "expected": {
+        "id": "alt+a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[97;4u",
+      "expected": {
+        "id": "shift+alt+a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[97;5u",
+      "expected": {
+        "id": "ctrl+a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[97;6u",
+      "expected": {
+        "id": "shift+ctrl+a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[97;7u",
+      "expected": {
+        "id": "ctrl+alt+a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[97;8u",
+      "expected": {
+        "id": "shift+ctrl+alt+a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[97;5:2u",
+      "expected": {
+        "id": "ctrl+a",
+        "eventType": "repeat"
+      }
+    },
+    {
+      "sequence": "\u001b[97;5:3u",
+      "expected": {
+        "id": "ctrl+a",
+        "eventType": "release"
+      }
+    },
+    {
+      "sequence": "\u001b[65;2u",
+      "expected": {
+        "id": "shift+a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[97:65;5u",
+      "expected": {
+        "id": "ctrl+a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[97::99;5u",
+      "expected": {
+        "id": "ctrl+a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[1089::99;5u",
+      "expected": {
+        "id": "ctrl+c",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[27;2u",
+      "expected": {
+        "id": "shift+escape",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[9;2u",
+      "expected": {
+        "id": "shift+tab",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[13;2u",
+      "expected": {
+        "id": "shift+enter",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[32;2u",
+      "expected": {
+        "id": "shift+space",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[127;2u",
+      "expected": {
+        "id": "shift+backspace",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[1;5A",
+      "expected": {
+        "id": "ctrl+up",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[1;6:2D",
+      "expected": {
+        "id": "shift+ctrl+left",
+        "eventType": "repeat"
+      }
+    },
+    {
+      "sequence": "\u001b[1;3H",
+      "expected": {
+        "id": "alt+home",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[1;5:3F",
+      "expected": {
+        "id": "ctrl+end",
+        "eventType": "release"
+      }
+    },
+    {
+      "sequence": "\u001b[1;2B",
+      "expected": {
+        "id": "shift+down",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[3;5~",
+      "expected": {
+        "id": "ctrl+delete",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[3;3:3~",
+      "expected": {
+        "id": "alt+delete",
+        "eventType": "release"
+      }
+    },
+    {
+      "sequence": "\u001b[2;2~",
+      "expected": {
+        "id": "shift+insert",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[5;5~",
+      "expected": {
+        "id": "ctrl+pageUp",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[7;2~",
+      "expected": {
+        "id": "shift+home",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[8;2~",
+      "expected": {
+        "id": "shift+end",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[57399u",
+      "expected": {
+        "id": "0",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[57400u",
+      "expected": {
+        "id": "1",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[57409u",
+      "expected": {
+        "id": ".",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[57413u",
+      "expected": {
+        "id": "+",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[57414u",
+      "expected": {
+        "id": "enter",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[57417u",
+      "expected": {
+        "id": "left",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[57420u",
+      "expected": {
+        "id": "down",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[57423u",
+      "expected": {
+        "id": "home",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[57426u",
+      "expected": {
+        "id": "delete",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[27;1;97~",
+      "expected": {
+        "id": "a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[27;2;65~",
+      "expected": {
+        "id": "shift+a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[27;3;97~",
+      "expected": {
+        "id": "alt+a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[27;5;97~",
+      "expected": {
+        "id": "ctrl+a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[27;6;65~",
+      "expected": {
+        "id": "shift+ctrl+a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[27;7;97~",
+      "expected": {
+        "id": "ctrl+alt+a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[27;8;65~",
+      "expected": {
+        "id": "shift+ctrl+alt+a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[27;1;13~",
+      "expected": {
+        "id": "enter",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[27;2;9~",
+      "expected": {
+        "id": "shift+tab",
+        "eventType": "press"
+      }
+    }
+  ],
+  "modeDependent": [
+    {
+      "sequence": "\u001bB",
+      "legacy": {
+        "id": "alt+left",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001bF",
+      "legacy": {
+        "id": "alt+right",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001ba",
+      "legacy": {
+        "id": "alt+a",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001bz",
+      "legacy": {
+        "id": "alt+z",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001b0",
+      "legacy": {
+        "id": "alt+0",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001b9",
+      "legacy": {
+        "id": "alt+9",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001b!",
+      "legacy": {
+        "id": "alt+!",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001b(",
+      "legacy": {
+        "id": "alt+(",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001b[",
+      "legacy": {
+        "id": "alt+[",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001b\\",
+      "legacy": {
+        "id": "alt+\\",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001b;",
+      "legacy": {
+        "id": "alt+;",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001b'",
+      "legacy": {
+        "id": "alt+'",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001b,",
+      "legacy": {
+        "id": "alt+,",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001b.",
+      "legacy": {
+        "id": "alt+.",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001b/",
+      "legacy": {
+        "id": "alt+/",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001b`",
+      "legacy": {
+        "id": "alt+`",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001b-",
+      "legacy": {
+        "id": "alt+-",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001b=",
+      "legacy": {
+        "id": "alt+=",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001b\u0001",
+      "legacy": {
+        "id": "ctrl+alt+a",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001b\u001a",
+      "legacy": {
+        "id": "ctrl+alt+z",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001b\r",
+      "legacy": {
+        "id": "alt+enter",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": "shift+enter",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b ",
+      "legacy": {
+        "id": "alt+space",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\n",
+      "legacy": {
+        "id": "enter",
+        "eventType": "press"
+      },
+      "kitty": {
+        "id": "shift+enter",
+        "eventType": "press"
+      }
+    }
+  ],
+  "divergences": [
+    {
+      "sequence": "A",
+      "pi": {
+        "id": "A",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "B",
+      "pi": {
+        "id": "B",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "C",
+      "pi": {
+        "id": "C",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "D",
+      "pi": {
+        "id": "D",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "E",
+      "pi": {
+        "id": "E",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "F",
+      "pi": {
+        "id": "F",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "G",
+      "pi": {
+        "id": "G",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "H",
+      "pi": {
+        "id": "H",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "I",
+      "pi": {
+        "id": "I",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "J",
+      "pi": {
+        "id": "J",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "K",
+      "pi": {
+        "id": "K",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "L",
+      "pi": {
+        "id": "L",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "M",
+      "pi": {
+        "id": "M",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "N",
+      "pi": {
+        "id": "N",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "O",
+      "pi": {
+        "id": "O",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "P",
+      "pi": {
+        "id": "P",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "Q",
+      "pi": {
+        "id": "Q",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "R",
+      "pi": {
+        "id": "R",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "S",
+      "pi": {
+        "id": "S",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "T",
+      "pi": {
+        "id": "T",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "U",
+      "pi": {
+        "id": "U",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "V",
+      "pi": {
+        "id": "V",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "W",
+      "pi": {
+        "id": "W",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "X",
+      "pi": {
+        "id": "X",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "Y",
+      "pi": {
+        "id": "Y",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "Z",
+      "pi": {
+        "id": "Z",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[65;1u",
+      "pi": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001b[65;5u",
+      "pi": {
+        "id": null,
+        "eventType": null
+      }
+    },
+    {
+      "sequence": "\u001b[27;5;65~",
+      "pi": {
+        "id": null,
+        "eventType": null
+      }
+    }
+  ],
+  "discarded": [
+    "\u001b[2J",
+    "\u001b[K",
+    "\u001b[6n",
+    "\u001b[?25l",
+    "\u001b[?2004h",
+    "\u001b]0;title\u0007",
+    "\u001b]9;4;1\u0007",
+    "\u001b]1337;File=inline=1:AA\u0007",
+    "\u001bP1|foo\u001b\\",
+    "\u001b_Ga=T,f=100;AAAA\u001b\\",
+    "\u001b[M",
+    "\u001b[<35;20;5m"
+  ],
+  "paste": [
+    {
+      "framed": "\u001b[200~plain paste\u001b[201~",
+      "content": "plain paste",
+      "lines": 1
+    },
+    {
+      "framed": "\u001b[200~line one\nline two\u001b[201~",
+      "content": "line one\nline two",
+      "lines": 2
+    },
+    {
+      "framed": "\u001b[200~\u001b[31mred\u001b[0m \u001b[27;5:3u \u001b[200~nested\u001b[201~",
+      "content": "\u001b[31mred\u001b[0m \u001b[27;5:3u \u001b[200~nested",
+      "lines": 1
+    }
+  ],
+  "chunkSplits": [
+    {
+      "sequence": "\u001b[A",
+      "chunkSize": 1,
+      "expected": {
+        "id": "up",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[27;6;65~",
+      "chunkSize": 2,
+      "expected": {
+        "id": "shift+ctrl+a",
+        "eventType": "press"
+      }
+    },
+    {
+      "sequence": "\u001b[97;6:3u",
+      "chunkSize": 3,
+      "expected": {
+        "id": "shift+ctrl+a",
+        "eventType": "release"
+      }
+    },
+    {
+      "sequence": "\u001b[1;6:2D",
+      "chunkSize": 1,
+      "expected": {
+        "id": "shift+ctrl+left",
+        "eventType": "repeat"
+      }
+    },
+    {
+      "sequence": "\u001b[200~split paste\u001b[201~",
+      "chunkSize": 4,
+      "expected": {
+        "id": null,
+        "eventType": null
+      }
+    }
+  ]
+}

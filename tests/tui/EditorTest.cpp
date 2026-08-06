@@ -262,6 +262,26 @@ TEST_CASE("Editor edits Unicode input through the Virtual Terminal seam", "[tui]
     CHECK(editor_pointer->text() == "\xc3\xa9");
 }
 
+TEST_CASE("Editor keeps typed uppercase letters while identifiers stay canonical", "[tui][editor][issue386]") {
+    cch::tui::VirtualTerminal terminal({.columns = 12, .rows = 2});
+    cch::tui::Tui tui(terminal);
+    auto editor = std::make_unique<cch::tui::Editor>();
+    auto* editor_pointer = editor.get();
+    REQUIRE(tui.add_child(std::move(editor)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(editor_pointer));
+    // Shift+letters decode to the canonical shift+letter identifier (the
+    // "Tui decodes the supported legacy special key vocabulary" rows) while
+    // the inserted text preserves the typed case (pi keys.ts "shift+letter
+    // produces uppercase"; the differential corpus pins the identifier).
+    REQUIRE(terminal.inject_input("AbC"));
+    CHECK(editor_pointer->text() == "AbC");
+    // Modify-other-keys and Kitty CSI-u shifted letters preserve case too.
+    REQUIRE(terminal.inject_input("\x1b[27;2;90~"));
+    REQUIRE(terminal.inject_input("\x1b[90;2u"));
+    CHECK(editor_pointer->text() == "AbCZZ");
+}
+
 TEST_CASE("Editor converts the semantic space key back to fresh text", "[tui][editor][issue58]") {
     cch::tui::VirtualTerminal terminal({.columns = 12, .rows = 2});
     cch::tui::Tui tui(terminal);

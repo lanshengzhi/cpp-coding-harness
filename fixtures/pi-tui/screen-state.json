@@ -1,0 +1,141 @@
+{
+  "comment": "VirtualTerminal screen-state goldens for the pi-tui completion gate (issue #386). Each row pins the deterministic C++ screen state (or forwarded-input outcome) of one scenario and cites the frozen pi test expectation it mirrors (row-by-row TS-side pin, ADR 0035 gate tier 3 fork-B). The C++ side is the executable evidence (VirtualTerminal is the retained protocol-aware harness); the small line arrays here are the committed snapshots the differential test compares byte-for-byte. Scenario renderings are deterministic: fixed dimensions, dummy text only.",
+  "scenarios": [
+    {
+      "name": "renderer-middle-line-change",
+      "columns": 10,
+      "rows": 5,
+      "pi": "tui-render.test.ts \"renders correctly when only a middle line changes (spinner case)\" — the changed middle line updates while the surrounding lines stay (pi asserts viewport[1] contains the new text)",
+      "expected": [
+        "line one  ",
+        "line two  ",
+        "line chg  ",
+        "",
+        ""
+      ]
+    },
+    {
+      "name": "renderer-last-line-change",
+      "columns": 10,
+      "rows": 5,
+      "pi": "tui-render.test.ts \"renders correctly when last line changes but rest stays same\" — the trailing line updates without touching earlier lines",
+      "expected": [
+        "alpha     ",
+        "beta      ",
+        "changed   ",
+        "",
+        ""
+      ]
+    },
+    {
+      "name": "shrink-to-zero",
+      "columns": 6,
+      "rows": 3,
+      "pi": "tui-shrink.test.ts \"clears all rendered lines when content shrinks to zero\" — every previously rendered line is cleared (pi asserts no viewport line contains the old text)",
+      "expected": [
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "name": "shrink-to-single-line",
+      "columns": 8,
+      "rows": 4,
+      "pi": "tui-shrink.test.ts \"handles shrink to single line\" — rows below the shrunken content are cleared",
+      "expected": [
+        "Only    ",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "name": "shrink-clears-trailing-rows",
+      "columns": 8,
+      "rows": 6,
+      "pi": "tui-render.test.ts \"clears empty rows when content shrinks significantly\" — first lines preserved, rows after the new content are cleared (pi asserts viewport[2..].trim() is empty)",
+      "expected": [
+        "Line 0  ",
+        "Line 1  ",
+        "        ",
+        "        ",
+        "        ",
+        "        "
+      ]
+    },
+    {
+      "name": "cell-size-bare-escape",
+      "columns": 10,
+      "rows": 3,
+      "pi": "tui-cell-size-input.test.ts \"forwards bare escape even when a cell size query was sent at startup\" — a lone ESC is not swallowed by the cell-size response consumer (pi asserts recorder.inputs deep-equals [\"\\u001b\"]; the C++ decode-at-edge layer buffers the ambiguous ESC until the fragment flush and then delivers the escape key)",
+      "expected": [
+        "escape"
+      ]
+    },
+    {
+      "name": "cell-size-response-consumed",
+      "columns": 10,
+      "rows": 3,
+      "pi": "tui-cell-size-input.test.ts \"consumes cell size responses and still forwards later user input\" — the \\u001b[6;20;10t response updates the cell dimensions and is not forwarded; later input still arrives (pi asserts recorder.inputs deep-equals [] then [\"q\"] and getCellDimensions() is {widthPx: 10, heightPx: 20})",
+      "expected": [
+        "q",
+        "cell 10x20"
+      ]
+    },
+    {
+      "name": "overlay-bottom-right",
+      "columns": 12,
+      "rows": 4,
+      "pi": "overlay-options.test.ts \"should position overlay at bottom-right\" — the overlay lands in the bottom-right corner of the terminal",
+      "expected": [
+        "base        ",
+        "            ",
+        "            ",
+        "ov          "
+      ]
+    },
+    {
+      "name": "overlay-top-left",
+      "columns": 12,
+      "rows": 4,
+      "pi": "overlay-options.test.ts \"should position overlay at top-left\" — the overlay lands in the top-left corner",
+      "expected": [
+        "ov          ",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "name": "overlay-non-capturing-passthrough",
+      "columns": 10,
+      "rows": 3,
+      "pi": "overlay-non-capturing.test.ts \"non-capturing overlay preserves focus on creation\" — a non-capturing overlay does not capture input; the focused base component still receives the key",
+      "expected": [
+        "a"
+      ]
+    },
+    {
+      "name": "component-input-cjk",
+      "columns": 20,
+      "rows": 1,
+      "pi": "input.test.ts \"does not overflow with wide CJK and fullwidth text\" — the single-line Input renders horizontally scrolled content whose visible width never exceeds the component width",
+      "expected": [
+        "> 가나다라마바사아자"
+      ]
+    },
+    {
+      "name": "component-select-list",
+      "columns": 60,
+      "rows": 4,
+      "pi": "select-list.test.ts \"normalizes multiline descriptions to single line\" — multiline descriptions render on one line with the primary label column aligned",
+      "expected": [
+        "→ Short               line one line two                   ",
+        "  A very long primar  second description                ",
+        "",
+        ""
+      ]
+    }
+  ]
+}

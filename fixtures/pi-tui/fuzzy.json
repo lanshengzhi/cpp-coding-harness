@@ -1,0 +1,184 @@
+
+{
+  "match": [
+    {
+      "query": "",
+      "text": "anything",
+      "output": {
+        "matches": true,
+        "score": 0
+      }
+    },
+    {
+      "query": "abc",
+      "text": "xxabcxx",
+      "output": {
+        "matches": true,
+        "score": -14.1
+      }
+    },
+    {
+      "query": "abc",
+      "text": "aabbcc",
+      "output": {
+        "matches": true,
+        "score": -10.4
+      }
+    },
+    {
+      "query": "abc",
+      "text": "ac",
+      "output": {
+        "matches": false,
+        "score": 0
+      }
+    },
+    {
+      "query": "ABC",
+      "text": "xxabcxx",
+      "output": {
+        "matches": true,
+        "score": -14.1
+      }
+    },
+    {
+      "query": "al",
+      "text": "alpha",
+      "output": {
+        "matches": true,
+        "score": -24.9
+      }
+    },
+    {
+      "query": "al",
+      "text": "alpine",
+      "output": {
+        "matches": true,
+        "score": -24.9
+      }
+    },
+    {
+      "query": "gt",
+      "text": "gpt-5.6",
+      "output": {
+        "matches": true,
+        "score": -12.8
+      }
+    },
+    {
+      "query": "g56",
+      "text": "gpt-5.6",
+      "output": {
+        "matches": true,
+        "score": -26
+      }
+    },
+    {
+      "query": "56g",
+      "text": "gpt-5.6",
+      "output": {
+        "matches": true,
+        "score": -21
+      }
+    },
+    {
+      "query": "kimi",
+      "text": "kimi-for-coding",
+      "output": {
+        "matches": true,
+        "score": -59.4
+      }
+    },
+    {
+      "query": "deep",
+      "text": "deepseek-v4-flash",
+      "output": {
+        "matches": true,
+        "score": -59.4
+      }
+    },
+    {
+      "query": "not-there",
+      "text": "short",
+      "output": {
+        "matches": false,
+        "score": 0
+      }
+    },
+    {
+      "query": "abc",
+      "text": "abcdef",
+      "output": {
+        "matches": true,
+        "score": -39.699999999999996
+      }
+    }
+  ],
+  "filter": [
+    {
+      "name": "empty-query",
+      "items": [
+        "alpha",
+        "beta"
+      ],
+      "query": "",
+      "output": [
+        "alpha",
+        "beta"
+      ]
+    },
+    {
+      "name": "rank",
+      "items": [
+        "alpha",
+        "beta",
+        "alpine",
+        "alps"
+      ],
+      "query": "al",
+      "output": [
+        "alpha",
+        "alpine",
+        "alps"
+      ]
+    },
+    {
+      "name": "tokens",
+      "items": [
+        "src/tui/Editor.cpp",
+        "src/ai/Editor.cpp",
+        "docs/editor.md"
+      ],
+      "query": "tui editor",
+      "output": [
+        "src/tui/Editor.cpp"
+      ]
+    },
+    {
+      "name": "exact",
+      "items": [
+        "model-selection",
+        "model",
+        "models.json"
+      ],
+      "query": "model",
+      "output": [
+        "model",
+        "model-selection",
+        "models.json"
+      ]
+    },
+    {
+      "name": "slash",
+      "items": [
+        "a/b/c",
+        "a/b",
+        "x/y"
+      ],
+      "query": "a/c",
+      "output": [
+        "a/b/c"
+      ]
+    }
+  ]
+}
