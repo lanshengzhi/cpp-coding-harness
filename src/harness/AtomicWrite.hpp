@@ -2,7 +2,7 @@
 
 #include "../../include/cch/util/Error.hpp"
 #include "PosixWrite.hpp"
-#include "UniqueFd.hpp"
+#include "util/UniqueFd.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -67,7 +67,7 @@ inline util::ExpectedVoid write_atomic_file(const std::filesystem::path& target,
 #ifdef O_NOFOLLOW
     dir_flags |= O_NOFOLLOW;
 #endif
-    const UniqueFd dir_fd(::open(parent.c_str(), dir_flags));
+    const util::UniqueFd dir_fd(::open(parent.c_str(), dir_flags));
     if (!dir_fd) {
         return std::unexpected(write_error("could not open target parent directory: " + std::string(std::strerror(errno))));
     }
@@ -77,7 +77,7 @@ inline util::ExpectedVoid write_atomic_file(const std::filesystem::path& target,
 #ifdef O_NOFOLLOW
     flags |= O_NOFOLLOW;
 #endif
-    UniqueFd file_fd(::openat(dir_fd.get(), temp_filename.c_str(), flags, mode));
+    util::UniqueFd file_fd(::openat(dir_fd.get(), temp_filename.c_str(), flags, mode));
     if (!file_fd) {
         return std::unexpected(write_error("could not create temporary file: " + std::string(std::strerror(errno))));
     }

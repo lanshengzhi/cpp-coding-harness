@@ -19,6 +19,15 @@ struct VisibleRange {
     std::size_t end{0};
 };
 
+/// The text after leading ASCII whitespace (pi's trimStart on the editor's
+/// ASCII-relevant comparisons).
+[[nodiscard]] inline std::string_view trim_start_ascii(std::string_view text) {
+    const auto first = std::find_if_not(text.begin(), text.end(), [](unsigned char value) {
+        return std::isspace(value) != 0;
+    });
+    return text.substr(static_cast<std::size_t>(first - text.begin()));
+}
+
 [[nodiscard]] inline VisibleRange centered_visible_range(
     std::size_t total,
     std::size_t selected,

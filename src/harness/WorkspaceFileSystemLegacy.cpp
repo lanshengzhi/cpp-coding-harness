@@ -62,7 +62,7 @@ util::Expected<std::string> WorkspaceFileSystem::read_existing_file(const std::s
     }
 
     auto filename = target->filename().string();
-    UniqueFd fd(::openat(parent_guard->get(), filename.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+    util::UniqueFd fd(::openat(parent_guard->get(), filename.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
     if (!fd) {
         if (errno == ELOOP) {
             return std::unexpected(workspace_error("refusing to read through symlink: " + requested));

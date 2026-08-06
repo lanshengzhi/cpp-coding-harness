@@ -9,7 +9,7 @@
 // presentation and the completed Bash Message) and, once the tail truncates,
 // a complete spill file in the OS temporary directory.
 
-#include "harness/UniqueFd.hpp"
+#include "util/UniqueFd.hpp"
 #include "util/OutputLimiter.hpp"
 
 #include <cch/util/Error.hpp>
@@ -107,13 +107,13 @@ private:
 #if defined(__unix__) || defined(__APPLE__)
     [[nodiscard]] static util::ExpectedVoid write_all(int fd, std::string_view bytes);
     static void remove_candidate(
-        harness::UniqueFd& fd,
+        util::UniqueFd& fd,
         const std::filesystem::path& candidate);
 #endif
     void remove_file();
 
 #if defined(__unix__) || defined(__APPLE__)
-    harness::UniqueFd fd_;
+    util::UniqueFd fd_;
 #endif
     std::filesystem::path path_;
     bool active_{false};

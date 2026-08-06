@@ -121,45 +121,97 @@ TEST_CASE("Editor makes a large bracketed paste editable without submitting", "[
     CHECK(editor.expanded_text().empty());
 }
 
-TEST_CASE("Editor accepts caller supplied command and filesystem suggestions", "[tui][editor][issue48][issue60]") {
-    cch::tui::Editor editor;
-    editor.set_autocomplete_provider([](const cch::tui::AutocompleteRequest& request)
-        -> std::optional<cch::tui::AutocompleteSuggestions> {
-        if (request.lines[request.cursor.line].starts_with("/")) {
-            return cch::tui::AutocompleteSuggestions{
-                .items = {{.value = "help", .label = "help", .description = {}},
-                          {.value = "history", .label = "history", .description = {}}},
-                .prefix = request.lines[request.cursor.line],
-            };
-        }
-        if (request.lines[request.cursor.line].starts_with("@")) {
-            return cch::tui::AutocompleteSuggestions{
-                .items = {{.value = "src/", .label = "src/", .description = {}}},
-                .prefix = "@s",
-            };
-        }
-        return std::nullopt;
-    });
+TEST_CASE(
+    "Editor accepts caller supplied command and filesystem suggestions through the async provider",
+    "[tui][editor][issue48][issue60][issue383]") {
+    class ScriptedProvider final : public cch::tui::AutocompleteProvider {
+    public:
+        std::optional<cch::tui::AutocompleteSuggestions> response;
+        std::vector<cch::tui::AutocompleteRequest> requests;
+        int apply_calls{0};
+        bool trigger_file_completion{true};
 
-    editor.set_text("/");
-    key(editor, "tab");
+        void get_suggestions(
+            const cch::tui::AutocompleteRequest& request,
+            cch::tui::AutocompleteResultSink sink) override {
+            requests.push_back(request);
+            sink(response);
+        }
+        cch::tui::AutocompleteApplyResult apply_completion(
+            const std::vector<std::string>& lines,
+            std::size_t cursor_line,
+            std::size_t cursor_column,
+            const cch::tui::AutocompleteItem& item,
+            std::string_view prefix) override {
+            ++apply_calls;
+            auto result_lines = lines;
+            auto& line = result_lines[cursor_line];
+            if (prefix.starts_with('/')) {
+                // pi's slash-command surgery: "/name " plus a trailing space.
+                const auto before = line.substr(0, cursor_column - prefix.size());
+                const auto after = line.substr(cursor_column);
+                line = before + "/" + item.value + " " + after;
+                return {
+                    .lines = std::move(result_lines),
+                    .cursor_line = cursor_line,
+                    .cursor_column = before.size() + item.value.size() + 2,
+                };
+            }
+            line = line.substr(0, cursor_column - prefix.size()) + item.value + line.substr(cursor_column);
+            return {
+                .lines = std::move(result_lines),
+                .cursor_line = cursor_line,
+                .cursor_column = cursor_column - prefix.size() + item.value.size(),
+            };
+        }
+        bool should_trigger_file_completion(
+            const std::vector<std::string>&,
+            std::size_t,
+            std::size_t) const override {
+            return trigger_file_completion;
+        }
+        std::vector<std::string> trigger_characters() const override { return {}; }
+    };
+
+    auto provider = std::make_unique<ScriptedProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->response = cch::tui::AutocompleteSuggestions{
+        .items = {{.value = "help", .label = "help", .description = {}},
+                  {.value = "history", .label = "history", .description = {}}},
+        .prefix = "/",
+    };
+    cch::tui::Editor editor;
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "/");
     REQUIRE(editor.autocomplete_open());
     CHECK(editor.autocomplete_selected_index() == 0);
     key(editor, "down");
     CHECK(editor.autocomplete_selected_index() == 1);
     key(editor, "up");
     CHECK(editor.autocomplete_selected_index() == 0);
-
-    editor.set_text({});
-    type(editor, "/he");
-    REQUIRE(editor.autocomplete_open());
     key(editor, "tab");
-    CHECK(editor.text() == "/help");
+    CHECK(provider_ptr->apply_calls == 1);
+    CHECK(editor.text() == "/help ");
     CHECK_FALSE(editor.autocomplete_open());
 
+    editor.set_text("/he");
+    type(editor, "l");
+    REQUIRE(editor.autocomplete_open());
+    key(editor, "escape");
+    CHECK_FALSE(editor.autocomplete_open());
+    CHECK(editor.text() == "/hel");
+
+    provider_ptr->response = cch::tui::AutocompleteSuggestions{
+        .items = {{.value = "@src/", .label = "src/", .description = {}},
+                  {.value = "@tests/", .label = "tests/", .description = {}}},
+        .prefix = "@s",
+    };
     editor.set_text("@s");
     key(editor, "tab");
     REQUIRE(editor.autocomplete_open());
+    CHECK(provider_ptr->requests.back().force);
+    CHECK(provider_ptr->requests.back().cursor_column == 2);
     key(editor, "escape");
     CHECK_FALSE(editor.autocomplete_open());
     CHECK(editor.text() == "@s");
@@ -562,4 +614,314 @@ TEST_CASE("Editor recalling history is undoable back to the draft", "[tui][edito
 
     CHECK(editor.text() == "draft");
     CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 0}));
+}
+
+namespace {
+
+/// Deterministic one-shot timer double for autocomplete debounce tests.
+class ManualDebounceTimer final : public cch::tui::AutocompleteDebounceTimer {
+public:
+    std::chrono::milliseconds last_delay{};
+    std::size_t start_count{0};
+    std::size_t cancel_count{0};
+
+    void start(std::chrono::milliseconds delay, std::move_only_function<void()> on_fire) override {
+        last_delay = delay;
+        callback = std::move(on_fire);
+        ++start_count;
+    }
+    void cancel() override {
+        ++cancel_count;
+        callback = nullptr;
+    }
+    void fire() {
+        auto on_fire = std::move(callback);
+        callback = nullptr;
+        if (on_fire) on_fire();
+    }
+
+private:
+    std::move_only_function<void()> callback;
+};
+
+/// Provider double with controllable sink delivery: `immediate` responds
+/// synchronously; otherwise the sink is held for manual firing in order.
+class HeldAutocompleteProvider final : public cch::tui::AutocompleteProvider {
+public:
+    bool immediate{true};
+    std::optional<cch::tui::AutocompleteSuggestions> response;
+    std::vector<cch::tui::AutocompleteRequest> requests;
+    std::vector<cch::tui::AutocompleteResultSink> held_sinks;
+    bool trigger_file_completion{true};
+
+    void get_suggestions(
+        const cch::tui::AutocompleteRequest& request,
+        cch::tui::AutocompleteResultSink sink) override {
+        requests.push_back(request);
+        if (!immediate) {
+            held_sinks.push_back(std::move(sink));
+            return;
+        }
+        sink(response);
+    }
+    cch::tui::AutocompleteApplyResult apply_completion(
+        const std::vector<std::string>& lines,
+        std::size_t cursor_line,
+        std::size_t cursor_column,
+        const cch::tui::AutocompleteItem& item,
+        std::string_view prefix) override {
+        auto result_lines = lines;
+        auto& line = result_lines[cursor_line];
+        if (prefix.starts_with('/')) {
+            // pi's slash-command surgery: "/name " plus a trailing space.
+            const auto before = line.substr(0, cursor_column - prefix.size());
+            const auto after = line.substr(cursor_column);
+            line = before + "/" + item.value + " " + after;
+            return {
+                .lines = std::move(result_lines),
+                .cursor_line = cursor_line,
+                .cursor_column = before.size() + item.value.size() + 2,
+            };
+        }
+        line = line.substr(0, cursor_column - prefix.size()) + item.value + line.substr(cursor_column);
+        return {
+            .lines = std::move(result_lines),
+            .cursor_line = cursor_line,
+            .cursor_column = cursor_column - prefix.size() + item.value.size(),
+        };
+    }
+    bool should_trigger_file_completion(
+        const std::vector<std::string>&,
+        std::size_t,
+        std::size_t) const override {
+        return trigger_file_completion;
+    }
+    std::vector<std::string> trigger_characters() const override { return {}; }
+};
+
+cch::tui::AutocompleteSuggestions slash_suggestions() {
+    return cch::tui::AutocompleteSuggestions{
+        .items = {{.value = "help", .label = "help", .description = {}}},
+        .prefix = "/",
+    };
+}
+
+} // namespace
+
+TEST_CASE("Editor debounces attachment autocomplete until the injected timer fires", "[tui][editor][autocomplete][issue383]") {
+    auto timer = std::make_unique<ManualDebounceTimer>();
+    auto* timer_ptr = timer.get();
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->response = cch::tui::AutocompleteSuggestions{
+        .items = {{.value = "@src/", .label = "src/", .description = {}}},
+        .prefix = "@",
+    };
+    cch::tui::Editor editor({.autocomplete_debounce_timer = std::move(timer)});
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "@");
+    CHECK(provider_ptr->requests.empty());  // debounced, not requested yet
+    CHECK(timer_ptr->start_count == 1);
+    CHECK(timer_ptr->last_delay == std::chrono::milliseconds{20});
+
+    timer_ptr->fire();
+    REQUIRE(provider_ptr->requests.size() == 1);
+    REQUIRE(editor.autocomplete_open());
+
+    // A new keystroke cancels the pending debounce and re-schedules. The
+    // request path always cancels the previous debounce first (pi
+    // cancelAutocompleteRequest), plus the cancel on set_autocomplete_provider.
+    type(editor, "s");
+    CHECK(timer_ptr->cancel_count == 3);
+    CHECK(timer_ptr->start_count == 2);
+    timer_ptr->fire();
+    REQUIRE(provider_ptr->requests.size() == 2);
+    REQUIRE(editor.autocomplete_open());
+}
+
+TEST_CASE("Editor debounces unclosed quoted attachment paths like pi", "[tui][editor][autocomplete][issue383]") {
+    auto timer = std::make_unique<ManualDebounceTimer>();
+    auto* timer_ptr = timer.get();
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->response = cch::tui::AutocompleteSuggestions{
+        .items = {{.value = "@\"src/main.cc\"", .label = "main.cc", .description = {}}},
+        .prefix = "@\"src/ma",
+    };
+    cch::tui::Editor editor({.autocomplete_debounce_timer = std::move(timer)});
+    editor.set_autocomplete_provider(std::move(provider));
+
+    // Typing inside an unclosed @" quoted path (spaces included) debounces.
+    type(editor, "@\"src/ma");
+    CHECK(provider_ptr->requests.empty());
+    CHECK(timer_ptr->start_count == 1);
+    CHECK(timer_ptr->last_delay == std::chrono::milliseconds{20});
+    timer_ptr->fire();
+    REQUIRE(provider_ptr->requests.size() == 1);
+    REQUIRE(editor.autocomplete_open());
+}
+
+TEST_CASE("Editor rejects stale autocomplete responses by generation", "[tui][editor][autocomplete][issue383]") {
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->immediate = false;
+    cch::tui::Editor editor;
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "/");  // request A held
+    REQUIRE(provider_ptr->requests.size() == 1);
+    type(editor, "/h");  // request B supersedes A
+    REQUIRE(provider_ptr->requests.size() == 2);
+
+    // The stale response for A is dropped at delivery time.
+    provider_ptr->held_sinks[0](slash_suggestions());
+    CHECK_FALSE(editor.autocomplete_open());
+
+    // The current response for B opens the menu at the next input boundary.
+    provider_ptr->held_sinks[1](slash_suggestions());
+    CHECK_FALSE(editor.autocomplete_open());
+    type(editor, "e");
+    REQUIRE(editor.autocomplete_open());
+    CHECK(editor.autocomplete_items().size() == 1);
+}
+
+TEST_CASE("Editor aborts an in-flight autocomplete request when superseded", "[tui][editor][autocomplete][issue383]") {
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->immediate = false;
+    cch::tui::Editor editor;
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "@");  // request A held with its stop token
+    REQUIRE(provider_ptr->requests.size() == 1);
+    auto aborted_token = provider_ptr->requests[0].stop_token;
+    CHECK_FALSE(aborted_token.stop_requested());
+
+    type(editor, "s");  // request B cancels and aborts A
+    REQUIRE(provider_ptr->requests.size() == 2);
+    CHECK(aborted_token.stop_requested());
+    CHECK_FALSE(provider_ptr->requests[1].stop_token.stop_requested());
+
+    // The aborted request's late response is rejected.
+    provider_ptr->held_sinks[0](slash_suggestions());
+    CHECK_FALSE(editor.autocomplete_open());
+}
+
+TEST_CASE("Editor escape-cancel keeps a late in-flight result from reopening the menu", "[tui][editor][autocomplete][issue383]") {
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->immediate = false;
+    cch::tui::Editor editor;
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "/");  // request A held
+    REQUIRE(provider_ptr->requests.size() == 1);
+    provider_ptr->held_sinks[0](slash_suggestions());  // A resolves
+    type(editor, "x");  // drain opens the menu; typing re-requests (held)
+    REQUIRE(editor.autocomplete_open());
+    REQUIRE(provider_ptr->requests.size() == 2);
+
+    key(editor, "escape");  // cancel the open menu and the in-flight request
+    CHECK_FALSE(editor.autocomplete_open());
+    CHECK(provider_ptr->requests[1].stop_token.stop_requested());
+
+    // The late result of the cancelled request must not reopen the menu (pi
+    // aborted-signal check).
+    provider_ptr->held_sinks[1](slash_suggestions());
+    CHECK_FALSE(editor.autocomplete_open());
+    type(editor, "y");
+    CHECK_FALSE(editor.autocomplete_open());
+}
+
+TEST_CASE("Editor drops autocomplete results that no longer match the buffer snapshot", "[tui][editor][autocomplete][issue383]") {
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->immediate = false;
+    cch::tui::Editor editor;
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "@");  // request A held; typing a plain space does not re-request
+    REQUIRE(provider_ptr->requests.size() == 1);
+    type(editor, " ");
+    REQUIRE(provider_ptr->requests.size() == 1);
+
+    // A's result lands after the buffer moved; the snapshot check drops it.
+    provider_ptr->held_sinks[0](cch::tui::AutocompleteSuggestions{
+        .items = {{.value = "@src/", .label = "src/", .description = {}}},
+        .prefix = "@",
+    });
+    key(editor, "left");
+    key(editor, "right");
+    CHECK_FALSE(editor.autocomplete_open());
+}
+
+TEST_CASE("Editor applies a unique forced completion without opening the menu", "[tui][editor][autocomplete][issue383]") {
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->response = cch::tui::AutocompleteSuggestions{
+        .items = {{.value = "src/", .label = "src/", .description = {}}},
+        .prefix = "",
+    };
+    cch::tui::Editor editor;
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "ab");
+    key(editor, "tab");  // force: exactly one item applies immediately
+    CHECK(editor.text() == "absrc/");
+    CHECK_FALSE(editor.autocomplete_open());
+    CHECK(provider_ptr->requests.back().force);
+}
+
+TEST_CASE("Editor gates forced file completion behind the provider", "[tui][editor][autocomplete][issue383]") {
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->trigger_file_completion = false;
+    cch::tui::Editor editor;
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "ab");
+    key(editor, "tab");
+    CHECK(provider_ptr->requests.empty());
+    CHECK_FALSE(editor.autocomplete_open());
+}
+
+TEST_CASE("Editor select.confirm applies and falls through to submit for slash commands", "[tui][editor][autocomplete][issue383]") {
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->response = slash_suggestions();
+    std::vector<std::string> submitted;
+    cch::tui::Editor editor(
+        {},
+        [](std::string) {},
+        [&submitted](std::string text) { submitted.push_back(std::move(text)); });
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "/");
+    REQUIRE(editor.autocomplete_open());
+    key(editor, "enter");  // slash confirm applies then submits
+    CHECK(editor.text().empty());
+    REQUIRE(submitted.size() == 1);
+    CHECK(submitted[0] == "/help");
+}
+
+TEST_CASE("Editor select.confirm applies without submitting outside slash commands", "[tui][editor][autocomplete][issue383]") {
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->response = cch::tui::AutocompleteSuggestions{
+        .items = {{.value = "@src/", .label = "src/", .description = {}}},
+        .prefix = "@",
+    };
+    std::vector<std::string> submitted;
+    cch::tui::Editor editor(
+        {},
+        [](std::string) {},
+        [&submitted](std::string text) { submitted.push_back(std::move(text)); });
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "@");
+    REQUIRE(editor.autocomplete_open());
+    key(editor, "enter");
+    CHECK(editor.text() == "@src/");
+    CHECK(submitted.empty());
 }

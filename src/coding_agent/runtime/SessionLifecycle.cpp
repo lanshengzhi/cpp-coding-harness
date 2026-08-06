@@ -3,7 +3,7 @@
 #include "../../../include/cch/coding_agent/AgentConfigDir.hpp"
 #include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
 #include "../SessionPathPolicy.hpp"
-#include "harness/UniqueFd.hpp"
+#include "util/UniqueFd.hpp"
 #include "harness/session/InMemorySessionStore.hpp"
 
 #include <cerrno>
@@ -113,7 +113,7 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
 #endif
 
     const auto start = path.is_absolute() ? path.root_path() : std::filesystem::path{"."};
-    harness::UniqueFd current(::open(start.c_str(), open_flags));
+    util::UniqueFd current(::open(start.c_str(), open_flags));
     if (!current) {
         return std::unexpected(session_error(
             "could not open session directory root",
@@ -148,7 +148,7 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
             final_created = true;
         }
 
-        harness::UniqueFd next(::openat(current.get(), component->c_str(), open_flags));
+        util::UniqueFd next(::openat(current.get(), component->c_str(), open_flags));
         if (!next) {
             const auto reason = std::string{std::strerror(errno)};
             return std::unexpected(session_error(

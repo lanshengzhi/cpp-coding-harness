@@ -2,7 +2,7 @@
 #include "SessionJournalTestHooks.hpp"
 
 #include "harness/PosixWrite.hpp"
-#include "harness/UniqueFd.hpp"
+#include "util/UniqueFd.hpp"
 
 #include <algorithm>
 #include <array>
@@ -33,7 +33,7 @@ namespace {
 }
 
 #if defined(__unix__) || defined(__APPLE__)
-[[nodiscard]] util::Expected<UniqueFd> open_parent_directory(
+[[nodiscard]] util::Expected<util::UniqueFd> open_parent_directory(
     const std::filesystem::path& path,
     bool create_missing) {
     int open_flags = O_RDONLY | O_DIRECTORY;
@@ -48,7 +48,7 @@ namespace {
         ? std::filesystem::path{"."}
         : path.parent_path();
     const auto start = parent.is_absolute() ? parent.root_path() : std::filesystem::path{"."};
-    UniqueFd current(::open(start.c_str(), open_flags));
+    util::UniqueFd current(::open(start.c_str(), open_flags));
     if (!current) {
         return std::unexpected(session_error(
             "could not open session directory root", std::strerror(errno)));
@@ -70,7 +70,7 @@ namespace {
             const auto reason = std::string{std::strerror(errno)};
             return std::unexpected(session_error("could not create session directory", reason));
         }
-        UniqueFd next(::openat(current.get(), component.c_str(), open_flags));
+        util::UniqueFd next(::openat(current.get(), component.c_str(), open_flags));
         if (!next) {
             const auto reason = std::string{std::strerror(errno)};
             return std::unexpected(session_error(
@@ -82,7 +82,7 @@ namespace {
     return current;
 }
 
-[[nodiscard]] util::Expected<UniqueFd> open_session_path(
+[[nodiscard]] util::Expected<util::UniqueFd> open_session_path(
     const std::filesystem::path& path,
     int flags,
     int mode = 0,
@@ -99,7 +99,7 @@ namespace {
 #ifdef O_NOFOLLOW
     final_flags |= O_NOFOLLOW;
 #endif
-    UniqueFd descriptor(::openat(parent->get(), path.filename().c_str(), final_flags, mode));
+    util::UniqueFd descriptor(::openat(parent->get(), path.filename().c_str(), final_flags, mode));
     if (!descriptor) {
         return std::unexpected(session_error("could not open session file", std::strerror(errno)));
     }

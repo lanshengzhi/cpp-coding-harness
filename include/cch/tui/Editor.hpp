@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cch/tui/Autocomplete.hpp>
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Style.hpp>
@@ -22,36 +23,28 @@ struct EditorCursor {
     bool operator==(const EditorCursor&) const = default;
 };
 
-struct AutocompleteItem {
-    std::string value;
-    std::string label;
-    std::string description;
-
-    bool operator==(const AutocompleteItem&) const = default;
-};
-
-struct AutocompleteRequest {
-    std::vector<std::string> lines;
-    EditorCursor cursor;
-    bool force{false};
-};
-
-struct AutocompleteSuggestions {
-    std::vector<AutocompleteItem> items;
-    /// Exact text immediately before the cursor that accepting an item replaces.
-    std::string prefix;
-};
-
-/// A caller-owned semantic suggestion source. The Editor does not know which
-/// product concepts (commands, files, or otherwise) produced its items.
-using AutocompleteProvider = std::move_only_function<std::optional<AutocompleteSuggestions>(
-    const AutocompleteRequest&)>;
+/// A caller-provided asynchronous suggestion source. The Editor owns the
+/// provider and does not know which product concepts (commands, files, or
+/// otherwise) produced its items. The editor serializes all requests: a new
+/// request cancels the previous one, and stale results are rejected by
+/// generation and snapshot checks.
 using EditorChangeSink = std::move_only_function<void(std::string)>;
 using EditorSubmitSink = std::move_only_function<void(std::string)>;
+
+/// Notification that the editor's presentation changed asynchronously (an
+/// autocomplete result arrived). Must return promptly and must not re-enter
+/// the editor; may be invoked from any thread.
+using EditorRenderRequestSink = std::move_only_function<void()>;
 
 struct EditorOptions {
     std::size_t max_visible_lines{5};
     std::shared_ptr<const KeybindingRegistry> keybindings{};
+    /// One-shot timer for autocomplete debounce; without one, debounced
+    /// requests run immediately (deterministic tests inject a manual timer).
+    std::unique_ptr<AutocompleteDebounceTimer> autocomplete_debounce_timer{};
+    /// Fired when an asynchronous autocomplete result lands so the host can
+    /// schedule a repaint.
+    EditorRenderRequestSink autocomplete_render_request{};
 };
 
 struct EditorTheme {
@@ -59,6 +52,11 @@ struct EditorTheme {
 };
 
 /// A reusable multiline Unicode editor controlled through semantic input.
+///
+/// Public methods serialize internally and may be called from any thread; the
+/// autocomplete result sink and render-request sink may be invoked from any
+/// thread. Caller-provided sinks (change/submit/render-request) must not
+/// re-enter the editor.
 class Editor final : public Component, public InputHandler, public Focusable, public ViewportAware {
 public:
     explicit Editor(
@@ -81,7 +79,7 @@ public:
     /// Record a submitted prompt for cursor-boundary up/down recall (pi addToHistory).
     void add_to_history(std::string text);
     void set_theme(EditorTheme theme);
-    void set_autocomplete_provider(AutocompleteProvider provider);
+    void set_autocomplete_provider(std::unique_ptr<AutocompleteProvider> provider);
     [[nodiscard]] bool autocomplete_open() const;
     [[nodiscard]] std::vector<AutocompleteItem> autocomplete_items() const;
     [[nodiscard]] std::size_t autocomplete_selected_index() const;
@@ -97,7 +95,7 @@ public:
 
 private:
     struct Impl;
-    std::unique_ptr<Impl> impl_;
+    std::shared_ptr<Impl> impl_;
 };
 
 } // namespace cch::tui

@@ -9,8 +9,11 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <map>
+#include <mutex>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -20,7 +23,10 @@ namespace cch::tui {
 namespace {
 
 // Behavioral baseline: pi 83114817 packages/tui/src/components/editor.ts
-// (addToHistory submit-path recording and cursor-boundary history recall).
+// (addToHistory submit-path recording and cursor-boundary history recall;
+// the async autocomplete request lifecycle: trigger characters and patterns,
+// debounce, force, cancellation, staleness rejection, applyCompletion
+// delegation, and the select.confirm fall-through).
 
 /// History depth cap matching pi's addToHistory.
 constexpr std::size_t kMaxHistoryEntries = 100;
@@ -114,16 +120,6 @@ using Document = std::vector<Line>;
     return {first, last};
 }
 
-[[nodiscard]] bool starts_with_case_insensitive(std::string_view value, std::string_view prefix) {
-    if (prefix.size() > value.size()) return false;
-    for (std::size_t index = 0; index < prefix.size(); ++index) {
-        const auto left = static_cast<unsigned char>(value[index]);
-        const auto right = static_cast<unsigned char>(prefix[index]);
-        if (std::tolower(left) != std::tolower(right)) return false;
-    }
-    return true;
-}
-
 } // namespace
 
 struct Editor::Impl {
@@ -150,10 +146,35 @@ struct Editor::Impl {
     std::vector<KillEntry> kill_ring;
     std::optional<std::size_t> last_yank_ring_index;
     std::optional<std::pair<EditorCursor, EditorCursor>> last_yank_range;
-    AutocompleteProvider autocomplete_provider;
+    std::unique_ptr<AutocompleteProvider> autocomplete_provider;
     std::vector<AutocompleteItem> autocomplete;
     std::string autocomplete_prefix;
     std::size_t autocomplete_selected{0};
+    enum class AutocompleteState { None, Regular, Force };
+    AutocompleteState autocomplete_state{AutocompleteState::None};
+    std::vector<std::string> autocomplete_trigger_characters{"@", "#"};
+
+    /// Self-reference for closures that may outlive the owning Editor
+    /// (provider result sinks and debounce timers); the Editor destructor
+    /// breaks the cycle. Closures must capture `self`, never `this`.
+    std::shared_ptr<Impl> self;
+    /// Serializes every public entry point (input, render, timers, sinks).
+    std::mutex impl_mutex;
+    /// Guards the cross-thread request bookkeeping and pending-result slot
+    /// (the provider result sink may be invoked from any thread).
+    std::mutex autocomplete_mutex;
+    std::size_t autocomplete_start_token{0};
+    std::size_t autocomplete_request_id{0};
+    std::stop_source request_stop_source;
+    struct PendingAutocomplete {
+        std::size_t request_id{0};
+        bool force{false};
+        bool explicit_tab{false};
+        std::string snapshot_text;
+        EditorCursor snapshot_cursor;
+        std::optional<AutocompleteSuggestions> result;
+    };
+    std::optional<PendingAutocomplete> pending_autocomplete;
 
     // Prompt history for up/down navigation. Most recent entry first, exactly
     // as pi's addToHistory unshifts; nullopt means not browsing.
@@ -200,6 +221,10 @@ struct Editor::Impl {
         }
     }
 
+    [[nodiscard]] std::string text() const {
+        return document_text(document);
+    }
+
     [[nodiscard]] std::string expanded() const {
         std::string result;
         for (std::size_t line_index = 0; line_index < document.size(); ++line_index) {
@@ -216,52 +241,445 @@ struct Editor::Impl {
         return result;
     }
 
-    void close_autocomplete() {
+    [[nodiscard]] std::size_t byte_offset_of(const Line& line, std::size_t grapheme_column) const {
+        std::size_t bytes = 0;
+        for (std::size_t index = 0; index < std::min(grapheme_column, line.size()); ++index) {
+            bytes += line[index].text.size();
+        }
+        return bytes;
+    }
+
+    [[nodiscard]] std::size_t cursor_byte_offset() const {
+        return byte_offset_of(document[cursor.line], cursor.column);
+    }
+
+    [[nodiscard]] std::string line_prefix_before_cursor() const {
+        return line_text(document[cursor.line]).substr(0, cursor_byte_offset());
+    }
+
+    [[nodiscard]] std::vector<std::string> line_strings() const {
+        std::vector<std::string> result;
+        result.reserve(document.size());
+        for (const auto& line : document) result.push_back(line_text(line));
+        return result;
+    }
+
+    void cancel_autocomplete_request() {
+        ++autocomplete_start_token;
+        // A cancelled request's late result must never reopen the menu: bump
+        // the request id so its delivery is rejected as stale (pi aborts the
+        // controller and isAutocompleteRequestCurrent checks signal.aborted).
+        {
+            std::lock_guard lock(autocomplete_mutex);
+            ++autocomplete_request_id;
+        }
+        if (options.autocomplete_debounce_timer) {
+            try {
+                options.autocomplete_debounce_timer->cancel();
+            } catch (...) {
+                // Cancellation is best-effort; a throwing timer cannot veto input.
+            }
+        }
+        request_stop_source.request_stop();
+    }
+
+    void clear_autocomplete_ui() {
         autocomplete.clear();
         autocomplete_prefix.clear();
         autocomplete_selected = 0;
+        autocomplete_state = AutocompleteState::None;
     }
 
-    void refresh_autocomplete(bool force = false) {
+    void cancel_autocomplete() {
+        cancel_autocomplete_request();
+        clear_autocomplete_ui();
+    }
+
+    /// Whether the text before the cursor ends in a token starting with one
+    /// of the trigger characters (pi buildTriggerPattern/buildDebouncePattern;
+    /// the two patterns coincide on single-line editor text).
+    [[nodiscard]] bool autocomplete_pattern_matches(std::string_view text_before_cursor) const {
+        if (autocomplete_trigger_characters.empty()) return false;
+        std::size_t token_start = 0;
+        for (std::size_t index = 0; index < text_before_cursor.size(); ++index) {
+            if (text_before_cursor[index] == ' ' || text_before_cursor[index] == '\t') token_start = index + 1;
+        }
+        if (token_start >= text_before_cursor.size()) return false;
+        const auto token = text_before_cursor.substr(token_start);
+        for (const auto& trigger : autocomplete_trigger_characters) {
+            if (token.starts_with(trigger)) return true;
+        }
+        return false;
+    }
+
+    /// Whether an attachment request deserves the 20 ms debounce (pi
+    /// buildDebouncePattern): an unclosed `@\"...` quoted path may contain
+    /// spaces, so the plain token test alone misses it.
+    [[nodiscard]] bool autocomplete_debounce_matches(std::string_view text_before_cursor) const {
+        bool in_quotes = false;
+        std::optional<std::size_t> quote_start;
+        for (std::size_t index = 0; index < text_before_cursor.size(); ++index) {
+            if (text_before_cursor[index] != '"') continue;
+            in_quotes = !in_quotes;
+            quote_start = index;
+        }
+        if (in_quotes && *quote_start > 0 && text_before_cursor[*quote_start - 1] == '@') {
+            const auto at_index = *quote_start - 1;
+            if (at_index == 0 || text_before_cursor[at_index - 1] == ' ' || text_before_cursor[at_index - 1] == '\t') {
+                return true;
+            }
+        }
+        return autocomplete_pattern_matches(text_before_cursor);
+    }
+
+    [[nodiscard]] bool is_slash_menu_allowed() const {
+        return cursor.line == 0;
+    }
+
+    [[nodiscard]] bool is_at_start_of_message() const {
+        if (!is_slash_menu_allowed()) return false;
+        const auto trimmed = trim_outer_whitespace(line_prefix_before_cursor());
+        return trimmed.empty() || trimmed == "/";
+    }
+
+    [[nodiscard]] bool in_slash_command_context(std::string_view text_before_cursor) const {
+        return is_slash_menu_allowed() && detail::trim_start_ascii(text_before_cursor).starts_with('/');
+    }
+
+    [[nodiscard]] bool is_trigger_character(char ch) const {
+        for (const auto& trigger : autocomplete_trigger_characters) {
+            if (trigger.size() == 1 && trigger[0] == ch) return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] static bool is_word_character(char ch) {
+        return std::isalnum(static_cast<unsigned char>(ch)) != 0 || ch == '.' || ch == '_' || ch == '-';
+    }
+
+    void set_autocomplete_trigger_characters(const std::vector<std::string>& characters) {
+        auto next = std::vector<std::string>{"@", "#"};
+        for (const auto& character : characters) {
+            if (character.size() != 1 || character == "/" ||
+                std::isspace(static_cast<unsigned char>(character[0])) != 0 ||
+                std::find(next.begin(), next.end(), character) != next.end()) {
+                continue;
+            }
+            next.push_back(character);
+        }
+        autocomplete_trigger_characters = std::move(next);
+    }
+
+    [[nodiscard]] std::chrono::milliseconds get_autocomplete_debounce_ms(bool force, bool explicit_tab) const {
+        if (explicit_tab || force) return {};
+        return autocomplete_debounce_matches(line_prefix_before_cursor())
+            ? std::chrono::milliseconds{20}
+            : std::chrono::milliseconds{};
+    }
+
+    [[nodiscard]] std::optional<std::size_t> best_autocomplete_match_index(
+        const std::vector<AutocompleteItem>& items,
+        const std::string& prefix) const {
+        if (prefix.empty()) return std::nullopt;
+        std::optional<std::size_t> first_prefix_index;
+        for (std::size_t index = 0; index < items.size(); ++index) {
+            if (items[index].value == prefix) return index;
+            if (!first_prefix_index && items[index].value.starts_with(prefix)) first_prefix_index = index;
+        }
+        return first_prefix_index;
+    }
+
+    void request_autocomplete(bool force, bool explicit_tab) {
         if (!autocomplete_provider) return;
-        std::optional<AutocompleteSuggestions> requested;
+        if (force &&
+            !autocomplete_provider->should_trigger_file_completion(
+                line_strings(),
+                cursor.line,
+                cursor_byte_offset())) {
+            return;
+        }
+        cancel_autocomplete_request();
+        const auto start_token = ++autocomplete_start_token;
+        const auto debounce_ms = get_autocomplete_debounce_ms(force, explicit_tab);
+        if (debounce_ms > std::chrono::milliseconds{} && options.autocomplete_debounce_timer) {
+            options.autocomplete_debounce_timer->start(
+                debounce_ms,
+                [self = self, start_token, force, explicit_tab] {
+                    self->on_debounce_fired(start_token, force, explicit_tab);
+                });
+            return;
+        }
+        start_autocomplete_request(start_token, force, explicit_tab);
+    }
+
+    void on_debounce_fired(std::size_t start_token, bool force, bool explicit_tab) {
+        std::lock_guard lock(impl_mutex);
+        start_autocomplete_request(start_token, force, explicit_tab);
+    }
+
+    void start_autocomplete_request(std::size_t start_token, bool force, bool explicit_tab) {
+        if (start_token != autocomplete_start_token) return;
+        if (!autocomplete_provider) return;
+        const auto snapshot_text = text();
+        const auto snapshot_cursor = cursor;
+        const auto cursor_column = cursor_byte_offset();
+        const auto request_id = [this] {
+            std::lock_guard lock(autocomplete_mutex);
+            return ++autocomplete_request_id;
+        }();
+        request_stop_source = std::stop_source{};
+        AutocompleteRequest request{
+            .lines = line_strings(),
+            .cursor_line = cursor.line,
+            .cursor_column = cursor_column,
+            .force = force,
+            .stop_token = request_stop_source.get_token(),
+        };
         try {
-            requested = autocomplete_provider(AutocompleteRequest{
-                .lines = [&]() {
-                    std::vector<std::string> result;
-                    result.reserve(document.size());
-                    for (const auto& line : document) result.push_back(line_text(line));
-                    return result;
-                }(),
-                .cursor = cursor,
-                .force = force,
-            });
+            autocomplete_provider->get_suggestions(
+                request,
+                [self = self, request_id, snapshot_text, snapshot_cursor, force, explicit_tab](
+                    std::optional<AutocompleteSuggestions> result) {
+                    self->deliver_autocomplete_result(
+                        request_id,
+                        std::move(result),
+                        snapshot_text,
+                        snapshot_cursor,
+                        force,
+                        explicit_tab);
+                });
         } catch (...) {
             callback_error = util::make_error(
                 util::ErrorCode::Unknown,
                 "Editor autocomplete provider failed",
                 "the autocomplete callback threw an exception");
-            close_autocomplete();
+            cancel_autocomplete();
             return;
         }
-        if (!requested || requested->items.empty()) {
-            close_autocomplete();
-            return;
+        drain_autocomplete_result();
+    }
+
+    void deliver_autocomplete_result(
+        std::size_t request_id,
+        std::optional<AutocompleteSuggestions> result,
+        std::string snapshot_text,
+        EditorCursor snapshot_cursor,
+        bool force,
+        bool explicit_tab) {
+        {
+            std::lock_guard lock(autocomplete_mutex);
+            if (request_id != autocomplete_request_id) return;  // stale response
+            pending_autocomplete = PendingAutocomplete{
+                .request_id = request_id,
+                .force = force,
+                .explicit_tab = explicit_tab,
+                .snapshot_text = std::move(snapshot_text),
+                .snapshot_cursor = snapshot_cursor,
+                .result = std::move(result),
+            };
         }
-        autocomplete.clear();
-        autocomplete_prefix = requested->prefix;
-        auto filter = autocomplete_prefix;
-        if (!filter.empty() && (filter.front() == '/' || filter.front() == '@' || filter.front() == '#')) {
-            filter.erase(0, 1);
-        }
-        for (const auto& item : requested->items) {
-            if (filter.empty() || starts_with_case_insensitive(item.value, filter) ||
-                starts_with_case_insensitive(item.label, filter)) {
-                autocomplete.push_back(item);
+        if (options.autocomplete_render_request) {
+            try {
+                options.autocomplete_render_request();
+            } catch (...) {
+                // Scheduling notifications cannot make input delivery fail
+                // (same bound as Tui::invalidate's render-request sink).
             }
         }
-        if (autocomplete.empty()) close_autocomplete();
-        else autocomplete_selected = std::min(autocomplete_selected, autocomplete.size() - 1);
+    }
+
+    void drain_autocomplete_result() {
+        std::optional<PendingAutocomplete> pending;
+        {
+            std::lock_guard lock(autocomplete_mutex);
+            pending = std::move(pending_autocomplete);
+            pending_autocomplete.reset();
+        }
+        if (!pending) return;
+        // pi isAutocompleteRequestCurrent: the result only applies while the
+        // buffer and cursor still match the request snapshot.
+        if (pending->snapshot_text != text() || pending->snapshot_cursor != cursor) return;
+        if (!pending->result || pending->result->items.empty()) {
+            cancel_autocomplete();
+            return;
+        }
+        if (pending->force && pending->explicit_tab && pending->result->items.size() == 1) {
+            // Tab on a unique match completes immediately without opening the
+            // menu (pi runAutocompleteRequest).
+            apply_autocomplete_item(pending->result->items.front(), pending->result->prefix, true);
+            return;
+        }
+        apply_autocomplete_suggestions(*pending->result, pending->force);
+    }
+
+    void apply_autocomplete_suggestions(const AutocompleteSuggestions& suggestions, bool force) {
+        autocomplete_prefix = suggestions.prefix;
+        autocomplete = suggestions.items;
+        if (const auto best = best_autocomplete_match_index(autocomplete, autocomplete_prefix)) {
+            autocomplete_selected = *best;
+        } else {
+            autocomplete_selected = std::min(autocomplete_selected, autocomplete.size() - 1);
+        }
+        autocomplete_state = force ? AutocompleteState::Force : AutocompleteState::Regular;
+    }
+
+    void update_autocomplete() {
+        if (autocomplete_state == AutocompleteState::None) return;
+        if (!autocomplete_provider) return;
+        request_autocomplete(autocomplete_state == AutocompleteState::Force, false);
+    }
+
+    void try_trigger_autocomplete() {
+        request_autocomplete(false, false);
+    }
+
+    /// pi insertCharacter's autocomplete tail: auto-trigger on slash at
+    /// message start, trigger characters at token boundaries, and word
+    /// characters inside a slash or attachment context; an open menu instead
+    /// re-queries with its force mode.
+    void maybe_trigger_autocomplete(char last_char) {
+        if (autocomplete_state != AutocompleteState::None) {
+            update_autocomplete();
+            return;
+        }
+        const auto text_before_cursor = line_prefix_before_cursor();
+        if (last_char == '/' && is_at_start_of_message()) {
+            try_trigger_autocomplete();
+            return;
+        }
+        if (is_trigger_character(last_char)) {
+            const auto length = text_before_cursor.size();
+            if (length == 1 ||
+                (length >= 2 && (text_before_cursor[length - 2] == ' ' || text_before_cursor[length - 2] == '\t'))) {
+                try_trigger_autocomplete();
+            }
+            return;
+        }
+        if (is_word_character(last_char)) {
+            if (in_slash_command_context(text_before_cursor) || autocomplete_pattern_matches(text_before_cursor)) {
+                try_trigger_autocomplete();
+            }
+        }
+    }
+
+    /// pi handleBackspace/handleForwardDelete's autocomplete tail.
+    void update_or_retrigger_after_erase() {
+        if (autocomplete_state != AutocompleteState::None) {
+            update_autocomplete();
+            return;
+        }
+        const auto text_before_cursor = line_prefix_before_cursor();
+        if (in_slash_command_context(text_before_cursor) || autocomplete_pattern_matches(text_before_cursor)) {
+            try_trigger_autocomplete();
+        }
+    }
+
+    void handle_tab_completion() {
+        if (!autocomplete_provider) return;
+        const auto text_before_cursor = line_prefix_before_cursor();
+        if (in_slash_command_context(text_before_cursor) &&
+            detail::trim_start_ascii(text_before_cursor).find(' ') == std::string_view::npos) {
+            request_autocomplete(false, true);
+        } else {
+            request_autocomplete(true, true);
+        }
+    }
+
+    void apply_completion_result(const AutocompleteApplyResult& result, std::string_view prefix) {
+        if (result.cursor_line >= document.size()) return;
+        auto& line = document[result.cursor_line];
+        const auto cursor_bytes = cursor_byte_offset();
+        if (prefix.size() > cursor_bytes) return;
+        const auto start_bytes = cursor_bytes - prefix.size();
+        const auto current_line_text = line_text(line);
+        if (current_line_text.substr(start_bytes, prefix.size()) != prefix) return;
+
+        // Map byte offsets to segment boundaries; bail when a boundary cuts
+        // through an atomic segment (e.g. a paste marker).
+        const auto segment_index_at = [&line](std::size_t bytes) -> std::optional<std::size_t> {
+            std::size_t accumulated = 0;
+            for (std::size_t index = 0; index < line.size(); ++index) {
+                if (accumulated == bytes) return index;
+                accumulated += line[index].text.size();
+                if (accumulated == bytes) return index + 1;
+            }
+            if (accumulated == bytes) return line.size();
+            return std::nullopt;
+        };
+        const auto start_segment = segment_index_at(start_bytes);
+        const auto cursor_segment = segment_index_at(cursor_bytes);
+        if (!start_segment || !cursor_segment) return;
+        const auto start_segment_value = *start_segment;
+        const auto cursor_segment_value = *cursor_segment;
+
+        const auto& result_line = result.lines[result.cursor_line];
+        const auto result_cursor = std::min(result.cursor_column, result_line.size());
+        if (result_cursor < start_bytes) return;
+
+        // pi applyCompletion's quote adjustment: when completing into an
+        // unclosed quoted prefix the item already carries the closing quote,
+        // so the typed leading quote after the cursor is dropped.
+        const bool is_quoted_prefix = prefix.starts_with('"') || prefix.starts_with("@\"");
+        const bool has_trailing_quote_in_item =
+            result_cursor > start_bytes && result_line[result_cursor - 1] == '"';
+        const bool has_leading_quote_after_cursor =
+            cursor_segment_value < line.size() && line[cursor_segment_value].text == "\"";
+        const auto after_begin = cursor_segment_value +
+            ((is_quoted_prefix && has_trailing_quote_in_item && has_leading_quote_after_cursor) ? 1 : 0);
+
+        // The provider's surgery only touches the region between the prefix
+        // start and the result cursor; the regions outside it must be
+        // byte-identical to the original line (pi's applyCompletion shape).
+        const auto original_after = current_line_text.substr(cursor_bytes);
+        const auto expected_after = result_line.substr(result_cursor);
+        const bool quote_adjusted =
+            (is_quoted_prefix && has_trailing_quote_in_item && has_leading_quote_after_cursor);
+        if (result_line.substr(0, start_bytes) != current_line_text.substr(0, start_bytes)) return;
+        if (expected_after != (quote_adjusted && !original_after.empty() ? original_after.substr(1)
+                                                                         : original_after)) {
+            return;
+        }
+
+        // Rebuild the line from the result text for the edited region while
+        // preserving the untouched segments (paste-marker associations).
+        Line rebuilt;
+        rebuilt.reserve(start_segment_value + (line.size() - after_begin) + 1);
+        rebuilt.insert(
+            rebuilt.end(),
+            line.begin(),
+            line.begin() + static_cast<std::ptrdiff_t>(start_segment_value));
+        auto middle_segments = segment_lines(result_line.substr(start_bytes, result_cursor - start_bytes)).front();
+        rebuilt.insert(
+            rebuilt.end(),
+            std::make_move_iterator(middle_segments.begin()),
+            std::make_move_iterator(middle_segments.end()));
+        rebuilt.insert(
+            rebuilt.end(),
+            line.begin() + static_cast<std::ptrdiff_t>(after_begin),
+            line.end());
+        line = std::move(rebuilt);
+
+        const auto result_prefix = std::string_view{result_line}.substr(0, result_cursor);
+        cursor.column = segment_lines(result_prefix).front().size();
+    }
+
+    void apply_autocomplete_item(const AutocompleteItem& item, std::string_view prefix, bool notify) {
+        if (!autocomplete_provider) return;
+        push_undo();
+        const auto result = autocomplete_provider->apply_completion(
+            line_strings(),
+            cursor.line,
+            cursor_byte_offset(),
+            item,
+            prefix);
+        apply_completion_result(result, prefix);
+        cancel_autocomplete();
+        if (notify) notify_change();
+    }
+
+    void accept_selected_autocomplete(bool fallthrough_submit) {
+        if (autocomplete.empty() || !autocomplete_provider) return;
+        apply_autocomplete_item(autocomplete[autocomplete_selected], autocomplete_prefix, !fallthrough_submit);
     }
 
     void insert_segments(std::vector<Line> inserted) {
@@ -291,7 +709,7 @@ struct Editor::Impl {
         if (record_undo) push_undo();
         insert_segments(segment_lines(text));
         notify_change();
-        if (update_autocomplete) refresh_autocomplete();
+        if (update_autocomplete) maybe_trigger_autocomplete(text.back());
     }
 
     [[nodiscard]] static std::string marker_for(std::size_t id, std::string_view text) {
@@ -360,7 +778,7 @@ struct Editor::Impl {
             }
         }
         notify_change();
-        refresh_autocomplete();
+        update_or_retrigger_after_erase();
     }
 
     void move_left() {
@@ -370,6 +788,7 @@ struct Editor::Impl {
             cursor.column = document[cursor.line].size();
         }
         last_yank_ring_index.reset();
+        if (autocomplete_state != AutocompleteState::None) update_autocomplete();
     }
 
     void move_right() {
@@ -379,6 +798,7 @@ struct Editor::Impl {
             cursor.column = 0;
         }
         last_yank_ring_index.reset();
+        if (autocomplete_state != AutocompleteState::None) update_autocomplete();
     }
 
     void move_word(bool forward) {
@@ -505,7 +925,6 @@ struct Editor::Impl {
             return;
         }
         notify_change();
-        refresh_autocomplete();
     }
 
     void delete_word(bool forward) {
@@ -524,7 +943,6 @@ struct Editor::Impl {
         const auto removed = remove_until(end, true);
         kill_ring.insert(kill_ring.begin(), kill_entry(Document{std::move(removed)}));
         notify_change();
-        refresh_autocomplete();
     }
 
     void yank() {
@@ -563,7 +981,7 @@ struct Editor::Impl {
         cursor = previous.cursor;
         pastes = std::move(previous.pastes);
         paste_counter = previous.paste_counter;
-        close_autocomplete();
+        cancel_autocomplete();
         notify_change();
     }
 
@@ -667,7 +1085,7 @@ struct Editor::Impl {
         pastes.clear();
         paste_counter = 0;
         undo.clear();
-        close_autocomplete();
+        cancel_autocomplete();
         scroll_offset = 0;
         notify_change();
         if (!on_submit) return;
@@ -702,12 +1120,12 @@ struct Editor::Impl {
             const auto marker = marker_for(id, filtered);
             insert_segments({{{.text = marker, .paste_id = id}}});
             notify_change();
-            close_autocomplete();
+            cancel_autocomplete();
             return;
         }
         insert_segments(segment_lines(filtered));
         notify_change();
-        close_autocomplete();
+        cancel_autocomplete();
     }
 
     struct VisualLine {
@@ -773,6 +1191,7 @@ struct Editor::Impl {
         cursor.line = to.logical_line;
         cursor.column = std::min(to.end, to.start + (cursor.column - from.start));
         last_yank_ring_index.reset();
+        if (autocomplete_state != AutocompleteState::None) update_autocomplete();
     }
 
     void jump_to(std::string_view target, JumpDirection direction) {
@@ -799,106 +1218,110 @@ struct Editor::Impl {
             }
         }
     }
-
-    void accept_autocomplete() {
-        if (autocomplete.empty()) return;
-        const auto& item = autocomplete[autocomplete_selected];
-        auto prefix = autocomplete_prefix;
-        auto prefix_segments = segment_lines(prefix).front();
-        if (prefix_segments.size() > cursor.column) return;
-        push_undo();
-        auto& line = document[cursor.line];
-        const auto start = cursor.column - prefix_segments.size();
-        line.erase(line.begin() + static_cast<std::ptrdiff_t>(start),
-                   line.begin() + static_cast<std::ptrdiff_t>(cursor.column));
-        cursor.column = start;
-        std::string value = item.value;
-        if (!prefix.empty() && (prefix.front() == '/' || prefix.front() == '@' || prefix.front() == '#') &&
-            !value.starts_with(prefix.front())) {
-            value.insert(value.begin(), prefix.front());
-        }
-        insert_segments(segment_lines(value));
-        close_autocomplete();
-        notify_change();
-    }
 };
 
 Editor::Editor(EditorOptions options, EditorChangeSink on_change, EditorSubmitSink on_submit)
-    : impl_(std::make_unique<Impl>()) {
+    : impl_(std::make_shared<Impl>()) {
+    impl_->self = impl_;
     if (!options.keybindings) options.keybindings = default_tui_keybindings();
     impl_->options = std::move(options);
     impl_->on_change = std::move(on_change);
     impl_->on_submit = std::move(on_submit);
 }
 
-Editor::Editor(Editor&&) noexcept = default;
-Editor& Editor::operator=(Editor&&) noexcept = default;
-Editor::~Editor() = default;
+Editor::Editor(Editor&& other) noexcept : impl_(std::move(other.impl_)) {
+    other.impl_.reset();
+}
+Editor& Editor::operator=(Editor&& other) noexcept {
+    if (this != &other) {
+        if (impl_) impl_->self.reset();
+        impl_ = std::move(other.impl_);
+        other.impl_.reset();
+    }
+    return *this;
+}
+Editor::~Editor() {
+    if (impl_) impl_->self.reset();
+}
 
 std::string Editor::text() const {
+    std::lock_guard lock(impl_->impl_mutex);
     return document_text(impl_->document);
 }
 
 std::string Editor::expanded_text() const {
+    std::lock_guard lock(impl_->impl_mutex);
     return impl_->expanded();
 }
 
 std::vector<std::string> Editor::lines() const {
-    std::vector<std::string> result;
-    result.reserve(impl_->document.size());
-    for (const auto& line : impl_->document) result.push_back(line_text(line));
-    return result;
+    std::lock_guard lock(impl_->impl_mutex);
+    return impl_->line_strings();
 }
 
 EditorCursor Editor::cursor() const {
+    std::lock_guard lock(impl_->impl_mutex);
     return impl_->cursor;
 }
 
 void Editor::set_text(std::string text) {
+    std::lock_guard lock(impl_->impl_mutex);
     impl_->exit_history_browsing();
     text = normalize_input(std::move(text));
-    if (text == this->text()) return;
+    if (text == document_text(impl_->document)) return;
     impl_->push_undo();
     impl_->document = segment_lines(text);
     impl_->pastes.clear();
     impl_->paste_counter = 0;
     impl_->cursor = {.line = impl_->document.size() - 1, .column = impl_->document.back().size()};
-    impl_->close_autocomplete();
+    impl_->cancel_autocomplete();
     impl_->notify_change();
 }
 
 void Editor::insert_text_at_cursor(std::string text) {
-    impl_->close_autocomplete();
+    std::lock_guard lock(impl_->impl_mutex);
+    impl_->cancel_autocomplete();
     impl_->insert_text(std::move(text), true, false);
 }
 
 void Editor::add_to_history(std::string text) {
+    std::lock_guard lock(impl_->impl_mutex);
     impl_->add_to_history(std::move(text));
 }
 
 void Editor::set_theme(EditorTheme theme) {
+    std::lock_guard lock(impl_->impl_mutex);
     impl_->theme = std::move(theme);
     invalidate();
 }
 
-void Editor::set_autocomplete_provider(AutocompleteProvider provider) {
+void Editor::set_autocomplete_provider(std::unique_ptr<AutocompleteProvider> provider) {
+    std::lock_guard lock(impl_->impl_mutex);
+    impl_->cancel_autocomplete();
     impl_->autocomplete_provider = std::move(provider);
-    impl_->close_autocomplete();
+    impl_->set_autocomplete_trigger_characters(
+        impl_->autocomplete_provider ? impl_->autocomplete_provider->trigger_characters()
+                                     : std::vector<std::string>{});
 }
 
 bool Editor::autocomplete_open() const {
-    return !impl_->autocomplete.empty();
+    std::lock_guard lock(impl_->impl_mutex);
+    return impl_->autocomplete_state != Impl::AutocompleteState::None;
 }
 
 std::vector<AutocompleteItem> Editor::autocomplete_items() const {
+    std::lock_guard lock(impl_->impl_mutex);
     return impl_->autocomplete;
 }
 
 std::size_t Editor::autocomplete_selected_index() const {
+    std::lock_guard lock(impl_->impl_mutex);
     return impl_->autocomplete_selected;
 }
 
 util::Expected<RenderResult> Editor::render(std::size_t width) {
+    std::lock_guard lock(impl_->impl_mutex);
+    impl_->drain_autocomplete_result();
     if (impl_->callback_error) return std::unexpected(*impl_->callback_error);
     if (width == 0) {
         return std::unexpected(util::make_error(util::ErrorCode::Validation, "Editor requires a positive visible width"));
@@ -949,6 +1372,8 @@ util::Expected<RenderResult> Editor::render(std::size_t width) {
 void Editor::invalidate() {}
 
 void Editor::handle_input(const InputEventVariant& input) {
+    std::lock_guard lock(impl_->impl_mutex);
+    impl_->drain_autocomplete_result();
     if (const auto* paste = std::get_if<PasteEvent>(&input)) {
         impl_->paste(paste->text);
         return;
@@ -972,9 +1397,9 @@ void Editor::handle_input(const InputEventVariant& input) {
         impl_->jump_direction.reset();
     }
 
-    if (autocomplete_open()) {
+    if (impl_->autocomplete_state != Impl::AutocompleteState::None) {
         if (matches("tui.select.cancel")) {
-            impl_->close_autocomplete();
+            impl_->cancel_autocomplete();
             return;
         }
         if (matches("tui.select.up")) {
@@ -988,13 +1413,19 @@ void Editor::handle_input(const InputEventVariant& input) {
             return;
         }
         if (matches("tui.input.tab")) {
-            impl_->accept_autocomplete();
+            impl_->accept_selected_autocomplete(false);
             return;
+        }
+        if (matches("tui.select.confirm")) {
+            const bool fallthrough_submit = impl_->autocomplete_prefix.starts_with('/');
+            impl_->accept_selected_autocomplete(fallthrough_submit);
+            if (!fallthrough_submit) return;
+            // Slash-command confirm cancels the menu and falls through to submit.
         }
     }
 
     if (matches("tui.input.tab")) {
-        impl_->refresh_autocomplete(true);
+        impl_->handle_tab_completion();
         return;
     }
     if (matches("tui.editor.undo")) {
@@ -1095,6 +1526,7 @@ void Editor::handle_input(const InputEventVariant& input) {
         return;
     }
     if (matches("tui.input.newLine")) {
+        impl_->cancel_autocomplete();
         impl_->insert_text("\n", true);
         return;
     }
@@ -1106,18 +1538,22 @@ void Editor::handle_input(const InputEventVariant& input) {
 }
 
 bool Editor::accepts_key_releases() const {
+    std::lock_guard lock(impl_->impl_mutex);
     return false;
 }
 
 void Editor::set_focused(bool focused) {
+    std::lock_guard lock(impl_->impl_mutex);
     impl_->focused = focused;
 }
 
 bool Editor::focused() const {
+    std::lock_guard lock(impl_->impl_mutex);
     return impl_->focused;
 }
 
 std::optional<CursorPosition> Editor::cursor_location() const {
+    std::lock_guard lock(impl_->impl_mutex);
     if (!impl_->focused || impl_->layout_width == 0) return std::nullopt;
     // Compute visual row/column for the cursor position
     const auto visual = impl_->visual_lines(impl_->layout_width);
@@ -1169,6 +1605,7 @@ std::optional<CursorPosition> Editor::cursor_location() const {
 }
 
 void Editor::set_available_height(std::size_t rows) {
+    std::lock_guard lock(impl_->impl_mutex);
     impl_->available_height = std::max<std::size_t>(1, rows);
 }
 

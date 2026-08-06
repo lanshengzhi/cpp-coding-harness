@@ -1,7 +1,7 @@
 #include <cch/tui/ProcessTerminal.hpp>
 #include <cch/tui/Tui.hpp>
 
-#include "harness/UniqueFd.hpp"
+#include "util/UniqueFd.hpp"
 #include "support/PseudoTerminal.hpp"
 
 #include "../../third_party/catch2/catch_test_macros.hpp"
@@ -133,8 +133,8 @@ private:
 TEST_CASE("Process Terminal rejects non-TTY descriptors before changing modes", "[tui][terminal][issue54]") {
     std::array<int, 2> raw_descriptors{};
     REQUIRE(::pipe(raw_descriptors.data()) == 0);
-    cch::harness::UniqueFd input(raw_descriptors[0]);
-    cch::harness::UniqueFd output(raw_descriptors[1]);
+    cch::util::UniqueFd input(raw_descriptors[0]);
+    cch::util::UniqueFd output(raw_descriptors[1]);
 
     cch::tui::ProcessTerminal terminal({
         .input_fd = input.get(),
@@ -321,7 +321,7 @@ TEST_CASE("Concurrent external and sink stops restore without deadlock", "[tui][
 TEST_CASE("Process Terminal reports callback and restoration failures together", "[tui][terminal][issue54]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
-    cch::harness::UniqueFd output(::dup(pty->slave.get()));
+    cch::util::UniqueFd output(::dup(pty->slave.get()));
     REQUIRE(output);
     const auto output_descriptor = output.get();
     std::atomic<bool> callback_failed{false};
@@ -347,7 +347,7 @@ TEST_CASE("Process Terminal reports callback and restoration failures together",
     CHECK(failed_stop.error().detail.find("Process Terminal input sink failed") != std::string::npos);
     CHECK(failed_stop.error().detail.find("could not write terminal output") != std::string::npos);
 
-    cch::harness::UniqueFd replacement(::open(pty->slave_name.c_str(), O_RDWR | O_NOCTTY));
+    cch::util::UniqueFd replacement(::open(pty->slave_name.c_str(), O_RDWR | O_NOCTTY));
     REQUIRE(replacement);
     REQUIRE(replacement.get() == output_descriptor);
     REQUIRE(terminal.stop());
@@ -434,7 +434,7 @@ TEST_CASE("Process Terminal runs a minimal TUI shell and restores during unwindi
 TEST_CASE("Process Terminal rolls back raw input after partial startup failure", "[tui][terminal][issue54]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
-    cch::harness::UniqueFd read_only_output(::open(pty->slave_name.c_str(), O_RDONLY | O_NOCTTY));
+    cch::util::UniqueFd read_only_output(::open(pty->slave_name.c_str(), O_RDONLY | O_NOCTTY));
     REQUIRE(read_only_output);
     termios original{};
     REQUIRE(::tcgetattr(pty->slave.get(), &original) == 0);

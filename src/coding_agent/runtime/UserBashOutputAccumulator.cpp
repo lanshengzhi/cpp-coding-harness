@@ -190,7 +190,7 @@ util::ExpectedVoid SpillFile::start(
     for (int attempt = 0; attempt < 16; ++attempt) {
         const auto candidate =
             temp_directory / ("cch-user-bash-" + random_suffix() + ".log");
-        harness::UniqueFd fd(::open(
+        util::UniqueFd fd(::open(
             candidate.c_str(),
             O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
             0600));
@@ -293,7 +293,7 @@ util::ExpectedVoid SpillFile::write_all(int fd, std::string_view bytes) {
 }
 
 void SpillFile::remove_candidate(
-    harness::UniqueFd& fd,
+    util::UniqueFd& fd,
     const std::filesystem::path& candidate) {
     fd.reset();
     std::error_code remove_error;

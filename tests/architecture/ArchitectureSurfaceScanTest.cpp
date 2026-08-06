@@ -1004,3 +1004,58 @@ TEST_CASE(
     CHECK(settings_list.find("casefold_text") == std::string::npos);
     CHECK(settings_list.find("match_fuzzy_query") == std::string::npos);
 }
+
+TEST_CASE(
+    "Autocomplete is the public async provider module and the sync editor surface is gone",
+    "[architecture][tui][issue383]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto header = read_text(
+        source_root / "include" / "cch" / "tui" / "Autocomplete.hpp");
+
+    // The pi autocomplete.ts surface: values, SlashCommand, the async
+    // provider contract, and the combined provider.
+    for (const auto& symbol : {
+             "struct AutocompleteItem",
+             "struct AutocompleteRequest",
+             "struct AutocompleteSuggestions",
+             "struct SlashCommand",
+             "class AutocompleteProvider",
+             "class CombinedAutocompleteProvider",
+             "get_suggestions",
+             "apply_completion",
+             "should_trigger_file_completion",
+             "AutocompleteResultSink",
+             "AutocompleteDebounceTimer",
+         }) {
+        CHECK(header.find(symbol) != std::string::npos);
+    }
+
+    // The old synchronous surface is gone from the editor header: no provider
+    // alias, no autocomplete value definitions, no refresh seam.
+    const auto editor_header = read_text(
+        source_root / "include" / "cch" / "tui" / "Editor.hpp");
+    CHECK(editor_header.find("cch/tui/Autocomplete.hpp") != std::string::npos);
+    CHECK(editor_header.find("using AutocompleteProvider =") == std::string::npos);
+    CHECK(editor_header.find("struct AutocompleteItem") == std::string::npos);
+    CHECK(editor_header.find("struct AutocompleteRequest") == std::string::npos);
+    CHECK(editor_header.find("struct AutocompleteSuggestions") == std::string::npos);
+
+    const auto editor_source = read_text(
+        source_root / "src" / "tui" / "Editor.cpp");
+    CHECK(editor_source.find("refresh_autocomplete") == std::string::npos);
+    CHECK(editor_source.find("close_autocomplete") == std::string::npos);
+
+    // The sync harness provider is gone; the app assembles the combined
+    // provider at startup like pi's interactive mode.
+    for (const auto& file : files_under({"include", "src", "tests"})) {
+        if (file == source_root / "tests" / "architecture" / "ArchitectureSurfaceScanTest.cpp") {
+            continue;
+        }
+        const auto text = read_text(file);
+        CHECK(text.find("command_autocomplete_provider") == std::string::npos);
+    }
+    const auto interactive_mode = read_text(
+        source_root / "src" / "coding_agent" / "tui" / "InteractiveMode.cpp");
+    CHECK(interactive_mode.find("CombinedAutocompleteProvider") != std::string::npos);
+    CHECK(interactive_mode.find("AsioAutocompleteDebounceTimer") != std::string::npos);
+}

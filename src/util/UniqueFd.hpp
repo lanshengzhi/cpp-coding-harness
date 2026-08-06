@@ -1,13 +1,13 @@
 #pragma once
 
-// POSIX-only RAII owner for a raw file descriptor. Private to src/harness;
+// POSIX-only RAII owner for a raw file descriptor (CODING_STANDARDS 7.8);
 // replaces unique_ptr<int> fd guards that heap-allocated an int per descriptor.
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <unistd.h>
 #endif
 
-namespace cch::harness {
+namespace cch::util {
 
 #if defined(__unix__) || defined(__APPLE__)
 

@@ -11,8 +11,8 @@
 namespace cch::harness {
 
 #if defined(__unix__) || defined(__APPLE__)
-util::Expected<UniqueFd> WorkspaceFileSystem::open_workspace_root() const {
-    UniqueFd fd(::open(root_.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+util::Expected<util::UniqueFd> WorkspaceFileSystem::open_workspace_root() const {
+    util::UniqueFd fd(::open(root_.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
     if (!fd) {
         return std::unexpected(workspace_error(
             "could not open workspace root: " + std::string(std::strerror(errno))));
@@ -20,7 +20,7 @@ util::Expected<UniqueFd> WorkspaceFileSystem::open_workspace_root() const {
     return fd;
 }
 
-util::Expected<UniqueFd> WorkspaceFileSystem::open_parent_directory(
+util::Expected<util::UniqueFd> WorkspaceFileSystem::open_parent_directory(
     const std::filesystem::path& target,
     bool create_missing) const {
     auto root_guard = open_workspace_root();
@@ -31,7 +31,7 @@ util::Expected<UniqueFd> WorkspaceFileSystem::open_parent_directory(
     auto parent = target.parent_path();
     std::error_code parent_ec;
     if (parent.empty() || std::filesystem::weakly_canonical(parent, parent_ec) == root_) {
-        UniqueFd dup_fd(::dup(root_guard->get()));
+        util::UniqueFd dup_fd(::dup(root_guard->get()));
         if (!dup_fd) {
             return std::unexpected(workspace_error(
                 "could not duplicate workspace fd: " + std::string(std::strerror(errno))));
@@ -41,7 +41,7 @@ util::Expected<UniqueFd> WorkspaceFileSystem::open_parent_directory(
 
     auto rel = parent.lexically_normal().lexically_relative(root_);
     if (rel.empty() || rel == ".") {
-        UniqueFd dup_fd(::dup(root_guard->get()));
+        util::UniqueFd dup_fd(::dup(root_guard->get()));
         if (!dup_fd) {
             return std::unexpected(workspace_error(
                 "could not duplicate workspace fd: " + std::string(std::strerror(errno))));
@@ -49,7 +49,7 @@ util::Expected<UniqueFd> WorkspaceFileSystem::open_parent_directory(
         return dup_fd;
     }
 
-    UniqueFd current_guard(root_guard->release());
+    util::UniqueFd current_guard(root_guard->release());
     for (const auto& part : rel) {
         if (part == "." || part.empty()) {
             continue;
@@ -57,7 +57,7 @@ util::Expected<UniqueFd> WorkspaceFileSystem::open_parent_directory(
         if (part == "..") {
             return std::unexpected(workspace_error("parent path escapes workspace"));
         }
-        UniqueFd next_fd(::openat(
+        util::UniqueFd next_fd(::openat(
             current_guard.get(),
             part.c_str(),
             O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));

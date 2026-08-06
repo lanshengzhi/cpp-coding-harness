@@ -24,6 +24,7 @@
 #include <cch/harness/session/SessionStore.hpp>
 #include <cch/tools/ToolFactories.hpp>
 #include <cch/tui/CancellableLoader.hpp>
+#include <cch/tui/Autocomplete.hpp>
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Container.hpp>
 #include <cch/tui/Editor.hpp>
@@ -164,11 +165,17 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_final_v<tui::KeybindingRegistry>);
     static_assert(std::is_aggregate_v<tui::EditorCursor>);
     static_assert(std::is_aggregate_v<tui::AutocompleteItem>);
-    static_assert(std::is_aggregate_v<tui::AutocompleteRequest>);
     static_assert(std::is_aggregate_v<tui::AutocompleteSuggestions>);
+    static_assert(std::is_move_constructible_v<tui::AutocompleteRequest>);
+    static_assert(std::is_copy_constructible_v<tui::AutocompleteRequest>);
+    static_assert(std::is_abstract_v<tui::AutocompleteProvider>);
+    static_assert(std::is_abstract_v<tui::AutocompleteDebounceTimer>);
+    static_assert(std::is_final_v<tui::CombinedAutocompleteProvider>);
+    static_assert(std::is_move_constructible_v<tui::AutocompleteResultSink>);
+    static_assert(!std::is_copy_constructible_v<tui::AutocompleteResultSink>);
+    static_assert(std::is_move_constructible_v<tui::EditorRenderRequestSink>);
+    static_assert(!std::is_copy_constructible_v<tui::EditorRenderRequestSink>);
     static_assert(std::is_aggregate_v<tui::EditorTheme>);
-    static_assert(std::is_move_constructible_v<tui::AutocompleteProvider>);
-    static_assert(!std::is_copy_constructible_v<tui::AutocompleteProvider>);
     static_assert(std::is_aggregate_v<tui::SelectItem>);
     static_assert(std::is_aggregate_v<tui::SelectListOptions>);
     static_assert(std::is_aggregate_v<tui::SettingItem>);

@@ -64,6 +64,7 @@ target_link_libraries(cch_util
 )
 
 add_library(cch_tui
+    src/tui/Autocomplete.cpp
     src/tui/CancellableLoader.cpp
     src/tui/Container.cpp
     src/tui/Editor.cpp
@@ -408,6 +409,7 @@ if(CCH_BUILD_TESTS)
         tests/harness/session/SessionTreeTest.cpp
         tests/tools/AsyncToolsTest.cpp
         tests/tui/ContainerTest.cpp
+        tests/tui/AutocompleteTest.cpp
         tests/tui/EditorTest.cpp
         tests/tui/FuzzyTest.cpp
         tests/tui/ImageTest.cpp

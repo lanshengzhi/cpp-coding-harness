@@ -2,7 +2,7 @@
 
 #include <cch/harness/ExecutionEnv.hpp>
 #include <cch/util/Error.hpp>
-#include "UniqueFd.hpp"
+#include "util/UniqueFd.hpp"
 
 #include <filesystem>
 #include <optional>
@@ -73,8 +73,8 @@ private:
     [[nodiscard]] static FileError util_error_to_file_error(const util::Error& error, const std::string& path);
 
 #if defined(__unix__) || defined(__APPLE__)
-    [[nodiscard]] util::Expected<UniqueFd> open_workspace_root() const;
-    [[nodiscard]] util::Expected<UniqueFd> open_parent_directory(
+    [[nodiscard]] util::Expected<util::UniqueFd> open_workspace_root() const;
+    [[nodiscard]] util::Expected<util::UniqueFd> open_parent_directory(
         const std::filesystem::path& target,
         bool create_missing) const;
     [[nodiscard]] util::Expected<void> create_parent_directories(const std::filesystem::path& target) const;

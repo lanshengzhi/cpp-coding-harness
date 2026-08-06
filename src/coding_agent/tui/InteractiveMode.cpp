@@ -4,6 +4,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/coding_agent/Sdk.hpp>
 #include <cch/coding_agent/Settings.hpp>
+#include <cch/tui/Autocomplete.hpp>
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Loader.hpp>
 #include <cch/tui/Overlay.hpp>
@@ -24,7 +25,7 @@
 #include "coding_agent/tui/Transcript.hpp"
 #include "coding_agent/tui/UserBashPresentation.hpp"
 #include "coding_agent/tui/UserBashSyntax.hpp"
-#include "harness/UniqueFd.hpp"
+#include "util/UniqueFd.hpp"
 #include "util/TerminalText.hpp"
 
 #include <boost/asio/any_io_executor.hpp>
@@ -172,7 +173,7 @@ struct InteractiveStartupDiagnostics {
                 util::ErrorCode::Process,
                 "could not generate a clipboard image path"));
         }
-        harness::UniqueFd fd(::open(
+        util::UniqueFd fd(::open(
             path.c_str(),
             O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
             0600));
@@ -381,27 +382,71 @@ struct InteractiveStartupDiagnostics {
     return items;
 }
 
-[[nodiscard]] cch::tui::AutocompleteProvider command_autocomplete_provider(
-    std::vector<cch::tui::AutocompleteItem> available_items) {
-    return [items = std::move(available_items)](const cch::tui::AutocompleteRequest& request)
-        -> std::optional<cch::tui::AutocompleteSuggestions> {
-        if (request.cursor.line != 0 || request.lines.empty()) return std::nullopt;
-        const auto& line = request.lines.front();
-        if (request.cursor.column > line.size()) return std::nullopt;
-        const auto prefix = std::string_view{line}.substr(0, request.cursor.column);
-        if (prefix.empty() || prefix.front() != '/') return std::nullopt;
-        if (std::any_of(prefix.begin(), prefix.end(), [](unsigned char ch) {
-                return ch >= 0x80 || ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r';
-            })) {
-            return std::nullopt;
-        }
-
-        return cch::tui::AutocompleteSuggestions{
-            .items = items,
-            .prefix = std::string{prefix},
-        };
-    };
+/// Resolve an executable on PATH (pi's `ensureTool`); nullopt when absent so
+/// `@`/`#` completion degrades gracefully to empty file suggestions.
+[[nodiscard]] std::optional<std::filesystem::path> find_executable_on_path(std::string_view name) {
+#if defined(__unix__) || defined(__APPLE__)
+    const char* path_env = std::getenv("PATH");
+    if (path_env == nullptr) return std::nullopt;
+    std::string_view path_view{path_env};
+    std::size_t begin = 0;
+    for (std::size_t index = 0; index <= path_view.size(); ++index) {
+        if (index != path_view.size() && path_view[index] != ':') continue;
+        const auto dir = path_view.substr(begin, index - begin);
+        begin = index + 1;
+        if (dir.empty()) continue;
+        const auto candidate = std::filesystem::path{dir} / name;
+        std::error_code error;
+        const auto status = std::filesystem::status(candidate, error);
+        if (error || !std::filesystem::is_regular_file(status)) continue;
+        if (::access(candidate.c_str(), X_OK) == 0) return candidate;
+    }
+#endif
+    return std::nullopt;
 }
+
+/// Executor-bound one-shot debounce timer for the editor's autocomplete
+/// requests. All timer state is confined to the executor thread via posts;
+/// the shared state keeps the wait handler safe after the editor is gone.
+class AsioAutocompleteDebounceTimer final : public cch::tui::AutocompleteDebounceTimer {
+public:
+    explicit AsioAutocompleteDebounceTimer(boost::asio::any_io_executor executor)
+        : state_(std::make_shared<State>(std::move(executor))) {}
+
+    void start(std::chrono::milliseconds delay, std::move_only_function<void()> on_fire) override {
+        const auto state = state_;
+        boost::asio::post(state->executor, [state, delay, on_fire = std::move(on_fire)]() mutable {
+            const auto generation = ++state->generation;
+            state->active_callback = std::move(on_fire);
+            state->timer.expires_after(delay);
+            state->timer.async_wait([state, generation](boost::system::error_code error) {
+                if (generation != state->generation) return;
+                auto callback = std::move(state->active_callback);
+                state->active_callback = nullptr;
+                if (!error && callback) callback();
+            });
+        });
+    }
+
+    void cancel() override {
+        const auto state = state_;
+        boost::asio::post(state->executor, [state] {
+            ++state->generation;
+            state->active_callback = nullptr;
+            state->timer.cancel();
+        });
+    }
+
+private:
+    struct State {
+        explicit State(boost::asio::any_io_executor executor) : timer(std::move(executor)) {}
+        boost::asio::any_io_executor executor;
+        boost::asio::steady_timer timer;
+        std::size_t generation{0};
+        std::move_only_function<void()> active_callback;
+    };
+    std::shared_ptr<State> state_;
+};
 
 class DismissibleView final
     : public cch::tui::Component,
@@ -479,7 +524,9 @@ public:
         InterruptSink on_interrupt,
         ActionSink on_exit,
         bool user_bash_available,
-        std::vector<cch::tui::AutocompleteItem> autocomplete_items,
+        std::unique_ptr<cch::tui::AutocompleteProvider> autocomplete_provider,
+        std::unique_ptr<cch::tui::AutocompleteDebounceTimer> autocomplete_debounce_timer,
+        cch::tui::EditorRenderRequestSink autocomplete_render_request,
         cch::tui::TerminalCapabilities terminal_capabilities,
         const LiveTheme& theme)
         : keybindings_(std::move(keybindings)),
@@ -495,7 +542,11 @@ public:
           transcript_(theme, *keybindings_),
           theme_(&theme),
           editor_(
-              cch::tui::EditorOptions{.keybindings = keybindings_},
+              cch::tui::EditorOptions{
+                  .keybindings = keybindings_,
+                  .autocomplete_debounce_timer = std::move(autocomplete_debounce_timer),
+                  .autocomplete_render_request = std::move(autocomplete_render_request),
+              },
               [this](std::string text) {
                   // Editor submission clears before invoking its submit sink;
                   // keep that notification on the sampled text's revision.
@@ -511,8 +562,7 @@ public:
           pending_bash_([this](bool exclude_from_context) {
               return make_bash_loader(exclude_from_context);
           }) {
-        editor_.set_autocomplete_provider(command_autocomplete_provider(
-            std::move(autocomplete_items)));
+        editor_.set_autocomplete_provider(std::move(autocomplete_provider));
     }
     InteractiveView(InteractiveView&&) = delete;
     InteractiveView& operator=(InteractiveView&&) = delete;
@@ -1203,7 +1253,20 @@ private:
                 if (const auto self = weak.lock()) self->post_exit();
             },
             detail::AgentSessionInteractiveAccess::has_user_shell(session_),
-            command_autocomplete_items(commands_, session_.templates(), session_.skills()),
+            std::make_unique<cch::tui::CombinedAutocompleteProvider>(
+                [&] {
+                    std::vector<std::variant<cch::tui::SlashCommand, cch::tui::AutocompleteItem>> commands;
+                    for (auto item : command_autocomplete_items(commands_, session_.templates(), session_.skills())) {
+                        commands.push_back(cch::tui::AutocompleteItem{std::move(item)});
+                    }
+                    return commands;
+                }(),
+                session_.workspace(),
+                find_executable_on_path("fd")),
+            std::make_unique<AsioAutocompleteDebounceTimer>(executor_),
+            [weak] {
+                if (const auto self = weak.lock()) self->post_invalidate();
+            },
             terminal_.capabilities(),
             theme_controller_->live_theme());
     }
