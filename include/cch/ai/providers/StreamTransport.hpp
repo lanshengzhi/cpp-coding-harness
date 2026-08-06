@@ -48,6 +48,10 @@ public:
     /// Streams one HTTP request. The borrowed StreamRequest is read across
     /// suspension points, so it must remain valid until the returned
     /// awaitable completes.
+    ///
+    /// Executor contract: the transport is driven by the calling executor and
+    /// is not internally synchronized; drive it from a single-threaded executor
+    /// and do not run `async_stream` on the same transport from two threads.
     [[nodiscard]] virtual boost::asio::awaitable<util::Expected<StreamResponse>> async_stream(
         const StreamRequest& request,
         BodyChunkHandler on_body_chunk) = 0;

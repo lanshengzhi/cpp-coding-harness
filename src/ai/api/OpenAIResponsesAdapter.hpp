@@ -10,6 +10,9 @@ namespace cch::ai::api {
 /// Private protocol executor for the frozen `openai-responses` surface.
 /// Provider composition owns registration; callers select it only through a
 /// Model whose api identity is `openai-responses`.
+///
+/// Stateless per call: the shared transport is driven by the calling
+/// single-threaded executor (StreamTransport executor contract).
 class OpenAIResponsesAdapter final {
 public:
     explicit OpenAIResponsesAdapter(

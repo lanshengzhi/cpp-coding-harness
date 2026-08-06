@@ -315,6 +315,11 @@ public:
     /// temporary executor for this call. Do not invoke it from callbacks or an
     /// execution context already driving a blocking prompt for this session;
     /// such self-wait attempts are rejected. Async hosts should use prompt().
+    ///
+    /// The temporary executor drives the shared ModelRuntime, which is not
+    /// internally synchronized: do not call prompt_blocking on one thread while
+    /// another thread drives the same session or any session sharing the same
+    /// runtime.
     [[nodiscard]] util::ExpectedVoid prompt_blocking(
         std::string text,
         PromptOptions options = {});

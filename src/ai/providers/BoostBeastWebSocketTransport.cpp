@@ -181,6 +181,14 @@ public:
             std::optional<asio::steady_timer> idle_timer;
             if (idle_timeout_ && *idle_timeout_ > std::chrono::milliseconds{0}) {
                 idle_timer.emplace(executor, *idle_timeout_);
+                // The handler captures the coroutine-frame locals `this` and
+                // `idle_timed_out` by reference across the read suspension.
+                // The frame outlives the handler: the read completion cancels
+                // the timer before the coroutine can return, and an exception
+                // exit destroys the timer with the frame (Asio never invokes
+                // a destroyed timer's handler). The connection's executor
+                // contract is single-threaded, so handler invocation cannot
+                // interleave with frame destruction.
                 idle_timer->async_wait([&idle_timed_out, this](
                                            boost::system::error_code error) {
                     if (!error) {

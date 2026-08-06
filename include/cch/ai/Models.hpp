@@ -18,6 +18,14 @@ namespace cch::ai {
 
 /// Runtime collection of long-lived Providers plus live authentication and
 /// request-time stream delegation.
+///
+/// Concurrency contract: `Models` and the Providers it owns are not internally
+/// synchronized; Providers hold long-lived state (e.g. the Codex WebSocket
+/// session cache) and adapters are driven by the calling executor. All
+/// operations on one `Models`/`Provider` graph must be driven by a
+/// single-threaded executor or otherwise serialized; do not drive the same
+/// graph from two threads. One runtime is shared across sessions (ADR 0029),
+/// so callers must serialize every session's calls onto one executor.
 class Models final {
 public:
     Models(

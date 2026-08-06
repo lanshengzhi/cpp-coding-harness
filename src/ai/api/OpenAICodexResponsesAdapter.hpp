@@ -14,6 +14,12 @@ namespace cch::ai::api {
 /// socket reuse, `previous_response_id` continuation, and the two targeted WS
 /// retries. Provider composition owns registration; callers select it only
 /// through a Model whose api identity is `openai-codex-responses`.
+///
+/// Concurrency contract: the adapter owns the mutable Codex WebSocket session
+/// cache and the SSE-fallback set; it is not internally synchronized. All
+/// `stream` calls on one adapter must be driven by a single-threaded executor
+/// or otherwise serialized — do not run `stream` concurrently on the same
+/// adapter from two threads.
 class OpenAICodexResponsesAdapter final {
 public:
     explicit OpenAICodexResponsesAdapter(

@@ -67,6 +67,14 @@ struct ModelRuntimeAuthStatus {
 /// `CreateAgentSessionOptions` and into the stateful Agent (the sole injectable
 /// seam per #326); runtimes are reusable across sessions with no dispose
 /// ceremony.
+///
+/// Concurrency contract: a runtime and everything it owns (Models, Providers,
+/// adapters, transports, credential store) are not internally synchronized.
+/// All operations on one runtime — including every session sharing it — must
+/// be driven by a single-threaded executor or otherwise serialized; do not
+/// drive the same runtime from two threads. `AgentSession::prompt_blocking`
+/// runs the prompt on a temporary executor created for that call, so it must
+/// not interleave with another thread driving the same runtime.
 class ModelRuntime {
 public:
     /// Construct and refresh a ModelRuntime from the Agent Config Directory.

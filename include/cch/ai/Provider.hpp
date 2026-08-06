@@ -40,6 +40,11 @@ struct ProviderStreamOptions {
 };
 
 /// Long-lived runtime owner for one provider identity.
+///
+/// Concurrency contract: a Provider is not internally synchronized and its
+/// adapters may hold per-connection or per-session state. All operations on
+/// one Provider must be driven by a single-threaded executor or otherwise
+/// serialized; do not drive the same Provider from two threads.
 class Provider {
 public:
     virtual ~Provider() = default;
@@ -52,7 +57,8 @@ public:
     /// Domain failures complete through one terminal event and a final
     /// AssistantMessage value. The Expected error alternative is reserved for
     /// consumer-sink or other infrastructure failure. The borrowed Model and
-    /// AiContext must outlive the returned awaitable.
+    /// AiContext must outlive the returned awaitable. `stream` must not run
+    /// concurrently on the same Provider; see the class concurrency contract.
     [[nodiscard]] virtual boost::asio::awaitable<util::Expected<AssistantMessage>> stream(
         const Model& model,
         const AiContext& context,

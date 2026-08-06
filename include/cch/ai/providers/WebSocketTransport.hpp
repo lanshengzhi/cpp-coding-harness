@@ -34,7 +34,10 @@ struct WebSocketConnectRequest {
 };
 
 /// One bidirectional WebSocket connection. Implementations are driven by a
-/// single coroutine: sends and receives never overlap.
+/// single coroutine on a single-threaded executor: sends, receives, and close
+/// never overlap and the connection is never driven from two threads. A
+/// connection must outlive every in-flight `async_send`/`async_receive`
+/// awaitable; callers keep the owning `shared_ptr` alive until each completes.
 class WebSocket {
 public:
     virtual ~WebSocket() = default;
@@ -53,6 +56,10 @@ public:
 };
 
 /// Injectable WebSocket transport used by the `openai-codex-responses` adapter.
+///
+/// Executor contract: the transport is driven by the calling executor and is
+/// not internally synchronized; drive it from a single-threaded executor and
+/// do not run `async_connect` on the same transport from two threads.
 class WebSocketTransport {
 public:
     virtual ~WebSocketTransport() = default;
