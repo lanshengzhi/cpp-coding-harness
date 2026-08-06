@@ -8,6 +8,7 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
 #include <array>
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -69,6 +70,13 @@ public:
     }
     [[nodiscard]] cch::util::ExpectedVoid begin_synchronized_update() override { return {}; }
     [[nodiscard]] cch::util::ExpectedVoid end_synchronized_update() override { return {}; }
+    [[nodiscard]] cch::util::ExpectedVoid set_title(std::string_view) override { return {}; }
+    [[nodiscard]] cch::util::ExpectedVoid set_progress(bool) override { return {}; }
+    [[nodiscard]] cch::util::ExpectedVoid drain_input(
+        std::chrono::milliseconds,
+        std::chrono::milliseconds) override {
+        return {};
+    }
 
 private:
     cch::tui::TerminalModeState modes_;
@@ -610,4 +618,47 @@ TEST_CASE("VirtualTerminal bounds callback failures", "[tui][issue45]") {
     REQUIRE_FALSE(resize_result);
     CHECK(resize_result.error().message == "Virtual Terminal resize sink failed");
     CHECK(resize_result.error().detail == "the resize callback threw an exception");
+}
+
+TEST_CASE("Terminal seam records title and progress through VirtualTerminal", "[tui][terminal][issue378]") {
+    cch::tui::VirtualTerminal terminal;
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+
+    REQUIRE(terminal.set_title("cch - session - workspace"));
+    REQUIRE(terminal.set_progress(true));
+    REQUIRE(terminal.set_progress(false));
+
+    const std::vector<std::string> expected_output{
+        "\x1b]0;cch - session - workspace\x07",
+        "\x1b]9;4;3\x07",
+        "\x1b]9;4;0;\x07",
+    };
+    CHECK(terminal.output() == expected_output);
+    REQUIRE(terminal.stop());
+    CHECK(terminal.output() == expected_output);
+}
+
+TEST_CASE("VirtualTerminal stop clears an active progress indicator", "[tui][terminal][issue378]") {
+    cch::tui::VirtualTerminal terminal;
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+
+    REQUIRE(terminal.set_progress(true));
+    REQUIRE(terminal.stop());
+
+    const std::vector<std::string> expected_output{
+        "\x1b]9;4;3\x07",
+        "\x1b]9;4;0;\x07",
+    };
+    CHECK(terminal.output() == expected_output);
+}
+
+TEST_CASE("VirtualTerminal drain input is a started-gated no-op", "[tui][terminal][issue378]") {
+    cch::tui::VirtualTerminal terminal;
+    const auto before_start = terminal.drain_input();
+    REQUIRE_FALSE(before_start);
+    CHECK(before_start.error().message == "Virtual Terminal must be started before terminal operations");
+
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    REQUIRE(terminal.drain_input());
+    REQUIRE(terminal.drain_input(std::chrono::milliseconds(100), std::chrono::milliseconds(10)));
 }

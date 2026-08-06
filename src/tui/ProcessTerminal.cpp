@@ -31,6 +31,9 @@
 namespace cch::tui {
 namespace {
 
+// Behavioral baseline: pi 83114817 packages/tui/src/terminal.ts
+// (setTitle/setProgress/drainInput, TERMINAL_PROGRESS_* constants, and
+// drainInput defaults).
 constexpr std::string_view kBracketedPasteEnable = "\x1b[?2004h";
 constexpr std::string_view kBracketedPasteDisable = "\x1b[?2004l";
 constexpr std::string_view kCursorShow = "\x1b[?25h";
@@ -45,6 +48,9 @@ constexpr std::string_view kColorSchemeQuery = "\x1b[?996n";
 constexpr std::string_view kBackgroundColorQuery = "\x1b]11;?\x07";
 constexpr std::string_view kModifyOtherKeysEnable = "\x1b[>4;2m";
 constexpr std::string_view kModifyOtherKeysDisable = "\x1b[>4;0m";
+constexpr std::string_view kProgressActiveSequence = "\x1b]9;4;3\x07";
+constexpr std::string_view kProgressClearSequence = "\x1b]9;4;0;\x07";
+constexpr auto kProgressKeepalive = std::chrono::milliseconds(1000);
 
 [[nodiscard]] util::Error process_error(std::string message, std::string_view operation, int error_number) {
     return util::make_error(
@@ -440,6 +446,10 @@ struct ProcessTerminal::Impl {
     bool keyboard_protocol_pushed{false};
     bool modify_other_keys_active{false};
     std::size_t synchronized_update_depth{0};
+    bool progress_active{false};
+    std::chrono::steady_clock::time_point progress_next_keepalive{};
+    bool draining{false};
+    std::chrono::steady_clock::time_point drain_last_activity{};
 #if defined(__linux__) || defined(__APPLE__)
     termios original_termios{};
     bool has_original_termios{false};
@@ -527,6 +537,7 @@ void invoke_input(T& impl, std::string input) {
     std::shared_ptr<TerminalInputSink> sink;
     {
         std::lock_guard lock(impl.mutex);
+        if (impl.draining) return;
         sink = impl.input_sink;
     }
     if (!sink || !*sink) return;
@@ -617,6 +628,20 @@ void apply_keyboard_response(T& impl, const detail::KeyboardProtocolResponse& re
         impl.modify_other_keys_active = false;
     }
     impl.capabilities.keyboard_protocol = KeyboardProtocol::Kitty;
+}
+
+template <typename T>
+void emit_progress_keepalive(T& impl) {
+    std::lock_guard lock(impl.mutex);
+    if (!impl.progress_active) return;
+    const auto now = std::chrono::steady_clock::now();
+    if (now < impl.progress_next_keepalive) return;
+    auto emitted = write_all(impl.options.output_fd, kProgressActiveSequence);
+    if (!emitted) {
+        if (!impl.worker_error) impl.worker_error = emitted.error();
+        return;
+    }
+    impl.progress_next_keepalive = now + kProgressKeepalive;
 }
 
 enum class WorkerEventKind {
@@ -736,6 +761,11 @@ template <typename T>
         return false;
     }
     if (event.kind == WorkerEventKind::Input) {
+        if (impl.draining) {
+            std::lock_guard lock(impl.mutex);
+            impl.drain_last_activity = std::chrono::steady_clock::now();
+            return true;
+        }
         state.appearance_idle_polls = 0;
         auto forwarded = consume_appearance_input(state.appearance, event.input);
         apply_detected_appearance(impl, state.appearance);
@@ -792,6 +822,7 @@ void run_terminal_worker(T& impl, std::stop_token stop_token) {
             return;
         }
         if (!stop_token.stop_requested()) deliver_resize_if_changed(impl);
+        if (!stop_token.stop_requested()) emit_progress_keepalive(impl);
     }
 }
 
@@ -799,6 +830,11 @@ template <typename T>
 [[nodiscard]] util::ExpectedVoid restore_terminal_modes(T& impl) {
     util::ExpectedVoid first_error;
 
+    if (impl.progress_active) {
+        auto cleared = write_all(impl.options.output_fd, kProgressClearSequence);
+        if (cleared) impl.progress_active = false;
+        retain_error(first_error, std::move(cleared));
+    }
     if (impl.synchronized_update_depth > 0) {
         auto ended = write_all(impl.options.output_fd, kEndSynchronizedUpdate);
         if (ended) impl.synchronized_update_depth = 0;
@@ -880,7 +916,8 @@ util::ExpectedVoid ProcessTerminal::start(
 #else
     if (impl_->has_original_termios || impl_->modes.bracketed_paste ||
         !impl_->modes.cursor_visible || impl_->keyboard_protocol_pushed ||
-        impl_->modify_other_keys_active || impl_->synchronized_update_depth > 0) {
+        impl_->modify_other_keys_active || impl_->synchronized_update_depth > 0 ||
+        impl_->progress_active) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Process,
             "Process Terminal has unrestored state from a previous stop"));
@@ -1145,6 +1182,92 @@ util::ExpectedVoid ProcessTerminal::end_synchronized_update() {
     return ended;
 #else
     impl_->synchronized_update_depth = 0;
+    return {};
+#endif
+}
+
+util::ExpectedVoid ProcessTerminal::set_title(std::string_view title) {
+    std::lock_guard lock(impl_->mutex);
+    if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
+#if defined(__linux__) || defined(__APPLE__)
+    return write_all(impl_->options.output_fd, std::format("\x1b]0;{}\x07", title));
+#else
+    return {};
+#endif
+}
+
+util::ExpectedVoid ProcessTerminal::set_progress(bool active) {
+    std::lock_guard lock(impl_->mutex);
+    if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
+#if defined(__linux__) || defined(__APPLE__)
+    auto attempt = attempt_write_all(
+        impl_->options.output_fd,
+        active ? kProgressActiveSequence : kProgressClearSequence);
+    if (!attempt.result) return attempt.result;
+    if (active) {
+        if (!impl_->progress_active) {
+            impl_->progress_active = true;
+            impl_->progress_next_keepalive = std::chrono::steady_clock::now() + kProgressKeepalive;
+        }
+    } else {
+        impl_->progress_active = false;
+    }
+    return {};
+#else
+    impl_->progress_active = active;
+    return {};
+#endif
+}
+
+util::ExpectedVoid ProcessTerminal::drain_input(
+    std::chrono::milliseconds max_ms,
+    std::chrono::milliseconds idle_ms) {
+    std::unique_lock lock(impl_->mutex);
+    if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
+#if !defined(__linux__) && !defined(__APPLE__)
+    (void)max_ms;
+    (void)idle_ms;
+    return {};
+#else
+    // Disable the keyboard protocols first so late key releases cannot
+    // generate new escape sequences while the buffer drains (pi drainInput).
+    if (impl_->keyboard_protocol_pushed) {
+        auto popped = write_all(impl_->options.output_fd, kKeyboardProtocolPop);
+        if (!popped) return popped;
+        impl_->keyboard_protocol_pushed = false;
+        impl_->capabilities.keyboard_protocol = KeyboardProtocol::Legacy;
+    }
+    if (impl_->modify_other_keys_active) {
+        auto disabled = write_all(impl_->options.output_fd, kModifyOtherKeysDisable);
+        if (!disabled) return disabled;
+        impl_->modify_other_keys_active = false;
+    }
+
+    // The delivery worker stays the sole reader: while draining it discards
+    // everything it reads and records each read in drain_last_activity. This
+    // call waits until input has been idle for idle_ms (or max_ms elapses);
+    // it never reads or holds a lock across a sleep, so it cannot race the
+    // worker's poll-to-read window or contend with its periodic locks.
+    impl_->draining = true;
+    impl_->drain_last_activity = std::chrono::steady_clock::now();
+    auto last_activity = impl_->drain_last_activity;
+    lock.unlock();
+    const auto deadline = last_activity + max_ms;
+    while (true) {
+        const auto now = std::chrono::steady_clock::now();
+        if (now >= deadline) break;
+        const auto idle_elapsed = now - last_activity;
+        if (idle_elapsed >= idle_ms) break;
+        const auto remaining = std::min(
+            std::chrono::duration_cast<std::chrono::milliseconds>(idle_ms - idle_elapsed),
+            std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now));
+        std::this_thread::sleep_for(remaining);
+        std::lock_guard guard(impl_->mutex);
+        last_activity = impl_->drain_last_activity;
+    }
+
+    lock.lock();
+    impl_->draining = false;
     return {};
 #endif
 }

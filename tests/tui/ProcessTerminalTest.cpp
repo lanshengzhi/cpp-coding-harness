@@ -685,4 +685,201 @@ TEST_CASE(
     }));
     REQUIRE(terminal.stop());
 }
+
+TEST_CASE("Process Terminal writes OSC 0 window titles", "[tui][terminal][issue378]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+
+    const auto before_start = terminal.set_title("title");
+    REQUIRE_FALSE(before_start);
+    CHECK(
+        before_start.error().message ==
+        "Process Terminal must be started before terminal operations");
+
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    (void)cch::tests::read_available(pty->master.get());
+    REQUIRE(terminal.set_title("cch - session - workspace"));
+    CHECK(
+        cch::tests::read_available(pty->master.get()) ==
+        "\x1b]0;cch - session - workspace\x07");
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE(
+    "Process Terminal re-emits active progress on the one-second keepalive",
+    "[tui][terminal][issue378]") {
+    constexpr std::string_view kProgressActiveSequence = "\x1b]9;4;3\x07";
+    constexpr std::string_view kProgressClearSequence = "\x1b]9;4;0;\x07";
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    std::string accumulated = cch::tests::read_available(pty->master.get());
+
+    const auto count_active = [&] {
+        std::size_t count = 0;
+        std::size_t position = 0;
+        while ((position = accumulated.find(kProgressActiveSequence, position)) != std::string::npos) {
+            ++count;
+            position += kProgressActiveSequence.size();
+        }
+        return count;
+    };
+
+    REQUIRE(terminal.set_progress(true));
+    accumulated += cch::tests::read_available(pty->master.get());
+    CHECK(accumulated.find(kProgressActiveSequence) != std::string::npos);
+    CHECK(accumulated.find(kProgressClearSequence) == std::string::npos);
+
+    // pi's 1-second keepalive: the active sequence is re-emitted while active.
+    REQUIRE(cch::tests::wait_until(
+        [&] {
+            accumulated += cch::tests::read_available(pty->master.get());
+            return count_active() >= 2;
+        },
+        std::chrono::seconds(3)));
+    REQUIRE(terminal.set_progress(false));
+    accumulated += cch::tests::read_available(pty->master.get());
+    CHECK(accumulated.find(kProgressClearSequence) != std::string::npos);
+    const auto emissions_before_clear = count_active();
+
+    // Deactivation stops the keepalive: no further active sequences.
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+    accumulated += cch::tests::read_available(pty->master.get());
+    CHECK(count_active() == emissions_before_clear);
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE(
+    "Process Terminal stop clears an active progress indicator and restarts cleanly",
+    "[tui][terminal][issue378]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    (void)cch::tests::read_available(pty->master.get());
+
+    REQUIRE(terminal.set_progress(true));
+    (void)cch::tests::read_available(pty->master.get());
+    REQUIRE(terminal.stop());
+    const auto restoration = cch::tests::read_available(pty->master.get());
+    CHECK(restoration.find("\x1b]9;4;0;\x07") != std::string::npos);
+    CHECK(restoration.find("\x1b[?2004l") != std::string::npos);
+    CHECK(terminal.modes() == cch::tui::TerminalModeState{});
+
+    // A restart must not re-arm the keepalive from the previous session.
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    (void)cch::tests::read_available(pty->master.get());
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+    const auto after_restart = cch::tests::read_available(pty->master.get());
+    CHECK(after_restart.find("\x1b]9;4;3\x07") == std::string::npos);
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE(
+    "Process Terminal drains buffered input before exit without delivering it",
+    "[tui][terminal][issue378]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    std::mutex delivered_mutex;
+    std::vector<std::string> delivered;
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    REQUIRE(terminal.start(
+        [&](std::string input) {
+            std::lock_guard lock(delivered_mutex);
+            delivered.push_back(std::move(input));
+        },
+        [](cch::tui::TerminalDimensions) {}));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // A writer floods the terminal with Kitty key-release-style garbage. It
+    // waits out the drain's entry so every byte arrives after draining began.
+    std::jthread writer([&] {
+        const std::string burst(4096, 'x');
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        for (int i = 0; i < 40; ++i) {
+            if (::write(pty->master.get(), burst.data(), burst.size()) !=
+                static_cast<ssize_t>(burst.size())) {
+                return;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    });
+
+    const auto drain_started = std::chrono::steady_clock::now();
+    REQUIRE(terminal.drain_input(
+        std::chrono::seconds(2),
+        std::chrono::milliseconds(100)));
+    const auto drain_elapsed = std::chrono::steady_clock::now() - drain_started;
+    writer.join();
+
+    // The drain stayed alive while input flowed and exited once input went idle.
+    CHECK(drain_elapsed >= std::chrono::milliseconds(300));
+    CHECK(drain_elapsed < std::chrono::seconds(2));
+    // Nothing reached the input sink during the drain.
+    {
+        std::lock_guard lock(delivered_mutex);
+        CHECK(delivered.empty());
+    }
+    // Everything was consumed: nothing remains buffered for the parent shell.
+    CHECK(cch::tests::read_available(pty->slave.get(), std::chrono::milliseconds(50)).empty());
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE(
+    "Process Terminal drain disables keyboard protocols once before exit",
+    "[tui][terminal][issue378]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // Activate the modifyOtherKeys fallback via the device-attributes response.
+    constexpr std::string_view kResponse = "\x1b[?1;2c";
+    REQUIRE(
+        ::write(pty->master.get(), kResponse.data(), kResponse.size()) ==
+        static_cast<ssize_t>(kResponse.size()));
+    REQUIRE(cch::tests::wait_until([&] {
+        return terminal.capabilities().keyboard_protocol ==
+            cch::tui::KeyboardProtocol::ModifyOtherKeys;
+    }));
+    (void)cch::tests::read_available(pty->master.get());
+
+    const auto drain_started = std::chrono::steady_clock::now();
+    REQUIRE(terminal.drain_input(
+        std::chrono::milliseconds(1000),
+        std::chrono::milliseconds(20)));
+    CHECK(
+        std::chrono::steady_clock::now() - drain_started <
+        std::chrono::milliseconds(300));
+    CHECK(terminal.capabilities().keyboard_protocol == cch::tui::KeyboardProtocol::Legacy);
+    const auto drained = cch::tests::read_available(pty->master.get());
+    CHECK(drained.find("\x1b[<u") != std::string::npos);
+    CHECK(drained.find("\x1b[>4;0m") != std::string::npos);
+
+    // stop() must not re-emit the disables drain_input already wrote.
+    REQUIRE(terminal.stop());
+    const auto restoration = cch::tests::read_available(pty->master.get());
+    CHECK(restoration.find("\x1b[<u") == std::string::npos);
+    CHECK(restoration.find("\x1b[>4;0m") == std::string::npos);
+    CHECK(terminal.modes() == cch::tui::TerminalModeState{});
+}
+
 #endif

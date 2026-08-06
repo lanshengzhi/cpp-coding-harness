@@ -176,6 +176,13 @@ public:
     }
     [[nodiscard]] util::ExpectedVoid begin_synchronized_update() override { return {}; }
     [[nodiscard]] util::ExpectedVoid end_synchronized_update() override { return {}; }
+    [[nodiscard]] util::ExpectedVoid set_title(std::string_view) override { return {}; }
+    [[nodiscard]] util::ExpectedVoid set_progress(bool) override { return {}; }
+    [[nodiscard]] util::ExpectedVoid drain_input(
+        std::chrono::milliseconds,
+        std::chrono::milliseconds) override {
+        return {};
+    }
 };
 
 class FailingCleanupTerminal final : public tui::Terminal {
@@ -225,6 +232,13 @@ public:
     }
     [[nodiscard]] util::ExpectedVoid begin_synchronized_update() override { return {}; }
     [[nodiscard]] util::ExpectedVoid end_synchronized_update() override { return {}; }
+    [[nodiscard]] util::ExpectedVoid set_title(std::string_view) override { return {}; }
+    [[nodiscard]] util::ExpectedVoid set_progress(bool) override { return {}; }
+    [[nodiscard]] util::ExpectedVoid drain_input(
+        std::chrono::milliseconds,
+        std::chrono::milliseconds) override {
+        return {};
+    }
 
 private:
     tui::TerminalModeState modes_;

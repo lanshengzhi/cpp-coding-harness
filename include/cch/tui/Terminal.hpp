@@ -2,6 +2,7 @@
 
 #include <cch/util/Error.hpp>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -105,6 +106,13 @@ struct TerminalImage {
 using TerminalInputSink = std::move_only_function<void(std::string)>;
 using TerminalResizeSink = std::move_only_function<void(TerminalDimensions)>;
 
+// Behavioral baseline: pi 83114817 packages/tui/src/terminal.ts (ProcessTerminal
+// setTitle/setProgress/drainInput and the TERMINAL_PROGRESS_* constants).
+
+/// drain_input() defaults matching pi's drainInput(maxMs = 1000, idleMs = 50).
+constexpr auto kDrainInputMaxMs = std::chrono::milliseconds(1000);
+constexpr auto kDrainInputIdleMs = std::chrono::milliseconds(50);
+
 class Terminal {
 public:
     virtual ~Terminal() = default;
@@ -135,6 +143,25 @@ public:
     /// capability may ignore the start/end markers.
     [[nodiscard]] virtual util::ExpectedVoid begin_synchronized_update() = 0;
     [[nodiscard]] virtual util::ExpectedVoid end_synchronized_update() = 0;
+
+    /// Set the terminal window title (OSC 0;title BEL), exactly as pi's
+    /// interactive boot does with setTitle.
+    [[nodiscard]] virtual util::ExpectedVoid set_title(std::string_view title) = 0;
+
+    /// Present or clear the progress indicator (OSC 9;4). While active, the
+    /// sequence is re-emitted on pi's 1-second keepalive so the indicator
+    /// survives terminal redraws and timeouts; stop() clears an active
+    /// indicator during mode restoration.
+    [[nodiscard]] virtual util::ExpectedVoid set_progress(bool active) = 0;
+
+    /// Drain buffered input before exit so Kitty key-release escape sequences
+    /// cannot leak into the parent shell after the TUI stops. Keyboard
+    /// protocol push and modifyOtherKeys are disabled first, then input is
+    /// consumed (discarded) until idle_ms passes without data or max_ms
+    /// elapses, matching pi's drainInput defaults (1000ms / 50ms).
+    [[nodiscard]] virtual util::ExpectedVoid drain_input(
+        std::chrono::milliseconds max_ms = kDrainInputMaxMs,
+        std::chrono::milliseconds idle_ms = kDrainInputIdleMs) = 0;
 };
 
 } // namespace cch::tui

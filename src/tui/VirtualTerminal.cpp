@@ -27,6 +27,7 @@ struct VirtualTerminal::Impl {
     CursorPosition cursor;
     std::size_t sync_depth{0};
     std::uint64_t next_image_handle{1};
+    bool progress_active{false};
     bool clear_screen_called{false};
 };
 
@@ -34,6 +35,13 @@ namespace {
 
 constexpr std::string_view kBeginSync = "\x1b[?2026h";
 constexpr std::string_view kEndSync = "\x1b[?2026l";
+
+// Behavioral baseline: pi 83114817 packages/tui/src/terminal.ts
+// (setTitle OSC 0, setProgress OSC 9;4 active/clear sequences). The
+// 1-second progress keepalive is ProcessTerminal's serial-worker behavior;
+// the double records the emitted sequences only.
+constexpr std::string_view kProgressActiveSequence = "\x1b]9;4;3\x07";
+constexpr std::string_view kProgressClearSequence = "\x1b]9;4;0;\x07";
 
 [[nodiscard]] VirtualTerminalStyle public_style(const detail::AnsiStyleState& style) {
     return {
@@ -167,6 +175,10 @@ util::ExpectedVoid VirtualTerminal::start(TerminalInputSink input_sink, Terminal
 }
 
 util::ExpectedVoid VirtualTerminal::stop() {
+    if (impl_->progress_active) {
+        impl_->output.push_back(std::string(kProgressClearSequence));
+        impl_->progress_active = false;
+    }
     impl_->input_sink = {};
     impl_->resize_sink = {};
     impl_->modes.started = false;
@@ -221,6 +233,29 @@ util::ExpectedVoid VirtualTerminal::end_synchronized_update() {
     if (impl_->sync_depth == 0) {
         impl_->output.push_back(std::string(kEndSync));
     }
+    return {};
+}
+
+util::ExpectedVoid VirtualTerminal::set_title(std::string_view title) {
+    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    impl_->output.push_back(std::format("\x1b]0;{}\x07", title));
+    return {};
+}
+
+util::ExpectedVoid VirtualTerminal::set_progress(bool active) {
+    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    impl_->output.push_back(std::string(active ? kProgressActiveSequence : kProgressClearSequence));
+    impl_->progress_active = active;
+    return {};
+}
+
+util::ExpectedVoid VirtualTerminal::drain_input(
+    std::chrono::milliseconds,
+    std::chrono::milliseconds) {
+    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    // The double delivers input synchronously through inject_input; there is
+    // no buffered input to drain. The call is recorded by callers through
+    // their own ordering, and ProcessTerminal pins the real drain behavior.
     return {};
 }
 

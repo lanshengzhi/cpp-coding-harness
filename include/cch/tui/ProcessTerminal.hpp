@@ -2,6 +2,7 @@
 
 #include <cch/tui/Terminal.hpp>
 
+#include <chrono>
 #include <memory>
 
 namespace cch::tui {
@@ -44,6 +45,11 @@ public:
         const CellRegion& region) override;
     [[nodiscard]] util::ExpectedVoid begin_synchronized_update() override;
     [[nodiscard]] util::ExpectedVoid end_synchronized_update() override;
+    [[nodiscard]] util::ExpectedVoid set_title(std::string_view title) override;
+    [[nodiscard]] util::ExpectedVoid set_progress(bool active) override;
+    [[nodiscard]] util::ExpectedVoid drain_input(
+        std::chrono::milliseconds max_ms = kDrainInputMaxMs,
+        std::chrono::milliseconds idle_ms = kDrainInputIdleMs) override;
 
 private:
     struct Impl;
