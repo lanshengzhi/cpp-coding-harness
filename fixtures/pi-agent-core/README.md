@@ -6,17 +6,40 @@ tests in this repository against the C++ surface, so the gate's evidence is one 
 No fixture value is a live credential or derived from one; all strings are distinguishable
 dummy values (see [Sanitization rules](#sanitization-rules)).
 
-This file records only the capabilities landed so far (T01 [#350], T02 [#351], T03 [#352], T04 [#353], T05 [#354], T06 [#355], T07 [#356], T08 [#357], T09 [#358], T10 [#359], T11 [#360], T12 [#361], T13 [#362]); the
-capability checklist grows with each subsequent ticket (T13–T14, blockers-first per parity map [#2]), and
-rows below cover only what the ticket that last touched this file landed.
+This file completes the pi-agent-core completion gate ([#363], T14): T01 [#350] through T13 [#362] landed
+the capability rows below, and this gate verifies the checklist is complete, every #331-mandated
+golden is committed, and the ADR 0034 / CONTEXT.md documentation is consistent with the landed
+surface.
 
-## Pinned baseline
+## Pinned baseline and shard artifact
 
 - **Frozen pi commit:** `83114817c68f5413e4d7ba6d7003ddc511cd31d2` (the parity map [#2]
   baseline). The local pi checkout is `../pi`; `pi:` references resolve from that root.
 - **Published artifact:** `@earendil-works/pi-agent-core@0.83.0`, published at pi tag
-  `v0.83.0`. The harness consumer pinned here is `packages/agent/src/harness/agent-harness.ts`
-  (`createStreamFn`) with the loop order of `packages/agent/src/agent-loop.ts` (`runLoop`).
+  `v0.83.0` (tag commit `845d6ff1f`, released 2026-07-30 — an ancestor of the parity
+  baseline), registry tarball
+  `https://registry.npmjs.org/@earendil-works/pi-agent-core/-/pi-agent-core-0.83.0.tgz`,
+  sha512 `468ac6a7d387e65dc4969b82e5ae5943679671c8591977e55d1cd51a457df72df2ead4fe2cb372c686087552af4ca58439bc211317906d31f47c8dad138897e2`
+  (the same hash npm records base64-encoded as `dist.integrity`). Unlike pi-ai's provider shards, pi-agent-core ships no generated
+  data: the shard pinned here is the compiled harness-consumer surface in the package's
+  `dist/`, whose parity authority is the baseline `packages/agent/src/` tree. The harness
+  consumer pinned here is `agent-harness.ts` (`createStreamFn`) with the loop order of
+  `agent-loop.ts` (`runLoop`).
+
+### Harness-consumer hashes (sha256)
+
+| Consumer file | Published `pi-agent-core@0.83.0` (`dist/`) | Baseline source (`packages/agent/src/`, parity authority) |
+| --- | --- | --- |
+| harness consumer (`createStreamFn`) | `harness/agent-harness.js` `ba1f0a1780087b8e891e43092513d5b4728d61551aa562f64966b748b1a0aa2b` | `harness/agent-harness.ts` `672e9c47ae3e9ffdbe35d515183dfe9f7f905f4bd620e1f5432b4f4b7c97ed0f` |
+| loop order (`runLoop`) | `agent-loop.js` `d3d20bc773ccc8d5f7cfe0eabf8b421ff3da8685617445b142d89a44457741bc` | `agent-loop.ts` `3f2bef7cd470395d62d869eba2b8d6ade47d4643db71b67f7a25dd2686cc462c` |
+| Agent state machine (`DEFAULT_MODEL`, `continue`) | `agent.js` `02e5f6dfcea09280d7c6818fd264dc9a1219087f1d6c49115752b7086f6f2b62` | `agent.ts` `b1b1655f0d27a038a0ec8091e213aba070bc99041d778135d3dccaab51f0146b` |
+| compaction machinery (`prepareCompaction`) | `harness/compaction/compaction.js` `932066dfc25663672a9086da30c41e0a5db9690b80d1202ea184e7fa8328a67b` | `harness/compaction/compaction.ts` `b93a6e29980dd43a6b0560e0134e3f27d653c24d65e200b2a86ba6e07b138738` |
+| session wire/derived state | `harness/session/session.js` `eb10ebe2079343f4ea01028fa21872d1e53f97de19b798e9d8a2bebd70b8cdba` | `harness/session/session.ts` `8ba72cf4247761024bb3c3d8a0c6a7367c2ff8fac7011cc3a43a689bb612072c` |
+
+The published dist was compiled from the v0.83.0 tag, which predates the baseline; the
+baseline source is the parity authority the C++ surface was built against, so the pinned
+source hashes are the contract and the published columns are the artifact reference (same
+two-column convention as `fixtures/pi-ai/`).
 
 ## Sanitization rules
 
@@ -175,7 +198,8 @@ compact-and-retry-once, threshold) is T10's half; only the machinery and the man
   `ModelRuntime` at the stream seam: `cacheRetention: "none"` and a fresh session id (injected
   deterministic `summarization-session-1`, proving each request isolates routing and avoids
   unreusable cache writes exactly like pi's `completeSimpleWithRetries`), `maxTokens` 1600
-  (`floor(0.8 * reserveTokens)`), `reasoning` forwarding for a thinking model, the verbatim
+  (`min(floor(0.8 * reserveTokens), model.maxTokens)` — the fake model's 1600 cap on
+  `floor(0.8 * 16384) = 13107`), `reasoning` forwarding for a thinking model, the verbatim
   `SUMMARIZATION_SYSTEM_PROMPT`, and the `<conversation>`-wrapped summarization prompt.
 - `compaction-persistence.jsonl` — the appended `compaction` entry line with pi's field set
   (`summary`, `firstKeptEntryId`, `tokensBefore`, `retainedTail` messages, `details`
@@ -282,7 +306,7 @@ surface, and the committed evidence. Resolution records: [#326]
 `7d813af3650dfa4fd098e90e321fce24`, [#329] `746839885c04cf195984af7112f2ea88`, [#330]
 `6d06d3172ff3383ed3188a9bef4be587`, [#331] `3a9243c1cb711cecbde25396a5af53cd`.
 
-### Supported Capabilities (this ticket's scope)
+### Supported Capabilities (complete at T14 — every row checked)
 
 | # | Capability | Frozen pi source | C++ surface | Evidence (tests → fixtures) |
 | --- | --- | --- | --- | --- |
@@ -327,6 +351,26 @@ surface, and the committed evidence. Resolution records: [#326]
 | 39 | `auto_retry_start`/`auto_retry_end` events (pi `AgentSessionEvent`): `auto_retry_start {attempt, maxAttempts, delayMs, errorMessage}` fires before each backoff sleep; `auto_retry_end {success, attempt, finalError?}` fires at the first non-error assistant message after retries (success), at final-failure exhaustion (with the final error message), and at an aborted backoff ("Retry cancelled") — retry is observable and cancellable like pi | `packages/coding-agent/src/core/agent-session.ts` `_prepareRetry` (start emission), `_handleAgentEvent` message_end (success reset), `_handlePostAgentRun` (failure emission), abort catch ("Retry cancelled") | `include/cch/coding_agent/AgentSessionEvent.hpp` (`AutoRetryStartEvent`/`AutoRetryEndEvent`, `AgentSessionEvent`), `AgentSessionRuntime::subscribe_session`/`emit_session_event`, `AgentSession::subscribe_session` (SDK) | `TurnAutoRetryTest` event-sequence rows + golden → `auto-retry-lifecycle.json` |
 | 40 | Abort-interruptible backoff: the prompt-scoped stop token cancels the backoff timer; an abort during the sleep emits exactly one `auto_retry_end {success: false, finalError: "Retry cancelled"}` terminal outcome, the retry never starts, and the session stays reusable for the next prompt | `packages/coding-agent/src/core/agent-session.ts` `_prepareRetry` `sleep(delayMs, this._retryAbortController.signal)` catch branch; `abort()` (`abortRetry()`) | `AgentSessionRuntime::prepare_retry` (steady_timer + `std::stop_callback`; `operation_aborted`/`stop_requested` → cancelled) | `TurnAutoRetryTest` abort-during-backoff row (one end event, one model call, error retained in session history, reusable session) |
 | 41 | Legacy contraction ([#362], T13): the `ai::StreamingChatClient` interface and its `StreamChatRequest`/`stream()`/`complete()` consumption seam are removed — `ai::Models` and `coding_agent::ModelRuntime` expose only the frozen `streamSimple` surface (`Models::stream_simple` / `ModelRuntime::stream_simple`, Provider `stream(Model, AiContext, ProviderStreamOptions, sink)`), and the session layer's runtime decorators wrap `streamSimple` only. The `OpenAIChatClient` failure path, the `Model{id}` placeholder, the `edit_file` tool name, and the `"off"` thinking default are gone with **no compatibility headers, aliases, deprecation shims, or fallback reads** — `include/cch/ai/ChatClient.hpp` and `tests/support/GatedChatClient.hpp` are deleted, every test fake drives a scripted `ai::Provider`, and `grep`/`find`/`ls` and the `AgentHarness` class stay absent with no placeholder. Architecture tests pin the clean end state | ADR 0034 decision 8; #331 resolution record (superseded list: `StreamingChatClient`/`OpenAIChatClient` consumption seam, `Model{id}`, `edit_file`, `"off"` default); spec user story 37 | none — the removed surface exists only as architecture-pinned absence: `Models.hpp`/`ModelRuntime.hpp` declare `stream_simple` (no `stream`), `Context.hpp` carries no model slot, `Provider.hpp` `stream(const Model&, const AiContext&, ProviderStreamOptions, AssistantEventSink)` is the sole request seam | `ArchitectureSurfaceScanTest` `"legacy chat-client surface stays removed with no shims"` ([#362]: tree sweep for `StreamingChatClient`/`StreamChatRequest`/`OpenAIChatClient`/`make_scripted_fake_stream`/`models_from_stream`/`GatedChatClient`/`edit_file` + header-absence checks) and `"streamSimple exposes only the supported caller option set"`, `"Model is complete typed and required on every provider request"`; `PublicHeaderBoundaryTest`/`MoveOnlyCallbackTest` compile against the narrowed surface |
+
+### Deferred Capabilities (absent from the surface — no placeholders, no compatibility shims)
+
+- `grep`/`find`/`ls` tools (pi `packages/coding-agent/src/core/tools/{grep,find,ls}.ts`):
+  absent with no placeholder (row 41's architecture-pinned absence).
+- The `AgentHarness` class surface (Session interface, hooks, resources, skills/prompt
+  templates, tree navigation): deferred per ADR 0034 (R15; the class is rejected in
+  'Considered options') — pi's own coding-agent drives
+  the low-level `Agent` directly, and claiming the class would drag extension hooks and tree
+  navigation into this module.
+- Producers of the `branch_summary`/`custom`/`custom_message`/`label`/`session_info` entry
+  types (tree navigation, extensions, session naming): the entries round-trip with pi's
+  projection semantics (rows 22–25) but their producers remain fog.
+- `settings.retry` writes (pi `SettingsManager.setRetryEnabled`): the C++ reads
+  `settings.retry {enabled, maxRetries, baseDelayMs}` with pi's defaults (row 36) but has no
+  write API yet; the toggle surface is deferred to the coding-agent module gate.
+- A compaction event channel (pi `compaction_end`): the C++ session reports the second-overflow
+  recovery failure through the prompt error instead (row 31 divergence note).
+- End-to-end acceptance (agent-harness-through-`streamSimple`, TUI/CLI full-chain): belongs to
+  the pi-tui / pi-coding-agent gates.
 
 ### Recorded divergences preserved (unchanged by this ticket)
 
@@ -391,6 +435,28 @@ surface, and the committed evidence. Resolution records: [#326]
   has no settings *write* API for retry yet (pi `SettingsManager.setRetryEnabled`); the toggle
   surface is deferred to the coding-agent module gate.
 
+## Final classification
+
+Every Supported Capability scoped by ADR 0034 for this module is a checked row (1–41) above,
+each tying the capability to its frozen pi source, the resolution record that froze it, the
+C++ surface, and committed evidence (tests → goldens). Every #331-mandated golden is committed
+under this directory (the full 25-golden inventory is the [Fixture inventory](#fixture-inventory)
+section above; the mandated subset): option-forwarding (`stream-simple-options.json`,
+`stream-simple-options-default.json`), loop lifecycle ordering (`loop-*.json`), thinking
+clamp/resolution + persistence (`thinking-level-clamp.json`, `thinking-persistence.json`),
+tool-result shape (`tool-result-shape.json`), compaction cut-point + summarization request +
+overflow/threshold lifecycle (`summarization-request.json`, `compaction-persistence.jsonl`,
+`compaction-rebuild.json`, `overflow-recovery-message.txt`), the 11-entry-type JSONL
+round-trip + resume re-resolution (`session-roundtrip.jsonl`, `derived-session-state.json`,
+`projection-*.json`), the six-category terminal matrix (`ModelRuntimeSeamTest` — a test
+matrix, not a fixture), verbatim re-auth guidance (`re-auth-guidance-*.txt`), and the retry
+lifecycle (`auto-retry-lifecycle.json`). Goldens were captured from the frozen pi tests
+(`packages/agent/test/{agent,agent-loop}.test.ts`, `packages/agent/test/harness/*`,
+`packages/coding-agent/test/*`) at baseline `83114817` with the TS sides pinned as snapshots
+in this repository; no node sidecar runs in CI. ADR 0034 and the CONTEXT.md entries (Agent
+Stream Flow, Thinking Level, Compaction, Auto-Retry, Re-auth Guidance) were re-verified
+against the landed surface at this gate with no drift.
+
 ## Gate notes
 
 - The fake `ModelRuntime` is the only seam used here (no live keys, no network validation);
@@ -416,3 +482,5 @@ surface, and the committed evidence. Resolution records: [#326]
 [#359]: https://github.com/lanshengzhi/cpp-coding-harness/issues/359
 [#360]: https://github.com/lanshengzhi/cpp-coding-harness/issues/360
 [#361]: https://github.com/lanshengzhi/cpp-coding-harness/issues/361
+[#362]: https://github.com/lanshengzhi/cpp-coding-harness/issues/362
+[#363]: https://github.com/lanshengzhi/cpp-coding-harness/issues/363
