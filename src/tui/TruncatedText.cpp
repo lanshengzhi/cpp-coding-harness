@@ -14,11 +14,9 @@ namespace cch::tui {
 
 TruncatedText::TruncatedText(
     std::string text,
-    std::string ellipsis,
     std::size_t padding_x,
     std::size_t padding_y)
     : text_(std::move(text)),
-      ellipsis_(std::move(ellipsis)),
       padding_x_(padding_x),
       padding_y_(padding_y) {}
 
@@ -28,10 +26,6 @@ void TruncatedText::set_text(std::string text) {
 
 std::string_view TruncatedText::text() const {
     return text_;
-}
-
-void TruncatedText::set_ellipsis(std::string ellipsis) {
-    ellipsis_ = std::move(ellipsis);
 }
 
 util::Expected<RenderResult> TruncatedText::render(std::size_t width) {
@@ -52,7 +46,8 @@ util::Expected<RenderResult> TruncatedText::render(std::size_t width) {
     const auto newline_position = normalized->find('\n');
     const auto single_line = std::string_view(*normalized).substr(0, newline_position);
     const auto available_width = width - padding_x_ - padding_x_;
-    auto truncated = truncate_text(single_line, available_width, ellipsis_);
+    // Hard cut at the width boundary: no ellipsis (pi `TruncatedText`).
+    auto truncated = truncate_text(single_line, available_width, "");
     if (!truncated) return std::unexpected(truncated.error());
 
     std::vector<std::string> result;
