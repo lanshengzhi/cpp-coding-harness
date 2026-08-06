@@ -4,6 +4,7 @@
 
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
+#include <format>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -313,4 +314,252 @@ TEST_CASE("Editor rejects failing or width-changing generic styling", "[tui][edi
 
     REQUIRE_FALSE(callback_failure);
     CHECK(callback_failure.error().message.find("style hook failed") != std::string::npos);
+}
+
+TEST_CASE("Editor does nothing on Up when history is empty", "[tui][editor][history][issue379]") {
+    cch::tui::Editor editor;
+    key(editor, "up");
+    CHECK(editor.text().empty());
+}
+
+TEST_CASE("Editor recalls the most recent entry on Up when empty", "[tui][editor][history][issue379]") {
+    cch::tui::Editor editor;
+    editor.add_to_history("first prompt");
+    editor.add_to_history("second prompt");
+
+    key(editor, "up");
+
+    CHECK(editor.text() == "second prompt");
+}
+
+TEST_CASE("Editor cycles through history entries on repeated Up", "[tui][editor][history][issue379]") {
+    cch::tui::Editor editor;
+    editor.add_to_history("first");
+    editor.add_to_history("second");
+    editor.add_to_history("third");
+
+    key(editor, "up");
+    CHECK(editor.text() == "third");
+    key(editor, "up");
+    CHECK(editor.text() == "second");
+    key(editor, "up");
+    CHECK(editor.text() == "first");
+    key(editor, "up");
+    CHECK(editor.text() == "first");  // Stays at the oldest entry
+}
+
+TEST_CASE("Editor jumps to start before entering history from a non-empty draft", "[tui][editor][history][issue379]") {
+    cch::tui::Editor editor;
+    editor.add_to_history("prompt");
+    editor.set_text("draft");
+    key(editor, "left");
+    key(editor, "left");
+
+    key(editor, "up");  // Jumps to start before history browsing
+    CHECK(editor.text() == "draft");
+    CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 0}));
+
+    key(editor, "up");  // At start - shows "prompt"
+    CHECK(editor.text() == "prompt");
+
+    key(editor, "down");  // Restores draft
+    CHECK(editor.text() == "draft");
+    CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 0}));
+}
+
+TEST_CASE("Editor navigates forward through history with Down", "[tui][editor][history][issue379]") {
+    cch::tui::Editor editor;
+    editor.add_to_history("first");
+    editor.add_to_history("second");
+    editor.add_to_history("third");
+    editor.set_text("draft");
+
+    // Go to oldest: start-jump, then third, second, first
+    key(editor, "up");
+    key(editor, "up");
+    key(editor, "up");
+    key(editor, "up");
+
+    // Navigate back
+    key(editor, "down");
+    CHECK(editor.text() == "second");
+    key(editor, "down");
+    CHECK(editor.text() == "third");
+    key(editor, "down");
+    CHECK(editor.text() == "draft");
+}
+
+TEST_CASE("Editor exits history mode when typing a character", "[tui][editor][history][issue379]") {
+    cch::tui::Editor editor;
+    editor.add_to_history("old prompt");
+
+    key(editor, "up");  // Shows "old prompt" with cursor at start
+    type(editor, "x");
+
+    CHECK(editor.text() == "xold prompt");
+}
+
+TEST_CASE("Editor exits history mode on set_text", "[tui][editor][history][issue379]") {
+    cch::tui::Editor editor;
+    editor.add_to_history("first");
+    editor.add_to_history("second");
+
+    key(editor, "up");  // Shows "second"
+    editor.set_text("");
+
+    key(editor, "up");  // Starts fresh from most recent
+    CHECK(editor.text() == "second");
+}
+
+TEST_CASE("Editor does not add empty strings to history", "[tui][editor][history][issue379]") {
+    cch::tui::Editor editor;
+    editor.add_to_history("");
+    editor.add_to_history("   ");
+    editor.add_to_history("valid");
+
+    key(editor, "up");
+    CHECK(editor.text() == "valid");
+    key(editor, "up");  // No more entries
+    CHECK(editor.text() == "valid");
+}
+
+TEST_CASE("Editor does not add consecutive duplicates to history", "[tui][editor][history][issue379]") {
+    cch::tui::Editor editor;
+    editor.add_to_history("same");
+    editor.add_to_history("same");
+    editor.add_to_history("same");
+
+    key(editor, "up");
+    CHECK(editor.text() == "same");
+    key(editor, "up");  // Only one entry
+    CHECK(editor.text() == "same");
+}
+
+TEST_CASE("Editor allows non-consecutive duplicates in history", "[tui][editor][history][issue379]") {
+    cch::tui::Editor editor;
+    editor.add_to_history("first");
+    editor.add_to_history("second");
+    editor.add_to_history("first");  // Not consecutive, added
+
+    key(editor, "up");
+    CHECK(editor.text() == "first");
+    key(editor, "up");
+    CHECK(editor.text() == "second");
+    key(editor, "up");
+    CHECK(editor.text() == "first");  // Older one
+}
+
+TEST_CASE("Editor uses cursor movement instead of history when content is present", "[tui][editor][history][issue379]") {
+    cch::tui::Editor editor;
+    editor.add_to_history("history item");
+    editor.set_text("line1\nline2");
+
+    key(editor, "up");  // Cursor movement, not history
+    type(editor, "X");  // Verify cursor position
+
+    CHECK(editor.text() == "line1X\nline2");
+}
+
+TEST_CASE("Editor limits history to 100 entries", "[tui][editor][history][issue379]") {
+    cch::tui::Editor editor;
+    for (int index = 0; index < 105; ++index) {
+        editor.add_to_history(std::format("prompt {}", index));
+    }
+
+    for (int index = 0; index < 100; ++index) key(editor, "up");
+
+    // Oldest kept entry, not entry 0
+    CHECK(editor.text() == "prompt 5");
+
+    key(editor, "up");  // No change at the oldest entry
+    CHECK(editor.text() == "prompt 5");
+}
+
+TEST_CASE("Editor places the cursor at the start after browsing upward", "[tui][editor][history][issue379]") {
+    cch::tui::Editor editor;
+    editor.add_to_history("older entry");
+    editor.add_to_history("line1\nline2\nline3");
+
+    key(editor, "up");  // Shows multi-line entry at start
+    CHECK(editor.text() == "line1\nline2\nline3");
+    CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 0}));
+
+    key(editor, "up");  // Immediately navigates to older entry
+    CHECK(editor.text() == "older entry");
+    CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 0}));
+}
+
+TEST_CASE("Editor places the cursor at the end after browsing downward", "[tui][editor][history][issue379]") {
+    cch::tui::Editor editor;
+    editor.add_to_history("older entry");
+    editor.add_to_history("line1\nline2\nline3");
+    editor.add_to_history("newer entry");
+
+    key(editor, "up");  // newer entry
+    key(editor, "up");  // multi-line entry
+    key(editor, "up");  // older entry
+
+    key(editor, "down");  // Shows multi-line entry at end
+    CHECK(editor.text() == "line1\nline2\nline3");
+    CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 2, .column = 5}));
+
+    key(editor, "down");  // Immediately navigates to newer entry
+    CHECK(editor.text() == "newer entry");
+}
+
+TEST_CASE("Editor allows opposite-direction cursor movement within a multi-line entry", "[tui][editor][history][issue379]") {
+    cch::tui::Editor editor;
+    editor.add_to_history("line1\nline2\nline3");
+
+    key(editor, "up");  // Shows entry at start
+    CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 0}));
+
+    key(editor, "down");  // Cursor moves to line2
+    CHECK(editor.text() == "line1\nline2\nline3");
+    CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 1, .column = 0}));
+
+    key(editor, "up");  // Cursor moves back to line1
+    CHECK(editor.text() == "line1\nline2\nline3");
+    CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 0}));
+}
+
+TEST_CASE("Editor records every submit path and recalls the submitted entry", "[tui][editor][history][issue379]") {
+    std::vector<std::string> submitted;
+    cch::tui::Editor editor(
+        {},
+        {},
+        [&submitted](std::string text) { submitted.push_back(std::move(text)); });
+
+    type(editor, "one");
+    key(editor, "enter");
+    REQUIRE(submitted.size() == 1);
+    CHECK(submitted[0] == "one");
+
+    // The submitted entry is immediately recallable
+    key(editor, "up");
+    CHECK(editor.text() == "one");
+    key(editor, "down");  // back to the empty draft
+
+    // Whitespace-only submissions are trimmed away and not recorded
+    type(editor, "two");
+    key(editor, "enter");
+    REQUIRE(submitted.size() == 2);
+    type(editor, "   ");
+    key(editor, "enter");
+    REQUIRE(submitted.size() == 3);
+    key(editor, "up");
+    CHECK(editor.text() == "two");
+}
+
+TEST_CASE("Editor recalling history is undoable back to the draft", "[tui][editor][history][issue379]") {
+    cch::tui::Editor editor;
+    editor.add_to_history("recalled");
+    editor.set_text("draft");
+
+    key(editor, "up");  // start-jump
+    key(editor, "up");  // "recalled" (browsing captured the draft)
+    key(editor, "-", true);  // undo
+
+    CHECK(editor.text() == "draft");
+    CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 0}));
 }

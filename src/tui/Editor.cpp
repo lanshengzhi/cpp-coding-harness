@@ -19,6 +19,12 @@
 namespace cch::tui {
 namespace {
 
+// Behavioral baseline: pi 83114817 packages/tui/src/components/editor.ts
+// (addToHistory submit-path recording and cursor-boundary history recall).
+
+/// History depth cap matching pi's addToHistory.
+constexpr std::size_t kMaxHistoryEntries = 100;
+
 struct Segment {
     std::string text;
     std::optional<std::size_t> paste_id;
@@ -148,6 +154,16 @@ struct Editor::Impl {
     std::vector<AutocompleteItem> autocomplete;
     std::string autocomplete_prefix;
     std::size_t autocomplete_selected{0};
+
+    // Prompt history for up/down navigation. Most recent entry first, exactly
+    // as pi's addToHistory unshifts; nullopt means not browsing.
+    std::vector<std::string> history;
+    std::optional<std::size_t> history_index;
+    struct HistoryDraft {
+        Document document;
+        EditorCursor cursor;
+    };
+    std::optional<HistoryDraft> history_draft;
     bool focused{false};
     std::size_t available_height{5};
     std::size_t layout_width{80};
@@ -271,6 +287,7 @@ struct Editor::Impl {
     void insert_text(std::string text, bool record_undo, bool update_autocomplete = true) {
         text = normalize_input(std::move(text));
         if (text.empty()) return;
+        exit_history_browsing();
         if (record_undo) push_undo();
         insert_segments(segment_lines(text));
         notify_change();
@@ -308,6 +325,7 @@ struct Editor::Impl {
     }
 
     void erase_at_cursor(bool backward) {
+        exit_history_browsing();
         clamp_cursor();
         if (backward) {
             if (cursor.column > 0) {
@@ -459,6 +477,7 @@ struct Editor::Impl {
     }
 
     void kill_to_line(bool forward) {
+        exit_history_browsing();
         const auto target = forward ? document[cursor.line].size() : 0U;
         if (target != cursor.column) {
             push_undo();
@@ -490,6 +509,7 @@ struct Editor::Impl {
     }
 
     void delete_word(bool forward) {
+        exit_history_browsing();
         const auto original = cursor;
         move_word(forward);
         const auto target = cursor;
@@ -509,6 +529,7 @@ struct Editor::Impl {
 
     void yank() {
         if (kill_ring.empty()) return;
+        exit_history_browsing();
         push_undo();
         const auto start = cursor;
         insert_segments(materialize_kill(kill_ring.front()));
@@ -519,6 +540,7 @@ struct Editor::Impl {
 
     void yank_pop() {
         if (!last_yank_ring_index || !last_yank_range || kill_ring.size() < 2) return;
+        exit_history_browsing();
         const auto previous = *last_yank_range;
         const auto prior_ring_index = *last_yank_ring_index;
         if (previous.first.line != previous.second.line) return;
@@ -533,6 +555,7 @@ struct Editor::Impl {
     }
 
     void undo_once() {
+        exit_history_browsing();
         if (undo.empty()) return;
         auto previous = std::move(undo.back());
         undo.pop_back();
@@ -544,8 +567,101 @@ struct Editor::Impl {
         notify_change();
     }
 
+    void add_to_history(std::string text) {
+        text = trim_outer_whitespace(std::move(text));
+        if (text.empty()) return;
+        if (!history.empty() && history.front() == text) return;
+        history.insert(history.begin(), std::move(text));
+        if (history.size() > kMaxHistoryEntries) history.pop_back();
+    }
+
+    void exit_history_browsing() {
+        history_index.reset();
+        history_draft.reset();
+    }
+
+    [[nodiscard]] bool editor_is_empty() const {
+        return document.size() == 1 && document.front().empty();
+    }
+
+    struct VisualLine;
+
+    [[nodiscard]] std::size_t find_current_visual_line(const std::vector<VisualLine>& visual) const {
+        for (std::size_t index = 0; index < visual.size(); ++index) {
+            if (visual[index].logical_line == cursor.line && cursor.column >= visual[index].start &&
+                cursor.column <= visual[index].end) {
+                return index;
+            }
+        }
+        return visual.empty() ? 0 : visual.size() - 1;
+    }
+
+    [[nodiscard]] bool on_first_visual_line() const {
+        return find_current_visual_line(visual_lines(layout_width)) == 0;
+    }
+
+    [[nodiscard]] bool on_last_visual_line() const {
+        const auto visual = visual_lines(layout_width);
+        return find_current_visual_line(visual) + 1 == visual.size();
+    }
+
+    void move_to_line_start() {
+        last_yank_ring_index.reset();
+        last_yank_range.reset();
+        cursor.column = 0;
+    }
+
+    void move_to_line_end() {
+        last_yank_ring_index.reset();
+        last_yank_range.reset();
+        cursor.column = document[cursor.line].size();
+    }
+
+    void set_text_internal(std::string text, bool cursor_at_start) {
+        document = segment_lines(std::move(text));
+        cursor.line = cursor_at_start ? 0 : document.size() - 1;
+        cursor.column = cursor_at_start ? 0 : document[cursor.line].size();
+        scroll_offset = 0;
+        notify_change();
+    }
+
+    void navigate_history(int direction) {
+        last_yank_ring_index.reset();
+        last_yank_range.reset();
+        if (history.empty()) return;
+
+        const auto current = history_index ? static_cast<int>(*history_index) : -1;
+        const auto new_index = current - direction;  // Up(-1) increases index, Down(1) decreases
+        if (new_index < -1 || new_index >= static_cast<int>(history.size())) return;
+
+        // Capture state when first entering history browsing mode.
+        if (!history_index && new_index >= 0) {
+            push_undo();
+            history_draft = HistoryDraft{.document = document, .cursor = cursor};
+        }
+
+        if (new_index == -1) {
+            history_index.reset();
+            auto draft = history_draft;
+            history_draft.reset();
+            if (draft) {
+                document = std::move(draft->document);
+                cursor = draft->cursor;
+                scroll_offset = 0;
+                notify_change();
+            } else {
+                set_text_internal("", false);
+            }
+        } else {
+            history_index = static_cast<std::size_t>(new_index);
+            set_text_internal(history[*history_index], direction == -1);
+        }
+    }
+
     void submit() {
         const auto result = trim_outer_whitespace(expanded());
+        exit_history_browsing();
+        add_to_history(result);
         document.assign(1, {});
         cursor = {};
         pastes.clear();
@@ -566,6 +682,7 @@ struct Editor::Impl {
     }
 
     void paste(std::string text) {
+        exit_history_browsing();
         std::string filtered;
         text = normalize_input(std::move(text));
         for (std::size_t index = 0; index < text.size();) {
@@ -738,6 +855,7 @@ EditorCursor Editor::cursor() const {
 }
 
 void Editor::set_text(std::string text) {
+    impl_->exit_history_browsing();
     text = normalize_input(std::move(text));
     if (text == this->text()) return;
     impl_->push_undo();
@@ -752,6 +870,10 @@ void Editor::set_text(std::string text) {
 void Editor::insert_text_at_cursor(std::string text) {
     impl_->close_autocomplete();
     impl_->insert_text(std::move(text), true, false);
+}
+
+void Editor::add_to_history(std::string text) {
+    impl_->add_to_history(std::move(text));
 }
 
 void Editor::set_theme(EditorTheme theme) {
@@ -918,11 +1040,11 @@ void Editor::handle_input(const InputEventVariant& input) {
         return;
     }
     if (matches("tui.editor.cursorLineStart")) {
-        impl_->cursor.column = 0;
+        impl_->move_to_line_start();
         return;
     }
     if (matches("tui.editor.cursorLineEnd")) {
-        impl_->cursor.column = impl_->document[impl_->cursor.line].size();
+        impl_->move_to_line_end();
         return;
     }
     if (matches("tui.editor.cursorLeft")) {
@@ -942,11 +1064,26 @@ void Editor::handle_input(const InputEventVariant& input) {
         return;
     }
     if (matches("tui.editor.cursorUp")) {
-        impl_->move_vertical(-1);
+        if (impl_->on_first_visual_line() &&
+            (impl_->editor_is_empty() || impl_->history_index.has_value() || impl_->cursor.column == 0)) {
+            impl_->navigate_history(-1);
+        } else if (impl_->on_first_visual_line()) {
+            // Already at top - jump to start of line
+            impl_->move_to_line_start();
+        } else {
+            impl_->move_vertical(-1);
+        }
         return;
     }
     if (matches("tui.editor.cursorDown")) {
-        impl_->move_vertical(1);
+        if (impl_->history_index.has_value() && impl_->on_last_visual_line()) {
+            impl_->navigate_history(1);
+        } else if (impl_->on_last_visual_line()) {
+            // Already at bottom - jump to end of line
+            impl_->move_to_line_end();
+        } else {
+            impl_->move_vertical(1);
+        }
         return;
     }
     if (matches("tui.editor.pageUp")) {
@@ -962,7 +1099,7 @@ void Editor::handle_input(const InputEventVariant& input) {
         return;
     }
     if (matches("tui.input.submit")) {
-        if (!impl_->options.disable_submit) impl_->submit();
+        impl_->submit();
         return;
     }
     if (is_printable(*event)) impl_->insert_text(std::string(printable_text(*event)), true);

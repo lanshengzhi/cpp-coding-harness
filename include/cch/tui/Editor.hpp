@@ -50,7 +50,6 @@ using EditorChangeSink = std::move_only_function<void(std::string)>;
 using EditorSubmitSink = std::move_only_function<void(std::string)>;
 
 struct EditorOptions {
-    bool disable_submit{false};
     std::size_t max_visible_lines{5};
     std::shared_ptr<const KeybindingRegistry> keybindings{};
 };
@@ -79,6 +78,8 @@ public:
     [[nodiscard]] EditorCursor cursor() const;
     void set_text(std::string text);
     void insert_text_at_cursor(std::string text);
+    /// Record a submitted prompt for cursor-boundary up/down recall (pi addToHistory).
+    void add_to_history(std::string text);
     void set_theme(EditorTheme theme);
     void set_autocomplete_provider(AutocompleteProvider provider);
     [[nodiscard]] bool autocomplete_open() const;
