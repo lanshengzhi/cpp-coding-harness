@@ -25,9 +25,9 @@ struct FunctionToolDto {
 
 [[nodiscard]] inline Tool tool_from_function_tool_dto(const FunctionToolDto& dto) {
     return Tool{
-        dto.name,
-        dto.description,
-        util::json_from_glaze(dto.parameters),
+        .name = dto.name,
+        .description = dto.description,
+        .parameters = util::json_from_glaze(dto.parameters),
     };
 }
 

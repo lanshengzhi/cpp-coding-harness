@@ -99,7 +99,7 @@ constexpr std::size_t kToolResultMaxChars = 2000;
         ai::CustomMessage message;
         message.custom_type = value->custom_type;
         if (const auto* text = std::get_if<std::string>(&value->content)) {
-            message.content = {ai::TextContent{*text, std::nullopt}};
+            message.content = {ai::TextContent{.text = *text, .text_signature = std::nullopt}};
         } else {
             const auto& blocks =
                 std::get<std::vector<CustomMessageEntryContentBlock>>(value->content);

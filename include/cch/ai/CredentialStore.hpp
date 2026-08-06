@@ -35,6 +35,8 @@ struct OAuthCredential {
     bool operator==(const OAuthCredential&) const = default;
 };
 
+// §3.3 names variant aliases `*Variant`; `Credential` predates the rule and
+// keeps its short name to avoid public API churn (debt recorded in #372).
 using Credential = std::variant<ApiKeyCredential, OAuthCredential>;
 
 /// Non-secret metadata for one stored provider record. `type` remains a string

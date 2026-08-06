@@ -15,21 +15,21 @@ namespace cch::ai {
 using TimestampMs = std::int64_t;
 
 struct DiagnosticErrorInfo {
-    std::optional<std::string> name;
-    std::string message;
-    std::optional<std::string> stack;
-    std::optional<std::string> code;
+    std::optional<std::string> name{};
+    std::string message{};
+    std::optional<std::string> stack{};
+    std::optional<std::string> code{};
 };
 
 struct DiagnosticEntry {
-    std::string type;
+    std::string type{};
     TimestampMs timestamp{};
-    std::optional<DiagnosticErrorInfo> error;
-    std::optional<util::JsonValue> details;
+    std::optional<DiagnosticErrorInfo> error{};
+    std::optional<util::JsonValue> details{};
 };
 
 struct SystemMessage {
-    std::string content;
+    std::string content{};
     TimestampMs timestamp{};
 };
 
@@ -38,30 +38,30 @@ struct UserMessage {
     /// The string alternative arrives only from external callers and
     /// pre-existing session files; internal construction sites build the
     /// block-array alternative (pi parity map #102, spec #364).
-    std::variant<std::string, std::vector<Content>> content;
+    std::variant<std::string, std::vector<Content>> content{};
     TimestampMs timestamp{};
 };
 
 struct AssistantMessage {
-    std::vector<AssistantContent> content;
-    std::string api;
-    std::string provider;
-    std::string model;
-    std::optional<std::string> response_model;
-    std::optional<std::string> response_id;
+    std::vector<AssistantContent> content{};
+    std::string api{};
+    std::string provider{};
+    std::string model{};
+    std::optional<std::string> response_model{};
+    std::optional<std::string> response_id{};
     Usage usage{};
     AssistantStopReason stop_reason{AssistantStopReason::Stop};
-    std::optional<std::string> raw_stop_reason;
-    std::optional<std::string> error_message;
-    std::optional<std::vector<DiagnosticEntry>> diagnostics;
+    std::optional<std::string> raw_stop_reason{};
+    std::optional<std::string> error_message{};
+    std::optional<std::vector<DiagnosticEntry>> diagnostics{};
     TimestampMs timestamp{};
 };
 
 struct ToolResultMessage {
-    std::string tool_call_id;
-    std::string tool_name;
-    std::vector<Content> content;
-    std::optional<util::JsonValue> details;
+    std::string tool_call_id{};
+    std::string tool_name{};
+    std::vector<Content> content{};
+    std::optional<util::JsonValue> details{};
     bool is_error{false};
     TimestampMs timestamp{};
 };
@@ -69,32 +69,32 @@ struct ToolResultMessage {
 // ── pi extended runtime message types ──
 
 struct BashExecutionMessage {
-    std::string command;
-    std::string output;
-    std::optional<int> exit_code;
+    std::string command{};
+    std::string output{};
+    std::optional<int> exit_code{};
     bool cancelled{false};
     bool truncated{false};
-    std::optional<std::string> full_output_path;
+    std::optional<std::string> full_output_path{};
     bool exclude_from_context{false};
     TimestampMs timestamp{};
 };
 
 struct CustomMessage {
-    std::string custom_type;
-    std::vector<Content> content;
+    std::string custom_type{};
+    std::vector<Content> content{};
     bool display{true};
-    std::optional<util::JsonValue> details;
+    std::optional<util::JsonValue> details{};
     TimestampMs timestamp{};
 };
 
 struct BranchSummaryMessage {
-    std::string summary;
-    std::string from_id;
+    std::string summary{};
+    std::string from_id{};
     TimestampMs timestamp{};
 };
 
 struct CompactionSummaryMessage {
-    std::string summary;
+    std::string summary{};
     std::int64_t tokens_before{0};
     TimestampMs timestamp{};
 };
@@ -205,7 +205,7 @@ inline constexpr std::string_view BRANCH_SUMMARY_SUFFIX = "</summary>";
 }
 
 [[nodiscard]] inline UserMessage custom_message_to_user_message(const CustomMessage& msg) {
-    return UserMessage{msg.content, msg.timestamp};
+    return UserMessage{.content = msg.content, .timestamp = msg.timestamp};
 }
 
 } // namespace cch::ai

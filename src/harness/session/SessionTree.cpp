@@ -180,7 +180,7 @@ void emitEntryMessage(SessionContext& ctx, const SessionEntry* entry) {
         if (const auto* value = std::get_if<CustomMessageEntryValue>(&entry->value)) {
             cm.custom_type = value->custom_type;
             if (const auto* text = std::get_if<std::string>(&value->content)) {
-                cm.content = {ai::TextContent{*text, std::nullopt}};
+                cm.content = {ai::TextContent{.text = *text, .text_signature = std::nullopt}};
             } else {
                 const auto& blocks =
                     std::get<std::vector<CustomMessageEntryContentBlock>>(value->content);

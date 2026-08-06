@@ -65,7 +65,10 @@ execute_with_update_lifetime(
     ai::ToolResultMessage result;
     result.tool_call_id = call.id;
     result.tool_name = call.name;
-    result.content.emplace_back(ai::TextContent{std::move(message), std::nullopt});
+    result.content.emplace_back(ai::TextContent{
+        .text = std::move(message),
+        .text_signature = std::nullopt,
+    });
     result.is_error = true;
     return result;
 }

@@ -3,6 +3,8 @@
 #include "ai/glaze/AiJson.hpp"
 #include "util/Json.hpp"
 
+#include <cch/ai/StreamEvent.hpp>
+
 #include <optional>
 #include <string>
 #include <type_traits>
@@ -612,4 +614,41 @@ TEST_CASE("custom_message_to_user_message preserves empty content", "[ai][extend
 
     CHECK(std::get<std::vector<ai::Content>>(msg.content).empty());
     CHECK(msg.timestamp == 1718000000006);
+}
+
+TEST_CASE("default-constructed AI contracts are empty passive values", "[ai][contract][issue372]") {
+    ai::Tool tool;
+    CHECK(tool.name.empty());
+    CHECK(tool.description.empty());
+    CHECK(tool.parameters.holds<util::JsonValue::null_t>());
+
+    ai::TextContent text;
+    CHECK(text.text.empty());
+    CHECK_FALSE(text.text_signature.has_value());
+
+    ai::ToolCallContent call;
+    CHECK(call.id.empty());
+    CHECK_FALSE(call.arguments.has_value());
+    CHECK(call.arguments_valid);
+
+    ai::UserMessage user;
+    CHECK(std::holds_alternative<std::string>(user.content));
+    CHECK(std::get<std::string>(user.content).empty());
+
+    ai::AssistantMessage assistant;
+    CHECK(assistant.content.empty());
+    CHECK(assistant.api.empty());
+    CHECK(assistant.stop_reason == ai::AssistantStopReason::Stop);
+
+    ai::AiContext context;
+    CHECK(context.system_prompt == std::nullopt);
+    CHECK(context.messages.empty());
+    CHECK(context.tools.empty());
+
+    ai::AssistantStartEvent start;
+    CHECK(start.partial.content.empty());
+
+    ai::AssistantErrorEvent error;
+    CHECK(error.error.content.empty());
+    CHECK_FALSE(error.failure.has_value());
 }

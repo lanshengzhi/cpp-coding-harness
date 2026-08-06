@@ -490,7 +490,7 @@ struct Transcript::Impl {
         if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
             std::vector<ai::Content> blocks;
             if (const auto* text = std::get_if<std::string>(&user->content)) {
-                blocks.emplace_back(ai::TextContent{*text, std::nullopt});
+                blocks.emplace_back(ai::TextContent{.text = *text, .text_signature = std::nullopt});
             } else {
                 blocks = std::get<std::vector<ai::Content>>(user->content);
             }

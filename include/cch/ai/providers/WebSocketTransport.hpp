@@ -57,6 +57,9 @@ class WebSocketTransport {
 public:
     virtual ~WebSocketTransport() = default;
 
+    /// Opens one WebSocket connection. The borrowed WebSocketConnectRequest is
+    /// read across suspension points, so it must remain valid until the
+    /// returned awaitable completes.
     [[nodiscard]] virtual boost::asio::awaitable<util::Expected<std::shared_ptr<WebSocket>>> async_connect(
         const WebSocketConnectRequest& request) = 0;
 };

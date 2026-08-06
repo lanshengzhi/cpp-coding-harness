@@ -202,3 +202,4 @@ Sanctioned deviations are grandfathered only on untouched existing lines. Added 
 - **Include spelling (§2.9):** untouched relative quoted project includes (`"../util/Error.hpp"`, `"../../include/cch/..."`) are grandfathered; added or modified include lines use the current spelling rule.
 - **Test tag `[coding-agent]`** (35 uses) predates §11.4's `[coding_agent]`; untouched tags are grandfathered, while added or modified tag lists use `[coding_agent]`.
 - **Constant naming (§3.5):** untouched snake_case constexpr locals and `SCREAMING_SNAKE` public constants are grandfathered; added or modified constant declarations use `kCamelCase`.
+- **Variant-alias naming (§3.3):** `Content`, `AssistantContent`, `Credential`, `AuthPromptKind`, and `AuthEventKind` predate the `*Variant` suffix and are intentionally kept to avoid public API churn (debt recorded in #372); added or renamed variant aliases use `*Variant`.

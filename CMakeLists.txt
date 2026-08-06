@@ -113,6 +113,7 @@ target_link_libraries(cch_coding_agent_tui
 )
 
 add_library(cch_ai
+    src/ai/ContentUtil.cpp
     src/ai/Model.cpp
     src/ai/Models.cpp
     src/ai/SimpleOptions.cpp

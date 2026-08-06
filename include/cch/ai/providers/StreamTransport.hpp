@@ -45,6 +45,9 @@ class StreamTransport {
 public:
     virtual ~StreamTransport() = default;
 
+    /// Streams one HTTP request. The borrowed StreamRequest is read across
+    /// suspension points, so it must remain valid until the returned
+    /// awaitable completes.
     [[nodiscard]] virtual boost::asio::awaitable<util::Expected<StreamResponse>> async_stream(
         const StreamRequest& request,
         BodyChunkHandler on_body_chunk) = 0;

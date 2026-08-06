@@ -13,9 +13,9 @@ namespace cch::ai {
 /// carried here; it is the concrete Model argument of `streamSimple` and
 /// `Provider::stream` (ADR 0019).
 struct AiContext {
-    std::optional<std::string> system_prompt;
-    std::vector<MessageVariant> messages;
-    std::vector<Tool> tools;
+    std::optional<std::string> system_prompt{};
+    std::vector<MessageVariant> messages{};
+    std::vector<Tool> tools{};
 };
 
 } // namespace cch::ai

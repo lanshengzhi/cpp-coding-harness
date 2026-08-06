@@ -84,6 +84,9 @@ struct AuthPromptManualCode {
 /// per-prompt `std::stop_token` lets the flow cancel a pending prompt when an
 /// out-of-band event resolves the step, e.g. a `manual_code` prompt raced
 /// against the Codex callback server is aborted when the callback wins.
+// §3.3 names variant aliases `*Variant`; `AuthPromptKind` predates the rule
+// and keeps its kind-suffixed name to avoid public API churn (debt recorded
+// in #372).
 using AuthPromptKind = std::variant<
     AuthPromptText,
     AuthPromptSecret,
@@ -125,6 +128,9 @@ struct AuthProgress {
 /// Best-effort display event emitted during login. Never carries secrets:
 /// authorization codes, PKCE verifiers, tokens, and account ids are excluded
 /// by contract (secret boundary, #327).
+// §3.3 names variant aliases `*Variant`; `AuthEventKind` predates the rule and
+// keeps its kind-suffixed name to avoid public API churn (debt recorded in
+// #372).
 using AuthEventKind = std::variant<AuthInfo, AuthUrl, AuthDeviceCode, AuthProgress>;
 
 struct AuthEvent {

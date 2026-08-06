@@ -5,49 +5,57 @@
 #include <optional>
 #include <string>
 #include <variant>
+#include <vector>
 
 namespace cch::ai {
 
 struct TextContent {
-    std::string text;
-    std::optional<std::string> text_signature;
+    std::string text{};
+    std::optional<std::string> text_signature{};
 };
 
 struct ThinkingContent {
-    std::string thinking;
-    std::optional<std::string> thinking_signature;
+    std::string thinking{};
+    std::optional<std::string> thinking_signature{};
     bool redacted{false};
 };
 
 struct ImageContent {
-    std::string data;
-    std::string mime_type;
+    std::string data{};
+    std::string mime_type{};
 };
 
 struct ToolCallContent {
-    std::string id;
-    std::string name;
-    std::optional<util::JsonValue> arguments;
-    std::string raw_arguments;
-    std::optional<std::string> thought_signature;
+    std::string id{};
+    std::string name{};
+    std::optional<util::JsonValue> arguments{};
+    std::string raw_arguments{};
+    std::optional<std::string> thought_signature{};
     bool arguments_valid{true};
-    std::optional<std::string> argument_error;
+    std::optional<std::string> argument_error{};
 };
 
+// §3.3 names variant aliases `*Variant`; `Content` and `AssistantContent`
+// predate the rule and keep their short names to avoid public API churn (debt
+// recorded in #372).
 using Content = std::variant<TextContent, ThinkingContent, ImageContent>;
 
 using AssistantContent = std::variant<TextContent, ThinkingContent, ToolCallContent>;
 
 [[nodiscard]] inline TextContent text_content(std::string text) {
-    return TextContent{std::move(text), std::nullopt};
+    return TextContent{.text = std::move(text), .text_signature = std::nullopt};
 }
 
 [[nodiscard]] inline ThinkingContent thinking_content(std::string thinking) {
-    return ThinkingContent{std::move(thinking), std::nullopt, false};
+    return ThinkingContent{
+        .thinking = std::move(thinking),
+        .thinking_signature = std::nullopt,
+        .redacted = false,
+    };
 }
 
 [[nodiscard]] inline ImageContent image_content(std::string data, std::string mime_type) {
-    return ImageContent{std::move(data), std::move(mime_type)};
+    return ImageContent{.data = std::move(data), .mime_type = std::move(mime_type)};
 }
 
 [[nodiscard]] inline ToolCallContent tool_call_content(
@@ -56,38 +64,23 @@ using AssistantContent = std::variant<TextContent, ThinkingContent, ToolCallCont
     std::string raw_arguments,
     std::optional<util::JsonValue> arguments = std::nullopt) {
     return ToolCallContent{
-        std::move(id),
-        std::move(name),
-        std::move(arguments),
-        std::move(raw_arguments),
-        std::nullopt,
-        true,
-        std::nullopt,
+        .id = std::move(id),
+        .name = std::move(name),
+        .arguments = std::move(arguments),
+        .raw_arguments = std::move(raw_arguments),
+        .thought_signature = std::nullopt,
+        .arguments_valid = true,
+        .argument_error = std::nullopt,
     };
 }
 
-namespace detail {
+/// Presentation/read-only extraction of the concatenated text across a block
+/// list. The generic block-walking machinery is implemented in
+/// `src/ai/ContentUtil.cpp` so it stays out of the public surface
+/// (AGENTS.md guardrail 4).
+[[nodiscard]] std::string text_from_content(const std::vector<Content>& content);
 
-template <typename ContentBlock>
-[[nodiscard]] inline std::string text_from_blocks(const std::vector<ContentBlock>& content) {
-    std::string text;
-    for (const auto& block : content) {
-        if (const auto* text_block = std::get_if<TextContent>(&block)) {
-            text += text_block->text;
-        }
-    }
-    return text;
-}
-
-} // namespace detail
-
-[[nodiscard]] inline std::string text_from_content(const std::vector<Content>& content) {
-    return detail::text_from_blocks(content);
-}
-
-[[nodiscard]] inline std::string text_from_assistant_content(
-    const std::vector<AssistantContent>& content) {
-    return detail::text_from_blocks(content);
-}
+[[nodiscard]] std::string text_from_assistant_content(
+    const std::vector<AssistantContent>& content);
 
 } // namespace cch::ai
