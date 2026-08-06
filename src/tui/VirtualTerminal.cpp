@@ -1,6 +1,6 @@
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include "tui/TerminalImage.hpp"
+#include <cch/tui/TerminalImage.hpp>
 #include "tui/UnicodeWidth.hpp"
 
 #include <algorithm>
@@ -27,6 +27,7 @@ struct VirtualTerminal::Impl {
     CursorPosition cursor;
     std::size_t sync_depth{0};
     std::uint64_t next_image_handle{1};
+    std::string cell_size_pending;
     bool progress_active{false};
     bool clear_screen_called{false};
 };
@@ -37,7 +38,10 @@ constexpr std::string_view kBeginSync = "\x1b[?2026h";
 constexpr std::string_view kEndSync = "\x1b[?2026l";
 
 // Behavioral baseline: pi 83114817 packages/tui/src/terminal.ts
-// (setTitle OSC 0, setProgress OSC 9;4 active/clear sequences). The
+// (setTitle OSC 0, setProgress OSC 9;4 active/clear sequences) and
+// packages/tui/src/terminal-image.ts + tui.ts (the CSI 16 t cell-size query
+// emitted at startup when images are supported, and the ESC [ 6 ; h ; w t
+// response consumption that pi's consumeCellSizeResponse performs). The
 // 1-second progress keepalive is ProcessTerminal's serial-worker behavior;
 // the double records the emitted sequences only.
 constexpr std::string_view kProgressActiveSequence = "\x1b]9;4;3\x07";
@@ -171,6 +175,11 @@ util::ExpectedVoid VirtualTerminal::start(TerminalInputSink input_sink, Terminal
         .bracketed_paste = true,
         .cursor_visible = true,
     };
+    // Protocol-aware recording of pi's startup cell-size query (tui.ts
+    // queryCellSize): emitted only when inline images are supported.
+    if (impl_->capabilities.inline_images != InlineImageProtocol::None) {
+        impl_->output.push_back(std::string(detail::kCellSizeQuery));
+    }
     return {};
 }
 
@@ -380,13 +389,25 @@ util::Expected<TerminalImageHandle> VirtualTerminal::place_image(const TerminalI
     }
     for (const auto& visible : impl_->images) {
         if (detail::cell_regions_intersect(visible.region, image.region)) {
+            // A re-placement of the same protocol image (an animation frame
+            // update) replaces the prior record in place instead of
+            // overlapping it.
+            if (image.preferred_handle && visible.handle == *image.preferred_handle) {
+                continue;
+            }
             return std::unexpected(util::make_error(
                 util::ErrorCode::Validation,
                 "Inline image regions cannot overlap"));
         }
     }
 
-    const TerminalImageHandle handle{.value = impl_->next_image_handle++};
+    const TerminalImageHandle handle = image.preferred_handle
+        ? *image.preferred_handle
+        : TerminalImageHandle{.value = impl_->next_image_handle++};
+    // The re-transmit replaces the previous record carrying this handle.
+    std::erase_if(impl_->images, [&](const auto& visible) {
+        return visible.handle == handle;
+    });
     impl_->images.push_back({
         .handle = handle,
         .resource_id = image.resource_id,
@@ -429,18 +450,48 @@ util::ExpectedVoid VirtualTerminal::remove_image(
 
 util::ExpectedVoid VirtualTerminal::inject_input(std::string input) {
     if (!impl_->modes.started || !impl_->input_sink) return {};
-    try {
-        impl_->input_sink(std::move(input));
-    } catch (const std::exception&) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
-            "Virtual Terminal input sink failed",
-            "the input callback threw an exception"));
-    } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown,
-            "Virtual Terminal input sink failed",
-            "the input callback threw an unknown exception"));
+    auto consumed = detail::consume_cell_size_input(
+        std::move(impl_->cell_size_pending),
+        input);
+    impl_->cell_size_pending = std::move(consumed.pending);
+    if (!consumed.responses.empty()) {
+        const auto& response = consumed.responses.back();
+        if (response.height_px > 0 && response.width_px > 0) {
+            impl_->capabilities.cell_pixels = CellPixelDimensions{
+                .width = response.width_px,
+                .height = response.height_px,
+            };
+            if (impl_->resize_sink) {
+                try {
+                    impl_->resize_sink(impl_->dimensions);
+                } catch (const std::exception&) {
+                    return std::unexpected(util::make_error(
+                        util::ErrorCode::Unknown,
+                        "Virtual Terminal resize sink failed",
+                        "the resize callback threw an exception"));
+                } catch (...) {
+                    return std::unexpected(util::make_error(
+                        util::ErrorCode::Unknown,
+                        "Virtual Terminal resize sink failed",
+                        "the resize callback threw an unknown exception"));
+                }
+            }
+        }
+    }
+    if (input.empty() || !consumed.forwarded_input.empty()) {
+        try {
+            impl_->input_sink(std::move(consumed.forwarded_input));
+        } catch (const std::exception&) {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Unknown,
+                "Virtual Terminal input sink failed",
+                "the input callback threw an exception"));
+        } catch (...) {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Unknown,
+                "Virtual Terminal input sink failed",
+                "the input callback threw an unknown exception"));
+        }
     }
     return {};
 }

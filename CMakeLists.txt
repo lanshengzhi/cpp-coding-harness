@@ -424,6 +424,7 @@ if(CCH_BUILD_TESTS)
         tests/tui/RenderDifferentialTest.cpp
         tests/tui/SelectListTest.cpp
         tests/tui/SettingsListTest.cpp
+        tests/tui/TerminalImageTest.cpp
         tests/tui/TruncatedTextTest.cpp
         tests/tui/TuiTest.cpp
         tests/tui/UnicodeWidthTest.cpp

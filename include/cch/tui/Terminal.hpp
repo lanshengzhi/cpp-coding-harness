@@ -77,7 +77,12 @@ struct TerminalModeState {
 struct TerminalCapabilities {
     bool synchronized_output{false};
     InlineImageProtocol inline_images{InlineImageProtocol::None};
-    std::optional<CellPixelDimensions> cell_pixels{std::nullopt};
+    /// OSC 8 hyperlink support from the per-emulator env rules (pi
+    /// terminal-image.ts detectCapabilities).
+    bool hyperlinks{false};
+    /// Cell size in pixels; pi's 9x18 default applies until a `CSI 16 t`
+    /// response (`ESC [ 6 ; h ; w t`) refines it.
+    std::optional<CellPixelDimensions> cell_pixels{CellPixelDimensions{}};
     KeyboardProtocol keyboard_protocol{KeyboardProtocol::Legacy};
     TerminalColorCapability color{TerminalColorCapability::Xterm256};
     TerminalAppearance appearance{TerminalAppearance::Unknown};
@@ -99,11 +104,18 @@ struct TerminalImage {
     std::uint64_t resource_id{0};
     std::uint64_t revision{0};
     CellRegion region{};
+    /// When set, re-place with this existing handle instead of allocating a
+    /// fresh one (pi's imageId reuse): the Kitty protocol re-transmits with
+    /// the same `i=` so animation frames replace in place.
+    std::optional<TerminalImageHandle> preferred_handle{std::nullopt};
 };
 
 /// Delivers raw input bytes. An empty value flushes an incomplete escape sequence
 /// after the terminal's ambiguity timeout.
 using TerminalInputSink = std::move_only_function<void(std::string)>;
+/// Notifies that the terminal presentation changed and should be re-rendered:
+/// terminal dimensions changed, or a presentation-affecting capability update
+/// (the `CSI 16 t` cell-size response) was absorbed with unchanged dimensions.
 using TerminalResizeSink = std::move_only_function<void(TerminalDimensions)>;
 
 // Behavioral baseline: pi 83114817 packages/tui/src/terminal.ts (ProcessTerminal
@@ -129,7 +141,9 @@ public:
     [[nodiscard]] virtual util::ExpectedVoid set_cursor(CursorPosition position) = 0;
     [[nodiscard]] virtual util::ExpectedVoid set_cursor_visible(bool visible) = 0;
 
-    /// Place one validated image inside a TUI-owned absolute cell region.
+    /// Place one validated image inside a TUI-owned absolute cell region. The
+    /// terminal positions the cursor at the region origin before emitting the
+    /// protocol sequence; the returned handle becomes the protocol image ID.
     [[nodiscard]] virtual util::Expected<TerminalImageHandle> place_image(const TerminalImage& image) = 0;
 
     /// Remove one image previously returned by place_image(). The region is supplied

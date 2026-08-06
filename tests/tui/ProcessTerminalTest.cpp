@@ -1,6 +1,7 @@
 #include <cch/tui/ProcessTerminal.hpp>
 #include <cch/tui/Tui.hpp>
 
+#include "support/ImageEnvironmentGuard.hpp"
 #include "util/UniqueFd.hpp"
 #include "support/PseudoTerminal.hpp"
 
@@ -154,6 +155,10 @@ TEST_CASE("Process Terminal restores raw paste cursor and pending render modes",
     REQUIRE(pty);
     termios original{};
     REQUIRE(::tcgetattr(pty->slave.get(), &original) == 0);
+
+    // Scrub the image-capability env surface so the conservative unknown-
+    // terminal default is pinned regardless of the runner's own terminal.
+    cch::tests::ImageEnvironmentGuard environment;
 
     cch::tui::ProcessTerminal terminal({
         .input_fd = pty->slave.get(),
@@ -880,6 +885,224 @@ TEST_CASE(
     CHECK(restoration.find("\x1b[<u") == std::string::npos);
     CHECK(restoration.find("\x1b[>4;0m") == std::string::npos);
     CHECK(terminal.modes() == cch::tui::TerminalModeState{});
+}
+
+namespace {
+
+using cch::tests::ImageEnvironmentGuard;
+
+} // namespace
+
+TEST_CASE(
+    "Process Terminal detects image capabilities and queries cell size from the environment",
+    "[tui][terminal][image][issue385]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    ImageEnvironmentGuard environment;
+    environment.set("TERM_PROGRAM", "ghostty");
+
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    CHECK(terminal.capabilities().inline_images == cch::tui::InlineImageProtocol::Kitty);
+    CHECK(terminal.capabilities().hyperlinks);
+    // pi's 9x18 default applies until a CSI 16 t response arrives.
+    CHECK(terminal.capabilities().cell_pixels == cch::tui::CellPixelDimensions{});
+
+    const auto startup = cch::tests::read_available(pty->master.get());
+    CHECK(startup.find("\x1b[16t") != std::string::npos);
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE(
+    "Process Terminal stays conservative under unknown and tmux environments",
+    "[tui][terminal][image][issue385]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    {
+        ImageEnvironmentGuard environment;
+        cch::tui::ProcessTerminal terminal({
+            .input_fd = pty->slave.get(),
+            .output_fd = pty->slave.get(),
+        });
+        REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+        CHECK(terminal.capabilities().inline_images == cch::tui::InlineImageProtocol::None);
+        CHECK_FALSE(terminal.capabilities().hyperlinks);
+        CHECK_FALSE(cch::tests::read_available(pty->master.get()).find("\x1b[16t") != std::string::npos);
+        REQUIRE(terminal.stop());
+    }
+    {
+        ImageEnvironmentGuard environment;
+        environment.set("TMUX", "/tmp/tmux-1000/default,1234,0");
+        environment.set("TERM", "tmux-256color");
+        environment.set("TERM_PROGRAM", "ghostty");
+        cch::tui::ProcessTerminal terminal({
+            .input_fd = pty->slave.get(),
+            .output_fd = pty->slave.get(),
+        });
+        REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+        CHECK(terminal.capabilities().inline_images == cch::tui::InlineImageProtocol::None);
+        REQUIRE(terminal.stop());
+    }
+}
+
+TEST_CASE(
+    "Process Terminal consumes CSI 16 t cell-size responses and notifies re-render",
+    "[tui][terminal][image][issue385]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    ImageEnvironmentGuard environment;
+    environment.set("TERM_PROGRAM", "ghostty");
+    std::mutex events_mutex;
+    std::vector<std::string> inputs;
+    std::vector<cch::tui::TerminalDimensions> notifications;
+
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    REQUIRE(terminal.start(
+        [&](std::string input) {
+            std::lock_guard lock(events_mutex);
+            inputs.push_back(std::move(input));
+        },
+        [&](cch::tui::TerminalDimensions dimensions) {
+            std::lock_guard lock(events_mutex);
+            notifications.push_back(dimensions);
+        }));
+    (void)cch::tests::read_available(pty->master.get());
+
+    constexpr std::string_view kResponse = "\x1b[6;20;10t";
+    REQUIRE(
+        ::write(pty->master.get(), kResponse.data(), kResponse.size()) ==
+        static_cast<ssize_t>(kResponse.size()));
+    REQUIRE(cch::tests::wait_until([&] {
+        const auto capabilities = terminal.capabilities();
+        return capabilities.cell_pixels &&
+            *capabilities.cell_pixels ==
+            cch::tui::CellPixelDimensions{.width = 10, .height = 20};
+    }));
+    REQUIRE(cch::tests::wait_until([&] {
+        std::lock_guard lock(events_mutex);
+        return !notifications.empty();
+    }));
+    {
+        std::lock_guard lock(events_mutex);
+        CHECK(notifications.back() == terminal.dimensions());
+        CHECK(inputs.empty());
+    }
+
+    // User input after the response still forwards.
+    REQUIRE(::write(pty->master.get(), "q", 1) == 1);
+    REQUIRE(cch::tests::wait_until([&] {
+        std::lock_guard lock(events_mutex);
+        return !inputs.empty();
+    }));
+    {
+        std::lock_guard lock(events_mutex);
+        CHECK(inputs.front() == "q");
+    }
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE(
+    "Process Terminal places and removes images with pi-exact protocol bytes",
+    "[tui][terminal][image][issue385]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    ImageEnvironmentGuard environment;
+    environment.set("TERM_PROGRAM", "ghostty");
+
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    (void)cch::tests::read_available(pty->master.get());
+
+    const cch::tui::TerminalImage image{
+        .encoded_data = "QUFBQQ==",
+        .mime_type = "image/png",
+        .filename = std::string_view{"name.png"},
+        .pixel_width = 10,
+        .pixel_height = 10,
+        .resource_id = 7,
+        .revision = 2,
+        .region = {.column = 2, .row = 1, .columns = 2, .rows = 2},
+    };
+    const auto placed = terminal.place_image(image);
+    REQUIRE(placed);
+    const auto placed_output = cch::tests::read_available(pty->master.get());
+    // Cursor positioned at the region origin (row 1 -> 2, column 2 -> 3),
+    // then the Kitty placement with the handle as the image ID.
+    CHECK(placed_output.find("\x1b[2;3H") != std::string::npos);
+    CHECK(placed_output.find("\x1b_Ga=T,f=100,q=2,C=1,c=2,r=2,i=1;QUFBQQ==\x1b\\") != std::string::npos);
+
+    // An animation frame re-place reuses the protocol image id (pi imageId
+    // reuse): the same `i=1` is re-transmitted and no fresh id is allocated.
+    const cch::tui::TerminalImage frame{
+        .encoded_data = "QUFBQQ==",
+        .mime_type = "image/png",
+        .pixel_width = 10,
+        .pixel_height = 10,
+        .resource_id = 7,
+        .revision = 3,
+        .region = {.column = 2, .row = 1, .columns = 2, .rows = 2},
+        .preferred_handle = *placed,
+    };
+    const auto replaced = terminal.place_image(frame);
+    REQUIRE(replaced);
+    CHECK(*replaced == *placed);
+    const auto replaced_output = cch::tests::read_available(pty->master.get());
+    CHECK(replaced_output.find("\x1b_Ga=T,f=100,q=2,C=1,c=2,r=2,i=1;QUFBQQ==\x1b\\") != std::string::npos);
+
+    REQUIRE(terminal.remove_image(*placed, image.region));
+    const auto removed_output = cch::tests::read_available(pty->master.get());
+    CHECK(removed_output.find("\x1b_Ga=d,d=I,i=1,q=2\x1b\\") != std::string::npos);
+    // The owned cells are blanked so protocols without addressable deletion
+    // (iTerm2) clear exactly the placement, matching VirtualTerminal.
+    CHECK(removed_output.find("\x1b[2;3H") != std::string::npos);
+    CHECK(removed_output.find(std::string(4, ' ')) != std::string::npos);
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE(
+    "Process Terminal iTerm2 placement omits default preserveAspectRatio and blanks removal",
+    "[tui][terminal][image][issue385]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    ImageEnvironmentGuard environment;
+    environment.set("TERM_PROGRAM", "iterm.app");
+
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    (void)cch::tests::read_available(pty->master.get());
+
+    const cch::tui::TerminalImage image{
+        .encoded_data = "QUFBQQ==",
+        .mime_type = "image/png",
+        .pixel_width = 10,
+        .pixel_height = 10,
+        .resource_id = 1,
+        .revision = 1,
+        .region = {.column = 0, .row = 0, .columns = 1, .rows = 1},
+    };
+    const auto placed = terminal.place_image(image);
+    REQUIRE(placed);
+    const auto placed_output = cch::tests::read_available(pty->master.get());
+    CHECK(placed_output.find("\x1b]1337;File=inline=1;width=1;height=1:QUFBQQ==\x07") != std::string::npos);
+    CHECK(placed_output.find("preserveAspectRatio") == std::string::npos);
+
+    REQUIRE(terminal.remove_image(*placed, image.region));
+    const auto removed_output = cch::tests::read_available(pty->master.get());
+    CHECK(removed_output.find("a=d") == std::string::npos);
+    CHECK(removed_output.find(" ") != std::string::npos);
+    REQUIRE(terminal.stop());
 }
 
 #endif

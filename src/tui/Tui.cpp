@@ -1,10 +1,10 @@
 #include <cch/tui/Tui.hpp>
 
+#include <cch/tui/TerminalImage.hpp>
 #include <cch/tui/Utils.hpp>
 
 #include "tui/InputDecoder.hpp"
 #include "tui/RenderUtils.hpp"
-#include "tui/TerminalImage.hpp"
 #include "tui/UnicodeWidth.hpp"
 
 #include <algorithm>
@@ -17,6 +17,16 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+
+// Behavioral baseline: pi 83114817 packages/tui/src/tui.ts and
+// packages/tui/src/components/image.ts, sidecar fork B. Placement is
+// terminal-owned: Tui materializes InlineImageRenderRegions with the
+// per-render capabilities (protocol + cell size, pi's 9x18 default refined
+// by CSI 16 t responses), reuses the placement identity (resource_id + cell
+// region) across animation frames by re-placing with the same protocol image
+// id (pi's imageId reuse) so Kitty updates frames in place, and removes stale
+// placements through the terminal seam without pi's in-line sequence
+// bookkeeping.
 
 namespace cch::tui {
 namespace {
@@ -695,12 +705,14 @@ util::ExpectedVoid Tui::remove_stale_images(
     std::size_t index = 0;
     while (index < active_images_.size()) {
         const auto& active = active_images_[index];
+        // Placement identity is (resource_id, region): a revision bump is an
+        // animation frame that place_images() re-places in place (reusing the
+        // protocol image id), never a removal.
         const auto retained = std::find_if(
             desired_images.begin(),
             desired_images.end(),
             [&](const auto& desired) {
                 return active.resource_id == desired.resource_id &&
-                    active.revision == desired.revision &&
                     active.region == desired.region;
             });
         if (retained != desired_images.end()) {
@@ -723,14 +735,15 @@ util::ExpectedVoid Tui::place_images(
             active_images_.end(),
             [&](const auto& candidate) {
                 return candidate.resource_id == image.resource_id &&
-                    candidate.revision == image.revision &&
                     candidate.region == image.region;
             });
-        if (active != active_images_.end()) continue;
+        if (active != active_images_.end() && active->revision == image.revision) {
+            continue;
+        }
 
         std::optional<std::string_view> filename;
         if (image.filename) filename = *image.filename;
-        const TerminalImage terminal_image{
+        TerminalImage terminal_image{
             .encoded_data = image.encoded_data,
             .mime_type = image.mime_type,
             .filename = filename,
@@ -740,8 +753,18 @@ util::ExpectedVoid Tui::place_images(
             .revision = image.revision,
             .region = image.region,
         };
+        if (active != active_images_.end()) {
+            // Animation frame: re-place with the same protocol image id so
+            // Kitty replaces the image in place (pi's imageId reuse) instead
+            // of delete-plus-recreate.
+            terminal_image.preferred_handle = active->handle;
+        }
         auto placed = terminal_.place_image(terminal_image);
         if (!placed) return std::unexpected(placed.error());
+        if (active != active_images_.end()) {
+            active->revision = image.revision;
+            continue;
+        }
         active_images_.push_back({
             .handle = *placed,
             .region = image.region,

@@ -1062,3 +1062,43 @@ TEST_CASE(
     CHECK(interactive_mode.find("CombinedAutocompleteProvider") != std::string::npos);
     CHECK(interactive_mode.find("AsioAutocompleteDebounceTimer") != std::string::npos);
 }
+
+TEST_CASE(
+    "terminal-image is the public pi-aligned image module with the private encoder gone",
+    "[architecture][tui][issue385]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto image_header = read_text(
+        source_root / "include" / "cch" / "tui" / "TerminalImage.hpp");
+
+    // The pi terminal-image.ts public surface: hyperlink, imageFallback, and
+    // the env-rule capability detection with cache overrides.
+    for (const auto& symbol : {
+             "hyperlink(",
+             "image_fallback(",
+             "detect_image_capabilities",
+             "get_image_capabilities",
+             "set_image_capabilities",
+             "reset_image_capabilities_cache",
+             "TmuxHyperlinkProbe",
+             "DetectedImageCapabilities",
+             "ImagePixelSize",
+         }) {
+        CHECK(image_header.find(symbol) != std::string::npos);
+    }
+    // The encoder stays behind the sidecar seam in the detail namespace of the
+    // same public module (tests and the terminal implementations consume it).
+    CHECK(image_header.find("encode_terminal_image") != std::string::npos);
+    CHECK(image_header.find("namespace detail") != std::string::npos);
+
+    // The private src/tui/TerminalImage.hpp duplicate is gone: no file exists
+    // under src/tui and nothing outside the module includes it by that path.
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "tui" / "TerminalImage.hpp"));
+    for (const auto& file : files_under({"include", "src", "tests"})) {
+        if (file == source_root / "tests" / "architecture" / "ArchitectureSurfaceScanTest.cpp") {
+            continue;
+        }
+        const auto text = read_text(file);
+        CHECK(text.find("\"tui/TerminalImage.hpp\"") == std::string::npos);
+    }
+}

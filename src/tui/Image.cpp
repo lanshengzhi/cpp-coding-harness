@@ -1,5 +1,6 @@
 #include <cch/tui/Image.hpp>
 
+#include <cch/tui/TerminalImage.hpp>
 #include <cch/tui/Utils.hpp>
 
 #include "tui/UnicodeWidth.hpp"
@@ -9,12 +10,20 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
-#include <format>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
+
+// Behavioral baseline: pi 83114817 packages/tui/src/components/image.ts and
+// packages/tui/src/terminal-image.ts. The Image component reports sniffed
+// dimensions, renders the pi-exact `[Image: path [mime] WxH]` fallback
+// (imageFallback with ~/ shortening and file:// linking gated on the
+// hyperlinks capability), and truncates the fallback to the render width
+// with truncateToWidth's "..." ellipsis. Native sizing and protocol selection
+// are terminal-owned under the sidecar model (fork B); resource-id/revision
+// reuse keeps animation frames at the same placement.
 
 namespace cch::tui {
 namespace {
@@ -24,7 +33,6 @@ struct ImageDimensions {
     std::size_t height{0};
 };
 
-constexpr std::size_t kDefaultMaxWidth = 60;
 constexpr std::size_t kMaxDecodedBytes = 64U * 1024U * 1024U;
 
 std::atomic<std::uint64_t> g_next_image_id{1};
@@ -321,18 +329,33 @@ util::Expected<RenderResult> Image::render(std::size_t width) {
     const auto dimensions = decoded
         ? image_dimensions(*decoded, impl_->content.mime_type)
         : std::nullopt;
-    const auto filename = impl_->content.filename
-        ? safe_label(*impl_->content.filename) + " "
-        : std::string{};
     const auto mime_type = safe_label(impl_->content.mime_type);
-    const auto dimension_text = dimensions
-        ? std::format(" {}x{}", dimensions->width, dimensions->height)
-        : std::string{" unavailable"};
-    auto fallback = std::format("[Image: {}[{}]{}]", filename, mime_type, dimension_text);
+    std::optional<std::string_view> filename;
+    std::string sanitized_filename;
+    if (impl_->content.filename) {
+        sanitized_filename = safe_label(*impl_->content.filename);
+        filename = sanitized_filename;
+    }
+    // Pi-exact fallback text: `[Image: path [mime] WxH]` with ~/ shortening
+    // and file:// linking when hyperlinks are available (pi imageFallback).
+    // The C++ sanitization of control bytes and the 128-byte label cap stay
+    // as a bounded hardening divergence; pi's Image component defaults
+    // unsniffable dimensions to 800x600 (components/image.ts), so the WxH
+    // segment is always present, exactly as in pi.
+    auto fallback = image_fallback(
+        mime_type,
+        dimensions
+            ? std::optional<ImagePixelSize>{ImagePixelSize{
+                  .width = dimensions->width,
+                  .height = dimensions->height,
+              }}
+            : std::optional<ImagePixelSize>{ImagePixelSize{.width = 800, .height = 600}},
+        filename);
 
-    const auto constraint_width = impl_->options.constraints.max_width.value_or(kDefaultMaxWidth);
-    const auto fallback_width = std::max<std::size_t>(1, std::min(width, constraint_width));
-    auto truncated = truncate_text(fallback, fallback_width);
+    // Pi's Image truncates the fallback to the render width (truncateToWidth
+    // with its "..." ellipsis); the cell constraints apply to the native
+    // image sizing only, never to the fallback line.
+    auto truncated = truncate_text(fallback, width);
     if (!truncated) return std::unexpected(truncated.error());
     fallback = std::move(*truncated);
 

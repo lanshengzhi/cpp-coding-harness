@@ -1,5 +1,7 @@
 #include <cch/tui/ProcessTerminal.hpp>
 
+#include <cch/tui/TerminalImage.hpp>
+
 #include "KeyboardProtocol.hpp"
 
 #include <array>
@@ -33,7 +35,11 @@ namespace {
 
 // Behavioral baseline: pi 83114817 packages/tui/src/terminal.ts
 // (setTitle/setProgress/drainInput, TERMINAL_PROGRESS_* constants, and
-// drainInput defaults).
+// drainInput defaults) and packages/tui/src/terminal-image.ts
+// (detectCapabilities env rules, probeTmuxHyperlinks, and the CSI 16 t
+// cell-size query that tui.ts queryCellSize sends at startup; the response
+// consumption is the terminal seam's sidecar-model counterpart of pi's
+// consumeCellSizeResponse).
 constexpr std::string_view kBracketedPasteEnable = "\x1b[?2004h";
 constexpr std::string_view kBracketedPasteDisable = "\x1b[?2004l";
 constexpr std::string_view kCursorShow = "\x1b[?25h";
@@ -448,6 +454,7 @@ struct ProcessTerminal::Impl {
     std::size_t synchronized_update_depth{0};
     bool progress_active{false};
     std::chrono::steady_clock::time_point progress_next_keepalive{};
+    std::uint64_t next_image_handle{1};
     bool draining{false};
     std::chrono::steady_clock::time_point drain_last_activity{};
 #if defined(__linux__) || defined(__APPLE__)
@@ -717,6 +724,7 @@ struct WorkerEvent {
 struct WorkerInputState {
     AppearanceInputState appearance;
     std::string keyboard_pending;
+    std::string cell_size_pending;
     bool needs_input_flush{false};
     int appearance_idle_polls{0};
     int negotiation_idle_polls{0};
@@ -733,13 +741,60 @@ void apply_detected_appearance(T& impl, const AppearanceInputState& appearance) 
 }
 
 template <typename T>
+void apply_cell_size_response(
+    T& impl,
+    const detail::CellSizeResponse& response) {
+    if (response.height_px == 0 || response.width_px == 0) return;
+    std::shared_ptr<TerminalResizeSink> sink;
+    TerminalDimensions dimensions;
+    {
+        std::lock_guard lock(impl.mutex);
+        const CellPixelDimensions updated{
+            .width = response.width_px,
+            .height = response.height_px,
+        };
+        if (impl.capabilities.cell_pixels && *impl.capabilities.cell_pixels == updated) {
+            return;
+        }
+        impl.capabilities.cell_pixels = updated;
+        sink = impl.resize_sink;
+        dimensions = impl.dimensions;
+    }
+    if (!sink || !*sink) return;
+    try {
+        (*sink)(dimensions);
+    } catch (const std::exception&) {
+        record_worker_error(impl, util::make_error(
+            util::ErrorCode::Unknown,
+            "Process Terminal resize sink failed",
+            "the resize callback threw an exception"));
+        std::lock_guard lock(impl.mutex);
+        if (impl.resize_sink == sink) impl.resize_sink.reset();
+    } catch (...) {
+        record_worker_error(impl, util::make_error(
+            util::ErrorCode::Unknown,
+            "Process Terminal resize sink failed",
+            "the resize callback threw an unknown exception"));
+        std::lock_guard lock(impl.mutex);
+        if (impl.resize_sink == sink) impl.resize_sink.reset();
+    }
+}
+
+template <typename T>
 void handle_forwarded_input(
     T& impl,
     WorkerInputState& state,
     std::string input) {
+    auto cell_size = detail::consume_cell_size_input(
+        std::move(state.cell_size_pending),
+        input);
+    state.cell_size_pending = std::move(cell_size.pending);
+    if (!cell_size.responses.empty()) {
+        apply_cell_size_response(impl, cell_size.responses.back());
+    }
     auto parsed = detail::parse_keyboard_protocol_input(
         std::move(state.keyboard_pending),
-        input);
+        cell_size.forwarded_input);
     state.keyboard_pending = std::move(parsed.pending);
     state.negotiation_idle_polls = 0;
     for (const auto& response : parsed.responses) apply_keyboard_response(impl, response);
@@ -793,6 +848,12 @@ template <typename T>
         state.negotiation_idle_polls >= kNegotiationTimeoutPolls) {
         invoke_input(impl, std::move(state.keyboard_pending));
         state.keyboard_pending.clear();
+        state.needs_input_flush = true;
+    }
+    if (!state.cell_size_pending.empty() &&
+        state.negotiation_idle_polls >= kNegotiationTimeoutPolls) {
+        invoke_input(impl, std::move(state.cell_size_pending));
+        state.cell_size_pending.clear();
         state.needs_input_flush = true;
     }
     if (state.needs_input_flush && state.keyboard_pending.empty()) {
@@ -944,8 +1005,11 @@ util::ExpectedVoid ProcessTerminal::start(
     impl_->startup_input.clear();
     impl_->startup_appearance = {};
     const auto environment_appearance = detect_terminal_appearance();
+    const auto detected_images = detect_image_capabilities();
     impl_->capabilities = TerminalCapabilities{
         .synchronized_output = supports_synchronized_output(),
+        .inline_images = detected_images.images,
+        .hyperlinks = detected_images.hyperlinks,
         .color = detect_color_capability(),
         .appearance = environment_appearance,
     };
@@ -995,6 +1059,17 @@ util::ExpectedVoid ProcessTerminal::start(
     if (!keyboard_query.result) {
         auto rollback = restore_terminal_modes(*impl_);
         return std::unexpected(startup_failure(keyboard_query.result.error(), rollback));
+    }
+
+    if (detected_images.images != InlineImageProtocol::None) {
+        // Query cell size in pixels (CSI 16 t) exactly as pi's TUI does at
+        // startup when images are supported; the response updates
+        // capabilities().cell_pixels and triggers a re-render.
+        auto cell_size_query = attempt_write_all(impl_->options.output_fd, detail::kCellSizeQuery);
+        if (!cell_size_query.result) {
+            auto rollback = restore_terminal_modes(*impl_);
+            return std::unexpected(startup_failure(cell_size_query.result.error(), rollback));
+        }
     }
 
     impl_->input_sink = std::move(owned_input_sink);
@@ -1133,18 +1208,81 @@ util::ExpectedVoid ProcessTerminal::set_cursor_visible(bool visible) {
 #endif
 }
 
-util::Expected<TerminalImageHandle> ProcessTerminal::place_image(const TerminalImage&) {
+util::Expected<TerminalImageHandle> ProcessTerminal::place_image(const TerminalImage& image) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
+#if defined(__linux__) || defined(__APPLE__)
+    const auto handle = image.preferred_handle
+        ? *image.preferred_handle
+        : TerminalImageHandle{.value = impl_->next_image_handle};
+    auto encoded = detail::encode_terminal_image(
+        impl_->capabilities.inline_images,
+        image,
+        handle);
+    if (!encoded) return std::unexpected(encoded.error());
+    if (image.region.column >= impl_->dimensions.columns ||
+        image.region.row >= impl_->dimensions.rows ||
+        image.region.columns > impl_->dimensions.columns - image.region.column ||
+        image.region.rows > impl_->dimensions.rows - image.region.row) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "Inline image region is outside terminal dimensions"));
+    }
+    // Both protocols anchor the image's top-left at the cursor, so position
+    // the cursor at the region origin before emitting the sequence.
+    auto positioned = write_all(
+        impl_->options.output_fd,
+        std::format("\x1b[{};{}H", image.region.row + 1, image.region.column + 1));
+    if (!positioned) return std::unexpected(positioned.error());
+    auto written = write_all(impl_->options.output_fd, *encoded);
+    if (!written) return std::unexpected(written.error());
+    if (!image.preferred_handle) ++impl_->next_image_handle;
+    return handle;
+#else
+    (void)image;
     return std::unexpected(util::make_error(
         util::ErrorCode::Validation,
         "Process Terminal does not support inline images"));
+#endif
 }
 
-util::ExpectedVoid ProcessTerminal::remove_image(TerminalImageHandle, const CellRegion&) {
+util::ExpectedVoid ProcessTerminal::remove_image(
+    TerminalImageHandle handle,
+    const CellRegion& region) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
+#if defined(__linux__) || defined(__APPLE__)
+    if (region.column >= impl_->dimensions.columns || region.row >= impl_->dimensions.rows) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "Inline image removal region is outside terminal dimensions"));
+    }
+    const auto columns = std::min(region.columns, impl_->dimensions.columns - region.column);
+    const auto rows = std::min(region.rows, impl_->dimensions.rows - region.row);
+    auto removal = detail::encode_terminal_image_removal(
+        impl_->capabilities.inline_images,
+        handle);
+    if (!removal) return std::unexpected(removal.error());
+    auto written = write_all(impl_->options.output_fd, *removal);
+    if (!written) return std::unexpected(written.error());
+    // iTerm2 has no addressable deletion: blank the owned cells. Kitty's
+    // delete restores the blanked cells the TUI placed the image over, and
+    // the blanking is idempotent with it (matching the VirtualTerminal
+    // recorded removal semantics).
+    auto cleared = write_all(
+        impl_->options.output_fd,
+        std::format(
+            "\x1b[{};{}H{}",
+            region.row + 1,
+            region.column + 1,
+            std::string(columns * rows, ' ')));
+    if (!cleared) return std::unexpected(cleared.error());
     return {};
+#else
+    (void)handle;
+    (void)region;
+    return {};
+#endif
 }
 
 util::ExpectedVoid ProcessTerminal::begin_synchronized_update() {

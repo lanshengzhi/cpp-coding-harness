@@ -40,6 +40,7 @@
 #include <cch/tui/SettingsList.hpp>
 #include <cch/tui/Style.hpp>
 #include <cch/tui/Terminal.hpp>
+#include <cch/tui/TerminalImage.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/TruncatedText.hpp>
 #include <cch/tui/Tui.hpp>

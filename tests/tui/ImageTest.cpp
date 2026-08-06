@@ -1,11 +1,10 @@
 #include <cch/tui/Container.hpp>
 #include <cch/tui/Image.hpp>
+#include <cch/tui/TerminalImage.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/Tui.hpp>
-#include <cch/tui/VirtualTerminal.hpp>
 #include <cch/tui/Utils.hpp>
-
-#include "tui/TerminalImage.hpp"
+#include <cch/tui/VirtualTerminal.hpp>
 
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
@@ -181,7 +180,9 @@ TEST_CASE("Truncated supported formats use fallback instead of native transport"
         REQUIRE(rendered);
         CHECK(rendered->images.empty());
         REQUIRE(rendered->lines.size() == 1);
-        CHECK(rendered->lines[0].find("unavailable") != std::string::npos);
+        // Pi-exact fallback: pi's Image component defaults unsniffable
+        // dimensions to 800x600, so the WxH segment is always present.
+        CHECK(rendered->lines[0].find("truncated.img [" + fixture.mime_type + "] 800x600") != std::string::npos);
     }
 }
 
@@ -219,6 +220,114 @@ TEST_CASE("Terminal without image capability shows semantic fallback", "[tui][im
     CHECK(terminal.images().empty());
     CHECK(terminal.screen()[0].find("Image") != std::string::npos);
     CHECK(terminal.screen()[0].find("16x9") != std::string::npos);
+}
+
+TEST_CASE("Cell-size math defaults to pi's 9x18 cells and consumes CSI 16 t updates", "[tui][image][issue385]") {
+    cch::tui::VirtualTerminal terminal({
+        .columns = 20,
+        .rows = 3,
+        .capabilities = {
+            .synchronized_output = true,
+            .inline_images = cch::tui::InlineImageProtocol::Kitty,
+            // cell_pixels intentionally unset: pi's 9x18 default applies.
+        },
+    });
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Image>(make_image(
+        base64_encode(png_header(20, 20)),
+        "image/png",
+        std::nullopt,
+        {.max_width = 2, .max_height = 2}))));
+    REQUIRE(tui.start());
+    CHECK(terminal.capabilities().cell_pixels == cch::tui::CellPixelDimensions{});
+
+    REQUIRE(tui.render());
+    REQUIRE(terminal.images().size() == 1);
+    // 9x18 cells: widthScale = 2*9/20 = 0.9, heightScale = 2*18/20 = 1.8,
+    // scale = 0.9 -> 2 columns x 1 row.
+    const cch::tui::CellRegion default_region{.column = 0, .row = 0, .columns = 2, .rows = 1};
+    CHECK(terminal.images()[0].region == default_region);
+
+    // A CSI 16 t response refines the cell size; the next render
+    // re-materializes with the updated math (2 columns x 2 rows at 20x20).
+    REQUIRE(terminal.inject_input("\x1b[6;20;20t"));
+    REQUIRE(tui.render());
+    REQUIRE(terminal.images().size() == 1);
+    const cch::tui::CellRegion refined_region{.column = 0, .row = 0, .columns = 2, .rows = 2};
+    CHECK(terminal.images()[0].region == refined_region);
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("Unchanged re-renders keep the same image placement handle", "[tui][image][issue385]") {
+    cch::tui::VirtualTerminal terminal({
+        .columns = 8,
+        .rows = 3,
+        .capabilities = {
+            .synchronized_output = true,
+            .inline_images = cch::tui::InlineImageProtocol::Kitty,
+            .cell_pixels = cch::tui::CellPixelDimensions{.width = 10, .height = 10},
+        },
+    });
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Image>(make_image(
+        base64_encode(png_header(10, 10)),
+        "image/png",
+        std::nullopt,
+        {.max_width = 1, .max_height = 1}))));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    REQUIRE(terminal.images().size() == 1);
+    const auto first_handle = terminal.images()[0].handle;
+
+    REQUIRE(tui.render());
+    REQUIRE(terminal.images().size() == 1);
+    CHECK(terminal.images()[0].handle == first_handle);
+    REQUIRE(tui.stop());
+    CHECK(terminal.images().empty());
+}
+
+TEST_CASE("Animation frames update the same placement with protocol-id reuse", "[tui][image][issue385]") {
+    cch::tui::VirtualTerminal terminal({
+        .columns = 8,
+        .rows = 4,
+        .capabilities = {
+            .synchronized_output = true,
+            .inline_images = cch::tui::InlineImageProtocol::Kitty,
+            .cell_pixels = cch::tui::CellPixelDimensions{.width = 10, .height = 10},
+        },
+    });
+    cch::tui::Tui tui(terminal);
+    auto image = std::make_unique<cch::tui::Image>(make_image(
+        base64_encode(png_header(10, 10)),
+        "image/png",
+        "frame.png",
+        {.max_width = 1, .max_height = 1}));
+    auto* image_ptr = image.get();
+    REQUIRE(tui.add_child(std::move(image)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    REQUIRE(terminal.images().size() == 1);
+    const auto first_resource = terminal.images()[0].resource_id;
+    const auto first_revision = terminal.images()[0].revision;
+    const auto first_region = terminal.images()[0].region;
+    const auto first_handle = terminal.images()[0].handle;
+    CHECK(first_revision == 1);
+
+    // Frame update: the revision bumps, but the placement (region) stays, the
+    // resource id keeps the animation identity, and the protocol image id is
+    // reused so Kitty replaces the frame in place (pi's imageId reuse).
+    image_ptr->set_content({
+        .encoded_data = base64_encode(png_header(10, 10)),
+        .mime_type = "image/png",
+        .filename = "frame.png",
+    });
+    REQUIRE(tui.render());
+    REQUIRE(terminal.images().size() == 1);
+    CHECK(terminal.images()[0].resource_id == first_resource);
+    CHECK(terminal.images()[0].revision == first_revision + 1);
+    CHECK(terminal.images()[0].region == first_region);
+    CHECK(terminal.images()[0].handle == first_handle);
+    REQUIRE(tui.stop());
 }
 
 TEST_CASE("Kitty and iTerm2 images stay inside TUI-owned rows", "[tui][image][issue53]") {
@@ -595,6 +704,8 @@ TEST_CASE("Private protocol encoders expose meaningful bounded parameters", "[tu
     CHECK(iterm->find("width=2") != std::string::npos);
     CHECK(iterm->find("height=3") != std::string::npos);
     CHECK(iterm->find("name=bmFtZS5wbmc=") != std::string::npos);
+    // pi's encodeITerm2 omits preserveAspectRatio when it keeps the default.
+    CHECK(iterm->find("preserveAspectRatio") == std::string::npos);
 
     const auto removed = cch::tui::detail::encode_terminal_image_removal(
         cch::tui::InlineImageProtocol::Kitty,
