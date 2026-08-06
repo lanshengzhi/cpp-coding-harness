@@ -58,12 +58,13 @@ namespace {
     }
     // Non-ASCII whitespace that NFKC leaves in place (ECMAScript WhiteSpace
     // minus the codepoints NFKC already decomposed to U+0020).
-    constexpr std::array<std::string_view, 6> units{
+    constexpr std::array<std::string_view, 7> units{
         "\xc2\xa0",     // U+00A0 NBSP
         "\xe1\x9a\x80", // U+1680 OGHAM SPACE MARK
         "\xe2\x80\xa8", // U+2028 LINE SEPARATOR
         "\xe2\x80\xa9", // U+2029 PARAGRAPH SEPARATOR
         "\xe2\x80\xaf", // U+202F NARROW NBSP
+        "\xe2\x81\x9f", // U+205F MEDIUM MATHEMATICAL SPACE
         "\xef\xbb\xbf", // U+FEFF ZERO WIDTH NO-BREAK SPACE
     };
     for (const auto unit : units) {

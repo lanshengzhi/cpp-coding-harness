@@ -33,7 +33,7 @@ struct EditEntry {
     std::string newText;
 };
 
-struct EditFileArgs {
+struct EditArgs {
     std::string path;
     std::vector<EditEntry> edits;
 };
@@ -280,7 +280,7 @@ public:
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
         agent::ToolInvocation invocation,
         std::stop_token stop_token) override {
-        auto parsed = parse_invocation_args<EditFileArgs>(invocation);
+        auto parsed = parse_invocation_args<EditArgs>(invocation);
         if (!parsed || parsed->path.empty()) {
             co_return error_result("invalid edit arguments: missing path");
         }

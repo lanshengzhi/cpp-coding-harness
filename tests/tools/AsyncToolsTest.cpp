@@ -302,7 +302,7 @@ TEST_CASE("async edit tool rejects missing and duplicate target text with pi mes
 
 TEST_CASE("async edit tool preserves BOM and CRLF line endings", "[tools][async][issue354]") {
     tests::TempWorkspace workspace;
-    workspace.write("edit.txt", "\xef\xbb\bfone\r\ntwo\r\n");
+    workspace.write("edit.txt", "\xef\xbb\xbf" "one\r\ntwo\r\n");
     auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
     auto tool = tools::make_async_edit_tool(env);
 
@@ -313,7 +313,7 @@ TEST_CASE("async edit tool preserves BOM and CRLF line endings", "[tools][async]
 
     REQUIRE(result);
     CHECK_FALSE(result->is_error);
-    CHECK(workspace.read("edit.txt") == "\xef\xbb\bfone\r\nTWO\r\n");
+    CHECK(workspace.read("edit.txt") == "\xef\xbb\xbf" "one\r\nTWO\r\n");
 }
 
 TEST_CASE("async edit tool fuzzy-matches smart-quote and dash variants", "[tools][async][issue354]") {
