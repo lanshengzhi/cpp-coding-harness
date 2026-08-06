@@ -149,11 +149,21 @@ util::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolutionReq
     for (const auto& override : request.overrides) {
         const auto definition = definition_indices.find(override.id);
         if (definition == definition_indices.end()) {
-            issues.push_back({
-                .code = "unknown_action",
-                .message = std::format("unknown keybinding action '{}'", override.id),
-                .action_id = override.id,
-            });
+            if (is_known_unassembled_tui_keybinding(override.id)) {
+                issues.push_back({
+                    .code = "unavailable_action",
+                    .message = std::format(
+                        "keybinding action '{}' is recognized but not assembled by cch_tui",
+                        override.id),
+                    .action_id = override.id,
+                });
+            } else {
+                issues.push_back({
+                    .code = "unknown_action",
+                    .message = std::format("unknown keybinding action '{}'", override.id),
+                    .action_id = override.id,
+                });
+            }
             continue;
         }
         auto& entry = entries[definition->second];
@@ -209,7 +219,7 @@ util::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolutionReq
 }
 
 std::vector<KeybindingDefinition> builtin_tui_keybinding_definitions() {
-    // Compatibility baseline: pi 864b35c, packages/tui/src/keybindings.ts.
+    // Compatibility baseline: pi 83114817, packages/tui/src/keybindings.ts.
     return {
         make_definition("tui.editor.cursorUp", {"up"}, "Move cursor up", "Editor cursor"),
         make_definition("tui.editor.cursorDown", {"down"}, "Move cursor down", "Editor cursor"),
@@ -254,7 +264,7 @@ std::vector<KeybindingDefinition> builtin_tui_keybinding_definitions() {
         make_definition("tui.editor.undo", {"ctrl+-"}, "Undo", "Editor kill ring"),
         make_definition("tui.input.newLine", {"shift+enter", "ctrl+j"}, "Insert newline", "Input"),
         make_definition("tui.input.submit", {"enter"}, "Submit input", "Input"),
-        make_definition("tui.input.tab", {"tab"}, "Tab or autocomplete", "Input"),
+        make_definition("tui.input.tab", {"tab"}, "Tab / autocomplete", "Input"),
         make_definition("tui.select.up", {"up"}, "Move selection up", "Selection"),
         make_definition("tui.select.down", {"down"}, "Move selection down", "Selection"),
         make_definition("tui.select.pageUp", {"pageUp"}, "Selection page up", "Selection"),
@@ -262,6 +272,13 @@ std::vector<KeybindingDefinition> builtin_tui_keybinding_definitions() {
         make_definition("tui.select.confirm", {"enter"}, "Confirm selection", "Selection"),
         make_definition("tui.select.cancel", {"escape", "ctrl+c"}, "Cancel selection", "Selection"),
     };
+}
+
+bool is_known_unassembled_tui_keybinding(std::string_view id) {
+    return id == "tui.input.copy" ||
+        id == "tui.altScreen.pageUp" || id == "tui.altScreen.pageDown" ||
+        id == "tui.altScreen.previousPrompt" || id == "tui.altScreen.nextPrompt" ||
+        id == "tui.altScreen.top" || id == "tui.altScreen.bottom";
 }
 
 std::shared_ptr<const KeybindingRegistry> default_tui_keybindings() {

@@ -83,8 +83,17 @@ struct KeybindingResolution {
 /// candidate order and the returned issues report the conflict.
 [[nodiscard]] util::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolutionRequest request);
 
-/// Reusable actions implemented by cch_tui, pinned to pi baseline 864b35c.
+/// Reusable actions implemented by cch_tui, pinned to pi baseline 83114817.
 [[nodiscard]] std::vector<KeybindingDefinition> builtin_tui_keybinding_definitions();
+
+/// Whether `id` is a known pi `tui.*` action that cch_tui recognizes but does
+/// not assemble in this phase: `tui.input.copy` and the six
+/// `tui.altScreen.*` viewport actions, whose only active behavior is
+/// alt-screen viewport scrolling and selection copy (ADR 0035 defers the
+/// alt-screen half). Such IDs are never entries in the resolved registry —
+/// never no-op bindings — and diagnostic callers report them as
+/// known-but-unbound.
+[[nodiscard]] bool is_known_unassembled_tui_keybinding(std::string_view id);
 [[nodiscard]] std::shared_ptr<const KeybindingRegistry> default_tui_keybindings();
 [[nodiscard]] KeybindingPlatform native_keybinding_platform();
 

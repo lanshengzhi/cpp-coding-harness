@@ -167,6 +167,34 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Known-but-unassembled tui ids are diagnosed as unavailable and never installed",
+    "[coding_agent][keybindings][issue382]") {
+    tests::TempWorkspace config;
+    config.write("keybindings.json", R"({
+        "tui.input.copy": "ctrl+c",
+        "tui.altScreen.pageUp": ["pageUp"],
+        "tui.altScreen.previousPrompt": "ctrl+shift+up"
+    })");
+
+    coding_agent::tui::KeybindingCatalogRequest request;
+    request.agent_config_directory = config.path();
+    request.platform = tui::KeybindingPlatform::Linux;
+    const auto catalog = coding_agent::tui::load_keybinding_catalog(std::move(request));
+
+    REQUIRE(catalog);
+    const auto unavailable = std::count_if(
+        catalog->diagnostics.begin(),
+        catalog->diagnostics.end(),
+        [](const auto& diagnostic) { return diagnostic.code == "unavailable_action"; });
+    CHECK(unavailable == 3);
+    CHECK_FALSE(has_diagnostic(*catalog, "unknown_action"));
+    CHECK(catalog->registry->find("tui.input.copy") == nullptr);
+    CHECK(catalog->registry->find("tui.altScreen.pageUp") == nullptr);
+    CHECK(catalog->registry->find("tui.altScreen.previousPrompt") == nullptr);
+    CHECK(catalog->registry->entries().size() == 30);
+}
+
+TEST_CASE(
     "Keybinding catalog bounds diagnostics and redacts invalid key text",
     "[coding_agent][keybindings][issue57]") {
     tests::TempWorkspace config;

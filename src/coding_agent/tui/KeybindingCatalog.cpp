@@ -142,7 +142,7 @@ struct ApplicationTemplate {
 }
 
 [[nodiscard]] bool known_unassembled_id(std::string_view id) {
-    if (id == "tui.input.copy") return true;
+    if (cch::tui::is_known_unassembled_tui_keybinding(id)) return true;
     return find_application_template(id) != nullptr;
 }
 
