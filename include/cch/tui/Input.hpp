@@ -24,6 +24,7 @@ struct InputOptions {
 };
 
 /// Single-line text input with horizontal scrolling (pi `components/input.ts`).
+/// `render` always returns exactly one line.
 ///
 /// Behaves like pi's Input: bracketed-paste insertion at the cursor, Emacs
 /// kill ring with yank/yank-pop, undo with typing coalescing, word

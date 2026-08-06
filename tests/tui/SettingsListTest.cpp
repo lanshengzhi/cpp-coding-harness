@@ -199,6 +199,114 @@ TEST_CASE("SettingsList renders and dispatches hints from one effective registry
     CHECK(cancellations == 1);
 }
 
+TEST_CASE("SettingsList space confirms only while the search is empty", "[tui][settings-list][issue384]") {
+    std::vector<std::string> updates;
+    cch::tui::SettingsList list(
+        {
+            {
+                .id = "theme",
+                .label = "Theme",
+                .current_value = "off",
+                .control = cch::tui::SettingValues{{"off", "on"}},
+            },
+        },
+        cch::tui::SettingsListOptions{
+            .enable_search = true,
+            .on_change = [&updates](std::string id, std::string value) {
+                updates.push_back(std::move(id) + "=" + std::move(value));
+            },
+        });
+
+    // Space with an empty search activates the item (pi settings-list.ts).
+    list.handle_input(cch::tui::KeyEvent{.key = "space"});
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->current_value == "on");
+    CHECK(updates.size() == 1);
+
+    // Space with a non-empty search inserts a space into the query instead.
+    list.handle_input(cch::tui::KeyEvent{.key = "t"});
+    list.handle_input(cch::tui::KeyEvent{.key = "space"});
+    CHECK(list.search_query() == "t ");
+    CHECK(updates.size() == 1);
+}
+
+TEST_CASE("SettingsList search editing flows through the Input component", "[tui][settings-list][issue384]") {
+    cch::tui::SettingsList list(
+        {
+            {.id = "alpha", .label = "Alpha", .current_value = "off"},
+            {.id = "beta", .label = "Beta", .current_value = "off"},
+        },
+        cch::tui::SettingsListOptions{.enable_search = true});
+    const auto key = [&list](std::string identifier, bool ctrl = false) {
+        list.handle_input(cch::tui::KeyEvent{.key = std::move(identifier), .ctrl = ctrl});
+    };
+    const auto type = [&key](std::string_view text) {
+        for (const auto& character : text) key(std::string(1, character));
+    };
+
+    type("al");
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->id == "alpha");
+
+    // Cursor movement and mid-query insertion are the Input component's
+    // editing behaviors; the filter re-runs on the component's full value.
+    key("left");
+    key("p");
+    CHECK(list.search_query() == "apl");
+    CHECK_FALSE(list.selected_item());
+
+    // deleteCharBackward and undo resolve in the same effective registry.
+    key("backspace");
+    CHECK(list.search_query() == "al");
+    key("-", true);
+    CHECK(list.search_query() == "apl");
+    CHECK_FALSE(list.selected_item());
+}
+
+TEST_CASE("SettingsList paste flows through the Input component's cleaning", "[tui][settings-list][issue384]") {
+    cch::tui::SettingsList list(
+        {
+            {.id = "alpha", .label = "Alpha beta", .current_value = "off"},
+            {.id = "beta", .label = "Beta", .current_value = "off"},
+        },
+        cch::tui::SettingsListOptions{.enable_search = true});
+
+    // CRLF is dropped and spaces are preserved by the Input component's paste
+    // cleaning; the query updates and the filter re-runs on it.
+    list.handle_input(cch::tui::PasteEvent{.text = "al\r\nph"});
+    CHECK(list.search_query() == "alph");
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->id == "alpha");
+
+    list.handle_input(cch::tui::PasteEvent{.text = "a b"});
+    CHECK(list.search_query() == "alpha b");
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->id == "alpha");
+}
+
+TEST_CASE("SettingsList search line renders and locates the cursor through Input", "[tui][settings-list][issue384]") {
+    cch::tui::SettingsList list(
+        {
+            {.id = "alpha", .label = "Alpha", .current_value = "off"},
+        },
+        cch::tui::SettingsListOptions{.enable_search = true});
+    for (const auto& character : std::string("tool")) {
+        list.handle_input(cch::tui::KeyEvent{.key = std::string(1, character)});
+    }
+    list.set_focused(true);
+    const auto rendered = list.render(50);
+    REQUIRE(rendered);
+    CHECK(rendered->lines.size() >= 2);
+    CHECK(rendered->lines[0].starts_with("> tool"));
+    CHECK(rendered->lines[0].size() == 50);
+    CHECK(rendered->lines[1].empty());
+
+    const auto cursor = list.cursor_location();
+    REQUIRE(cursor);
+    CHECK(cursor->row == 0);
+    CHECK(cursor->column == 6);
+}
+
 TEST_CASE("SettingsList cancellation invokes the callback once per semantic key", "[tui][settings-list][issue52]") {
     std::size_t cancellations = 0;
     cch::tui::SettingsList list({}, cch::tui::SettingsListOptions{

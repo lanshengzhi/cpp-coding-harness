@@ -1,13 +1,13 @@
 #include <cch/tui/SettingsList.hpp>
 
 #include <cch/tui/Fuzzy.hpp>
+#include <cch/tui/Input.hpp>
 #include <cch/tui/Utils.hpp>
 
 #include "tui/InteractionUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <cstddef>
 #include <exception>
 #include <format>
@@ -15,40 +15,22 @@
 #include <numeric>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace cch::tui {
-namespace {
 
-// Behavioral baseline: pi 864b35c settings-list.ts.
-[[nodiscard]] bool is_search_text(const KeyEvent& event) {
-    if (event.ctrl || event.alt || event.key.empty()) return false;
-    return event.key != "enter" && event.key != "tab" && event.key != "escape" &&
-        event.key != "backspace" && event.key != "delete" && event.key != "insert" &&
-        event.key != "clear" && event.key != "home" && event.key != "end" &&
-        event.key != "pageUp" && event.key != "pageDown" && event.key != "up" &&
-        event.key != "down" && event.key != "left" && event.key != "right" &&
-        event.key != "space";
-}
-
-[[nodiscard]] std::string without_spaces(std::string text) {
-    std::erase_if(text, [](char value) {
-        return value == ' ' || value == '\r' || value == '\n' || value == '\t';
-    });
-    return text;
-}
-
-} // namespace
-
+// Behavioral baseline: pi 83114817 packages/tui/src/components/settings-list.ts.
+// Search input flows through the single-line Input component (editing
+// behaviors and paste cleaning apply) and ranking through the public Fuzzy
+// module; space confirms only while the search is empty.
 struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Impl> {
     std::vector<SettingItem> items;
     std::vector<std::size_t> filtered_indices;
     std::size_t selected_index{0};
     std::size_t max_visible{5};
     bool search_enabled{false};
-    std::string search;
+    std::unique_ptr<Input> search_input;
     SettingsListTheme theme;
     std::shared_ptr<SettingsChangeSink> on_change;
     std::shared_ptr<SettingsCancelSink> on_cancel;
@@ -57,7 +39,6 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
     std::unique_ptr<Component> submenu;
     std::optional<util::Error> callback_error;
     bool focused{false};
-    std::size_t render_width{80};
 
     [[nodiscard]] const std::vector<std::size_t>& displayed_indices() const {
         return search_enabled ? filtered_indices : all_indices();
@@ -88,12 +69,18 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
             "the interaction callback threw an exception");
     }
 
+    /// The current search text; empty when search is disabled (the only state
+    /// in which `search_input` is null).
+    [[nodiscard]] std::string search_text() const {
+        return search_input ? search_input->value() : std::string{};
+    }
+
     void apply_filter() {
         std::vector<std::size_t> indices(items.size());
         std::iota(indices.begin(), indices.end(), 0);
         filtered_indices = fuzzy_filter(
             std::move(indices),
-            search,
+            search_text(),
             [&](std::size_t index) -> std::string { return items[index].label; });
         selected_index = 0;
     }
@@ -195,6 +182,9 @@ SettingsList::SettingsList(std::vector<SettingItem> items, SettingsListOptions o
     impl_->on_cancel = std::make_shared<SettingsCancelSink>(std::move(options.on_cancel));
     impl_->submenu_factory = std::move(options.submenu_factory);
     impl_->keybindings = options.keybindings ? std::move(options.keybindings) : default_tui_keybindings();
+    if (impl_->search_enabled) {
+        impl_->search_input = std::make_unique<Input>(InputOptions{.keybindings = impl_->keybindings});
+    }
 }
 
 SettingsList::SettingsList(SettingsList&&) noexcept = default;
@@ -215,7 +205,7 @@ std::optional<SettingItem> SettingsList::selected_item() const {
 }
 
 std::string SettingsList::search_query() const {
-    return impl_->search;
+    return impl_->search_text();
 }
 
 bool SettingsList::submenu_open() const {
@@ -229,15 +219,16 @@ util::Expected<RenderResult> SettingsList::render(std::size_t width) {
             util::ErrorCode::Validation,
             "TUI SettingsList requires a positive visible width"));
     }
-    impl->render_width = width;
     if (impl->callback_error) return std::unexpected(*impl->callback_error);
     if (impl->submenu) return impl->submenu->render(width);
 
     std::vector<std::string> lines;
     if (impl->search_enabled) {
-        auto query = truncate_text("> " + impl->search, width, "");
-        if (!query) return std::unexpected(query.error());
-        lines.push_back(std::move(*query));
+        auto search_line = impl->search_input->render(width);
+        if (!search_line) return std::unexpected(search_line.error());
+        // The Input component renders exactly one line (its documented
+        // single-line contract).
+        lines.push_back(std::move(search_line->lines[0]));
         lines.emplace_back();
     }
 
@@ -350,9 +341,9 @@ void SettingsList::handle_input(const InputEventVariant& input) {
         if (auto* handler = dynamic_cast<InputHandler*>(impl->submenu.get())) handler->handle_input(input);
         return;
     }
-    if (const auto* paste = std::get_if<PasteEvent>(&input)) {
-        if (!impl->search_enabled) return;
-        impl->search += without_spaces(paste->text);
+    if (std::holds_alternative<PasteEvent>(input)) {
+        if (!impl->search_enabled || !impl->search_input) return;
+        impl->search_input->handle_input(input);
         impl->apply_filter();
         return;
     }
@@ -369,7 +360,9 @@ void SettingsList::handle_input(const InputEventVariant& input) {
         impl->selected_index = impl->selected_index + 1 == displayed.size() ? 0 : impl->selected_index + 1;
         return;
     }
-    if (impl->keybindings->matches(*key, "tui.select.confirm") || matches_key(*key, "space")) {
+    const auto search_empty = !impl->search_input || impl->search_input->value().empty();
+    if (impl->keybindings->matches(*key, "tui.select.confirm") ||
+        (matches_key(*key, "space") && (!impl->search_enabled || search_empty))) {
         impl->activate_item();
         return;
     }
@@ -383,19 +376,11 @@ void SettingsList::handle_input(const InputEventVariant& input) {
         }
         return;
     }
-    if (!impl->search_enabled) return;
-    if (impl->keybindings->matches(*key, "tui.editor.deleteCharBackward")) {
-        auto graphemes = detail::split_graphemes(impl->search);
-        if (!graphemes.empty()) graphemes.pop_back();
-        impl->search.clear();
-        for (const auto& grapheme : graphemes) impl->search += grapheme;
-        impl->apply_filter();
-        return;
-    }
-    if (is_search_text(*key)) {
-        impl->search += without_spaces(key->key);
-        impl->apply_filter();
-    }
+    if (!impl->search_enabled || !impl->search_input) return;
+    // Remaining keys are the shared Input component's editing behaviors; the
+    // filter re-runs on the component's current value (pi settings-list.ts).
+    impl->search_input->handle_input(input);
+    impl->apply_filter();
 }
 
 bool SettingsList::accepts_key_releases() const {
@@ -405,6 +390,7 @@ bool SettingsList::accepts_key_releases() const {
 void SettingsList::set_focused(bool focused) {
     auto impl = impl_;
     impl->focused = focused;
+    if (impl->search_input) impl->search_input->set_focused(focused);
     if (impl->submenu) {
         if (auto* focusable = dynamic_cast<Focusable*>(impl->submenu.get())) focusable->set_focused(focused);
     }
@@ -416,11 +402,7 @@ bool SettingsList::focused() const {
 
 std::optional<CursorPosition> SettingsList::cursor_location() const {
     if (!impl_->focused || !impl_->search_enabled || impl_->submenu) return std::nullopt;
-    const auto width = std::max<std::size_t>(1, impl_->render_width);
-    return CursorPosition{
-        .column = std::min<std::size_t>(2 + visible_width(impl_->search), width - 1),
-        .row = 0,
-    };
+    return impl_->search_input ? impl_->search_input->cursor_location() : std::nullopt;
 }
 
 } // namespace cch::tui

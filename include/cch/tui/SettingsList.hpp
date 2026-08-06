@@ -62,6 +62,11 @@ struct SettingsListOptions {
 };
 
 /// A searchable settings interaction with deterministic cycling and nested selection.
+///
+/// When search is enabled, the search line is a single-line `Input` component
+/// (pi `components/settings-list.ts`): editing behaviors and paste cleaning are
+/// the component's, ranking is the public `Fuzzy` module's, and space confirms
+/// only while the search is empty.
 class SettingsList final : public Component, public InputHandler, public Focusable {
 public:
     explicit SettingsList(std::vector<SettingItem> items, SettingsListOptions options = {});
