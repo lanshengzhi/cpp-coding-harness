@@ -88,6 +88,14 @@ _Avoid_: Provider request, per-adapter option struct, second exception hierarchy
 The model-facing reasoning preference with pi's seven levels (off, minimal, low, medium, high, xhigh, max), defaulting to medium and clamped to the active model's supported set at session creation and on model switch; per turn it becomes the stream's reasoning option, with off meaning no reasoning is requested.
 _Avoid_: Free-form effort string, provider-specific knob
 
+**System Prompt**:
+The model-facing instruction text constructed for an Agent Session in pi's shape: the default or custom opening, the available-tools list with one-line snippets, guidelines from the tool contract, the Project Context File section, the skills section, and the current working directory line. It is built at session construction and rebuilt on Resource Reload.
+_Avoid_: Hard-coded prompt, provider request text
+
+**Project Context File**:
+An AGENTS.md or CLAUDE.md (with case variants) discovered in the Agent Config Directory or in the working directory's ancestor chain and rendered into the System Prompt's project-context section; discovery is not gated by Project Trust.
+_Avoid_: Repo instructions file, project readme
+
 **Live Session State**:
 The current in-process view of an Agent Session, which may be newer than its durable history.
 _Avoid_: Persisted state, session file
@@ -139,6 +147,14 @@ _Avoid_: Truncation, deletion, raw history replay
 **Project Resource**:
 A project-associated skill or prompt template that may be made available to an Agent Session after policy checks.
 _Avoid_: Runtime service, project file
+
+**Skill**:
+A user- or project-authored instruction set discovered as a SKILL.md file (frontmatter name, description, and disable-model-invocation), listed to the model in the System Prompt's skills section and invocable as a `/skill:name` command while the Skill Commands setting is enabled; the file body is read at invocation time.
+_Avoid_: Plugin, add-on
+
+**Prompt Template**:
+A user- or project-authored markdown file whose content substitutes for a matching `/name` slash invocation, with bash-style argument parsing and positional, `$@`, and default-value substitution.
+_Avoid_: Macro, canned prompt, system prompt
 
 **Project Trust**:
 The user-controlled authorization decision governing whether project-authored resources may be loaded.
@@ -215,6 +231,18 @@ _Avoid_: Session metadata, resume state
 **User Bash**:
 A Native TUI operation that runs a user-entered shell command without treating it as an Agent Prompt. Its completed execution belongs to Agent Session history and is either included in or excluded from later model context according to the user's invocation.
 _Avoid_: Bash tool, prompt processing
+
+**Slash Command**:
+A user input beginning with `/` that the Native TUI interprets before the Agent Prompt path: a builtin command, a Prompt Template invocation, or a Skill invocation; unrecognized slash text passes through as an ordinary Agent Prompt.
+_Avoid_: Command registry, dispatch table
+
+**Resource Reload**:
+The `/reload` command's re-read of User Settings, keybindings, skills, Prompt Templates, themes, and Project Context Files, followed by System Prompt rebuild and a refreshed loaded-resources presentation; refused while the Agent is streaming or compacting.
+_Avoid_: Restart, hot swap
+
+**Loaded Resources**:
+The startup presentation listing the Project Context Files, skills, and Prompt Templates (and themes) in effect, grouped by source scope and carrying load diagnostics.
+_Avoid_: Startup banner, resource log
 
 **Interrupt Admission**:
 The Native TUI decision of how an interrupt request applies to the current activity: which channel it targets (the active Agent run, the running User Bash, or a pending User Bash submission) and whether the request is stale relative to the active prompt generation. The decision is made against activity facts supplied at request time; the owning frontend performs the routed effect. It is the C++ translation of pi's app.interrupt precedence at the parity baseline.
