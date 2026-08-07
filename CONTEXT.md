@@ -140,6 +140,10 @@ _Avoid_: Session picker, resume chooser
 A new Agent Session created from an existing session's history at a chosen point, carrying a parent-session pointer and the target working directory.
 _Avoid_: Session clone, history copy
 
+**Session Tree Navigation**:
+The in-session flow of moving the active point through a session's tree topology: the tree overlay (opened by pi's default double-Escape trigger) lists the session tree with filters and label editing, and switching the active path follows the leaf/active-path semantics of the pi v3 Session Format. Branch summarization generation is not part of it.
+_Avoid_: Tree view, fork picker, history browser
+
 **Compaction**:
 The context-summarization capability that replaces compacted session history with a summary entry while retaining a recent tail, triggered on context overflow (compact and retry once), on threshold, or manually; summarization requests are isolated with cache retention "none" and a fresh session id.
 _Avoid_: Truncation, deletion, raw history replay
@@ -228,6 +232,10 @@ _Avoid_: Request option, transport override
 The protocol feature that lets a provider correlate requests from one session — Codex via `previous_response_id` continuation and session-keyed socket reuse, DeepSeek via silently-ignored affinity headers. Where the provider is stateless or the continuation key is absent, full-context stateless replay is used instead.
 _Avoid_: Session metadata, resume state
 
+**Print Mode**:
+The one-shot text frontend selected by `--print`/`-p`, a non-TTY stream, or `--mode text`: it subscribes to nothing and prints only the final assistant message's text content blocks, reports terminal error/aborted outcomes to stderr with exit 1, and handles SIGTERM/SIGHUP with pi's dispose-and-exit semantics. Piped stdin, `@file` text, and sequential positionals merge into the initial prompt in pi's order.
+_Avoid_: Event stream, JSON event print, one-shot slash dispatch
+
 **User Bash**:
 A Native TUI operation that runs a user-entered shell command without treating it as an Agent Prompt. Its completed execution belongs to Agent Session history and is either included in or excluded from later model context according to the user's invocation.
 _Avoid_: Bash tool, prompt processing
@@ -248,6 +256,10 @@ _Avoid_: Startup banner, resource log
 The Native TUI decision of how an interrupt request applies to the current activity: which channel it targets (the active Agent run, the running User Bash, or a pending User Bash submission) and whether the request is stale relative to the active prompt generation. The decision is made against activity facts supplied at request time; the owning frontend performs the routed effect. It is the C++ translation of pi's app.interrupt precedence at the parity baseline.
 _Avoid_: Escape handling, keybinding dispatch
 
+**Generic Selector**:
+The reusable string-list selection overlay used by the login auth-type picker ("Sign in with an account" / "API key"), `select`-type AuthPrompts, and the boot Project Trust prompt. pi's `extension-selector` component is not extension-only; it carries this non-extension role in the C++ app layer.
+_Avoid_: Extension selector, provider-specific dialog
+
 **TUI Toolkit**:
 The reusable terminal UI capability module (`cch_tui`) that owns the terminal seam, input protocol decoding, keybindings, the editor stack, autocomplete, fuzzy matching, layout-free components, markdown rendering, and terminal image capability, depending on no coding-agent types. The Native TUI's interactive mode is assembled from it; interactive-mode application components (model selection, login presentation, footer/status, chat UX) are not toolkit capabilities.
 _Avoid_: UI library, widget set, interactive frontend
@@ -259,6 +271,18 @@ _Avoid_: Raw string matching, per-consumer escape parsing
 **Resolved Keybinding Registry**:
 The immutable, resolution-time keybinding table consumed by dispatch, help, and hints alike: the 30 assembled `tui.*` actions (21 `tui.editor.*`, 3 `tui.input.*`, 6 `tui.select.*`) with pi's default keys at the parity baseline, one startup `keybindings.json` read with replace-all-defaults and empty-array unbind, and bounded redacted diagnostics. `tui.input.copy` and the six `tui.altScreen.*` ids are recognized-but-unassembled: diagnosed as known-but-unbound, never no-op bindings, because their only active behavior is alt-screen selection copy.
 _Avoid_: Mutable global manager, no-op bindings, per-consumer key tables
+
+**Theme**:
+A pi-format theme asset: a JSON document with an optional `$schema`, a required `name`, optional `vars` (resolved recursively with pi's circular-reference error), and a `colors` object over pi's 52-token set — 50 required tokens plus optional `scrollbarThumb` and `thinkingMax` with their fallbacks. Validation and missing-token diagnostics use pi's verbatim wording; theme names containing `/` are rejected.
+_Avoid_: Theme catalog, custom theme format, palette
+
+**Theme Setting**:
+The `theme` user-settings scalar naming the active theme. A slash-containing value — the automatic `light/dark` pair — resolves as unset and the environment default applies, matching pi's own read semantics; the automatic pair itself is not supported.
+_Avoid_: Auto theme, light/dark mode, terminal sync
+
+**Theme Submenu**:
+The `/settings` submenu listing the available themes (builtins, custom directory, registered) with in-memory preview on selection, a global-scope settings commit on confirm, and no revert on cancel — pi's preview/commit/cancel-does-not-revert behavior.
+_Avoid_: Standalone theme overlay, theme picker dialog
 
 **Terminal-Owned Image Placement**:
 The TUI Toolkit's inline-image model in which components emit protocol-neutral image regions alongside their rendered lines and the Terminal owns physical placement and removal in absolute cell regions, including protocol selection (Kitty/iTerm2), cell-size math, animation-id reuse, and fallback text. An Intentional Divergence from pi's escape-sequences-in-lines with identical placement, sizing, and fallback outcomes.

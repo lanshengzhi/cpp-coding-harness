@@ -88,22 +88,36 @@ pass-through behavior for a copy-mapped key (pi lets the parent handle exit/clea
 holds without the action existing.
 
 Application (`app.*`) actions are registered only by a frontend that assembles
-the corresponding capability. The Native TUI composition registers these
-baseline application actions:
+the corresponding capability. The app layer adopts pi's full 42-action
+`AppKeybindings` catalog (`pi:packages/coding-agent/src/core/keybindings.ts` at
+`83114817`, ADR 0036). The Native TUI composition assembles pi's default bound
+set in the main editor:
 
 | Action ID | Default keys | Active-run behavior |
 |---|---|---|
 | `app.interrupt` | `escape` | Restore pending input, then request one ordinary abort lifecycle. |
 | `app.clear` | `ctrl+c` | Clear the editor. |
 | `app.exit` | `ctrl+d` | Exit when the editor is empty and restore the terminal. |
+| `app.suspend` | `ctrl+z` (`[]` on native Windows) | Suspend to background (SIGTSTP + keep-alive). |
+| `app.thinking.cycle` | `shift+tab` | Cycle thinking level. |
+| `app.model.cycleForward` | `ctrl+p` | Cycle to the next model. |
+| `app.model.cycleBackward` | `shift+ctrl+p` | Cycle to the previous model. |
+| `app.model.select` | `ctrl+l` | Open the model selector. |
 | `app.tools.expand` | `ctrl+o` | Toggle expanded tool output. |
 | `app.thinking.toggle` | `ctrl+t` | Toggle expanded thinking blocks. |
+| `app.editor.external` | `ctrl+g` | Open the external editor (env-only command source). |
+| `app.message.copy` | `ctrl+x` | Copy the last agent message to the clipboard. |
 | `app.message.followUp` | `alt+enter` | Admit editor text to the Agent Session follow-up queue. |
 | `app.message.dequeue` | `alt+up` | Restore steering, then follow-up, then unsent editor text. |
 
 `app.clipboard.pasteImage` (`ctrl+v`, or `alt+v` on native Windows) is registered
 only when the assembling host injects an asynchronous clipboard reader; the
-production CLI does not advertise an unassembled clipboard action.
+production CLI does not advertise an unassembled clipboard action. `app.session.*`
+(`new`, `tree`, `fork`, `resume`) stays recognized-but-unbound in the main editor
+(pi ships `defaultKeys: []`); the session selector, tree selector, and
+scoped-models selector bind their scoped action sets (`app.session.*`
+filter/rename/delete, `app.tree.*`, `app.models.*`) inside those components, and
+`/hotkeys` plus the header hints render the assembled subset only.
 
 Ordinary `tui.input.submit` starts a prompt while idle and admits steering input
 while a run is active. Alt+Enter acts like ordinary submit while idle. The

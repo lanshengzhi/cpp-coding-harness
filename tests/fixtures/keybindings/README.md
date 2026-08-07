@@ -1,7 +1,9 @@
 # Keybinding compatibility fixtures
 
 These fixtures record the supported configuration shape at pi parity baseline
-`864b35c`. They were derived from:
+`83114817` (re-pinned from `864b35c` by the pi-coding-agent phase audit, ADR 0036; the pinned
+`packages/tui/src/keybindings.ts` and `packages/coding-agent/src/core/keybindings.ts` tables are
+byte-identical between the two commits). They were derived from:
 
 - `pi:packages/tui/src/keybindings.ts`
 - `pi:packages/coding-agent/src/core/keybindings.ts`
