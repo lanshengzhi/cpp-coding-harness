@@ -20,8 +20,6 @@ namespace cch::coding_agent::runtime {
 /// options are adapted separately so the public SDK interface does not absorb
 /// CLI-specific facts.
 struct AgentSessionCreationRequest {
-    bool fake{false};
-    bool enable_bash{false};
     /// Assemble the Native TUI's independent Session-owned User Shell
     /// capability (ADR 0026). Only the interactive Native TUI frontend sets
     /// this; it never registers or authorizes the model Bash Tool, and the
@@ -31,12 +29,10 @@ struct AgentSessionCreationRequest {
     bool disable_project_skills{false};
     bool disable_prompt_templates{false};
     std::vector<std::string> prompt_template_paths;
-    bool workspace_explicit{false};
     std::size_t max_queued_messages{agent::kDefaultMaxQueuedMessages};
     std::size_t max_queued_bytes{agent::kDefaultMaxQueuedBytes};
-    /// Explicit turn cap for the assembled session; std::nullopt (the default)
-    /// imposes no cap (ADR 0015).
-    std::optional<int> max_turns{std::nullopt};
+    /// The internal workspace containment seam: always the current working
+    /// directory (pi `workspace := cwd`).
     std::filesystem::path workspace;
     /// Normalized CLI session intent. Default construction selects
     /// workspace-keyed default persisted creation; explicit create and resume
@@ -97,6 +93,13 @@ public:
         std::unique_ptr<AsyncUserShell> user_shell);
     [[nodiscard]] static util::Expected<CreateAgentSessionResult> create(
         AgentSessionCreationRequest request);
+    /// Private CLI-path assembly seam for the test-suite fake provider: the
+    /// injected Models carries the scripted fake provider, and the request
+    /// model is fabricated from it (the CLI path the `--fake` flag used to
+    /// drive). Models never appears in the installed SDK contract.
+    [[nodiscard]] static util::Expected<CreateAgentSessionResult> create(
+        AgentSessionCreationRequest request,
+        std::shared_ptr<ai::Models> models);
 };
 
 } // namespace cch::coding_agent::runtime
@@ -111,5 +114,11 @@ namespace cch::coding_agent {
     CreateAgentSessionOptions options,
     std::shared_ptr<ai::Models> models,
     std::unique_ptr<runtime::AsyncUserShell> user_shell);
+/// Private CLI-path test-support wrapper around SessionFactory's Models
+/// assembly seam (the deterministic provider surface the `--fake` flag used
+/// to drive).
+[[nodiscard]] util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
+    runtime::AgentSessionCreationRequest request,
+    std::shared_ptr<ai::Models> models);
 
 } // namespace cch::coding_agent

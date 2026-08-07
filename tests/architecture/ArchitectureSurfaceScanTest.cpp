@@ -625,8 +625,8 @@ TEST_CASE(
           std::string::npos);
 
     // Production assembly: only the Native TUI CLI frontend gains the
-    // Session-owned LocalUserShell; --enable-bash still controls only the
-    // model tool registry.
+    // Session-owned LocalUserShell; the model-requested bash tool is always
+    // available under the fixed tool set (the --enable-bash opt-in is gone).
     CHECK(factory_source.find("std::make_unique<LocalUserShell>") !=
           std::string::npos);
     CHECK(factory_source.find("plan.provide_user_shell") != std::string::npos);
@@ -808,12 +808,13 @@ TEST_CASE(
     "all Agent Turn cap inputs default to absent",
     "[architecture][agent][coding_agent][cli][sdk][issue68][issue80]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    // The deleted --max-turns flag carries no CLI request field; the remaining
+    // turn-cap contracts are the Agent context, the SDK options (removed with
+    // the SDK), the runtime config, and the assembly plan.
     const std::vector<std::filesystem::path> turn_cap_contracts{
         source_root / "include" / "cch" / "agent" / "AgentContext.hpp",
         source_root / "include" / "cch" / "coding_agent" / "Sdk.hpp",
-        source_root / "src" / "cli" / "CliConfig.hpp",
         source_root / "src" / "coding_agent" / "runtime" / "AgentSessionRuntime.hpp",
-        source_root / "src" / "coding_agent" / "runtime" / "SessionFactory.hpp",
         source_root / "src" / "coding_agent" / "runtime" / "SessionFactory.cpp",
     };
 

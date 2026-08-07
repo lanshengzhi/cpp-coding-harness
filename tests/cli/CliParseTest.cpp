@@ -27,7 +27,7 @@ std::vector<char*> argv_from_strings(std::vector<std::string>& args) {
 } // namespace
 
 TEST_CASE("parse_args leaves model selection empty when model flags omitted", "[cli][parse]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "hello"};
+    std::vector<std::string> args{"cpp-harness", "hello"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
@@ -40,7 +40,6 @@ TEST_CASE("parse_args leaves model selection empty when model flags omitted", "[
 TEST_CASE("parse_args records the pi CLI model selection surface", "[cli][parse]") {
     std::vector<std::string> args{
         "cpp-harness",
-        "--fake",
         "--provider",
         "deepseek",
         "--model",
@@ -107,7 +106,7 @@ TEST_CASE("parse_args accepts --api-key with each explicit-model form", "[cli][p
 }
 
 TEST_CASE("parse_args rejects the removed --base-url flag", "[cli][parse]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "--base-url", "https://x", "hello"};
+    std::vector<std::string> args{"cpp-harness", "--base-url", "https://x", "hello"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE_FALSE(parsed);
@@ -115,7 +114,7 @@ TEST_CASE("parse_args rejects the removed --base-url flag", "[cli][parse]") {
 }
 
 TEST_CASE("parse_args rejects the removed --api-key-env flag", "[cli][parse]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "--api-key-env", "OPENAI_API_KEY", "hello"};
+    std::vector<std::string> args{"cpp-harness", "--api-key-env", "OPENAI_API_KEY", "hello"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE_FALSE(parsed);
@@ -123,30 +122,38 @@ TEST_CASE("parse_args rejects the removed --api-key-env flag", "[cli][parse]") {
 }
 
 TEST_CASE("parse_args rejects the removed --auth flag", "[cli][parse]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "--auth", "openai", "hello"};
+    std::vector<std::string> args{"cpp-harness", "--auth", "openai", "hello"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE_FALSE(parsed);
     CHECK(parsed.error().message.find("unknown option: --auth") != std::string::npos);
 }
 
-TEST_CASE("parse_args defaults to no turn cap and records an explicit --max-turns", "[cli][parse][issue68]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "hello"};
-    auto argv = argv_from_strings(args);
-    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
-    REQUIRE(parsed);
-    CHECK_FALSE(parsed->max_turns.has_value());
-
-    std::vector<std::string> capped_args{"cpp-harness", "--fake", "--max-turns", "12", "hello"};
-    auto capped_argv = argv_from_strings(capped_args);
-    auto capped_parsed = cch::cli::parse_args(static_cast<int>(capped_argv.size()), capped_argv.data());
-    REQUIRE(capped_parsed);
-    REQUIRE(capped_parsed->max_turns.has_value());
-    CHECK(*capped_parsed->max_turns == 12);
+TEST_CASE("parse_args rejects the deleted C++-only flags as unknown", "[cli][parse]") {
+    const std::vector<std::string> deleted{
+        "--fake",
+        "--enable-bash",
+        "--max-turns",
+        "--workspace",
+    };
+    for (const auto& flag : deleted) {
+        std::vector<std::string> args{"cpp-harness", flag, "hello"};
+        if (flag == "--max-turns") {
+            args = {"cpp-harness", flag, "12", "hello"};
+        } else if (flag == "--workspace") {
+            args = {"cpp-harness", flag, "/tmp", "hello"};
+        } else if (flag == "--enable-bash") {
+            args = {"cpp-harness", flag, "hello"};
+        }
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE_FALSE(parsed);
+        CHECK(parsed.error().message.find("unknown option: " + flag) != std::string::npos);
+    }
 }
 
 TEST_CASE("parse_args rejects the removed repl option", "[cli][parse][issue64]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "--repl"};
+    std::vector<std::string> args{"cpp-harness", "--repl"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE_FALSE(parsed);
@@ -154,29 +161,65 @@ TEST_CASE("parse_args rejects the removed repl option", "[cli][parse][issue64]")
 }
 
 TEST_CASE("parse_args exposes no temporary TUI selector", "[cli][parse][issue64]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "--tui"};
+    std::vector<std::string> args{"cpp-harness", "--tui"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE_FALSE(parsed);
     CHECK(parsed.error().message.find("unknown option: --tui") != std::string::npos);
 
-    std::vector<std::string> mode_args{"cpp-harness", "--fake", "--mode", "tui"};
+    std::vector<std::string> mode_args{"cpp-harness", "--mode", "tui"};
     auto mode_argv = argv_from_strings(mode_args);
     parsed = cch::cli::parse_args(static_cast<int>(mode_argv.size()), mode_argv.data());
     REQUIRE_FALSE(parsed);
     CHECK(parsed.error().message.find("unsupported --mode: tui") != std::string::npos);
 }
 
-TEST_CASE("parse_args rejects rpc mode with positional prompt", "[cli][parse]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "--mode", "rpc", "hello"};
+TEST_CASE("parse_args rejects the removed json and rpc modes explicitly", "[cli][parse]") {
+    {
+        std::vector<std::string> args{"cpp-harness", "--mode", "json", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE_FALSE(parsed);
+        CHECK(parsed.error().message.find("--mode json was removed") != std::string::npos);
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "--mode", "rpc", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE_FALSE(parsed);
+        CHECK(parsed.error().message.find("--mode rpc was removed") != std::string::npos);
+    }
+}
+
+TEST_CASE("parse_args rejects a removed mode even when it is accepted-but-unused", "[cli][parse]") {
+    // Never accepted-but-ignored: the mode rejection fires with no prompt and
+    // with --print, in both spellings.
+    {
+        std::vector<std::string> args{"cpp-harness", "--mode", "json"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE_FALSE(parsed);
+        CHECK(parsed.error().message.find("--mode json was removed") != std::string::npos);
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "--print", "--mode", "rpc"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE_FALSE(parsed);
+        CHECK(parsed.error().message.find("--mode rpc was removed") != std::string::npos);
+    }
+}
+
+TEST_CASE("parse_args keeps --mode text as the pi-default spelling", "[cli][parse]") {
+    std::vector<std::string> args{"cpp-harness", "--mode", "text", "hello"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
-    REQUIRE_FALSE(parsed);
-    CHECK(parsed.error().message.find("positional prompt is not allowed") != std::string::npos);
+    REQUIRE(parsed);
+    CHECK(parsed->output_mode == cch::cli::OutputMode::Text);
 }
 
 TEST_CASE("parse_args normalizes unknown options", "[cli][parse]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "--not-a-flag", "hello"};
+    std::vector<std::string> args{"cpp-harness", "--not-a-flag", "hello"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE_FALSE(parsed);
@@ -185,7 +228,7 @@ TEST_CASE("parse_args normalizes unknown options", "[cli][parse]") {
 
 TEST_CASE("parse_args maps approve flags to project trust override", "[cli][parse]") {
     {
-        std::vector<std::string> args{"cpp-harness", "--fake", "--approve", "hello"};
+        std::vector<std::string> args{"cpp-harness", "--approve", "hello"};
         auto argv = argv_from_strings(args);
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
@@ -193,7 +236,26 @@ TEST_CASE("parse_args maps approve flags to project trust override", "[cli][pars
         CHECK(*parsed->project_trust_override);
     }
     {
-        std::vector<std::string> args{"cpp-harness", "--fake", "--no-approve", "hello"};
+        std::vector<std::string> args{"cpp-harness", "--no-approve", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        REQUIRE(parsed->project_trust_override.has_value());
+        CHECK_FALSE(*parsed->project_trust_override);
+    }
+}
+
+TEST_CASE("parse_args accepts pi's shorts for approve and no-approve", "[cli][parse]") {
+    {
+        std::vector<std::string> args{"cpp-harness", "-a", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        REQUIRE(parsed->project_trust_override.has_value());
+        CHECK(*parsed->project_trust_override);
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "-na", "hello"};
         auto argv = argv_from_strings(args);
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
@@ -205,7 +267,6 @@ TEST_CASE("parse_args maps approve flags to project trust override", "[cli][pars
 TEST_CASE("parse_args treats prompt-template as one repeatable path", "[cli][parse]") {
     std::vector<std::string> args{
         "cpp-harness",
-        "--fake",
         "--prompt-template",
         "custom.md",
         "--prompt-template",
@@ -223,7 +284,7 @@ TEST_CASE("parse_args treats prompt-template as one repeatable path", "[cli][par
 }
 
 TEST_CASE("parse_args defaults output mode to text", "[cli][parse]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "hello"};
+    std::vector<std::string> args{"cpp-harness", "hello"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
@@ -231,7 +292,7 @@ TEST_CASE("parse_args defaults output mode to text", "[cli][parse]") {
 }
 
 TEST_CASE("parse_args records print intent without requiring positional input", "[cli][parse][issue64]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "--print"};
+    std::vector<std::string> args{"cpp-harness", "--print"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
@@ -242,7 +303,6 @@ TEST_CASE("parse_args records print intent without requiring positional input", 
 TEST_CASE("parse_args retains positional file arguments separately from prompt text", "[cli][parse][issue63]") {
     std::vector<std::string> args{
         "cpp-harness",
-        "--fake",
         "@first.png",
         "describe",
         "@second.webp",
@@ -259,7 +319,7 @@ TEST_CASE("parse_args retains positional file arguments separately from prompt t
 }
 
 TEST_CASE("parse_args treats a lone positional file as initial input", "[cli][parse][issue63]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "@only.gif"};
+    std::vector<std::string> args{"cpp-harness", "@only.gif"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
 
@@ -269,30 +329,18 @@ TEST_CASE("parse_args treats a lone positional file as initial input", "[cli][pa
     CHECK(parsed->file_arguments[0] == "only.gif");
 }
 
-TEST_CASE("parse_args accepts a lone positional file in json mode", "[cli][parse][issue63]") {
+TEST_CASE("parse_args rejects json mode with a lone positional file", "[cli][parse][issue63]") {
     std::vector<std::string> args{
-        "cpp-harness", "--fake", "--mode", "json", "@image.webp"};
-    auto argv = argv_from_strings(args);
-    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
-
-    REQUIRE(parsed);
-    CHECK(parsed->output_mode == cch::cli::OutputMode::Json);
-    CHECK(parsed->prompt.empty());
-    REQUIRE(parsed->file_arguments.size() == 1);
-    CHECK(parsed->file_arguments[0] == "image.webp");
-}
-
-TEST_CASE("parse_args rejects positional files in rpc mode", "[cli][parse][issue63]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "--mode", "rpc", "@image.png"};
+        "cpp-harness", "--mode", "json", "@image.webp"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
 
     REQUIRE_FALSE(parsed);
-    CHECK(parsed.error().message.find("positional prompt is not allowed") != std::string::npos);
+    CHECK(parsed.error().message.find("--mode json was removed") != std::string::npos);
 }
 
 TEST_CASE("parse_args represents an omitted session target as default persisted creation", "[cli][parse][session-target]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "hello"};
+    std::vector<std::string> args{"cpp-harness", "hello"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
@@ -300,7 +348,7 @@ TEST_CASE("parse_args represents an omitted session target as default persisted 
 }
 
 TEST_CASE("parse_args maps --session to an explicit new-session target", "[cli][parse][session-target]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "--session", "new.jsonl", "hello"};
+    std::vector<std::string> args{"cpp-harness", "--session", "new.jsonl", "hello"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
@@ -309,18 +357,29 @@ TEST_CASE("parse_args maps --session to an explicit new-session target", "[cli][
     CHECK(target->path == "new.jsonl");
 }
 
-TEST_CASE("parse_args maps --resume to an explicit resume target", "[cli][parse][session-target]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "--resume", "old.jsonl", "hello"};
-    auto argv = argv_from_strings(args);
-    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
-    REQUIRE(parsed);
-    const auto* target = std::get_if<cch::coding_agent::ExplicitResumeSessionTarget>(&parsed->session_target);
-    REQUIRE(target != nullptr);
-    CHECK(target->path == "old.jsonl");
+TEST_CASE("parse_args maps --resume and -r to an explicit resume target", "[cli][parse][session-target]") {
+    {
+        std::vector<std::string> args{"cpp-harness", "--resume", "old.jsonl", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        const auto* target = std::get_if<cch::coding_agent::ExplicitResumeSessionTarget>(&parsed->session_target);
+        REQUIRE(target != nullptr);
+        CHECK(target->path == "old.jsonl");
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "-r", "old.jsonl", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        const auto* target = std::get_if<cch::coding_agent::ExplicitResumeSessionTarget>(&parsed->session_target);
+        REQUIRE(target != nullptr);
+        CHECK(target->path == "old.jsonl");
+    }
 }
 
 TEST_CASE("parse_args maps --no-session to the in-memory target", "[cli][parse][session-target]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "--no-session", "hello"};
+    std::vector<std::string> args{"cpp-harness", "--no-session", "hello"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
@@ -328,7 +387,7 @@ TEST_CASE("parse_args maps --no-session to the in-memory target", "[cli][parse][
 }
 
 TEST_CASE("parse_args rejects --no-session with an explicit create target", "[cli][parse][session-target]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "--no-session", "--session", "new.jsonl", "hello"};
+    std::vector<std::string> args{"cpp-harness", "--no-session", "--session", "new.jsonl", "hello"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE_FALSE(parsed);
@@ -336,66 +395,94 @@ TEST_CASE("parse_args rejects --no-session with an explicit create target", "[cl
 }
 
 TEST_CASE("parse_args rejects --no-session with an explicit resume target", "[cli][parse][session-target]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "--no-session", "--resume", "old.jsonl", "hello"};
+    std::vector<std::string> args{"cpp-harness", "--no-session", "--resume", "old.jsonl", "hello"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE_FALSE(parsed);
     CHECK(parsed.error().message.find("--no-session cannot be combined with --resume") != std::string::npos);
 }
 
-TEST_CASE("parse_args help text advertises --no-session", "[cli][parse][session-target]") {
+TEST_CASE("parse_args carries the raw pi session-family flags", "[cli][parse][session-target]") {
+    std::vector<std::string> args{
+        "cpp-harness",
+        "--continue",
+        "--session-id",
+        "project-session",
+        "--fork",
+        "old.jsonl",
+        "--name",
+        "my session",
+        "hello",
+    };
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    CHECK(parsed->continue_session);
+    REQUIRE(parsed->session_id.has_value());
+    CHECK(*parsed->session_id == "project-session");
+    REQUIRE(parsed->fork.has_value());
+    CHECK(*parsed->fork == "old.jsonl");
+    REQUIRE(parsed->name.has_value());
+    CHECK(*parsed->name == "my session");
+    CHECK(parsed->prompt == "hello");
+}
+
+TEST_CASE("parse_args accepts pi's session-family shorts", "[cli][parse][session-target]") {
+    {
+        std::vector<std::string> args{"cpp-harness", "-c", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        CHECK(parsed->continue_session);
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "-n", "named", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        REQUIRE(parsed->name.has_value());
+        CHECK(*parsed->name == "named");
+        CHECK(parsed->prompt == "hello");
+    }
+}
+
+TEST_CASE("parse_args help text advertises the pi-aligned surface", "[cli][parse][session-target]") {
     std::vector<std::string> args{"cpp-harness", "--help"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
     REQUIRE(parsed->help);
     CHECK(parsed->help_text.find("--no-session") != std::string::npos);
+    CHECK(parsed->help_text.find("--session-id") != std::string::npos);
+    CHECK(parsed->help_text.find("--continue, -c") != std::string::npos);
+    CHECK(parsed->help_text.find("--resume, -r") != std::string::npos);
+    CHECK(parsed->help_text.find("--name, -n") != std::string::npos);
+    CHECK(parsed->help_text.find("--no-approve, -na") != std::string::npos);
+    CHECK(parsed->help_text.find("--no-skills, -ns") != std::string::npos);
+    CHECK(parsed->help_text.find("--no-prompt-templates, -np") != std::string::npos);
+    CHECK(parsed->help_text.find("--no-context-files, -nc") != std::string::npos);
+    CHECK(parsed->help_text.find("--list-models [search]") != std::string::npos);
+    CHECK(parsed->help_text.find("--theme") != std::string::npos);
+    CHECK(parsed->help_text.find("--no-themes") != std::string::npos);
+    CHECK(parsed->help_text.find("--skill") != std::string::npos);
+    CHECK(parsed->help_text.find("--system-prompt") != std::string::npos);
+    CHECK(parsed->help_text.find("--append-system-prompt") != std::string::npos);
+    CHECK(parsed->help_text.find("--thinking") != std::string::npos);
+    CHECK(parsed->help_text.find("--version, -v") != std::string::npos);
 }
 
-TEST_CASE("parse_args captures --session-dir as the automatic-directory override", "[cli][parse][session-dir]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "--session-dir", "/data/sessions", "hello"};
+TEST_CASE("parse_args help omits the deleted C++-only flags", "[cli][parse]") {
+    std::vector<std::string> args{"cpp-harness", "--help"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
-    REQUIRE(parsed->session_dir.has_value());
-    CHECK(*parsed->session_dir == "/data/sessions");
-    // The automatic-directory override leaves the normalized default target alone.
-    CHECK(std::holds_alternative<cch::coding_agent::DefaultPersistedSessionTarget>(parsed->session_target));
-}
-
-TEST_CASE("parse_args defaults --session-dir to absent", "[cli][parse][session-dir]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "hello"};
-    auto argv = argv_from_strings(args);
-    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
-    REQUIRE(parsed);
-    CHECK_FALSE(parsed->session_dir.has_value());
-}
-
-TEST_CASE("parse_args accepts --session-dir alongside explicit and in-memory targets", "[cli][parse][session-dir]") {
-    {
-        std::vector<std::string> args{"cpp-harness", "--fake", "--session-dir", "/data", "--session", "explicit.jsonl", "hello"};
-        auto argv = argv_from_strings(args);
-        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
-        REQUIRE(parsed);
-        REQUIRE(parsed->session_dir.has_value());
-        const auto* target = std::get_if<cch::coding_agent::ExplicitNewSessionTarget>(&parsed->session_target);
-        REQUIRE(target != nullptr);
-        CHECK(target->path == "explicit.jsonl");
-    }
-    {
-        std::vector<std::string> args{"cpp-harness", "--fake", "--session-dir", "/data", "--resume", "explicit.jsonl", "hello"};
-        auto argv = argv_from_strings(args);
-        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
-        REQUIRE(parsed);
-        CHECK(std::holds_alternative<cch::coding_agent::ExplicitResumeSessionTarget>(parsed->session_target));
-    }
-    {
-        std::vector<std::string> args{"cpp-harness", "--fake", "--session-dir", "/data", "--no-session", "hello"};
-        auto argv = argv_from_strings(args);
-        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
-        REQUIRE(parsed);
-        CHECK(std::holds_alternative<cch::coding_agent::InMemorySessionTarget>(parsed->session_target));
-    }
+    REQUIRE(parsed->help);
+    CHECK(parsed->help_text.find("--fake") == std::string::npos);
+    CHECK(parsed->help_text.find("--enable-bash") == std::string::npos);
+    CHECK(parsed->help_text.find("--max-turns") == std::string::npos);
+    CHECK(parsed->help_text.find("--workspace") == std::string::npos);
+    CHECK(parsed->help_text.find("--async") == std::string::npos);
+    CHECK(parsed->help_text.find("--repl") == std::string::npos);
 }
 
 TEST_CASE("parse_args help text advertises the session-directory override precedence", "[cli][parse][session-dir]") {
@@ -409,12 +496,197 @@ TEST_CASE("parse_args help text advertises the session-directory override preced
     CHECK(parsed->help_text.find("sessionDir") != std::string::npos);
 }
 
-TEST_CASE("parse_args still requires prompt for json mode", "[cli][parse]") {
-    std::vector<std::string> args{"cpp-harness", "--fake", "--mode", "json"};
+TEST_CASE("parse_args captures --session-dir as the automatic-directory override", "[cli][parse][session-dir]") {
+    std::vector<std::string> args{"cpp-harness", "--session-dir", "/data/sessions", "hello"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
-    REQUIRE_FALSE(parsed);
-    CHECK(parsed.error().message.find("prompt is required") != std::string::npos);
+    REQUIRE(parsed);
+    REQUIRE(parsed->session_dir.has_value());
+    CHECK(*parsed->session_dir == "/data/sessions");
+    // The automatic-directory override leaves the normalized default target alone.
+    CHECK(std::holds_alternative<cch::coding_agent::DefaultPersistedSessionTarget>(parsed->session_target));
+}
+
+TEST_CASE("parse_args defaults --session-dir to absent", "[cli][parse][session-dir]") {
+    std::vector<std::string> args{"cpp-harness", "hello"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    CHECK_FALSE(parsed->session_dir.has_value());
+}
+
+TEST_CASE("parse_args accepts --session-dir alongside explicit and in-memory targets", "[cli][parse][session-dir]") {
+    {
+        std::vector<std::string> args{"cpp-harness", "--session-dir", "/data", "--session", "explicit.jsonl", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        REQUIRE(parsed->session_dir.has_value());
+        const auto* target = std::get_if<cch::coding_agent::ExplicitNewSessionTarget>(&parsed->session_target);
+        REQUIRE(target != nullptr);
+        CHECK(target->path == "explicit.jsonl");
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "--session-dir", "/data", "--resume", "explicit.jsonl", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        CHECK(std::holds_alternative<cch::coding_agent::ExplicitResumeSessionTarget>(parsed->session_target));
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "--session-dir", "/data", "--no-session", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        CHECK(std::holds_alternative<cch::coding_agent::InMemorySessionTarget>(parsed->session_target));
+    }
+}
+
+TEST_CASE("parse_args records the pi prompt/theme/skill flags", "[cli][parse]") {
+    std::vector<std::string> args{
+        "cpp-harness",
+        "--system-prompt",
+        "custom system prompt",
+        "--append-system-prompt",
+        "first append",
+        "--append-system-prompt",
+        "second append",
+        "--thinking",
+        "high",
+        "--skill",
+        "user-skill",
+        "--skill",
+        "project-skill",
+        "--theme",
+        "dark.json",
+        "--theme",
+        "custom-themes",
+        "--no-context-files",
+        "--no-themes",
+        "--no-skills",
+        "--no-prompt-templates",
+        "hello",
+    };
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    REQUIRE(parsed->system_prompt.has_value());
+    CHECK(*parsed->system_prompt == "custom system prompt");
+    REQUIRE(parsed->append_system_prompt.size() == 2);
+    CHECK(parsed->append_system_prompt[0] == "first append");
+    CHECK(parsed->append_system_prompt[1] == "second append");
+    REQUIRE(parsed->thinking.has_value());
+    CHECK(*parsed->thinking == "high");
+    REQUIRE(parsed->skills.size() == 2);
+    CHECK(parsed->skills[0] == "user-skill");
+    CHECK(parsed->skills[1] == "project-skill");
+    REQUIRE(parsed->themes.size() == 2);
+    CHECK(parsed->themes[0] == "dark.json");
+    CHECK(parsed->themes[1] == "custom-themes");
+    CHECK(parsed->no_context_files);
+    CHECK(parsed->no_themes);
+    CHECK(parsed->no_skills);
+    CHECK(parsed->no_prompt_templates);
+    CHECK(parsed->prompt == "hello");
+}
+
+TEST_CASE("parse_args accepts pi's multi-character shorts for the no-* flags", "[cli][parse]") {
+    {
+        std::vector<std::string> args{"cpp-harness", "-ns", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        CHECK(parsed->no_skills);
+        CHECK_FALSE(parsed->no_prompt_templates);
+        CHECK_FALSE(parsed->no_context_files);
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "-np", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        CHECK(parsed->no_prompt_templates);
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "-nc", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        CHECK(parsed->no_context_files);
+    }
+}
+
+TEST_CASE("parse_args accepts pi's -p and -v shorts", "[cli][parse]") {
+    {
+        std::vector<std::string> args{"cpp-harness", "-p", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        CHECK(parsed->print);
+        CHECK(parsed->prompt == "hello");
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "-v"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        CHECK(parsed->version);
+    }
+}
+
+TEST_CASE("parse_args records --list-models with and without a search pattern", "[cli][parse]") {
+    {
+        std::vector<std::string> args{"cpp-harness", "--list-models"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        REQUIRE(parsed->list_models.has_value());
+        CHECK(parsed->list_models->empty());
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "--list-models", "sonnet"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        REQUIRE(parsed->list_models.has_value());
+        CHECK(*parsed->list_models == "sonnet");
+    }
+}
+
+TEST_CASE("parse_args does not treat an @file after --list-models as a search", "[cli][parse]") {
+    std::vector<std::string> args{"cpp-harness", "--list-models", "@prompt.md"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    REQUIRE(parsed->list_models.has_value());
+    CHECK(parsed->list_models->empty());
+    REQUIRE(parsed->file_arguments.size() == 1);
+    CHECK(parsed->file_arguments[0] == "prompt.md");
+}
+
+TEST_CASE("parse_args keeps --list-models from swallowing later flags", "[cli][parse]") {
+    std::vector<std::string> args{"cpp-harness", "--list-models", "@prompt.md", "--print"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    REQUIRE(parsed->list_models.has_value());
+    CHECK(parsed->list_models->empty());
+    REQUIRE(parsed->file_arguments.size() == 1);
+    CHECK(parsed->file_arguments[0] == "prompt.md");
+    CHECK(parsed->print);
+}
+
+TEST_CASE("parse_args treats tokens after -- as positionals verbatim", "[cli][parse]") {
+    std::vector<std::string> args{"cpp-harness", "--", "-p", "--print"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    CHECK_FALSE(parsed->print);
+    CHECK(parsed->prompt == "-p --print");
+}
+
+TEST_CASE("parse_args exposes the CMake project version", "[cli][parse]") {
+    CHECK_FALSE(cch::cli::project_version().empty());
 }
 
 #if defined(__unix__) || defined(__APPLE__)
@@ -430,7 +702,7 @@ TEST_CASE("parse_args reports a diagnostic when the working directory is unavail
     REQUIRE(::chdir(deleted_dir) == 0);
     REQUIRE(::rmdir(deleted_dir) == 0);
 
-    std::vector<std::string> args{"cpp-harness", "--fake", "hello"};
+    std::vector<std::string> args{"cpp-harness", "hello"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
 

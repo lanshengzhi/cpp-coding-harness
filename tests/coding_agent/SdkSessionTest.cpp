@@ -2611,12 +2611,12 @@ TEST_CASE("SessionFactory applies one User Settings snapshot across provider and
         "{\"defaultModel\":\"settings-model\",\"sessionDir\":\"" + settings_sessions.path().string() + "\"}");
 
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.fake = true;
     request.disable_project_skills = true;
     request.disable_prompt_templates = true;
     request.workspace = paths.workspace.path();
 
-    auto result = coding_agent::create_agent_session(std::move(request));
+    auto result = coding_agent::create_agent_session_for_testing(
+        std::move(request), ai::providers::make_scripted_fake_models());
     REQUIRE(result.has_value());
     // The same snapshot feeds provider resolution and CLI automatic
     // session-directory selection.
@@ -2799,7 +2799,6 @@ TEST_CASE("SessionFactory CLI creation failure after User Settings fallback keep
     agent_dir.write("settings.json", "{not valid json");
 
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.fake = true;
     request.workspace = paths.workspace.path() / "missing-workspace";
 
     auto result = coding_agent::create_agent_session(std::move(request));
@@ -2851,7 +2850,6 @@ TEST_CASE("SessionFactory CLI explicit new target rejects an unresolvable worksp
     agent_dir_guard.set(agent_dir.path().string());
 
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.fake = true;
     request.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     request.workspace = paths.workspace.path() / "missing-workspace";
 
@@ -2869,7 +2867,6 @@ TEST_CASE("SessionFactory CLI resume rejects an unresolvable explicit workspace"
     agent_dir_guard.set(agent_dir.path().string());
 
     coding_agent::runtime::AgentSessionCreationRequest create_request;
-    create_request.fake = true;
     create_request.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     create_request.workspace = paths.workspace.path();
     auto created = coding_agent::create_agent_session(std::move(create_request));
@@ -2877,10 +2874,8 @@ TEST_CASE("SessionFactory CLI resume rejects an unresolvable explicit workspace"
     created->session->close();
 
     coding_agent::runtime::AgentSessionCreationRequest resume_request;
-    resume_request.fake = true;
     resume_request.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
     resume_request.workspace = paths.workspace.path() / "missing-workspace";
-    resume_request.workspace_explicit = true;
 
     auto result = coding_agent::create_agent_session(std::move(resume_request));
     REQUIRE_FALSE(result.has_value());
@@ -2899,7 +2894,6 @@ TEST_CASE("SessionFactory CLI explicit new target rejects an existing session fi
     }
 
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.fake = true;
     request.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     request.workspace = paths.workspace.path();
 

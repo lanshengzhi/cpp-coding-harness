@@ -1507,11 +1507,10 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest resume;
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     resume.workspace = workspace.path();
-    resume.workspace_explicit = true;
-    resume.fake = true;
     resume.disable_project_skills = true;
     resume.disable_prompt_templates = true;
-    auto resumed = coding_agent::create_agent_session(std::move(resume));
+    auto resumed = coding_agent::create_agent_session_for_testing(
+        std::move(resume), ai::providers::make_scripted_fake_models());
     REQUIRE(resumed);
 
     const auto authoritative_before = resumed->session->snapshot().agent_state.messages;

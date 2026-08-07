@@ -2,6 +2,7 @@
 
 #include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
+#include "ai/providers/FakeProvider.hpp"
 
 #include <cch/harness/session/JsonlSessionStore.hpp>
 #include "harness/session/SessionJournalTestHooks.hpp"
@@ -155,14 +156,13 @@ TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point",
     REQUIRE(resumed_store->append_leaf(std::nullopt, first_id));
 
     runtime::AgentSessionCreationRequest request;
-    request.fake = true;
     request.disable_project_skills = true;
     request.disable_prompt_templates = true;
     request.workspace = workspace.path();
-    request.workspace_explicit = true;
     request.session_target = coding_agent::ExplicitResumeSessionTarget{path};
 
-    auto session_result = coding_agent::create_agent_session(std::move(request));
+    auto session_result = coding_agent::create_agent_session_for_testing(
+        std::move(request), ai::providers::make_scripted_fake_models());
     REQUIRE(session_result);
     auto prompt_result = session_result->session->prompt_blocking("continue branch");
     REQUIRE(prompt_result);
@@ -200,14 +200,13 @@ TEST_CASE(
     REQUIRE(resumed_store->append_leaf(std::nullopt, first_id));
 
     runtime::AgentSessionCreationRequest request;
-    request.fake = true;
     request.disable_project_skills = true;
     request.disable_prompt_templates = true;
     request.workspace = workspace.path();
-    request.workspace_explicit = true;
     request.session_target = coding_agent::ExplicitResumeSessionTarget{path};
 
-    auto session_result = coding_agent::create_agent_session(std::move(request));
+    auto session_result = coding_agent::create_agent_session_for_testing(
+        std::move(request), ai::providers::make_scripted_fake_models());
     REQUIRE(session_result);
     auto& session = session_result->session;
 

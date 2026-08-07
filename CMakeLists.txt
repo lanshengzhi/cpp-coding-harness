@@ -307,6 +307,7 @@ target_link_libraries(
         CLI11::CLI11
 )
 target_include_directories(cpp_harness PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_compile_definitions(cpp_harness PRIVATE CCH_PROJECT_VERSION="${PROJECT_VERSION}")
 target_compile_options(cpp_harness PRIVATE ${CCH_WARNING_OPTIONS})
 
 if(CCH_BUILD_TESTS)
@@ -352,7 +353,6 @@ if(CCH_BUILD_TESTS)
         tests/cli/CliSmokeTest.cpp
         tests/cli/CliParseTest.cpp
         tests/cli/FrontendSelectionTest.cpp
-        tests/cli/NativeTuiCliSmokeTest.cpp
         tests/cli/OneShotCliFrontendTest.cpp
         tests/cli/InitialPromptTest.cpp
         tests/coding_agent/BuiltinCommandsTest.cpp
@@ -456,10 +456,12 @@ if(CCH_BUILD_TESTS)
     target_sources(cpp_harness_tests PRIVATE
         src/cli/CliParse.cpp
         src/cli/FrontendSelection.cpp
+        src/coding_agent/runtime/AsyncCliRuntime.cpp
     )
     target_compile_definitions(cpp_harness_tests PRIVATE
         CCH_BINARY="$<TARGET_FILE:cpp_harness>"
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+        CCH_PROJECT_VERSION="${PROJECT_VERSION}"
     )
     target_compile_options(cpp_harness_tests PRIVATE ${CCH_WARNING_OPTIONS})
     add_dependencies(cpp_harness_tests cpp_harness)

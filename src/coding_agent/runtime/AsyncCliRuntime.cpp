@@ -1,5 +1,6 @@
 #include "coding_agent/runtime/AsyncCliRuntime.hpp"
 
+#include "cli/CliParse.hpp"
 #include "cli/InitialPrompt.hpp"
 #include "cli/JsonCliRenderer.hpp"
 #include "cli/OneShotCliFrontend.hpp"
@@ -25,36 +26,41 @@
 namespace cch::cli {
 namespace {
 
-[[nodiscard]] util::Expected<std::string> read_piped_input(bool stdin_is_terminal) {
+[[nodiscard]] util::Expected<std::string> read_piped_input(
+    std::istream& input,
+    bool stdin_is_terminal) {
     if (stdin_is_terminal) return std::string{};
 
-    std::ostringstream input;
-    input << std::cin.rdbuf();
-    if (std::cin.bad()) {
+    std::ostringstream collected;
+    collected << input.rdbuf();
+    if (input.bad()) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Unknown,
             "could not read piped stdin"));
     }
-    return input.str();
+    return collected.str();
 }
 
 void print_creation_error(
     const CliConfig& config,
+    std::ostream& error_stream,
     const util::Error& error) {
-    std::cerr << (std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(config.session_target)
-                      ? "could not resume session: "
-                      : "could not create session: ")
-              << error.message;
+    error_stream << (std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(config.session_target)
+                         ? "could not resume session: "
+                         : "could not create session: ")
+                 << error.message;
     if (!error.detail.empty() && error.detail != error.message) {
-        std::cerr << ": " << error.detail;
+        error_stream << ": " << error.detail;
     }
-    std::cerr << '\n';
+    error_stream << '\n';
     if (error.context && !error.context->empty()) {
-        std::cerr << "note: " << *error.context << '\n';
+        error_stream << "note: " << *error.context << '\n';
     }
 }
 
-void print_session_diagnostics(const std::vector<coding_agent::SdkDiagnostic>& diagnostics) {
+void print_session_diagnostics(
+    std::ostream& error_stream,
+    const std::vector<coding_agent::SdkDiagnostic>& diagnostics) {
     for (const auto& diag : diagnostics) {
         const char* severity = "info";
         switch (diag.severity) {
@@ -74,11 +80,11 @@ void print_session_diagnostics(const std::vector<coding_agent::SdkDiagnostic>& d
             category = code.substr(0, split);
             code = code.substr(split + 1);
         }
-        std::cerr << '[' << category << ':' << severity << "] " << code << ": " << diag.message;
+        error_stream << '[' << category << ':' << severity << "] " << code << ": " << diag.message;
         if (diag.path) {
-            std::cerr << " (" << *diag.path << ')';
+            error_stream << " (" << *diag.path << ')';
         }
-        std::cerr << '\n';
+        error_stream << '\n';
     }
 }
 
@@ -130,26 +136,29 @@ void print_session_diagnostics(const std::vector<coding_agent::SdkDiagnostic>& d
 [[nodiscard]] int run_async_cli(
     const CliConfig& config,
     Frontend frontend,
-    FrontendEnvironment environment) {
+    CliStreams streams,
+    FrontendEnvironment environment,
+    std::shared_ptr<ai::Models> models) {
     auto initial_prompt = prepare_initial_prompt(
         config.prompt,
         config.file_arguments,
         config.workspace);
     if (!initial_prompt) {
-        std::cerr << "could not prepare initial prompt: "
-                  << initial_prompt.error().message;
+        streams.error << "could not prepare initial prompt: "
+                      << initial_prompt.error().message;
         if (!initial_prompt.error().detail.empty() &&
             initial_prompt.error().detail != initial_prompt.error().message) {
-            std::cerr << ": " << initial_prompt.error().detail;
+            streams.error << ": " << initial_prompt.error().detail;
         }
-        std::cerr << '\n';
+        streams.error << '\n';
         return 2;
     }
 
     if (frontend != Frontend::Rpc) {
-        if (auto piped_input = read_piped_input(environment.stdin_is_terminal);
+        if (auto piped_input = read_piped_input(
+                streams.input, environment.stdin_is_terminal);
             !piped_input) {
-            std::cerr << piped_input.error().message << '\n';
+            streams.error << piped_input.error().message << '\n';
             return 2;
         } else {
             initial_prompt->text.insert(0, std::move(*piped_input));
@@ -157,13 +166,11 @@ void print_session_diagnostics(const std::vector<coding_agent::SdkDiagnostic>& d
     }
     if ((frontend == Frontend::Print || frontend == Frontend::Json) &&
         initial_prompt->text.empty() && initial_prompt->images.empty()) {
-        std::cerr << "prompt is required for non-interactive output\n";
+        streams.error << "prompt is required for non-interactive output\n";
         return 2;
     }
 
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.fake = config.fake;
-    request.enable_bash = config.enable_bash;
     // The interactive Native TUI always receives its independent User Shell
     // (ADR 0026); one-shot, JSON, and RPC frontends keep ordinary-prompt
     // semantics for leading '!' text.
@@ -172,8 +179,6 @@ void print_session_diagnostics(const std::vector<coding_agent::SdkDiagnostic>& d
     request.disable_project_skills = config.no_skills;
     request.disable_prompt_templates = config.no_prompt_templates;
     request.prompt_template_paths = config.prompt_template_paths;
-    request.workspace_explicit = config.workspace_explicit;
-    request.max_turns = config.max_turns;
     request.workspace = config.workspace;
     request.session_target = config.session_target;
     request.session_dir = config.session_dir;
@@ -182,18 +187,21 @@ void print_session_diagnostics(const std::vector<coding_agent::SdkDiagnostic>& d
     request.models = config.models;
     request.api_key = config.api_key;
 
-    auto created = coding_agent::create_agent_session(std::move(request));
+    auto created = models
+        ? coding_agent::create_agent_session_for_testing(
+              std::move(request), std::move(models))
+        : coding_agent::create_agent_session(std::move(request));
     if (!created) {
-        print_creation_error(config, created.error());
+        print_creation_error(config, streams.error, created.error());
         return 2;
     }
-    print_session_diagnostics(created->diagnostics);
+    print_session_diagnostics(streams.error, created->diagnostics);
 
     auto& session = *created->session;
     if (frontend == Frontend::Rpc) {
         return coding_agent::runtime::run_rpc_mode(coding_agent::runtime::RpcModeConfig{
-            std::cin,
-            std::cout,
+            streams.input,
+            streams.output,
             session,
             created->provider,
             created->model,
@@ -205,8 +213,8 @@ void print_session_diagnostics(const std::vector<coding_agent::SdkDiagnostic>& d
     }
 
     OneShotCliFrontendConfig frontend_config{
-        .output = std::cout,
-        .error = std::cerr,
+        .output = streams.output,
+        .error = streams.error,
         .prompt = std::move(initial_prompt->text),
     };
     auto run_frontend = [&](CliRenderer& renderer) {
@@ -223,15 +231,54 @@ void print_session_diagnostics(const std::vector<coding_agent::SdkDiagnostic>& d
     };
 
     if (frontend == Frontend::Json) {
-        JsonCliRenderer renderer{std::cout, std::cerr};
+        JsonCliRenderer renderer{streams.output, streams.error};
         return run_frontend(renderer);
     }
 
     TextCliRenderer renderer{
-        std::cout,
-        std::cerr,
+        streams.output,
+        streams.error,
         environment.stdin_is_terminal && environment.stdout_is_terminal};
     return run_frontend(renderer);
+}
+
+[[nodiscard]] int run_cli_entry(
+    int argc,
+    char** argv,
+    CliStreams streams,
+    CliRuntimeOptions options) {
+    auto parsed = parse_args(argc, argv);
+    if (!parsed) {
+        // Parse errors carry the full help text in detail.
+        const auto& error = parsed.error();
+        streams.error << (error.detail.empty() ? error.message : error.detail) << '\n';
+        return 2;
+    }
+    CliConfig config = std::move(*parsed);
+    if (config.help) {
+        streams.output << config.help_text;
+        return 0;
+    }
+    if (config.version) {
+        streams.output << project_version() << '\n';
+        return 0;
+    }
+
+    const FrontendEnvironment environment = options.environment_explicit
+        ? options.environment
+        : detect_frontend_environment();
+    if (auto frontend = select_frontend(config, environment); !frontend) {
+        const auto& error = frontend.error();
+        streams.error << error.message;
+        if (!error.detail.empty() && error.detail != error.message) {
+            streams.error << ": " << error.detail;
+        }
+        streams.error << '\n';
+        return 2;
+    } else {
+        return run_async_cli(
+            config, *frontend, streams, environment, std::move(options.models));
+    }
 }
 
 } // namespace cch::cli

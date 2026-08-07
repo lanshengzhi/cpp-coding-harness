@@ -97,8 +97,9 @@ struct AssemblyPlan {
     bool models_injected{false};
     /// SDK explicit initial model for the public path (pi `model` option).
     std::optional<ai::Model> requested_model;
-    /// CLI `--fake` flag: a scripted fake provider is registered into the
-    /// runtime.
+    /// CLI-path fake-provider seam: the test-suite injected `ai::Models`
+    /// carries the scripted fake provider, and the request model is fabricated
+    /// from it (the request surface the `--fake` flag used to drive).
     bool cli_fake{false};
     /// pi CLI model selection (`--provider`, `--model`, `--models`, `--api-key`).
     struct CliModelSelection {
@@ -302,9 +303,10 @@ void cleanup_factory_env(bool env_owned, harness::AsyncExecutionEnv* env) {
 // Model / runtime resolution
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Fabricate the request Model for the scripted fake provider registered by
-/// `--fake`. The fake provider's catalog is empty (deterministic test surface),
-/// so the request model is a truthful, credential-free value pointing at it.
+/// Fabricate the request Model for the CLI-path fake-provider seam: the
+/// injected `ai::Models` carries the scripted fake provider whose catalog is
+/// empty (deterministic test surface), so the request model is a truthful,
+/// credential-free value pointing at it.
 [[nodiscard]] ai::Model make_fake_request_model() {
     return ai::Model{
         .id = "fake-model",
@@ -753,7 +755,10 @@ struct SessionTargetNormalizationOptions {
         SessionTargetNormalizationOptions{
             .profile = CreationProfile::Cli,
             .workspace = request.workspace,
-            .workspace_explicit = request.workspace_explicit,
+            // The workspace is always the launch directory (pi
+            // `workspace := cwd`); an explicit workspace override no longer
+            // exists, so the resume mismatch check never sees one.
+            .workspace_explicit = false,
             .cli_session_dir = request.session_dir,
             .settings_session_dir = merged.session_dir,
         });
@@ -763,7 +768,6 @@ struct SessionTargetNormalizationOptions {
     plan.target = std::move(*target);
 
     plan.model_runtime = nullptr;
-    plan.cli_fake = request.fake;
     plan.cli_selection = AssemblyPlan::CliModelSelection{
         .provider = std::move(request.provider),
         .model = std::move(request.model),
@@ -771,11 +775,13 @@ struct SessionTargetNormalizationOptions {
         .api_key = std::move(request.api_key),
     };
     plan.host_execution_env = nullptr;
+    // The model-requested bash tool is always available under the fixed tool
+    // set (pi); the workspace boundary stays the internal containment seam.
     plan.builtin_tools = coding_agent::SdkBuiltinTools{
         .read = true,
         .write = true,
         .edit = true,
-        .bash = request.enable_bash,
+        .bash = true,
     };
 
     plan.load_project_resources = true;
@@ -788,7 +794,6 @@ struct SessionTargetNormalizationOptions {
     plan.prompt_template_paths = request.prompt_template_paths;
     plan.max_queued_messages = request.max_queued_messages;
     plan.max_queued_bytes = request.max_queued_bytes;
-    plan.max_turns = request.max_turns;
     plan.provide_user_shell = request.provide_user_shell;
 
     return plan;
@@ -1067,16 +1072,7 @@ struct SessionTargetNormalizationOptions {
         runtime = std::move(*built);
     }
 
-    // 5. Register the scripted fake provider for --fake.
-    if (plan.cli_fake) {
-        if (auto registered = runtime->register_native_provider(
-                ai::providers::make_scripted_fake_provider());
-            !registered) {
-            return std::unexpected(registered.error());
-        }
-    }
-
-    // 6. Resolve provider/model metadata and the request Model. Resume stores
+    // 5. Resolve provider/model metadata and the request Model. Resume stores
     // only `model_change {provider, modelId}`; the recorded identity is
     // re-resolved against the live runtime catalog. Refresh live availability
     // first so the resolution chain consults real configured auth (pi
@@ -1217,10 +1213,10 @@ struct SessionTargetNormalizationOptions {
         }
     }
 
-    // 7. The runtime is the session's canonical ModelRuntime, held for
+    // 6. The runtime is the session's canonical ModelRuntime, held for
     // `model_runtime()` and injected as the Agent's sole stream seam (#326).
 
-    // 8. Resolve execution environment and ownership. Secret environment names
+    // 7. Resolve execution environment and ownership. Secret environment names
     // come from the runtime's configured models.json apiKey templates.
     std::shared_ptr<harness::AsyncExecutionEnv> exec_env;
     bool env_owned = true;
@@ -1241,7 +1237,7 @@ struct SessionTargetNormalizationOptions {
 
     auto cleanup_on_failure = [&]() { cleanup_factory_env(env_owned, exec_env.get()); };
 
-    // 9. Build the tool registry from enabled built-ins plus validated custom tools.
+    // 8. Build the tool registry from enabled built-ins plus validated custom tools.
     agent::AsyncToolRegistry tools;
     std::set<std::string> builtin_names;
 
@@ -1298,7 +1294,7 @@ struct SessionTargetNormalizationOptions {
         }
     }
 
-    // 10. Publish the session only after all fallible prerequisites succeeded.
+    // 9. Publish the session only after all fallible prerequisites succeeded.
     OpenSession open;
     if (is_resume) {
         auto published = publish_resume_session(prepared_resume);
@@ -1349,7 +1345,7 @@ struct SessionTargetNormalizationOptions {
         }
     }
 
-    // 11. Assemble the runtime. The Native TUI's Session-owned User Shell is
+    // 10. Assemble the runtime. The Native TUI's Session-owned User Shell is
     // an independent capability instance: it shares only the effective
     // user-level Shell configuration with an enabled model Bash Tool and
     // never widens the shared Execution Environment (ADR 0026).
@@ -1429,6 +1425,33 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
     AgentSessionCreationRequest request) {
     auto snapshot = load_settings_snapshot(request.workspace);
     return finish_creation(normalize_cli(std::move(request), snapshot.manager), snapshot);
+}
+
+util::Expected<CreateAgentSessionResult> SessionFactory::create(
+    AgentSessionCreationRequest request,
+    std::shared_ptr<ai::Models> models) {
+    auto snapshot = load_settings_snapshot(request.workspace);
+    if (!models) {
+        return finish_creation(normalize_cli(std::move(request), snapshot.manager), snapshot);
+    }
+    ModelRuntimeOptions wrap_options;
+    auto wrapped = ModelRuntime::create_from_models_for_testing(
+        std::move(models), std::move(wrap_options));
+    if (!wrapped) {
+        return std::unexpected(with_settings_fallback_context(wrapped.error(), snapshot));
+    }
+    auto plan = normalize_cli(std::move(request), snapshot.manager);
+    if (!plan) {
+        return std::unexpected(with_settings_fallback_context(plan.error(), snapshot));
+    }
+    // The injected Models is the runtime's catalog; its scripted fake
+    // provider serves streams, and the request model is fabricated from it
+    // (the deterministic provider surface the `--fake` flag used to drive).
+    plan->model_runtime = std::move(*wrapped);
+    plan->model_runtime_owned = true;
+    plan->models_injected = false;
+    plan->cli_fake = true;
+    return finish_creation(std::move(plan), snapshot);
 }
 
 util::Expected<CreateAgentSessionResult> SessionFactory::create(

@@ -20,16 +20,6 @@ TEST_CASE("frontend selection follows pi precedence", "[cli][selection][issue64]
     selected = cli::select_frontend(config, interactive);
     REQUIRE(selected);
     CHECK(*selected == cli::Frontend::Print);
-
-    config.output_mode = cli::OutputMode::Json;
-    selected = cli::select_frontend(config, interactive);
-    REQUIRE(selected);
-    CHECK(*selected == cli::Frontend::Json);
-
-    config.output_mode = cli::OutputMode::Rpc;
-    selected = cli::select_frontend(config, interactive);
-    REQUIRE(selected);
-    CHECK(*selected == cli::Frontend::Rpc);
 }
 
 TEST_CASE("text mode leaves terminal-based frontend selection unchanged", "[cli][selection][issue64]") {

@@ -557,6 +557,13 @@ util::Expected<CreateAgentSessionResult> create_agent_session(
     return detail::AgentSessionRuntimeAccess::wrap_factory_result(runtime::SessionFactory::create(std::move(request)));
 }
 
+util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
+    runtime::AgentSessionCreationRequest request,
+    std::shared_ptr<ai::Models> models) {
+    return detail::AgentSessionRuntimeAccess::wrap_factory_result(
+        runtime::SessionFactory::create(std::move(request), std::move(models)));
+}
+
 util::Expected<CreateAgentSessionResult> create_agent_session(
     CreateAgentSessionOptions options,
     std::unique_ptr<runtime::AsyncUserShell> user_shell) {

@@ -69,13 +69,12 @@ struct TestPaths {
 [[nodiscard]] util::Expected<coding_agent::CreateAgentSessionResult> resume_for_frontend(
     const TestPaths& paths) {
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.fake = true;
     request.disable_project_skills = true;
     request.disable_prompt_templates = true;
     request.workspace = paths.workspace.path();
-    request.workspace_explicit = true;
     request.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
-    return coding_agent::create_agent_session(std::move(request));
+    return coding_agent::create_agent_session_for_testing(
+        std::move(request), ai::providers::make_scripted_fake_models());
 }
 
 class GatedSnapshotChatProvider final : public tests::ScriptedProvider {
