@@ -124,6 +124,14 @@ _Avoid_: Session Close, process kill
 The shape of an Agent Session history, such as linear, branched, or compacted.
 _Avoid_: Completion state
 
+**Session Selection**:
+The user-facing flow of choosing which Agent Session to open — at boot through the resume picker or a session-family flag, or in-session through the session selector.
+_Avoid_: Session picker, resume chooser
+
+**Session Fork**:
+A new Agent Session created from an existing session's history at a chosen point, carrying a parent-session pointer and the target working directory.
+_Avoid_: Session clone, history copy
+
 **Compaction**:
 The context-summarization capability that replaces compacted session history with a summary entry while retaining a recent tail, triggered on context overflow (compact and retry once), on threshold, or manually; summarization requests are isolated with cache retention "none" and a fresh session id.
 _Avoid_: Truncation, deletion, raw history replay
