@@ -2257,10 +2257,19 @@ TEST_CASE(
     REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 2);
     REQUIRE(snapshot.agent_state.input_queues.follow_up.messages.size() == 1);
     auto screen = visible_screen(terminal);
-    CHECK(screen.find("Steering: steer one") != std::string::npos);
-    CHECK(screen.find("Steering: steer two") != std::string::npos);
-    CHECK(screen.find("Follow-up: follow one") != std::string::npos);
-    CHECK(screen.find("Alt+Up to edit all queued messages") != std::string::npos);
+    const auto steer_one = screen.find("Steering: steer one");
+    const auto steer_two = screen.find("Steering: steer two");
+    const auto follow_up = screen.find("Follow-up: follow one");
+    REQUIRE(steer_one != std::string::npos);
+    REQUIRE(steer_two != std::string::npos);
+    REQUIRE(follow_up != std::string::npos);
+    // pi updatePendingMessagesDisplay: steering messages render before
+    // follow-up messages, then the dequeue hint.
+    CHECK(steer_one < steer_two);
+    CHECK(steer_two < follow_up);
+    const auto dequeue_hint = screen.find("Alt+Up to edit all queued messages");
+    REQUIRE(dequeue_hint != std::string::npos);
+    CHECK(follow_up < dequeue_hint);
 
     client_pointer->release();
     drain_ready(io);
@@ -2540,6 +2549,293 @@ TEST_CASE(
     CHECK_FALSE(created->session->is_busy());
     CHECK(visible_screen(terminal).find("recovered after TUI abort") !=
         std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI records accepted follow-up in editor history and queues slash text while a run is active",
+    "[coding_agent][tui][queues][issue401]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto client = std::make_shared<TurnGatedChatProvider>();
+    auto* client_pointer = client.get();
+    auto created = coding_agent::create_agent_session(session_options(
+        workspace,
+        std::move(client)));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("initial\r"));
+    drain_ready(io);
+    CHECK(client_pointer->request_count == 1);
+
+    // Alt+Enter admits follow-up input; the accepted text leaves the editor
+    // and is recorded in editor history (pi handleFollowUp addToHistory).
+    REQUIRE(terminal.inject_input("follow one\x1b[13;3u"));
+    drain_ready(io);
+    auto snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.input_queues.follow_up.messages.size() == 1);
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("Follow-up: follow one") != std::string::npos);
+
+    // Up in the empty editor recalls the accepted follow-up text (the
+    // cursor sits at the start of the recalled line, like the Enter path).
+    REQUIRE(terminal.inject_input("\x1b[A"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("x"));
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("xfollow one") != std::string::npos);
+
+    // pi handleFollowUp: while a run is active, Alt+Enter queues even slash
+    // text directly as follow-up input — the command chain does not run.
+    REQUIRE(terminal.inject_input("\x03"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("/hotkeys\x1b[13;3u"));
+    drain_ready(io);
+    snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.input_queues.follow_up.messages.size() == 2);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(
+        snapshot.agent_state.input_queues.follow_up.messages[1])) == "/hotkeys");
+    screen = visible_screen(terminal);
+    CHECK(screen.find("Follow-up: /hotkeys") != std::string::npos);
+    CHECK(screen.find("Hotkeys") == std::string::npos);
+
+    client_pointer->release();
+    drain_ready(io);
+    CHECK(client_pointer->request_count == 2);
+    REQUIRE(client_pointer->observed_users.size() == 2);
+    CHECK((client_pointer->observed_users[1] ==
+        std::vector<std::string>{"initial", "follow one"}));
+    client_pointer->release();
+    drain_ready(io);
+    CHECK(client_pointer->request_count == 3);
+    REQUIRE(client_pointer->observed_users.size() == 3);
+    CHECK((client_pointer->observed_users[2] ==
+        std::vector<std::string>{"initial", "follow one", "/hotkeys"}));
+    client_pointer->release();
+    drain_ready(io);
+    CHECK_FALSE(created->session->is_busy());
+    CHECK(created->session->snapshot().agent_state.input_queues.follow_up.messages.empty());
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI rejects follow-up admission at capacity and restores the text unchanged",
+    "[coding_agent][tui][queues][limits][issue401]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto client = std::make_shared<TurnGatedChatProvider>();
+    auto* client_pointer = client.get();
+    auto options = session_options(workspace, std::move(client));
+    options.max_queued_messages = 1;
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 80, .rows = 20});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("initial\r"));
+    drain_ready(io);
+    CHECK(client_pointer->request_count == 1);
+
+    REQUIRE(terminal.inject_input("fu one\x1b[13;3u"));
+    drain_ready(io);
+    auto snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.input_queues.follow_up.messages.size() == 1);
+
+    // Second follow-up admission is rejected at capacity: the submitted text
+    // is restored unchanged to the editor, the diagnostic is bounded and
+    // redacted, and the queue plus the active run stay untouched.
+    REQUIRE(terminal.inject_input("fu two\x1b[13;3u"));
+    drain_ready(io);
+    snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.input_queues.follow_up.messages.size() == 1);
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("Unable to queue follow-up input: too many queued messages") !=
+        std::string::npos);
+    CHECK(screen.find("Follow-up: fu one") != std::string::npos);
+    CHECK(screen.find("Follow-up: fu two") == std::string::npos);
+    // The rejected text is back in the editor, unchanged.
+    CHECK(screen.find("fu two") != std::string::npos);
+    CHECK(client_pointer->request_count == 1);
+
+    client_pointer->release();
+    drain_ready(io);
+    CHECK(client_pointer->request_count == 2);
+    CHECK(created->session->snapshot().agent_state.input_queues.follow_up.messages.empty());
+    client_pointer->release();
+    drain_ready(io);
+    CHECK_FALSE(created->session->is_busy());
+
+    // The rejected text still occupies the editor; clear before exit.
+    REQUIRE(terminal.inject_input("\x03"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI dequeue restores steering, then follow-up, then draft with blank lines",
+    "[coding_agent][tui][queues][issue401]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto client = std::make_shared<TurnGatedChatProvider>();
+    auto* client_pointer = client.get();
+    auto created = coding_agent::create_agent_session(session_options(
+        workspace,
+        std::move(client)));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("initial\r"));
+    drain_ready(io);
+    CHECK(client_pointer->request_count == 1);
+
+    // One steering message, one follow-up message, and an unsubmitted draft.
+    REQUIRE(terminal.inject_input("s1\r"));
+    REQUIRE(terminal.inject_input("f1\x1b[13;3u"));
+    REQUIRE(terminal.inject_input("draft"));
+    drain_ready(io);
+    auto snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 1);
+    REQUIRE(snapshot.agent_state.input_queues.follow_up.messages.size() == 1);
+
+    // Alt+Up (app.message.dequeue) restores steering, then follow-up, then
+    // the draft, each separated by a blank line (pi restoreQueuedMessages-
+    // ToEditor join semantics), and clears the Agent-owned queues.
+    REQUIRE(terminal.inject_input("\x1b[1;3A"));
+    drain_ready(io);
+    snapshot = created->session->snapshot();
+    CHECK(snapshot.agent_state.input_queues.steering.messages.empty());
+    CHECK(snapshot.agent_state.input_queues.follow_up.messages.empty());
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("Restored 2 queued messages to editor") != std::string::npos);
+    CHECK(screen.find("Steering: s1") == std::string::npos);
+    CHECK(screen.find("Follow-up: f1") == std::string::npos);
+
+    std::vector<std::string> lines;
+    {
+        std::stringstream stream(screen);
+        std::string line;
+        while (std::getline(stream, line)) lines.push_back(std::move(line));
+    }
+    const auto find_line = [&lines](std::string_view needle) {
+        for (std::size_t index = 0; index < lines.size(); ++index) {
+            if (lines[index].find(needle) != std::string::npos) return index;
+        }
+        return lines.size();
+    };
+    const auto steering_line = find_line("s1");
+    const auto follow_up_line = find_line("f1");
+    const auto draft_line = find_line("draft");
+    REQUIRE(steering_line != lines.size());
+    REQUIRE(follow_up_line != lines.size());
+    REQUIRE(draft_line != lines.size());
+    CHECK(steering_line < follow_up_line);
+    CHECK(follow_up_line < draft_line);
+    // pi joins queued messages and the current text with "\n\n".
+    CHECK(follow_up_line == steering_line + 2);
+    CHECK(draft_line == follow_up_line + 2);
+
+    client_pointer->release();
+    drain_ready(io);
+    // The queues were emptied by the dequeue, so the gated run completes
+    // without a follow-up request.
+    CHECK(client_pointer->request_count == 1);
+    CHECK_FALSE(created->session->is_busy());
+
+    REQUIRE(terminal.inject_input("\x03"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI expanded header hints assemble followUp and dequeue with pi's keys",
+    "[coding_agent][tui][hints][issue401]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto created = coding_agent::create_agent_session(session_options(
+        workspace,
+        ai::providers::make_scripted_fake_provider()));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 90, .rows = 26});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    // app.tools.expand (ctrl+o) reveals the expanded startup instructions
+    // over the assembled subset, including the two queue actions.
+    REQUIRE(terminal.inject_input("\x0f"));
+    drain_ready(io);
+    auto screen = visible_screen(terminal);
+    // pi keyHint: the header renders keyText (lowercase); the pending
+    // display hint uses keyDisplayText (capitalized) — both assembled here.
+    CHECK(screen.find("alt+enter to queue follow-up") != std::string::npos);
+    CHECK(screen.find("alt+up to edit all queued messages") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -2890,6 +3186,11 @@ TEST_CASE(
     CHECK(screen.find("Hotkeys") != std::string::npos);
     CHECK(screen.find("f6") != std::string::npos);
     CHECK(screen.find("app.exit") != std::string::npos);
+    // The assembled queue actions appear in help with pi's default keys.
+    CHECK(screen.find("app.message.followUp") != std::string::npos);
+    CHECK(screen.find("alt+enter") != std::string::npos);
+    CHECK(screen.find("app.message.dequeue") != std::string::npos);
+    CHECK(screen.find("alt+up") != std::string::npos);
     CHECK(screen.find("app.session.new") == std::string::npos);
     CHECK(screen.find("app.suspend") == std::string::npos);
     CHECK(screen.find("app.clipboard.pasteImage") == std::string::npos);

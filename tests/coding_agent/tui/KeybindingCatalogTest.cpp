@@ -152,6 +152,54 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "app.message.followUp and app.message.dequeue carry pi's default keys and help text",
+    "[coding_agent][keybindings][issue401]") {
+    constexpr std::array<std::string_view, 2> kQueueActions{
+        "app.message.followUp",
+        "app.message.dequeue",
+    };
+    const auto definitions = coding_agent::tui::baseline_application_keybindings(
+        kQueueActions,
+        tui::KeybindingPlatform::Linux);
+    REQUIRE(definitions);
+    REQUIRE(definitions->size() == 2);
+    CHECK((*definitions)[0].id == "app.message.followUp");
+    CHECK((*definitions)[0].default_keys == std::vector<std::string>{"alt+enter"});
+    CHECK((*definitions)[0].description == "Queue follow-up message");
+    CHECK((*definitions)[1].id == "app.message.dequeue");
+    CHECK((*definitions)[1].default_keys == std::vector<std::string>{"alt+up"});
+    CHECK((*definitions)[1].description == "Restore queued messages");
+
+    // The assembled registry resolves the defaults, and dispatch and help
+    // both observe them through the exact registry used by the TUI.
+    coding_agent::tui::KeybindingCatalogRequest request;
+    request.application_definitions = *definitions;
+    request.platform = tui::KeybindingPlatform::Linux;
+    const auto catalog = coding_agent::tui::load_keybinding_catalog(std::move(request));
+    REQUIRE(catalog);
+    CHECK(catalog->registry->matches(
+        tui::KeyEvent{.key = "enter", .alt = true},
+        "app.message.followUp"));
+    CHECK(catalog->registry->matches(
+        tui::KeyEvent{.key = "up", .alt = true},
+        "app.message.dequeue"));
+    CHECK_FALSE(catalog->registry->matches(
+        tui::KeyEvent{.key = "enter"},
+        "app.message.followUp"));
+    const auto help_entries = coding_agent::tui::hotkey_help_entries(*catalog->registry);
+    const auto follow_up = std::find_if(help_entries.begin(), help_entries.end(), [](const auto& entry) {
+        return entry.id == "app.message.followUp";
+    });
+    const auto dequeue = std::find_if(help_entries.begin(), help_entries.end(), [](const auto& entry) {
+        return entry.id == "app.message.dequeue";
+    });
+    REQUIRE(follow_up != help_entries.end());
+    REQUIRE(dequeue != help_entries.end());
+    CHECK(follow_up->keys == "alt+enter");
+    CHECK(dequeue->keys == "alt+up");
+}
+
+TEST_CASE(
     "Malformed keybinding documents retain defaults with a bounded diagnostic",
     "[coding_agent][keybindings][issue57]") {
     tests::TempWorkspace config;

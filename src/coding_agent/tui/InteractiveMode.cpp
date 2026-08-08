@@ -1072,6 +1072,10 @@ private:
     void invoke_follow_up() {
         auto text = trim_editor_submission(editor_.expanded_text());
         if (text.empty()) return;
+        // pi handleFollowUp: the accepted text enters editor history before
+        // the editor clears and the follow-up admission is posted, matching
+        // the Enter path where the editor records the submission itself.
+        editor_.add_to_history(text);
         editor_.set_text({});
         invoke_submission(
             on_follow_up_,
@@ -1868,8 +1872,17 @@ private:
             cleared_editor_revision_ == editor_revision) {
             return;
         }
-        if (dispatch_user_bash(text, origin)) return;
-        if (dispatch_command(text)) return;
+        // pi handleFollowUp: while a run is active, Alt+Enter queues the
+        // trimmed text directly as follow-up input — the editor chain (User
+        // Bash parse, slash dispatch) does not run, and prompt-template
+        // expansion happens inside the session admission; when idle,
+        // Alt+Enter acts like regular Enter and runs the full editor chain.
+        const bool follow_up_while_active =
+            submission == InputSubmission::FollowUp && prompt_active_;
+        if (!follow_up_while_active) {
+            if (dispatch_user_bash(text, origin)) return;
+            if (dispatch_command(text)) return;
+        }
 
         if (prompt_active_) {
             if (interrupt_requested()) {
