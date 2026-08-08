@@ -31,7 +31,6 @@
 
 namespace {
 
-using cch::tests::count_occurrences;
 using cch::tests::shell_quote;
 
 struct CommandResult {
@@ -269,60 +268,52 @@ TEST_CASE(
         workspace,
         {"--session", missing_session.string(),
          "@" + (workspace.path() / "missing.png").string()});
-    CHECK(missing.exit_code == 2);
+    CHECK(missing.exit_code == 1);
     CHECK(missing.stderr_text.find("initial file not found") != std::string::npos);
     std::error_code exists_error;
     CHECK_FALSE(std::filesystem::exists(missing_session, exists_error));
     CHECK_FALSE(exists_error);
 }
 
-TEST_CASE("CLI one-shot prints transcript and writes session through the fake seam", "[cli][u6]") {
+TEST_CASE("CLI print mode prints only the final assistant text and writes the session", "[cli][u6]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "one-shot.jsonl";
     auto result = run_in_workspace(workspace, {"--session", session.string(), "hello"});
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("[model-request]") != std::string::npos);
-    CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
-    CHECK(count_occurrences(result.stdout_text, "fake: hello") == 1);
-    CHECK(result.stdout_text.find("[completed]") != std::string::npos);
+    CHECK(result.stdout_text == "fake: hello\n");
+    CHECK(result.stderr_text.empty());
     CHECK(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI text one-shot displays /help without invoking the model", "[cli][commands]") {
+TEST_CASE("CLI print mode has no slash commands and sends /help to the model", "[cli][commands]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "help-one-shot.jsonl";
     auto result = run_in_workspace(workspace, {"--session", session.string(), "/help"});
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("Available commands:") != std::string::npos);
-    CHECK(result.stdout_text.find("/commands") != std::string::npos);
-    CHECK(result.stdout_text.find("/help [command]") != std::string::npos);
-    CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
+    CHECK(result.stdout_text == "fake: /help\n");
+    CHECK(result.stderr_text.empty());
 }
 
-TEST_CASE("CLI text one-shot unknown /help target does not invoke the model", "[cli][commands]") {
+TEST_CASE("CLI print mode passes unknown slash text through as an ordinary prompt", "[cli][commands]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "help-unknown.jsonl";
     auto result = run_in_workspace(
         workspace, {"--session", session.string(), "/help missing"});
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("Unknown command: /missing") != std::string::npos);
-    CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
-    CHECK(result.stdout_text.find("[assistant]") == std::string::npos);
+    CHECK(result.stdout_text == "fake: /help missing\n");
 }
 
-TEST_CASE("CLI text one-shot dispatches /commands as /help", "[cli][commands][issue64]") {
+TEST_CASE("CLI print mode sends /commands to the model like any prompt", "[cli][commands][issue64]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "commands.jsonl";
     auto result = run_in_workspace(
         workspace, {"--print", "--session", session.string(), "/commands"});
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("Available commands:") != std::string::npos);
-    CHECK(result.stdout_text.find("Alias for /help") != std::string::npos);
-    CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
+    CHECK(result.stdout_text == "fake: /commands\n");
 }
 
 TEST_CASE("CLI text one-shot sends unmatched slash input to the model", "[cli][commands]") {
@@ -331,8 +322,7 @@ TEST_CASE("CLI text one-shot sends unmatched slash input to the model", "[cli][c
     auto result = run_in_workspace(workspace, {"--session", session.string(), "/missing"});
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("fake: /missing") != std::string::npos);
-    CHECK(result.stdout_text.find("Unknown command") == std::string::npos);
+    CHECK(result.stdout_text == "fake: /missing\n");
 }
 
 TEST_CASE("CLI text one-shot treats user bash syntax as an ordinary prompt", "[cli][commands][user-bash][issue64]") {
@@ -353,28 +343,26 @@ TEST_CASE("CLI text one-shot treats user bash syntax as an ordinary prompt", "[c
     CHECK(double_bang.stdout_text.find("fake: !!echo hidden") != std::string::npos);
 }
 
-TEST_CASE("CLI non-TTY /clear emits no ANSI and does not invoke the model", "[cli][commands][issue64]") {
+TEST_CASE("CLI print mode sends /clear to the model", "[cli][commands][issue64]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "clear-one-shot.jsonl";
     auto result = run_in_workspace(workspace, {"--session", session.string(), "/clear"});
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.empty());
-    CHECK(result.stdout_text.empty());
-    CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
+    CHECK(result.stdout_text == "fake: /clear\n");
 }
 
-TEST_CASE("CLI text one-shot /exit displays shutdown text", "[cli][commands]") {
+TEST_CASE("CLI print mode sends /exit to the model", "[cli][commands]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "exit-one-shot.jsonl";
     auto result = run_in_workspace(workspace, {"--session", session.string(), "/exit"});
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("Shutting down.") != std::string::npos);
-    CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
+    CHECK(result.stdout_text == "fake: /exit\n");
 }
 
-TEST_CASE("CLI text tool flow renders subscription events without duplicate presentation", "[cli][presentation]") {
+TEST_CASE("CLI print mode outputs only the final text after a tool flow", "[cli][presentation]") {
     cch::tests::TempWorkspace workspace;
     std::ofstream(workspace.path() / "note.txt") << "subscription text";
     auto session = workspace.path() / "text-tool-flow.jsonl";
@@ -382,10 +370,8 @@ TEST_CASE("CLI text tool flow renders subscription events without duplicate pres
         workspace, {"--session", session.string(), "read note.txt"});
 
     REQUIRE(result.exit_code == 0);
-    CHECK(count_occurrences(result.stdout_text, "[tool-call] read#fake-read-1") == 1);
-    CHECK(count_occurrences(result.stdout_text, "[tool-success] fake-read-1") == 1);
-    CHECK(result.stdout_text.find("[assistant] fake observed: subscription text") != std::string::npos);
-    CHECK(count_occurrences(result.stdout_text, "fake observed: subscription text") == 1);
+    CHECK(result.stdout_text == "fake observed: subscription text\n");
+    CHECK(result.stderr_text.empty());
     CHECK(std::filesystem::exists(session));
 }
 
@@ -398,9 +384,7 @@ TEST_CASE("CLI bash tool is always available under the fixed tool set", "[cli][u
     REQUIRE(result.exit_code == 0);
     // The model-requested bash tool is registered without any --enable-bash
     // opt-in (pi); the scripted fake's bash request executes in the workspace
-    // and its result reaches the model (exit_code=0 with the command output).
-    CHECK(count_occurrences(result.stdout_text, "[tool-call] bash#fake-bash-1") == 1);
-    CHECK(count_occurrences(result.stdout_text, "[tool-success] fake-bash-1") == 1);
+    // and its result reaches the model through the final assistant text.
     CHECK(result.stdout_text.find("unknown tool: bash") == std::string::npos);
     CHECK(result.stdout_text.find("bash is disabled") == std::string::npos);
     CHECK(result.stdout_text.find("exit_code=0") != std::string::npos);
@@ -500,7 +484,7 @@ TEST_CASE("CLI non-TTY stdin becomes one print prompt", "[cli][selection][issue6
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("[assistant] fake: one\ntwo") != std::string::npos);
+    CHECK(result.stdout_text == "fake: one\ntwo\n");
 }
 
 TEST_CASE("CLI resume appends to an existing redacted session", "[cli][u6]") {
@@ -513,7 +497,7 @@ TEST_CASE("CLI resume appends to an existing redacted session", "[cli][u6]") {
     auto second = run_in_workspace(
         workspace, {"--resume", session.string(), "second"});
     REQUIRE(second.exit_code == 0);
-    CHECK(second.stdout_text.find("[assistant] fake: second") != std::string::npos);
+    CHECK(second.stdout_text == "fake: second\n");
 }
 
 TEST_CASE("CLI resume uses session workspace when the launch directory differs", "[cli][u6]") {
@@ -546,7 +530,7 @@ TEST_CASE("CLI rejects session and resume together before model request", "[cli]
     CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
 }
 
-TEST_CASE("CLI empty non-TTY input fails before session creation", "[cli][selection][issue64]") {
+TEST_CASE("CLI print mode with no prompt prints nothing and exits 0", "[cli][selection][issue64]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "empty-print.jsonl";
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
@@ -554,10 +538,12 @@ TEST_CASE("CLI empty non-TTY input fails before session creation", "[cli][select
         .cwd = workspace.path(),
     });
 
-    REQUIRE(result.exit_code == 2);
+    // pi: no prompt-required guard; the session is still created, nothing is
+    // printed, and the run exits 0.
+    REQUIRE(result.exit_code == 0);
     CHECK(result.stdout_text.empty());
-    CHECK(result.stderr_text.find("prompt is required") != std::string::npos);
-    CHECK_FALSE(std::filesystem::exists(session));
+    CHECK(result.stderr_text.empty());
+    CHECK(std::filesystem::exists(session));
 }
 
 TEST_CASE("CLI blocks existing session path without resume before model request", "[cli][u6]") {
@@ -567,10 +553,10 @@ TEST_CASE("CLI blocks existing session path without resume before model request"
     auto result = run_in_workspace(
         workspace, {"--session", session.string(), "hello"});
 
-    REQUIRE(result.exit_code == 2);
+    REQUIRE(result.exit_code == 1);
     CHECK(result.stderr_text.find("could not create session") != std::string::npos);
     CHECK(result.stderr_text.find("already exists") != std::string::npos);
-    CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
+    CHECK(result.stdout_text.empty());
 }
 
 TEST_CASE("CLI real-provider mode reports missing API key as a terminal auth outcome", "[cli][u6][issue338]") {
@@ -583,12 +569,12 @@ TEST_CASE("CLI real-provider mode reports missing API key as a terminal auth out
         " --session " + shell_quote(session) +
         " hello");
 
-    REQUIRE(result.exit_code == 0);
+    REQUIRE(result.exit_code == 1);
     // Nothing resolves as configured: the Agent holds pi's unknown
-    // kDefaultModel and fails through normal provider lookup (T04).
-    CHECK(result.stdout_text.find("Unknown provider: unknown") != std::string::npos);
-    CHECK(result.stdout_text.find("[model-request]") != std::string::npos);
-    CHECK(result.stdout_text.find("[completed]") != std::string::npos);
+    // kDefaultModel and fails through normal provider lookup (T04); the
+    // terminal outcome's errorMessage reaches stderr with exit 1.
+    CHECK(result.stdout_text.empty());
+    CHECK(result.stderr_text.find("Unknown provider: unknown") != std::string::npos);
 }
 
 TEST_CASE("CLI Kimi path reports missing KIMI_API_KEY through the preflight re-auth guidance", "[cli][kimi][u3][issue338][issue360]") {
@@ -604,7 +590,7 @@ TEST_CASE("CLI Kimi path reports missing KIMI_API_KEY through the preflight re-a
     // T11 preflight (pi `prompt()` hasConfiguredAuth check): a real model
     // whose provider resolves no auth fails the prompt before any stream with
     // pi's verbatim OAuth re-auth guidance (kimi-coding is OAuth-typed).
-    REQUIRE(result.exit_code != 0);
+    REQUIRE(result.exit_code == 1);
     CHECK(result.output.find("loop failed: Authentication failed for \"kimi-coding\"") !=
           std::string::npos);
     CHECK(result.output.find("Run '/login kimi-coding' to re-authenticate.") !=
@@ -628,11 +614,11 @@ TEST_CASE("CLI terminal auth failure after malformed settings keeps the warning 
         " --session " + shell_quote(session) +
         " hello");
 
-    REQUIRE(result.exit_code == 0);
+    REQUIRE(result.exit_code == 1);
     // Nothing resolves as configured: the Agent holds kDefaultModel and the
-    // terminal auth outcome names the unknown provider (T04).
-    CHECK(result.stdout_text.find("[error] Unknown provider: unknown") != std::string::npos);
-    CHECK(result.stdout_text.find("[completed]") != std::string::npos);
+    // terminal auth outcome names the unknown provider (T04) on stderr.
+    CHECK(result.stdout_text.empty());
+    CHECK(result.stderr_text.find("Unknown provider: unknown") != std::string::npos);
     CHECK(result.stderr_text.find("could not load global settings") != std::string::npos);
     CHECK(std::filesystem::exists(session));
 }
@@ -931,7 +917,7 @@ TEST_CASE("CLI text mode shows malformed project resource diagnostics on stderr"
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.find("[skill:warn] invalid_metadata") != std::string::npos);
     CHECK(result.stderr_text.find("[template:warn] parse_failed") != std::string::npos);
-    CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
+    CHECK(result.stdout_text == "fake: hello\n");
 }
 
 TEST_CASE("CLI applies settings.json model when CLI omits --model", "[cli][settings]") {
@@ -1029,7 +1015,7 @@ TEST_CASE("CLI resume with explicit model override reports diagnostic and uses o
 
     REQUIRE(second.exit_code == 0);
     CHECK(second.stderr_text.find("resume_provider_override") != std::string::npos);
-    CHECK(second.stdout_text.find("[assistant] fake: second") != std::string::npos);
+    CHECK(second.stdout_text == "fake: second\n");
 }
 
 TEST_CASE("CLI resume without override retains stored provider and model", "[cli][provider-resolution]") {
@@ -1052,7 +1038,7 @@ TEST_CASE("CLI resume without override retains stored provider and model", "[cli
 
     REQUIRE(second.exit_code == 0);
     CHECK(second.stderr_text.find("resume_provider_override") == std::string::npos);
-    CHECK(second.stdout_text.find("[assistant] fake: second") != std::string::npos);
+    CHECK(second.stdout_text == "fake: second\n");
 }
 
 TEST_CASE("CLI resume falls back with a diagnostic when the stored model no longer resolves", "[cli][resume][issue346]") {
@@ -1071,12 +1057,12 @@ TEST_CASE("CLI resume falls back with a diagnostic when the stored model no long
     })");
     auto session = workspace.path() / "resume-unresolved.jsonl";
 
-    // Create a session whose model_change records deepseek/deepseek-v4-flash
-    // without streaming (a frontend command never invokes the model).
+    // Create a session that records deepseek/deepseek-v4-flash without
+    // streaming: a no-prompt print run still creates the session (pi).
     auto first = run_command_split(
         "cd " + shell_quote(workspace.path()) + " && HOME=" + shell_quote(home.path()) + " " + bin() +
         " --session " + shell_quote(session) +
-        " --model deepseek-v4-flash /help");
+        " --model deepseek-v4-flash");
     REQUIRE(first.exit_code == 0);
 
     // Remove the configured model, then resume: the stored identity no longer
@@ -1084,7 +1070,7 @@ TEST_CASE("CLI resume falls back with a diagnostic when the stored model no long
     std::filesystem::remove(models_path);
     auto second = run_command_split(
         "cd " + shell_quote(workspace.path()) + " && HOME=" + shell_quote(home.path()) + " " + bin() +
-        " --resume " + shell_quote(session) + " /help");
+        " --resume " + shell_quote(session));
 
     REQUIRE(second.exit_code == 0);
     CHECK(second.stderr_text.find("resume_model_unresolved") != std::string::npos);
@@ -1114,30 +1100,35 @@ TEST_CASE("CLI rejects --api-key without an explicit model", "[cli][api-key][iss
     cch::tests::TempWorkspace workspace;
     auto result = run_command_split(
         "cd " + shell_quote(workspace.path()) + " && " + bin() + " --api-key sk-nomodel hello");
-    REQUIRE(result.exit_code == 2);
+    REQUIRE(result.exit_code == 1);
     CHECK(
         result.stderr_text.find("--api-key requires a model") != std::string::npos);
 }
 
-TEST_CASE("CLI text command is resolved by the adapter and does not reach AgentSession", "[cli][commands]") {
+TEST_CASE("CLI print mode slash text reaches AgentSession and the session file", "[cli][commands]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "command-adapter.jsonl";
     auto result = run_in_workspace(workspace, {"--session", session.string(), "/help"});
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("Available commands:") != std::string::npos);
-    CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
+    CHECK(result.stdout_text == "fake: /help\n");
 
     const auto content = read_file(session);
     const auto lines = non_empty_lines(content);
-    REQUIRE(lines.size() >= 1);
+    REQUIRE(lines.size() >= 3);
     auto header = parse_json_line(lines.front());
     CHECK(json_string_at(as_object(header), "type") == "session");
 
+    // The slash text is an ordinary prompt: the session records the user
+    // message and the assistant reply.
+    bool saw_message = false;
     for (std::size_t i = 1; i < lines.size(); ++i) {
         auto record = parse_json_line(lines[i]);
-        CHECK(json_string_at(as_object(record), "type") != "message");
+        if (json_string_at(as_object(record), "type") == "message") {
+            saw_message = true;
+        }
     }
+    CHECK(saw_message);
 }
 
 TEST_CASE("CLI default creation stores the session under the workspace-keyed agent config directory", "[cli][default-session]") {
@@ -1153,7 +1144,7 @@ TEST_CASE("CLI default creation stores the session under the workspace-keyed age
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
+    CHECK(result.stdout_text == "fake: hello\n");
 
     const auto created = require_single_automatic_session(agent_dir / "sessions", canonical_workspace);
     CHECK(json_string_at(created.header, "provider") == "fake");
@@ -1223,7 +1214,7 @@ TEST_CASE("CLI piped print propagates the same default persisted target", "[cli]
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
+    CHECK(result.stdout_text == "fake: hello\n");
     require_single_automatic_session(agent_dir / "sessions", canonical_workspace);
 }
 
@@ -1375,13 +1366,12 @@ TEST_CASE("CLI --no-session runs a text prompt without publishing session state"
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("[model-request]") != std::string::npos);
-    CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
-    CHECK(result.stdout_text.find("[completed]") != std::string::npos);
+    CHECK(result.stdout_text == "fake: hello\n");
+    CHECK(result.stderr_text.empty());
     require_no_session_filesystem_state(agent_dir, workspace.path());
 }
 
-TEST_CASE("CLI --no-session command reports the in-memory target", "[cli][no-session][issue64]") {
+TEST_CASE("CLI --no-session sends /session to the model as an ordinary prompt", "[cli][no-session][issue64]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
@@ -1393,13 +1383,11 @@ TEST_CASE("CLI --no-session command reports the in-memory target", "[cli][no-ses
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
-    // /session names the in-memory state instead of an ambiguous empty path.
-    CHECK(result.stdout_text.find("File: In-memory") != std::string::npos);
+    CHECK(result.stdout_text == "fake: /session\n");
     require_no_session_filesystem_state(agent_dir, workspace.path());
 }
 
-TEST_CASE("CLI /session shows the persisted file for a default session", "[cli][no-session]") {
+TEST_CASE("CLI print mode sends /session to the model under default session storage", "[cli][no-session]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
@@ -1412,10 +1400,8 @@ TEST_CASE("CLI /session shows the persisted file for a default session", "[cli][
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
-    const auto created = require_single_automatic_session(agent_dir / "sessions", canonical_workspace);
-    CHECK(result.stdout_text.find("File: " + created.path.string()) != std::string::npos);
-    CHECK(result.stdout_text.find("In-memory") == std::string::npos);
+    CHECK(result.stdout_text == "fake: /session\n");
+    require_single_automatic_session(agent_dir / "sessions", canonical_workspace);
 }
 
 TEST_CASE("CLI rejects --no-session combined with explicit create or resume before model work", "[cli][no-session]") {
@@ -1463,7 +1449,7 @@ TEST_CASE("CLI --no-session does not consult default storage", "[cli][no-session
     // In-memory operation is explicit, so unusable default storage is never
     // inspected and cannot fail or redirect the run.
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
+    CHECK(result.stdout_text == "fake: hello\n");
     CHECK_FALSE(std::filesystem::exists(workspace.path() / ".cpp-harness" / "sessions"));
 }
 
@@ -1480,9 +1466,9 @@ TEST_CASE("CLI --no-session preserves tool execution and events", "[cli][no-sess
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(count_occurrences(result.stdout_text, "[tool-call] read#fake-read-1") == 1);
-    CHECK(count_occurrences(result.stdout_text, "[tool-success] fake-read-1") == 1);
-    CHECK(result.stdout_text.find("[assistant] fake observed: in-memory tool text") != std::string::npos);
+    // Print mode presents only the final assistant text; the tool execution
+    // still happened (the observation reached the final response).
+    CHECK(result.stdout_text == "fake observed: in-memory tool text\n");
     require_no_session_filesystem_state(agent_dir, workspace.path());
 }
 
@@ -1517,7 +1503,7 @@ TEST_CASE("CLI --session-dir redirects automatic storage for one run", "[cli][se
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
+    CHECK(result.stdout_text == "fake: hello\n");
 
     const auto created = require_single_session_in_directory(override_dir, canonical_workspace);
     CHECK(json_string_at(created.header, "provider") == "fake");
@@ -1661,7 +1647,7 @@ TEST_CASE("CLI --no-session ignores session directory overrides and publishes no
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("[assistant] fake: hello") != std::string::npos);
+    CHECK(result.stdout_text == "fake: hello\n");
     CHECK_FALSE(std::filesystem::exists(override_dir));
     CHECK(jsonl_files_under(agent_dir).empty());
     CHECK(jsonl_files_under(workspace.path()).empty());

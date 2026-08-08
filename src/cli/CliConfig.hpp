@@ -70,7 +70,9 @@ struct CliConfig {
     std::optional<std::string> system_prompt;
     std::vector<std::string> append_system_prompt;
     std::vector<std::string> file_arguments;
-    std::string prompt;
+    /// Positional messages in CLI order (pi `parsed.messages`): the first
+    /// merges into the initial prompt, the rest prompt sequentially.
+    std::vector<std::string> messages;
     std::string help_text;
 };
 

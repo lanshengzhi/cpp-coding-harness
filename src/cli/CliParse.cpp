@@ -3,7 +3,6 @@
 #include <CLI/CLI.hpp>
 
 #include <cctype>
-#include <sstream>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -19,17 +18,6 @@ constexpr std::string_view kProjectVersion = CCH_PROJECT_VERSION;
 
 cch::util::Error cli_error(std::string message) {
     return cch::util::make_error(cch::util::ErrorCode::Validation, message, message);
-}
-
-std::string join_prompt(const std::vector<std::string>& parts) {
-    std::ostringstream out;
-    for (std::size_t i = 0; i < parts.size(); ++i) {
-        if (i > 0) {
-            out << ' ';
-        }
-        out << parts[i];
-    }
-    return out.str();
 }
 
 std::string normalize_parse_error(const CLI::ParseError& error) {
@@ -416,7 +404,9 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
             prompt_text_parts.push_back(std::move(part));
         }
     }
-    config.prompt = join_prompt(prompt_text_parts);
+    // pi keeps every positional as its own message: the first merges into the
+    // initial prompt, the rest prompt sequentially in print mode.
+    config.messages = std::move(prompt_text_parts);
     return config;
 }
 

@@ -511,7 +511,9 @@ TEST_CASE("removed event and command contracts stay out of session ownership", "
     const auto factory_source = read_text(
         source_root / "src" / "coding_agent" / "runtime" / "SessionFactory.cpp");
     const auto cli_source = read_text(
-        source_root / "src" / "cli" / "OneShotCliFrontend.cpp");
+        source_root / "src" / "cli" / "PrintMode.cpp");
+    const auto interactive_source = read_text(
+        source_root / "src" / "coding_agent" / "tui" / "InteractiveMode.cpp");
 
     const std::vector<std::string> removed_event_types{
         std::string{"QueuedMessage"} + "StartEvent",
@@ -529,7 +531,25 @@ TEST_CASE("removed event and command contracts stay out of session ownership", "
     CHECK(runtime_header.find(registry_name) == std::string::npos);
     CHECK(factory_header.find(registry_name) == std::string::npos);
     CHECK(factory_source.find(registry_name) == std::string::npos);
-    CHECK(cli_source.find(registry_name) != std::string::npos);
+    // One-shot slash dispatch is deleted: print mode never carries the own
+    // slash registry; it lives only behind the interactive mode (pi: slash
+    // dispatch is interactive-only).
+    CHECK(cli_source.find(registry_name) == std::string::npos);
+    CHECK(interactive_source.find(registry_name) != std::string::npos);
+
+    // The event-stream text renderer is gone with the one-shot presentation
+    // seam (pi print mode prints only the final assistant text): the renderer
+    // seam, the text renderer, and the event printer leave no placeholder.
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "cli" / "CliRenderer.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "cli" / "TextCliRenderer.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "cli" / "TextCliRenderer.cpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "runtime" / "EventPrinter.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "runtime" / "EventPrinter.cpp"));
 
     // The SDK command/handler vocabulary is gone with the SDK itself; the
     // session handle and factory surfaces never carry it (the own slash

@@ -240,12 +240,10 @@ add_library(cch_coding_agent_runtime
     src/coding_agent/PromptTemplateLoader.cpp
     src/coding_agent/SkillFormatting.cpp
     src/coding_agent/runtime/AgentSessionRuntime.cpp
-    src/coding_agent/runtime/EventPrinter.cpp
     src/coding_agent/runtime/LocalUserShell.cpp
     src/coding_agent/runtime/SessionEventCommitment.cpp
     src/coding_agent/runtime/UserBashOutputAccumulator.cpp
-    src/cli/OneShotCliFrontend.cpp
-    src/cli/TextCliRenderer.cpp
+    src/cli/PrintMode.cpp
     src/coding_agent/runtime/SessionFactory.cpp
     src/coding_agent/runtime/SessionLifecycle.cpp
 )
@@ -350,7 +348,7 @@ if(CCH_BUILD_TESTS)
         tests/cli/CliSmokeTest.cpp
         tests/cli/CliParseTest.cpp
         tests/cli/FrontendSelectionTest.cpp
-        tests/cli/OneShotCliFrontendTest.cpp
+        tests/cli/PrintModeTest.cpp
         tests/cli/InitialPromptTest.cpp
         tests/coding_agent/BuiltinCommandsTest.cpp
         tests/coding_agent/CommandRegistryTest.cpp

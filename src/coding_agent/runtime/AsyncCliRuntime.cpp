@@ -2,8 +2,7 @@
 
 #include "cli/CliParse.hpp"
 #include "cli/InitialPrompt.hpp"
-#include "cli/OneShotCliFrontend.hpp"
-#include "cli/TextCliRenderer.hpp"
+#include "cli/PrintMode.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include <cch/coding_agent/AgentConfigDir.hpp>
@@ -13,6 +12,8 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/use_future.hpp>
 
+#include <algorithm>
+#include <cctype>
 #include <exception>
 #include <future>
 #include <iostream>
@@ -24,6 +25,9 @@
 namespace cch::cli {
 namespace {
 
+/// pi `readPipedStdin`: read all of piped stdin and trim it; empty (or
+/// whitespace-only) content is absent and contributes nothing to the initial
+/// message merge.
 [[nodiscard]] util::Expected<std::string> read_piped_input(
     std::istream& input,
     bool stdin_is_terminal) {
@@ -36,7 +40,13 @@ namespace {
             util::ErrorCode::Unknown,
             "could not read piped stdin"));
     }
-    return collected.str();
+    auto text = collected.str();
+    const auto not_space = [](unsigned char character) {
+        return !std::isspace(character);
+    };
+    text.erase(text.begin(), std::find_if(text.begin(), text.end(), not_space));
+    text.erase(std::find_if(text.rbegin(), text.rend(), not_space).base(), text.end());
+    return text;
 }
 
 void print_creation_error(
@@ -88,7 +98,7 @@ void print_session_diagnostics(
 
 [[nodiscard]] int run_native_tui(
     coding_agent::AgentSession& session,
-    PreparedInitialPrompt initial_prompt) {
+    InitialMessageResult initial) {
     cch::tui::ProcessTerminal terminal;
     boost::asio::io_context io;
     auto future = boost::asio::co_spawn(
@@ -98,12 +108,12 @@ void print_session_diagnostics(
             terminal,
             coding_agent::tui::InteractiveModeConfig{
                 .agent_config_directory = coding_agent::agent_config_dir(),
-                .initial_prompt = initial_prompt.text.empty()
+                .initial_prompt = initial.initial_message.empty()
                     ? std::nullopt
-                    : std::optional<std::string>{std::move(initial_prompt.text)},
+                    : std::optional<std::string>{std::move(initial.initial_message)},
                 .initial_prompt_options = coding_agent::PromptOptions{
                     .expand_prompt_templates = true,
-                    .images = std::move(initial_prompt.images),
+                    .images = std::move(initial.initial_images),
                 },
             }),
         boost::asio::use_future);
@@ -117,14 +127,14 @@ void print_session_diagnostics(
                 std::cerr << ": " << result.error().detail;
             }
             std::cerr << '\n';
-            return 2;
+            return 1;
         }
     } catch (const std::exception& error) {
         std::cerr << "Native TUI failed: " << error.what() << '\n';
-        return 2;
+        return 1;
     } catch (...) {
         std::cerr << "Native TUI failed: unknown exception\n";
-        return 2;
+        return 1;
     }
     return 0;
 }
@@ -137,33 +147,33 @@ void print_session_diagnostics(
     CliStreams streams,
     FrontendEnvironment environment,
     std::shared_ptr<ai::Models> models) {
-    auto initial_prompt = prepare_initial_prompt(
-        config.prompt,
-        config.file_arguments,
-        config.workspace);
-    if (!initial_prompt) {
-        streams.error << "could not prepare initial prompt: "
-                      << initial_prompt.error().message;
-        if (!initial_prompt.error().detail.empty() &&
-            initial_prompt.error().detail != initial_prompt.error().message) {
-            streams.error << ": " << initial_prompt.error().detail;
-        }
-        streams.error << '\n';
-        return 2;
+    // pi `readPipedStdin`: piped stdin is trimmed and only present when it
+    // has content; a TTY stdin contributes nothing.
+    auto piped_input = read_piped_input(
+        streams.input, environment.stdin_is_terminal);
+    if (!piped_input) {
+        streams.error << piped_input.error().message << '\n';
+        return 1;
     }
 
-    if (auto piped_input = read_piped_input(
-            streams.input, environment.stdin_is_terminal);
-        !piped_input) {
-        streams.error << piped_input.error().message << '\n';
-        return 2;
-    } else {
-        initial_prompt->text.insert(0, std::move(*piped_input));
-    }
-    if (frontend == Frontend::Print &&
-        initial_prompt->text.empty() && initial_prompt->images.empty()) {
-        streams.error << "prompt is required for non-interactive output\n";
-        return 2;
+    // pi `prepareInitialMessage` + `buildInitialMessage`: piped stdin, @file
+    // text, and the first positional merge into the initial prompt with no
+    // separator; remaining positionals prompt sequentially afterwards.
+    auto initial = build_initial_message(InitialMessageInput{
+        .messages = config.messages,
+        .file_arguments = config.file_arguments,
+        .working_directory = config.workspace,
+        .stdin_content = std::move(*piped_input),
+    });
+    if (!initial) {
+        streams.error << "could not prepare initial prompt: "
+                      << initial.error().message;
+        if (!initial.error().detail.empty() &&
+            initial.error().detail != initial.error().message) {
+            streams.error << ": " << initial.error().detail;
+        }
+        streams.error << '\n';
+        return 1;
     }
 
     coding_agent::runtime::AgentSessionCreationRequest request;
@@ -189,34 +199,39 @@ void print_session_diagnostics(
         : coding_agent::create_agent_session(std::move(request));
     if (!created) {
         print_creation_error(config, streams.error, created.error());
-        return 2;
+        return 1;
     }
     print_session_diagnostics(streams.error, created->diagnostics);
 
     auto& session = *created->session;
     if (frontend == Frontend::Interactive) {
-        return run_native_tui(session, std::move(*initial_prompt));
+        // The interactive spine takes one initial prompt; the remaining
+        // positionals join the space-separated initial prompt exactly like
+        // the pre-print-alignment entry chain.
+        std::string interactive_text = initial->initial_message;
+        for (const auto& message : initial->remaining_messages) {
+            interactive_text += ' ';
+            interactive_text += message;
+        }
+        initial->initial_message = std::move(interactive_text);
+        initial->remaining_messages.clear();
+        return run_native_tui(session, std::move(*initial));
     }
 
-    OneShotCliFrontendConfig frontend_config{
-        .output = streams.output,
-        .error = streams.error,
-        .prompt = std::move(initial_prompt->text),
-    };
-    TextCliRenderer renderer{
-        streams.output,
-        streams.error,
-        environment.stdin_is_terminal && environment.stdout_is_terminal};
-    OneShotCliFrontend one_shot{
+    return run_print_mode(
         session,
-        renderer,
-        created->metadata,
-        std::move(frontend_config),
-        coding_agent::PromptOptions{
-            .expand_prompt_templates = true,
-            .images = std::move(initial_prompt->images),
-        }};
-    return one_shot_exit_code_for(one_shot.run());
+        PrintModeConfig{
+            .output = streams.output,
+            .error = streams.error,
+        },
+        PrintModePlan{
+            .initial_message = std::move(initial->initial_message),
+            .messages = std::move(initial->remaining_messages),
+            .initial_prompt_options = coding_agent::PromptOptions{
+                .expand_prompt_templates = true,
+                .images = std::move(initial->initial_images),
+            },
+        });
 }
 
 [[nodiscard]] int run_cli_entry(
@@ -226,10 +241,11 @@ void print_session_diagnostics(
     CliRuntimeOptions options) {
     auto parsed = parse_args(argc, argv);
     if (!parsed) {
-        // Parse errors carry the full help text in detail.
+        // Parse errors carry the full help text in detail. Unified exit
+        // codes: usage errors exit 1 like pi.
         const auto& error = parsed.error();
         streams.error << (error.detail.empty() ? error.message : error.detail) << '\n';
-        return 2;
+        return 1;
     }
     CliConfig config = std::move(*parsed);
     if (config.help) {
@@ -251,7 +267,7 @@ void print_session_diagnostics(
             streams.error << ": " << error.detail;
         }
         streams.error << '\n';
-        return 2;
+        return 1;
     } else {
         return run_async_cli(
             config, *frontend, streams, environment, std::move(options.models));

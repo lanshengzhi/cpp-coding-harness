@@ -215,7 +215,8 @@ TEST_CASE("parse_args keeps --mode text as the pi-default spelling", "[cli][pars
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
-    CHECK(parsed->prompt == "hello");
+    REQUIRE(parsed->messages.size() == 1);
+    CHECK(parsed->messages[0] == "hello");
 }
 
 TEST_CASE("parse_args normalizes unknown options", "[cli][parse]") {
@@ -280,7 +281,11 @@ TEST_CASE("parse_args treats prompt-template as one repeatable path", "[cli][par
     REQUIRE(parsed->prompt_template_paths.size() == 2);
     CHECK(parsed->prompt_template_paths[0] == "custom.md");
     CHECK(parsed->prompt_template_paths[1] == "more.md");
-    CHECK(parsed->prompt == "/custom Ada");
+    // pi keeps every positional as its own message: the first merges into
+    // the initial prompt, the rest prompt sequentially in print mode.
+    REQUIRE(parsed->messages.size() == 2);
+    CHECK(parsed->messages[0] == "/custom");
+    CHECK(parsed->messages[1] == "Ada");
 }
 
 TEST_CASE("parse_args accepts the plain text default", "[cli][parse]") {
@@ -288,7 +293,8 @@ TEST_CASE("parse_args accepts the plain text default", "[cli][parse]") {
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
-    CHECK(parsed->prompt == "hello");
+    REQUIRE(parsed->messages.size() == 1);
+    CHECK(parsed->messages[0] == "hello");
 }
 
 TEST_CASE("parse_args records print intent without requiring positional input", "[cli][parse][issue64]") {
@@ -297,7 +303,7 @@ TEST_CASE("parse_args records print intent without requiring positional input", 
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
     CHECK(parsed->print);
-    CHECK(parsed->prompt.empty());
+    CHECK(parsed->messages.empty());
 }
 
 TEST_CASE("parse_args retains positional file arguments separately from prompt text", "[cli][parse][issue63]") {
@@ -312,7 +318,9 @@ TEST_CASE("parse_args retains positional file arguments separately from prompt t
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
 
     REQUIRE(parsed);
-    CHECK(parsed->prompt == "describe these");
+    REQUIRE(parsed->messages.size() == 2);
+    CHECK(parsed->messages[0] == "describe");
+    CHECK(parsed->messages[1] == "these");
     REQUIRE(parsed->file_arguments.size() == 2);
     CHECK(parsed->file_arguments[0] == "first.png");
     CHECK(parsed->file_arguments[1] == "second.webp");
@@ -324,7 +332,7 @@ TEST_CASE("parse_args treats a lone positional file as initial input", "[cli][pa
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
 
     REQUIRE(parsed);
-    CHECK(parsed->prompt.empty());
+    CHECK(parsed->messages.empty());
     REQUIRE(parsed->file_arguments.size() == 1);
     CHECK(parsed->file_arguments[0] == "only.gif");
 }
@@ -424,7 +432,8 @@ TEST_CASE("parse_args carries the raw pi session-family flags", "[cli][parse][se
     CHECK(*parsed->fork == "old.jsonl");
     REQUIRE(parsed->name.has_value());
     CHECK(*parsed->name == "my session");
-    CHECK(parsed->prompt == "hello");
+    REQUIRE(parsed->messages.size() == 1);
+    CHECK(parsed->messages[0] == "hello");
 }
 
 TEST_CASE("parse_args accepts pi's session-family shorts", "[cli][parse][session-target]") {
@@ -442,7 +451,8 @@ TEST_CASE("parse_args accepts pi's session-family shorts", "[cli][parse][session
         REQUIRE(parsed);
         REQUIRE(parsed->name.has_value());
         CHECK(*parsed->name == "named");
-        CHECK(parsed->prompt == "hello");
+        REQUIRE(parsed->messages.size() == 1);
+        CHECK(parsed->messages[0] == "hello");
     }
 }
 
@@ -587,7 +597,8 @@ TEST_CASE("parse_args records the pi prompt/theme/skill flags", "[cli][parse]") 
     CHECK(parsed->no_themes);
     CHECK(parsed->no_skills);
     CHECK(parsed->no_prompt_templates);
-    CHECK(parsed->prompt == "hello");
+    REQUIRE(parsed->messages.size() == 1);
+    CHECK(parsed->messages[0] == "hello");
 }
 
 TEST_CASE("parse_args accepts pi's multi-character shorts for the no-* flags", "[cli][parse]") {
@@ -623,7 +634,8 @@ TEST_CASE("parse_args accepts pi's -p and -v shorts", "[cli][parse]") {
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
         CHECK(parsed->print);
-        CHECK(parsed->prompt == "hello");
+        REQUIRE(parsed->messages.size() == 1);
+        CHECK(parsed->messages[0] == "hello");
     }
     {
         std::vector<std::string> args{"cpp-harness", "-v"};
@@ -682,7 +694,9 @@ TEST_CASE("parse_args treats tokens after -- as positionals verbatim", "[cli][pa
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
     CHECK_FALSE(parsed->print);
-    CHECK(parsed->prompt == "-p --print");
+    REQUIRE(parsed->messages.size() == 2);
+    CHECK(parsed->messages[0] == "-p");
+    CHECK(parsed->messages[1] == "--print");
 }
 
 TEST_CASE("parse_args exposes the CMake project version", "[cli][parse]") {

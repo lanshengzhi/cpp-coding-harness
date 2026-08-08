@@ -116,13 +116,12 @@ namespace {
     return bytes;
 }
 
-} // namespace
-
-util::Expected<PreparedInitialPrompt> prepare_initial_prompt(
-    std::string_view prompt,
+/// pi `processFileArguments`: process every `@file` argument into text
+/// references and image content, in order.
+[[nodiscard]] util::Expected<InitialMessageResult> process_file_arguments(
     const std::vector<std::string>& file_arguments,
     const std::filesystem::path& working_directory) {
-    PreparedInitialPrompt prepared;
+    InitialMessageResult processed;
     for (const auto& argument : file_arguments) {
         auto resolved = resolve_file_path(argument, working_directory);
         if (!resolved) return std::unexpected(std::move(resolved.error()));
@@ -133,17 +132,48 @@ util::Expected<PreparedInitialPrompt> prepare_initial_prompt(
 
         const auto mime_type = coding_agent::sniff_supported_image_mime_type(*bytes);
         if (!mime_type) {
-            prepared.text += text_file_reference(*resolved, *bytes);
+            processed.initial_message += text_file_reference(*resolved, *bytes);
             continue;
         }
 
-        auto processed = coding_agent::process_image_input(*bytes, *mime_type);
-        if (!processed) return std::unexpected(std::move(processed.error()));
-        prepared.text += image_file_reference(*resolved, *processed);
-        if (processed->image) prepared.images.push_back(std::move(*processed->image));
+        auto image_processed = coding_agent::process_image_input(*bytes, *mime_type);
+        if (!image_processed) return std::unexpected(std::move(image_processed.error()));
+        processed.initial_message += image_file_reference(*resolved, *image_processed);
+        if (image_processed->image) {
+            processed.initial_images.push_back(std::move(*image_processed->image));
+        }
     }
-    prepared.text += prompt;
-    return prepared;
+    return processed;
+}
+
+} // namespace
+
+util::Expected<InitialMessageResult> build_initial_message(
+    const InitialMessageInput& input) {
+    // pi `prepareInitialMessage` (main.ts): process the @file arguments first,
+    // then merge with pi `buildInitialMessage`.
+    InitialMessageResult result;
+    if (!input.file_arguments.empty()) {
+        auto processed = process_file_arguments(
+            input.file_arguments, input.working_directory);
+        if (!processed) return std::unexpected(std::move(processed.error()));
+        result = std::move(*processed);
+    }
+
+    // pi `buildInitialMessage`: piped stdin, @file text, and the first CLI
+    // message concatenated with no separator; the first message is consumed
+    // and the rest prompt sequentially afterwards.
+    std::string merged = std::move(result.initial_message);
+    if (!input.stdin_content.empty()) {
+        merged.insert(0, input.stdin_content);
+    }
+    if (!input.messages.empty()) {
+        merged += input.messages.front();
+        result.remaining_messages.assign(
+            input.messages.begin() + 1, input.messages.end());
+    }
+    result.initial_message = std::move(merged);
+    return result;
 }
 
 } // namespace cch::cli
