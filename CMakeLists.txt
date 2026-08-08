@@ -226,6 +226,7 @@ add_library(cch_coding_agent_runtime
     src/coding_agent/ImageInput.cpp
     src/cli/InitialPrompt.cpp
     src/coding_agent/CommandRegistry.cpp
+    src/coding_agent/SessionDiscovery.cpp
     src/coding_agent/SessionPathPolicy.cpp
     src/coding_agent/SettingsManager.cpp
     src/coding_agent/ProjectResourceLoader.cpp
@@ -244,6 +245,7 @@ add_library(cch_coding_agent_runtime
     src/coding_agent/runtime/SessionEventCommitment.cpp
     src/coding_agent/runtime/UserBashOutputAccumulator.cpp
     src/cli/PrintMode.cpp
+    src/cli/SessionFamily.cpp
     src/coding_agent/runtime/SessionFactory.cpp
     src/coding_agent/runtime/SessionLifecycle.cpp
 )
@@ -350,6 +352,8 @@ if(CCH_BUILD_TESTS)
         tests/cli/FrontendSelectionTest.cpp
         tests/cli/PrintModeTest.cpp
         tests/cli/InitialPromptTest.cpp
+        tests/cli/SessionFamilyCliTest.cpp
+        tests/coding_agent/SessionDiscoveryTest.cpp
         tests/coding_agent/BuiltinCommandsTest.cpp
         tests/coding_agent/CommandRegistryTest.cpp
         tests/coding_agent/ImageInputTest.cpp

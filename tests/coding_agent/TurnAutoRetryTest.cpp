@@ -227,7 +227,7 @@ struct RetrySessionUnderTest {
     client_ptr->responses = std::move(responses);
 
     tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file};
     options.workspace = paths.workspace.path();
     options.request_model = tests::scripted_request_model("sdk-host", "gpt-test");
     options.custom_tools = std::move(custom_tools);

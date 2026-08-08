@@ -26,6 +26,7 @@ struct WriteHeaderDto {
     std::string id;
     std::string timestamp;
     std::string cwd;
+    std::optional<std::string> parentSession;
     std::string provider;
     std::string model;
 };
@@ -41,6 +42,7 @@ struct ReadHeaderDto {
     std::optional<std::string> id;
     std::optional<std::string> timestamp;
     std::optional<std::string> cwd;
+    std::optional<std::string> parentSession;
 };
 
 // All entry DTOs declare fields in pi's exact wire order (pi builds entries
@@ -346,32 +348,45 @@ template <typename T>
 }
 
 [[nodiscard]] WriteHeaderDto to_dto(const SessionMetadata& metadata) {
-    return WriteHeaderDto{
+    WriteHeaderDto dto{
         "session",
         3,
         metadata.session_id,
         metadata.created_at,
         metadata.workspace.string(),
+        std::nullopt,
         metadata.provider,
         metadata.model,
     };
+    if (metadata.parent_session) {
+        dto.parentSession = metadata.parent_session->string();
+    }
+    return dto;
 }
 
 [[nodiscard]] SessionMetadata from_dto(const ReadHeaderDto& dto) {
     if (dto.type == "session") {
-        return SessionMetadata{
+        SessionMetadata metadata{
             dto.id.value_or(std::string{}),
             dto.timestamp.value_or(std::string{}),
             dto.cwd.value_or(std::string{}),
             dto.provider.value_or(std::string{}),
             dto.model.value_or(std::string{})};
+        if (dto.parentSession && !dto.parentSession->empty()) {
+            metadata.parent_session = *dto.parentSession;
+        }
+        return metadata;
     }
-    return SessionMetadata{
+    SessionMetadata metadata{
         dto.sessionId.value_or(std::string{}),
         dto.createdAt.value_or(std::string{}),
         dto.workspace.value_or(std::string{}),
         dto.provider.value_or(std::string{}),
         dto.model.value_or(std::string{})};
+    if (dto.parentSession && !dto.parentSession->empty()) {
+        metadata.parent_session = *dto.parentSession;
+    }
+    return metadata;
 }
 
 [[nodiscard]] MessageEntryDto to_dto(

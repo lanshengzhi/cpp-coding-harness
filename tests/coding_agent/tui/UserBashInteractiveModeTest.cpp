@@ -480,7 +480,7 @@ TEST_CASE(
     });
 
     tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::ExplicitNewSessionTarget{session_path};
+    options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{session_path};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
     auto created = coding_agent::create_agent_session(

@@ -147,7 +147,7 @@ constexpr std::string_view kKeyedReasoningProvider = R"({
 [[nodiscard]] coding_agent::runtime::AgentSessionCreationRequest cli_request(
     const Fixture& fixture) {
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.session_target = coding_agent::ExplicitNewSessionTarget{fixture.session_file};
+    request.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
     request.workspace = fixture.workspace.path();
     return request;
 }

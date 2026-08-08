@@ -3,9 +3,11 @@
 #include "cli/CliParse.hpp"
 #include "cli/InitialPrompt.hpp"
 #include "cli/PrintMode.hpp"
+#include "cli/SessionFamily.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include <cch/coding_agent/AgentConfigDir.hpp>
+#include <cch/coding_agent/Settings.hpp>
 #include <cch/tui/ProcessTerminal.hpp>
 
 #include <boost/asio/co_spawn.hpp>
@@ -15,8 +17,10 @@
 #include <algorithm>
 #include <cctype>
 #include <exception>
+#include <filesystem>
 #include <future>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -50,10 +54,10 @@ namespace {
 }
 
 void print_creation_error(
-    const CliConfig& config,
+    bool is_resume_target,
     std::ostream& error_stream,
     const util::Error& error) {
-    error_stream << (std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(config.session_target)
+    error_stream << (is_resume_target
                          ? "could not resume session: "
                          : "could not create session: ")
                  << error.message;
@@ -94,6 +98,17 @@ void print_session_diagnostics(
         }
         error_stream << '\n';
     }
+}
+
+/// pi main.ts session selection: the startup settings manager supplies the
+/// sessionDir chain value used during session-family resolution, exactly like
+/// pi's `startupSettingsManager.getSessionDir()`.
+[[nodiscard]] std::optional<std::string> startup_settings_session_dir(
+    const std::filesystem::path& workspace) {
+    auto settings = coding_agent::SettingsManager::create(
+        workspace, coding_agent::agent_config_dir(),
+        /* project_trusted */ false);
+    return settings.settings().session_dir;
 }
 
 [[nodiscard]] int run_native_tui(
@@ -147,6 +162,37 @@ void print_session_diagnostics(
     CliStreams streams,
     FrontendEnvironment environment,
     std::shared_ptr<ai::Models> models) {
+    // pi main.ts boot order: the session-family flag guards run before any
+    // session machinery, the cross-project fork prompt happens during session
+    // selection (before piped stdin is read), and the `--name` guard follows
+    // session selection.
+    if (auto guard = session_family_guard_error(config); guard) {
+        streams.error << *guard << '\n';
+        return 1;
+    }
+
+    auto assembly = assemble_session_target(
+        config,
+        startup_settings_session_dir(config.workspace),
+        streams.input,
+        // pi takes over stdout outside interactive mode (output-guard.ts), so
+        // the cross-project notice, fork prompt, and "Aborted." line land on
+        // stderr in print mode and never pollute the one-shot stdout.
+        frontend == Frontend::Interactive ? streams.output : streams.error,
+        streams.error);
+    if (!assembly) {
+        streams.error << assembly.error().message << '\n';
+        return 1;
+    }
+    if (assembly->aborted) {
+        // pi: the declined fork printed "Aborted." during session selection.
+        return 0;
+    }
+    if (auto name_guard = session_name_guard_error(config); name_guard) {
+        streams.error << *name_guard << '\n';
+        return 1;
+    }
+
     // pi `readPipedStdin`: piped stdin is trimmed and only present when it
     // has content; a TTY stdin contributes nothing.
     auto piped_input = read_piped_input(
@@ -180,13 +226,17 @@ void print_session_diagnostics(
     // The interactive Native TUI always receives its independent User Shell
     // (ADR 0026); the one-shot print path keeps ordinary-prompt semantics
     // for leading '!' text.
+    const bool is_resume_target =
+        std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(
+            assembly->target);
     request.provide_user_shell = frontend == Frontend::Interactive;
     request.project_trust_override = config.project_trust_override;
     request.disable_project_skills = config.no_skills;
     request.disable_prompt_templates = config.no_prompt_templates;
     request.prompt_template_paths = config.prompt_template_paths;
     request.workspace = config.workspace;
-    request.session_target = config.session_target;
+    request.session_target = std::move(assembly->target);
+    request.session_name = config.name;
     request.session_dir = config.session_dir;
     request.provider = config.provider;
     request.model = config.model;
@@ -198,7 +248,7 @@ void print_session_diagnostics(
               std::move(request), std::move(models))
         : coding_agent::create_agent_session(std::move(request));
     if (!created) {
-        print_creation_error(config, streams.error, created.error());
+        print_creation_error(is_resume_target, streams.error, created.error());
         return 1;
     }
     print_session_diagnostics(streams.error, created->diagnostics);

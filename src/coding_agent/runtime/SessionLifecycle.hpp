@@ -46,14 +46,18 @@ struct ExplicitNewPublication {
 /// Automatic publication under the Agent Config Directory, or directly inside
 /// an already-resolved CLI directory override. Path derivation and identity
 /// generation happen inside publish_session; the target carries intent only.
+/// An optional `--session-id` names the new session (pi warn-create).
 struct AutomaticPublication {
     std::filesystem::path workspace;
     std::optional<std::filesystem::path> directory_override;
+    std::optional<std::string> session_id;
 };
 
-/// In-memory publication without any filesystem state.
+/// In-memory publication without any filesystem state. An optional
+/// `--session-id` names the session (pi inMemory + `--session-id`).
 struct InMemoryPublication {
     std::filesystem::path workspace;
+    std::optional<std::string> session_id;
 };
 
 /// Passive target intent for publishing one newly created Agent Session.
@@ -82,5 +86,18 @@ using NewSessionPublication = std::variant<
 /// prerequisites have succeeded.
 [[nodiscard]] util::Expected<OpenSession> publish_resume_session(
     const PreparedResumeTarget& target);
+
+/// pi `SessionManager.forkFrom`: create a new persisted session in the target
+/// directory (the effective session directory or the workspace-keyed default)
+/// that inherits the source session's full history. The new file carries a
+/// fresh header (new id, target cwd, `parentSession` = the resolved source
+/// path); the returned prepared target re-resolves the copied history exactly
+/// like a resume. Fails with pi's fork wording when the source is empty or
+/// invalid or carries no header.
+[[nodiscard]] util::Expected<PreparedResumeTarget> prepare_fork_target(
+    std::filesystem::path source_path,
+    std::filesystem::path target_workspace,
+    std::optional<std::filesystem::path> directory_override,
+    std::optional<std::string> session_id);
 
 } // namespace cch::coding_agent::runtime

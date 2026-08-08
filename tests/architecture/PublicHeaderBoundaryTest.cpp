@@ -250,15 +250,17 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
 
 TEST_CASE("session targets remain one passive variant with optional path results", "[architecture][session][sdk]") {
     static_assert(std::is_aggregate_v<coding_agent::DefaultPersistedSessionTarget>);
-    static_assert(std::is_aggregate_v<coding_agent::ExplicitNewSessionTarget>);
+    static_assert(std::is_aggregate_v<coding_agent::ExplicitOpenOrCreateSessionTarget>);
     static_assert(std::is_aggregate_v<coding_agent::ExplicitResumeSessionTarget>);
+    static_assert(std::is_aggregate_v<coding_agent::ForkSessionTarget>);
+    static_assert(std::is_aggregate_v<coding_agent::ContinueRecentSessionTarget>);
     static_assert(std::is_aggregate_v<coding_agent::InMemorySessionTarget>);
-    static_assert(std::variant_size_v<coding_agent::SessionTarget> == 4);
+    static_assert(std::variant_size_v<coding_agent::SessionTarget> == 6);
     static_assert(std::is_same_v<
                   std::variant_alternative_t<0, coding_agent::SessionTarget>,
                   coding_agent::DefaultPersistedSessionTarget>);
     static_assert(std::is_same_v<
-                  std::variant_alternative_t<3, coding_agent::SessionTarget>,
+                  std::variant_alternative_t<5, coding_agent::SessionTarget>,
                   coding_agent::InMemorySessionTarget>);
     static_assert(std::is_same_v<
                   decltype(coding_agent::CreateAgentSessionResult::session_path),

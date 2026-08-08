@@ -18,6 +18,9 @@ struct SessionMetadata {
     std::filesystem::path workspace;
     std::string provider;
     std::string model;
+    /// pi `parentSession?: string` — the absolute source session path for
+    /// forked sessions (absent on ordinary sessions).
+    std::optional<std::filesystem::path> parent_session{std::nullopt};
 };
 
 enum class SessionEntryKind {

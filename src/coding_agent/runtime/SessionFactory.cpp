@@ -11,6 +11,7 @@
 #include <cch/tools/ToolFactories.hpp>
 #include <cch/util/Error.hpp>
 #include "coding_agent/ProjectResourceLoader.hpp"
+#include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/prompt/PromptProcessor.hpp"
 #include "coding_agent/runtime/AgentSessionRuntime.hpp"
@@ -47,15 +48,22 @@ struct AutomaticNewSessionTarget {
     /// PI_CODING_AGENT_SESSION_DIR, then settings sessionDir). When absent
     /// the workspace-keyed Agent Config Directory default applies.
     std::optional<std::filesystem::path> directory_override;
+    /// pi `--session-id` warn-create: the new session's exact id.
+    std::optional<std::string> session_id;
 };
 
-struct NewSessionTarget {
+/// pi `SessionManager.open`: open-or-create at an exact path. The assembly
+/// resumes the file when it exists with content and creates a new session
+/// there otherwise.
+struct OpenOrCreateSessionTarget {
     std::filesystem::path session_path;
     std::filesystem::path workspace;
 };
 
 struct InMemoryNewSessionTarget {
     std::filesystem::path workspace;
+    /// pi `--session-id` + `--no-session`: the in-memory session's id.
+    std::optional<std::string> session_id;
 };
 
 struct ResumeSessionTarget {
@@ -64,11 +72,30 @@ struct ResumeSessionTarget {
     bool workspace_explicit{false};
 };
 
+/// pi `SessionManager.forkFrom`: the new session inherits the source's
+/// history and is published in the effective session directory.
+struct ForkTarget {
+    std::filesystem::path source_path;
+    std::optional<std::string> session_id;
+    std::optional<std::filesystem::path> directory_override;
+    std::filesystem::path workspace;
+};
+
+/// pi `SessionManager.continueRecent`: resume the most recent session in the
+/// effective session directory (cwd-filtered only when a custom override is
+/// in effect), or create a new persisted session when none exists.
+struct ContinueRecentTarget {
+    std::optional<std::filesystem::path> directory_override;
+    std::filesystem::path workspace;
+};
+
 using NormalizedSessionTarget = std::variant<
     AutomaticNewSessionTarget,
-    NewSessionTarget,
+    OpenOrCreateSessionTarget,
     InMemoryNewSessionTarget,
-    ResumeSessionTarget>;
+    ResumeSessionTarget,
+    ForkTarget,
+    ContinueRecentTarget>;
 
 struct AssemblyPlan {
     NormalizedSessionTarget target;
@@ -111,6 +138,9 @@ struct AssemblyPlan {
     /// Shell (ADR 0026). Set only by CLI normalization for the interactive
     /// frontend.
     bool provide_user_shell{false};
+    /// pi `--name`: the session display name appended as a `session_info`
+    /// entry after publication (pi appendSessionInfo).
+    std::optional<std::string> session_name;
 };
 
 [[nodiscard]] SessionDiagnostic make_diag(SessionDiagnostic::Severity severity,
@@ -313,6 +343,31 @@ void cleanup_factory_env(harness::AsyncExecutionEnv* env) {
         }
     }
     return value;
+}
+
+/// pi appendSessionInfo name sanitization: CR/LF runs become one space,
+/// then the result is trimmed.
+[[nodiscard]] std::string sanitize_session_name(const std::string& name) {
+    std::string result;
+    result.reserve(name.size());
+    bool pending_space = false;
+    for (const char character : name) {
+        if (character == '\r' || character == '\n') {
+            pending_space = true;
+            continue;
+        }
+        if (pending_space) {
+            result.push_back(' ');
+            pending_space = false;
+        }
+        result.push_back(character);
+    }
+    const auto not_space = [](unsigned char character) {
+        return character != ' ' && character != '\t';
+    };
+    result.erase(result.begin(), std::find_if(result.begin(), result.end(), not_space));
+    result.erase(std::find_if(result.rbegin(), result.rend(), not_space).base(), result.end());
+    return result;
 }
 
 /// Resolve a CLI `--model` pattern (with optional `--provider`) against the
@@ -566,28 +621,14 @@ void refresh_availability_sync(
     const std::optional<std::string>& flag_value,
     const std::optional<std::string>& settings_value,
     const std::filesystem::path& canonical_workspace) {
-    std::optional<std::string> value;
-    if (flag_value && !flag_value->empty()) {
-        value = flag_value;
+    std::optional<std::string> env_value;
+    if (const char* env = std::getenv("PI_CODING_AGENT_SESSION_DIR");
+        env != nullptr && env[0] != '\0') {
+        env_value = std::string{env};
     }
-    if (!value) {
-        if (const char* env_value = std::getenv("PI_CODING_AGENT_SESSION_DIR");
-            env_value != nullptr && env_value[0] != '\0') {
-            value = std::string{env_value};
-        }
-    }
-    if (!value && settings_value && !settings_value->empty()) {
-        value = settings_value;
-    }
-    if (!value) {
-        return std::optional<std::filesystem::path>{};
-    }
-    auto resolved = session_paths::resolve_session_dir_value(
-        *value, canonical_workspace, coding_agent::home_directory());
-    if (!resolved) {
-        return std::unexpected(resolved.error());
-    }
-    return std::optional<std::filesystem::path>{std::move(*resolved)};
+    return session_paths::resolve_effective_session_dir(
+        flag_value, env_value, settings_value, canonical_workspace,
+        coding_agent::home_directory());
 }
 
 struct SessionTargetNormalizationOptions {
@@ -606,7 +647,8 @@ struct SessionTargetNormalizationOptions {
     }
     options.workspace = std::move(*workspace);
 
-    if (std::holds_alternative<DefaultPersistedSessionTarget>(target)) {
+    if (const auto* default_target =
+            std::get_if<DefaultPersistedSessionTarget>(&target)) {
         std::optional<std::filesystem::path> directory_override;
         auto resolved = resolve_cli_session_dir_override(
             options.cli_session_dir,
@@ -619,11 +661,13 @@ struct SessionTargetNormalizationOptions {
         return NormalizedSessionTarget{AutomaticNewSessionTarget{
             .workspace = std::move(options.workspace),
             .directory_override = std::move(directory_override),
+            .session_id = default_target->session_id,
         }};
     }
-    if (auto* explicit_new = std::get_if<ExplicitNewSessionTarget>(&target)) {
-        return NormalizedSessionTarget{NewSessionTarget{
-            .session_path = std::move(explicit_new->path),
+    if (auto* open_or_create =
+            std::get_if<ExplicitOpenOrCreateSessionTarget>(&target)) {
+        return NormalizedSessionTarget{OpenOrCreateSessionTarget{
+            .session_path = std::move(open_or_create->path),
             .workspace = std::move(options.workspace),
         }};
     }
@@ -634,9 +678,42 @@ struct SessionTargetNormalizationOptions {
             .workspace_explicit = options.workspace_explicit,
         }};
     }
-    if (std::holds_alternative<InMemorySessionTarget>(target)) {
+    if (auto* fork = std::get_if<ForkSessionTarget>(&target)) {
+        std::optional<std::filesystem::path> directory_override;
+        auto resolved = resolve_cli_session_dir_override(
+            options.cli_session_dir,
+            options.settings_session_dir,
+            options.workspace);
+        if (!resolved) {
+            return std::unexpected(resolved.error());
+        }
+        directory_override = std::move(*resolved);
+        return NormalizedSessionTarget{ForkTarget{
+            .source_path = std::move(fork->source_path),
+            .session_id = std::move(fork->session_id),
+            .directory_override = std::move(directory_override),
+            .workspace = std::move(options.workspace),
+        }};
+    }
+    if (std::holds_alternative<ContinueRecentSessionTarget>(target)) {
+        std::optional<std::filesystem::path> directory_override;
+        auto resolved = resolve_cli_session_dir_override(
+            options.cli_session_dir,
+            options.settings_session_dir,
+            options.workspace);
+        if (!resolved) {
+            return std::unexpected(resolved.error());
+        }
+        directory_override = std::move(*resolved);
+        return NormalizedSessionTarget{ContinueRecentTarget{
+            .directory_override = std::move(directory_override),
+            .workspace = std::move(options.workspace),
+        }};
+    }
+    if (const auto* in_memory = std::get_if<InMemorySessionTarget>(&target)) {
         return NormalizedSessionTarget{InMemoryNewSessionTarget{
             .workspace = std::move(options.workspace),
+            .session_id = in_memory->session_id,
         }};
     }
     return std::unexpected(util::make_error(
@@ -686,6 +763,7 @@ struct SessionTargetNormalizationOptions {
     plan.max_queued_messages = request.max_queued_messages;
     plan.max_queued_bytes = request.max_queued_bytes;
     plan.provide_user_shell = request.provide_user_shell;
+    plan.session_name = std::move(request.session_name);
 
     return plan;
 }
@@ -781,33 +859,122 @@ struct SessionTargetNormalizationOptions {
     std::unique_ptr<AsyncUserShell> user_shell) {
     std::vector<SessionDiagnostic> diagnostics;
 
-    // 1. Resolve workspace and validate target shape.
+    // 1. Resolve workspace and validate target shape. Resume-shaped targets
+    // (explicit resume, open-or-create on an existing file, fork, continue
+    // with a most-recent session) prepare their resume view first so the
+    // model chain below re-resolves the stored identity.
     std::filesystem::path workspace;
     PreparedResumeTarget prepared_resume;
-    const bool is_resume = std::holds_alternative<ResumeSessionTarget>(plan.target);
+    std::optional<NewSessionPublication> new_publication;
+    bool is_resume = false;
 
-    if (is_resume) {
-        const auto& target = std::get<ResumeSessionTarget>(plan.target);
+    if (const auto* target = std::get_if<ResumeSessionTarget>(&plan.target)) {
         auto prepared = prepare_resume_target(
-            target.resume_path, target.workspace, target.workspace_explicit);
+            target->resume_path, target->workspace, target->workspace_explicit);
         if (!prepared) {
             return std::unexpected(prepared.error());
         }
         workspace = prepared->workspace;
         prepared_resume = std::move(*prepared);
-    } else if (const auto* target = std::get_if<AutomaticNewSessionTarget>(&plan.target)) {
+        is_resume = true;
+    } else if (const auto* target =
+                   std::get_if<OpenOrCreateSessionTarget>(&plan.target)) {
         workspace = target->workspace;
-    } else if (const auto* target = std::get_if<InMemoryNewSessionTarget>(&plan.target)) {
-        workspace = target->workspace;
-    } else {
-        const auto& new_target = std::get<NewSessionTarget>(plan.target);
-        if (new_target.workspace.empty()) {
+        // pi `SessionManager.open`: an existing non-empty file resumes (cwd
+        // from the header); a missing or empty regular file creates a new
+        // session at the exact path (pi rewrites an empty file with a fresh
+        // header). A non-regular existing entry is refused.
+        std::error_code ec;
+        const bool exists = std::filesystem::exists(target->session_path, ec);
+        const bool regular =
+            exists && std::filesystem::is_regular_file(target->session_path, ec);
+        if (exists && !regular) {
             return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
-                "workspace is required for new sessions",
-                "supply a non-empty workspace path"));
+                util::ErrorCode::Session,
+                "session target is not a regular file",
+                target->session_path.string()));
         }
-        workspace = new_target.workspace;
+        if (regular && std::filesystem::file_size(target->session_path, ec) > 0) {
+            auto prepared = prepare_resume_target(
+                target->session_path, workspace, false);
+            if (!prepared) {
+                return std::unexpected(prepared.error());
+            }
+            workspace = prepared->workspace;
+            prepared_resume = std::move(*prepared);
+            is_resume = true;
+        } else {
+            if (exists) {
+                std::error_code remove_ec;
+                if (!std::filesystem::remove(target->session_path, remove_ec) ||
+                    remove_ec) {
+                    return std::unexpected(util::make_error(
+                        util::ErrorCode::Session,
+                        "could not initialize session file",
+                        target->session_path.string() +
+                            (remove_ec ? ": " + remove_ec.message()
+                                       : std::string{})));
+                }
+            }
+            new_publication = ExplicitNewPublication{
+                target->session_path, workspace};
+        }
+    } else if (const auto* target = std::get_if<ForkTarget>(&plan.target)) {
+        workspace = target->workspace;
+        auto prepared = prepare_fork_target(
+            target->source_path,
+            workspace,
+            target->directory_override,
+            target->session_id);
+        if (!prepared) {
+            return std::unexpected(prepared.error());
+        }
+        prepared_resume = std::move(*prepared);
+        is_resume = true;
+    } else if (const auto* target =
+                   std::get_if<ContinueRecentTarget>(&plan.target)) {
+        workspace = target->workspace;
+        // pi `continueRecent`: the most recent session in the effective
+        // session directory, cwd-filtered only when a custom override differs
+        // from the workspace-keyed default; a new persisted session when
+        // none exists.
+        const auto sessions_root = coding_agent::sessions_root_path();
+        const auto default_directory =
+            sessions_root / session_paths::encode_workspace_key(workspace);
+        const auto directory =
+            target->directory_override.value_or(default_directory);
+        const std::optional<std::filesystem::path> cwd_filter =
+            (target->directory_override &&
+             *target->directory_override != default_directory)
+                ? std::optional<std::filesystem::path>{workspace}
+                : std::nullopt;
+        if (auto most_recent = session_discovery::find_most_recent_session(
+                directory, cwd_filter)) {
+            auto prepared = prepare_resume_target(
+                most_recent->path, workspace, false);
+            if (!prepared) {
+                return std::unexpected(prepared.error());
+            }
+            workspace = prepared->workspace;
+            prepared_resume = std::move(*prepared);
+            is_resume = true;
+        } else {
+            new_publication = AutomaticPublication{
+                workspace, target->directory_override, std::nullopt};
+        }
+    } else if (const auto* target =
+                   std::get_if<AutomaticNewSessionTarget>(&plan.target)) {
+        workspace = target->workspace;
+        new_publication = AutomaticPublication{
+            workspace, target->directory_override, target->session_id};
+    } else if (const auto* target =
+                   std::get_if<InMemoryNewSessionTarget>(&plan.target)) {
+        workspace = target->workspace;
+        new_publication = InMemoryPublication{workspace, target->session_id};
+    } else {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "unsupported session target"));
     }
 
     // 2. Settings load errors stay observable as warning diagnostics. Global
@@ -1096,25 +1263,8 @@ struct SessionTargetNormalizationOptions {
         }
         open = std::move(*published);
     } else {
-        NewSessionPublication publication;
-        if (const auto* automatic = std::get_if<AutomaticNewSessionTarget>(&plan.target)) {
-            publication = AutomaticPublication{
-                .workspace = automatic->workspace,
-                .directory_override = automatic->directory_override,
-            };
-        } else if (const auto* in_memory = std::get_if<InMemoryNewSessionTarget>(&plan.target)) {
-            publication = InMemoryPublication{
-                .workspace = in_memory->workspace,
-            };
-        } else {
-            const auto& explicit_new = std::get<NewSessionTarget>(plan.target);
-            publication = ExplicitNewPublication{
-                .session_path = explicit_new.session_path,
-                .workspace = explicit_new.workspace,
-            };
-        }
         auto published = publish_session(
-            std::move(publication),
+            std::move(*new_publication),
             resolved_provider,
             resolved_model);
         if (!published) {
@@ -1130,6 +1280,22 @@ struct SessionTargetNormalizationOptions {
                 dynamic_cast<harness::session::JsonlSessionStore*>(open.store.get())) {
             if (auto appended = jsonl_store->append_model_change(
                     std::nullopt, resolved_provider, resolved_model);
+                !appended) {
+                cleanup_on_failure();
+                return std::unexpected(appended.error());
+            }
+        }
+    }
+
+    // pi main.ts `--name`: appendSessionInfo after session selection. The
+    // stored name is sanitized exactly like pi (CR/LF runs become one space,
+    // then trimmed); in-memory sessions have no session_info surface.
+    if (plan.session_name) {
+        auto sanitized = sanitize_session_name(*plan.session_name);
+        if (auto* jsonl_store =
+                dynamic_cast<harness::session::JsonlSessionStore*>(open.store.get())) {
+            if (auto appended = jsonl_store->append_session_info(
+                    std::nullopt, std::move(sanitized));
                 !appended) {
                 cleanup_on_failure();
                 return std::unexpected(appended.error());

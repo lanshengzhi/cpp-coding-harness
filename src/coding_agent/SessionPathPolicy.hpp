@@ -69,4 +69,26 @@ struct AutomaticSessionTarget {
     const std::filesystem::path& canonical_workspace,
     const std::filesystem::path& home_dir);
 
+/// Resolve one explicit session path value (pi: resolvePath): a leading `~`
+/// or `~/` expands against home_dir (pi: normalizePath), a relative value
+/// resolves against the workspace, and the result is lexically normalized.
+/// Pure: no filesystem or environment access.
+[[nodiscard]] std::filesystem::path resolve_session_path_value(
+    const std::string& value,
+    const std::filesystem::path& workspace,
+    const std::filesystem::path& home_dir);
+
+/// The pi sessionDir chain: `--session-dir`, then PI_CODING_AGENT_SESSION_DIR,
+/// then the settings `sessionDir` value; the first non-empty value resolves to
+/// an absolute directory (empty values are skipped). The caller supplies the
+/// environment value so the helper stays pure. A nullopt result means no
+/// override is in effect (the workspace-keyed default applies).
+[[nodiscard]] util::Expected<std::optional<std::filesystem::path>>
+resolve_effective_session_dir(
+    const std::optional<std::string>& flag_value,
+    const std::optional<std::string>& env_value,
+    const std::optional<std::string>& settings_value,
+    const std::filesystem::path& canonical_workspace,
+    const std::filesystem::path& home_dir);
+
 } // namespace cch::coding_agent::session_paths

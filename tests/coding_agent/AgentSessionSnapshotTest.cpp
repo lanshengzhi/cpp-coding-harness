@@ -149,7 +149,7 @@ TEST_CASE(
     TestPaths paths;
     auto created = coding_agent::create_agent_session(new_session_options(
         paths,
-        coding_agent::ExplicitNewSessionTarget{paths.session_file}));
+        coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file}));
     REQUIRE(created.has_value());
 
     auto snapshot = created->session->snapshot();
@@ -278,7 +278,7 @@ TEST_CASE(
     "[sdk][snapshot][persistence-failure][issue42]") {
     TestPaths paths;
     tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file};
     options.workspace = paths.workspace.path();
     options.models = cch::tests::models_from_provider(std::make_shared<CapturingSnapshotChatProvider>());
     auto created = coding_agent::create_agent_session(std::move(options));

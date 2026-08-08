@@ -61,7 +61,7 @@ public:
     tests::ModelsSessionOptions options;
     if (session_path) {
         options.session_target =
-            coding_agent::ExplicitNewSessionTarget{*session_path};
+            coding_agent::ExplicitOpenOrCreateSessionTarget{*session_path};
     } else {
         options.session_target = coding_agent::InMemorySessionTarget{};
     }

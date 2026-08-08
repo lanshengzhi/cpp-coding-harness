@@ -265,9 +265,7 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
         ->allow_extra_args(false);
     auto* session_option = app.add_option("--session", session_text, "Create a new JSONL session at an explicit path");
     auto* resume_option = app.add_option("--resume", resume_text, "Resume and append to an existing JSONL session");
-    session_option->excludes(resume_option);
-    resume_option->excludes(session_option);
-    auto* no_session_option = app.add_flag("--no-session", "Run the session in memory without persisting a transcript");
+    app.add_flag("--no-session", config.no_session_flag, "Run the session in memory without persisting a transcript");
     auto* session_dir_option = app.add_option("--session-dir", session_dir_text,
         "Directory for automatic session storage (overrides PI_CODING_AGENT_SESSION_DIR and settings.json sessionDir)");
     auto* continue_option = app.add_flag("--continue", config.continue_session, "Continue the most recent session");
@@ -305,20 +303,11 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
             message + "\n\n" + help_text()));
     }
 
-    if (no_session_option->count() > 0 && session_option->count() > 0) {
-        return std::unexpected(cli_error("--no-session cannot be combined with --session"));
+    if (session_option->count() > 0 && !session_text.empty()) {
+        config.session_value = session_text;
     }
-    if (no_session_option->count() > 0 && resume_option->count() > 0) {
-        return std::unexpected(cli_error("--no-session cannot be combined with --resume"));
-    }
-    if (session_option->count() > 0) {
-        config.session_target = coding_agent::ExplicitNewSessionTarget{session_text};
-    }
-    if (resume_option->count() > 0) {
-        config.session_target = coding_agent::ExplicitResumeSessionTarget{resume_text};
-    }
-    if (no_session_option->count() > 0) {
-        config.session_target = coding_agent::InMemorySessionTarget{};
+    if (resume_option->count() > 0 && !resume_text.empty()) {
+        config.resume_value = resume_text;
     }
     if (session_dir_option->count() > 0) {
         config.session_dir = session_dir_text;
@@ -361,7 +350,7 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     if (session_id_option->count() > 0) {
         config.session_id = session_id_text;
     }
-    if (fork_option->count() > 0) {
+    if (fork_option->count() > 0 && !fork_text.empty()) {
         config.fork = fork_text;
     }
     if (name_option->count() > 0) {

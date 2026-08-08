@@ -173,4 +173,52 @@ util::Expected<std::filesystem::path> resolve_session_dir_value(
     return resolved;
 }
 
+std::filesystem::path resolve_session_path_value(
+    const std::string& value,
+    const std::filesystem::path& workspace,
+    const std::filesystem::path& home_dir) {
+    std::filesystem::path resolved;
+    const bool needs_home = value == "~" || value.starts_with("~/")
+#if defined(_WIN32)
+                            || value.starts_with("~\\")
+#endif
+        ;
+    if (value == "~") {
+        resolved = home_dir;
+    } else if (needs_home) {
+        resolved = home_dir / value.substr(2);
+    } else {
+        resolved = value;
+    }
+    if (resolved.is_relative()) {
+        resolved = workspace / resolved;
+    }
+    return resolved.lexically_normal();
+}
+
+util::Expected<std::optional<std::filesystem::path>> resolve_effective_session_dir(
+    const std::optional<std::string>& flag_value,
+    const std::optional<std::string>& env_value,
+    const std::optional<std::string>& settings_value,
+    const std::filesystem::path& canonical_workspace,
+    const std::filesystem::path& home_dir) {
+    std::optional<std::string> value;
+    if (flag_value && !flag_value->empty()) {
+        value = flag_value;
+    } else if (env_value && !env_value->empty()) {
+        value = env_value;
+    } else if (settings_value && !settings_value->empty()) {
+        value = settings_value;
+    }
+    if (!value) {
+        return std::optional<std::filesystem::path>{};
+    }
+    auto resolved = resolve_session_dir_value(
+        *value, canonical_workspace, home_dir);
+    if (!resolved) {
+        return std::unexpected(resolved.error());
+    }
+    return std::optional<std::filesystem::path>{std::move(*resolved)};
+}
+
 } // namespace cch::coding_agent::session_paths

@@ -518,16 +518,21 @@ TEST_CASE("CLI resume uses session workspace when the launch directory differs",
     CHECK(resumed.stdout_text.find("from-session-workspace") != std::string::npos);
 }
 
-TEST_CASE("CLI rejects session and resume together before model request", "[cli][u6]") {
+TEST_CASE("CLI --session wins over --resume without a conflict error", "[cli][u6]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "exclusive.jsonl";
+    auto other = workspace.path() / "other.jsonl";
     auto result = run_in_workspace(
         workspace,
-        {"--session", session.string(), "--resume", session.string(), "hello"});
+        {"--session", session.string(), "--resume", other.string(), "hello"});
 
-    REQUIRE(result.exit_code != 0);
-    CHECK(result.stderr_text.find("use either --session or --resume") != std::string::npos);
-    CHECK(result.stdout_text.find("[model-request]") == std::string::npos);
+    // pi precedence: --session is selected before --resume; the C++-today
+    // "use either --session or --resume" error is deleted.
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.find("use either --session or --resume") == std::string::npos);
+    CHECK(result.stdout_text == "fake: hello\n");
+    CHECK(std::filesystem::exists(session));
+    CHECK_FALSE(std::filesystem::exists(other));
 }
 
 TEST_CASE("CLI print mode with no prompt prints nothing and exits 0", "[cli][selection][issue64]") {
@@ -546,17 +551,24 @@ TEST_CASE("CLI print mode with no prompt prints nothing and exits 0", "[cli][sel
     CHECK(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI blocks existing session path without resume before model request", "[cli][u6]") {
+TEST_CASE("CLI --session opens-or-creates at the target path", "[cli][u6]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "exists.jsonl";
-    std::ofstream(session) << "already here";
-    auto result = run_in_workspace(
-        workspace, {"--session", session.string(), "hello"});
 
-    REQUIRE(result.exit_code == 1);
-    CHECK(result.stderr_text.find("could not create session") != std::string::npos);
-    CHECK(result.stderr_text.find("already exists") != std::string::npos);
-    CHECK(result.stdout_text.empty());
+    // pi: --session on a missing path creates the session; the old
+    // create-only "already exists" behavior is gone.
+    auto first = run_in_workspace(
+        workspace, {"--session", session.string(), "first"});
+    REQUIRE(first.exit_code == 0);
+    CHECK(std::filesystem::exists(session));
+
+    // pi: --session on an existing path opens (resumes) it.
+    auto second = run_in_workspace(
+        workspace, {"--session", session.string(), "second"});
+    REQUIRE(second.exit_code == 0);
+    CHECK(second.stdout_text == "fake: second\n");
+    const auto content = read_file(session);
+    CHECK(content.find("\"text\":\"second\"") != std::string::npos);
 }
 
 TEST_CASE("CLI real-provider mode reports missing API key as a terminal auth outcome", "[cli][u6][issue338]") {
@@ -1404,29 +1416,32 @@ TEST_CASE("CLI print mode sends /session to the model under default session stor
     require_single_automatic_session(agent_dir / "sessions", canonical_workspace);
 }
 
-TEST_CASE("CLI rejects --no-session combined with explicit create or resume before model work", "[cli][no-session]") {
+TEST_CASE("CLI --no-session short-circuits silently over explicit create and resume", "[cli][no-session]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     const auto agent_dir = agent_root.path() / "agent";
     const auto explicit_session = workspace.path() / "explicit.jsonl";
 
+    // pi: --no-session wins silently over --session/--resume; the C++-today
+    // conflict errors are deleted and no session file is ever written.
     auto created = cch::tests::run_cli(cch::tests::CliRunOptions{
         .args = {"--no-session", "--session", explicit_session.string(), "hello"},
         .cwd = workspace.path(),
         .env = {{"PI_CODING_AGENT_DIR", agent_dir.string()}},
     });
-    REQUIRE(created.exit_code != 0);
-    CHECK(created.stdout_text.empty());
-    CHECK(created.stderr_text.find("--no-session cannot be combined with --session") != std::string::npos);
+    REQUIRE(created.exit_code == 0);
+    CHECK(created.stdout_text == "fake: hello\n");
+    CHECK(created.stderr_text.find("cannot be combined") == std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(explicit_session));
 
     auto resumed = cch::tests::run_cli(cch::tests::CliRunOptions{
         .args = {"--no-session", "--resume", explicit_session.string(), "hello"},
         .cwd = workspace.path(),
         .env = {{"PI_CODING_AGENT_DIR", agent_dir.string()}},
     });
-    REQUIRE(resumed.exit_code != 0);
-    CHECK(resumed.stdout_text.empty());
-    CHECK(resumed.stderr_text.find("--no-session cannot be combined with --resume") != std::string::npos);
+    REQUIRE(resumed.exit_code == 0);
+    CHECK(resumed.stdout_text == "fake: hello\n");
+    CHECK(resumed.stderr_text.find("cannot be combined") == std::string::npos);
 
     require_no_session_filesystem_state(agent_dir, workspace.path());
 }

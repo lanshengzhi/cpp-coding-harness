@@ -40,6 +40,10 @@ struct AgentSessionCreationRequest {
     /// alternatives keep their exact paths; in-memory creation publishes no
     /// filesystem state.
     SessionTarget session_target{};
+    /// pi `--name`: the session display name, appended as a `session_info`
+    /// entry after publication (pi appendSessionInfo sanitization). The CLI
+    /// already enforced the non-empty guard.
+    std::optional<std::string> session_name;
     /// Raw --session-dir value: the highest-priority CLI automatic-directory
     /// override, ahead of PI_CODING_AGENT_SESSION_DIR and settings
     /// sessionDir. Consulted only for default persisted creation.

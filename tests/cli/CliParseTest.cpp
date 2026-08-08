@@ -347,67 +347,84 @@ TEST_CASE("parse_args rejects json mode with a lone positional file", "[cli][par
     CHECK(parsed.error().message.find("--mode json was removed") != std::string::npos);
 }
 
-TEST_CASE("parse_args represents an omitted session target as default persisted creation", "[cli][parse][session-target]") {
+TEST_CASE("parse_args records an omitted session family as no flags", "[cli][parse][session-target]") {
     std::vector<std::string> args{"cpp-harness", "hello"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
-    CHECK(std::holds_alternative<cch::coding_agent::DefaultPersistedSessionTarget>(parsed->session_target));
+    CHECK_FALSE(parsed->session_value.has_value());
+    CHECK_FALSE(parsed->resume_value.has_value());
+    CHECK_FALSE(parsed->continue_session);
+    CHECK_FALSE(parsed->no_session_flag);
+    CHECK_FALSE(parsed->session_id.has_value());
+    CHECK_FALSE(parsed->fork.has_value());
+    CHECK_FALSE(parsed->name.has_value());
 }
 
-TEST_CASE("parse_args maps --session to an explicit new-session target", "[cli][parse][session-target]") {
-    std::vector<std::string> args{"cpp-harness", "--session", "new.jsonl", "hello"};
-    auto argv = argv_from_strings(args);
-    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
-    REQUIRE(parsed);
-    const auto* target = std::get_if<cch::coding_agent::ExplicitNewSessionTarget>(&parsed->session_target);
-    REQUIRE(target != nullptr);
-    CHECK(target->path == "new.jsonl");
-}
-
-TEST_CASE("parse_args maps --resume and -r to an explicit resume target", "[cli][parse][session-target]") {
+TEST_CASE("parse_args records --session and --resume as raw flags", "[cli][parse][session-target]") {
+    {
+        std::vector<std::string> args{"cpp-harness", "--session", "new.jsonl", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        REQUIRE(parsed->session_value.has_value());
+        CHECK(*parsed->session_value == "new.jsonl");
+        CHECK_FALSE(parsed->resume_value.has_value());
+    }
     {
         std::vector<std::string> args{"cpp-harness", "--resume", "old.jsonl", "hello"};
         auto argv = argv_from_strings(args);
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
-        const auto* target = std::get_if<cch::coding_agent::ExplicitResumeSessionTarget>(&parsed->session_target);
-        REQUIRE(target != nullptr);
-        CHECK(target->path == "old.jsonl");
+        REQUIRE(parsed->resume_value.has_value());
+        CHECK(*parsed->resume_value == "old.jsonl");
+        CHECK_FALSE(parsed->session_value.has_value());
     }
     {
         std::vector<std::string> args{"cpp-harness", "-r", "old.jsonl", "hello"};
         auto argv = argv_from_strings(args);
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
-        const auto* target = std::get_if<cch::coding_agent::ExplicitResumeSessionTarget>(&parsed->session_target);
-        REQUIRE(target != nullptr);
-        CHECK(target->path == "old.jsonl");
+        REQUIRE(parsed->resume_value.has_value());
+        CHECK(*parsed->resume_value == "old.jsonl");
     }
 }
 
-TEST_CASE("parse_args maps --no-session to the in-memory target", "[cli][parse][session-target]") {
-    std::vector<std::string> args{"cpp-harness", "--no-session", "hello"};
-    auto argv = argv_from_strings(args);
-    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
-    REQUIRE(parsed);
-    CHECK(std::holds_alternative<cch::coding_agent::InMemorySessionTarget>(parsed->session_target));
-}
-
-TEST_CASE("parse_args rejects --no-session with an explicit create target", "[cli][parse][session-target]") {
-    std::vector<std::string> args{"cpp-harness", "--no-session", "--session", "new.jsonl", "hello"};
-    auto argv = argv_from_strings(args);
-    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
-    REQUIRE_FALSE(parsed);
-    CHECK(parsed.error().message.find("--no-session cannot be combined with --session") != std::string::npos);
-}
-
-TEST_CASE("parse_args rejects --no-session with an explicit resume target", "[cli][parse][session-target]") {
-    std::vector<std::string> args{"cpp-harness", "--no-session", "--resume", "old.jsonl", "hello"};
-    auto argv = argv_from_strings(args);
-    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
-    REQUIRE_FALSE(parsed);
-    CHECK(parsed.error().message.find("--no-session cannot be combined with --resume") != std::string::npos);
+TEST_CASE("parse_args records --no-session as a raw flag without conflict errors", "[cli][parse][session-target]") {
+    // pi precedence: --no-session short-circuits silently; the C++-today
+    // conflict errors are deleted, and --session/--resume coexist at parse.
+    {
+        std::vector<std::string> args{"cpp-harness", "--no-session", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        CHECK(parsed->no_session_flag);
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "--no-session", "--session", "new.jsonl", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        CHECK(parsed->no_session_flag);
+        REQUIRE(parsed->session_value.has_value());
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "--no-session", "--resume", "old.jsonl", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        CHECK(parsed->no_session_flag);
+        REQUIRE(parsed->resume_value.has_value());
+    }
+    {
+        // pi: --session wins over --resume without a parse-time exclusion.
+        std::vector<std::string> args{"cpp-harness", "--session", "a.jsonl", "--resume", "b.jsonl", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        REQUIRE(parsed->session_value.has_value());
+        REQUIRE(parsed->resume_value.has_value());
+    }
 }
 
 TEST_CASE("parse_args carries the raw pi session-family flags", "[cli][parse][session-target]") {
@@ -513,8 +530,10 @@ TEST_CASE("parse_args captures --session-dir as the automatic-directory override
     REQUIRE(parsed);
     REQUIRE(parsed->session_dir.has_value());
     CHECK(*parsed->session_dir == "/data/sessions");
-    // The automatic-directory override leaves the normalized default target alone.
-    CHECK(std::holds_alternative<cch::coding_agent::DefaultPersistedSessionTarget>(parsed->session_target));
+    // The automatic-directory override rides alongside the raw session flags.
+    CHECK_FALSE(parsed->session_value.has_value());
+    CHECK_FALSE(parsed->resume_value.has_value());
+    CHECK_FALSE(parsed->no_session_flag);
 }
 
 TEST_CASE("parse_args defaults --session-dir to absent", "[cli][parse][session-dir]") {
@@ -532,23 +551,25 @@ TEST_CASE("parse_args accepts --session-dir alongside explicit and in-memory tar
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
         REQUIRE(parsed->session_dir.has_value());
-        const auto* target = std::get_if<cch::coding_agent::ExplicitNewSessionTarget>(&parsed->session_target);
-        REQUIRE(target != nullptr);
-        CHECK(target->path == "explicit.jsonl");
+        REQUIRE(parsed->session_value.has_value());
+        CHECK(*parsed->session_value == "explicit.jsonl");
     }
     {
         std::vector<std::string> args{"cpp-harness", "--session-dir", "/data", "--resume", "explicit.jsonl", "hello"};
         auto argv = argv_from_strings(args);
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
-        CHECK(std::holds_alternative<cch::coding_agent::ExplicitResumeSessionTarget>(parsed->session_target));
+        REQUIRE(parsed->session_dir.has_value());
+        REQUIRE(parsed->resume_value.has_value());
+        CHECK(*parsed->resume_value == "explicit.jsonl");
     }
     {
         std::vector<std::string> args{"cpp-harness", "--session-dir", "/data", "--no-session", "hello"};
         auto argv = argv_from_strings(args);
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
-        CHECK(std::holds_alternative<cch::coding_agent::InMemorySessionTarget>(parsed->session_target));
+        REQUIRE(parsed->session_dir.has_value());
+        CHECK(parsed->no_session_flag);
     }
 }
 

@@ -190,7 +190,7 @@ struct SessionUnderTest {
     client_ptr->responses.push_back(big_assistant("a3 " + big));
 
     tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file};
     options.workspace = paths.workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
 
@@ -314,7 +314,7 @@ TEST_CASE(
     client_ptr->aborted_content = "a3 " + big;
 
     tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file};
     options.workspace = paths.workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
 
@@ -387,7 +387,7 @@ TEST_CASE(
     auto client = std::make_shared<CompactionScriptedProvider>();
     client->responses.push_back(ai::assistant_text_message("small reply"));
     tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file};
     options.workspace = paths.workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
     auto created = coding_agent::create_agent_session(std::move(options));
@@ -538,7 +538,7 @@ struct TriggerSessionUnderTest {
     client_ptr->responses = std::move(responses);
 
     tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
+    options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file};
     options.workspace = paths.workspace.path();
     options.request_model = trigger_model(context_window);
     options.models = cch::tests::models_from_provider(std::move(client));

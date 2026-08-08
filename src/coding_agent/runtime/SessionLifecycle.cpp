@@ -2,7 +2,11 @@
 
 #include "../../../include/cch/coding_agent/AgentConfigDir.hpp"
 #include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
-#include "../SessionPathPolicy.hpp"
+#include "../../../include/cch/harness/session/SessionTree.hpp"
+#include "coding_agent/SessionDiscovery.hpp"
+#include "coding_agent/SessionPathPolicy.hpp"
+#include "harness/session/EntrySerializer.hpp"
+#include "harness/session/SessionJournal.hpp"
 #include "util/UniqueFd.hpp"
 #include "harness/session/InMemorySessionStore.hpp"
 
@@ -296,23 +300,30 @@ util::Expected<OpenSession> publish_session(
     NewSessionPublication target,
     std::string provider,
     std::string model) {
+    auto identity = session_paths::generate_automatic_session_identity();
+
     if (const auto* in_memory = std::get_if<InMemoryPublication>(&target)) {
+        if (in_memory->session_id) {
+            identity.session_id = *in_memory->session_id;
+        }
         OpenSession session;
         session.workspace = in_memory->workspace;
         session.metadata = new_session_metadata(
             in_memory->workspace,
-            session_paths::generate_automatic_session_identity(),
+            identity,
             std::move(provider),
             std::move(model));
         session.store = std::make_unique<harness::session::InMemorySessionStore>();
         return session;
     }
 
-    const auto identity = session_paths::generate_automatic_session_identity();
     std::filesystem::path session_path;
     std::filesystem::path workspace;
 
     if (const auto* automatic = std::get_if<AutomaticPublication>(&target)) {
+        if (automatic->session_id) {
+            identity.session_id = *automatic->session_id;
+        }
         workspace = automatic->workspace;
         const auto composed = automatic->directory_override
             ? session_paths::make_custom_automatic_session_target(
@@ -426,6 +437,145 @@ util::Expected<OpenSession> publish_resume_session(
     }
     session.store = std::make_unique<harness::session::JsonlSessionStore>(std::move(*opened));
     return session;
+}
+
+util::Expected<PreparedResumeTarget> prepare_fork_target(
+    std::filesystem::path source_path,
+    std::filesystem::path target_workspace,
+    std::optional<std::filesystem::path> directory_override,
+    std::optional<std::string> session_id) {
+    std::error_code absolute_ec;
+    const auto resolved_source =
+        std::filesystem::absolute(source_path, absolute_ec).lexically_normal();
+    if (absolute_ec) {
+        return std::unexpected(session_error(
+            "Cannot fork: source session path cannot be resolved: " +
+            source_path.string()));
+    }
+
+    auto loaded = harness::session::JsonlSessionStore::load(resolved_source);
+    if (!loaded) {
+        return std::unexpected(session_error(
+            "Cannot fork: source session file is empty or invalid: " +
+            resolved_source.string()));
+    }
+
+    // Copy the raw non-header entry lines first: the loaded session moves
+    // into the tree below for context derivation. pi `forkFrom` copies every
+    // parsed non-header entry, including future/foreign entry types (the
+    // C++ Unknown kind keeps those raw lines verbatim).
+    std::vector<std::string> entry_lines;
+    for (const auto& entry : loaded->entries) {
+        if (entry.kind == harness::session::SessionEntryKind::Header) {
+            continue;
+        }
+        entry_lines.push_back(entry.raw_line);
+    }
+    if (std::none_of(
+            loaded->entries.begin(), loaded->entries.end(),
+            [](const harness::session::SessionEntry& entry) {
+                return entry.kind == harness::session::SessionEntryKind::Header;
+            })) {
+        return std::unexpected(session_error(
+            "Cannot fork: source session has no header: " +
+            resolved_source.string()));
+    }
+
+    harness::session::SessionTree source_tree(std::move(*loaded));
+    const auto context = source_tree.buildSessionContext();
+
+    if (session_id) {
+        if (auto invalid = session_discovery::invalid_session_id_reason(*session_id);
+            invalid) {
+            return std::unexpected(session_error(*invalid));
+        }
+    }
+
+    auto identity = session_paths::generate_automatic_session_identity();
+    if (session_id) {
+        identity.session_id = *session_id;
+    }
+
+    const auto composed = directory_override
+        ? session_paths::make_custom_automatic_session_target(
+              *directory_override, target_workspace, identity)
+        : session_paths::make_automatic_session_target(
+              coding_agent::sessions_root_path(), target_workspace, identity);
+
+    if (composed.sessions_root.empty()) {
+        return std::unexpected(publication_error(
+            composed.session_path,
+            session_error(
+                "automatic session storage is unavailable",
+                "Agent Config Directory sessions root could not be resolved for workspace " +
+                    composed.workspace.string())));
+    }
+    if (!composed.sessions_root.is_absolute()) {
+        return std::unexpected(publication_error(
+            composed.session_path,
+            session_error(
+                "automatic session storage root must be absolute",
+                composed.custom_directory
+                    ? "refusing relative session directory override: " +
+                          composed.sessions_root.string()
+                    : "refusing relative Agent Config Directory sessions root: " +
+                          composed.sessions_root.string())));
+    }
+
+    if (composed.custom_directory) {
+        if (auto prepared = prepare_custom_directory(composed.workspace_directory); !prepared) {
+            return std::unexpected(publication_error(composed.session_path, prepared.error()));
+        }
+    } else {
+        if (auto prepared = prepare_default_directory(composed.sessions_root); !prepared) {
+            return std::unexpected(publication_error(composed.session_path, prepared.error()));
+        }
+        if (auto prepared = prepare_default_directory(composed.workspace_directory); !prepared) {
+            return std::unexpected(publication_error(composed.session_path, prepared.error()));
+        }
+    }
+
+    // The fork header: a fresh identity with the target cwd, the resolved
+    // source path as `parentSession`, and the copied history's model identity
+    // (pi forkFrom; the C++ headers additionally carry provider/model).
+    harness::session::SessionMetadata metadata{
+        .session_id = identity.session_id,
+        .created_at = identity.created_at,
+        .workspace = target_workspace,
+        .provider = context.provider.value_or(std::string{}),
+        .model = context.model.value_or(std::string{}),
+        .parent_session = resolved_source,
+    };
+
+    harness::session::EntrySerializer serializer;
+    auto header_line = serializer.serialize_header(metadata);
+    if (!header_line) {
+        return std::unexpected(publication_error(
+            composed.session_path, std::move(header_line.error())));
+    }
+    auto journal = harness::session::SessionJournal::create_new(
+        composed.session_path, *header_line);
+    if (!journal) {
+        return std::unexpected(publication_error(composed.session_path, journal.error()));
+    }
+    for (const auto& line : entry_lines) {
+        if (auto appended = journal->append_line(line + '\n'); !appended) {
+            return std::unexpected(publication_error(composed.session_path, appended.error()));
+        }
+    }
+
+    // Re-resolve the new file exactly like a resume: the copied history's
+    // model/thinking/topology restore from the entries, and the runtime
+    // re-resolves the stored identity against the live catalog.
+    auto resumed = harness::session::resume_session(composed.session_path);
+    if (!resumed) {
+        return std::unexpected(publication_error(composed.session_path, resumed.error()));
+    }
+    return PreparedResumeTarget{
+        .resume_path = composed.session_path,
+        .workspace = target_workspace,
+        .resume = std::move(*resumed),
+    };
 }
 
 } // namespace cch::coding_agent::runtime

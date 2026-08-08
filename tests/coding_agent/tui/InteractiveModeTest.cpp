@@ -1574,7 +1574,7 @@ TEST_CASE(
     auto create = session_options(
         workspace,
         ai::providers::make_scripted_fake_provider());
-    create.session_target = coding_agent::ExplicitNewSessionTarget{session_file};
+    create.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
     auto fresh = coding_agent::create_agent_session(std::move(create));
     REQUIRE(fresh);
     REQUIRE(fresh->session->prompt_blocking("equivalent prompt"));
@@ -1992,7 +1992,7 @@ TEST_CASE(
     auto options = session_options(
         workspace,
         ai::providers::make_scripted_fake_provider());
-    options.session_target = coding_agent::ExplicitNewSessionTarget{session_file};
+    options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
 

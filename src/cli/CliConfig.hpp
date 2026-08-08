@@ -35,15 +35,28 @@ struct CliConfig {
     /// directory (pi `workspace := cwd`), resolved non-throwingly by
     /// parse_args; an unreadable cwd becomes a parse diagnostic.
     std::filesystem::path workspace;
-    /// Normalized session intent: default persisted creation when no explicit
-    /// target flag (--session/--resume/--no-session) was supplied. The
-    /// remaining session-family flags (--continue/--session-id/--fork/--name)
-    /// carry their raw values below; session-family semantics assemble them
-    /// (pi session-family CLI).
-    coding_agent::SessionTarget session_target{};
+    /// pi session-family raw flags (pi args.ts surface). The CLI runtime
+    /// assembles the session target from these in pi's boot order (pi main.ts
+    /// `createSessionManager`): `--session` opens-or-creates at a path or
+    /// resolves an id (cross-project fork prompt), `--resume` resumes at an
+    /// exact path (the picker lands with the startup-TUI ticket), `--continue`
+    /// resumes the most recent session, `--fork` forks from a target id,
+    /// `--session-id` names/validates/conflicts/warns-creates, `--name` sets
+    /// the session display name, and `--no-session` short-circuits silently.
+    /// The `--session`/`--fork`/`--resume` values engage only for non-empty
+    /// values: pi's hand parser treats an empty value as absent (args.ts
+    /// truthiness).
+    std::optional<std::string> session_value;
+    std::optional<std::string> resume_value;
+    bool no_session_flag{false};
+    bool continue_session{false};
+    std::optional<std::string> session_id;
+    std::optional<std::string> fork;
+    std::optional<std::string> name;
     /// Raw --session-dir value: the highest-priority automatic-directory
-    /// override. Applies only to default persisted creation; explicit create
-    /// and resume targets keep their exact paths.
+    /// override (pi: --session-dir, then PI_CODING_AGENT_SESSION_DIR, then
+    /// settings sessionDir). Consulted for default persisted creation and for
+    /// session listing during session-family resolution.
     std::optional<std::string> session_dir;
     /// pi CLI model selection: `--provider` (default provider name),
     /// `--model` (model pattern), `--models` (comma-separated cycling
@@ -55,13 +68,6 @@ struct CliConfig {
     std::optional<std::string> api_key;
     /// pi `--thinking <level>` (off, minimal, low, medium, high, xhigh, max).
     std::optional<std::string> thinking;
-    /// pi session-family raw values: `--continue`, `--session-id`, `--fork`,
-    /// and `--name` carry pi's spellings and shorts; the session-family
-    /// semantics own their normalization.
-    bool continue_session{false};
-    std::optional<std::string> session_id;
-    std::optional<std::string> fork;
-    std::optional<std::string> name;
     /// pi `--list-models [search]`: has_value() when requested; an empty
     /// string is the bare flag, a non-empty string the fuzzy search pattern.
     std::optional<std::string> list_models;

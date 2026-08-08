@@ -95,7 +95,7 @@ constexpr std::string_view kKeylessAlphaKeyedBeta = R"({
     const Fixture& fixture) {
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target =
-        coding_agent::ExplicitNewSessionTarget{fixture.session_file};
+        coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
     request.workspace = fixture.workspace.path();
     return request;
 }
@@ -156,7 +156,7 @@ create_scripted_session(
     const std::filesystem::path& workspace) {
     tests::ModelsSessionOptions options;
     options.session_target =
-        coding_agent::ExplicitNewSessionTarget{session_file};
+        coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
     options.workspace = workspace;
     options.models = cch::tests::models_from_provider(std::move(client));
     options.request_model = cch::tests::scripted_request_model("sdk-host", "sdk-model");
