@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cch/ai/Message.hpp>
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/AgentSession.hpp"
 #include <cch/util/Error.hpp>
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/runtime/UserBash.hpp"

@@ -461,45 +461,49 @@ TEST_CASE("RuntimeServices remains internal to the coding_agent runtime package"
 
 TEST_CASE("AgentSession has one prompt completion and event subscription path", "[architecture][session][sdk]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
-    const auto sdk_header = read_text(source_root / "include" / "cch" / "coding_agent" / "Sdk.hpp");
+    // The public embeddable SDK surface is deleted with the SDK (ADR 0036):
+    // no public header and no implementation file remains, and the session
+    // handle surface lives in the private session header.
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "include" / "cch" / "coding_agent" / "Sdk.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "Sdk.cpp"));
+    const auto session_header = read_text(
+        source_root / "src" / "coding_agent" / "AgentSession.hpp");
     const auto runtime_header = read_text(
         source_root / "src" / "coding_agent" / "runtime" / "AgentSessionRuntime.hpp");
     const auto runtime_source = read_text(
         source_root / "src" / "coding_agent" / "runtime" / "AgentSessionRuntime.cpp");
-    const auto rpc_source = read_text(
-        source_root / "src" / "coding_agent" / "runtime" / "RpcMode.cpp");
 
     const auto public_result = std::string{"Prompt"} + "Result";
     const auto private_result = std::string{"Prompt"} + "RunResult";
     const auto prompt_sink_field = std::string{"event"} + "_sink";
     const auto prompt_scope_name = std::string{"per"} + "_prompt";
 
-    CHECK(sdk_header.find(public_result) == std::string::npos);
+    CHECK(session_header.find(public_result) == std::string::npos);
     CHECK(runtime_header.find(private_result) == std::string::npos);
-    CHECK(sdk_header.find(prompt_sink_field) == std::string::npos);
+    CHECK(session_header.find(prompt_sink_field) == std::string::npos);
     CHECK(runtime_header.find(prompt_scope_name) == std::string::npos);
     CHECK(cch::tests::count_occurrences(
-              sdk_header,
+              session_header,
               "boost::asio::awaitable<util::ExpectedVoid> prompt(") == 1);
-    CHECK(cch::tests::count_occurrences(sdk_header, "util::ExpectedVoid prompt_blocking(") == 1);
+    CHECK(cch::tests::count_occurrences(session_header, "util::ExpectedVoid prompt_blocking(") == 1);
     CHECK(runtime_source.find(
               "result = co_await agent::detail::AgentPromptAccess::prompt(") !=
           std::string::npos);
     CHECK(cch::tests::count_occurrences(runtime_source, "boost::asio::co_spawn(") == 1);
-    CHECK(cch::tests::count_occurrences(sdk_header, "AgentEventSink") == 1);
-    CHECK(sdk_header.find("subscribe(") != std::string::npos);
-    CHECK(cch::tests::count_occurrences(rpc_source, "config.session.subscribe(") == 1);
-    CHECK(rpc_source.find(prompt_sink_field) == std::string::npos);
-    CHECK(sdk_header.find("preflight_result") == std::string::npos);
-    CHECK(sdk_header.find("shared_ptr<ai::Models>") == std::string::npos);
-    CHECK(sdk_header.find("chat_client") == std::string::npos);
-    CHECK(rpc_source.find("AgentSessionPromptAccess::prompt_blocking") != std::string::npos);
+    CHECK(cch::tests::count_occurrences(session_header, "AgentEventSink") == 1);
+    CHECK(session_header.find("subscribe(") != std::string::npos);
+    CHECK(session_header.find("preflight_result") == std::string::npos);
+    // The private Models injection seam never appears in the public include
+    // surface (checked below); the session handle itself only accesses it
+    // through the private test-support factory friends.
+    CHECK(session_header.find("chat_client") == std::string::npos);
 }
 
 TEST_CASE("removed event and command contracts stay out of session ownership", "[architecture][agent][session][sdk]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
     const auto event_header = read_text(source_root / "include" / "cch" / "agent" / "AgentEvent.hpp");
-    const auto sdk_header = read_text(source_root / "include" / "cch" / "coding_agent" / "Sdk.hpp");
     const auto runtime_header = read_text(
         source_root / "src" / "coding_agent" / "runtime" / "AgentSessionRuntime.hpp");
     const auto factory_header = read_text(
@@ -527,39 +531,57 @@ TEST_CASE("removed event and command contracts stay out of session ownership", "
     CHECK(factory_source.find(registry_name) == std::string::npos);
     CHECK(cli_source.find(registry_name) != std::string::npos);
 
+    // The SDK command/handler vocabulary is gone with the SDK itself; the
+    // session handle and factory surfaces never carry it (the own slash
+    // registry still exists until its phase ticket).
     const auto sdk_command = std::string{"Sdk"} + "Command";
     const auto command_handler = std::string{"Command"} + "Handler";
-    CHECK(sdk_header.find(sdk_command) == std::string::npos);
-    CHECK(sdk_header.find(command_handler) == std::string::npos);
+    const auto session_header = read_text(
+        source_root / "src" / "coding_agent" / "AgentSession.hpp");
+    CHECK(session_header.find(sdk_command) == std::string::npos);
+    CHECK(session_header.find(command_handler) == std::string::npos);
+    CHECK(factory_header.find(sdk_command) == std::string::npos);
+    CHECK(factory_header.find(command_handler) == std::string::npos);
 }
 
 TEST_CASE(
     "User Bash remains a private Native TUI capability",
     "[architecture][session][tui][issue85]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
-    const auto sdk_header = read_text(
-        source_root / "include" / "cch" / "coding_agent" / "Sdk.hpp");
     const auto event_header = read_text(
         source_root / "include" / "cch" / "agent" / "AgentEvent.hpp");
-    const auto rpc_source = read_text(
-        source_root / "src" / "coding_agent" / "runtime" / "RpcMode.cpp");
-    const auto json_source = read_text(
-        source_root / "src" / "coding_agent" / "runtime" / "JsonEventPrinter.cpp");
     const auto services_header = read_text(
         source_root / "src" / "coding_agent" / "runtime" /
         (std::string{"RuntimeServices"} + ".hpp"));
     const auto runtime_source = read_text(
         source_root / "src" / "coding_agent" / "runtime" / "AgentSessionRuntime.cpp");
 
+    // The public SDK header and the RPC/JSON surfaces are gone with no
+    // placeholder (ADR 0036), so no machine-facing User Bash surface exists.
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "include" / "cch" / "coding_agent" / "Sdk.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "Sdk.cpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "runtime" / "RpcMode.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "runtime" / "RpcMode.cpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "runtime" / "RpcJsonl.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "runtime" / "RpcJsonl.cpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "runtime" / "JsonEventPrinter.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "runtime" / "JsonEventPrinter.cpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "cli" / "JsonCliRenderer.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "cli" / "JsonCliRenderer.cpp"));
     CHECK_FALSE(std::filesystem::exists(
         source_root / "include" / "cch" / "coding_agent" / "UserShell.hpp"));
     CHECK_FALSE(std::filesystem::exists(
         source_root / "include" / "cch" / "coding_agent" / "AsyncUserShell.hpp"));
-    CHECK(sdk_header.find("run_user_bash(") == std::string::npos);
-    CHECK(sdk_header.find("cancel_user_bash(") == std::string::npos);
-    CHECK(rpc_source.find("run_user_bash(") == std::string::npos);
-    CHECK(rpc_source.find("abort_bash") == std::string::npos);
-    CHECK(json_source.find("UserBash") == std::string::npos);
     CHECK(event_header.find("UserBash") == std::string::npos);
 
     CHECK(services_header.find("std::unique_ptr<AsyncUserShell> user_shell") !=
@@ -578,16 +600,8 @@ TEST_CASE(
     "Native TUI User Bash promotion keeps public and wire surfaces unchanged",
     "[architecture][session][tui][issue90]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
-    const auto sdk_header = read_text(
-        source_root / "include" / "cch" / "coding_agent" / "Sdk.hpp");
     const auto event_header = read_text(
         source_root / "include" / "cch" / "agent" / "AgentEvent.hpp");
-    const auto rpc_mode_source = read_text(
-        source_root / "src" / "coding_agent" / "runtime" / "RpcMode.cpp");
-    const auto rpc_jsonl_source = read_text(
-        source_root / "src" / "coding_agent" / "runtime" / "RpcJsonl.cpp");
-    const auto json_source = read_text(
-        source_root / "src" / "coding_agent" / "runtime" / "JsonEventPrinter.cpp");
     const auto keybinding_catalog = read_text(
         source_root / "src" / "coding_agent" / "tui" / "KeybindingCatalog.cpp") +
         read_text(
@@ -599,20 +613,29 @@ TEST_CASE(
     const auto cli_runtime_source = read_text(
         source_root / "src" / "coding_agent" / "runtime" / "AsyncCliRuntime.cpp");
 
-    // No public SDK User Bash method, option, or capability descriptor.
-    CHECK(sdk_header.find("UserShell") == std::string::npos);
-    CHECK(sdk_header.find("user_shell") == std::string::npos);
-    CHECK(sdk_header.find("UserBash") == std::string::npos);
-    CHECK(sdk_header.find("user_bash") == std::string::npos);
-    CHECK(sdk_header.find("userBash") == std::string::npos);
-
-    // No RPC command and no JSON protocol addition.
-    CHECK(rpc_mode_source.find("abort_bash") == std::string::npos);
-    CHECK(rpc_jsonl_source.find("abort_bash") == std::string::npos);
-    CHECK(rpc_mode_source.find("\"bash\"") == std::string::npos);
-    CHECK(rpc_jsonl_source.find("\"bash\"") == std::string::npos);
-    CHECK(json_source.find("UserBash") == std::string::npos);
-    CHECK(json_source.find("user_bash") == std::string::npos);
+    // The public SDK header and the RPC/JSON surfaces are deleted with no
+    // placeholder: no public User Bash method, no RPC command, no JSON
+    // protocol addition.
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "include" / "cch" / "coding_agent" / "Sdk.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "Sdk.cpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "runtime" / "RpcMode.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "runtime" / "RpcMode.cpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "runtime" / "RpcJsonl.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "runtime" / "RpcJsonl.cpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "runtime" / "JsonEventPrinter.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "runtime" / "JsonEventPrinter.cpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "cli" / "JsonCliRenderer.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "cli" / "JsonCliRenderer.cpp"));
 
     // No Agent lifecycle event alternative.
     CHECK(event_header.find("UserBash") == std::string::npos);
@@ -624,14 +647,14 @@ TEST_CASE(
     CHECK(command_registry_source.find("register_command(\"!") ==
           std::string::npos);
 
-    // Production assembly: only the Native TUI CLI frontend gains the
+    // Production assembly: only the interactive CLI frontend gains the
     // Session-owned LocalUserShell; the model-requested bash tool is always
     // available under the fixed tool set (the --enable-bash opt-in is gone).
     CHECK(factory_source.find("std::make_unique<LocalUserShell>") !=
           std::string::npos);
     CHECK(factory_source.find("plan.provide_user_shell") != std::string::npos);
     CHECK(cli_runtime_source.find(
-              "request.provide_user_shell = frontend == Frontend::NativeTui") !=
+              "request.provide_user_shell = frontend == Frontend::Interactive") !=
           std::string::npos);
 }
 
@@ -808,14 +831,14 @@ TEST_CASE(
     "all Agent Turn cap inputs default to absent",
     "[architecture][agent][coding_agent][cli][sdk][issue68][issue80]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
-    // The deleted --max-turns flag carries no CLI request field; the remaining
-    // turn-cap contracts are the Agent context, the SDK options (removed with
-    // the SDK), the runtime config, and the assembly plan.
+    // The deleted --max-turns flag carries no CLI request field and the SDK
+    // options are removed with the SDK; the remaining turn-cap contracts are
+    // the Agent context and the runtime config.
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "include" / "cch" / "coding_agent" / "Sdk.hpp"));
     const std::vector<std::filesystem::path> turn_cap_contracts{
         source_root / "include" / "cch" / "agent" / "AgentContext.hpp",
-        source_root / "include" / "cch" / "coding_agent" / "Sdk.hpp",
         source_root / "src" / "coding_agent" / "runtime" / "AgentSessionRuntime.hpp",
-        source_root / "src" / "coding_agent" / "runtime" / "SessionFactory.cpp",
     };
 
     // The explicit host-set max_turns extension remains available, but every
@@ -881,8 +904,12 @@ TEST_CASE(
     "ModelRuntime replaces AuthLoader and ProviderConfigResolution with no aliases",
     "[architecture][sdk][issue345]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
-    const auto sdk_header = read_text(
-        source_root / "include" / "cch" / "coding_agent" / "Sdk.hpp");
+    // The public SDK header is deleted with the SDK (ADR 0036); the session
+    // handle surface lives in the private session header.
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "include" / "cch" / "coding_agent" / "Sdk.hpp"));
+    const auto session_header = read_text(
+        source_root / "src" / "coding_agent" / "AgentSession.hpp");
     const auto factory_header = read_text(
         source_root / "src" / "coding_agent" / "runtime" / "SessionFactory.hpp");
 
@@ -895,20 +922,26 @@ TEST_CASE(
         source_root / "src" / "coding_agent" / "ProviderConfigResolution.hpp"));
     CHECK_FALSE(std::filesystem::exists(
         source_root / "src" / "coding_agent" / "ProviderConfigResolution.cpp"));
-    CHECK(sdk_header.find("SdkProviderConfig") == std::string::npos);
-    CHECK(sdk_header.find("provider_config") == std::string::npos);
+    CHECK(session_header.find("SdkProviderConfig") == std::string::npos);
+    CHECK(session_header.find("provider_config") == std::string::npos);
 
     // The ModelRuntime seam is the sole public model/auth injection surface.
     CHECK(std::filesystem::exists(
         source_root / "include" / "cch" / "coding_agent" / "ModelRuntime.hpp"));
-    CHECK(sdk_header.find("std::shared_ptr<ModelRuntime> model_runtime") !=
-          std::string::npos);
-    CHECK(sdk_header.find("model_runtime()") != std::string::npos);
-    CHECK(sdk_header.find("agent_dir") != std::string::npos);
-    CHECK(sdk_header.find("shared_ptr<ai::Models>") == std::string::npos);
+    CHECK(session_header.find("model_runtime()") != std::string::npos);
+    CHECK(session_header.find("agent_dir") == std::string::npos);
 
     // The private Models injection seam stays limited to the test-support
-    // factory wrapper; it never appears in the public SDK surface.
+    // factory wrappers; the public include surface never carries it (only the
+    // ModelRuntime seam itself may name the catalog).
+    for (const auto& header : public_headers()) {
+        if (header == source_root / "include" / "cch" / "coding_agent" /
+                "ModelRuntime.hpp") {
+            continue;
+        }
+        const auto text = read_text(header);
+        CHECK(text.find("shared_ptr<ai::Models>") == std::string::npos);
+    }
     CHECK(factory_header.find("std::shared_ptr<ai::Models> models") !=
           std::string::npos);
 }

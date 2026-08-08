@@ -2,7 +2,7 @@
 
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/ai/Content.hpp>
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/tui/Autocomplete.hpp>
 #include <cch/tui/Editor.hpp>

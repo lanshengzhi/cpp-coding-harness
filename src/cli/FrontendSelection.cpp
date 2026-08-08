@@ -40,9 +40,9 @@ FrontendEnvironment detect_frontend_environment() {
         .stdout_is_terminal = descriptor_is_terminal(kOutputDescriptor),
 #endif
 #if defined(__linux__) || defined(__APPLE__)
-        .native_tui_supported = true,
+        .interactive_supported = true,
 #else
-        .native_tui_supported = false,
+        .interactive_supported = false,
 #endif
     };
 }
@@ -50,22 +50,16 @@ FrontendEnvironment detect_frontend_environment() {
 util::Expected<Frontend> select_frontend(
     const CliConfig& config,
     FrontendEnvironment environment) {
-    if (config.output_mode == OutputMode::Rpc) {
-        return Frontend::Rpc;
-    }
-    if (config.output_mode == OutputMode::Json) {
-        return Frontend::Json;
-    }
     if (config.print || !environment.stdin_is_terminal || !environment.stdout_is_terminal) {
         return Frontend::Print;
     }
-    if (!environment.native_tui_supported) {
+    if (!environment.interactive_supported) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "Native TUI interactive mode is not supported on this platform",
-            "use --print, --mode json, or --mode rpc instead"));
+            "use --print instead"));
     }
-    return Frontend::NativeTui;
+    return Frontend::Interactive;
 }
 
 } // namespace cch::cli

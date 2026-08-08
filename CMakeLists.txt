@@ -238,7 +238,7 @@ add_library(cch_coding_agent_runtime
     src/coding_agent/prompt/PromptProcessor.cpp
     src/coding_agent/prompt/PromptTemplateExpander.cpp
     src/coding_agent/prompt/SlashCommandParser.cpp
-    src/coding_agent/Sdk.cpp
+    src/coding_agent/AgentSession.cpp
     src/coding_agent/SkillFrontmatterParser.cpp
     src/coding_agent/SkillLoader.cpp
     src/coding_agent/PromptTemplateLoader.cpp
@@ -249,12 +249,8 @@ add_library(cch_coding_agent_runtime
     src/coding_agent/runtime/SessionEventCommitment.cpp
     src/coding_agent/runtime/UserBashOutputAccumulator.cpp
     src/cli/OneShotCliFrontend.cpp
-    src/cli/JsonCliRenderer.cpp
     src/cli/TextCliRenderer.cpp
     src/coding_agent/runtime/SessionFactory.cpp
-    src/coding_agent/runtime/JsonEventPrinter.cpp
-    src/coding_agent/runtime/RpcJsonl.cpp
-    src/coding_agent/runtime/RpcMode.cpp
     src/coding_agent/runtime/SessionLifecycle.cpp
 )
 cch_target_defaults(cch_coding_agent_runtime)
@@ -387,16 +383,13 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/tui/InteractionPolicyTest.cpp
         tests/coding_agent/tui/UserBashPresentationTest.cpp
         tests/coding_agent/tui/UserBashSyntaxTest.cpp
-        tests/coding_agent/SdkSessionTest.cpp
         tests/coding_agent/AgentSessionCompactionTest.cpp
         tests/coding_agent/ReAuthGuidanceTest.cpp
         tests/coding_agent/TurnAutoRetryTest.cpp
         tests/coding_agent/AgentSessionSnapshotTest.cpp
         tests/coding_agent/SkillIntegrationTest.cpp
-        tests/coding_agent/runtime/JsonEventPrinterTest.cpp
         tests/coding_agent/runtime/LocalUserShellTest.cpp
         tests/coding_agent/runtime/SessionFactoryUserShellTest.cpp
-        tests/coding_agent/runtime/RpcModeTest.cpp
         tests/coding_agent/runtime/SessionEventCommitmentTest.cpp
         tests/coding_agent/runtime/SessionLifecycleTest.cpp
         tests/coding_agent/runtime/UserBashCancellationTest.cpp

@@ -1,4 +1,4 @@
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/AgentSession.hpp"
 
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/runtime/AgentSessionPromptAccess.hpp"
@@ -531,45 +531,26 @@ public:
 } // namespace detail
 
 util::Expected<CreateAgentSessionResult> create_agent_session(
-    CreateAgentSessionOptions options) {
-    return detail::AgentSessionRuntimeAccess::wrap_factory_result(runtime::SessionFactory::create(std::move(options)));
-}
-
-util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
-    CreateAgentSessionOptions options,
-    std::shared_ptr<ai::Models> models) {
-    return detail::AgentSessionRuntimeAccess::wrap_factory_result(
-        runtime::SessionFactory::create(
-            std::move(options), std::move(models)));
-}
-
-util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
-    CreateAgentSessionOptions options,
-    std::shared_ptr<ai::Models> models,
-    std::unique_ptr<runtime::AsyncUserShell> user_shell) {
-    return detail::AgentSessionRuntimeAccess::wrap_factory_result(
-        runtime::SessionFactory::create(
-            std::move(options), std::move(models), std::move(user_shell)));
-}
-
-util::Expected<CreateAgentSessionResult> create_agent_session(
     runtime::AgentSessionCreationRequest request) {
-    return detail::AgentSessionRuntimeAccess::wrap_factory_result(runtime::SessionFactory::create(std::move(request)));
+    return detail::AgentSessionRuntimeAccess::wrap_factory_result(
+        runtime::SessionFactory::create(std::move(request)));
 }
 
 util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
     runtime::AgentSessionCreationRequest request,
     std::shared_ptr<ai::Models> models) {
     return detail::AgentSessionRuntimeAccess::wrap_factory_result(
-        runtime::SessionFactory::create(std::move(request), std::move(models)));
+        runtime::SessionFactory::create(
+            std::move(request), std::move(models)));
 }
 
-util::Expected<CreateAgentSessionResult> create_agent_session(
-    CreateAgentSessionOptions options,
+util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
+    runtime::AgentSessionCreationRequest request,
+    std::shared_ptr<ai::Models> models,
     std::unique_ptr<runtime::AsyncUserShell> user_shell) {
     return detail::AgentSessionRuntimeAccess::wrap_factory_result(
         runtime::SessionFactory::create(
-            std::move(options), std::move(user_shell)));
+            std::move(request), std::move(models), std::move(user_shell)));
 }
 
 } // namespace cch::coding_agent

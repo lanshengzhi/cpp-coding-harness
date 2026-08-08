@@ -10,8 +10,8 @@ Directory. Discovery reads only that resolved user-level root and never scans a
 project-local `.pi` directory.
 
 On supported Linux/macOS, the production CLI loads this file when interactive
-stdin/stdout selects the Native TUI. Print, JSON, RPC, SDK, and unsupported-platform
-startup do not load a Native TUI keybinding registry.
+stdin/stdout selects the Native TUI. Print and unsupported-platform startup do
+not load a Native TUI keybinding registry.
 
 ## Format
 

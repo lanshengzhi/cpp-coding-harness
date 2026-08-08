@@ -2,7 +2,7 @@
 
 #include "CliRenderer.hpp"
 #include "coding_agent/prompt/SlashCommandParser.hpp"
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/AgentSession.hpp"
 
 #include <optional>
 #include <ostream>

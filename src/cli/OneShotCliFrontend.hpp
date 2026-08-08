@@ -1,7 +1,7 @@
 #pragma once
 
 #include "coding_agent/CommandRegistry.hpp"
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/AgentSession.hpp"
 #include <cch/harness/session/SessionEntry.hpp>
 
 #include <iosfwd>

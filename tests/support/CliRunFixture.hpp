@@ -147,7 +147,7 @@ inline CliRunResult run_cli(CliRunOptions options) {
     const cli::FrontendEnvironment environment{
         .stdin_is_terminal = options.stdin_is_terminal,
         .stdout_is_terminal = options.stdout_is_terminal,
-        .native_tui_supported = true,
+        .interactive_supported = true,
     };
     const int exit_code = cli::run_cli_entry(
         static_cast<int>(argv.size()),

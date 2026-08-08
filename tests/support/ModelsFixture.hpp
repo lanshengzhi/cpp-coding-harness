@@ -2,6 +2,7 @@
 
 #include <cch/ai/Models.hpp>
 #include <cch/ai/Provider.hpp>
+#include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "util/ExpectedMacros.hpp"
 
@@ -78,7 +79,7 @@ struct RecordedProviderRequest {
     ai::ProviderStreamOptions options;
 };
 
-/// Base for scripted `ai::Provider` fakes used across the SDK/session/TUI/CLI
+/// Base for scripted `ai::Provider` fakes used across the session/TUI/CLI
 /// test suites: fixed identity and an always-configured API-key auth.
 /// Subclasses implement the frozen `Provider::stream` surface only.
 class ScriptedProvider : public ai::Provider {
@@ -158,14 +159,17 @@ inline std::shared_ptr<ai::Models> models_from_provider(
     return models;
 }
 
-/// Test-only carrier for SessionFactory's private Models assembly seam.
-struct ModelsSessionOptions : coding_agent::CreateAgentSessionOptions {
+/// Test-only carrier for SessionFactory's private Models assembly seam. The
+/// base is the internal CLI creation request: focused session tests reuse its
+/// session-target/workspace/model-selection surface, and `models` injects the
+/// deterministic scripted provider catalog.
+struct ModelsSessionOptions : coding_agent::runtime::AgentSessionCreationRequest {
     std::shared_ptr<ai::Models> models;
 };
 
-/// Request Model for SDK session tests that no longer set `provider_config`:
+/// Request Model for focused session tests that no longer set `provider_config`:
 /// a complete, credential-free shape carried through the scripted fake seam.
-inline ai::Model sdk_request_model(
+inline ai::Model scripted_request_model(
     std::string provider,
     std::string model_id,
     std::optional<std::string> base_url = std::nullopt) {
@@ -189,21 +193,21 @@ inline ai::Model sdk_request_model(
 inline util::Expected<coding_agent::CreateAgentSessionResult> create_agent_session(
     ModelsSessionOptions options) {
     auto models = std::move(options.models);
-    coding_agent::CreateAgentSessionOptions public_options = std::move(options);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     if (models) {
         return coding_agent::create_agent_session_for_testing(
-            std::move(public_options), std::move(models));
+            std::move(request), std::move(models));
     }
-    return coding_agent::create_agent_session(std::move(public_options));
+    return coding_agent::create_agent_session(std::move(request));
 }
 
 inline util::Expected<coding_agent::CreateAgentSessionResult> create_agent_session(
     ModelsSessionOptions options,
     std::unique_ptr<coding_agent::runtime::AsyncUserShell> user_shell) {
     auto models = std::move(options.models);
-    coding_agent::CreateAgentSessionOptions public_options = std::move(options);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     return coding_agent::create_agent_session_for_testing(
-        std::move(public_options), std::move(models), std::move(user_shell));
+        std::move(request), std::move(models), std::move(user_shell));
 }
 
 } // namespace cch::tests

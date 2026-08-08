@@ -4,7 +4,7 @@
 #include <cch/coding_agent/AgentSessionEvent.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/Skill.hpp>
 #include <cch/util/Error.hpp>
 #include "coding_agent/prompt/PromptProcessor.hpp"
@@ -54,7 +54,7 @@ struct RetrySettings {
 };
 
 /// Internal runtime behind AgentSession. Composes the stateful Agent with
-/// session persistence, prompt processing, resources, and SDK presentation.
+/// session persistence, prompt processing, resources, and session presentation.
 class AgentSessionRuntime {
 public:
     AgentSessionRuntime(

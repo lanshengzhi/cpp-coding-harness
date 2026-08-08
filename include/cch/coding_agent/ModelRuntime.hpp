@@ -29,7 +29,7 @@ class SessionFactory;
 /// subset). Every field is optional; defaults derive from the Agent Config
 /// Directory.
 struct ModelRuntimeOptions {
-    /// Agent Config Directory override (SDK `agentDir`). When empty, the
+    /// Agent Config Directory override (pi `agentDir`). When empty, the
     /// default `agent_config_dir()` applies (`PI_CODING_AGENT_DIR`, then
     /// `~/.pi/agent`).
     std::filesystem::path agent_dir{};

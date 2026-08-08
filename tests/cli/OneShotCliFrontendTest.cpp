@@ -2,12 +2,10 @@
 #include "support/ModelsFixture.hpp"
 
 #include "cli/OneShotCliFrontend.hpp"
-#include "cli/JsonCliRenderer.hpp"
 #include "cli/TextCliRenderer.hpp"
 
 #include "ai/providers/FakeProvider.hpp"
-#include <cch/coding_agent/Sdk.hpp>
-#include "util/Json.hpp"
+#include "coding_agent/AgentSession.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/TextHelpers.hpp"
 
@@ -110,12 +108,6 @@ tests::ModelsSessionOptions fake_in_memory_options(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace;
     options.models = ai::providers::make_scripted_fake_models();
-    options.builtin_tools = coding_agent::SdkBuiltinTools{
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     return options;
 }
 
@@ -139,92 +131,7 @@ CreatedSession make_session(
     return CreatedSession{std::move(*created)};
 }
 
-[[nodiscard]] std::vector<util::JsonValue::object_t> parse_json_lines(
-    const std::string& text) {
-    std::vector<util::JsonValue::object_t> records;
-    std::istringstream lines{text};
-    for (std::string line; std::getline(lines, line);) {
-        if (line.empty()) {
-            continue;
-        }
-        auto parsed = util::read_json<util::JsonValue>(line);
-        REQUIRE(parsed.has_value());
-        const auto* object = parsed->get_if<util::JsonValue::object_t>();
-        REQUIRE(object != nullptr);
-        records.push_back(*object);
-    }
-    return records;
-}
-
-[[nodiscard]] std::size_t find_record_index(
-    const std::vector<util::JsonValue::object_t>& records,
-    const std::string& type) {
-    for (std::size_t index = 0; index < records.size(); ++index) {
-        const auto it = records[index].find("type");
-        if (it != records[index].end()) {
-            if (const auto* value = it->second.get_if<std::string>(); value && *value == type) {
-                return index;
-            }
-        }
-    }
-    return records.size();
-}
-
-[[nodiscard]] std::size_t find_assistant_message_end_index(
-    const std::vector<util::JsonValue::object_t>& records) {
-    for (std::size_t index = 0; index < records.size(); ++index) {
-        const auto type = records[index].find("type");
-        if (type == records[index].end()) {
-            continue;
-        }
-        const auto* type_value = type->second.get_if<std::string>();
-        if (type_value == nullptr || *type_value != "message_end") {
-            continue;
-        }
-        const auto message = records[index].find("message");
-        if (message == records[index].end()) {
-            continue;
-        }
-        const auto* message_object = message->second.get_if<util::JsonValue::object_t>();
-        if (message_object == nullptr) {
-            continue;
-        }
-        const auto role = message_object->find("role");
-        if (role == message_object->end()) {
-            continue;
-        }
-        if (const auto* role_value = role->second.get_if<std::string>();
-            role_value && *role_value == "assistant") {
-            return index;
-        }
-    }
-    return records.size();
-}
-
 } // namespace
-
-TEST_CASE(
-    "one-shot JSON frontend exits 2 when the session header cannot be written",
-    "[cli][frontend]") {
-    tests::TempWorkspace workspace;
-    auto session = make_session(workspace);
-
-    FailingStreambuf failing;
-    std::ostream broken_output{&failing};
-    std::istringstream input;
-    std::ostringstream error;
-    cli::JsonCliRenderer renderer{broken_output, error};
-    cli::OneShotCliFrontend frontend{
-        *session.created.session,
-        renderer,
-        session.created.metadata,
-        cli::OneShotCliFrontendConfig{
-            .output = broken_output, .error = error,
-            .prompt = "hello"}};
-
-    CHECK(frontend.run() == cli::OneShotCliOutcome::StartupFailure);
-    CHECK(error.str().find("event printer failed: ") != std::string::npos);
-}
 
 TEST_CASE(
     "one-shot frontend exits 2 when event subscription fails",
@@ -506,125 +413,3 @@ TEST_CASE(
     CHECK_FALSE(static_cast<bool>(*rejecting));
 }
 
-TEST_CASE(
-    "one-shot JSON frontend emits a session header and event records",
-    "[cli][frontend]") {
-    tests::TempWorkspace workspace;
-    auto session = make_session(workspace);
-
-    std::istringstream input;
-    std::ostringstream output;
-    std::ostringstream error;
-    cli::JsonCliRenderer renderer{output, error};
-    cli::OneShotCliFrontend frontend{
-        *session.created.session,
-        renderer,
-        session.created.metadata,
-        cli::OneShotCliFrontendConfig{
-            .output = output, .error = error,
-            .prompt = "hello"}};
-
-    CHECK(frontend.run() == cli::OneShotCliOutcome::Success);
-
-    std::istringstream records{output.str()};
-    std::string header_line;
-    REQUIRE(std::getline(records, header_line));
-    const auto header = util::read_json<util::JsonValue>(header_line);
-    REQUIRE(header.has_value());
-    const auto* header_object = header->get_if<util::JsonValue::object_t>();
-    REQUIRE(header_object != nullptr);
-    CHECK(header_object->at("type").get<std::string>() == "session");
-    CHECK(header_object->at("id").get<std::string>() == session.created.metadata.session_id);
-    CHECK(output.str().find("agent_start") != std::string::npos);
-    CHECK(output.str().find("fake: hello") != std::string::npos);
-    CHECK(error.str().empty());
-}
-
-TEST_CASE(
-    "one-shot JSON frontend carries the terminal outcome in ordinary lifecycle records",
-    "[cli][frontend][issue16]") {
-    tests::TempWorkspace workspace;
-    auto session = make_session(
-        workspace,
-        std::make_shared<TerminalOutcomeChatProvider>(
-            ai::AssistantStopReason::Error, "host transport lost"));
-
-    std::istringstream input;
-    std::ostringstream output;
-    std::ostringstream error;
-    cli::JsonCliRenderer renderer{output, error};
-    cli::OneShotCliFrontend frontend{
-        *session.created.session,
-        renderer,
-        session.created.metadata,
-        cli::OneShotCliFrontendConfig{
-            .output = output, .error = error,
-            .prompt = "hello"}};
-
-    CHECK(frontend.run() == cli::OneShotCliOutcome::Success);
-    CHECK(error.str().empty());
-
-    const auto records = parse_json_lines(output.str());
-    REQUIRE(records.size() > 1);
-    CHECK(records.front().at("type").get<std::string>() == "session");
-    CHECK(find_record_index(records, "runtime_terminal") == records.size());
-
-    const auto message_end_index = find_assistant_message_end_index(records);
-    const auto turn_end_index = find_record_index(records, "turn_end");
-    const auto agent_end_index = find_record_index(records, "agent_end");
-    REQUIRE(message_end_index < records.size());
-    REQUIRE(turn_end_index < records.size());
-    REQUIRE(agent_end_index < records.size());
-    CHECK(message_end_index < turn_end_index);
-    CHECK(turn_end_index < agent_end_index);
-
-    const auto& ended_message = records[message_end_index].at("message").get<util::JsonValue::object_t>();
-    CHECK(ended_message.at("role").get<std::string>() == "assistant");
-    CHECK(ended_message.at("stopReason").get<std::string>() == "error");
-    CHECK(ended_message.at("errorMessage").get<std::string>() == "host transport lost");
-
-    const auto& turn_end = records[turn_end_index];
-    const auto& turn_message = turn_end.at("message").get<util::JsonValue::object_t>();
-    CHECK(turn_message.at("stopReason").get<std::string>() == "error");
-    CHECK(turn_message.at("errorMessage").get<std::string>() == "host transport lost");
-    CHECK(turn_end.at("toolResults").get<util::JsonValue::array_t>().empty());
-
-    const auto& agent_messages = records[agent_end_index].at("messages").get<util::JsonValue::array_t>();
-    REQUIRE_FALSE(agent_messages.empty());
-    const auto& final_message = agent_messages.back().get<util::JsonValue::object_t>();
-    CHECK(final_message.at("role").get<std::string>() == "assistant");
-    CHECK(final_message.at("stopReason").get<std::string>() == "error");
-    CHECK(final_message.at("errorMessage").get<std::string>() == "host transport lost");
-}
-
-TEST_CASE(
-    "one-shot JSON frontend suppresses frontend command output",
-    "[cli][frontend]") {
-    tests::TempWorkspace workspace;
-    auto session = make_session(workspace);
-
-    std::istringstream input;
-    std::ostringstream output;
-    std::ostringstream error;
-    cli::JsonCliRenderer renderer{output, error};
-    cli::OneShotCliFrontend frontend{
-        *session.created.session,
-        renderer,
-        session.created.metadata,
-        cli::OneShotCliFrontendConfig{
-            .output = output, .error = error,
-            .prompt = "/session"}};
-
-    CHECK(frontend.run() == cli::OneShotCliOutcome::Success);
-    CHECK(output.str().find("Session: ") == std::string::npos);
-    CHECK(output.str().find("\033[2J\033[H") == std::string::npos);
-
-    // Every emitted line stays a JSON protocol record.
-    std::istringstream records{output.str()};
-    for (std::string line; std::getline(records, line);) {
-        if (line.empty()) {
-            continue;
-        }
-        CHECK(util::read_json<util::JsonValue>(line).has_value());
-    }
-}

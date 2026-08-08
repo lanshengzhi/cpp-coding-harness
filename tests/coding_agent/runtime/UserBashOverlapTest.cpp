@@ -1,7 +1,6 @@
 #include <cch/ai/Content.hpp>
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/AgentSession.hpp"
 #include <cch/harness/session/SessionResume.hpp>
-#include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "harness/session/SessionJournalTestHooks.hpp"
 #include "support/FakeUserShell.hpp"
@@ -131,12 +130,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -212,12 +205,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -282,12 +269,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -345,12 +326,6 @@ TEST_CASE(
     options.session_target = coding_agent::ExplicitNewSessionTarget{session_path};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -408,12 +383,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = true,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -491,12 +460,6 @@ TEST_CASE(
     options.session_target = coding_agent::ExplicitNewSessionTarget{session_path};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -562,12 +525,6 @@ TEST_CASE(
     options.session_target = coding_agent::ExplicitNewSessionTarget{session_path};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -627,12 +584,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);

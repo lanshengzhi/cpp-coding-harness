@@ -1,21 +1,21 @@
 #pragma once
 
+#include <cch/agent/AgentContext.hpp>
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/agent/AgentTool.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Model.hpp>
+#include <cch/ai/Models.hpp>
 #include <cch/ai/Usage.hpp>
 #include <cch/coding_agent/AgentSessionEvent.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
-#include <cch/coding_agent/ProjectResources.hpp>
-#include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/coding_agent/Skill.hpp>
-#include <cch/harness/ExecutionEnv.hpp>
 #include <cch/harness/session/SessionEntry.hpp>
 #include <cch/util/Error.hpp>
 #include <cch/util/JsonValue.hpp>
+#include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
@@ -25,8 +25,17 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Internal session handle for the CLI frontends (pi `agent-session.ts`
+// equivalent). The former public embeddable SDK surface (`Sdk.hpp`) is
+// removed with the pi-coding-agent phase (ADR 0036): no public session header,
+// no host-supplied skill/template/tool injection, no create_agent_session
+// options surface. This header is private to the binary and its tests.
+// ─────────────────────────────────────────────────────────────────────────────
 
 namespace cch::coding_agent {
 namespace detail {
@@ -34,19 +43,14 @@ class AgentSessionInteractiveAccess;
 class AgentSessionPromptAccess;
 class AgentSessionRuntimeAccess;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Public SDK types for the embeddable C++23 agent surface.
-//
-// This header is a source-level API contract. It does not expose private
-// runtime headers, serialization machinery, CLI/RPC helpers, or provider
-// wire DTOs. The SDK is experimental and not ABI-stable.
-// ─────────────────────────────────────────────────────────────────────────────
+namespace runtime {
+class AsyncUserShell;
+}
 
 // ── Diagnostics ──────────────────────────────────────────────────────────────
 
 /// Diagnostic produced during session creation.
-struct SdkDiagnostic {
+struct SessionDiagnostic {
     enum class Severity { Info, Warning, Error };
 
     Severity severity{Severity::Warning};
@@ -59,138 +63,17 @@ struct SdkDiagnostic {
     std::optional<std::string> path;
 };
 
-// ── Built-in tool selection ──────────────────────────────────────────────────
-
-/// Which built-in tools to register.
-/// Defaults match the safe-tool posture: read, write, edit; bash opt-in.
-struct SdkBuiltinTools {
-    bool read{true};
-    bool write{true};
-    bool edit{true};
-    bool bash{false};
-};
-
-// ── CreateAgentSessionOptions ────────────────────────────────────────────────
-
-/// Create a persisted Agent Session beneath the workspace-keyed Agent Config
-/// Directory sessions root.
-struct DefaultPersistedSessionTarget {};
-
-/// Create a new persisted Agent Session at an exact caller-supplied path.
-struct ExplicitNewSessionTarget {
-    std::filesystem::path path;
-};
-
-/// Resume the persisted Agent Session at an exact caller-supplied path.
-struct ExplicitResumeSessionTarget {
-    std::filesystem::path path;
-};
-
-/// Create an Agent Session without a session directory or transcript file.
-struct InMemorySessionTarget {};
-
-/// Mutually exclusive session target. Default construction selects
-/// workspace-keyed persistence under the Agent Config Directory.
-using SessionTarget = std::variant<
-    DefaultPersistedSessionTarget,
-    ExplicitNewSessionTarget,
-    ExplicitResumeSessionTarget,
-    InMemorySessionTarget>;
-
-/// Options passed to create_agent_session().
-///
-/// Session target: defaults to workspace-keyed persisted creation. Explicit
-/// create and resume alternatives retain their exact paths and may live outside
-/// the Agent Config Directory. In-memory creation has no physical session path.
-///
-/// Workspace: required for new sessions. It is resolved to one canonical
-/// physical directory used for execution, metadata, and default storage. For
-/// resumes, if `workspace` is explicit and differs from the stored session
-/// workspace, creation fails.
-///
-/// Model: the initial model for the new session. When absent, the runtime
-/// default applies; a resume re-resolves the stored model against the live
-/// runtime.
-struct CreateAgentSessionOptions {
-    // ── Session target ───────────────────────────────────────────────────
-    SessionTarget session_target{};
-    std::filesystem::path workspace;
-
-    // ── Model / auth runtime ──────────────────────────────────────────────
-    /// Canonical model/auth runtime (ADR 0029/0030). Nullable: when absent a
-    /// runtime is default-created from the Agent Config Directory for this
-    /// session. An injected runtime wins over `agent_dir` path derivation,
-    /// is reusable across sessions, and has no dispose ceremony.
-    std::shared_ptr<ModelRuntime> model_runtime{nullptr};
-    /// Agent Config Directory override for the default-created runtime only
-    /// (SDK `agentDir`). Ignored when `model_runtime` is injected. When
-    /// absent, the default `agent_config_dir()` applies.
-    std::optional<std::filesystem::path> agent_dir{std::nullopt};
-    /// Initial model for the new session. When absent, the runtime default
-    /// applies (frozen default-model table, then the first available model;
-    /// a resume re-resolves the stored model against the live runtime).
-    std::optional<ai::Model> model{std::nullopt};
-
-    // ── Host-provided capabilities ───────────────────────────────────────
-    /// Host-provided execution environment. If not set, a local execution
-    /// environment is constructed for the workspace. Host-provided environments
-    /// are never cleaned up by the session.
-    std::shared_ptr<harness::AsyncExecutionEnv> execution_env;
-
-    // ── Built-in tool selection ──────────────────────────────────────────
-    SdkBuiltinTools builtin_tools{};
-
-    // ── Custom tools ─────────────────────────────────────────────────────
-    /// Custom tools whose ownership transfers to the session. Duplicate names
-    /// (including clashes with built-in tools) fail session creation.
-    std::vector<std::unique_ptr<agent::AsyncAgentTool>> custom_tools;
-
-    // ── Host-provided resources ──────────────────────────────────────────
-    /// Skills available to the agent. Host-provided skills take precedence
-    /// over project-discovered duplicates.
-    std::vector<Skill> skills;
-    /// Prompt templates available for expansion before the agent loop.
-    /// Host-provided templates take precedence over project-discovered
-    /// duplicates.
-    std::vector<PromptTemplate> prompt_templates;
-
-    // ── Project resource loading (opt-in) ────────────────────────────────
-    /// When true, discover and load project-local skills and prompt
-    /// templates from `.cpp-harness/`. Diagnostics are returned as values,
-    /// not printed.
-    bool load_project_resources{false};
-    /// Default trust decision for project resource loading. Defaults to `ask`.
-    std::optional<DefaultProjectTrust> default_project_trust;
-    /// Resource enablement for project skills.
-    std::optional<ResourceEnablement> project_skills_enablement;
-    /// Optional absolute path to a user-controlled trust store outside the
-    /// workspace. If omitted, the agent config directory's `trust.json`
-    /// (`~/.pi/agent/trust.json`) is used. A supplied path must be
-    /// absolute and must not resolve to the workspace or any path inside it.
-    std::optional<std::filesystem::path> trust_store_path;
-
-    // ── Agent execution policy ───────────────────────────────────────────
-    /// Per-queue admission limits forwarded to AsyncAgentOptions. The Agent
-    /// remains the sole owner of queue storage, bounds, and admission.
-    std::size_t max_queued_messages{agent::kDefaultMaxQueuedMessages};
-    std::size_t max_queued_bytes{agent::kDefaultMaxQueuedBytes};
-    /// Optional explicit turn cap per prompt (passed through to
-    /// AsyncAgentOptions). std::nullopt (the default) imposes no turn cap
-    /// (ADR 0015).
-    std::optional<int> max_turns{std::nullopt};
-};
-
 // ── CreateAgentSessionResult ─────────────────────────────────────────────────
 
 class AgentSession;
 
-/// Result of a successful create_agent_session() call.
+/// Result of a successful session creation.
 struct CreateAgentSessionResult {
     /// The created/resumed session handle. Move-only.
     std::unique_ptr<AgentSession> session;
     /// Diagnostics collected during creation (provider fallback,
     /// resource load warnings, etc.).
-    std::vector<SdkDiagnostic> diagnostics;
+    std::vector<SessionDiagnostic> diagnostics;
 
     /// Resolved session metadata (for host introspection).
     std::string session_id;
@@ -257,7 +140,7 @@ public:
     [[nodiscard]] explicit operator bool() const;
 
 public:
-    /// Opaque implementation type. Defined in the SDK implementation.
+    /// Opaque implementation type. Defined in the session implementation.
     struct Impl;
 
 private:
@@ -286,7 +169,8 @@ private:
 /// later subscriber delivery or persistence fails.
 class AgentSession {
 public:
-    /// Opaque implementation type. Defined in the SDK implementation source.
+    /// Opaque implementation type. Defined in the session implementation
+    /// source.
     struct Impl;
 
     AgentSession();
@@ -457,7 +341,7 @@ public:
 
     // ── Resource access (read-only introspection) ────────────────────────
 
-    /// Skills available to the agent (host-provided + loaded project skills).
+    /// Skills available to the agent (loaded project skills).
     [[nodiscard]] const std::vector<Skill>& skills() const;
 
     /// Prompt templates available for expansion.
@@ -465,7 +349,14 @@ public:
 
 private:
     friend util::Expected<CreateAgentSessionResult> create_agent_session(
-        CreateAgentSessionOptions options);
+        runtime::AgentSessionCreationRequest request);
+    friend util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
+        runtime::AgentSessionCreationRequest request,
+        std::shared_ptr<ai::Models> models);
+    friend util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
+        runtime::AgentSessionCreationRequest request,
+        std::shared_ptr<ai::Models> models,
+        std::unique_ptr<runtime::AsyncUserShell> user_shell);
     friend class detail::AgentSessionInteractiveAccess;
     friend class detail::AgentSessionPromptAccess;
     friend class detail::AgentSessionRuntimeAccess;
@@ -477,14 +368,28 @@ private:
 
 // ── Factory ──────────────────────────────────────────────────────────────────
 
-/// Create or resume an agent session.
+/// Create or resume an agent session from the CLI creation request.
 ///
-/// Validates options, resolves the workspace, opens or creates the selected
-/// persisted session, assembles the provider client, execution environment,
-/// tools, and resources, and returns a session handle with diagnostics.
+/// Validates the request, resolves the workspace, opens or creates the
+/// selected persisted session, assembles the provider client, execution
+/// environment, tools, and resources, and returns a session handle with
+/// diagnostics.
 ///
 /// Does not write to stdout/stderr or read RPC stdin.
 [[nodiscard]] util::Expected<CreateAgentSessionResult> create_agent_session(
-    CreateAgentSessionOptions options);
+    runtime::AgentSessionCreationRequest request);
+
+/// Private test-support wrapper around SessionFactory's Models assembly seam
+/// (the deterministic provider surface the `--fake` flag used to drive).
+[[nodiscard]] util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
+    runtime::AgentSessionCreationRequest request,
+    std::shared_ptr<ai::Models> models);
+
+/// Private test-support wrapper around SessionFactory's Models assembly seam
+/// with an injected Session-owned User Shell.
+[[nodiscard]] util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
+    runtime::AgentSessionCreationRequest request,
+    std::shared_ptr<ai::Models> models,
+    std::unique_ptr<runtime::AsyncUserShell> user_shell);
 
 } // namespace cch::coding_agent

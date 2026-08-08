@@ -120,10 +120,13 @@ struct NormalizedArgv {
     return normalized;
 }
 
-[[nodiscard]] cch::util::Expected<OutputMode> parse_output_mode(
+[[nodiscard]] cch::util::ExpectedVoid validate_output_mode(
     const std::string& mode_text) {
+    // The internal OutputMode reduces to the text default (pi): only
+    // `--mode text` parses; the removed json/rpc values are hard-rejected so
+    // no removed surface is ever accepted-but-ignored.
     if (mode_text == "text") {
-        return OutputMode::Text;
+        return {};
     }
     if (mode_text == "json" || mode_text == "rpc") {
         return std::unexpected(cli_error(
@@ -389,13 +392,9 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     }
 
     if (mode_option->count() > 0) {
-        auto parsed_mode = parse_output_mode(mode_text);
-        if (!parsed_mode) {
+        if (auto parsed_mode = validate_output_mode(mode_text); !parsed_mode) {
             return std::unexpected(std::move(parsed_mode.error()));
         }
-        config.output_mode = *parsed_mode;
-    } else {
-        config.output_mode = OutputMode::Text;
     }
 
     // `--api-key` requires an explicit model (pi): it cannot name a provider

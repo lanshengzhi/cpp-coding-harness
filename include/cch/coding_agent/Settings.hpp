@@ -53,7 +53,7 @@ struct UserSettings {
     std::optional<std::vector<std::string>> enabled_models{std::nullopt};
     /// pi `sessionDir` — CLI session-storage preference (same format as the
     /// `--session-dir` flag). Consumed only by CLI automatic-directory
-    /// resolution; SDK default persistence never reads it.
+    /// resolution; default persistence never reads it.
     std::optional<std::string> session_dir{std::nullopt};
     /// pi `defaultProjectTrust` — global-only; never honored from the project
     /// scope.

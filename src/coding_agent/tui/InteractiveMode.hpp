@@ -2,7 +2,7 @@
 
 #include "coding_agent/tui/ClipboardReader.hpp"
 
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/AgentSession.hpp"
 #include <cch/tui/Keybindings.hpp>
 #include <cch/util/Error.hpp>
 

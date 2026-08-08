@@ -1,11 +1,10 @@
 #include "support/ModelsFixture.hpp"
 #include <cch/ai/Content.hpp>
 #include <cch/agent/AgentTool.hpp>
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/AgentSession.hpp"
 #include <cch/harness/session/JsonlSessionStore.hpp>
 #include <cch/harness/session/SessionResume.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
-#include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
@@ -24,6 +23,7 @@
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
+#include <set>
 
 #include <algorithm>
 #include <chrono>
@@ -328,12 +328,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -395,7 +389,15 @@ TEST_CASE(
     const auto& provider_messages = client_pointer->requests[0].context.messages;
     CHECK(has_bash_command(provider_messages, "echo included"));
     CHECK_FALSE(has_bash_command(provider_messages, "echo excluded"));
-    CHECK(client_pointer->requests[0].context.tools.empty());
+    // The fixed #331 tool set (read/write/edit/bash) is always registered.
+    const auto& tools = client_pointer->requests[0].context.tools;
+    REQUIRE(tools.size() == 4);
+    std::set<std::string> tool_names;
+    for (const auto& tool : tools) {
+        tool_names.insert(tool.name);
+    }
+    CHECK((tool_names ==
+           std::set<std::string>{"bash", "edit", "read", "write"}));
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -416,12 +418,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -487,12 +483,6 @@ TEST_CASE(
     options.session_target = coding_agent::ExplicitNewSessionTarget{session_path};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -609,12 +599,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -675,12 +659,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -750,12 +728,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -826,12 +798,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -900,12 +866,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -1017,12 +977,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -1136,12 +1090,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -1248,12 +1196,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -1333,12 +1275,6 @@ TEST_CASE(
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
     options.custom_tools.push_back(std::move(tool));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -1414,12 +1350,6 @@ TEST_CASE(
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
     options.custom_tools.push_back(std::move(tool));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -1497,12 +1427,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -1618,12 +1542,6 @@ TEST_CASE(
     options.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::make_shared<RecordingChatProvider>());
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto resumed = coding_agent::create_agent_session(std::move(options));
     REQUIRE(resumed);
 
@@ -1697,12 +1615,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -1789,12 +1701,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -1859,12 +1765,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -1959,12 +1859,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -2027,12 +1921,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -2106,12 +1994,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -2202,14 +2084,7 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.load_project_resources = true;
-    options.default_project_trust = coding_agent::DefaultProjectTrust::Always;
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
+    options.project_trust_override = true;
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -2263,12 +2138,6 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);

@@ -2,11 +2,9 @@
 
 #include "cli/CliParse.hpp"
 #include "cli/InitialPrompt.hpp"
-#include "cli/JsonCliRenderer.hpp"
 #include "cli/OneShotCliFrontend.hpp"
 #include "cli/TextCliRenderer.hpp"
-#include "coding_agent/AgentSessionBridge.hpp"
-#include "coding_agent/runtime/RpcMode.hpp"
+#include "coding_agent/AgentSession.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/tui/ProcessTerminal.hpp>
@@ -60,17 +58,17 @@ void print_creation_error(
 
 void print_session_diagnostics(
     std::ostream& error_stream,
-    const std::vector<coding_agent::SdkDiagnostic>& diagnostics) {
+    const std::vector<coding_agent::SessionDiagnostic>& diagnostics) {
     for (const auto& diag : diagnostics) {
         const char* severity = "info";
         switch (diag.severity) {
-        case coding_agent::SdkDiagnostic::Severity::Info:
+        case coding_agent::SessionDiagnostic::Severity::Info:
             severity = "info";
             break;
-        case coding_agent::SdkDiagnostic::Severity::Warning:
+        case coding_agent::SessionDiagnostic::Severity::Warning:
             severity = "warn";
             break;
-        case coding_agent::SdkDiagnostic::Severity::Error:
+        case coding_agent::SessionDiagnostic::Severity::Error:
             severity = "error";
             break;
         }
@@ -154,17 +152,15 @@ void print_session_diagnostics(
         return 2;
     }
 
-    if (frontend != Frontend::Rpc) {
-        if (auto piped_input = read_piped_input(
-                streams.input, environment.stdin_is_terminal);
-            !piped_input) {
-            streams.error << piped_input.error().message << '\n';
-            return 2;
-        } else {
-            initial_prompt->text.insert(0, std::move(*piped_input));
-        }
+    if (auto piped_input = read_piped_input(
+            streams.input, environment.stdin_is_terminal);
+        !piped_input) {
+        streams.error << piped_input.error().message << '\n';
+        return 2;
+    } else {
+        initial_prompt->text.insert(0, std::move(*piped_input));
     }
-    if ((frontend == Frontend::Print || frontend == Frontend::Json) &&
+    if (frontend == Frontend::Print &&
         initial_prompt->text.empty() && initial_prompt->images.empty()) {
         streams.error << "prompt is required for non-interactive output\n";
         return 2;
@@ -172,9 +168,9 @@ void print_session_diagnostics(
 
     coding_agent::runtime::AgentSessionCreationRequest request;
     // The interactive Native TUI always receives its independent User Shell
-    // (ADR 0026); one-shot, JSON, and RPC frontends keep ordinary-prompt
-    // semantics for leading '!' text.
-    request.provide_user_shell = frontend == Frontend::NativeTui;
+    // (ADR 0026); the one-shot print path keeps ordinary-prompt semantics
+    // for leading '!' text.
+    request.provide_user_shell = frontend == Frontend::Interactive;
     request.project_trust_override = config.project_trust_override;
     request.disable_project_skills = config.no_skills;
     request.disable_prompt_templates = config.no_prompt_templates;
@@ -198,17 +194,7 @@ void print_session_diagnostics(
     print_session_diagnostics(streams.error, created->diagnostics);
 
     auto& session = *created->session;
-    if (frontend == Frontend::Rpc) {
-        return coding_agent::runtime::run_rpc_mode(coding_agent::runtime::RpcModeConfig{
-            streams.input,
-            streams.output,
-            session,
-            created->provider,
-            created->model,
-            created->workspace,
-        });
-    }
-    if (frontend == Frontend::NativeTui) {
+    if (frontend == Frontend::Interactive) {
         return run_native_tui(session, std::move(*initial_prompt));
     }
 
@@ -217,29 +203,20 @@ void print_session_diagnostics(
         .error = streams.error,
         .prompt = std::move(initial_prompt->text),
     };
-    auto run_frontend = [&](CliRenderer& renderer) {
-        OneShotCliFrontend one_shot{
-            session,
-            renderer,
-            created->metadata,
-            std::move(frontend_config),
-            coding_agent::PromptOptions{
-                .expand_prompt_templates = true,
-                .images = std::move(initial_prompt->images),
-            }};
-        return one_shot_exit_code_for(one_shot.run());
-    };
-
-    if (frontend == Frontend::Json) {
-        JsonCliRenderer renderer{streams.output, streams.error};
-        return run_frontend(renderer);
-    }
-
     TextCliRenderer renderer{
         streams.output,
         streams.error,
         environment.stdin_is_terminal && environment.stdout_is_terminal};
-    return run_frontend(renderer);
+    OneShotCliFrontend one_shot{
+        session,
+        renderer,
+        created->metadata,
+        std::move(frontend_config),
+        coding_agent::PromptOptions{
+            .expand_prompt_templates = true,
+            .images = std::move(initial_prompt->images),
+        }};
+    return one_shot_exit_code_for(one_shot.run());
 }
 
 [[nodiscard]] int run_cli_entry(

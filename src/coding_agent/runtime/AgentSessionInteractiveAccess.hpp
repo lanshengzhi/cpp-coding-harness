@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/AgentSession.hpp"
 #include <cch/util/Error.hpp>
 #include "coding_agent/runtime/UserBash.hpp"
 
@@ -12,7 +12,7 @@
 namespace cch::coding_agent::detail {
 
 /// Private Native TUI bridge to the Agent Session runtime. This keeps direct
-/// editor execution out of the public SDK and machine-facing protocols.
+/// editor execution out of the session handle and machine-facing protocols.
 class AgentSessionInteractiveAccess {
 public:
     [[nodiscard]] static bool has_user_shell(const AgentSession& session);

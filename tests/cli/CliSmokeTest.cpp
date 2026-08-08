@@ -6,7 +6,6 @@
 #include "support/TempWorkspace.hpp"
 #include "support/TextHelpers.hpp"
 
-#include <cch/coding_agent/Sdk.hpp>
 #include "coding_agent/runtime/AsyncCliRuntime.hpp"
 #include "util/Json.hpp"
 

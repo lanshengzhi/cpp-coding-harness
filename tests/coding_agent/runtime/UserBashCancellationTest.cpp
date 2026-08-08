@@ -1,7 +1,6 @@
 #include <cch/ai/Content.hpp>
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/AgentSession.hpp"
 #include <cch/harness/session/SessionResume.hpp>
-#include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/FakeUserShell.hpp"
@@ -68,12 +67,6 @@ public:
     }
     options.workspace = workspace;
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     return coding_agent::create_agent_session(std::move(options), std::move(shell));
 }
 

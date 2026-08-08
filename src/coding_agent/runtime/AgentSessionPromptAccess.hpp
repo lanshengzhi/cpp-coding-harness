@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../include/cch/coding_agent/Sdk.hpp"
+#include "coding_agent/AgentSession.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
@@ -11,7 +11,7 @@
 namespace cch::coding_agent::detail {
 
 /// Private access for coordinating adapter acknowledgement with the
-/// AgentSession preflight boundary without widening the public SDK contract.
+/// AgentSession preflight boundary without widening the session handle contract.
 ///
 /// prompt is deliberately an ordinary function (no coroutine keywords): the
 /// session impl_ copy enters the prompt_impl frame synchronously at the call,

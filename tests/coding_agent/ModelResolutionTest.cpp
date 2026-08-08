@@ -13,11 +13,10 @@
 // check of one precedence level.
 
 #include <cch/agent/Agent.hpp>
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/harness/session/JsonlSessionStore.hpp>
 #include <cch/util/Error.hpp>
-#include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelFixture.hpp"
@@ -162,12 +161,12 @@ constexpr std::string_view kKeyedReasoningProvider = R"({
 }
 
 [[nodiscard]] bool has_diagnostic(
-    const std::vector<coding_agent::SdkDiagnostic>& diagnostics,
+    const std::vector<coding_agent::SessionDiagnostic>& diagnostics,
     std::string_view code) {
     return std::any_of(
         diagnostics.begin(),
         diagnostics.end(),
-        [code](const coding_agent::SdkDiagnostic& diagnostic) {
+        [code](const coding_agent::SessionDiagnostic& diagnostic) {
             return diagnostic.code == code;
         });
 }
@@ -175,7 +174,7 @@ constexpr std::string_view kKeyedReasoningProvider = R"({
 /// The message of the first diagnostic with `code`, for asserting pi's exact
 /// fallback-message text.
 [[nodiscard]] std::optional<std::string> diagnostic_message(
-    const std::vector<coding_agent::SdkDiagnostic>& diagnostics,
+    const std::vector<coding_agent::SessionDiagnostic>& diagnostics,
     std::string_view code) {
     for (const auto& diagnostic : diagnostics) {
         if (diagnostic.code == code) {
@@ -219,7 +218,7 @@ constexpr std::string_view kKeyedReasoningProvider = R"({
 // Model resolution chain — CLI profile
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE("CLI model resolution: --model wins over settings defaults", "[sdk][model-resolution][issue353]") {
+TEST_CASE("CLI model resolution: --model wins over settings defaults", "[coding_agent][model-resolution][issue353])") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
     fixture.write_settings(R"({"defaultProvider":"alpha","defaultModel":"alpha-1"})");
@@ -237,7 +236,7 @@ TEST_CASE("CLI model resolution: --model wins over settings defaults", "[sdk][mo
     result->session->close();
 }
 
-TEST_CASE("CLI model resolution: settings default wins with configured auth", "[sdk][model-resolution][issue353]") {
+TEST_CASE("CLI model resolution: settings default wins with configured auth", "[coding_agent][model-resolution][issue353])") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
     fixture.write_settings(R"({"defaultProvider":"beta","defaultModel":"beta-1"})");
@@ -251,7 +250,7 @@ TEST_CASE("CLI model resolution: settings default wins with configured auth", "[
 
 TEST_CASE(
     "CLI model resolution: unauthenticated settings default falls through to first available with auth",
-    "[sdk][model-resolution][issue353]") {
+    "[coding_agent][model-resolution][issue353])") {
     Fixture fixture;
     fixture.write_models(kKeylessAlphaKeyedBeta);
     // The saved default (alpha-1) has no configured auth; pi findInitialModel
@@ -266,7 +265,7 @@ TEST_CASE(
     result->session->close();
 }
 
-TEST_CASE("CLI model resolution: scoped models select the first scoped model for new sessions", "[sdk][model-resolution][issue353]") {
+TEST_CASE("CLI model resolution: scoped models select the first scoped model for new sessions", "[coding_agent][model-resolution][issue353])") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
@@ -282,7 +281,7 @@ TEST_CASE("CLI model resolution: scoped models select the first scoped model for
 
 TEST_CASE(
     "CLI model resolution: the saved default in scope wins over the first scoped model",
-    "[sdk][model-resolution][issue353]") {
+    "[coding_agent][model-resolution][issue353])") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
     fixture.write_settings(R"({"defaultProvider":"beta","defaultModel":"beta-1"})");
@@ -299,7 +298,7 @@ TEST_CASE(
     result->session->close();
 }
 
-TEST_CASE("CLI model resolution: resume re-resolves the stored model identity", "[sdk][model-resolution][resume][issue353]") {
+TEST_CASE("CLI model resolution: resume re-resolves the stored model identity", "[coding_agent][model-resolution][resume][issue353])") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
@@ -324,7 +323,7 @@ TEST_CASE("CLI model resolution: resume re-resolves the stored model identity", 
 
 TEST_CASE(
     "CLI model resolution: resume without configured auth falls back with pi's message",
-    "[sdk][model-resolution][resume][issue357]") {
+    "[coding_agent][model-resolution][resume][issue357])") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
@@ -357,7 +356,7 @@ TEST_CASE(
 
 TEST_CASE(
     "CLI model resolution: resume with a missing model falls back with pi's message",
-    "[sdk][model-resolution][resume][issue357]") {
+    "[coding_agent][model-resolution][resume][issue357])") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
@@ -398,7 +397,7 @@ TEST_CASE(
 
 TEST_CASE(
     "session files persist only model_change provider/modelId, never auth material",
-    "[sdk][model-resolution][resume][issue357]") {
+    "[coding_agent][model-resolution][resume][issue357])") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
@@ -440,7 +439,7 @@ TEST_CASE(
 
 TEST_CASE(
     "CLI model resolution: nothing configured keeps kDefaultModel and fails through provider lookup",
-    "[sdk][model-resolution][issue353]") {
+    "[coding_agent][model-resolution][issue353])") {
     Fixture fixture;
     // Empty Agent Config Directory: no providers, no models, no auth.
     auto result = coding_agent::create_agent_session(cli_request(fixture));
@@ -467,20 +466,16 @@ TEST_CASE(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Model resolution chain — SDK public profile
+// Model resolution chain — default CLI creation profile
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST_CASE(
-    "SDK public path resolves the first available model with configured auth",
-    "[sdk][model-resolution][issue353]") {
+    "default creation resolves the first available model with configured auth",
+    "[coding_agent][model-resolution][issue353])") {
     Fixture fixture;
     fixture.write_models(kKeylessAlphaKeyedBeta);
 
-    coding_agent::CreateAgentSessionOptions options;
-    options.session_target = coding_agent::ExplicitNewSessionTarget{fixture.session_file};
-    options.workspace = fixture.workspace.path();
-
-    auto result = coding_agent::create_agent_session(std::move(options));
+    auto result = coding_agent::create_agent_session(cli_request(fixture));
     REQUIRE(result.has_value());
     CHECK(result->provider == "beta");
     CHECK(result->model == "beta-1");
@@ -488,18 +483,14 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "SDK public path honors the settings default only with configured auth",
-    "[sdk][model-resolution][issue353]") {
+    "default creation honors the settings default only with configured auth",
+    "[coding_agent][model-resolution][issue353])") {
     Fixture fixture;
     fixture.write_models(kKeylessAlphaKeyedBeta);
     // defaultModel alpha-1 (keyless) is skipped; defaultModel beta-1 wins.
     fixture.write_settings(R"({"defaultProvider":"alpha","defaultModel":"alpha-1"})");
 
-    coding_agent::CreateAgentSessionOptions options;
-    options.session_target = coding_agent::ExplicitNewSessionTarget{fixture.session_file};
-    options.workspace = fixture.workspace.path();
-
-    auto result = coding_agent::create_agent_session(std::move(options));
+    auto result = coding_agent::create_agent_session(cli_request(fixture));
     REQUIRE(result.has_value());
     CHECK(result->provider == "beta");
     CHECK(result->model == "beta-1");
@@ -507,26 +498,19 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "SDK public path resume re-resolves the stored model with configured auth",
-    "[sdk][model-resolution][resume][issue353]") {
+    "default creation resume re-resolves the stored model with configured auth",
+    "[coding_agent][model-resolution][resume][issue353])") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
     {
-        coding_agent::CreateAgentSessionOptions options;
-        options.session_target = coding_agent::ExplicitNewSessionTarget{fixture.session_file};
-        options.workspace = fixture.workspace.path();
-        auto created = coding_agent::create_agent_session(std::move(options));
+        auto created = coding_agent::create_agent_session(cli_request(fixture));
         REQUIRE(created.has_value());
         CHECK(created->provider == "alpha");
         created->session->close();
     }
 
-    coding_agent::CreateAgentSessionOptions options;
-    options.session_target = coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
-    options.workspace = fixture.workspace.path();
-
-    auto resumed = coding_agent::create_agent_session(std::move(options));
+    auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
     REQUIRE(resumed.has_value());
     CHECK(resumed->provider == "alpha");
     CHECK(resumed->model == "alpha-1");
@@ -535,8 +519,8 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "SDK public path resume re-resolves a non-default stored model identity",
-    "[sdk][model-resolution][resume][issue357]") {
+    "default creation resume re-resolves a non-default stored model identity",
+    "[coding_agent][model-resolution][resume][issue357])") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
@@ -544,22 +528,17 @@ TEST_CASE(
         // Explicitly request beta-1 so the stored model_change is not the
         // runtime default (alpha-1): resume must re-resolve the recorded
         // identity, not fall through to the first available model.
-        coding_agent::CreateAgentSessionOptions options;
-        options.session_target = coding_agent::ExplicitNewSessionTarget{fixture.session_file};
-        options.workspace = fixture.workspace.path();
-        options.model = tests::make_model("beta-1", "beta");
-        auto created = coding_agent::create_agent_session(std::move(options));
+        auto request = cli_request(fixture);
+        request.provider = "beta";
+        request.model = "beta-1";
+        auto created = coding_agent::create_agent_session(std::move(request));
         REQUIRE(created.has_value());
         CHECK(created->provider == "beta");
         CHECK(created->model == "beta-1");
         created->session->close();
     }
 
-    coding_agent::CreateAgentSessionOptions options;
-    options.session_target = coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
-    options.workspace = fixture.workspace.path();
-
-    auto resumed = coding_agent::create_agent_session(std::move(options));
+    auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
     REQUIRE(resumed.has_value());
     CHECK(resumed->provider == "beta");
     CHECK(resumed->model == "beta-1");
@@ -571,25 +550,13 @@ TEST_CASE(
 // Thinking-level persistence
 // ─────────────────────────────────────────────────────────────────────────────
 
-namespace {
-
-[[nodiscard]] coding_agent::CreateAgentSessionOptions reasoning_session_options(
-    const Fixture& fixture) {
-    coding_agent::CreateAgentSessionOptions options;
-    options.session_target = coding_agent::ExplicitNewSessionTarget{fixture.session_file};
-    options.workspace = fixture.workspace.path();
-    return options;
-}
-
-} // namespace
-
 TEST_CASE(
     "set_thinking_level persists a thinking_level_change entry and the settings default",
-    "[sdk][thinking-persistence][issue353]") {
+    "[coding_agent][thinking-persistence][issue353])") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
-    auto result = coding_agent::create_agent_session(reasoning_session_options(fixture));
+    auto result = coding_agent::create_agent_session(cli_request(fixture));
     REQUIRE(result.has_value());
     // The resolution chain landed the first available model with configured
     // auth; the session's model supports reasoning so a level change is real.
@@ -625,12 +592,12 @@ TEST_CASE(
 
 TEST_CASE(
     "resume restores the persisted thinking level from the session entry",
-    "[sdk][thinking-persistence][resume][issue353]") {
+    "[coding_agent][thinking-persistence][resume][issue353])") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
     {
-        auto result = coding_agent::create_agent_session(reasoning_session_options(fixture));
+        auto result = coding_agent::create_agent_session(cli_request(fixture));
         REQUIRE(result.has_value());
         auto changed = result->session->set_thinking_level("high");
         REQUIRE(changed.has_value());
@@ -640,11 +607,7 @@ TEST_CASE(
 
     // Resume: the nearest `thinking_level_change` on the active path wins over
     // the settings default and DEFAULT_THINKING_LEVEL (pi sdk.ts).
-    coding_agent::CreateAgentSessionOptions options;
-    options.session_target = coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
-    options.workspace = fixture.workspace.path();
-
-    auto resumed = coding_agent::create_agent_session(std::move(options));
+    auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
     REQUIRE(resumed.has_value());
     CHECK(resumed->session->snapshot().agent_state.thinking_level == "high");
     resumed->session->close();
@@ -652,24 +615,20 @@ TEST_CASE(
 
 TEST_CASE(
     "resumed session without a thinking entry uses the settings default",
-    "[sdk][thinking-persistence][resume][issue353]") {
+    "[coding_agent][thinking-persistence][resume][issue353])") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
     {
         // Create without any level change: no thinking_level_change entry.
-        auto result = coding_agent::create_agent_session(reasoning_session_options(fixture));
+        auto result = coding_agent::create_agent_session(cli_request(fixture));
         REQUIRE(result.has_value());
         result->session->close();
     }
 
     fixture.write_settings(R"({"defaultThinkingLevel":"low"})");
 
-    coding_agent::CreateAgentSessionOptions options;
-    options.session_target = coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
-    options.workspace = fixture.workspace.path();
-
-    auto resumed = coding_agent::create_agent_session(std::move(options));
+    auto resumed = coding_agent::create_agent_session(cli_resume_request(fixture));
     REQUIRE(resumed.has_value());
     CHECK(resumed->session->snapshot().agent_state.thinking_level == "low");
     resumed->session->close();
@@ -677,12 +636,12 @@ TEST_CASE(
 
 TEST_CASE(
     "fresh session requests the settings default thinking level",
-    "[sdk][thinking-persistence][issue353]") {
+    "[coding_agent][thinking-persistence][issue353])") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
     fixture.write_settings(R"({"defaultThinkingLevel":"high"})");
 
-    auto result = coding_agent::create_agent_session(reasoning_session_options(fixture));
+    auto result = coding_agent::create_agent_session(cli_request(fixture));
     REQUIRE(result.has_value());
     // The Agent clamped the settings default against the reasoning model; the
     // supported set (no thinkingLevelMap) is off..high, so "high" survives.
@@ -692,11 +651,11 @@ TEST_CASE(
 
 TEST_CASE(
     "set_thinking_level to off persists on a reasoning model (pi supportsThinking gate)",
-    "[sdk][thinking-persistence][issue353]") {
+    "[coding_agent][thinking-persistence][issue353])") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
-    auto result = coding_agent::create_agent_session(reasoning_session_options(fixture));
+    auto result = coding_agent::create_agent_session(cli_request(fixture));
     REQUIRE(result.has_value());
     CHECK(result->session->snapshot().agent_state.thinking_level == "medium");
 
@@ -722,11 +681,11 @@ TEST_CASE(
 
 TEST_CASE(
     "set_thinking_level clamps to the active model and rejects invalid levels",
-    "[sdk][thinking-persistence][issue353]") {
+    "[coding_agent][thinking-persistence][issue353])") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
-    auto result = coding_agent::create_agent_session(reasoning_session_options(fixture));
+    auto result = coding_agent::create_agent_session(cli_request(fixture));
     REQUIRE(result.has_value());
 
     // No thinkingLevelMap: supported is off..high, so "max" clamps to "high".
@@ -764,11 +723,11 @@ TEST_CASE(
 
 TEST_CASE(
     "thinking-persistence golden pins the entry shape and the settings default write",
-    "[sdk][fixture][issue353]") {
+    "[coding_agent][fixture][issue353])") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
-    auto result = coding_agent::create_agent_session(reasoning_session_options(fixture));
+    auto result = coding_agent::create_agent_session(cli_request(fixture));
     REQUIRE(result.has_value());
     auto changed = result->session->set_thinking_level("high");
     REQUIRE(changed.has_value());

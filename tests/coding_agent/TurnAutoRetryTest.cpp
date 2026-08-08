@@ -12,7 +12,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/coding_agent/AgentSessionEvent.hpp>
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/AgentSession.hpp"
 #include <cch/harness/session/JsonlSessionStore.hpp>
 #include <cch/util/Error.hpp>
 #include <cch/util/JsonValue.hpp>
@@ -172,7 +172,7 @@ public:
 }
 
 /// A minimal fake tool for retry-continuation tool-loop evidence (same shape
-/// as SdkSessionTest's FakeEchoTool).
+/// A recording tool for retry-continuation evidence.
 class FakeEchoTool final : public agent::AsyncAgentTool {
 public:
     explicit FakeEchoTool(std::shared_ptr<std::size_t> execution_count)
@@ -229,7 +229,7 @@ struct RetrySessionUnderTest {
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     options.workspace = paths.workspace.path();
-    options.model = tests::sdk_request_model("sdk-host", "gpt-test");
+    options.request_model = tests::scripted_request_model("sdk-host", "gpt-test");
     options.custom_tools = std::move(custom_tools);
     options.models = cch::tests::models_from_provider(std::move(client));
 

@@ -215,7 +215,7 @@ TEST_CASE("parse_args keeps --mode text as the pi-default spelling", "[cli][pars
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
-    CHECK(parsed->output_mode == cch::cli::OutputMode::Text);
+    CHECK(parsed->prompt == "hello");
 }
 
 TEST_CASE("parse_args normalizes unknown options", "[cli][parse]") {
@@ -283,12 +283,12 @@ TEST_CASE("parse_args treats prompt-template as one repeatable path", "[cli][par
     CHECK(parsed->prompt == "/custom Ada");
 }
 
-TEST_CASE("parse_args defaults output mode to text", "[cli][parse]") {
+TEST_CASE("parse_args accepts the plain text default", "[cli][parse]") {
     std::vector<std::string> args{"cpp-harness", "hello"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
-    CHECK(parsed->output_mode == cch::cli::OutputMode::Text);
+    CHECK(parsed->prompt == "hello");
 }
 
 TEST_CASE("parse_args records print intent without requiring positional input", "[cli][parse][issue64]") {

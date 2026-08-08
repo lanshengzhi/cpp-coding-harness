@@ -4,11 +4,10 @@
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/AgentSession.hpp"
 #include <cch/harness/session/JsonlSessionStore.hpp>
 
 #include "ai/providers/FakeProvider.hpp"
-#include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "harness/session/SessionJournalTestHooks.hpp"
 #include "support/TempWorkspace.hpp"
@@ -61,7 +60,7 @@ struct TestPaths {
     tests::ModelsSessionOptions options;
     options.session_target = std::move(target);
     options.workspace = paths.workspace.path();
-    options.model = cch::tests::sdk_request_model("fake", "fake-model");
+    options.request_model = cch::tests::scripted_request_model("fake", "fake-model");
     options.models = cch::tests::models_from_provider(std::move(client));
     return options;
 }
@@ -158,7 +157,7 @@ TEST_CASE(
     CHECK_FALSE(snapshot.agent_state.is_running);
     CHECK(snapshot.agent_state.model.id == "fake-model");
     CHECK(snapshot.agent_state.thinking_level == "off");
-    CHECK(snapshot.agent_state.active_tool_names.size() == 3);
+    CHECK(snapshot.agent_state.active_tool_names.size() == 4);
     CHECK(snapshot.metadata.session_id == created->session_id);
     CHECK(snapshot.metadata.workspace == paths.workspace.path());
     CHECK(snapshot.topology == harness::session::SessionTopology::Linear);
@@ -172,7 +171,7 @@ TEST_CASE(
 
     const auto unchanged = created->session->snapshot();
     CHECK(unchanged.agent_state.messages.empty());
-    CHECK(unchanged.agent_state.active_tool_names.size() == 3);
+    CHECK(unchanged.agent_state.active_tool_names.size() == 4);
     CHECK(unchanged.metadata.session_id == created->session_id);
     CHECK(unchanged.session_path.has_value());
     created->session->close();
@@ -233,7 +232,7 @@ TEST_CASE(
     CHECK(active.agent_state.streaming_message->model == "fake-model");
     CHECK(active.agent_state.model.id == "fake-model");
     CHECK(active.agent_state.thinking_level == "off");
-    CHECK(active.agent_state.active_tool_names.size() == 3);
+    CHECK(active.agent_state.active_tool_names.size() == 4);
     CHECK(active.agent_state.pending_tool_call_ids.empty());
 
     client_ptr->release();

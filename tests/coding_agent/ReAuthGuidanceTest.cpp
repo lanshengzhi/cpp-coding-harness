@@ -14,10 +14,9 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/coding_agent/AuthGuidance.hpp>
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/AgentSession.hpp"
 #include <cch/harness/session/JsonlSessionStore.hpp>
 #include <cch/util/Error.hpp>
-#include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/runtime/AuthGuidanceStreamRuntime.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
@@ -160,7 +159,7 @@ create_scripted_session(
         coding_agent::ExplicitNewSessionTarget{session_file};
     options.workspace = workspace;
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.model = cch::tests::sdk_request_model("sdk-host", "sdk-model");
+    options.request_model = cch::tests::scripted_request_model("sdk-host", "sdk-model");
     return coding_agent::create_agent_session(std::move(options));
 }
 
@@ -231,7 +230,7 @@ TEST_CASE(
     auto request = cli_request(fixture);
     request.provider = "alpha";
     request.model = "alpha-1";
-    auto result = coding_agent::create_agent_session(request);
+    auto result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(result.has_value());
     CHECK(result->provider == "alpha");
     CHECK(result->model == "alpha-1");
@@ -258,7 +257,7 @@ TEST_CASE(
     auto request = cli_request(fixture);
     request.provider = "kimi-coding";
     request.model = "kimi-for-coding";
-    auto result = coding_agent::create_agent_session(request);
+    auto result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(result.has_value());
     CHECK(result->provider == "kimi-coding");
 

@@ -16,7 +16,7 @@
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/Settings.hpp>
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/AgentSession.hpp"
 #include <cch/harness/ExecutionEnv.hpp>
 #include <cch/harness/LocalExecutionEnv.hpp>
 #include <cch/harness/session/JsonlSessionStore.hpp>
@@ -248,7 +248,7 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     CHECK(std::holds_alternative<agent::TurnStartEvent>(agent_event));
 }
 
-TEST_CASE("SDK targets remain one passive variant with optional path results", "[architecture][session][sdk]") {
+TEST_CASE("session targets remain one passive variant with optional path results", "[architecture][session][sdk]") {
     static_assert(std::is_aggregate_v<coding_agent::DefaultPersistedSessionTarget>);
     static_assert(std::is_aggregate_v<coding_agent::ExplicitNewSessionTarget>);
     static_assert(std::is_aggregate_v<coding_agent::ExplicitResumeSessionTarget>);
@@ -267,8 +267,8 @@ TEST_CASE("SDK targets remain one passive variant with optional path results", "
                   decltype(std::declval<const coding_agent::AgentSession&>().session_path()),
                   const std::optional<std::filesystem::path>&>);
 
-    coding_agent::CreateAgentSessionOptions options;
-    CHECK(std::holds_alternative<coding_agent::DefaultPersistedSessionTarget>(options.session_target));
+    coding_agent::runtime::AgentSessionCreationRequest request;
+    CHECK(std::holds_alternative<coding_agent::DefaultPersistedSessionTarget>(request.session_target));
 }
 
 TEST_CASE("agent lifecycle advertises only the supported pi event alternatives", "[architecture][agent]") {

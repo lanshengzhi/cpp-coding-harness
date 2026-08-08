@@ -10,8 +10,9 @@ namespace cch::cli {
 
 /// Presentation seam for one-shot CLI output. OneShotCliFrontend owns command
 /// dispatch and run outcomes; a CliRenderer owns how session start, Agent
-/// events, command results, and prompt failures are presented. Two implementations:
-/// TextCliRenderer and JsonCliRenderer.
+/// events, command results, and prompt failures are presented. The current
+/// implementation is TextCliRenderer (the removed JSON renderer is gone with
+/// the JSON CLI mode, ADR 0036).
 class CliRenderer {
 public:
     virtual ~CliRenderer() = default;

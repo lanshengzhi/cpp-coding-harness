@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/SessionTarget.hpp"
 #include <cch/coding_agent/Settings.hpp>
 
 #include <filesystem>
@@ -10,12 +10,6 @@
 #include <vector>
 
 namespace cch::cli {
-
-enum class OutputMode {
-    Text,
-    Json,
-    Rpc,
-};
 
 /// The one passive CLI intent value: produced by argument parsing and consumed
 /// by the CLI runtime directly after help handling. SessionFactory owns every
@@ -37,7 +31,6 @@ struct CliConfig {
     /// Repeatable pi `--theme` paths (file or directory). `--no-themes` skips
     /// auto-discovery only; explicit paths stay effective.
     std::vector<std::string> themes;
-    OutputMode output_mode{OutputMode::Text};
     /// The internal workspace containment seam: always the current working
     /// directory (pi `workspace := cwd`), resolved non-throwingly by
     /// parse_args; an unreadable cwd becomes a parse diagnostic.

@@ -4,12 +4,11 @@
 #include "support/TempWorkspace.hpp"
 
 #include <cch/ai/Content.hpp>
-#include <cch/coding_agent/Sdk.hpp>
 #include <cch/harness/session/JsonlSessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "ai/providers/FakeProvider.hpp"
-#include "coding_agent/AgentSessionBridge.hpp"
+#include "coding_agent/AgentSession.hpp"
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "harness/session/SessionJournalTestHooks.hpp"
@@ -49,12 +48,6 @@ namespace {
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     return options;
 }
 
@@ -473,7 +466,7 @@ public:
         response.content.emplace_back(ai::text_content("reading " + path));
         response.content.emplace_back(ai::tool_call_content(
             "fake-read-1",
-            "read",
+            "probe-read",
             std::format(R"({{"path":"{}"}})", path),
             util::JsonValue{std::move(arguments)}));
         response.stop_reason = ai::AssistantStopReason::ToolUse;
@@ -485,7 +478,7 @@ public:
         }
         partial.content.emplace_back(ai::tool_call_content(
             "fake-read-1",
-            "read",
+            "probe-read",
             {}));
         if (auto emitted = sink(ai::ToolCallStartEvent{
                 .content_index = 0,
@@ -496,7 +489,7 @@ public:
         }
         partial.content[0] = ai::tool_call_content(
             "fake-read-1",
-            "read",
+            "probe-read",
             R"({"path":"STALE ARGUMENT"})");
         if (auto emitted = sink(ai::ToolCallDeltaEvent{
                 .content_index = 0,
@@ -531,7 +524,7 @@ public:
 class GatedPartialReadTool final : public agent::AsyncAgentTool {
 public:
     GatedPartialReadTool() {
-        definition_.name = "read";
+        definition_.name = "probe-read";
         definition_.description = "Stream a deterministic read result";
         definition_.parameters = util::JsonValue::object_t{{"type", "object"}};
     }
@@ -611,7 +604,7 @@ class ImageReadTool final : public agent::AsyncAgentTool {
 public:
     explicit ImageReadTool(std::string image_data)
         : image_data_(std::move(image_data)) {
-        definition_.name = "read";
+        definition_.name = "probe-read";
         definition_.description = "Return deterministic text and image content";
         definition_.parameters = util::JsonValue::object_t{{"type", "object"}};
     }
@@ -969,12 +962,6 @@ TEST_CASE(
     resume_options.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     resume_options.workspace = workspace.path();
     resume_options.models = ai::providers::make_scripted_fake_models();
-    resume_options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto resumed = coding_agent::create_agent_session(std::move(resume_options));
     REQUIRE(resumed);
     const auto authoritative_before = resumed->session->snapshot().agent_state.messages;
@@ -1064,12 +1051,6 @@ TEST_CASE(
     fallback_resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     fallback_resume.workspace = workspace.path();
     fallback_resume.models = ai::providers::make_scripted_fake_models();
-    fallback_resume.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto fallback_session = coding_agent::create_agent_session(std::move(fallback_resume));
     REQUIRE(fallback_session);
     const auto fallback_before = fallback_session->session->snapshot().agent_state.messages;
@@ -1204,12 +1185,6 @@ TEST_CASE(
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     resume.workspace = workspace.path();
     resume.models = ai::providers::make_scripted_fake_models();
-    resume.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = coding_agent::create_agent_session(std::move(resume));
     REQUIRE(created);
     tui::VirtualTerminal terminal({
@@ -1628,12 +1603,6 @@ TEST_CASE(
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     resume.workspace = workspace.path();
     resume.models = ai::providers::make_scripted_fake_models();
-    resume.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto resumed = coding_agent::create_agent_session(std::move(resume));
     REQUIRE(resumed);
 
@@ -1692,7 +1661,7 @@ TEST_CASE(
     drain_ready(io);
     REQUIRE(tool_pointer->started);
     auto screen = visible_screen(terminal);
-    CHECK(count_text(screen, "Tool pending: read#fake-read-1") == 1);
+    CHECK(count_text(screen, "Tool pending: probe-read#fake-read-1") == 1);
     CHECK(count_text(screen, "Tool result: partial tool output") == 1);
     CHECK(screen.find("STALE ARGUMENT") == std::string::npos);
     CHECK(screen.find(R"(Tool arguments: {"path":"large.txt"})") != std::string::npos);
@@ -1702,13 +1671,13 @@ TEST_CASE(
     tool_pointer->release();
     drain_ready(io);
     screen = visible_screen(terminal);
-    CHECK(count_text(screen, "Tool success: read#fake-read-1") == 1);
+    CHECK(count_text(screen, "Tool success: probe-read#fake-read-1") == 1);
     CHECK(screen.find("Tool result: line 1") != std::string::npos);
     CHECK(screen.find("TOOL OUTPUT END") == std::string::npos);
     REQUIRE(tool_pointer->emit_late_update());
     drain_ready(io);
     screen = visible_screen(terminal);
-    CHECK(count_text(screen, "Tool success: read#fake-read-1") == 1);
+    CHECK(count_text(screen, "Tool success: probe-read#fake-read-1") == 1);
     CHECK(screen.find("LATE TOOL UPDATE") == std::string::npos);
 
     REQUIRE(terminal.inject_input("\x0f"));
@@ -1721,7 +1690,7 @@ TEST_CASE(
     drain_ready(io);
     REQUIRE(tool_pointer->started);
     screen = visible_screen(terminal);
-    CHECK(count_text(screen, "Tool pending: read#fake-read-1") == 1);
+    CHECK(count_text(screen, "Tool pending: probe-read#fake-read-1") == 1);
     CHECK(count_text(screen, "Tool result: partial tool output") == 1);
     CHECK(screen.find("STALE SNAPSHOT") == std::string::npos);
     CHECK(count_text(screen, "LATEST SNAPSHOT") == 1);
@@ -1729,9 +1698,9 @@ TEST_CASE(
     tool_pointer->release();
     drain_ready(io);
     screen = visible_screen(terminal);
-    CHECK(count_text(screen, "read#fake-read-1") == 2);
-    CHECK(count_text(screen, "Tool success: read#fake-read-1") == 1);
-    CHECK(count_text(screen, "Tool failed: read#fake-read-1") == 1);
+    CHECK(count_text(screen, "probe-read#fake-read-1") == 2);
+    CHECK(count_text(screen, "Tool success: probe-read#fake-read-1") == 1);
+    CHECK(count_text(screen, "Tool failed: probe-read#fake-read-1") == 1);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -2809,8 +2778,7 @@ TEST_CASE(
     auto options = session_options(
         workspace,
         ai::providers::make_scripted_fake_provider());
-    options.load_project_resources = true;
-    options.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    options.project_trust_override = true;
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
 

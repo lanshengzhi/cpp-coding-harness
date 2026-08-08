@@ -1,6 +1,6 @@
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
-#include "coding_agent/AgentSessionBridge.hpp"
+#include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 #include "ai/providers/FakeProvider.hpp"
 

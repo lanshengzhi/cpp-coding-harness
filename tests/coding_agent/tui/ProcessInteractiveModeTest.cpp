@@ -3,7 +3,7 @@
 #include "support/PseudoTerminal.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/AgentSession.hpp"
 #include <cch/tui/ProcessTerminal.hpp>
 
 #include "ai/providers/FakeProvider.hpp"
@@ -86,12 +86,6 @@ TEST_CASE(
     options.session_target = cch::coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(cch::ai::providers::make_scripted_fake_provider());
-    options.builtin_tools = {
-        .read = false,
-        .write = false,
-        .edit = false,
-        .bash = false,
-    };
     auto created = cch::coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
 

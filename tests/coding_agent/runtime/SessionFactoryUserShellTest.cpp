@@ -2,9 +2,8 @@
 
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/AgentSession.hpp"
 
-#include "coding_agent/AgentSessionBridge.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "ai/providers/FakeProvider.hpp"
 #include "support/ModelsFixture.hpp"
@@ -105,20 +104,6 @@ TEST_CASE(
     "[coding_agent][runtime][assembly][issue90]") {
     tests::TempWorkspace workspace;
     auto created = create_cli_session(workspace, false);
-    REQUIRE(created);
-    CHECK_FALSE(
-        coding_agent::detail::AgentSessionInteractiveAccess::has_user_shell(*created->session));
-}
-
-TEST_CASE(
-    "SDK session assembly never gains a User Shell",
-    "[coding_agent][runtime][assembly][issue90]") {
-    tests::TempWorkspace workspace;
-    coding_agent::CreateAgentSessionOptions options;
-    options.session_target = coding_agent::InMemorySessionTarget{};
-    options.workspace = workspace.path();
-    options.model = cch::tests::sdk_request_model("fake", "fake-model");
-    auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
     CHECK_FALSE(
         coding_agent::detail::AgentSessionInteractiveAccess::has_user_shell(*created->session));

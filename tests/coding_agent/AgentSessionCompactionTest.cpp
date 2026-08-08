@@ -7,7 +7,7 @@
 
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
-#include <cch/coding_agent/Sdk.hpp>
+#include "coding_agent/AgentSession.hpp"
 #include <cch/harness/session/JsonlSessionStore.hpp>
 #include <cch/util/Error.hpp>
 #include "support/EnvVarGuard.hpp"
@@ -519,7 +519,7 @@ public:
 
 /// Session request model with a configurable context window.
 [[nodiscard]] ai::Model trigger_model(std::uint64_t context_window) {
-    auto model = tests::sdk_request_model("sdk-host", "gpt-test");
+    auto model = tests::scripted_request_model("sdk-host", "gpt-test");
     model.context_window = context_window;
     return model;
 }
@@ -540,7 +540,7 @@ struct TriggerSessionUnderTest {
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::ExplicitNewSessionTarget{paths.session_file};
     options.workspace = paths.workspace.path();
-    options.model = trigger_model(context_window);
+    options.request_model = trigger_model(context_window);
     options.models = cch::tests::models_from_provider(std::move(client));
 
     auto created = coding_agent::create_agent_session(std::move(options));

@@ -7,7 +7,7 @@ namespace cch::coding_agent::tui {
 
 /// Focused-editor User Bash syntax (ADR 0026, pi baseline 864b35c): only a
 /// direct focused Native TUI editor submission interprets the `!`/`!!`
-/// prefixes. Positional initial input, one-shot, JSON, RPC, SDK, and Skill or
+/// prefixes. Positional initial input, one-shot print, and Skill or
 /// Prompt Template expansions keep ordinary Agent Prompt semantics, so this
 /// module is a pure value vocabulary with no session or terminal dependency.
 
