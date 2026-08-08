@@ -9,6 +9,7 @@
 #include <cch/ai/Usage.hpp>
 #include <cch/coding_agent/AgentSessionEvent.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
+#include <cch/coding_agent/ModelResolver.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
 #include <cch/coding_agent/Skill.hpp>
@@ -154,6 +155,17 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
+// ── ModelCycleResult ─────────────────────────────────────────────────────────
+
+/// pi `ModelCycleResult` (agent-session.ts): the model a cycle landed on,
+/// the effective (clamped) thinking level, and whether the cycle ran within
+/// the scoped set.
+struct ModelCycleResult {
+    ai::Model model{};
+    std::string thinking_level{};
+    bool is_scoped{false};
+};
+
 // ── AgentSession ─────────────────────────────────────────────────────────────
 
 /// Move-only session handle. Created by create_agent_session().
@@ -267,6 +279,34 @@ public:
     /// Blocking facade for tests and one-shot hosts; drives the async path on
     /// a temporary executor (same contract as prompt_blocking).
     [[nodiscard]] util::ExpectedVoid set_model_blocking(ai::Model model);
+
+    /// Runtime model cycle (pi `AgentSession.cycleModel`): when the session
+    /// carries scoped models, cycle within the auth-filtered scoped set
+    /// (models whose provider resolves no auth are dropped; a scoped model's
+    /// explicit thinking level overrides the current preference); otherwise
+    /// cycle within the available models. A set with zero or one eligible
+    /// model yields `std::nullopt`. Same impl_ copying contract as prompt().
+    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ModelCycleResult>>>
+    cycle_model(std::string direction);
+    /// Blocking facade for tests and one-shot hosts; drives the async path on
+    /// a temporary executor (same contract as prompt_blocking).
+    [[nodiscard]] util::Expected<std::optional<ModelCycleResult>> cycle_model_blocking(
+        std::string direction);
+
+    /// Cycle the thinking level through the active model's supported set (pi
+    /// `AgentSession.cycleThinkingLevel`): the next level after the current
+    /// one, wrapping. `std::nullopt` when the active model supports no
+    /// thinking. Applies `set_thinking_level` (entry + settings default on a
+    /// real change).
+    [[nodiscard]] util::Expected<std::optional<std::string>> cycle_thinking_level();
+
+    /// Replace the session's scoped-model set (pi `AgentSession.setScopedModels`;
+    /// session-only, never persisted). An empty set restores un-scoped cycling
+    /// over the available models.
+    void set_scoped_models(std::vector<ScopedModel> models);
+    /// The session's scoped-model set (pi `AgentSession.scopedModels`),
+    /// seeded from the `--models` CLI scope.
+    [[nodiscard]] const std::vector<ScopedModel>& scoped_models() const;
 
     // ── Compaction ───────────────────────────────────────────────────────
 

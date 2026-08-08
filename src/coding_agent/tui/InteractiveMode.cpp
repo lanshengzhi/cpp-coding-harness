@@ -6,8 +6,10 @@
 #include <cch/ai/Content.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/Settings.hpp>
+#include <cch/coding_agent/ModelResolver.hpp>
 #include <cch/tui/Autocomplete.hpp>
 #include <cch/tui/Editor.hpp>
+#include <cch/tui/Fuzzy.hpp>
 #include <cch/tui/Loader.hpp>
 #include <cch/tui/Overlay.hpp>
 #include <cch/tui/Terminal.hpp>
@@ -26,8 +28,11 @@
 #include "coding_agent/tui/KeybindingHints.hpp"
 #include "coding_agent/tui/LoginDialog.hpp"
 #include "coding_agent/tui/LoginPresentation.hpp"
+#include "coding_agent/tui/ModelSearch.hpp"
+#include "coding_agent/tui/ModelSelector.hpp"
 #include "coding_agent/tui/OAuthSelector.hpp"
 #include "coding_agent/tui/OpenBrowser.hpp"
+#include "coding_agent/tui/ScopedModelsSelector.hpp"
 #include "coding_agent/tui/StringListSelector.hpp"
 #include "coding_agent/tui/ThemeCatalog.hpp"
 #include "util/UniqueFd.hpp"
@@ -435,11 +440,29 @@ private:
             combined_error_text(restoration))));
 }
 
-[[nodiscard]] std::vector<cch::tui::AutocompleteItem> command_autocomplete_items(
+/// One immutable model-completion candidate. The `/model` argument
+/// completion reads a shared immutable snapshot so the autocomplete request
+/// thread never races the executor-confined session state (the snapshot is
+/// replaced on the executor whenever the candidate set changes).
+struct ModelCompletionItem {
+    std::string id;
+    std::string provider;
+    std::string name;
+};
+using ModelCompletionSnapshot = std::vector<ModelCompletionItem>;
+
+/// Build the editor autocomplete command list: the registered slash commands
+/// as plain items, prompt templates, and skills — plus the `model` command as
+/// a `SlashCommand` whose argument completion resolves pi's `model-search`
+/// text over the current candidate snapshot (scoped models when the session
+/// carries a scope, else the availability snapshot).
+[[nodiscard]] std::vector<std::variant<cch::tui::SlashCommand, cch::tui::AutocompleteItem>>
+command_autocomplete_commands(
     const CommandRegistry& commands,
     std::span<const PromptTemplate> prompt_templates,
-    std::span<const Skill> skills) {
-    std::vector<cch::tui::AutocompleteItem> items;
+    std::span<const Skill> skills,
+    std::shared_ptr<const ModelCompletionSnapshot> model_completion) {
+    std::vector<std::variant<cch::tui::SlashCommand, cch::tui::AutocompleteItem>> items;
     std::set<std::string, std::less<>> names;
     for (const auto& command : commands.list_commands()) {
         std::string description = command.description;
@@ -448,11 +471,52 @@ private:
                 ? command.argument_hint
                 : std::format("{} — {}", command.argument_hint, description);
         }
-        items.push_back({
-            .value = command.name,
-            .label = command.name,
-            .description = std::move(description),
-        });
+        if (command.name == "model") {
+            // pi `createBaseAutocompleteProvider`: `/model` argument
+            // completion over `getModelSearchText`, value `provider/id`,
+            // label `id`, description `provider`. The description stays
+            // plain: the combined provider prepends the argument hint.
+            cch::tui::SlashCommand slash;
+            slash.name = command.name;
+            slash.description = command.description;
+            slash.argument_hint = command.argument_hint;
+            slash.get_argument_completions =
+                [model_completion](std::string_view prefix)
+                -> std::optional<std::vector<cch::tui::AutocompleteItem>> {
+                    if (!model_completion || model_completion->empty()) return std::nullopt;
+                    std::vector<ModelSearchItem> items;
+                    items.reserve(model_completion->size());
+                    for (const auto& candidate : *model_completion) {
+                        items.push_back(ModelSearchItem{
+                            .id = candidate.id,
+                            .provider = candidate.provider,
+                            .name = candidate.name.empty()
+                                ? std::nullopt
+                                : std::optional<std::string>{candidate.name},
+                        });
+                    }
+                    const auto filtered = cch::tui::fuzzy_filter(
+                        std::move(items), prefix, get_model_search_text);
+                    if (filtered.empty()) return std::nullopt;
+                    std::vector<cch::tui::AutocompleteItem> result;
+                    result.reserve(filtered.size());
+                    for (const auto& item : filtered) {
+                        result.push_back(cch::tui::AutocompleteItem{
+                            .value = item.provider + "/" + item.id,
+                            .label = item.id,
+                            .description = item.provider,
+                        });
+                    }
+                    return result;
+                };
+            items.push_back(std::move(slash));
+        } else {
+            items.push_back(cch::tui::AutocompleteItem{
+                .value = command.name,
+                .label = command.name,
+                .description = std::move(description),
+            });
+        }
         names.insert(command.name);
     }
     for (const auto& prompt_template : prompt_templates) {
@@ -463,7 +527,7 @@ private:
                 ? *prompt_template.argument_hint
                 : std::format("{} — {}", *prompt_template.argument_hint, description);
         }
-        items.push_back({
+        items.push_back(cch::tui::AutocompleteItem{
             .value = prompt_template.name,
             .label = prompt_template.name,
             .description = std::move(description),
@@ -472,16 +536,51 @@ private:
     for (const auto& skill : skills) {
         auto name = "skill:" + skill.name;
         if (!names.insert(name).second) continue;
-        items.push_back({
+        items.push_back(cch::tui::AutocompleteItem{
             .value = name,
             .label = name,
             .description = skill.description,
         });
     }
     std::sort(items.begin(), items.end(), [](const auto& left, const auto& right) {
-        return left.label < right.label;
+        const auto label = [](const auto& item) -> std::string_view {
+            if (const auto* slash = std::get_if<cch::tui::SlashCommand>(&item)) {
+                return slash->name;
+            }
+            return std::get<cch::tui::AutocompleteItem>(item).label;
+        };
+        return label(left) < label(right);
     });
     return items;
+}
+
+/// pi `showModelsSelector` initial enabled ids: the session scope when one
+/// exists, else the configured scope's resolved ids, with `no-match` pattern
+/// ids appended as unavailable entries (pi's `currentEnabledIds` assembly).
+[[nodiscard]] std::optional<std::vector<std::string>> initial_selector_enabled_ids(
+    const std::vector<cch::coding_agent::ScopedModel>& session_scoped_models,
+    const std::optional<ModelScopeResolution>& configured_scope) {
+    std::optional<std::vector<std::string>> ids;
+    if (!session_scoped_models.empty()) {
+        ids = std::vector<std::string>{};
+        for (const auto& entry : session_scoped_models) {
+            ids->push_back(entry.model.provider + "/" + entry.model.id);
+        }
+    } else if (configured_scope) {
+        ids = std::vector<std::string>{};
+        for (const auto& scoped : configured_scope->scoped_models) {
+            ids->push_back(scoped.model.provider + "/" + scoped.model.id);
+        }
+    }
+    for (const auto& diagnostic : configured_scope ? configured_scope->diagnostics
+                                                   : std::vector<ModelScopeDiagnostic>{}) {
+        if (diagnostic.code != "no-match") continue;
+        if (!ids) ids = std::vector<std::string>{};
+        if (std::find(ids->begin(), ids->end(), diagnostic.pattern) == ids->end()) {
+            ids->push_back(diagnostic.pattern);
+        }
+    }
+    return ids;
 }
 
 /// Resolve an executable on PATH (pi's `ensureTool`); nullopt when absent so
@@ -629,6 +728,10 @@ public:
         ActionSink on_dequeue,
         InterruptSink on_interrupt,
         ActionSink on_exit,
+        ActionSink on_cycle_model_forward,
+        ActionSink on_cycle_model_backward,
+        ActionSink on_select_model,
+        ActionSink on_cycle_thinking,
         bool user_bash_available,
         std::unique_ptr<cch::tui::AutocompleteProvider> autocomplete_provider,
         std::unique_ptr<cch::tui::AutocompleteDebounceTimer> autocomplete_debounce_timer,
@@ -644,6 +747,10 @@ public:
           on_dequeue_(std::move(on_dequeue)),
           on_interrupt_(std::move(on_interrupt)),
           on_exit_(std::move(on_exit)),
+          on_cycle_model_forward_(std::move(on_cycle_model_forward)),
+          on_cycle_model_backward_(std::move(on_cycle_model_backward)),
+          on_select_model_(std::move(on_select_model)),
+          on_cycle_thinking_(std::move(on_cycle_thinking)),
           user_bash_available_(user_bash_available),
           header_(theme, *keybindings_, user_bash_available, on_clipboard_paste_ != nullptr),
           chat_(theme, *keybindings_),
@@ -1094,6 +1201,25 @@ public:
                 invoke_action(on_invalidate_, "Native TUI invalidation callback failed");
                 return;
             }
+            // pi's main-editor `app.model.*` / `app.thinking.cycle` bindings:
+            // the cycle actions and the model selector post to the executor
+            // like every session-touching action.
+            if (keybindings_->matches(*key, "app.model.cycleForward")) {
+                invoke_action(on_cycle_model_forward_, "Native TUI model cycle callback failed");
+                return;
+            }
+            if (keybindings_->matches(*key, "app.model.cycleBackward")) {
+                invoke_action(on_cycle_model_backward_, "Native TUI model cycle callback failed");
+                return;
+            }
+            if (keybindings_->matches(*key, "app.model.select")) {
+                invoke_action(on_select_model_, "Native TUI model selector callback failed");
+                return;
+            }
+            if (keybindings_->matches(*key, "app.thinking.cycle")) {
+                invoke_action(on_cycle_thinking_, "Native TUI thinking cycle callback failed");
+                return;
+            }
         }
         const auto autocomplete_was_open = editor_.autocomplete_open();
         const auto previous_selection = editor_.autocomplete_selected_index();
@@ -1253,6 +1379,10 @@ private:
     ActionSink on_dequeue_;
     InterruptSink on_interrupt_;
     ActionSink on_exit_;
+    ActionSink on_cycle_model_forward_;
+    ActionSink on_cycle_model_backward_;
+    ActionSink on_select_model_;
+    ActionSink on_cycle_thinking_;
     bool user_bash_available_{false};
     std::optional<util::Error> callback_error_;
     mutable std::mutex mutex_;
@@ -1302,6 +1432,7 @@ public:
         } else {
             open_browser_sink_ = [](std::string url) { open_browser(std::move(url)); };
         }
+        update_model_completion();
         if (auto registered = register_commands(); !registered) {
             return fail_start(registered.error());
         }
@@ -1389,8 +1520,21 @@ private:
             "app.exit",
             "app.tools.expand",
             "app.thinking.toggle",
+            "app.thinking.cycle",
+            "app.model.cycleForward",
+            "app.model.cycleBackward",
+            "app.model.select",
             "app.message.followUp",
             "app.message.dequeue",
+            // Selector-scoped: the scoped-models selector matches the six
+            // `app.models.*` actions through the same registry (pi's shared
+            // KeybindingsManager).
+            "app.models.save",
+            "app.models.enableAll",
+            "app.models.clearAll",
+            "app.models.toggleProvider",
+            "app.models.reorderUp",
+            "app.models.reorderDown",
         };
         if (clipboard_reader_) actions.push_back("app.clipboard.pasteImage");
         if (auto definitions = baseline_application_keybindings(actions, config.platform); !definitions) {
@@ -1410,12 +1554,15 @@ private:
 
         // The Native TUI reads only the global settings scope (the theme is
         // global-only) and writes theme selections surgically through the
-        // two-scope manager with the project scope untrusted.
-        auto settings_manager = coding_agent::SettingsManager::create(
+        // two-scope manager with the project scope untrusted. The manager
+        // stays owned by the state: the scoped-models selector persists
+        // `enabledModels` through it (pi `setEnabledModels`) and the theme
+        // committer below references it.
+        settings_manager_.emplace(coding_agent::SettingsManager::create(
             /* cwd */ {},
             config.agent_config_directory,
-            /* project_trusted */ false);
-        for (const auto& settings_error : settings_manager.errors()) {
+            /* project_trusted */ false));
+        for (const auto& settings_error : settings_manager_->errors()) {
             if (settings_error.scope == coding_agent::SettingsScope::Global) {
                 return std::unexpected(util::make_error(
                     util::ErrorCode::JsonParse,
@@ -1426,7 +1573,7 @@ private:
         const auto capabilities = terminal_.capabilities();
         ThemeCatalogRequest request;
         request.agent_config_directory = config.agent_config_directory;
-        request.user_active_theme = settings_manager.global_settings().theme;
+        request.user_active_theme = settings_manager_->global_settings().theme;
         request.terminal_capabilities = capabilities;
         if (auto catalog = load_theme_catalog(std::move(request)); !catalog) {
             return std::unexpected(catalog.error());
@@ -1434,8 +1581,12 @@ private:
             diagnostics.themes = catalog->diagnostics;
             ThemeSelectionCommitter committer;
             if (!config.agent_config_directory.empty()) {
-                committer = [manager = std::move(settings_manager)](std::string_view name) mutable {
-                    return manager.set_theme(coding_agent::SettingsScope::Global, name);
+                committer = [manager = settings_manager_.has_value()
+                                 ? &*settings_manager_
+                                 : nullptr](std::string_view name) mutable {
+                    return manager != nullptr
+                        ? manager->set_theme(coding_agent::SettingsScope::Global, name)
+                        : util::ExpectedVoid{};
                 };
             }
             theme_controller_.emplace(
@@ -1482,13 +1633,26 @@ private:
             [weak] {
                 if (const auto self = weak.lock()) self->post_exit();
             },
+            [weak] {
+                if (const auto self = weak.lock()) self->post_cycle_model("forward");
+            },
+            [weak] {
+                if (const auto self = weak.lock()) self->post_cycle_model("backward");
+            },
+            [weak] {
+                if (const auto self = weak.lock()) self->post_open_model_selector();
+            },
+            [weak] {
+                if (const auto self = weak.lock()) self->post_cycle_thinking();
+            },
             detail::AgentSessionInteractiveAccess::has_user_shell(session_),
             std::make_unique<cch::tui::CombinedAutocompleteProvider>(
                 [&] {
-                    std::vector<std::variant<cch::tui::SlashCommand, cch::tui::AutocompleteItem>> commands;
-                    for (auto item : command_autocomplete_items(commands_, session_.templates(), session_.skills())) {
-                        commands.push_back(cch::tui::AutocompleteItem{std::move(item)});
-                    }
+                    auto commands = command_autocomplete_commands(
+                        commands_,
+                        session_.templates(),
+                        session_.skills(),
+                        model_completion_);
                     return commands;
                 }(),
                 session_.workspace(),
@@ -1814,9 +1978,9 @@ private:
         });
     }
 
-    /// Spawn one detached login-flow coroutine; a frame failure becomes a
-    /// chat diagnostic (the user-bash precedent).
-    void spawn_login_flow(
+    /// Spawn one detached executor flow; a frame failure becomes a chat
+    /// diagnostic (the user-bash precedent; the login flows use this too).
+    void spawn_flow(
         std::move_only_function<boost::asio::awaitable<void>()> start,
         std::string failure_label) {
         const auto weak = weak_from_this();
@@ -1859,6 +2023,374 @@ private:
         tui_.invalidate();
     }
 
+    // ── Model selector / cycling (pi interactive-mode.ts, #407) ───────────
+
+    /// Rebuild the shared immutable `/model` completion snapshot on the
+    /// executor (pi's candidate set: session scoped models when a scope
+    /// exists, else the availability snapshot). The snapshot is only ever
+    /// replaced here, so autocomplete readers see one consistent list.
+    void update_model_completion() {
+        auto runtime = session_.model_runtime();
+        if (!runtime) {
+            model_completion_ = std::make_shared<const ModelCompletionSnapshot>();
+            return;
+        }
+        auto snapshot = std::make_shared<ModelCompletionSnapshot>();
+        const auto scoped = session_.scoped_models();
+        if (!scoped.empty()) {
+            snapshot->reserve(scoped.size());
+            for (const auto& entry : scoped) {
+                snapshot->push_back(ModelCompletionItem{
+                    .id = entry.model.id,
+                    .provider = entry.model.provider,
+                    .name = entry.model.name,
+                });
+            }
+        } else {
+            for (const auto& model : runtime->get_available_snapshot()) {
+                snapshot->push_back(ModelCompletionItem{
+                    .id = model.id,
+                    .provider = model.provider,
+                    .name = model.name,
+                });
+            }
+        }
+        model_completion_ = std::move(snapshot);
+    }
+
+    /// Post one model/thinking action to the executor from the input thread.
+    void post_cycle_model(std::string direction) {
+        const auto weak = weak_from_this();
+        boost::asio::post(executor_, [weak, direction = std::move(direction)]() mutable {
+            if (const auto self = weak.lock(); self && self->running_) {
+                self->spawn_flow(
+                    [self, direction = std::move(direction)]() mutable
+                    -> boost::asio::awaitable<void> {
+                        co_await self->cycle_model(std::move(direction));
+                    },
+                    "Native TUI model cycle failed");
+            }
+        });
+    }
+
+    void post_cycle_thinking() {
+        const auto weak = weak_from_this();
+        boost::asio::post(executor_, [weak] {
+            if (const auto self = weak.lock(); self && self->running_) {
+                self->cycle_thinking_level();
+            }
+        });
+    }
+
+    void post_open_model_selector() {
+        const auto weak = weak_from_this();
+        boost::asio::post(executor_, [weak] {
+            if (const auto self = weak.lock(); self && self->running_) {
+                self->show_model_selector(std::nullopt);
+            }
+        });
+    }
+
+    void post_open_model_selector(std::string search_term) {
+        const auto weak = weak_from_this();
+        boost::asio::post(executor_, [weak, search_term = std::move(search_term)]() mutable {
+            if (const auto self = weak.lock(); self && self->running_) {
+                self->spawn_flow(
+                    [self, search_term = std::move(search_term)]() mutable
+                    -> boost::asio::awaitable<void> {
+                        co_await self->handle_model_command(std::move(search_term));
+                    },
+                    "Native TUI model command failed");
+            }
+        });
+    }
+
+    void post_open_scoped_models_selector() {
+        const auto weak = weak_from_this();
+        boost::asio::post(executor_, [weak] {
+            if (const auto self = weak.lock(); self && self->running_) {
+                self->spawn_flow(
+                    [self]() -> boost::asio::awaitable<void> {
+                        co_await self->show_scoped_models_selector();
+                    },
+                    "Native TUI scoped-models selector failed");
+            }
+        });
+    }
+
+    /// pi `cycleModel` presentation: `Only one model in scope` / `Only one
+    /// model available` when the cycle cannot move, otherwise the
+    /// `Switched to <name> (thinking: <level>)` status; errors surface as
+    /// `Error: <text>` lines.
+    [[nodiscard]] boost::asio::awaitable<void> cycle_model(std::string direction) {
+        auto result = co_await session_.cycle_model(std::move(direction));
+        if (!result) {
+            show_error(combined_error_text(result.error()));
+            co_return;
+        }
+        if (!*result) {
+            show_status(
+                session_.scoped_models().empty() ? "Only one model available"
+                                                 : "Only one model in scope");
+            co_return;
+        }
+        const auto& cycle = **result;
+        update_model_completion();
+        const auto thinking_str =
+            cycle.model.reasoning && cycle.thinking_level != "off"
+            ? " (thinking: " + cycle.thinking_level + ")"
+            : "";
+        const auto label = cycle.model.name.empty() ? cycle.model.id : cycle.model.name;
+        show_status("Switched to " + label + thinking_str);
+    }
+
+    /// pi `cycleThinkingLevel` presentation: `Current model does not support
+    /// thinking` when the model has no reasoning, else
+    /// `Thinking level: <level>`.
+    void cycle_thinking_level() {
+        auto level = session_.cycle_thinking_level();
+        if (!level) {
+            show_error(combined_error_text(level.error()));
+            return;
+        }
+        if (!*level) {
+            show_status("Current model does not support thinking");
+            return;
+        }
+        show_status("Thinking level: " + **level);
+    }
+
+    /// pi `showModelSelector`: the model selector renders in the editor slot
+    /// (pi's `showSelector` editorContainer swap). Selecting a model runs
+    /// `session.setModel` on the executor and reports `Model: <id>`; the
+    /// settings default write rides the session path.
+    void show_model_selector(std::optional<std::string> initial_search_input) {
+        if (!running_ || view_ == nullptr || !session_.is_open() || !theme_controller_) return;
+        const auto current_model = session_.snapshot().agent_state.model;
+        const auto weak = weak_from_this();
+        auto selector = std::make_shared<ModelSelectorComponent>(
+            theme_controller_->live_theme(),
+            keybindings_,
+            &current_model,
+            session_.model_runtime(),
+            executor_,
+            session_.scoped_models(),
+            [weak](ai::Model model) {
+                // Input-thread sink: post the session switch to the executor.
+                if (const auto self = weak.lock()) {
+                    self->post_from_view([model = std::move(model)](InteractiveState& state) mutable {
+                        state.spawn_flow(
+                            [state_self = state.shared_from_this(), model = std::move(model)]() mutable
+                            -> boost::asio::awaitable<void> {
+                                auto switched = co_await state_self->session_.set_model(std::move(model));
+                                if (!switched) {
+                                    state_self->show_error(combined_error_text(switched.error()));
+                                    co_return;
+                                }
+                                state_self->update_model_completion();
+                                state_self->restore_editor_slot();
+                                state_self->show_status("Model: " + state_self->session_.snapshot().agent_state.model.id);
+                            },
+                            "Native TUI model selection failed");
+                    });
+                }
+            },
+            [weak] {
+                if (const auto self = weak.lock()) {
+                    self->post_from_view([](InteractiveState& state) { state.restore_editor_slot(); });
+                }
+            },
+            [weak] {
+                if (const auto self = weak.lock()) self->post_invalidate();
+            },
+            std::move(initial_search_input));
+        place_editor_replacement(std::move(selector));
+    }
+
+    /// pi `handleModelCommand`: no search term opens the selector; an exact
+    /// provider/model reference switches immediately (`Model: <id>`); anything
+    /// else opens the selector pre-filtered with the term.
+    [[nodiscard]] boost::asio::awaitable<void> handle_model_command(
+        std::string search_term) {
+        const auto term = trim_editor_submission(std::move(search_term));
+        if (term.empty()) {
+            show_model_selector(std::nullopt);
+            co_return;
+        }
+
+        // pi `getModelCandidates`: the scoped set when present, else a live
+        // availability refresh.
+        std::vector<ai::Model> candidates;
+        const auto scoped = session_.scoped_models();
+        if (!scoped.empty()) {
+            candidates.reserve(scoped.size());
+            for (const auto& entry : scoped) candidates.push_back(entry.model);
+        } else {
+            auto runtime = session_.model_runtime();
+            if (!runtime) co_return;
+            (void)runtime->refresh();
+            auto available = co_await runtime->get_available();
+            if (!available) {
+                show_error(combined_error_text(available.error()));
+                co_return;
+            }
+            candidates = std::move(*available);
+        }
+
+        if (const auto matched = find_exact_model_reference_match(term, candidates)) {
+            const auto model = *matched;
+            auto switched = co_await session_.set_model(model);
+            if (!switched) {
+                show_error(combined_error_text(switched.error()));
+                co_return;
+            }
+            update_model_completion();
+            show_status("Model: " + model.id);
+            co_return;
+        }
+        show_model_selector(term);
+    }
+
+    /// pi `showModelsSelector` / `updateSessionModels`/`onPersist`: the
+    /// scoped-models selector starts from the session scope, else the
+    /// settings `enabledModels` patterns resolved over the live availability
+    /// (no-match diagnostics become unavailable ids); changes stay
+    /// session-only until `app.models.save` persists them.
+    [[nodiscard]] boost::asio::awaitable<void> show_scoped_models_selector() {
+        if (!running_ || view_ == nullptr || !session_.is_open() || !theme_controller_) co_return;
+        auto runtime = session_.model_runtime();
+        if (!runtime) co_return;
+        // pi: refresh() then getAvailable().
+        (void)runtime->refresh();
+        auto available = co_await runtime->get_available();
+        if (!available) {
+            show_error(combined_error_text(available.error()));
+            co_return;
+        }
+        const auto all_models = std::move(*available);
+        std::set<std::string, std::less<>> all_model_ids;
+        for (const auto& model : all_models) {
+            all_model_ids.insert(model.provider + "/" + model.id);
+        }
+        const std::vector<std::string>* configured_patterns =
+            settings_manager_ && settings_manager_->settings().enabled_models
+            ? &*settings_manager_->settings().enabled_models
+            : nullptr;
+        const auto& session_scoped_models = session_.scoped_models();
+        if (all_models.empty() &&
+            (configured_patterns == nullptr || configured_patterns->empty()) &&
+            session_scoped_models.empty()) {
+            show_status("No models available");
+            co_return;
+        }
+
+        std::optional<ModelScopeResolution> configured_scope;
+        if (configured_patterns != nullptr && !configured_patterns->empty()) {
+            configured_scope =
+                resolve_model_scope_with_diagnostics(*configured_patterns, all_models);
+        }
+        auto current_enabled_ids = initial_selector_enabled_ids(
+            session_scoped_models, configured_scope);
+
+        const auto weak = weak_from_this();
+        const auto all_models_shared = std::make_shared<const std::vector<ai::Model>>(all_models);
+        const auto all_model_ids_shared = std::make_shared<const std::set<std::string, std::less<>>>(all_model_ids);
+        auto selector = std::make_shared<ScopedModelsSelectorComponent>(
+            theme_controller_->live_theme(),
+            keybindings_,
+            all_models,
+            std::move(current_enabled_ids),
+            [weak, all_models = all_models_shared, ids = all_model_ids_shared](
+                std::optional<std::vector<std::string>> enabled_ids) {
+                // Input-thread sink: apply session-only scope changes on the
+                // executor (pi `updateSessionModels`).
+                if (const auto self = weak.lock()) {
+                    self->post_from_view(
+                        [enabled_ids = std::move(enabled_ids),
+                         all_models = std::move(all_models),
+                         ids = std::move(ids)](InteractiveState& state) mutable {
+                            state.apply_scoped_model_change(
+                                std::move(enabled_ids), *all_models, *ids);
+                        });
+                }
+            },
+            [weak, all_models = all_models_shared, ids = all_model_ids_shared](
+                std::optional<std::vector<std::string>> enabled_ids) {
+                // Input-thread sink: persist to settings on the executor (pi
+                // `onPersist`).
+                if (const auto self = weak.lock()) {
+                    self->post_from_view(
+                        [enabled_ids = std::move(enabled_ids),
+                         all_models = std::move(all_models),
+                         ids = std::move(ids)](InteractiveState& state) mutable {
+                            state.persist_scoped_models(
+                                std::move(enabled_ids), *all_models, *ids);
+                        });
+                }
+            },
+            [weak] {
+                if (const auto self = weak.lock()) {
+                    self->post_from_view([](InteractiveState& state) { state.restore_editor_slot(); });
+                }
+            });
+        place_editor_replacement(std::move(selector));
+    }
+
+    /// pi `updateSessionModels` (executor): session-only scope changes from
+    /// the scoped-models selector. An explicit list with at least one
+    /// available model and not every available model enabled resolves to the
+    /// session scope; otherwise the scope clears (all enabled / none enabled
+    /// = no filter).
+    void apply_scoped_model_change(
+        std::optional<std::vector<std::string>> enabled_ids,
+        const std::vector<ai::Model>& all_models,
+        const std::set<std::string, std::less<>>& all_model_ids) {
+        const bool has_enabled_available =
+            enabled_ids && std::any_of(
+                               enabled_ids->begin(),
+                               enabled_ids->end(),
+                               [&](const std::string& id) { return all_model_ids.contains(id); });
+        const bool all_available_enabled =
+            enabled_ids && std::all_of(
+                               all_model_ids.begin(),
+                               all_model_ids.end(),
+                               [&](const std::string& id) {
+                                   return std::find(
+                                              enabled_ids->begin(),
+                                              enabled_ids->end(),
+                                              id) != enabled_ids->end();
+                               });
+        if (enabled_ids && has_enabled_available && !all_available_enabled) {
+            session_.set_scoped_models(
+                resolve_model_scope(*enabled_ids, all_models));
+        } else {
+            session_.set_scoped_models({});
+        }
+        update_model_completion();
+        tui_.invalidate();
+    }
+
+    /// pi `onPersist` (executor): persist the current selection to the global
+    /// `enabledModels` settings field; an all-enabled selection clears the
+    /// field (pi writes `undefined`).
+    void persist_scoped_models(
+        std::optional<std::vector<std::string>> enabled_ids,
+        const std::vector<ai::Model>& all_models,
+        const std::set<std::string, std::less<>>& all_model_ids) {
+        const bool all_enabled =
+            enabled_ids && enabled_ids->size() == all_models.size() &&
+            std::all_of(
+                enabled_ids->begin(),
+                enabled_ids->end(),
+                [&](const std::string& id) { return all_model_ids.contains(id); });
+        const auto new_patterns =
+            !enabled_ids || all_enabled ? std::nullopt : std::move(enabled_ids);
+        if (settings_manager_) {
+            (void)settings_manager_->set_enabled_models(std::move(new_patterns));
+        }
+        show_status("Model selection saved to settings");
+    }
+
     [[nodiscard]] OpenBrowserSink open_browser_hook() {
         const auto weak = weak_from_this();
         return [weak](std::string url) {
@@ -1878,7 +2410,7 @@ private:
     void open_login(std::string provider_ref) {
         if (!running_ || view_ == nullptr || !session_.is_open()) return;
         const auto self = shared_from_this();
-        spawn_login_flow(
+        spawn_flow(
             [self, provider_ref = std::move(provider_ref)]() mutable
                 -> boost::asio::awaitable<void> {
                 co_await self->handle_login_command(std::move(provider_ref));
@@ -1889,7 +2421,7 @@ private:
     void open_logout() {
         if (!running_ || view_ == nullptr || !session_.is_open()) return;
         const auto self = shared_from_this();
-        spawn_login_flow(
+        spawn_flow(
             [self]() -> boost::asio::awaitable<void> {
                 co_await self->run_logout();
             },
@@ -1953,7 +2485,7 @@ private:
         if (provider_options && options.size() == 1 && !provider_options->empty()) {
             const auto self = shared_from_this();
             const auto option = provider_options->front();
-            spawn_login_flow(
+            spawn_flow(
                 [self, option]() -> boost::asio::awaitable<void> {
                     co_await self->start_provider_login(option);
                 },
@@ -1988,7 +2520,7 @@ private:
                                 if (found == provider_options->end()) return;
                                 const auto option = *found;
                                 const auto shared = self.shared_from_this();
-                                self.spawn_login_flow(
+                                self.spawn_flow(
                                     [shared, option]() -> boost::asio::awaitable<void> {
                                         co_await shared->start_provider_login(option);
                                     },
@@ -2039,7 +2571,7 @@ private:
                             if (found == options.end()) return;
                             const auto option = *found;
                             const auto shared = self.shared_from_this();
-                            self.spawn_login_flow(
+                            self.spawn_flow(
                                 [shared, option]() -> boost::asio::awaitable<void> {
                                     co_await shared->start_provider_login(option);
                                 },
@@ -2376,7 +2908,7 @@ private:
                             if (found == options.end()) return;
                             const auto option = *found;
                             const auto shared = self.shared_from_this();
-                            self.spawn_login_flow(
+                            self.spawn_flow(
                                 [shared, option]() -> boost::asio::awaitable<void> {
                                     co_await shared->run_logout_provider(option);
                                 },
@@ -2434,6 +2966,12 @@ private:
             return;
         case CommandEffect::OpenLogout:
             open_logout();
+            return;
+        case CommandEffect::OpenModelSelector:
+            post_open_model_selector(std::move(result.effect_argument));
+            return;
+        case CommandEffect::OpenScopedModelsSelector:
+            post_open_scoped_models_selector();
             return;
         case CommandEffect::Shutdown:
             if (view_ != nullptr) {
@@ -2840,6 +3378,15 @@ private:
     cch::tui::Tui tui_;
     CommandRegistry commands_;
     std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings_;
+    /// Two-scope settings manager (global scope only; the project scope stays
+    /// untrusted in the Native TUI). The theme committer and the
+    /// scoped-models selector persist through it. Declared before
+    /// `theme_controller_` so the controller's committer reference stays
+    /// valid through destruction.
+    std::optional<coding_agent::SettingsManager> settings_manager_{std::nullopt};
+    /// Immutable `/model` completion snapshot, replaced on the executor by
+    /// `update_model_completion()` whenever the candidate set changes.
+    std::shared_ptr<const ModelCompletionSnapshot> model_completion_{};
     std::optional<ThemeController> theme_controller_;
     std::unique_ptr<AsyncClipboardReader> clipboard_reader_;
     std::move_only_function<void(std::string)> open_browser_sink_;

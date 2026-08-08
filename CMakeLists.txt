@@ -156,6 +156,7 @@ target_compile_options(cch_ai PRIVATE -Wall -Wextra -Wpedantic)
 # the sole injectable ModelRuntime seam (#326/#331) without a dependency cycle.
 add_library(cch_coding_agent_core
     src/coding_agent/ModelRuntime.cpp
+    src/coding_agent/ModelResolver.cpp
     src/coding_agent/ModelConfig.cpp
     src/coding_agent/ProviderComposer.cpp
     src/coding_agent/AgentConfigDir.cpp
@@ -276,8 +277,10 @@ add_library(cch_coding_agent_interactive
     src/coding_agent/tui/KeybindingHints.cpp
     src/coding_agent/tui/LoginDialog.cpp
     src/coding_agent/tui/LoginPresentation.cpp
+    src/coding_agent/tui/ModelSelector.cpp
     src/coding_agent/tui/OAuthSelector.cpp
     src/coding_agent/tui/OpenBrowser.cpp
+    src/coding_agent/tui/ScopedModelsSelector.cpp
     src/coding_agent/tui/StringListSelector.cpp
     src/coding_agent/tui/ToolExecutionComponent.cpp
     src/coding_agent/tui/UserMessageComponent.cpp
@@ -372,6 +375,8 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/SessionPathPolicyTest.cpp
         tests/coding_agent/SettingsManagerTest.cpp
         tests/coding_agent/ModelConfigTest.cpp
+        tests/coding_agent/ModelCycleTest.cpp
+        tests/coding_agent/ModelResolverTest.cpp
         tests/coding_agent/ModelResolutionTest.cpp
         tests/coding_agent/SetModelTest.cpp
         tests/coding_agent/ModelRuntimeTest.cpp
@@ -389,7 +394,10 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/tui/ChatContainerStatusTest.cpp
         tests/coding_agent/tui/LoginDialogTest.cpp
         tests/coding_agent/tui/LoginInteractiveModeTest.cpp
+        tests/coding_agent/tui/ModelSelectorInteractiveTest.cpp
+        tests/coding_agent/tui/ModelSelectorTest.cpp
         tests/coding_agent/tui/OAuthSelectorTest.cpp
+        tests/coding_agent/tui/ScopedModelsSelectorTest.cpp
         tests/coding_agent/tui/StringListSelectorTest.cpp
         tests/coding_agent/tui/ProcessInteractiveModeTest.cpp
         tests/coding_agent/tui/ThemeTest.cpp

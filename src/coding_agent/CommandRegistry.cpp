@@ -373,6 +373,42 @@ util::ExpectedVoid register_native_tui_commands(CommandRegistry& registry) {
         return std::unexpected(registered.error());
     }
 
+    // /model — the model selector, optionally pre-filtered by the search term
+    // (pi `/model` with `handleModelCommand`: an exact provider/model match
+    // switches immediately, anything else opens the selector with the term).
+    if (auto registered = registry.register_command(
+            "model",
+            "Select model (opens selector UI)",
+            "<provider/model>",
+            [](const CommandContext& /*ctx*/, std::string_view args) {
+                return CommandResult{
+                    .display_text = {},
+                    .effect = CommandEffect::OpenModelSelector,
+                    .effect_argument = std::string{args},
+                };
+            });
+        !registered) {
+        return std::unexpected(registered.error());
+    }
+
+    // /scoped-models — the scoped-models selector (pi `/scoped-models`).
+    if (auto registered = registry.register_command(
+            "scoped-models",
+            "Enable/disable models for Ctrl+P cycling",
+            {},
+            [](const CommandContext& /*ctx*/, std::string_view args) {
+                if (!args.empty()) {
+                    return CommandResult{.display_text = "Usage: /scoped-models"};
+                }
+                return CommandResult{
+                    .display_text = {},
+                    .effect = CommandEffect::OpenScopedModelsSelector,
+                };
+            });
+        !registered) {
+        return std::unexpected(registered.error());
+    }
+
     return {};
 }
 

@@ -52,6 +52,11 @@ enum class CommandEffect {
     OpenLogin,
     /// Open the logout presentation flow (pi `/logout`).
     OpenLogout,
+    /// Open the model selector, optionally pre-filtered by the `/model`
+    /// search term in `effect_argument` (pi `handleModelCommand`).
+    OpenModelSelector,
+    /// Open the scoped-models selector (pi `/scoped-models`).
+    OpenScopedModelsSelector,
     Shutdown,
 };
 

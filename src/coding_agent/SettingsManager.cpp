@@ -980,4 +980,58 @@ util::ExpectedVoid SettingsManager::set_default_model_and_provider(
     return util::ExpectedVoid{};
 }
 
+util::ExpectedVoid SettingsManager::set_enabled_models(
+    std::optional<std::vector<std::string>> patterns) {
+    // pi `setEnabledModels` always writes the global scope.
+    if (impl_->global_load_failed) {
+        return util::ExpectedVoid{};
+    }
+    if (impl_->global_path.empty()) {
+        return util::ExpectedVoid{};
+    }
+
+    auto& target = impl_->global_settings;
+    if (target.enabled_models == patterns) {
+        return util::ExpectedVoid{};
+    }
+
+    if (!patterns) {
+        // pi writes `undefined`, which its JSON serializer drops: remove the
+        // field, preserving every other field.
+        auto lock = FileLock::acquire(impl_->global_path);
+        if (!lock) {
+            return std::unexpected(lock.error());
+        }
+        auto object = read_current_settings(impl_->global_path);
+        if (!object) {
+            return std::unexpected(object.error());
+        }
+        object->erase("enabledModels");
+        auto serialized = serialize_pretty(*object);
+        if (!serialized) {
+            return std::unexpected(serialized.error());
+        }
+        if (auto written = write_settings_text(impl_->global_path, std::move(*serialized));
+            !written) {
+            return written;
+        }
+    } else if (auto persisted = persist_field(
+                   impl_->global_path,
+                   "enabledModels",
+                   [&] {
+                       util::JsonValue::array_t entries;
+                       entries.reserve(patterns->size());
+                       for (const auto& pattern : *patterns) {
+                           entries.emplace_back(pattern);
+                       }
+                       return util::JsonValue{std::move(entries)};
+                   }());
+               !persisted) {
+        return persisted;
+    }
+    target.enabled_models = std::move(patterns);
+    impl_->recompute_merged();
+    return util::ExpectedVoid{};
+}
+
 } // namespace cch::coding_agent

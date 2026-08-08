@@ -405,6 +405,96 @@ util::ExpectedVoid detail::AgentSessionPromptAccess::set_model_blocking(
     return std::move(*result);
 }
 
+boost::asio::awaitable<util::Expected<std::optional<ModelCycleResult>>>
+AgentSession::cycle_model(std::string direction) {
+    return detail::AgentSessionPromptAccess::cycle_model(*this, std::move(direction));
+}
+
+util::Expected<std::optional<ModelCycleResult>> AgentSession::cycle_model_blocking(
+    std::string direction) {
+    return detail::AgentSessionPromptAccess::cycle_model_blocking(
+        *this, std::move(direction));
+}
+
+boost::asio::awaitable<util::Expected<std::optional<ModelCycleResult>>>
+detail::AgentSessionPromptAccess::cycle_model(
+    AgentSession& session,
+    std::string direction) {
+    return cycle_model_impl(session.impl_, std::move(direction));
+}
+
+boost::asio::awaitable<util::Expected<std::optional<ModelCycleResult>>>
+detail::AgentSessionPromptAccess::cycle_model_impl(
+    std::shared_ptr<AgentSession::Impl> impl,
+    std::string direction) {
+    if (!impl || !impl->runtime) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    try {
+        co_return co_await impl->runtime->cycle_model(std::move(direction));
+    } catch (...) {
+        const auto failure = prompt_exception(std::current_exception());
+        co_return std::unexpected(failure.error());
+    }
+}
+
+util::Expected<std::optional<ModelCycleResult>>
+detail::AgentSessionPromptAccess::cycle_model_blocking(
+    AgentSession& session,
+    std::string direction) {
+    const auto impl = session.impl_;
+    if (!impl) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    boost::asio::io_context io;
+    std::optional<util::Expected<std::optional<ModelCycleResult>>> result;
+    std::exception_ptr exception;
+    boost::asio::co_spawn(
+        io,
+        cycle_model(session, std::move(direction)),
+        [&](std::exception_ptr completion_exception,
+            util::Expected<std::optional<ModelCycleResult>> completion) {
+            exception = completion_exception;
+            result.emplace(std::move(completion));
+        });
+    io.run();
+
+    if (exception) {
+        const auto failure = prompt_exception(exception);
+        return std::unexpected(failure.error());
+    }
+    if (!result) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Unknown,
+            "session cycle_model coroutine did not complete"));
+    }
+    return std::move(*result);
+}
+
+util::Expected<std::optional<std::string>> AgentSession::cycle_thinking_level() {
+    if (!impl_ || !impl_->runtime) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    return impl_->runtime->cycle_thinking_level();
+}
+
+void AgentSession::set_scoped_models(std::vector<ScopedModel> models) {
+    if (impl_ && impl_->runtime) {
+        impl_->runtime->set_scoped_models(std::move(models));
+    }
+}
+
+const std::vector<ScopedModel>& AgentSession::scoped_models() const {
+    static const std::vector<ScopedModel> kEmpty;
+    return impl_ && impl_->runtime ? impl_->runtime->scoped_models() : kEmpty;
+}
+
 util::ExpectedVoid detail::AgentSessionPromptAccess::prompt_blocking(
     AgentSession& session,
     std::string text,

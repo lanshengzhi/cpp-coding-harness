@@ -166,6 +166,14 @@ public:
         std::string provider,
         std::string model);
 
+    /// Surgical field-level write of the pi `enabledModels` field in the
+    /// global scope (pi `SettingsManager.setEnabledModels`, which always
+    /// writes `globalSettings`); preserves every other field. `std::nullopt`
+    /// removes the field (pi writes `undefined`, which its serializer drops).
+    /// A global load failure suppresses the write. No-op when unchanged.
+    [[nodiscard]] util::ExpectedVoid set_enabled_models(
+        std::optional<std::vector<std::string>> patterns);
+
 private:
     struct Impl;
     explicit SettingsManager(std::unique_ptr<Impl> impl);

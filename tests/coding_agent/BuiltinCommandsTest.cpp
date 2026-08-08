@@ -182,16 +182,21 @@ TEST_CASE("Native TUI commands extend only the concrete effective registry", "[c
     REQUIRE(coding_agent::register_native_tui_commands(registry).has_value());
 
     const auto commands = registry.list_commands();
-    REQUIRE(commands.size() == 10);
+    REQUIRE(commands.size() == 12);
     CHECK(commands[4].name == "hotkeys");
     CHECK(commands[4].description == "Show all keyboard shortcuts");
-    CHECK(commands[9].name == "settings");
-    CHECK(commands[9].description == "Open settings menu");
+    CHECK(commands[11].name == "settings");
+    CHECK(commands[11].description == "Open settings menu");
     CHECK(commands[5].name == "login");
     CHECK(commands[5].description == "Configure provider authentication");
     CHECK(commands[5].argument_hint == "<provider>");
     CHECK(commands[6].name == "logout");
     CHECK(commands[6].description == "Remove provider authentication");
+    CHECK(commands[7].name == "model");
+    CHECK(commands[7].description == "Select model (opens selector UI)");
+    CHECK(commands[7].argument_hint == "<provider/model>");
+    CHECK(commands[9].name == "scoped-models");
+    CHECK(commands[9].description == "Enable/disable models for Ctrl+P cycling");
     CHECK_FALSE(registry.find_command_info("new").has_value());
     CHECK_FALSE(registry.find_command_info("resume").has_value());
 

@@ -269,6 +269,7 @@ util::ExpectedVoid ModelRuntime::refresh() {
 }
 
 std::optional<std::string> ModelRuntime::get_error() const {
+    if (!impl_) return std::nullopt;
     std::vector<std::string> errors;
     if (impl_->config_error) {
         errors.push_back(*impl_->config_error);
@@ -348,7 +349,9 @@ ModelRuntime::get_available(std::optional<std::string_view> provider_id) {
 }
 
 std::vector<ai::Model> ModelRuntime::get_available_snapshot() const {
-    return impl_->available_models;
+    // Impl-less recording fakes (the §7.2 test seam) serve an empty
+    // snapshot instead of dereferencing a null impl.
+    return impl_ ? impl_->available_models : std::vector<ai::Model>{};
 }
 
 boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>>

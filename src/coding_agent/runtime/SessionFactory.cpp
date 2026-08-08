@@ -493,30 +493,13 @@ void cleanup_factory_env(harness::AsyncExecutionEnv* env) {
 }
 
 /// Resolve `--models` / settings `enabledModels` patterns into the scoped
-/// model set for cycling (pi `resolveModelScope` subset: glob `*` plus plain
-/// id/name prefixes). An empty pattern list yields an empty scope.
-[[nodiscard]] std::vector<ai::Model> resolve_model_scope(
+/// model set for cycling (pi `resolveModelScope` over the live availability
+/// snapshot — scoping never includes providers without configured auth). An
+/// empty pattern list yields an empty scope.
+[[nodiscard]] std::vector<cch::coding_agent::ScopedModel> resolve_model_scope(
     const std::vector<std::string>& patterns,
     const ModelRuntime& runtime) {
-    std::vector<ai::Model> scoped;
-    const auto all_models = runtime.models();
-    for (const auto& model : all_models) {
-        for (const auto& raw_pattern : patterns) {
-            std::string pattern = raw_pattern;
-            if (pattern.starts_with("provider/")) {
-                pattern = pattern.substr(std::string{"provider/"}.size());
-            }
-            const bool matches =
-                pattern == "*" ||
-                lowercase(model.provider + "/" + model.id).find(lowercase(pattern)) != std::string::npos ||
-                lowercase(model.id).find(lowercase(pattern)) != std::string::npos;
-            if (matches) {
-                scoped.push_back(model);
-                break;
-            }
-        }
-    }
-    return scoped;
+    return cch::coding_agent::resolve_model_scope(patterns, runtime.get_available_snapshot());
 }
 
 /// Run the side-effect-free availability coroutine to completion on a
@@ -791,7 +774,13 @@ struct SessionTargetNormalizationOptions {
 /// (with `--provider`) wins; `--models`/`enabledModels` scope the selection
 /// for new sessions; a resume re-resolves the stored `model_change` against
 /// the live runtime; then settings `defaultProvider`/`defaultModel`; then the
-/// runtime default.
+/// runtime default. `out_scoped_models` receives the resolved `--models`/
+/// settings `enabledModels` scope (pi `scopedModels` carried into the
+/// session for Ctrl+P cycling; pi main.ts `parsed.models ??
+/// settingsManager.getEnabledModels()`), and `out_scoped_thinking_level` the
+/// first scoped entry's explicit `:level` when the scope selects the initial
+/// model (pi main.ts `buildSessionOptions`), regardless of which chain step
+/// selected the model.
 [[nodiscard]] util::Expected<ai::Model> resolve_cli_request_model(
     const AssemblyPlan& plan,
     const ModelRuntime& runtime,
@@ -799,24 +788,33 @@ struct SessionTargetNormalizationOptions {
     const std::optional<std::string>& stored_provider,
     const std::optional<std::string>& stored_model,
     bool resume_restore_failed,
-    const coding_agent::UserSettings& settings) {
+    const coding_agent::UserSettings& settings,
+    std::vector<cch::coding_agent::ScopedModel>* out_scoped_models = nullptr,
+    std::optional<std::string>* out_scoped_thinking_level = nullptr) {
     const auto& selection = plan.cli_selection;
 
-    // 1. CLI --model (with optional --provider) wins.
-    if (selection.model) {
-        return resolve_cli_model_pattern(runtime, selection.provider, *selection.model);
-    }
-
-    // 2. --models / settings enabledModels scope the selection (new sessions
-    // only; a resume re-resolves its stored identity instead).
-    std::vector<ai::Model> scoped;
+    // 0. `--models` / settings `enabledModels` scope the session's Ctrl+P
+    // cycling set (pi main.ts `parsed.models ?? getEnabledModels()`; a resume
+    // re-resolves its stored identity for the initial model but keeps the
+    // scope). The scope resolves from the live availability snapshot, so
+    // keyless providers are never in scope.
+    std::vector<cch::coding_agent::ScopedModel> scoped;
     std::vector<std::string> patterns = selection.models;
     if (patterns.empty() && settings.enabled_models) {
         patterns = *settings.enabled_models;
     }
     if (!patterns.empty()) {
         scoped = resolve_model_scope(patterns, runtime);
+        if (out_scoped_models != nullptr) *out_scoped_models = scoped;
     }
+
+    // 1. CLI --model (with optional --provider) wins.
+    if (selection.model) {
+        return resolve_cli_model_pattern(runtime, selection.provider, *selection.model);
+    }
+
+    // 2. The resolved scope selects the initial model for new sessions when
+    // no explicit --model was given.
 
     // 3. Resume: re-resolve the stored model_change identity against the live
     // runtime catalog and require configured auth (pi `restoreModelFromSession`:
@@ -832,17 +830,26 @@ struct SessionTargetNormalizationOptions {
     }
 
     // 4. Scoped models: the saved default when it is in scope, else the first
-    // scoped model (pi buildSessionOptions).
+    // scoped model (pi buildSessionOptions). The matching entry's explicit
+    // `:level` seeds the initial thinking level (pi main.ts
+    // `savedInScope.thinkingLevel` / `scopedModels[0].thinkingLevel`).
     if (!scoped.empty() && !is_resume) {
         if (settings.default_provider && settings.default_model) {
-            for (const auto& model : scoped) {
+            for (const auto& scoped_model : scoped) {
+                const auto& model = scoped_model.model;
                 if (model.provider == *settings.default_provider &&
                     model.id == *settings.default_model) {
+                    if (out_scoped_thinking_level != nullptr) {
+                        *out_scoped_thinking_level = scoped_model.thinking_level;
+                    }
                     return model;
                 }
             }
         }
-        return scoped.front();
+        if (out_scoped_thinking_level != nullptr) {
+            *out_scoped_thinking_level = scoped.front().thinking_level;
+        }
+        return scoped.front().model;
     }
 
     // 5. Settings defaultProvider/defaultModel — only when the provider has
@@ -1155,6 +1162,8 @@ struct SessionTargetNormalizationOptions {
     std::string resolved_provider;
     std::string resolved_model;
     ai::Model request_model;
+    std::vector<cch::coding_agent::ScopedModel> scoped_models;
+    std::optional<std::string> scoped_thinking_level;
     if (plan.requested_model) {
         // Private test seam: an explicit request Model wins directly.
         request_model = *plan.requested_model;
@@ -1176,7 +1185,7 @@ struct SessionTargetNormalizationOptions {
     } else {
         auto resolved = resolve_cli_request_model(
             plan, *runtime, is_resume, stored_provider, stored_model,
-            resume_restore_failed, settings);
+            resume_restore_failed, settings, &scoped_models, &scoped_thinking_level);
         if (!resolved) {
             return std::unexpected(resolved.error());
         }
@@ -1423,7 +1432,12 @@ struct SessionTargetNormalizationOptions {
     runtime_config.max_queued_messages = plan.max_queued_messages;
     runtime_config.max_queued_bytes = plan.max_queued_bytes;
     runtime_config.model = std::move(request_model);
-    runtime_config.default_thinking_level = settings.default_thinking_level;
+    runtime_config.scoped_models = std::move(scoped_models);
+    // pi main.ts `buildSessionOptions`: a scoped entry's explicit `:level`
+    // seeds the new-session thinking level (CLI `--thinking` precedence
+    // lands with the flag's session plumbing).
+    runtime_config.default_thinking_level =
+        scoped_thinking_level ? scoped_thinking_level : settings.default_thinking_level;
     const auto shell_path = settings.shell_path;
     const auto shell_command_prefix = settings.shell_command_prefix;
 

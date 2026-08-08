@@ -35,6 +35,10 @@ struct AgentSessionRuntimeConfig {
     /// (ADR 0015).
     std::optional<int> max_turns{std::nullopt};
     ai::Model model{};
+    /// pi `scopedModels`: the `--models` scope carried into the session for
+    /// Ctrl+P cycling. Session-only state; the interactive scoped-models
+    /// selector replaces it at runtime.
+    std::vector<coding_agent::ScopedModel> scoped_models{};
     /// pi `defaultThinkingLevel` from the merged settings scope. Used as the
     /// fresh-session and resumed-without-entry thinking level before the
     /// Agent's creation clamp (pi sdk.ts
@@ -155,6 +159,34 @@ public:
     [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> set_model(
         ai::Model model);
 
+    /// Runtime model cycle (pi `AgentSession.cycleModel`, G3 decision 5):
+    /// when the session carries scoped models, cycle within the auth-filtered
+    /// scoped set (pi `_cycleScopedModel`: models whose provider resolves no
+    /// auth are dropped; a scoped model's explicit thinking level overrides
+    /// the current preference); otherwise cycle within the available models
+    /// (pi `_cycleAvailableModel`). A set with zero or one eligible model
+    /// yields `std::nullopt`. Each cycle applies the model, appends the
+    /// `model_change` entry, writes the global settings default, and re-clamps
+    /// the thinking level, exactly like `set_model`.
+    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ModelCycleResult>>>
+    cycle_model(std::string_view direction);
+
+    /// Cycle the thinking level through the active model's supported set (pi
+    /// `AgentSession.cycleThinkingLevel`): the next level after the current
+    /// one, wrapping. `std::nullopt` when the active model supports no
+    /// thinking. Applies `set_thinking_level` (entry + settings default on a
+    /// real change).
+    [[nodiscard]] util::Expected<std::optional<std::string>> cycle_thinking_level();
+
+    /// Replace the session's scoped-model set (pi `setScopedModels`;
+    /// session-only, never persisted). An empty set restores un-scoped
+    /// cycling over the available models.
+    void set_scoped_models(std::vector<coding_agent::ScopedModel> models);
+    /// The session's scoped-model set (pi `scopedModels`).
+    [[nodiscard]] const std::vector<coding_agent::ScopedModel>& scoped_models() const {
+        return scoped_models_;
+    }
+
     // ── Compaction ────────────────────────────────────────────────────────
 
     /// Manually compact the session context (pi `AgentSession.compact`):
@@ -246,6 +278,18 @@ private:
 
     /// Shared preflight outcome for entry points that require a non-closed session.
     [[nodiscard]] util::ExpectedVoid reject_if_closed() const;
+    /// pi `_getThinkingLevelForModelSwitch`: an explicit scoped-model level
+    /// wins; otherwise a current model without thinking support falls back to
+    /// the merged settings default (then pi's DEFAULT_THINKING_LEVEL);
+    /// otherwise the current level is kept (re-clamped by the caller).
+    [[nodiscard]] std::string resolve_thinking_level_for_switch(
+        const std::optional<std::string>& explicit_level) const;
+    /// Shared model-switch tail (pi `setModel`/`cycleModel` after the auth
+    /// decision): swap the live Agent model, append the `model_change` entry,
+    /// write the global settings default, and re-clamp the thinking level.
+    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> apply_model_switch(
+        ai::Model model,
+        std::string thinking_level);
     /// Shared preflight outcome for entry points that reject a concurrent prompt.
     [[nodiscard]] util::ExpectedVoid reject_if_busy() const;
     /// Shared preflight outcome rejecting a second concurrent User Bash.
@@ -334,6 +378,10 @@ private:
     /// assistant message completes in pi); a second overflow while true fails
     /// with pi's verbatim recovery message.
     bool overflow_recovery_attempted_{false};
+    /// pi `_scopedModels`: the session's scoped-model set for Ctrl+P cycling,
+    /// seeded from the `--models` CLI scope and replaced session-only by the
+    /// scoped-models selector. Empty = cycle over the available models.
+    std::vector<coding_agent::ScopedModel> scoped_models_{};
     /// pi `_retryAttempt`: the in-flight turn auto-retry attempt count, reset
     /// by a non-error assistant message completion, by the final-failure
     /// emission, or by an aborted backoff.

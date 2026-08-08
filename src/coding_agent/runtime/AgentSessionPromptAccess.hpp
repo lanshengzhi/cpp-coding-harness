@@ -51,6 +51,15 @@ public:
         AgentSession& session,
         ai::Model model);
 
+    /// Runtime model cycle (pi `AgentSession.cycleModel`). Same impl_
+    /// copying contract as prompt().
+    [[nodiscard]] static boost::asio::awaitable<
+        util::Expected<std::optional<ModelCycleResult>>>
+    cycle_model(AgentSession& session, std::string direction);
+    /// Blocking facade driving the async path on a temporary executor.
+    [[nodiscard]] static util::Expected<std::optional<ModelCycleResult>>
+    cycle_model_blocking(AgentSession& session, std::string direction);
+
 private:
     [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> prompt_impl(
         std::shared_ptr<AgentSession::Impl> impl,
@@ -67,6 +76,12 @@ private:
     [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> set_model_impl(
         std::shared_ptr<AgentSession::Impl> impl,
         ai::Model model);
+
+    [[nodiscard]] static boost::asio::awaitable<
+        util::Expected<std::optional<ModelCycleResult>>>
+    cycle_model_impl(
+        std::shared_ptr<AgentSession::Impl> impl,
+        std::string direction);
 };
 
 } // namespace cch::coding_agent::detail

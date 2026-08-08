@@ -298,6 +298,40 @@ TEST_CASE("SettingsManager defaultThinkingLevel write creates a missing file", "
     CHECK(manager.settings().default_thinking_level == "low");
 }
 
+TEST_CASE("SettingsManager surgical enabledModels write preserves unknown fields and clears on nullopt", "[settings][two-scope][write][issue407]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({
+        "defaultProvider": "alpha",
+        "enabledModels": ["alpha-1"],
+        "future": {"enabled": true}
+    })");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.errors().empty());
+    REQUIRE(manager.settings().enabled_models.has_value());
+
+    // Surgical write replaces the field, preserving every other field.
+    REQUIRE(manager.set_enabled_models(std::vector<std::string>{"alpha-1", "beta-1"}));
+    auto content = dirs.workspace.read("agent/settings.json");
+    CHECK(content.find("\"enabledModels\": [\n    \"alpha-1\",\n    \"beta-1\"\n  ]") != std::string::npos);
+    CHECK(content.find("\"defaultProvider\": \"alpha\"") != std::string::npos);
+    CHECK(content.find("\"future\"") != std::string::npos);
+    REQUIRE(manager.settings().enabled_models.has_value());
+    CHECK(manager.settings().enabled_models->size() == 2);
+
+    // nullopt removes the field (pi writes `undefined`, which its serializer
+    // drops) and preserves the other fields.
+    REQUIRE(manager.set_enabled_models(std::nullopt));
+    content = dirs.workspace.read("agent/settings.json");
+    CHECK(content.find("enabledModels") == std::string::npos);
+    CHECK(content.find("\"defaultProvider\": \"alpha\"") != std::string::npos);
+    CHECK_FALSE(manager.settings().enabled_models.has_value());
+
+    // A no-op write reports success without rewriting.
+    REQUIRE(manager.set_enabled_models(std::nullopt));
+}
+
 TEST_CASE("SettingsManager rejects an invalid defaultThinkingLevel write", "[settings][two-scope][write][issue353]") {
     SettingsDirs dirs;
     auto manager = coding_agent::SettingsManager::create(

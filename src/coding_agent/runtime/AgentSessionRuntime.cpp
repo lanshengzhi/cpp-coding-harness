@@ -7,6 +7,7 @@
 
 #include "agent/AgentMessageAccess.hpp"
 #include "agent/AgentPromptAccess.hpp"
+#include "ai/ModelThinkingLevel.hpp"
 #include "ai/utils/RetryClassifier.hpp"
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/SkillFormatting.hpp"
@@ -120,6 +121,8 @@ AgentSessionRuntime::AgentSessionRuntime(
       session_(std::move(session)),
       prompt_processor_(std::move(prompt_processor)),
       config_(std::move(config)) {
+    // Seed the session's scoped-model set (pi `scopedModels: config.scopedModels`).
+    scoped_models_ = config_.scoped_models;
     // Build the <available_skills> block once from the same immutable snapshot
     // used for explicit /skill:name invocation.
     agent::AsyncAgentOptions options;
@@ -1010,15 +1013,34 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::set_model(
     // support falls back to the merged settings default (then pi's
     // DEFAULT_THINKING_LEVEL); otherwise the current level is kept and
     // re-clamped against the new model below.
-    std::string thinking_level = agent_->state().thinking_level;
-    if (!agent_->state().model.reasoning) {
-        thinking_level =
-            services_.settings_manager &&
-                    services_.settings_manager->settings().default_thinking_level
-                ? *services_.settings_manager->settings().default_thinking_level
-                : "medium";
-    }
+    const auto thinking_level = resolve_thinking_level_for_switch(std::nullopt);
+    co_return co_await apply_model_switch(std::move(model), thinking_level);
+}
 
+/// pi `_getThinkingLevelForModelSwitch`: an explicit scoped-model level wins;
+/// otherwise a current model without thinking support falls back to the
+/// merged settings default (then pi's DEFAULT_THINKING_LEVEL); otherwise the
+/// current level is kept and re-clamped against the new model below.
+[[nodiscard]] std::string AgentSessionRuntime::resolve_thinking_level_for_switch(
+    const std::optional<std::string>& explicit_level) const {
+    if (explicit_level) return *explicit_level;
+    if (!agent_ || !agent_->state().model.reasoning) {
+        return services_.settings_manager &&
+                services_.settings_manager->settings().default_thinking_level
+            ? *services_.settings_manager->settings().default_thinking_level
+            : "medium";
+    }
+    return agent_->state().thinking_level;
+}
+
+/// pi `_cycleScopedModel`/`_cycleAvailableModel` shared tail: apply the model
+/// (pi `agent.state.model = model`), append the `model_change` entry, write
+/// the global settings default, and re-clamp the thinking level — the same
+/// persistence sequence as `set_model`.
+[[nodiscard]] boost::asio::awaitable<util::ExpectedVoid>
+AgentSessionRuntime::apply_model_switch(
+    ai::Model model,
+    std::string thinking_level) {
     if (auto swapped = agent_->set_model(std::move(model)); !swapped) {
         co_return std::unexpected(std::move(swapped.error()));
     }
@@ -1048,10 +1070,142 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::set_model(
     // Re-clamp the thinking level for the new model's capabilities (pi
     // `setThinkingLevel` after the model assignment; entry + settings writes
     // ride the existing thinking-level path).
-    if (auto clamped = set_thinking_level(thinking_level); !clamped) {
+    if (auto clamped = set_thinking_level(std::move(thinking_level)); !clamped) {
         co_return std::unexpected(std::move(clamped.error()));
     }
     co_return util::ExpectedVoid{};
+}
+
+boost::asio::awaitable<util::Expected<std::optional<ModelCycleResult>>>
+AgentSessionRuntime::cycle_model(std::string_view direction) {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        co_return std::unexpected(rejected.error());
+    }
+    if (!agent_ || !services_.model_runtime) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation, "session is closed"));
+    }
+    const bool forward = direction != "backward";
+
+    // Scoped path (pi `_cycleScopedModel`): filter the scoped set by
+    // configured auth, then cycle within it.
+    if (!scoped_models_.empty()) {
+        std::vector<cch::coding_agent::ScopedModel> eligible;
+        for (const auto& scoped : scoped_models_) {
+            auto checked = co_await services_.model_runtime->check_auth(scoped.model.provider);
+            if (!checked) {
+                co_return std::unexpected(std::move(checked.error()));
+            }
+            if (*checked) eligible.push_back(scoped);
+        }
+        if (eligible.size() <= 1) {
+            co_return std::optional<ModelCycleResult>{};
+        }
+
+        const auto& current = agent_->state().model;
+        std::size_t current_index = 0;
+        for (std::size_t index = 0; index < eligible.size(); ++index) {
+            if (eligible[index].model.provider == current.provider &&
+                eligible[index].model.id == current.id) {
+                current_index = index;
+                break;
+            }
+        }
+        const auto next_index = forward
+            ? (current_index + 1) % eligible.size()
+            : (current_index + eligible.size() - 1) % eligible.size();
+        const auto& next = eligible[next_index];
+        const auto thinking_level =
+            resolve_thinking_level_for_switch(next.thinking_level);
+        if (auto applied = co_await apply_model_switch(next.model, thinking_level);
+            !applied) {
+            co_return std::unexpected(std::move(applied.error()));
+        }
+        co_return ModelCycleResult{
+            .model = agent_->state().model,
+            .thinking_level = agent_->state().thinking_level,
+            .is_scoped = true,
+        };
+    }
+
+    // Available path (pi `_cycleAvailableModel`): cycle within the
+    // auth-filtered availability snapshot.
+    auto available = co_await services_.model_runtime->get_available();
+    if (!available) {
+        co_return std::unexpected(std::move(available.error()));
+    }
+    if (available->size() <= 1) {
+        co_return std::optional<ModelCycleResult>{};
+    }
+
+    const auto& current = agent_->state().model;
+    std::size_t current_index = 0;
+    for (std::size_t index = 0; index < available->size(); ++index) {
+        if ((*available)[index].provider == current.provider &&
+            (*available)[index].id == current.id) {
+            current_index = index;
+            break;
+        }
+    }
+    const auto next_index = forward
+        ? (current_index + 1) % available->size()
+        : (current_index + available->size() - 1) % available->size();
+    const auto& next_model = (*available)[next_index];
+    const auto thinking_level = resolve_thinking_level_for_switch(std::nullopt);
+    if (auto applied = co_await apply_model_switch(next_model, thinking_level);
+        !applied) {
+        co_return std::unexpected(std::move(applied.error()));
+    }
+    co_return ModelCycleResult{
+        .model = agent_->state().model,
+        .thinking_level = agent_->state().thinking_level,
+        .is_scoped = false,
+    };
+}
+
+util::Expected<std::optional<std::string>>
+AgentSessionRuntime::cycle_thinking_level() {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        return std::unexpected(rejected.error());
+    }
+    if (!agent_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation, "session is closed"));
+    }
+    // pi `supportsThinking()`: the active model must support reasoning.
+    if (!agent_->state().model.reasoning) {
+        return std::optional<std::string>{};
+    }
+    const auto levels = ai::get_supported_thinking_levels(agent_->state().model);
+    if (levels.empty()) {
+        return std::optional<std::string>{};
+    }
+    const auto current = agent_->state().thinking_level;
+    // pi `levels.indexOf(current)`: a level absent from the supported set
+    // yields -1, so the next index is 0 (the first supported level).
+    std::ptrdiff_t current_index = -1;
+    for (std::size_t index = 0; index < levels.size(); ++index) {
+        if (ai::detail::model_thinking_level_name(levels[index]) == current) {
+            current_index = static_cast<std::ptrdiff_t>(index);
+            break;
+        }
+    }
+    const auto next_index =
+        (current_index + 1) % static_cast<std::ptrdiff_t>(levels.size());
+    const auto next_name = ai::detail::model_thinking_level_name(levels[next_index]);
+    if (!next_name) {
+        return std::optional<std::string>{};
+    }
+    auto applied = set_thinking_level(*next_name);
+    if (!applied) {
+        return std::unexpected(std::move(applied.error()));
+    }
+    return std::optional<std::string>{*applied};
+}
+
+void AgentSessionRuntime::set_scoped_models(
+    std::vector<cch::coding_agent::ScopedModel> models) {
+    scoped_models_ = std::move(models);
 }
 
 boost::asio::awaitable<util::Expected<coding_agent::CompactionResult>>
