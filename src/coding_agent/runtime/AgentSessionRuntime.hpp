@@ -187,6 +187,43 @@ public:
         return scoped_models_;
     }
 
+    // ── Tree navigation (pi navigateTree, G2 decision 13) ──────────────────
+
+    /// pi `waitForIdle`: settle when an Agent run is active. The run in
+    /// flight continues to its normal terminal; a no-op when idle. User Bash
+    /// and manual compaction are outside the Agent run and never awaited.
+    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> wait_for_idle();
+
+    /// The session tree topology for the tree selector (pi
+    /// `sessionManager.getTree()` + `getLeafId()`): root nodes with resolved
+    /// labels and the current active leaf id (empty at the root position).
+    /// Persisted sessions read the file's entries; in-memory sessions derive
+    /// a linear tree from the live context with synthetic ids that only the
+    /// tree surface understands (the in-memory store keeps no entries).
+    [[nodiscard]] util::Expected<coding_agent::SessionTreeTopology>
+    session_tree() const;
+
+    /// pi `AgentSession.navigateTree` subset (G2 decision 13): switch the
+    /// active path to `target_id` with the leaf/active-path semantics of the
+    /// pi v3 Session Format — user/custom-message targets move the leaf to
+    /// the parent (null at the root) and return the message text; other
+    /// targets become the leaf. Persisted sessions persist a `leaf` marker
+    /// and rebuild the live Agent context from the new path; in-memory
+    /// sessions truncate the live context. Branch summarization generation
+    /// stays Deferred: no `branch_summary` is ever produced. Rejects an
+    /// active Agent run with pi's verbatim error.
+    [[nodiscard]] util::Expected<coding_agent::TreeNavigationResult>
+    navigate_tree(std::string_view target_id);
+
+    /// pi `SessionManager.appendLabelChange` (the tree editLabel flow):
+    /// append a `label` entry targeting `entry_id` under the current leaf.
+    /// Persisted sessions write the entry; in-memory sessions keep no entry
+    /// surface and the change is dropped like every in-memory store write.
+    /// Verbatim pi errors: `Entry <id> not found` for an unknown target.
+    [[nodiscard]] util::ExpectedVoid set_entry_label(
+        std::string_view entry_id,
+        std::optional<std::string> label);
+
     // ── Compaction ────────────────────────────────────────────────────────
 
     /// Manually compact the session context (pi `AgentSession.compact`):

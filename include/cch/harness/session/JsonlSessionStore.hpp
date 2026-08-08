@@ -70,9 +70,11 @@ public:
                                                           std::string name);
 
     /// Write a Leaf entry to persist the current active leaf position.
-    /// The target_id is the entry ID that becomes the new leaf.
+    /// The target_id is the entry ID that becomes the new leaf; nullopt
+    /// writes the root leaf (pi `setLeafId(null)`, used after navigating
+    /// back before the first entry).
     [[nodiscard]] util::ExpectedVoid append_leaf(std::optional<std::string> parent_id,
-                                                  std::string target_id);
+                                                  std::optional<std::string> target_id);
 
     [[nodiscard]] std::optional<std::filesystem::path> path() const override;
     [[nodiscard]] const SessionMetadata& metadata() const;

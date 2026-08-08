@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <set>
+#include <unordered_map>
 #include <utility>
 #include <variant>
 
@@ -55,6 +56,18 @@ void SessionTree::build_index() {
         // Record the effective parent for leaf-to-root traversal.
         if (!entry.parent_id.has_value() || entry.parent_id->empty()) {
             inferred_parent_[entry.entry_id] = effective_parent;
+        }
+
+        // A root leaf marker (`targetId: null`, written when the active
+        // leaf moves back before the first entry) ends the linear chain: the
+        // next null-parent append starts a NEW root (pi `resetLeaf`), not a
+        // continuation of the previous history.
+        if (entry.kind == SessionEntryKind::Leaf) {
+            if (const auto* value = std::get_if<LeafEntryValue>(&entry.value);
+                value != nullptr && !value->target_id.has_value()) {
+                previous_id.reset();
+                continue;
+            }
         }
 
         previous_id = entry.entry_id;
@@ -110,6 +123,143 @@ util::ExpectedVoid SessionTree::branch(std::string_view entry_id) {
     }
     leaf_id_ = std::string{entry_id};
     return {};
+}
+
+void SessionTree::reset_leaf() {
+    leaf_id_.clear();
+}
+
+std::vector<SessionTreeNode> SessionTree::get_tree() const {
+    // Resolve labels in store order (pi `labelsById` / `labelTimestampsById`
+    // maintained by `_buildIndex`: later label entries win; an empty or
+    // absent label clears the target and its timestamp).
+    std::unordered_map<std::string, std::optional<std::string>> labels;
+    std::unordered_map<std::string, std::optional<ai::TimestampMs>>
+        label_timestamps;
+    for (const auto& entry : entries_) {
+        if (entry.kind != SessionEntryKind::Label) {
+            continue;
+        }
+        const auto* value = std::get_if<LabelEntryValue>(&entry.value);
+        if (value == nullptr) {
+            continue;
+        }
+        auto found = labels.find(value->target_id);
+        if (found == labels.end()) {
+            found = labels.emplace(value->target_id, std::nullopt).first;
+            label_timestamps.emplace(value->target_id, std::nullopt);
+        }
+        if (value->label.has_value()) {
+            auto label = *value->label;
+            const auto first = label.find_first_not_of(" \t\r\n");
+            if (first != std::string::npos) {
+                const auto last = label.find_last_not_of(" \t\r\n");
+                found->second = label.substr(first, last - first + 1);
+                label_timestamps[value->target_id] = entry.timestamp;
+            } else {
+                found->second = std::nullopt;
+                label_timestamps[value->target_id] = std::nullopt;
+            }
+        } else {
+            found->second = std::nullopt;
+            label_timestamps[value->target_id] = std::nullopt;
+        }
+    }
+
+    // Defensive node copies in store order, then parent/child links exactly
+    // like pi `getTree`: an absent parent or a parent equal to the entry's
+    // own id makes a root; an unresolvable parent makes an orphan root. The
+    // copied entries carry the EFFECTIVE parent (explicit wire parent, or
+    // the inferred linear-chain parent for the C++ flat-file shape) so the
+    // display-side parent walks (active path, folding, ancestor lookup)
+    // follow the same chain as context reconstruction.
+    std::vector<SessionTreeNode> nodes;
+    nodes.reserve(entries_.size());
+    std::unordered_map<std::string, std::size_t> node_by_id;
+    for (const auto& entry : entries_) {
+        SessionTreeNode node;
+        node.entry = entry;
+        // The display copy's parent is the effective parent; entries whose
+        // wire parent is null but chain onto a predecessor (the C++
+        // flat-file shape) get the inferred parent, so the tree selector
+        // walks one consistent topology.
+        if (!node.entry.parent_id.has_value() || node.entry.parent_id->empty()) {
+            const auto inferred = inferred_parent_.find(entry.entry_id);
+            if (inferred != inferred_parent_.end()) {
+                node.entry.parent_id = inferred->second;
+            }
+        }
+        auto label = labels.find(entry.entry_id);
+        if (label != labels.end()) {
+            node.label = label->second;
+            node.label_timestamp = label_timestamps[entry.entry_id];
+        }
+        node_by_id.emplace(entry.entry_id, nodes.size());
+        nodes.push_back(std::move(node));
+    }
+
+    std::vector<std::vector<std::size_t>> children_indexes(nodes.size());
+    std::vector<std::size_t> root_indexes;
+    root_indexes.reserve(nodes.size());
+    for (std::size_t index = 0; index < nodes.size(); ++index) {
+        const auto& entry = nodes[index].entry;
+        // The copied entry now carries the effective parent (explicit wire
+        // parent, or the inferred linear-chain parent for the C++ flat-file
+        // shape, exactly like `getBranch`/`buildSessionContext`).
+        const bool is_root =
+            !entry.parent_id.has_value() ||
+            *entry.parent_id == entry.entry_id;
+        if (is_root) {
+            root_indexes.push_back(index);
+            continue;
+        }
+        const auto parent_node = node_by_id.find(*entry.parent_id);
+        if (parent_node == node_by_id.end()) {
+            root_indexes.push_back(index);
+        } else {
+            children_indexes[parent_node->second].push_back(index);
+        }
+    }
+
+    // Build the tree iteratively (parents before children) so deep trees
+    // cannot overflow the stack (pi getTree). Each children vector is
+    // reserved before its pushes, so the work-stack node pointers stay valid.
+    std::vector<SessionTreeNode> roots;
+    roots.reserve(root_indexes.size());
+    std::vector<std::pair<std::size_t, SessionTreeNode*>> work;
+    for (const auto index : root_indexes) {
+        roots.push_back(SessionTreeNode{});
+        work.emplace_back(index, &roots.back());
+    }
+    while (!work.empty()) {
+        const auto [index, target] = work.back();
+        work.pop_back();
+        *target = std::move(nodes[index]);
+        auto& child_indexes = children_indexes[index];
+        target->children.reserve(child_indexes.size());
+        for (const auto child : child_indexes) {
+            target->children.push_back(SessionTreeNode{});
+            work.emplace_back(child, &target->children.back());
+        }
+    }
+
+    // Sort children by timestamp (oldest first, newest at bottom), iteratively
+    // so deep trees cannot overflow the stack (pi getTree).
+    std::vector<SessionTreeNode*> stack;
+    stack.reserve(nodes.size());
+    for (auto& root : roots) stack.push_back(&root);
+    while (!stack.empty()) {
+        auto* node = stack.back();
+        stack.pop_back();
+        std::sort(
+            node->children.begin(),
+            node->children.end(),
+            [](const SessionTreeNode& first, const SessionTreeNode& second) {
+                return first.entry.timestamp < second.entry.timestamp;
+            });
+        for (auto& child : node->children) stack.push_back(&child);
+    }
+    return roots;
 }
 
 std::vector<const SessionEntry*> SessionTree::getBranch(std::string_view from_id) const {

@@ -167,6 +167,26 @@ struct ModelCycleResult {
     bool is_scoped{false};
 };
 
+// ── Tree navigation (pi navigateTree, G2 decision 13) ────────────────────────
+
+/// Result of one in-session tree navigation (pi `navigateTree` result
+/// subset): `editorText` for user/custom-message targets (the message text
+/// pre-fills the editor), absent for other targets; `cancelled` is always
+/// false in the C++ subset (the summarize/extension cancel paths are
+/// Deferred with branch summarization generation).
+struct TreeNavigationResult {
+    std::optional<std::string> editor_text{std::nullopt};
+    bool cancelled{false};
+};
+
+/// The session tree topology for the tree selector (pi `getTree()` +
+/// `getLeafId()`): root nodes with resolved labels and the current active
+/// leaf id (empty when the leaf sits before the first entry).
+struct SessionTreeTopology {
+    std::vector<harness::session::SessionTreeNode> roots;
+    std::string leaf_id;
+};
+
 // ── AgentSession ─────────────────────────────────────────────────────────────
 
 /// Move-only session handle. Created by create_agent_session().
@@ -331,6 +351,46 @@ public:
     [[nodiscard]] util::Expected<runtime::ForkPreparation> prepare_fork(
         std::string_view entry_id,
         runtime::ForkPosition position) const;
+
+    // ── Tree navigation (pi navigateTree, G2 decision 13) ──────────────────
+
+    /// pi `waitForIdle`: an awaitable that settles when an active Agent run
+    /// finishes (the run already in flight continues to its normal terminal).
+    /// Returns immediately when no run is active; User Bash and manual
+    /// compaction are outside the Agent run and never awaited. The settle
+    /// wait itself cannot fail, so the expected alternative stays empty.
+    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> wait_for_idle();
+
+    /// The session tree topology for the tree selector (pi
+    /// `sessionManager.getTree()` + `getLeafId()`): root nodes with resolved
+    /// labels and the current active leaf. Persisted sessions read the
+    /// file's entries; in-memory sessions derive a linear tree from the live
+    /// context with synthetic ids that only the tree surface understands
+    /// (the C++ in-memory store keeps no entries, #409).
+    [[nodiscard]] util::Expected<SessionTreeTopology> session_tree() const;
+
+    /// pi `AgentSession.navigateTree` subset: switch the active path to
+    /// `target_id` with the leaf/active-path semantics of the pi v3 Session
+    /// Format — a user or custom-message target moves the leaf to its parent
+    /// (null at the root) and returns the message text for the editor; any
+    /// other target becomes the leaf. Persisted sessions persist a `leaf`
+    /// marker and rebuild the live Agent context from the new path; the
+    /// in-memory path truncates the live context to the target. Branch
+    /// summarization generation stays Deferred (G2): no `branch_summary` is
+    /// ever produced, and `branch_summary` entries from pi-created sessions
+    /// render unchanged. Rejects an active Agent run with pi's verbatim
+    /// error; label attachment is the separate `set_entry_label` surface
+    /// (editLabel).
+    [[nodiscard]] util::Expected<TreeNavigationResult> navigate_tree(
+        std::string_view target_id);
+
+    /// pi `SessionManager.appendLabelChange` (the tree editLabel flow):
+    /// append a `label` entry targeting `entry_id` under the current leaf.
+    /// Persisted sessions write the entry; in-memory sessions keep no entry
+    /// surface and the change is dropped like every in-memory store write.
+    [[nodiscard]] util::ExpectedVoid set_entry_label(
+        std::string_view entry_id,
+        std::optional<std::string> label);
 
     // ── Compaction ───────────────────────────────────────────────────────
 

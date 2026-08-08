@@ -235,10 +235,24 @@ util::ExpectedVoid JsonlSessionStore::append_session_info(
 
 util::ExpectedVoid JsonlSessionStore::append_leaf(
     std::optional<std::string> parent_id,
-    std::string target_id) {
+    std::optional<std::string> target_id) {
+    // The marker target is also the new in-process append parent: copy it
+    // before the serializer consumes the optional (a moved-from optional
+    // holds a moved-from string, never nullopt).
+    const auto marker_target = target_id;
     EntrySerializer serializer;
-    return impl_->append_serialized(serializer.serialize_leaf(
-        std::move(parent_id), std::move(target_id)));
+    if (auto appended = impl_->append_serialized(serializer.serialize_leaf(
+            std::move(parent_id), std::move(target_id)));
+        !appended) {
+        return appended;
+    }
+    // A durable leaf marker IS the new active position: the in-process
+    // append parent follows it (pi: the next append becomes a child of the
+    // new leaf, or a root at the null position), and marker discipline
+    // engages exactly like a resumed marker-bearing file.
+    impl_->active_append_parent_id = marker_target;
+    impl_->persist_leaf_after_message_append = true;
+    return {};
 }
 
 } // namespace cch::harness::session

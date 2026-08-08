@@ -27,6 +27,7 @@
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/tui/BashExecutionComponent.hpp"
 #include "coding_agent/tui/ChatContainer.hpp"
+#include "coding_agent/tui/ClipboardWrite.hpp"
 #include "coding_agent/tui/KeybindingCatalog.hpp"
 #include "coding_agent/tui/KeybindingHelp.hpp"
 #include "coding_agent/tui/KeybindingHints.hpp"
@@ -42,6 +43,7 @@
 #include "coding_agent/tui/SettingsSelector.hpp"
 #include "coding_agent/tui/StringListSelector.hpp"
 #include "coding_agent/tui/ThemeCatalog.hpp"
+#include "coding_agent/tui/TreeSelector.hpp"
 #include "coding_agent/tui/UserMessageSelector.hpp"
 #include "util/UniqueFd.hpp"
 #include "util/TerminalText.hpp"
@@ -747,6 +749,8 @@ public:
         ActionSink on_resume_session,
         ActionSink on_fork_session,
         ActionSink on_new_session,
+        ActionSink on_copy_last_message,
+        ActionSink on_open_tree_selector,
         bool hide_thinking_block,
         std::size_t output_pad,
         bool user_bash_available,
@@ -772,6 +776,8 @@ public:
           on_resume_session_(std::move(on_resume_session)),
           on_fork_session_(std::move(on_fork_session)),
           on_new_session_(std::move(on_new_session)),
+          on_copy_last_message_(std::move(on_copy_last_message)),
+          on_open_tree_selector_(std::move(on_open_tree_selector)),
           user_bash_available_(user_bash_available),
           header_(theme, *keybindings_, user_bash_available, on_clipboard_paste_ != nullptr),
           chat_(theme, *keybindings_),
@@ -892,6 +898,13 @@ public:
     void insert_editor_text(std::string text) {
         std::lock_guard lock(mutex_);
         editor_.insert_text_at_cursor(std::move(text));
+    }
+
+    /// The raw editor text (pi `editor.getText()` — the tree navigation
+    /// pre-fill and fork flows check emptiness before replacing it).
+    [[nodiscard]] std::string editor_text() const {
+        std::lock_guard lock(mutex_);
+        return editor_.text();
     }
 
     /// Replace the whole editor content (pi `editor.setText` — the fork
@@ -1273,6 +1286,16 @@ public:
                 invoke_action(on_new_session_, "Native TUI new-session callback failed");
                 return;
             }
+            if (keybindings_->matches(*key, "app.session.tree")) {
+                invoke_action(on_open_tree_selector_, "Native TUI tree selector callback failed");
+                return;
+            }
+            // pi's main-editor `app.message.copy` binding (P14: the tree
+            // selector matches the same action through the shared registry).
+            if (keybindings_->matches(*key, "app.message.copy")) {
+                invoke_action(on_copy_last_message_, "Native TUI copy callback failed");
+                return;
+            }
         }
         const auto autocomplete_was_open = editor_.autocomplete_open();
         const auto previous_selection = editor_.autocomplete_selected_index();
@@ -1440,6 +1463,8 @@ private:
     ActionSink on_resume_session_;
     ActionSink on_fork_session_;
     ActionSink on_new_session_;
+    ActionSink on_copy_last_message_;
+    ActionSink on_open_tree_selector_;
     bool user_bash_available_{false};
     std::optional<util::Error> callback_error_;
     mutable std::mutex mutex_;
@@ -1490,6 +1515,13 @@ public:
             open_browser_sink_ = std::move(config.open_browser_sink);
         } else {
             open_browser_sink_ = [](std::string url) { open_browser(std::move(url)); };
+        }
+        if (config.clipboard_write_sink) {
+            clipboard_write_sink_ = std::move(config.clipboard_write_sink);
+        } else {
+            clipboard_write_sink_ = [](std::string text) {
+                return write_clipboard_text(text);
+            };
         }
         update_model_completion();
         if (auto registered = register_commands(); !registered) {
@@ -1598,6 +1630,25 @@ private:
             "app.session.rename",
             "app.session.delete",
             "app.session.deleteNoninvasive",
+            // pi's main-editor `app.message.copy` (assembled with the tree
+            // selector, which matches the same action through the shared
+            // registry; the copy flows land with P14's clipboard writer).
+            "app.message.copy",
+            // Selector-scoped: the tree selector matches the eleven
+            // `app.tree.*` actions through the same registry (pi's shared
+            // KeybindingsManager), with the main editor leaving them
+            // unbound.
+            "app.tree.foldOrUp",
+            "app.tree.unfoldOrDown",
+            "app.tree.editLabel",
+            "app.tree.toggleLabelTimestamp",
+            "app.tree.filter.default",
+            "app.tree.filter.noTools",
+            "app.tree.filter.userOnly",
+            "app.tree.filter.labeledOnly",
+            "app.tree.filter.all",
+            "app.tree.filter.cycleForward",
+            "app.tree.filter.cycleBackward",
             // Selector-scoped: the scoped-models selector matches the six
             // `app.models.*` actions through the same registry (pi's shared
             // KeybindingsManager).
@@ -1734,6 +1785,12 @@ private:
             },
             [weak] {
                 if (const auto self = weak.lock()) self->post_new_session();
+            },
+            [weak] {
+                if (const auto self = weak.lock()) self->post_copy_last_message();
+            },
+            [weak] {
+                if (const auto self = weak.lock()) self->post_open_tree_selector();
             },
             hide_thinking_block_,
             output_pad_,
@@ -2392,6 +2449,40 @@ private:
         });
     }
 
+    /// Post the main-editor `app.message.copy` flow (pi `handleCopyCommand`).
+    void post_copy_last_message() {
+        const auto weak = weak_from_this();
+        boost::asio::post(executor_, [weak] {
+            if (const auto self = weak.lock(); self && self->running_) {
+                self->handle_copy_last_message();
+            }
+        });
+    }
+
+    /// pi `handleCopyCommand`: copy the last assistant message's text and
+    /// report the pi statuses.
+    void handle_copy_last_message() {
+        const auto text = session_->last_assistant_text();
+        if (!text || text->empty()) {
+            show_error("No agent messages to copy yet.");
+            return;
+        }
+        if (!write_clipboard_text_sink(*text)) {
+            show_error("Failed to copy to clipboard");
+            return;
+        }
+        show_status("Copied last agent message to clipboard");
+    }
+
+    /// The configured clipboard writer (pi `copyToClipboard` platform-tools
+    /// path; tests inject a recorder).
+    [[nodiscard]] bool write_clipboard_text_sink(const std::string& text) {
+        if (clipboard_write_sink_) {
+            return clipboard_write_sink_(text);
+        }
+        return write_clipboard_text(text);
+    }
+
     /// Build one in-session session creation request from the CLI-owned facts
     /// (pi `createRuntime` re-resolves the CLI options against the target
     /// cwd).
@@ -2737,6 +2828,147 @@ private:
                 if (const auto self = weak.lock()) self->post_invalidate();
             });
         place_editor_replacement(std::move(selector));
+    }
+
+    /// pi `showTreeSelector`: the session tree overlay in the editor slot
+    /// (pi's `showSelector` editorContainer swap). The tree renders the
+    /// session topology with the filters and the eleven `app.tree.*` actions
+    /// bound inside the component; selecting a node runs the navigateTree
+    /// flow, `shift+l` edits labels through the session, and `app.message.copy`
+    /// copies the selected entry.
+    void show_tree_selector() {
+        if (!running_ || view_ == nullptr || !session_->is_open() || !theme_controller_) {
+            return;
+        }
+        auto topology = session_->session_tree();
+        if (!topology) {
+            show_error(combined_error_text(topology.error()));
+            return;
+        }
+        if (topology->roots.empty()) {
+            show_status("No entries in session");
+            return;
+        }
+        const auto leaf_id = topology->leaf_id;
+        const auto weak = weak_from_this();
+        auto selector = std::make_shared<TreeSelectorComponent>(
+            theme_controller_->live_theme(),
+            keybindings_,
+            std::move(topology->roots),
+            topology->leaf_id,
+            terminal_.dimensions().rows,
+            [weak, leaf_id](std::string entry_id) {
+                if (const auto self = weak.lock()) {
+                    self->post_from_view(
+                        [entry_id = std::move(entry_id), leaf_id](InteractiveState& state) mutable {
+                            // pi: selecting the current leaf is a no-op
+                            // (nothing can move the leaf while the selector
+                            // is open, so the open-time leaf is live).
+                            state.restore_editor_slot();
+                            if (entry_id == leaf_id) {
+                                state.show_status("Already at this point");
+                                return;
+                            }
+                            const auto shared = state.shared_from_this();
+                            state.spawn_flow(
+                                [shared, entry_id = std::move(entry_id)]() mutable
+                                -> boost::asio::awaitable<void> {
+                                    co_await shared->handle_tree_navigation(
+                                        std::move(entry_id));
+                                },
+                                "Native TUI tree navigation flow failed");
+                        });
+                }
+            },
+            [weak] {
+                if (const auto self = weak.lock()) {
+                    self->post_from_view([](InteractiveState& state) { state.restore_editor_slot(); });
+                }
+            },
+            [weak](std::string entry_id, std::optional<std::string> label) {
+                // pi `onLabelChange` → `appendLabelChange`: the label write
+                // posts to the session executor; the component display
+                // already shows the committed label.
+                if (const auto self = weak.lock()) {
+                    self->post_from_view(
+                        [entry_id = std::move(entry_id), label = std::move(label)](
+                            InteractiveState& state) mutable {
+                            if (auto applied = state.session_->set_entry_label(
+                                    entry_id, std::move(label));
+                                !applied) {
+                                state.show_error(combined_error_text(applied.error()));
+                            }
+                        });
+                }
+            },
+            [weak](std::optional<std::string> text) {
+                if (const auto self = weak.lock()) {
+                    self->post_from_view(
+                        [text = std::move(text)](InteractiveState& state) mutable {
+                            state.handle_tree_copy(std::move(text));
+                        });
+                }
+            },
+            [weak] {
+                if (const auto self = weak.lock()) self->post_invalidate();
+            });
+        place_editor_replacement(std::move(selector));
+    }
+
+    /// pi tree `onCopy`: copy the selected entry's text with the pi statuses.
+    void handle_tree_copy(std::optional<std::string> text) {
+        if (!text || text->empty()) {
+            show_error("Selected entry has no text to copy");
+            return;
+        }
+        if (!write_clipboard_text_sink(*text)) {
+            show_error("Failed to copy to clipboard");
+            return;
+        }
+        show_status("Copied selected message to clipboard");
+    }
+
+    /// pi `navigateTree` presentation: switch the active path, rebuild the
+    /// chat from the new session context, pre-fill the editor with the
+    /// target message's text (pi: only when the editor is empty), and report
+    /// `Navigated to selected point`. The summary prompt loop stays absent
+    /// with branch summarization generation (G2).
+    [[nodiscard]] boost::asio::awaitable<void> handle_tree_navigation(
+        std::string entry_id) {
+        // pi stops the active response first (restore queued input, abort,
+        // wait for settle) before navigating; the runtime guard rejects a
+        // still-active run with pi's verbatim error.
+        if (session_->is_busy()) {
+            dequeue_pending_input(false);
+            session_->abort();
+            (void)co_await session_->wait_for_idle();
+        }
+        auto result = session_->navigate_tree(entry_id);
+        if (!result) {
+            show_error(combined_error_text(result.error()));
+            co_return;
+        }
+        rebuild_chat();
+        if (result->editor_text && !result->editor_text->empty() &&
+            view_ != nullptr) {
+            auto current = view_->editor_text();
+            const auto first = current.find_first_not_of(" \t\r\n");
+            if (first == std::string::npos) {
+                view_->set_editor_text(std::move(*result->editor_text));
+            }
+        }
+        show_status("Navigated to selected point");
+    }
+
+    /// Post the in-session tree selector (`app.session.tree`, unbound; the
+    /// double-escape trigger posts directly).
+    void post_open_tree_selector() {
+        const auto weak = weak_from_this();
+        boost::asio::post(executor_, [weak] {
+            if (const auto self = weak.lock(); self && self->running_) {
+                self->show_tree_selector();
+            }
+        });
     }
 
     /// pi `cycleModel` presentation: `Only one model in scope` / `Only one
@@ -3754,6 +3986,19 @@ private:
             }
             return;
         case InterruptRoute::None:
+            // pi's `onEscape` tail: an idle editor with no text runs the
+            // double-escape window (`doubleEscapeAction` default "tree", 500
+            // ms); the settings field stays out of the subset, so the tree
+            // trigger is hard-coded exactly like pi's default.
+            if (trim_editor_submission(request.pending_bash_text).empty()) {
+                const auto now = std::chrono::steady_clock::now();
+                if (now - last_escape_time_ < std::chrono::milliseconds{500}) {
+                    last_escape_time_ = {};
+                    show_tree_selector();
+                } else {
+                    last_escape_time_ = now;
+                }
+            }
             return;
         }
     }
@@ -4021,6 +4266,9 @@ private:
     std::optional<ThemeController> theme_controller_;
     std::unique_ptr<AsyncClipboardReader> clipboard_reader_;
     std::move_only_function<void(std::string)> open_browser_sink_;
+    /// The configured clipboard writer (pi `copyToClipboard` platform-tools
+    /// path); null installs the real platform tools.
+    std::move_only_function<bool(std::string)> clipboard_write_sink_;
     std::optional<std::string> model_fallback_message_;
     /// In-session session replacement (pi `AgentSessionRuntime`
     /// createRuntime); null when the host supplies none.
@@ -4035,6 +4283,9 @@ private:
     std::atomic<bool> running_{false};
     std::atomic<bool> prompt_active_{false};
     std::atomic<bool> user_bash_active_{false};
+    /// pi `lastEscapeTime`: the double-escape window base (500 ms, empty
+    /// editor, `doubleEscapeAction` default "tree"). Executor-confined.
+    std::chrono::steady_clock::time_point last_escape_time_{};
     // Prompt-generation staleness for interrupt requests (pi onEscape
     // routing; the deleted InterruptAdmission's generation). The generation
     // is read from the input thread at post time, so it stays atomic; the

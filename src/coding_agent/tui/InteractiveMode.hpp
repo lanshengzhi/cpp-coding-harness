@@ -60,6 +60,10 @@ struct InteractiveModeConfig {
     /// `openBrowser`: detached argv spawn, never through a shell, best-effort).
     /// Null installs the real platform spawn; tests inject a recorder.
     std::move_only_function<void(std::string)> open_browser_sink{nullptr};
+    /// Clipboard writing for the tree's `app.message.copy` and the main
+    /// editor's copy action (pi `copyToClipboard` platform-tools path). Null
+    /// installs the real platform tools; tests inject a recorder.
+    std::move_only_function<bool(std::string)> clipboard_write_sink{nullptr};
     /// In-session session replacement factory (pi `AgentSessionRuntime`
     /// `createRuntime`). Null installs no replacement: the session flows
     /// report an error. The interactive host always supplies it.

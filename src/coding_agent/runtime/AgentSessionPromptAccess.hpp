@@ -41,6 +41,11 @@ public:
         AgentSession& session,
         std::string custom_instructions);
 
+    /// pi `waitForIdle` (see AgentSession::wait_for_idle). Same impl_
+    /// copying contract as prompt().
+    [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> wait_for_idle(
+        AgentSession& session);
+
     /// Runtime model switch (pi `AgentSession.setModel`). Same impl_ copying
     /// contract as prompt().
     [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> set_model(
@@ -72,6 +77,10 @@ private:
     compact_impl(
         std::shared_ptr<AgentSession::Impl> impl,
         std::string custom_instructions);
+
+    [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid>
+    wait_for_idle_impl(
+        std::shared_ptr<AgentSession::Impl> impl);
 
     [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> set_model_impl(
         std::shared_ptr<AgentSession::Impl> impl,

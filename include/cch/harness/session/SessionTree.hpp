@@ -14,6 +14,19 @@
 
 namespace cch::harness::session {
 
+/// Tree node for `SessionTree::get_tree()` — a defensive copy of the session
+/// structure with resolved labels (pi `SessionTreeNode`: entry, children,
+/// `label`, `labelTimestamp`).
+struct SessionTreeNode {
+    SessionEntry entry{};
+    std::vector<SessionTreeNode> children{};
+    /// Resolved label for this entry, if any (pi `label`).
+    std::optional<std::string> label{std::nullopt};
+    /// Timestamp of the latest label change for this entry, if any (pi
+    /// `labelTimestamp`; cleared together with the label).
+    std::optional<ai::TimestampMs> label_timestamp{std::nullopt};
+};
+
 /// Result of context reconstruction from a session tree path.
 struct SessionContext {
     /// Messages ready for LLM consumption, in chronological order.
@@ -88,6 +101,26 @@ public:
     /// Returns an error if entry_id is not found.
     [[nodiscard]] util::ExpectedVoid branch(std::string_view entry_id);
 
+    /// pi `resetLeaf`: move the active leaf to null (before any entries); the
+    /// next append creates a new root entry. Used when navigating to re-edit
+    /// the first user message.
+    void reset_leaf();
+
+    /// pi `getTree`: root nodes with children sorted by timestamp (oldest
+    /// first, newest at bottom) and resolved labels/label timestamps. Parent
+    /// links follow the tree's effective parents (explicit wire parents, or
+    /// the linear-chain inference for the C++ flat-file shape, exactly like
+    /// context reconstruction), so the display topology matches the active
+    /// path; an unresolvable effective parent makes an orphan root (pi's
+    /// orphan rule).
+    [[nodiscard]] std::vector<SessionTreeNode> get_tree() const;
+
+    /// The effective parent id for leaf-to-root traversal: the explicit wire
+    /// parent, or the inferred linear-chain parent when the entry carries
+    /// none (the C++ flat-file reading, shared with `getBranch`).
+    [[nodiscard]] std::optional<std::string> effective_parent_id(
+        std::string_view entry_id) const;
+
     /// Collect entries from a given entry up to the root (leaf-to-root order).
     /// If from_id is empty, starts from the current leaf.
     [[nodiscard]] std::vector<const SessionEntry*> getBranch(std::string_view from_id = {}) const;
@@ -154,10 +187,6 @@ private:
     void build_index();
 
     void restore_leaf_position();
-
-    /// Get the effective parent ID for leaf-to-root traversal.
-    /// Prefers explicit parent_id, falls back to inferred parent from linear ordering.
-    [[nodiscard]] std::optional<std::string> effective_parent_id(std::string_view entry_id) const;
 
     SessionMetadata metadata_;
     std::vector<SessionEntry> entries_;

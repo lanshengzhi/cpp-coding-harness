@@ -274,6 +274,7 @@ add_library(cch_coding_agent_interactive
     src/coding_agent/tui/AssistantMessageComponent.cpp
     src/coding_agent/tui/BashExecutionComponent.cpp
     src/coding_agent/tui/ChatContainer.cpp
+    src/coding_agent/tui/ClipboardWrite.cpp
     src/coding_agent/tui/DiffRenderer.cpp
     src/coding_agent/tui/KeybindingHints.cpp
     src/coding_agent/tui/LoginDialog.cpp
@@ -287,6 +288,7 @@ add_library(cch_coding_agent_interactive
     src/coding_agent/tui/SessionSelectorSearch.cpp
     src/coding_agent/tui/StringListSelector.cpp
     src/coding_agent/tui/ToolExecutionComponent.cpp
+    src/coding_agent/tui/TreeSelector.cpp
     src/coding_agent/tui/UserMessageComponent.cpp
     src/coding_agent/tui/UserMessageSelector.cpp
 )
@@ -408,6 +410,8 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/tui/SessionSelectorInteractiveTest.cpp
         tests/coding_agent/tui/SettingsSelectorTest.cpp
         tests/coding_agent/tui/StringListSelectorTest.cpp
+        tests/coding_agent/tui/TreeSelectorComponentTest.cpp
+        tests/coding_agent/tui/TreeSelectorInteractiveTest.cpp
         tests/coding_agent/tui/ProcessInteractiveModeTest.cpp
         tests/coding_agent/tui/ThemeTest.cpp
         tests/coding_agent/tui/ThemeCatalogTest.cpp
@@ -423,6 +427,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/runtime/SessionEventCommitmentTest.cpp
         tests/coding_agent/runtime/SessionLifecycleTest.cpp
         tests/coding_agent/runtime/SessionForkTest.cpp
+        tests/coding_agent/runtime/TreeNavigationTest.cpp
         tests/coding_agent/runtime/UserBashCancellationTest.cpp
         tests/coding_agent/runtime/UserBashOutputAccumulatorTest.cpp
         tests/coding_agent/runtime/UserBashOverlapTest.cpp

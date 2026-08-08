@@ -315,6 +315,21 @@ boost::asio::awaitable<util::ExpectedVoid> detail::AgentSessionPromptAccess::pro
     }
 }
 
+boost::asio::awaitable<util::ExpectedVoid>
+detail::AgentSessionPromptAccess::wait_for_idle(
+    AgentSession& session) {
+    return wait_for_idle_impl(session.impl_);
+}
+
+boost::asio::awaitable<util::ExpectedVoid>
+detail::AgentSessionPromptAccess::wait_for_idle_impl(
+    std::shared_ptr<AgentSession::Impl> impl) {
+    if (impl && impl->runtime) {
+        co_await impl->runtime->wait_for_idle();
+    }
+    co_return util::ExpectedVoid{};
+}
+
 boost::asio::awaitable<util::Expected<CompactionResult>>
 detail::AgentSessionPromptAccess::compact(
     AgentSession& session,
@@ -702,6 +717,40 @@ util::Expected<runtime::ForkPreparation> AgentSession::prepare_fork(
         source.live_context = live_session_context(*impl_);
     }
     return runtime::prepare_fork(source, entry_id, position);
+}
+
+boost::asio::awaitable<util::ExpectedVoid> AgentSession::wait_for_idle() {
+    return detail::AgentSessionPromptAccess::wait_for_idle(*this);
+}
+
+util::Expected<SessionTreeTopology> AgentSession::session_tree() const {
+    if (!impl_ || !impl_->runtime) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    return impl_->runtime->session_tree();
+}
+
+util::Expected<TreeNavigationResult> AgentSession::navigate_tree(
+    std::string_view target_id) {
+    if (!impl_ || !impl_->runtime) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    return impl_->runtime->navigate_tree(target_id);
+}
+
+util::ExpectedVoid AgentSession::set_entry_label(
+    std::string_view entry_id,
+    std::optional<std::string> label) {
+    if (!impl_ || !impl_->runtime) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    return impl_->runtime->set_entry_label(entry_id, std::move(label));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

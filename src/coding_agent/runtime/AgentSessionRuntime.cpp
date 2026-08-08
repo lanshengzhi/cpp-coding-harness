@@ -1208,6 +1208,415 @@ void AgentSessionRuntime::set_scoped_models(
     scoped_models_ = std::move(models);
 }
 
+// ── Tree navigation (pi navigateTree, G2 decision 13) ──────────────────────
+
+namespace {
+
+/// The user message text for the tree editor pre-fill (pi `contentText`).
+[[nodiscard]] std::string user_message_text(const ai::UserMessage& message) {
+    if (const auto* text = std::get_if<std::string>(&message.content)) {
+        return *text;
+    }
+    return ai::text_from_user_message(message);
+}
+
+/// The custom-message text for the tree editor pre-fill (pi `contentText` on
+/// the custom-message content).
+[[nodiscard]] std::string custom_message_text(
+    const harness::session::CustomMessageEntryValue& value) {
+    if (const auto* text = std::get_if<std::string>(&value.content)) {
+        return *text;
+    }
+    std::string result;
+    for (const auto& block :
+         std::get<std::vector<harness::session::CustomMessageEntryContentBlock>>(
+             value.content)) {
+        if (const auto* text = std::get_if<ai::TextContent>(&block)) {
+            result += text->text;
+        }
+    }
+    return result;
+}
+
+/// pi `navigateTree` leaf semantics: the new leaf position and editor text
+/// for one target entry. A user or custom message moves the leaf to its
+/// effective parent (the explicit wire parent, or the inferred linear-chain
+/// parent for the C++ flat-file shape; nullopt at the root) and returns the
+/// message text; any other target becomes the leaf with no editor text.
+struct TreeLeafDecision {
+    std::optional<std::string> new_leaf_id;
+    std::optional<std::string> editor_text;
+};
+
+[[nodiscard]] TreeLeafDecision tree_leaf_decision(
+    std::optional<std::string> effective_parent,
+    const harness::session::SessionEntry& entry);
+
+[[nodiscard]] TreeLeafDecision tree_leaf_decision(
+    const harness::session::SessionTree& tree,
+    const harness::session::SessionEntry& entry) {
+    return tree_leaf_decision(tree.effective_parent_id(entry.entry_id), entry);
+}
+
+[[nodiscard]] TreeLeafDecision tree_leaf_decision(
+    std::optional<std::string> effective_parent,
+    const harness::session::SessionEntry& entry) {
+    if (entry.kind == harness::session::SessionEntryKind::Message &&
+        entry.message.has_value()) {
+        if (const auto* user = std::get_if<ai::UserMessage>(&*entry.message)) {
+            auto text = user_message_text(*user);
+            return TreeLeafDecision{
+                .new_leaf_id = std::move(effective_parent),
+                .editor_text = std::move(text),
+            };
+        }
+    } else if (entry.kind == harness::session::SessionEntryKind::CustomMessage) {
+        if (const auto* value =
+                std::get_if<harness::session::CustomMessageEntryValue>(
+                    &entry.value)) {
+            auto text = custom_message_text(*value);
+            return TreeLeafDecision{
+                .new_leaf_id = std::move(effective_parent),
+                .editor_text = std::move(text),
+            };
+        }
+    }
+    return TreeLeafDecision{.new_leaf_id = entry.entry_id, .editor_text = std::nullopt};
+}
+
+/// pi `setLeafId(null)` root leaf marker: `targetId: null` on the wire.
+[[nodiscard]] util::ExpectedVoid persist_leaf_marker(
+    harness::session::JsonlSessionStore& store,
+    const std::optional<std::string>& new_leaf_id) {
+    return store.append_leaf(std::nullopt, new_leaf_id);
+}
+
+/// In-memory entries derived from the live context (the C++ in-memory store
+/// keeps no entries, so the tree surface synthesizes ids like the fork
+/// flow's `mem-<index>` ids, which never surface outside the tree surface).
+/// Each entry remembers its live-message index so in-memory navigation can
+/// truncate the live context exactly at the chosen point.
+struct LiveContextEntry {
+    harness::session::SessionEntry entry;
+    std::size_t message_index{0};
+};
+
+[[nodiscard]] std::vector<LiveContextEntry>
+live_context_entries(const std::vector<ai::MessageVariant>& messages) {
+    std::vector<LiveContextEntry> result;
+    std::optional<std::string> previous_id;
+    std::size_t entry_index = 0;
+    for (std::size_t message_index = 0; message_index < messages.size();
+         ++message_index) {
+        const auto& message = messages[message_index];
+        // The live context never carries SystemMessages (the system prompt
+        // is injected per run through transform_context); skip defensively
+        // so the id-to-message mapping stays exact.
+        if (std::holds_alternative<ai::SystemMessage>(message)) {
+            continue;
+        }
+        harness::session::SessionEntry entry;
+        entry.kind = harness::session::SessionEntryKind::Message;
+        entry.message = message;
+        entry.entry_id = "mem-" + std::to_string(entry_index);
+        entry.parent_id = previous_id;
+        if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
+            entry.timestamp = user->timestamp;
+        } else if (const auto* assistant =
+                       std::get_if<ai::AssistantMessage>(&message)) {
+            entry.timestamp = assistant->timestamp;
+        } else if (const auto* tool =
+                       std::get_if<ai::ToolResultMessage>(&message)) {
+            entry.timestamp = tool->timestamp;
+        } else if (const auto* bash =
+                       std::get_if<ai::BashExecutionMessage>(&message)) {
+            entry.timestamp = bash->timestamp;
+        } else if (const auto* custom =
+                       std::get_if<ai::CustomMessage>(&message)) {
+            entry.timestamp = custom->timestamp;
+            entry.kind = harness::session::SessionEntryKind::CustomMessage;
+            harness::session::CustomMessageEntryValue value;
+            value.custom_type = custom->custom_type;
+            std::vector<harness::session::CustomMessageEntryContentBlock> blocks;
+            for (const auto& content : custom->content) {
+                // The custom-message wire content carries text/image blocks
+                // only (pi CustomMessageEntryContent); thinking blocks do
+                // not project onto it.
+                if (std::holds_alternative<ai::TextContent>(content)) {
+                    blocks.push_back(std::get<ai::TextContent>(content));
+                } else if (std::holds_alternative<ai::ImageContent>(content)) {
+                    blocks.push_back(std::get<ai::ImageContent>(content));
+                }
+            }
+            value.content = std::move(blocks);
+            value.display = custom->display;
+            value.details = custom->details;
+            entry.value = std::move(value);
+        } else if (const auto* summary =
+                       std::get_if<ai::BranchSummaryMessage>(&message)) {
+            entry.timestamp = summary->timestamp;
+            entry.kind = harness::session::SessionEntryKind::BranchSummary;
+            harness::session::BranchSummaryEntryValue value;
+            value.from_id = summary->from_id;
+            value.summary = summary->summary;
+            entry.value = std::move(value);
+        } else if (const auto* compaction =
+                       std::get_if<ai::CompactionSummaryMessage>(&message)) {
+            entry.timestamp = compaction->timestamp;
+            entry.kind = harness::session::SessionEntryKind::Compaction;
+            harness::session::CompactionEntryValue value;
+            value.summary = compaction->summary;
+            value.tokens_before =
+                static_cast<std::size_t>(compaction->tokens_before);
+            entry.value = std::move(value);
+        }
+        previous_id = entry.entry_id;
+        result.push_back(LiveContextEntry{
+            .entry = std::move(entry),
+            .message_index = message_index,
+        });
+        ++entry_index;
+    }
+    return result;
+}
+
+/// Build the tree roots for the in-memory surface: a linear chain with the
+/// live messages' timestamps, no labels (the in-memory store keeps none).
+[[nodiscard]] std::vector<harness::session::SessionTreeNode>
+build_linear_tree(const std::vector<LiveContextEntry>& entries) {
+    std::vector<harness::session::SessionTreeNode> nodes;
+    nodes.reserve(entries.size());
+    for (const auto& live : entries) {
+        harness::session::SessionTreeNode node;
+        node.entry = live.entry;
+        nodes.push_back(std::move(node));
+    }
+    if (nodes.empty()) {
+        return {};
+    }
+    for (std::size_t index = 0; index + 1 < nodes.size(); ++index) {
+        nodes[index].children.push_back(std::move(nodes[index + 1]));
+    }
+    nodes.resize(1);
+    return nodes;
+}
+
+} // namespace
+
+boost::asio::awaitable<util::ExpectedVoid>
+AgentSessionRuntime::wait_for_idle() {
+    // pi `waitForIdle`: settle when an Agent run is active. The run in
+    // flight continues to its normal terminal; the settled signal is
+    // cancelled exactly when the run settles (same waiter-before-cancel
+    // ordering as PendingUserBashCommit). The wait itself cannot fail.
+    if (!prompt_active_ || !prompt_settled_signal_) {
+        co_return util::ExpectedVoid{};
+    }
+    boost::system::error_code wait_error;
+    co_await prompt_settled_signal_->async_wait(
+        boost::asio::redirect_error(
+            boost::asio::use_awaitable, wait_error));
+    co_return util::ExpectedVoid{};
+}
+
+util::Expected<coding_agent::SessionTreeTopology>
+AgentSessionRuntime::session_tree() const {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        return std::unexpected(rejected.error());
+    }
+    auto* jsonl_store =
+        dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get());
+    if (jsonl_store != nullptr && jsonl_store->path()) {
+        auto tree = harness::session::JsonlSessionStore::open_as_tree(
+            *jsonl_store->path());
+        if (!tree) {
+            return std::unexpected(tree.error());
+        }
+        return coding_agent::SessionTreeTopology{
+            .roots = tree->get_tree(),
+            .leaf_id = tree->leaf_id(),
+        };
+    }
+    // In-memory: derive a linear tree from the live context (synthetic ids).
+    const auto entries =
+        agent_ ? live_context_entries(agent_->state().messages)
+               : std::vector<LiveContextEntry>{};
+    std::string leaf_id;
+    if (!entries.empty()) {
+        leaf_id = entries.back().entry.entry_id;
+    }
+    return coding_agent::SessionTreeTopology{
+        .roots = build_linear_tree(entries),
+        .leaf_id = std::move(leaf_id),
+    };
+}
+
+util::Expected<coding_agent::TreeNavigationResult>
+AgentSessionRuntime::navigate_tree(std::string_view target_id) {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        return std::unexpected(rejected.error());
+    }
+    // pi's navigateTree streaming guard: the interactive flow aborts the
+    // active response (then waits for settle) before navigating; a direct
+    // call while a run is active is rejected verbatim (regression
+    // tree-during-streaming).
+    if (prompt_active_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "Wait for the current response to finish before navigating the session tree."));
+    }
+    if (!agent_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation, "session is closed"));
+    }
+
+    auto* jsonl_store =
+        dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get());
+    if (jsonl_store != nullptr && jsonl_store->path()) {
+        auto tree = harness::session::JsonlSessionStore::open_as_tree(
+            *jsonl_store->path());
+        if (!tree) {
+            return std::unexpected(tree.error());
+        }
+
+        // pi: no-op when already at the target.
+        if (target_id == tree->leaf_id()) {
+            return coding_agent::TreeNavigationResult{};
+        }
+        const auto* target = tree->getEntry(target_id);
+        if (target == nullptr) {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Session,
+                std::format("Entry {} not found", target_id)));
+        }
+
+        const auto decision = tree_leaf_decision(*tree, *target);
+
+        // Switch the leaf: branch (non-root) or reset (root position).
+        if (decision.new_leaf_id.has_value()) {
+            if (auto branched = tree->branch(*decision.new_leaf_id); !branched) {
+                return std::unexpected(branched.error());
+            }
+        } else {
+            tree->reset_leaf();
+        }
+
+        // Persist the leaf marker first; on failure nothing durable changed
+        // and the live context keeps the old path (Session Event Commitment
+        // ordering: the durable mutation precedes the live-state advance).
+        if (auto persisted =
+                persist_leaf_marker(*jsonl_store, decision.new_leaf_id);
+            !persisted) {
+            return std::unexpected(persisted.error());
+        }
+
+        // Rebuild the live Agent context from the new path (pi
+        // `agent.state.messages = sessionContext.messages`).
+        const auto context = tree->buildSessionContext();
+        if (auto replaced =
+                agent::detail::AgentMessageAccess::replace_messages(
+                    *agent_, context.messages);
+            !replaced) {
+            return std::unexpected(replaced.error());
+        }
+        return coding_agent::TreeNavigationResult{
+            .editor_text = decision.editor_text,
+            .cancelled = false,
+        };
+    }
+
+    // In-memory: navigate over the live context (synthetic ids, linear). The
+    // leaf semantics mirror the persisted path: a user message moves the
+    // leaf before it (its text returns to the editor); any other target
+    // becomes the leaf. There is no store, so nothing persists.
+    const auto entries =
+        live_context_entries(agent_->state().messages);
+    const LiveContextEntry* target = nullptr;
+    for (const auto& live : entries) {
+        if (live.entry.entry_id == target_id) {
+            target = &live;
+            break;
+        }
+    }
+    if (target == nullptr) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Session,
+            std::format("Entry {} not found", target_id)));
+    }
+    // pi: no-op when already at the target (the in-memory leaf is the last
+    // live-context entry).
+    if (target->entry.entry_id == entries.back().entry.entry_id) {
+        return coding_agent::TreeNavigationResult{};
+    }
+    const auto decision = tree_leaf_decision(target->entry.parent_id, target->entry);
+    auto messages = agent_->state().messages;
+    std::optional<std::string> editor_text = decision.editor_text;
+    if (decision.new_leaf_id.has_value()) {
+        // The new leaf is the target's parent: keep live messages through
+        // the new leaf, dropping the target message and everything after it
+        // (pi: the live context becomes the path to the new leaf).
+        std::optional<std::size_t> keep_through_message;
+        for (const auto& live : entries) {
+            if (live.entry.entry_id == *decision.new_leaf_id) {
+                keep_through_message = live.message_index;
+                break;
+            }
+        }
+        if (keep_through_message &&
+            *keep_through_message + 1 <= messages.size()) {
+            messages.resize(*keep_through_message + 1);
+        }
+    } else {
+        // Root position: live context ends before the first entry (pi
+        // `resetLeaf`).
+        messages.clear();
+    }
+    if (auto replaced =
+            agent::detail::AgentMessageAccess::replace_messages(
+                *agent_, std::move(messages));
+        !replaced) {
+        return std::unexpected(replaced.error());
+    }
+    return coding_agent::TreeNavigationResult{
+        .editor_text = std::move(editor_text),
+        .cancelled = false,
+    };
+}
+
+util::ExpectedVoid AgentSessionRuntime::set_entry_label(
+    std::string_view entry_id,
+    std::optional<std::string> label) {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        return std::unexpected(rejected.error());
+    }
+    auto* jsonl_store =
+        dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get());
+    if (jsonl_store == nullptr || !jsonl_store->path()) {
+        // In-memory sessions keep no entry surface; the change is dropped
+        // like every in-memory store write (the tree's own display keeps it
+        // for the session's lifetime).
+        return {};
+    }
+    auto tree = harness::session::JsonlSessionStore::open_as_tree(
+        *jsonl_store->path());
+    if (!tree) {
+        return std::unexpected(tree.error());
+    }
+    if (tree->getEntry(entry_id) == nullptr) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Session,
+            std::format("Entry {} not found", entry_id)));
+    }
+    // pi `appendLabelChange`: the label entry hangs under the current leaf
+    // (null at the root position).
+    std::optional<std::string> parent_id;
+    if (!tree->leaf_id().empty()) {
+        parent_id = tree->leaf_id();
+    }
+    return jsonl_store->append_label_change(
+        std::move(parent_id), std::string{entry_id}, std::move(label));
+}
+
 boost::asio::awaitable<util::Expected<coding_agent::CompactionResult>>
 AgentSessionRuntime::compact(std::string custom_instructions) {
     if (auto rejected = reject_if_closed(); !rejected) {
