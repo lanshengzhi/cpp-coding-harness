@@ -1,6 +1,8 @@
 #include "InteractiveMode.hpp"
 
+#include <cch/agent/AgentContext.hpp>
 #include <cch/agent/AgentEvent.hpp>
+#include <cch/ai/Auth.hpp>
 #include <cch/ai/Content.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/Settings.hpp>
@@ -22,12 +24,18 @@
 #include "coding_agent/tui/KeybindingCatalog.hpp"
 #include "coding_agent/tui/KeybindingHelp.hpp"
 #include "coding_agent/tui/KeybindingHints.hpp"
+#include "coding_agent/tui/LoginDialog.hpp"
+#include "coding_agent/tui/LoginPresentation.hpp"
+#include "coding_agent/tui/OAuthSelector.hpp"
+#include "coding_agent/tui/OpenBrowser.hpp"
+#include "coding_agent/tui/StringListSelector.hpp"
 #include "coding_agent/tui/ThemeCatalog.hpp"
 #include "util/UniqueFd.hpp"
 #include "util/TerminalText.hpp"
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/experimental/concurrent_channel.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -377,6 +385,43 @@ struct InteractiveStartupDiagnostics {
     return presentation_error(error, "Native TUI startup failed");
 }
 
+/// pi's stable login-cancellation error: the cancelled kind travels on the
+/// error so the login flows suppress failure UI on kind, not string (#328).
+[[nodiscard]] util::Error login_cancelled_error() {
+    return util::make_error(util::ErrorCode::Cancelled, "Login cancelled");
+}
+
+/// pi `isUnknownModel`: the unresolved placeholder identity.
+[[nodiscard]] bool is_unknown_model(const ai::Model& model) {
+    return model.provider == agent::detail::kDefaultModel.provider &&
+        model.id == agent::detail::kDefaultModel.id &&
+        model.api == agent::detail::kDefaultModel.api;
+}
+
+/// One-shot prompt resolution channel for the login flows: producer threads
+/// resolve (first wins); the send is posted to the consumer executor so the
+/// channel is only ever touched from one thread.
+struct AuthPromptSlot : std::enable_shared_from_this<AuthPromptSlot> {
+    explicit AuthPromptSlot(boost::asio::any_io_executor executor)
+        : executor(std::move(executor)), channel(this->executor, 1) {}
+
+    void resolve(util::Expected<std::string> value) {
+        if (resolved.exchange(true)) return;
+        const auto self = shared_from_this();
+        boost::asio::post(executor, [self, value = std::move(value)]() mutable {
+            self->channel.try_send(boost::system::error_code{}, std::move(value));
+        });
+    }
+
+    boost::asio::any_io_executor executor;
+    boost::asio::experimental::concurrent_channel<
+        void(boost::system::error_code, util::Expected<std::string>)>
+        channel;
+
+private:
+    std::atomic<bool> resolved{false};
+};
+
 [[nodiscard]] util::Error aggregate_presentation_errors(
     const util::Error& primary,
     const util::Error& restoration,
@@ -664,6 +709,29 @@ public:
         chat_.append_warning(std::move(text));
     }
 
+    void append_status_message(std::string text) {
+        std::lock_guard lock(mutex_);
+        chat_.append_status_message(std::move(text));
+    }
+
+    /// The login presentation's editor slot (pi's `editorContainer` swap):
+    /// while a replacement is set it renders and receives input in place of
+    /// the editor, exactly like pi's focused dialog/selector.
+    void set_editor_replacement(std::shared_ptr<cch::tui::Component> component) {
+        std::lock_guard lock(mutex_);
+        editor_replacement_ = std::move(component);
+        if (editor_replacement_) {
+            if (auto* focusable = dynamic_cast<cch::tui::Focusable*>(editor_replacement_.get())) {
+                focusable->set_focused(editor_.focused());
+            }
+        }
+    }
+
+    void restore_editor() {
+        std::lock_guard lock(mutex_);
+        editor_replacement_.reset();
+    }
+
     void append_user_bash_diagnostic(std::string text) {
         std::lock_guard lock(mutex_);
         chat_.append_user_bash_diagnostic(std::move(text));
@@ -822,6 +890,17 @@ public:
             header_lines.size() + pending_lines.size() + status_lines.size() +
             footer_lines.size();
 
+        std::vector<std::string> editor_lines;
+        std::vector<std::string> autocomplete_lines;
+        if (editor_replacement_) {
+            // pi's editorContainer swap: the login dialog/selector renders in
+            // the editor slot with no autocomplete rows.
+            if (auto replaced = editor_replacement_->render(width); !replaced) {
+                return std::unexpected(replaced.error());
+            } else {
+                editor_lines = std::move(replaced->lines);
+            }
+        } else {
         editor_.set_available_height(available_rows_ > fixed_rows
             ? available_rows_ - fixed_rows
             : 1);
@@ -832,14 +911,12 @@ public:
                 .text = theme_->foreground_hook(ThemeToken::BashMode),
             }
             : theme_->editor_theme());
-        std::vector<std::string> editor_lines;
         if (auto editor = editor_.render(width); !editor) {
             return std::unexpected(editor.error());
         } else {
             editor_lines = std::move(editor->lines);
         }
 
-        std::vector<std::string> autocomplete_lines;
         const auto autocomplete = editor_.autocomplete_items();
         const auto selected = editor_.autocomplete_selected_index();
         constexpr std::size_t kMaxAutocompleteRows = 5;
@@ -866,6 +943,7 @@ public:
             } else if (!rendered->lines.empty()) {
                 autocomplete_lines.push_back(std::move(rendered->lines.front()));
             }
+        }
         }
         const auto chat_capacity = available_rows_ > fixed_rows + editor_lines.size() + autocomplete_lines.size()
             ? available_rows_ - fixed_rows - editor_lines.size() - autocomplete_lines.size()
@@ -950,10 +1028,21 @@ public:
     void invalidate() override {
         std::lock_guard lock(mutex_);
         editor_.invalidate();
+        if (editor_replacement_) editor_replacement_->invalidate();
     }
 
     void handle_input(const cch::tui::InputEventVariant& input) override {
         std::lock_guard lock(mutex_);
+        if (editor_replacement_) {
+            // pi routes every key to the focused dialog/selector; app-level
+            // bindings resume when the editor is restored. pi's TUI
+            // re-renders after each input event, so the view invalidates.
+            if (auto* handler = dynamic_cast<cch::tui::InputHandler*>(editor_replacement_.get())) {
+                handler->handle_input(input);
+                invoke_action(on_invalidate_, "Native TUI invalidation callback failed");
+            }
+            return;
+        }
         const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
         if (key != nullptr && key->type != cch::tui::KeyEventType::Release) {
             if (keybindings_->matches(*key, "app.exit") && editor_.expanded_text().empty()) {
@@ -1021,17 +1110,35 @@ public:
 
     void set_focused(bool focused) override {
         std::lock_guard lock(mutex_);
+        if (editor_replacement_) {
+            if (auto* focusable = dynamic_cast<cch::tui::Focusable*>(editor_replacement_.get())) {
+                focusable->set_focused(focused);
+                return;
+            }
+        }
         editor_.set_focused(focused);
     }
 
     [[nodiscard]] bool focused() const override {
         std::lock_guard lock(mutex_);
+        if (editor_replacement_) {
+            if (auto* focusable = dynamic_cast<cch::tui::Focusable*>(editor_replacement_.get())) {
+                return focusable->focused();
+            }
+        }
         return editor_.focused();
     }
 
     [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override {
         std::lock_guard lock(mutex_);
-        auto cursor = editor_.cursor_location();
+        std::optional<cch::tui::CursorPosition> cursor;
+        if (editor_replacement_) {
+            if (auto* focusable = dynamic_cast<cch::tui::Focusable*>(editor_replacement_.get())) {
+                cursor = focusable->cursor_location();
+            }
+        } else {
+            cursor = editor_.cursor_location();
+        }
         if (cursor) {
             cursor->row += editor_row_offset_;
             // The header/chat may overflow tiny terminals; keep the IME
@@ -1159,6 +1266,9 @@ private:
     std::vector<std::string> pending_follow_up_;
     // The live pending User Bash block (pi's pendingMessagesContainer).
     std::unique_ptr<BashExecutionComponent> pending_bash_;
+    // The login presentation's editor-slot occupant (pi's editorContainer
+    // swap); null renders the ordinary editor.
+    std::shared_ptr<cch::tui::Component> editor_replacement_;
     std::size_t last_bash_output_size_{0};
     bool bash_outcome_set_{false};
     std::size_t available_rows_{24};
@@ -1187,6 +1297,11 @@ public:
     [[nodiscard]] util::ExpectedVoid start(InteractiveModeConfig config) {
         clipboard_reader_ = std::move(config.clipboard_reader);
         model_fallback_message_ = std::move(config.model_fallback_message);
+        if (config.open_browser_sink) {
+            open_browser_sink_ = std::move(config.open_browser_sink);
+        } else {
+            open_browser_sink_ = [](std::string url) { open_browser(std::move(url)); };
+        }
         if (auto registered = register_commands(); !registered) {
             return fail_start(registered.error());
         }
@@ -1688,6 +1803,612 @@ private:
         }
     }
 
+    // ── Login presentation (pi interactive-mode.ts login flows, #328) ────
+
+    /// Post one login-presentation action to the executor from a view-thread
+    /// selector/dialog sink.
+    void post_from_view(std::move_only_function<void(InteractiveState&)> action) {
+        const auto weak = weak_from_this();
+        boost::asio::post(executor_, [weak, action = std::move(action)]() mutable {
+            if (const auto self = weak.lock(); self && self->running_) action(*self);
+        });
+    }
+
+    /// Spawn one detached login-flow coroutine; a frame failure becomes a
+    /// chat diagnostic (the user-bash precedent).
+    void spawn_login_flow(
+        std::move_only_function<boost::asio::awaitable<void>()> start,
+        std::string failure_label) {
+        const auto weak = weak_from_this();
+        boost::asio::co_spawn(
+            executor_,
+            start(),
+            [weak, failure_label = std::move(failure_label)](std::exception_ptr exception) {
+                if (!exception) return;
+                if (const auto self = weak.lock();
+                    self && self->running_ && self->view_ != nullptr) {
+                    self->view_->append_diagnostic(std::move(failure_label));
+                    self->tui_.invalidate();
+                }
+            });
+    }
+
+    void place_editor_replacement(std::shared_ptr<cch::tui::Component> component) {
+        if (view_ == nullptr) return;
+        view_->set_editor_replacement(std::move(component));
+        tui_.invalidate();
+    }
+
+    void restore_editor_slot() {
+        if (view_ == nullptr) return;
+        view_->restore_editor();
+        tui_.invalidate();
+    }
+
+    /// pi `showStatus`: one dim status line in the chat.
+    void show_status(std::string text) {
+        if (view_ == nullptr) return;
+        view_->append_status_message(std::move(text));
+        tui_.invalidate();
+    }
+
+    /// pi `showError`: one `Error: <text>` chat line.
+    void show_error(std::string text) {
+        if (view_ == nullptr) return;
+        view_->append_diagnostic(std::move(text));
+        tui_.invalidate();
+    }
+
+    [[nodiscard]] OpenBrowserSink open_browser_hook() {
+        const auto weak = weak_from_this();
+        return [weak](std::string url) {
+            if (const auto self = weak.lock(); self && self->open_browser_sink_) {
+                self->open_browser_sink_(std::move(url));
+            }
+        };
+    }
+
+    [[nodiscard]] LoginDialogActionSink dialog_invalidate_hook() {
+        const auto weak = weak_from_this();
+        return [weak] {
+            if (const auto self = weak.lock()) self->post_invalidate();
+        };
+    }
+
+    void open_login(std::string provider_ref) {
+        if (!running_ || view_ == nullptr || !session_.is_open()) return;
+        const auto self = shared_from_this();
+        spawn_login_flow(
+            [self, provider_ref = std::move(provider_ref)]() mutable
+                -> boost::asio::awaitable<void> {
+                co_await self->handle_login_command(std::move(provider_ref));
+            },
+            "Native TUI login flow failed");
+    }
+
+    void open_logout() {
+        if (!running_ || view_ == nullptr || !session_.is_open()) return;
+        const auto self = shared_from_this();
+        spawn_login_flow(
+            [self]() -> boost::asio::awaitable<void> {
+                co_await self->run_logout();
+            },
+            "Native TUI logout flow failed");
+    }
+
+    /// pi `handleLoginCommand`.
+    [[nodiscard]] boost::asio::awaitable<void> handle_login_command(std::string provider_ref) {
+        auto runtime = session_.model_runtime();
+        if (!runtime) co_return;
+        // pi awaits getAvailable() before presenting login options.
+        static_cast<void>(co_await runtime->get_available());
+        const auto ref = trim_editor_submission(std::move(provider_ref));
+        if (ref.empty()) {
+            show_login_auth_type_selector(std::nullopt);
+            co_return;
+        }
+        auto matches = find_login_provider_options(
+            compute_login_provider_options(*runtime), ref);
+        if (matches.size() == 1) {
+            co_await start_provider_login(matches.front());
+            co_return;
+        }
+        if (matches.size() > 1) {
+            const auto same_provider = std::all_of(
+                matches.begin(), matches.end(), [&](const auto& option) {
+                    return option.id == matches.front().id;
+                });
+            if (same_provider) {
+                show_login_auth_type_selector(std::move(matches));
+                co_return;
+            }
+        }
+        show_login_provider_selector(std::nullopt, ref);
+    }
+
+    /// pi `showLoginAuthTypeSelector` over the generic string-list selector.
+    void show_login_auth_type_selector(
+        std::optional<std::vector<AuthSelectorProvider>> provider_options) {
+        const std::string subscription_label{login_subscription_label()};
+        const std::string api_key_label{login_api_key_label()};
+        std::vector<std::string> options;
+        bool has_oauth = true;
+        bool has_api_key = true;
+        if (provider_options) {
+            has_oauth = std::any_of(
+                provider_options->begin(), provider_options->end(), [](const auto& option) {
+                    return option.auth_type == AuthSelectorType::OAuth;
+                });
+            has_api_key = std::any_of(
+                provider_options->begin(), provider_options->end(), [](const auto& option) {
+                    return option.auth_type == AuthSelectorType::ApiKey;
+                });
+        }
+        if (has_oauth) options.push_back(subscription_label);
+        if (has_api_key) options.push_back(api_key_label);
+        if (options.empty()) {
+            show_status(std::string{login_methods_empty_message()});
+            return;
+        }
+        if (provider_options && options.size() == 1 && !provider_options->empty()) {
+            const auto self = shared_from_this();
+            const auto option = provider_options->front();
+            spawn_login_flow(
+                [self, option]() -> boost::asio::awaitable<void> {
+                    co_await self->start_provider_login(option);
+                },
+                "Native TUI login flow failed");
+            return;
+        }
+        const std::string title = provider_options && !provider_options->empty()
+            ? "Select authentication method for " + provider_options->front().name + ":"
+            : "Select authentication method:";
+        const auto weak = weak_from_this();
+        auto selector = std::make_shared<StringListSelector>(
+            theme_controller_->live_theme(),
+            keybindings_,
+            title,
+            options,
+            [weak, provider_options, subscription_label](std::string selected) {
+                if (const auto self = weak.lock()) {
+                    self->post_from_view(
+                        [provider_options, subscription_label, selected = std::move(selected)](
+                            InteractiveState& self) mutable {
+                            self.restore_editor_slot();
+                            const auto type = selected == subscription_label
+                                ? AuthSelectorType::OAuth
+                                : AuthSelectorType::ApiKey;
+                            if (provider_options) {
+                                const auto found = std::find_if(
+                                    provider_options->begin(),
+                                    provider_options->end(),
+                                    [type](const auto& option) {
+                                        return option.auth_type == type;
+                                    });
+                                if (found == provider_options->end()) return;
+                                const auto option = *found;
+                                const auto shared = self.shared_from_this();
+                                self.spawn_login_flow(
+                                    [shared, option]() -> boost::asio::awaitable<void> {
+                                        co_await shared->start_provider_login(option);
+                                    },
+                                    "Native TUI login flow failed");
+                                return;
+                            }
+                            self.show_login_provider_selector(type, "");
+                        });
+                }
+            },
+            [weak] {
+                if (const auto self = weak.lock()) {
+                    self->post_from_view([](InteractiveState& self) {
+                        self.restore_editor_slot();
+                    });
+                }
+            });
+        place_editor_replacement(std::move(selector));
+    }
+
+    /// pi `showLoginProviderSelector` over the OAuth selector.
+    void show_login_provider_selector(
+        std::optional<AuthSelectorType> filter,
+        std::string initial_search) {
+        auto runtime = session_.model_runtime();
+        if (!runtime) return;
+        auto options = compute_login_provider_options(*runtime, filter);
+        if (options.empty()) {
+            show_status(std::string{login_provider_selector_empty_message(filter)});
+            return;
+        }
+        const auto weak = weak_from_this();
+        auto selector = std::make_shared<OAuthSelectorComponent>(
+            theme_controller_->live_theme(),
+            keybindings_,
+            AuthSelectorMode::Login,
+            options,
+            [weak, options](std::string provider_id, AuthSelectorType type) {
+                if (const auto self = weak.lock()) {
+                    self->post_from_view(
+                        [options, provider_id = std::move(provider_id), type](
+                            InteractiveState& self) mutable {
+                            self.restore_editor_slot();
+                            const auto found = std::find_if(
+                                options.begin(), options.end(), [&](const auto& option) {
+                                    return option.id == provider_id && option.auth_type == type;
+                                });
+                            if (found == options.end()) return;
+                            const auto option = *found;
+                            const auto shared = self.shared_from_this();
+                            self.spawn_login_flow(
+                                [shared, option]() -> boost::asio::awaitable<void> {
+                                    co_await shared->start_provider_login(option);
+                                },
+                                "Native TUI login flow failed");
+                        });
+                }
+            },
+            [weak, filter] {
+                if (const auto self = weak.lock()) {
+                    self->post_from_view([filter](InteractiveState& self) {
+                        self.restore_editor_slot();
+                        // pi: cancelling a filtered picker returns to the
+                        // auth-type picker.
+                        if (filter) self.show_login_auth_type_selector(std::nullopt);
+                    });
+                }
+            },
+            std::move(initial_search));
+        place_editor_replacement(std::move(selector));
+    }
+
+    /// pi `startProviderLogin`: OAuth takes the OAuth dialog branch; an
+    /// api-key method with a login hook takes the API-key dialog branch; an
+    /// ambient-only method shows the info dialog.
+    [[nodiscard]] boost::asio::awaitable<void> start_provider_login(
+        AuthSelectorProvider option) {
+        if (option.auth_type == AuthSelectorType::OAuth) {
+            co_await run_login_dialog(option.id, option.name, ai::AuthType::OAuth);
+            co_return;
+        }
+        if (option.has_login) {
+            co_await run_login_dialog(option.id, option.name, ai::AuthType::ApiKey);
+            co_return;
+        }
+        show_ambient_auth_dialog(option);
+    }
+
+    /// pi `showAmbientAuthDialog` (api-key auth configured outside the
+    /// binary, e.g. an environment-only key).
+    void show_ambient_auth_dialog(const AuthSelectorProvider& option) {
+        const auto weak = weak_from_this();
+        auto dialog = std::make_shared<LoginDialogComponent>(
+            theme_controller_->live_theme(),
+            keybindings_,
+            option.name + " setup",
+            dialog_invalidate_hook(),
+            open_browser_hook(),
+            [weak] {
+                if (const auto self = weak.lock()) {
+                    self->post_from_view([](InteractiveState& self) {
+                        self.restore_editor_slot();
+                    });
+                }
+            });
+        dialog->show_info(
+            option.method_name.value_or("Authentication") +
+                " is configured outside cch.",
+            {},
+            true);
+        place_editor_replacement(std::move(dialog));
+    }
+
+    /// pi `showLoginDialog` / `showApiKeyLoginDialog`: run the provider login
+    /// flow against the editor-slot dialog, then complete authentication.
+    [[nodiscard]] boost::asio::awaitable<void> run_login_dialog(
+        std::string provider_id,
+        std::string provider_name,
+        ai::AuthType type) {
+        auto runtime = session_.model_runtime();
+        if (!runtime) co_return;
+        const auto previous_model = session_.snapshot().agent_state.model;
+        auto dialog = std::make_shared<LoginDialogComponent>(
+            theme_controller_->live_theme(),
+            keybindings_,
+            "Login to " + provider_name,
+            dialog_invalidate_hook(),
+            open_browser_hook());
+        place_editor_replacement(dialog);
+
+        ai::AuthInteraction interaction;
+        interaction.stop_token = dialog->stop_token();
+        const auto self = shared_from_this();
+        interaction.prompt = [self, dialog](ai::AuthPrompt prompt)
+            -> boost::asio::awaitable<util::Expected<std::string>> {
+            co_return co_await self->show_auth_prompt(dialog, std::move(prompt));
+        };
+        interaction.notify = [self, dialog](const ai::AuthEvent& event) {
+            self->notify_auth_dialog(*dialog, event);
+        };
+        const auto completion_provider_id = provider_id;
+        auto result = co_await runtime->login(
+            std::move(provider_id), type, std::move(interaction));
+        restore_editor_slot();
+        if (result) {
+            co_await complete_provider_authentication(
+                completion_provider_id, provider_name, type, previous_model);
+            co_return;
+        }
+        // Login Cancellation suppresses failure UI on the stable cancelled
+        // kind (#328); every other failure shows pi's failure text.
+        if (result.error().code != util::ErrorCode::Cancelled) {
+            show_error(
+                (type == ai::AuthType::OAuth
+                     ? "Failed to login to " + provider_name
+                     : "Failed to save API key for " + provider_name) +
+                ": " + combined_error_text(result.error()));
+        }
+    }
+
+    /// pi `completeProviderAuthentication`: refresh availability, auto-select
+    /// the provider's default model only when the current model is the
+    /// unknown placeholder, and report through status + selection errors.
+    [[nodiscard]] boost::asio::awaitable<void> complete_provider_authentication(
+        std::string provider_id,
+        std::string provider_name,
+        ai::AuthType type,
+        ai::Model previous_model) {
+        auto runtime = session_.model_runtime();
+        if (!runtime) co_return;
+        auto available = co_await runtime->get_available();
+        const auto selector_type = type == ai::AuthType::OAuth
+            ? AuthSelectorType::OAuth
+            : AuthSelectorType::ApiKey;
+        const auto action_label = login_action_label(selector_type, provider_name);
+        std::optional<ai::Model> selected_model;
+        std::optional<std::string> selection_error;
+        if (is_unknown_model(previous_model)) {
+            std::vector<ai::Model> provider_models;
+            if (available) {
+                for (const auto& model : *available) {
+                    if (model.provider == provider_id) provider_models.push_back(model);
+                }
+            }
+            const auto default_id = ModelRuntime::default_model_for_provider(provider_id);
+            if (!default_id) {
+                selection_error =
+                    login_selection_error_no_default_model(action_label, provider_id);
+            } else if (provider_models.empty()) {
+                selection_error = login_selection_error_no_models(action_label);
+            } else {
+                const auto found = std::find_if(
+                    provider_models.begin(), provider_models.end(), [&](const auto& model) {
+                        return model.id == *default_id;
+                    });
+                if (found == provider_models.end()) {
+                    selection_error =
+                        login_selection_error_default_unavailable(action_label, *default_id);
+                } else {
+                    auto set = co_await session_.set_model(*found);
+                    if (set) {
+                        selected_model = *found;
+                    } else {
+                        selection_error = login_selection_error_select_failed(
+                            action_label, set.error().message);
+                    }
+                }
+            }
+        }
+        // pi's updateAvailableProviderCount/footer invalidate/editor border
+        // hooks land with the footer/editor-chrome ticket (P15); the
+        // availability refresh above is their data effect here.
+        const auto auth_path = auth_path_display(runtime->agent_dir());
+        show_status(login_success_status(
+            action_label,
+            selected_model ? std::optional{selected_model->id} : std::nullopt,
+            auth_path));
+        if (selection_error) show_error(*selection_error);
+    }
+
+    /// pi `showAuthSelect`: a `select`-type AuthPrompt resolves through the
+    /// generic string-list selector swapped into the editor slot.
+    [[nodiscard]] boost::asio::awaitable<util::Expected<std::string>> show_auth_select(
+        std::shared_ptr<LoginDialogComponent> dialog,
+        ai::AuthPromptSelect select,
+        std::optional<std::stop_token> per_prompt) {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        auto slot = std::make_shared<AuthPromptSlot>(executor);
+        std::vector<std::string> labels;
+        labels.reserve(select.options.size());
+        for (const auto& option : select.options) labels.push_back(option.label);
+        const auto weak = weak_from_this();
+        auto selector = std::make_shared<StringListSelector>(
+            theme_controller_->live_theme(),
+            keybindings_,
+            select.message,
+            std::move(labels),
+            [weak, slot, dialog, options = select.options](std::string label) {
+                if (const auto self = weak.lock()) {
+                    self->post_from_view(
+                        [slot, dialog, label = std::move(label), options = std::move(options)](
+                            InteractiveState& self) mutable {
+                            // pi restoreDialog, then resolve the option id.
+                            self.place_editor_replacement(dialog);
+                            const auto found = std::find_if(
+                                options.begin(), options.end(), [&](const auto& option) {
+                                    return option.label == label;
+                                });
+                            if (found != options.end()) {
+                                slot->resolve(found->id);
+                            } else {
+                                slot->resolve(std::unexpected(login_cancelled_error()));
+                            }
+                        });
+                }
+            },
+            [weak, slot, dialog] {
+                if (const auto self = weak.lock()) {
+                    self->post_from_view([slot, dialog](InteractiveState& self) mutable {
+                        self.place_editor_replacement(dialog);
+                        slot->resolve(std::unexpected(login_cancelled_error()));
+                    });
+                }
+            });
+        place_editor_replacement(std::move(selector));
+
+        // pi's per-prompt race: an aborted per-prompt token rejects without
+        // touching the slot's UI (the flow's unwind restores the editor).
+        std::optional<std::stop_callback<std::move_only_function<void()>>> on_abort;
+        if (per_prompt) {
+            on_abort.emplace(*per_prompt, [slot] {
+                slot->resolve(std::unexpected(login_cancelled_error()));
+            });
+        }
+        boost::system::error_code error;
+        auto result = co_await slot->channel.async_receive(
+            boost::asio::redirect_error(boost::asio::use_awaitable, error));
+        if (error) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Unknown,
+                "login select channel failed",
+                error.message()));
+        }
+        co_return std::move(result);
+    }
+
+    /// pi `showAuthPrompt`: select → the generic selector; manual_code → the
+    /// manual input; text/secret → the prompt view. The optional per-prompt
+    /// token rejects with the stable cancelled error (the Codex
+    /// callback-vs-manual-input race).
+    [[nodiscard]] boost::asio::awaitable<util::Expected<std::string>> show_auth_prompt(
+        std::shared_ptr<LoginDialogComponent> dialog,
+        ai::AuthPrompt prompt) {
+        auto per_prompt = std::move(prompt.stop_token);
+        if (per_prompt && per_prompt->stop_requested()) {
+            co_return std::unexpected(login_cancelled_error());
+        }
+        if (auto* select = std::get_if<ai::AuthPromptSelect>(&prompt.kind)) {
+            co_return co_await show_auth_select(
+                std::move(dialog), std::move(*select), std::move(per_prompt));
+        }
+        if (const auto* manual = std::get_if<ai::AuthPromptManualCode>(&prompt.kind)) {
+            if (!per_prompt) co_return co_await dialog->show_manual_input(manual->message);
+            std::stop_callback on_abort(*per_prompt, [&dialog] {
+                dialog->cancel_pending_prompt();
+            });
+            co_return co_await dialog->show_manual_input(manual->message);
+        }
+        std::string message;
+        std::optional<std::string> placeholder;
+        if (const auto* text = std::get_if<ai::AuthPromptText>(&prompt.kind)) {
+            message = text->message;
+            placeholder = text->placeholder;
+        } else if (const auto* secret = std::get_if<ai::AuthPromptSecret>(&prompt.kind)) {
+            message = secret->message;
+            placeholder = secret->placeholder;
+        }
+        if (!per_prompt) {
+            co_return co_await dialog->show_prompt(
+                std::move(message), std::move(placeholder));
+        }
+        std::stop_callback on_abort(*per_prompt, [&dialog] {
+            dialog->cancel_pending_prompt();
+        });
+        co_return co_await dialog->show_prompt(
+            std::move(message), std::move(placeholder));
+    }
+
+    /// pi `notifyAuthDialog`: AuthEvent → the matching dialog view.
+    void notify_auth_dialog(LoginDialogComponent& dialog, const ai::AuthEvent& event) {
+        if (const auto* url = std::get_if<ai::AuthUrl>(&event.kind)) {
+            dialog.show_auth(url->url, url->instructions);
+            return;
+        }
+        if (const auto* device = std::get_if<ai::AuthDeviceCode>(&event.kind)) {
+            dialog.show_device_code(device->user_code, device->verification_uri);
+            dialog.show_waiting("Waiting for authentication...");
+            return;
+        }
+        if (const auto* info = std::get_if<ai::AuthInfo>(&event.kind)) {
+            std::vector<std::pair<std::string, std::optional<std::string>>> links;
+            links.reserve(info->links.size());
+            for (const auto& link : info->links) {
+                links.emplace_back(link.url, link.label);
+            }
+            dialog.show_info(info->message, std::move(links));
+            return;
+        }
+        if (const auto* progress = std::get_if<ai::AuthProgress>(&event.kind)) {
+            dialog.show_progress(progress->message);
+            return;
+        }
+    }
+
+    /// pi `showOAuthSelector("logout")`: the stored-credential picker.
+    [[nodiscard]] boost::asio::awaitable<void> run_logout() {
+        auto runtime = session_.model_runtime();
+        if (!runtime) co_return;
+        auto credentials = co_await runtime->list_credentials();
+        if (!credentials) {
+            show_error("Logout failed: " + combined_error_text(credentials.error()));
+            co_return;
+        }
+        auto options = compute_logout_provider_options(*runtime, std::move(*credentials));
+        if (options.empty()) {
+            show_status(std::string{logout_no_credentials_message()});
+            co_return;
+        }
+        const auto weak = weak_from_this();
+        auto selector = std::make_shared<OAuthSelectorComponent>(
+            theme_controller_->live_theme(),
+            keybindings_,
+            AuthSelectorMode::Logout,
+            options,
+            [weak, options](std::string provider_id, AuthSelectorType) {
+                if (const auto self = weak.lock()) {
+                    self->post_from_view(
+                        [options, provider_id = std::move(provider_id)](
+                            InteractiveState& self) mutable {
+                            self.restore_editor_slot();
+                            const auto found = std::find_if(
+                                options.begin(), options.end(), [&](const auto& option) {
+                                    return option.id == provider_id;
+                                });
+                            if (found == options.end()) return;
+                            const auto option = *found;
+                            const auto shared = self.shared_from_this();
+                            self.spawn_login_flow(
+                                [shared, option]() -> boost::asio::awaitable<void> {
+                                    co_await shared->run_logout_provider(option);
+                                },
+                                "Native TUI logout flow failed");
+                        });
+                }
+            },
+            [weak] {
+                if (const auto self = weak.lock()) {
+                    self->post_from_view([](InteractiveState& self) {
+                        self.restore_editor_slot();
+                    });
+                }
+            });
+        place_editor_replacement(std::move(selector));
+    }
+
+    /// pi's logout selection handler: local removal, availability refresh,
+    /// and the verbatim oauth/api_key status messages.
+    [[nodiscard]] boost::asio::awaitable<void> run_logout_provider(
+        AuthSelectorProvider option) {
+        auto runtime = session_.model_runtime();
+        if (!runtime) co_return;
+        if (auto logged_out = co_await runtime->logout(option.id); !logged_out) {
+            show_error("Logout failed: " + combined_error_text(logged_out.error()));
+            co_return;
+        }
+        // pi: updateAvailableProviderCount after logout.
+        static_cast<void>(co_await runtime->get_available());
+        show_status(logout_success_message(option.auth_type, option.name));
+    }
+
     void apply_command_result(CommandResult result) {
         if (view_ != nullptr) view_->append_frontend_message(std::move(result.display_text));
         switch (result.effect) {
@@ -1707,6 +2428,12 @@ private:
             return;
         case CommandEffect::OpenHotkeys:
             open_hotkeys();
+            return;
+        case CommandEffect::OpenLogin:
+            open_login(std::move(result.effect_argument));
+            return;
+        case CommandEffect::OpenLogout:
+            open_logout();
             return;
         case CommandEffect::Shutdown:
             if (view_ != nullptr) {
@@ -2115,6 +2842,7 @@ private:
     std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings_;
     std::optional<ThemeController> theme_controller_;
     std::unique_ptr<AsyncClipboardReader> clipboard_reader_;
+    std::move_only_function<void(std::string)> open_browser_sink_;
     std::optional<std::string> model_fallback_message_;
     boost::asio::any_io_executor executor_;
     boost::asio::steady_timer exit_wait_;

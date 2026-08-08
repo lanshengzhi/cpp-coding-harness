@@ -255,6 +255,19 @@ public:
     [[nodiscard]] util::Expected<std::string> set_thinking_level(
         std::string_view level);
 
+    /// Runtime model switch (pi `AgentSession.setModel`): validates that the
+    /// target model's provider resolves auth (`No API key for
+    /// <provider>/<model>` otherwise), swaps the live Agent model, persists
+    /// the `model_change` session entry and the global settings default, and
+    /// re-clamps the thinking level against the new model. Same impl_ copying
+    /// contract as prompt(): the returned lazy awaitable survives moving or
+    /// destroying the public handle before its first co_await.
+    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> set_model(
+        ai::Model model);
+    /// Blocking facade for tests and one-shot hosts; drives the async path on
+    /// a temporary executor (same contract as prompt_blocking).
+    [[nodiscard]] util::ExpectedVoid set_model_blocking(ai::Model model);
+
     // ── Compaction ───────────────────────────────────────────────────────
 
     /// Manually compact the session context (pi `AgentSession.compact`). The

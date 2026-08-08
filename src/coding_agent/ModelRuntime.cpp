@@ -452,10 +452,9 @@ std::optional<ModelRuntimeAuthStatus> ModelRuntime::get_provider_auth_status(
             .label = found->second.source,
         };
     }
-    const auto selected = provider(provider_id);
-    if (selected && (selected->auth().api_key || selected->auth().oauth)) {
-        return ModelRuntimeAuthStatus{.configured = true};
-    }
+    // pi `getProviderAuthStatus`: structural auth hooks alone are not a
+    // source — a provider with no runtime key, stored credential, config, or
+    // environment resolution is not configured.
     return ModelRuntimeAuthStatus{.configured = false};
 }
 

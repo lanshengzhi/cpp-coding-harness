@@ -342,6 +342,37 @@ util::ExpectedVoid register_native_tui_commands(CommandRegistry& registry) {
         return std::unexpected(registered.error());
     }
 
+    // /login — the login presentation flow (pi `/login [provider]`, #328).
+    if (auto registered = registry.register_command(
+            "login",
+            "Configure provider authentication",
+            "<provider>",
+            [](const CommandContext& /*ctx*/, std::string_view args) {
+                return CommandResult{
+                    .display_text = {},
+                    .effect = CommandEffect::OpenLogin,
+                    .effect_argument = std::string{args},
+                };
+            });
+        !registered) {
+        return std::unexpected(registered.error());
+    }
+
+    // /logout — the logout presentation flow (pi `/logout`, #328).
+    if (auto registered = registry.register_command(
+            "logout",
+            "Remove provider authentication",
+            {},
+            [](const CommandContext& /*ctx*/, std::string_view /*args*/) {
+                return CommandResult{
+                    .display_text = {},
+                    .effect = CommandEffect::OpenLogout,
+                };
+            });
+        !registered) {
+        return std::unexpected(registered.error());
+    }
+
     return {};
 }
 

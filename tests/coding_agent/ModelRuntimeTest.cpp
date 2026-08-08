@@ -606,3 +606,24 @@ TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a proces
     CHECK(transport->requests.front().headers.at("Authorization") == "Bearer dummy-command-key");
 #endif
 }
+
+TEST_CASE("ModelRuntime auth status reports an unconfigured builtin as not configured", "[coding_agent][model-runtime][issue406]") {
+    tests::TempWorkspace home;
+    tests::EnvVarGuard home_guard{"HOME"};
+    home_guard.set(home.path().string());
+    tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
+    kimi_guard.unset();
+
+    auto runtime = coding_agent::ModelRuntime::create({});
+    REQUIRE(runtime);
+    static_cast<void>(run_awaitable((*runtime)->get_available()));
+    auto status = (*runtime)->get_provider_auth_status("openai-codex");
+    REQUIRE(status.has_value());
+    // pi `getProviderAuthStatus`: no runtime key, no stored credential, no
+    // config, no environment → `{ configured: false }` (the selector renders
+    // "• unconfigured"); structural auth hooks alone are not a source.
+    CHECK_FALSE(status->configured);
+
+    auto missing = (*runtime)->get_provider_auth_status("no-such-provider");
+    CHECK_FALSE(missing.has_value());
+}

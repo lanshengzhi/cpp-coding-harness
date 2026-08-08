@@ -339,6 +339,72 @@ detail::AgentSessionPromptAccess::compact_impl(
     }
 }
 
+boost::asio::awaitable<util::ExpectedVoid> AgentSession::set_model(
+    ai::Model model) {
+    return detail::AgentSessionPromptAccess::set_model(*this, std::move(model));
+}
+
+util::ExpectedVoid AgentSession::set_model_blocking(ai::Model model) {
+    return detail::AgentSessionPromptAccess::set_model_blocking(
+        *this, std::move(model));
+}
+
+boost::asio::awaitable<util::ExpectedVoid>
+detail::AgentSessionPromptAccess::set_model(
+    AgentSession& session,
+    ai::Model model) {
+    return set_model_impl(session.impl_, std::move(model));
+}
+
+boost::asio::awaitable<util::ExpectedVoid>
+detail::AgentSessionPromptAccess::set_model_impl(
+    std::shared_ptr<AgentSession::Impl> impl,
+    ai::Model model) {
+    if (!impl || !impl->runtime) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    try {
+        co_return co_await impl->runtime->set_model(std::move(model));
+    } catch (...) {
+        const auto failure = prompt_exception(std::current_exception());
+        co_return std::unexpected(failure.error());
+    }
+}
+
+util::ExpectedVoid detail::AgentSessionPromptAccess::set_model_blocking(
+    AgentSession& session,
+    ai::Model model) {
+    const auto impl = session.impl_;
+    if (!impl) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> result;
+    std::exception_ptr exception;
+    boost::asio::co_spawn(
+        io,
+        set_model(session, std::move(model)),
+        [&](std::exception_ptr completion_exception, util::ExpectedVoid completion) {
+            exception = completion_exception;
+            result.emplace(std::move(completion));
+        });
+    io.run();
+
+    if (exception) {
+        return prompt_exception(exception);
+    }
+    if (!result) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Unknown,
+            "session set_model coroutine did not complete"));
+    }
+    return std::move(*result);
+}
+
 util::ExpectedVoid detail::AgentSessionPromptAccess::prompt_blocking(
     AgentSession& session,
     std::string text,

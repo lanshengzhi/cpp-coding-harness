@@ -182,21 +182,33 @@ TEST_CASE("Native TUI commands extend only the concrete effective registry", "[c
     REQUIRE(coding_agent::register_native_tui_commands(registry).has_value());
 
     const auto commands = registry.list_commands();
-    REQUIRE(commands.size() == 8);
+    REQUIRE(commands.size() == 10);
     CHECK(commands[4].name == "hotkeys");
     CHECK(commands[4].description == "Show all keyboard shortcuts");
-    CHECK(commands[7].name == "settings");
-    CHECK(commands[7].description == "Open settings menu");
+    CHECK(commands[9].name == "settings");
+    CHECK(commands[9].description == "Open settings menu");
+    CHECK(commands[5].name == "login");
+    CHECK(commands[5].description == "Configure provider authentication");
+    CHECK(commands[5].argument_hint == "<provider>");
+    CHECK(commands[6].name == "logout");
+    CHECK(commands[6].description == "Remove provider authentication");
     CHECK_FALSE(registry.find_command_info("new").has_value());
     CHECK_FALSE(registry.find_command_info("resume").has_value());
 
     const coding_agent::CommandContext context;
     const auto settings = registry.dispatch("settings", context, "");
     const auto hotkeys = registry.dispatch("hotkeys", context, "");
+    const auto login = registry.dispatch("login", context, "deepseek");
+    const auto logout = registry.dispatch("logout", context, "");
     REQUIRE(settings.has_value());
     REQUIRE(hotkeys.has_value());
+    REQUIRE(login.has_value());
+    REQUIRE(logout.has_value());
     CHECK(settings->effect == coding_agent::CommandEffect::OpenSettings);
     CHECK(hotkeys->effect == coding_agent::CommandEffect::OpenHotkeys);
+    CHECK(login->effect == coding_agent::CommandEffect::OpenLogin);
+    CHECK(login->effect_argument == "deepseek");
+    CHECK(logout->effect == coding_agent::CommandEffect::OpenLogout);
 }
 
 TEST_CASE("built-in /commands dispatches through the /help handler", "[coding_agent][prompt]") {

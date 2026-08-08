@@ -47,6 +47,11 @@ enum class CommandEffect {
     ClearScreen,
     OpenSettings,
     OpenHotkeys,
+    /// Open the login presentation flow with the optional provider reference
+    /// in `effect_argument` (pi `/login [provider]`).
+    OpenLogin,
+    /// Open the logout presentation flow (pi `/logout`).
+    OpenLogout,
     Shutdown,
 };
 
@@ -56,6 +61,9 @@ struct CommandResult {
     std::string display_text;
     /// Concrete frontend operation requested by this registered command.
     CommandEffect effect{CommandEffect::None};
+    /// Argument payload for effects that carry one (e.g. the `/login`
+    /// provider reference); empty otherwise.
+    std::string effect_argument;
 };
 
 /// Handler signature for slash-commands.

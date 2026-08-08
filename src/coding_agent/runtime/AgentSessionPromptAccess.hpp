@@ -41,6 +41,16 @@ public:
         AgentSession& session,
         std::string custom_instructions);
 
+    /// Runtime model switch (pi `AgentSession.setModel`). Same impl_ copying
+    /// contract as prompt().
+    [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> set_model(
+        AgentSession& session,
+        ai::Model model);
+    /// Blocking facade driving the async path on a temporary executor.
+    [[nodiscard]] static util::ExpectedVoid set_model_blocking(
+        AgentSession& session,
+        ai::Model model);
+
 private:
     [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> prompt_impl(
         std::shared_ptr<AgentSession::Impl> impl,
@@ -53,6 +63,10 @@ private:
     compact_impl(
         std::shared_ptr<AgentSession::Impl> impl,
         std::string custom_instructions);
+
+    [[nodiscard]] static boost::asio::awaitable<util::ExpectedVoid> set_model_impl(
+        std::shared_ptr<AgentSession::Impl> impl,
+        ai::Model model);
 };
 
 } // namespace cch::coding_agent::detail

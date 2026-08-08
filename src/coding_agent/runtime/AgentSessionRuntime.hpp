@@ -142,6 +142,19 @@ public:
     [[nodiscard]] util::Expected<std::string> set_thinking_level(
         std::string_view level);
 
+    /// Runtime model switch (pi `AgentSession.setModel`, G3 decision 5):
+    /// validates that the target model's provider resolves auth (`No API key
+    /// for <provider>/<model>` otherwise), swaps the live Agent model,
+    /// appends the `model_change` session entry (skipped for in-memory
+    /// sessions, like the creation-time entry), writes the global settings
+    /// default provider/model, and re-clamps the thinking level against the
+    /// new model's supported set (pi's `setModel` → `setThinkingLevel`
+    /// sequence). Live Agent state advances first; a persistence failure is
+    /// reported without rolling the change back (Session Event Commitment
+    /// philosophy).
+    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> set_model(
+        ai::Model model);
+
     // ── Compaction ────────────────────────────────────────────────────────
 
     /// Manually compact the session context (pi `AgentSession.compact`):

@@ -9,6 +9,7 @@
 #include <boost/asio/awaitable.hpp>
 
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -33,6 +34,10 @@ struct InteractiveModeConfig {
     /// `Warning: <message>` boot line in the chat container (pi
     /// `interactive-mode.ts` `showWarning`). Absent in print mode.
     std::optional<std::string> model_fallback_message{std::nullopt};
+    /// Browser opening for the login dialog's auth-URL view (pi
+    /// `openBrowser`: detached argv spawn, never through a shell, best-effort).
+    /// Null installs the real platform spawn; tests inject a recorder.
+    std::move_only_function<void(std::string)> open_browser_sink{nullptr};
 };
 
 /// Run the private Native TUI composition until its exit binding is received.

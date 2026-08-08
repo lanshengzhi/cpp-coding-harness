@@ -3,6 +3,7 @@
 #include "AgentLoop.hpp"
 #include "agent/AgentMessageAccess.hpp"
 #include <cch/ai/Content.hpp>
+#include <cch/ai/Model.hpp>
 #include "util/BoundedText.hpp"
 
 #include <algorithm>
@@ -657,6 +658,20 @@ util::Expected<std::string> Agent::set_thinking_level(std::string_view level) {
     impl_->loop.set_thinking_level(effective);
     impl_->state.thinking_level = effective;
     return effective;
+}
+
+util::ExpectedVoid Agent::set_model(ai::Model model) {
+    if (!impl_) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "agent is not initialized"));
+    }
+    if (auto valid = ai::validate_model(model); !valid) {
+        return valid;
+    }
+    impl_->loop.set_model(model);
+    impl_->state.model = std::move(model);
+    return {};
 }
 
 util::ExpectedVoid Agent::clear_steering_queue() {

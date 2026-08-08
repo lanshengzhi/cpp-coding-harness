@@ -86,6 +86,13 @@ private:
     void set_thinking_level(std::string level) noexcept {
         options_.thinking_level = std::move(level);
     }
+    /// Swap the turn Model for subsequent runs (pi `agent.state.model = model`
+    /// in `setModel`). The caller has validated the Model and re-clamps the
+    /// thinking level right after; this keeps the loop's option and the live
+    /// Agent state in agreement for the next stream request.
+    void set_model(ai::Model model) noexcept {
+        options_.model = std::move(model);
+    }
     [[nodiscard]] const std::string& session_id() const noexcept {
         return options_.session_id;
     }

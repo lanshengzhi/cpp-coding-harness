@@ -985,6 +985,75 @@ util::Expected<std::string> AgentSessionRuntime::set_thinking_level(
     return effective;
 }
 
+boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::set_model(
+    ai::Model model) {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        co_return std::unexpected(rejected.error());
+    }
+    if (!agent_ || !services_.model_runtime) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation, "session is closed"));
+    }
+
+    // pi setModel: `if (!(await checkAuth(model.provider))) throw`.
+    auto checked = co_await services_.model_runtime->check_auth(model.provider);
+    if (!checked) {
+        co_return std::unexpected(std::move(checked.error()));
+    }
+    if (!*checked) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Auth,
+            "No API key for " + model.provider + "/" + model.id));
+    }
+
+    // pi `_getThinkingLevelForModelSwitch`: a current model without thinking
+    // support falls back to the merged settings default (then pi's
+    // DEFAULT_THINKING_LEVEL); otherwise the current level is kept and
+    // re-clamped against the new model below.
+    std::string thinking_level = agent_->state().thinking_level;
+    if (!agent_->state().model.reasoning) {
+        thinking_level =
+            services_.settings_manager &&
+                    services_.settings_manager->settings().default_thinking_level
+                ? *services_.settings_manager->settings().default_thinking_level
+                : "medium";
+    }
+
+    if (auto swapped = agent_->set_model(std::move(model)); !swapped) {
+        co_return std::unexpected(std::move(swapped.error()));
+    }
+    const auto& active_model = agent_->state().model;
+
+    // Persist the `model_change` session entry (pi `appendModelChange`).
+    // In-memory sessions have no v3 tree entry surface and are not resumable,
+    // so the entry is skipped there exactly like the creation-time entry.
+    if (auto* jsonl_store =
+            dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get())) {
+        if (auto appended = jsonl_store->append_model_change(
+                std::nullopt, active_model.provider, active_model.id);
+            !appended) {
+            co_return std::unexpected(std::move(appended.error()));
+        }
+    }
+
+    // pi `settingsManager.setDefaultModelAndProvider` (global scope).
+    if (services_.settings_manager) {
+        if (auto saved = services_.settings_manager->set_default_model_and_provider(
+                active_model.provider, active_model.id);
+            !saved) {
+            co_return std::unexpected(std::move(saved.error()));
+        }
+    }
+
+    // Re-clamp the thinking level for the new model's capabilities (pi
+    // `setThinkingLevel` after the model assignment; entry + settings writes
+    // ride the existing thinking-level path).
+    if (auto clamped = set_thinking_level(thinking_level); !clamped) {
+        co_return std::unexpected(std::move(clamped.error()));
+    }
+    co_return util::ExpectedVoid{};
+}
+
 boost::asio::awaitable<util::Expected<coding_agent::CompactionResult>>
 AgentSessionRuntime::compact(std::string custom_instructions) {
     if (auto rejected = reject_if_closed(); !rejected) {

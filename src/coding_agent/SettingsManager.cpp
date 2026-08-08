@@ -946,4 +946,38 @@ util::ExpectedVoid SettingsManager::set_default_thinking_level(
     return util::ExpectedVoid{};
 }
 
+util::ExpectedVoid SettingsManager::set_default_model_and_provider(
+    std::string provider,
+    std::string model) {
+    // pi `setDefaultModelAndProvider` always writes the global scope.
+    if (impl_->global_load_failed) {
+        return util::ExpectedVoid{};
+    }
+    if (impl_->global_path.empty()) {
+        return util::ExpectedVoid{};
+    }
+
+    auto& target = impl_->global_settings;
+    if (target.default_provider == provider && target.default_model == model) {
+        return util::ExpectedVoid{};
+    }
+
+    // Persist first; the in-memory view advances only when the surgical write
+    // succeeded, so a persist failure never leaves memory diverged from disk.
+    if (auto persisted = persist_field(
+            impl_->global_path, "defaultProvider", util::JsonValue{provider});
+        !persisted) {
+        return persisted;
+    }
+    if (auto persisted = persist_field(
+            impl_->global_path, "defaultModel", util::JsonValue{model});
+        !persisted) {
+        return persisted;
+    }
+    target.default_provider = std::move(provider);
+    target.default_model = std::move(model);
+    impl_->recompute_merged();
+    return util::ExpectedVoid{};
+}
+
 } // namespace cch::coding_agent

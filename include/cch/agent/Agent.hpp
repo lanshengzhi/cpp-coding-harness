@@ -116,6 +116,13 @@ public:
     [[nodiscard]] util::Expected<std::string> set_thinking_level(
         std::string_view level);
 
+    /// Swap the active Model for subsequent turns (pi's runtime `setModel`:
+    /// `agent.state.model = model`). The Model is validated; the
+    /// thinking level is untouched here — the caller re-clamps it against the
+    /// new model's supported set right after, exactly like pi's `setModel` →
+    /// `setThinkingLevel` sequence.
+    [[nodiscard]] util::ExpectedVoid set_model(ai::Model model);
+
     /// Remove all pending steering messages.
     [[nodiscard]] util::ExpectedVoid clear_steering_queue();
 

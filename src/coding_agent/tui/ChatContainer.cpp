@@ -328,7 +328,13 @@ struct ChatContainer::Impl {
         bool warning{false};
     };
 
-    using ItemVariant = std::variant<MessageItem, FrontendItem, DiagnosticItem>;
+    /// pi `showStatus`: one dim status line. A new status replaces the
+    /// previous one while it is still the newest chat item.
+    struct StatusItem {
+        std::string text;
+    };
+
+    using ItemVariant = std::variant<MessageItem, FrontendItem, DiagnosticItem, StatusItem>;
 
     Impl(
         const LiveTheme& theme,
@@ -613,6 +619,15 @@ struct ChatContainer::Impl {
         if (const auto* frontend = std::get_if<FrontendItem>(&item)) {
             return render_plain(theme, frontend->text, width, ThemeToken::Text);
         }
+        if (const auto* status = std::get_if<StatusItem>(&item)) {
+            // pi showStatus: a Spacer row above the dim status text.
+            cch::tui::RenderResult result;
+            result.lines.emplace_back();
+            auto rendered = render_plain(theme, status->text, width, ThemeToken::Dim);
+            if (!rendered) return std::unexpected(rendered.error());
+            for (auto& line : rendered->lines) result.lines.push_back(std::move(line));
+            return result;
+        }
         const auto& diagnostic = std::get<DiagnosticItem>(item);
         if (diagnostic.warning) {
             return render_plain(
@@ -750,6 +765,17 @@ void ChatContainer::append_warning(std::string text) {
         .raw = false,
         .warning = true,
     });
+}
+
+void ChatContainer::append_status_message(std::string text) {
+    // pi showStatus: replace the tail status while it is the newest item.
+    if (!impl_->items.empty()) {
+        if (auto* tail = std::get_if<Impl::StatusItem>(&impl_->items.back())) {
+            tail->text = safe_text(std::move(text));
+            return;
+        }
+    }
+    impl_->items.emplace_back(Impl::StatusItem{.text = safe_text(std::move(text))});
 }
 
 void ChatContainer::append_user_bash_diagnostic(std::string text) {

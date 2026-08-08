@@ -157,6 +157,15 @@ public:
         SettingsScope scope,
         std::string_view value);
 
+    /// Surgical field-level write of the pi `defaultProvider` and
+    /// `defaultModel` fields in the global scope (pi
+    /// `SettingsManager.setDefaultModelAndProvider`, which always writes
+    /// `globalSettings`); preserves every other field. A global load failure
+    /// suppresses the write. No-op when both values are unchanged.
+    [[nodiscard]] util::ExpectedVoid set_default_model_and_provider(
+        std::string provider,
+        std::string model);
+
 private:
     struct Impl;
     explicit SettingsManager(std::unique_ptr<Impl> impl);

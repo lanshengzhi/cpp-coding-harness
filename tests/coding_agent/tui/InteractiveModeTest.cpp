@@ -3103,7 +3103,7 @@ TEST_CASE(
 
     REQUIRE(terminal.inject_input("/"));
     drain_ready(io);
-    for (std::size_t index = 0; index < 8; ++index) {
+    for (std::size_t index = 0; index < 10; ++index) {
         REQUIRE(terminal.inject_input("\x1b[B"));
         drain_ready(io);
     }

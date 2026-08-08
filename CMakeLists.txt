@@ -274,6 +274,11 @@ add_library(cch_coding_agent_interactive
     src/coding_agent/tui/ChatContainer.cpp
     src/coding_agent/tui/DiffRenderer.cpp
     src/coding_agent/tui/KeybindingHints.cpp
+    src/coding_agent/tui/LoginDialog.cpp
+    src/coding_agent/tui/LoginPresentation.cpp
+    src/coding_agent/tui/OAuthSelector.cpp
+    src/coding_agent/tui/OpenBrowser.cpp
+    src/coding_agent/tui/StringListSelector.cpp
     src/coding_agent/tui/ToolExecutionComponent.cpp
     src/coding_agent/tui/UserMessageComponent.cpp
 )
@@ -368,6 +373,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/SettingsManagerTest.cpp
         tests/coding_agent/ModelConfigTest.cpp
         tests/coding_agent/ModelResolutionTest.cpp
+        tests/coding_agent/SetModelTest.cpp
         tests/coding_agent/ModelRuntimeTest.cpp
         tests/coding_agent/ProviderComposerTest.cpp
         tests/coding_agent/ProjectResourcesTest.cpp
@@ -380,6 +386,11 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/PromptTemplateLoaderTest.cpp
         tests/coding_agent/tui/InteractiveModeTest.cpp
         tests/coding_agent/tui/KeybindingCatalogTest.cpp
+        tests/coding_agent/tui/ChatContainerStatusTest.cpp
+        tests/coding_agent/tui/LoginDialogTest.cpp
+        tests/coding_agent/tui/LoginInteractiveModeTest.cpp
+        tests/coding_agent/tui/OAuthSelectorTest.cpp
+        tests/coding_agent/tui/StringListSelectorTest.cpp
         tests/coding_agent/tui/ProcessInteractiveModeTest.cpp
         tests/coding_agent/tui/ThemeTest.cpp
         tests/coding_agent/tui/ThemeCatalogTest.cpp
