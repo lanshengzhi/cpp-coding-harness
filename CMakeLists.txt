@@ -281,6 +281,7 @@ add_library(cch_coding_agent_interactive
     src/coding_agent/tui/OAuthSelector.cpp
     src/coding_agent/tui/OpenBrowser.cpp
     src/coding_agent/tui/ScopedModelsSelector.cpp
+    src/coding_agent/tui/SettingsSelector.cpp
     src/coding_agent/tui/StringListSelector.cpp
     src/coding_agent/tui/ToolExecutionComponent.cpp
     src/coding_agent/tui/UserMessageComponent.cpp
@@ -398,6 +399,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/tui/ModelSelectorTest.cpp
         tests/coding_agent/tui/OAuthSelectorTest.cpp
         tests/coding_agent/tui/ScopedModelsSelectorTest.cpp
+        tests/coding_agent/tui/SettingsSelectorTest.cpp
         tests/coding_agent/tui/StringListSelectorTest.cpp
         tests/coding_agent/tui/ProcessInteractiveModeTest.cpp
         tests/coding_agent/tui/ThemeTest.cpp

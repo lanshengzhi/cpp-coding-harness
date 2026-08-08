@@ -593,3 +593,155 @@ TEST_CASE("SettingsManager rejects a non-object retry field", "[settings][two-sc
     REQUIRE_FALSE(manager.errors().empty());
     CHECK(manager.errors()[0].message.find("retry") != std::string::npos);
 }
+
+TEST_CASE("SettingsManager loads the graduated render settings with pi defaults", "[settings][two-scope][issue408]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({
+        "hideThinkingBlock": true,
+        "outputPad": 0
+    })");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.errors().empty());
+    const auto& settings = manager.settings();
+    REQUIRE(settings.hide_thinking_block.has_value());
+    CHECK(*settings.hide_thinking_block == true);
+    REQUIRE(settings.output_pad.has_value());
+    CHECK(*settings.output_pad == 0);
+    // Resolved accessors carry the pi defaults when the fields are absent.
+    SettingsDirs empty_dirs;
+    auto defaults = coding_agent::SettingsManager::create(
+        empty_dirs.cwd, empty_dirs.agent_dir, /* project_trusted */ true);
+    CHECK_FALSE(defaults.hide_thinking_block());
+    CHECK(defaults.output_pad() == 1);
+}
+
+TEST_CASE("SettingsManager outputPad resolves every non-zero value as 1 like pi", "[settings][two-scope][issue408]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"outputPad": 7})");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.errors().empty());
+    // pi `getOutputPad`: `settings.outputPad === 0 ? 0 : 1`.
+    CHECK(manager.settings().output_pad == 1);
+    CHECK(manager.output_pad() == 1);
+}
+
+TEST_CASE("SettingsManager deep-merges the graduated render settings with the project scope winning", "[settings][two-scope][issue408]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({
+        "hideThinkingBlock": true,
+        "outputPad": 0
+    })");
+    dirs.write_project(R"({
+        "hideThinkingBlock": false
+    })");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.errors().empty());
+    // Project scope wins per field; fields the project scope does not set
+    // keep the global scope value.
+    CHECK(manager.hide_thinking_block() == false);
+    CHECK(manager.output_pad() == 0);
+}
+
+TEST_CASE("SettingsManager hideThinkingBlock write is a surgical global-scope merge", "[settings][two-scope][write][issue408]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"theme":"dark","future":true})");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    auto saved = manager.set_hide_thinking_block(true);
+    REQUIRE(saved);
+
+    CHECK(manager.hide_thinking_block() == true);
+    CHECK(manager.settings().theme == "dark");
+    const auto content = dirs.workspace.read("agent/settings.json");
+    CHECK(content.find("\"hideThinkingBlock\": true") != std::string::npos);
+    // Unknown and unmodified fields survive the surgical write.
+    CHECK(content.find("\"future\": true") != std::string::npos);
+
+    // Reloading re-reads the persisted value (survives persistence).
+    auto reloaded = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    CHECK(reloaded.hide_thinking_block() == true);
+}
+
+TEST_CASE("SettingsManager hideThinkingBlock write creates the file and is a no-op when unchanged", "[settings][two-scope][write][issue408]") {
+    SettingsDirs dirs;
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.set_hide_thinking_block(true));
+    const auto content = dirs.workspace.read("agent/settings.json");
+    CHECK(content.find("\"hideThinkingBlock\": true") != std::string::npos);
+
+    // The unchanged value is a no-op: the file is not rewritten.
+    const auto before = dirs.workspace.read("agent/settings.json");
+    REQUIRE(manager.set_hide_thinking_block(true));
+    CHECK(dirs.workspace.read("agent/settings.json") == before);
+}
+
+TEST_CASE("SettingsManager outputPad write is a surgical global-scope merge and validates the value", "[settings][two-scope][write][issue408]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"theme":"dark"})");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.set_output_pad(0));
+    CHECK(manager.output_pad() == 0);
+    CHECK(manager.settings().theme == "dark");
+    const auto content = dirs.workspace.read("agent/settings.json");
+    CHECK(content.find("\"outputPad\": 0") != std::string::npos);
+    CHECK(content.find("\"theme\": \"dark\"") != std::string::npos);
+
+    auto reloaded = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    CHECK(reloaded.output_pad() == 0);
+
+    // Only 0 and 1 exist (pi `outputPad: 0 | 1`).
+    auto rejected = manager.set_output_pad(2);
+    REQUIRE_FALSE(rejected);
+    CHECK(rejected.error().message.find("outputPad") != std::string::npos);
+    CHECK(manager.output_pad() == 0);
+}
+
+TEST_CASE("SettingsManager render-setting writes suppress on a global load failure", "[settings][two-scope][write][error][issue408]") {
+    SettingsDirs dirs;
+    dirs.write_global("{");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE_FALSE(manager.errors().empty());
+    // A scope whose load failed suppresses writes to that scope (pi).
+    REQUIRE(manager.set_hide_thinking_block(true));
+    REQUIRE(manager.set_output_pad(0));
+    CHECK_FALSE(manager.hide_thinking_block());
+    CHECK(manager.output_pad() == 1);
+}
+
+TEST_CASE("SettingsManager defaultProjectTrust write is a surgical global-scope merge", "[settings][two-scope][write][issue408]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"theme":"dark","future":true})");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.set_default_project_trust(coding_agent::DefaultProjectTrust::Never));
+    REQUIRE(manager.default_project_trust().has_value());
+    CHECK(*manager.default_project_trust() == coding_agent::DefaultProjectTrust::Never);
+    CHECK(manager.settings().theme == "dark");
+    const auto content = dirs.workspace.read("agent/settings.json");
+    CHECK(content.find("\"defaultProjectTrust\": \"never\"") != std::string::npos);
+    CHECK(content.find("\"future\": true") != std::string::npos);
+
+    auto reloaded = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(reloaded.default_project_trust().has_value());
+    CHECK(*reloaded.default_project_trust() == coding_agent::DefaultProjectTrust::Never);
+}

@@ -308,6 +308,19 @@ void migrate_settings(JsonObject& settings) {
             return std::unexpected(parsed.error());
         }
     }
+    if (const auto found = object.find("hideThinkingBlock"); found != object.end()) {
+        if (const auto* parsed = found->second.get_if<bool>()) {
+            settings.hide_thinking_block = *parsed;
+        }
+    }
+    if (const auto found = object.find("outputPad"); found != object.end()) {
+        if (const auto* parsed = found->second.get_if<double>()) {
+            // pi `getOutputPad`: `settings.outputPad === 0 ? 0 : 1` — only 0
+            // resolves as 0; every other number resolves as 1.
+            settings.output_pad =
+                static_cast<std::size_t>(*parsed == 0 ? 0 : 1);
+        }
+    }
     return settings;
 }
 
@@ -692,6 +705,12 @@ struct SettingsManager::Impl {
             }
             merged.retry = merged_retry;
         }
+        if (project.hide_thinking_block) {
+            merged.hide_thinking_block = project.hide_thinking_block;
+        }
+        if (project.output_pad) {
+            merged.output_pad = project.output_pad;
+        }
         return merged;
     }
 
@@ -942,6 +961,104 @@ util::ExpectedVoid SettingsManager::set_default_thinking_level(
         return persisted;
     }
     target.default_thinking_level = std::string{value};
+    impl_->recompute_merged();
+    return util::ExpectedVoid{};
+}
+
+bool SettingsManager::hide_thinking_block() const noexcept {
+    return impl_->merged_settings.hide_thinking_block.value_or(false);
+}
+
+std::size_t SettingsManager::output_pad() const noexcept {
+    // pi `getOutputPad`: `settings.outputPad === 0 ? 0 : 1`. The parse path
+    // already resolves stored values to 0 or 1; the default is 1.
+    const auto stored = impl_->merged_settings.output_pad.value_or(1);
+    return stored == 0 ? 0 : 1;
+}
+
+util::ExpectedVoid SettingsManager::set_hide_thinking_block(bool hide) {
+    // pi `setHideThinkingBlock` always writes the global scope.
+    if (impl_->global_load_failed) {
+        return util::ExpectedVoid{};
+    }
+    if (impl_->global_path.empty()) {
+        return util::ExpectedVoid{};
+    }
+
+    auto& target = impl_->global_settings;
+    if (target.hide_thinking_block == hide) {
+        return util::ExpectedVoid{};
+    }
+
+    // Persist first; the in-memory view advances only when the surgical write
+    // succeeded, so a persist failure never leaves memory diverged from disk.
+    if (auto persisted = persist_field(
+            impl_->global_path, "hideThinkingBlock", util::JsonValue{hide});
+        !persisted) {
+        return persisted;
+    }
+    target.hide_thinking_block = hide;
+    impl_->recompute_merged();
+    return util::ExpectedVoid{};
+}
+
+util::ExpectedVoid SettingsManager::set_output_pad(std::size_t padding) {
+    // pi `setOutputPad` always writes the global scope; only 0 and 1 exist.
+    if (padding != 0 && padding != 1) {
+        return std::unexpected(settings_error(
+            "invalid outputPad",
+            "outputPad must be 0 or 1"));
+    }
+    if (impl_->global_load_failed) {
+        return util::ExpectedVoid{};
+    }
+    if (impl_->global_path.empty()) {
+        return util::ExpectedVoid{};
+    }
+
+    auto& target = impl_->global_settings;
+    if (target.output_pad == padding) {
+        return util::ExpectedVoid{};
+    }
+
+    // Persist first; the in-memory view advances only when the surgical write
+    // succeeded, so a persist failure never leaves memory diverged from disk.
+    if (auto persisted = persist_field(
+            impl_->global_path, "outputPad", util::JsonValue{static_cast<double>(padding)});
+        !persisted) {
+        return persisted;
+    }
+    target.output_pad = padding;
+    impl_->recompute_merged();
+    return util::ExpectedVoid{};
+}
+
+util::ExpectedVoid SettingsManager::set_default_project_trust(
+    DefaultProjectTrust trust) {
+    // pi `setDefaultProjectTrust` always writes the global scope and is
+    // global-only (the project scope never carries a trust default).
+    if (impl_->global_load_failed) {
+        return util::ExpectedVoid{};
+    }
+    if (impl_->global_path.empty()) {
+        return util::ExpectedVoid{};
+    }
+
+    auto& target = impl_->global_settings;
+    if (target.default_project_trust == trust) {
+        return util::ExpectedVoid{};
+    }
+
+    // Persist first; the in-memory view advances only when the surgical write
+    // succeeded, so a persist failure never leaves memory diverged from disk.
+    if (auto persisted = persist_field(
+            impl_->global_path,
+            "defaultProjectTrust",
+            util::JsonValue{to_string(trust)});
+        !persisted) {
+        return persisted;
+    }
+    target.default_project_trust = trust;
     impl_->recompute_merged();
     return util::ExpectedVoid{};
 }

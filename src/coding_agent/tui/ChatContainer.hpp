@@ -57,9 +57,17 @@ public:
     /// redacted.
     void append_user_bash_diagnostic(std::string text);
     void toggle_tool_output();
-    void toggle_thinking();
     /// Whether tool and User Bash output currently renders in full.
     [[nodiscard]] bool tools_expanded() const;
+
+    /// pi `hideThinkingBlock` render setting: update the flag and apply it to
+    /// every rendered assistant message in place (pi
+    /// `AssistantMessageComponent.setHideThinkingBlock`).
+    void set_hide_thinking_block(bool hide);
+    /// pi `outputPad` render setting: update the padding and rebuild the
+    /// user/assistant message components so the new padding applies (pi
+    /// `setOutputPad` + `rebuildChatFromMessages`).
+    void set_output_pad(std::size_t output_pad);
 
     [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override;

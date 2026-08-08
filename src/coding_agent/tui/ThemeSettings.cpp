@@ -32,6 +32,52 @@ struct ThemeSettingsState {
     std::optional<util::Error> error{std::nullopt};
 };
 
+/// The single-mode ThemeSubmenu content (G5): one select list of every
+/// available theme with the `(current)` marker on the active theme. Selection
+/// commits and applies through the controller before completing the submenu;
+/// failures report through `on_error` (input thread).
+[[nodiscard]] std::unique_ptr<cch::tui::SelectList> make_theme_submenu_list(
+    ThemeController& controller,
+    std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
+    ThemeSettingsErrorSink on_error,
+    cch::tui::SettingsSubmenuDoneSink done) {
+    std::vector<cch::tui::SelectItem> items;
+    const auto names = controller.available_theme_names();
+    items.reserve(names.size());
+    std::size_t selected_index = 0;
+    for (std::size_t index = 0; index < names.size(); ++index) {
+        if (names[index] == controller.active_theme_name()) selected_index = index;
+        items.push_back({
+            .value = names[index],
+            .label = names[index],
+            .description = names[index] == controller.active_theme_name()
+                ? std::optional<std::string>{"(current)"}
+                : std::nullopt,
+        });
+    }
+
+    auto completion = std::make_shared<cch::tui::SettingsSubmenuDoneSink>(std::move(done));
+    auto list = std::make_unique<cch::tui::SelectList>(
+        std::move(items),
+        cch::tui::SelectListOptions{
+            .max_visible = 10,
+            .theme = controller.live_theme().select_list_theme(),
+            .on_select = [&controller, on_error = std::move(on_error), completion](
+                              const cch::tui::SelectItem& item) mutable {
+                if (auto selected = controller.select_theme(item.value); !selected) {
+                    if (on_error) on_error(selected.error());
+                    (*completion)(std::nullopt);
+                } else {
+                    (*completion)(item.value);
+                }
+            },
+            .on_cancel = [completion]() { (*completion)(std::nullopt); },
+            .keybindings = std::move(keybindings),
+        });
+    list->set_selected_index(selected_index);
+    return list;
+}
+
 class ThemeSettingsList final : public cch::tui::Component,
                                 public cch::tui::InputHandler,
                                 public cch::tui::Focusable {
@@ -101,40 +147,11 @@ private:
             .submenu_factory = [state](
                                    const cch::tui::SettingItem&,
                                    cch::tui::SettingsSubmenuDoneSink done) {
-                std::vector<cch::tui::SelectItem> items;
-                const auto names = state->controller->available_theme_names();
-                items.reserve(names.size());
-                std::size_t selected_index = 0;
-                for (std::size_t index = 0; index < names.size(); ++index) {
-                    if (names[index] == state->controller->active_theme_name()) selected_index = index;
-                    items.push_back({
-                        .value = names[index],
-                        .label = names[index],
-                        .description = names[index] == state->controller->active_theme_name()
-                            ? std::optional<std::string>{"(current)"}
-                            : std::nullopt,
-                    });
-                }
-
-                auto completion = std::make_shared<cch::tui::SettingsSubmenuDoneSink>(std::move(done));
-                auto list = std::make_unique<cch::tui::SelectList>(
-                    std::move(items),
-                    cch::tui::SelectListOptions{
-                        .max_visible = 10,
-                        .theme = state->controller->live_theme().select_list_theme(),
-                        .on_select = [state, completion](const cch::tui::SelectItem& item) {
-                            if (auto selected = state->controller->select_theme(item.value); !selected) {
-                                state->error = selected.error();
-                                (*completion)(std::nullopt);
-                            } else {
-                                (*completion)(item.value);
-                            }
-                        },
-                        .on_cancel = [completion]() { (*completion)(std::nullopt); },
-                        .keybindings = state->keybindings,
-                    });
-                list->set_selected_index(selected_index);
-                return list;
+                return make_theme_submenu_list(
+                    *state->controller,
+                    state->keybindings,
+                    [state](util::Error error) { state->error = std::move(error); },
+                    std::move(done));
             },
             .keybindings = state->keybindings,
         };
@@ -251,6 +268,26 @@ util::Expected<std::unique_ptr<cch::tui::Overlay>> make_theme_settings_overlay(
         return std::unexpected(attached.error());
     }
     return overlay;
+}
+
+cch::tui::SettingsSubmenuFactoryHook make_theme_settings_submenu_factory(
+    ThemeController& controller,
+    std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
+    ThemeSettingsErrorSink on_error) {
+    if (!keybindings) keybindings = cch::tui::default_tui_keybindings();
+    auto error_sink =
+        std::make_shared<ThemeSettingsErrorSink>(std::move(on_error));
+    return [&controller, keybindings, error_sink](
+               const cch::tui::SettingItem&,
+               cch::tui::SettingsSubmenuDoneSink done) {
+        return make_theme_submenu_list(
+            controller,
+            keybindings,
+            [error_sink](util::Error error) {
+                if (*error_sink) (*error_sink)(std::move(error));
+            },
+            std::move(done));
+    };
 }
 
 } // namespace cch::coding_agent::tui

@@ -81,6 +81,63 @@ void drain_ready(boost::asio::io_context& io) {
     return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
 }
 
+/// One resumed session with a user message and an assistant message carrying
+/// a thinking block, mirroring the `[issue59]` rich-transcript fixture.
+struct RichThinkingSession {
+    tests::TempWorkspace workspace;
+    std::filesystem::path session_file;
+
+    void create() {
+        session_file = workspace.path() / "rich-session.jsonl";
+        auto store = harness::session::JsonlSessionStore::create_new(
+            session_file,
+            {
+                .session_id = "rich-session",
+                .created_at = "2026-07-28T00:00:00Z",
+                .workspace = workspace.path(),
+                .provider = "fake",
+                .model = "fake-model",
+            });
+        REQUIRE(store);
+        REQUIRE(store->append(ai::MessageVariant{
+            ai::user_text_message("resume request", 1'700'000'000'000)}));
+        ai::AssistantMessage assistant;
+        assistant.provider = "fake";
+        assistant.api = "fake";
+        assistant.model = "fake-model";
+        assistant.stop_reason = ai::AssistantStopReason::ToolUse;
+        assistant.timestamp = 1'700'000'000'001;
+        assistant.content.emplace_back(ai::thinking_content(
+            "inspect the saved state\nTHINKING END"));
+        assistant.content.emplace_back(ai::text_content(
+            "I will read the persisted file."));
+        REQUIRE(store->append(ai::MessageVariant{assistant}));
+    }
+
+    [[nodiscard]] auto resume() const {
+        coding_agent::runtime::AgentSessionCreationRequest request;
+        request.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
+        request.workspace = workspace.path();
+        request.no_skills = true;
+        request.no_prompt_templates = true;
+        auto resumed = coding_agent::create_agent_session_for_testing(
+            std::move(request), ai::providers::make_scripted_fake_models());
+        REQUIRE(resumed);
+        return resumed;
+    }
+};
+
+/// The column (0-based) at which `needle` starts in `screen`, counting from
+/// the beginning of its line.
+[[nodiscard]] std::size_t column_of(
+    std::string_view screen,
+    std::string_view needle) {
+    const auto position = screen.find(needle);
+    REQUIRE(position != std::string_view::npos);
+    const auto line_start = screen.rfind('\n', position);
+    return position - (line_start == std::string_view::npos ? 0 : line_start + 1);
+}
+
 class FakeClipboardReader final : public coding_agent::tui::AsyncClipboardReader {
 public:
     [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<coding_agent::tui::ClipboardImage>>>
@@ -3173,10 +3230,30 @@ TEST_CASE(
     REQUIRE(terminal.inject_input("/settings\r"));
     drain_ready(io);
     auto screen = visible_screen(terminal);
+    // The settings selector renders the #327 subset items plus the two
+    // graduated render settings with pi's settings-selector labels
+    // (settings-selector.ts), including the Theme submenu item.
+    CHECK(screen.find("Output padding") != std::string::npos);
+    CHECK(screen.find("Hide thinking") != std::string::npos);
+    CHECK(screen.find("Thinking level") != std::string::npos);
+    CHECK(screen.find("Default project trust") != std::string::npos);
     CHECK(screen.find("Theme") != std::string::npos);
-    CHECK(screen.find("Select the active Native TUI theme") != std::string::npos);
     CHECK(created->session->message_count() == 0);
 
+    // The Theme item opens the single-mode theme submenu with the `(current)`
+    // marker on the active theme.
+    REQUIRE(terminal.inject_input("\x1b[B\x1b[B\x1b[B\x1b[B\r"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    // The `(current)` marker renders as the styled description of the active
+    // theme row, so ANSI may separate it from the theme name.
+    CHECK(screen.find("(current)") != std::string::npos);
+    CHECK(screen.find("dark") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    // Esc closes the theme submenu; a second Esc closes the settings selector.
     REQUIRE(terminal.inject_input("\x1b"));
     REQUIRE(terminal.flush_input());
     drain_ready(io);
@@ -3248,4 +3325,194 @@ TEST_CASE(
     REQUIRE(run_result);
     CHECK(*run_result);
     CHECK_FALSE(terminal.modes().started);
+}
+
+TEST_CASE(
+    "Native TUI app.thinking.toggle persists hideThinkingBlock and reports pi status",
+    "[coding_agent][tui][render-settings][issue408]") {
+    RichThinkingSession fixture;
+    fixture.create();
+    tests::TempWorkspace config;
+    config.write(
+        "keybindings.json",
+        R"({"app.thinking.toggle":"f8","app.exit":"f6"})");
+    auto resumed = fixture.resume();
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *resumed->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    // The thinking block renders at boot (default hideThinkingBlock false).
+    CHECK(visible_screen(terminal).find("inspect the saved state") != std::string::npos);
+
+    // pi `toggleThinkingBlockVisibility`: toggle, persist, rebuild, status.
+    REQUIRE(terminal.inject_input("\x1b[19~"));
+    drain_ready(io);
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("inspect the saved state") == std::string::npos);
+    CHECK(screen.find("Thinking...") != std::string::npos);
+    CHECK(screen.find("Thinking blocks: hidden") != std::string::npos);
+    const auto settings_path = config.path() / "settings.json";
+    REQUIRE(std::filesystem::exists(settings_path));
+    CHECK(read_binary_file(settings_path).find("\"hideThinkingBlock\": true") !=
+        std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x1b[19~"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("inspect the saved state") != std::string::npos);
+    CHECK(screen.find("Thinking blocks: visible") != std::string::npos);
+    CHECK(read_binary_file(settings_path).find("\"hideThinkingBlock\": false") !=
+        std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x1b[17~"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI boots with the persisted hideThinkingBlock and outputPad render settings",
+    "[coding_agent][tui][render-settings][issue408]") {
+    RichThinkingSession fixture;
+    fixture.create();
+    tests::TempWorkspace config;
+    config.write(
+        "settings.json",
+        R"({"hideThinkingBlock": true, "outputPad": 0})");
+    auto resumed = fixture.resume();
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *resumed->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    const auto screen = visible_screen(terminal);
+    // hideThinkingBlock true hides the thinking block behind the pi label.
+    CHECK(screen.find("inspect the saved state") == std::string::npos);
+    CHECK(screen.find("Thinking...") != std::string::npos);
+    // outputPad 0 renders the user message at column 0 (the VirtualTerminal
+    // screen drops the OSC 133 zone prefix; the default padding 1 would shift
+    // the text one column right).
+    CHECK(column_of(screen, "resume request") == 0);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI settings selector changes render settings live and they survive persistence",
+    "[coding_agent][tui][settings-selector][issue408]") {
+    RichThinkingSession fixture;
+    fixture.create();
+    tests::TempWorkspace config;
+    config.write("keybindings.json", R"({"app.exit":"f6"})");
+    auto resumed = fixture.resume();
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *resumed->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    const auto settings_path = config.path() / "settings.json";
+    CHECK(visible_screen(terminal).find("inspect the saved state") != std::string::npos);
+
+    // /settings opens the selector; the first item is output-padding with the
+    // default value 1, so the user message starts one column right of the
+    // OSC zone prefix.
+    REQUIRE(terminal.inject_input("/settings\r"));
+    drain_ready(io);
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("Output padding") != std::string::npos);
+    CHECK(screen.find("Hide thinking") != std::string::npos);
+    // The default outputPad 1 renders the user message one column right of
+    // the zero-padding position.
+    CHECK(column_of(screen, "resume request") == 1);
+
+    // Down to hide-thinking and confirm: the thinking block disappears live
+    // and the global setting persists.
+    REQUIRE(terminal.inject_input("\x1b[B\r"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("inspect the saved state") == std::string::npos);
+    CHECK(screen.find("Thinking...") != std::string::npos);
+    REQUIRE(std::filesystem::exists(settings_path));
+    CHECK(read_binary_file(settings_path).find("\"hideThinkingBlock\": true") !=
+        std::string::npos);
+
+    // Up to output-padding and confirm: the padding cycles 1 → 0, the user
+    // message re-renders one column left, and the setting persists.
+    REQUIRE(terminal.inject_input("\x1b[A\r"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(column_of(screen, "resume request") == 0);
+    CHECK(read_binary_file(settings_path).find("\"outputPad\": 0") != std::string::npos);
+
+    // Esc closes the selector; exit.
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\x1b[17~"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+
+    // A fresh boot with the same config directory applies the persisted
+    // render settings (hideThinkingBlock true, outputPad 0).
+    auto rebooted = fixture.resume();
+    tui::VirtualTerminal reboot_terminal({.columns = 72, .rows = 30});
+    boost::asio::io_context reboot_io;
+    std::optional<util::ExpectedVoid> reboot_result;
+    boost::asio::co_spawn(
+        reboot_io,
+        coding_agent::tui::run_interactive_mode(
+            *rebooted->session,
+            reboot_terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            reboot_result.emplace(std::move(result));
+        });
+    drain_ready(reboot_io);
+    const auto reboot_screen = visible_screen(reboot_terminal);
+    CHECK(reboot_screen.find("inspect the saved state") == std::string::npos);
+    CHECK(reboot_screen.find("Thinking...") != std::string::npos);
+    CHECK(column_of(reboot_screen, "resume request") == 0);
+    REQUIRE(reboot_terminal.inject_input("\x1b[17~"));
+    drain_ready(reboot_io);
+    REQUIRE(reboot_result);
+    CHECK(*reboot_result);
 }

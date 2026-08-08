@@ -104,7 +104,7 @@ set in the main editor:
 | `app.model.cycleBackward` | `shift+ctrl+p` | Cycle to the previous model. |
 | `app.model.select` | `ctrl+l` | Open the model selector. |
 | `app.tools.expand` | `ctrl+o` | Toggle expanded tool output. |
-| `app.thinking.toggle` | `ctrl+t` | Toggle expanded thinking blocks. |
+| `app.thinking.toggle` | `ctrl+t` | Toggle expanded thinking blocks (persists the `hideThinkingBlock` user setting, pi `toggleThinkingBlockVisibility`). |
 | `app.editor.external` | `ctrl+g` | Open the external editor (env-only command source). |
 | `app.message.copy` | `ctrl+x` | Copy the last agent message to the clipboard. |
 | `app.message.followUp` | `alt+enter` | Admit editor text to the Agent Session follow-up queue. |

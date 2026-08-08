@@ -380,13 +380,16 @@ struct ChatContainer::Impl {
     void rebuild_message(MessageItem& item) {
         const auto& message = item.message;
         if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
-            item.component = std::make_unique<UserMessageComponent>(theme, user->content);
+            item.component = std::make_unique<UserMessageComponent>(
+                theme, user->content, output_pad);
             return;
         }
         if (const auto* assistant = std::get_if<ai::AssistantMessage>(&message)) {
             auto component = std::make_unique<AssistantMessageComponent>(
                 theme,
-                hide_thinking_block);
+                hide_thinking_block,
+                "Thinking...",
+                output_pad);
             component->update_content(*assistant);
             item.component = std::move(component);
             return;
@@ -597,6 +600,17 @@ struct ChatContainer::Impl {
         }
     }
 
+    void apply_output_pad_to_components() {
+        for (auto& item : items) {
+            auto* message = std::get_if<MessageItem>(&item);
+            if (message == nullptr || message->component == nullptr) continue;
+            if (std::holds_alternative<ai::UserMessage>(message->message) ||
+                std::holds_alternative<ai::AssistantMessage>(message->message)) {
+                rebuild_message(*message);
+            }
+        }
+    }
+
     [[nodiscard]] util::Expected<cch::tui::RenderResult> render_item(
         const ItemVariant& item,
         std::size_t width,
@@ -652,6 +666,7 @@ struct ChatContainer::Impl {
     std::optional<std::size_t> active_assistant_item;
     bool tools_expanded{false};
     bool hide_thinking_block{false};
+    std::size_t output_pad{1};
 };
 
 ChatContainer::ChatContainer(
@@ -790,9 +805,15 @@ void ChatContainer::toggle_tool_output() {
     impl_->apply_expanded_to_components();
 }
 
-void ChatContainer::toggle_thinking() {
-    impl_->hide_thinking_block = !impl_->hide_thinking_block;
+void ChatContainer::set_hide_thinking_block(bool hide) {
+    impl_->hide_thinking_block = hide;
     impl_->apply_thinking_to_components();
+}
+
+void ChatContainer::set_output_pad(std::size_t output_pad) {
+    if (impl_->output_pad == output_pad) return;
+    impl_->output_pad = output_pad;
+    impl_->apply_output_pad_to_components();
 }
 
 bool ChatContainer::tools_expanded() const {

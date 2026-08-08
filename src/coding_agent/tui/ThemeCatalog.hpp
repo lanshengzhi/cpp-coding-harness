@@ -78,6 +78,9 @@ struct ThemeCatalogResult {
 
 using ThemeSelectionCommitter = std::move_only_function<util::ExpectedVoid(std::string_view)>;
 using ThemeSettingsCancelSink = std::move_only_function<void()>;
+/// Reports one theme-submenu selection failure from the input thread (the
+/// settings-list select sink); callers post to their executor.
+using ThemeSettingsErrorSink = std::move_only_function<void(util::Error)>;
 
 /// Owns the selected palette for one Native TUI and invalidates the borrowed
 /// root after a successful settings-time selection. The Tui must outlive this
@@ -106,6 +109,18 @@ private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };
+
+/// Build the Theme settings submenu factory (the G5 single-mode ThemeSubmenu:
+/// builtins + custom directory + registered themes with the `(current)`
+/// marker). Selection commits the global-scope settings write and applies the
+/// theme through the controller, then completes the submenu with the selected
+/// name; failures report through `on_error` (input thread). Used by the
+/// settings selector; the standalone overlay wrapper is the G5 ticket's
+/// deletion surface.
+[[nodiscard]] cch::tui::SettingsSubmenuFactoryHook make_theme_settings_submenu_factory(
+    ThemeController& controller,
+    std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
+    ThemeSettingsErrorSink on_error = {});
 
 /// Build the supported Theme settings interaction from the immutable effective
 /// catalog. The caller owns overlay attachment/removal; no generalized resource

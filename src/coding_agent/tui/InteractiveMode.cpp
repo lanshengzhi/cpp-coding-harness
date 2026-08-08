@@ -5,6 +5,8 @@
 #include <cch/ai/Auth.hpp>
 #include <cch/ai/Content.hpp>
 #include "coding_agent/AgentSession.hpp"
+#include "ai/ModelThinkingLevel.hpp"
+#include <cch/ai/Model.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/coding_agent/ModelResolver.hpp>
 #include <cch/tui/Autocomplete.hpp>
@@ -33,6 +35,7 @@
 #include "coding_agent/tui/OAuthSelector.hpp"
 #include "coding_agent/tui/OpenBrowser.hpp"
 #include "coding_agent/tui/ScopedModelsSelector.hpp"
+#include "coding_agent/tui/SettingsSelector.hpp"
 #include "coding_agent/tui/StringListSelector.hpp"
 #include "coding_agent/tui/ThemeCatalog.hpp"
 #include "util/UniqueFd.hpp"
@@ -732,6 +735,9 @@ public:
         ActionSink on_cycle_model_backward,
         ActionSink on_select_model,
         ActionSink on_cycle_thinking,
+        ActionSink on_toggle_thinking,
+        bool hide_thinking_block,
+        std::size_t output_pad,
         bool user_bash_available,
         std::unique_ptr<cch::tui::AutocompleteProvider> autocomplete_provider,
         std::unique_ptr<cch::tui::AutocompleteDebounceTimer> autocomplete_debounce_timer,
@@ -751,6 +757,7 @@ public:
           on_cycle_model_backward_(std::move(on_cycle_model_backward)),
           on_select_model_(std::move(on_select_model)),
           on_cycle_thinking_(std::move(on_cycle_thinking)),
+          on_toggle_thinking_(std::move(on_toggle_thinking)),
           user_bash_available_(user_bash_available),
           header_(theme, *keybindings_, user_bash_available, on_clipboard_paste_ != nullptr),
           chat_(theme, *keybindings_),
@@ -773,6 +780,8 @@ public:
                       .editor_revision = editor_revision_,
                   });
               }) {
+        chat_.set_hide_thinking_block(hide_thinking_block);
+        chat_.set_output_pad(output_pad);
         editor_.set_autocomplete_provider(std::move(autocomplete_provider));
     }
     InteractiveView(InteractiveView&&) = delete;
@@ -784,6 +793,12 @@ public:
     void initialize(const AgentSessionSnapshot& snapshot) {
         std::lock_guard lock(mutex_);
         chat_.initialize(snapshot);
+    }
+
+    void apply_render_settings(bool hide_thinking_block, std::size_t output_pad) {
+        std::lock_guard lock(mutex_);
+        chat_.set_hide_thinking_block(hide_thinking_block);
+        chat_.set_output_pad(output_pad);
     }
 
     void apply_event(const agent::AgentLifecycleEvent& event) {
@@ -1197,8 +1212,9 @@ public:
                 return;
             }
             if (keybindings_->matches(*key, "app.thinking.toggle")) {
-                chat_.toggle_thinking();
-                invoke_action(on_invalidate_, "Native TUI invalidation callback failed");
+                invoke_action(
+                    on_toggle_thinking_,
+                    "Native TUI thinking toggle callback failed");
                 return;
             }
             // pi's main-editor `app.model.*` / `app.thinking.cycle` bindings:
@@ -1383,6 +1399,7 @@ private:
     ActionSink on_cycle_model_backward_;
     ActionSink on_select_model_;
     ActionSink on_cycle_thinking_;
+    ActionSink on_toggle_thinking_;
     bool user_bash_available_{false};
     std::optional<util::Error> callback_error_;
     mutable std::mutex mutex_;
@@ -1570,6 +1587,12 @@ private:
                     settings_error.message));
             }
         }
+        // pi `init()`: the render settings load once at boot
+        // (`settingsManager.getHideThinkingBlock()` / `getOutputPad()`) and
+        // apply to the chat; changes persist through the settings manager
+        // and re-apply live (the two G2-graduated fields).
+        hide_thinking_block_ = settings_manager_->hide_thinking_block();
+        output_pad_ = settings_manager_->output_pad();
         const auto capabilities = terminal_.capabilities();
         ThemeCatalogRequest request;
         request.agent_config_directory = config.agent_config_directory;
@@ -1645,6 +1668,11 @@ private:
             [weak] {
                 if (const auto self = weak.lock()) self->post_cycle_thinking();
             },
+            [weak] {
+                if (const auto self = weak.lock()) self->post_toggle_thinking();
+            },
+            hide_thinking_block_,
+            output_pad_,
             detail::AgentSessionInteractiveAccess::has_user_shell(session_),
             std::make_unique<cch::tui::CombinedAutocompleteProvider>(
                 [&] {
@@ -1927,20 +1955,156 @@ private:
         tui_.invalidate();
     }
 
-    void open_settings() {
-        if (active_overlay_ != nullptr || !theme_controller_ || !keybindings_) return;
-        const auto weak = weak_from_this();
-        if (auto overlay = make_theme_settings_overlay(
-                *theme_controller_,
-                keybindings_,
-                [weak] {
-                    if (const auto self = weak.lock()) self->post_close_overlay();
-                });
-            !overlay) {
-            append_command_error(overlay.error());
-        } else if (auto attached = attach_overlay(std::move(*overlay)); !attached) {
-            append_command_error(attached.error());
+    /// pi `showSettingsSelector`: the settings selector renders in the editor
+    /// slot (pi's `showSelector` editorContainer swap) over the #327 settings
+    /// subset plus the two graduated render settings. Changes persist through
+    /// the settings manager (global scope, surgical field-level merge) and
+    /// apply live; the Theme item keeps the G5 single-mode submenu reachable
+    /// until the G5 ticket re-expresses it with preview.
+    void show_settings_selector() {
+        if (!running_ || view_ == nullptr || !session_.is_open() ||
+            !theme_controller_ || !keybindings_ || !settings_manager_) {
+            return;
         }
+        if (active_overlay_ != nullptr) return;
+
+        const auto snapshot = session_.snapshot();
+        SettingsSelectorConfig config;
+        config.hide_thinking_block = hide_thinking_block_;
+        config.output_pad = output_pad_;
+        config.thinking_level = snapshot.agent_state.thinking_level;
+        const auto supported = ai::get_supported_thinking_levels(snapshot.agent_state.model);
+        config.available_thinking_levels.reserve(supported.size());
+        for (const auto level : supported) {
+            if (const auto name = ai::detail::model_thinking_level_name(level)) {
+                config.available_thinking_levels.emplace_back(*name);
+            }
+        }
+        config.default_project_trust =
+            settings_manager_->default_project_trust().value_or(DefaultProjectTrust::Ask);
+        config.current_theme = std::string{theme_controller_->active_theme_name()};
+
+        const auto weak = weak_from_this();
+        SettingsSelectorCallbacks callbacks;
+        callbacks.on_hide_thinking_block_change = [weak](bool hidden) {
+            if (const auto self = weak.lock()) {
+                self->post_from_view([hidden](InteractiveState& state) {
+                    state.set_hide_thinking_block_setting(hidden);
+                });
+            }
+        };
+        callbacks.on_output_pad_change = [weak](std::size_t padding) {
+            if (const auto self = weak.lock()) {
+                self->post_from_view([padding](InteractiveState& state) {
+                    state.set_output_pad_setting(padding);
+                });
+            }
+        };
+        callbacks.on_thinking_level_change = [weak](std::string level) {
+            if (const auto self = weak.lock()) {
+                self->post_from_view([level = std::move(level)](InteractiveState& state) mutable {
+                    // pi `onThinkingLevelChange` → `session.setThinkingLevel`:
+                    // the session persists the `thinking_level_change` entry
+                    // and the global settings default itself.
+                    auto applied = state.session_.set_thinking_level(level);
+                    if (!applied) {
+                        state.show_error(combined_error_text(applied.error()));
+                    }
+                });
+            }
+        };
+        callbacks.on_default_project_trust_change = [weak](DefaultProjectTrust trust) {
+            if (const auto self = weak.lock()) {
+                self->post_from_view([trust](InteractiveState& state) {
+                    if (auto saved =
+                            state.settings_manager_->set_default_project_trust(trust);
+                        !saved) {
+                        state.show_error(combined_error_text(saved.error()));
+                    }
+                });
+            }
+        };
+        callbacks.on_cancel = [weak] {
+            if (const auto self = weak.lock()) {
+                self->post_from_view([](InteractiveState& state) { state.restore_editor_slot(); });
+            }
+        };
+        callbacks.theme_submenu_factory = make_theme_settings_submenu_factory(
+            *theme_controller_,
+            keybindings_,
+            [weak](util::Error error) {
+                if (const auto self = weak.lock()) {
+                    self->post_from_view([error = std::move(error)](InteractiveState& state) {
+                        state.show_error(combined_error_text(error));
+                    });
+                }
+            });
+
+        auto selector = std::make_shared<SettingsSelectorComponent>(
+            theme_controller_->live_theme(),
+            keybindings_,
+            std::move(config),
+            std::move(callbacks));
+        place_editor_replacement(std::move(selector));
+    }
+
+    /// pi `setHideThinkingBlock` + live chat rebuild: persist the global
+    /// `hideThinkingBlock` setting and rebuild the chat from the session
+    /// snapshot so the assistant messages re-render with the new visibility.
+    void set_hide_thinking_block_setting(bool hidden) {
+        hide_thinking_block_ = hidden;
+        if (settings_manager_) {
+            if (auto persisted = settings_manager_->set_hide_thinking_block(hidden);
+                !persisted) {
+                show_error(combined_error_text(persisted.error()));
+            }
+        }
+        rebuild_chat();
+    }
+
+    /// pi `setOutputPad` + live chat rebuild: persist the global `outputPad`
+    /// setting and rebuild the chat so user/assistant messages re-render with
+    /// the new padding.
+    void set_output_pad_setting(std::size_t padding) {
+        output_pad_ = padding;
+        if (settings_manager_) {
+            if (auto persisted = settings_manager_->set_output_pad(padding);
+                !persisted) {
+                show_error(combined_error_text(persisted.error()));
+            }
+        }
+        rebuild_chat();
+    }
+
+    /// pi `toggleThinkingBlockVisibility`: flip the local render setting,
+    /// persist it through the settings manager, rebuild the chat from the
+    /// session (streaming message included), and report the pi status line.
+    void toggle_thinking_block_visibility() {
+        hide_thinking_block_ = !hide_thinking_block_;
+        if (settings_manager_) {
+            if (auto persisted =
+                    settings_manager_->set_hide_thinking_block(hide_thinking_block_);
+                !persisted) {
+                show_error(combined_error_text(persisted.error()));
+            }
+        }
+        rebuild_chat();
+        show_status(
+            "Thinking blocks: " +
+            std::string{hide_thinking_block_ ? "hidden" : "visible"});
+    }
+
+    /// Rebuild the chat from the authoritative session snapshot (pi
+    /// `rebuildChatFromMessages`): the render settings apply first, the
+    /// streaming assistant message re-renders with them, and the
+    /// pending-input queue display is restored.
+    void rebuild_chat() {
+        if (view_ == nullptr) return;
+        view_->apply_render_settings(hide_thinking_block_, output_pad_);
+        const auto snapshot = session_.snapshot();
+        view_->initialize(snapshot);
+        view_->set_pending_input(snapshot.agent_state.input_queues);
+        tui_.invalidate();
     }
 
     void open_hotkeys() {
@@ -2078,6 +2242,15 @@ private:
         boost::asio::post(executor_, [weak] {
             if (const auto self = weak.lock(); self && self->running_) {
                 self->cycle_thinking_level();
+            }
+        });
+    }
+
+    void post_toggle_thinking() {
+        const auto weak = weak_from_this();
+        boost::asio::post(executor_, [weak] {
+            if (const auto self = weak.lock(); self && self->running_) {
+                self->toggle_thinking_block_visibility();
             }
         });
     }
@@ -2956,7 +3129,7 @@ private:
             }
             return;
         case CommandEffect::OpenSettings:
-            open_settings();
+            show_settings_selector();
             return;
         case CommandEffect::OpenHotkeys:
             open_hotkeys();
@@ -3384,6 +3557,11 @@ private:
     /// `theme_controller_` so the controller's committer reference stays
     /// valid through destruction.
     std::optional<coding_agent::SettingsManager> settings_manager_{std::nullopt};
+    /// pi `hideThinkingBlock` / `outputPad` render settings, loaded once at
+    /// boot from the merged settings and mutated by `app.thinking.toggle` and
+    /// the settings selector. The view's chat renders with these values.
+    bool hide_thinking_block_{false};
+    std::size_t output_pad_{1};
     /// Immutable `/model` completion snapshot, replaced on the executor by
     /// `update_model_completion()` whenever the candidate set changes.
     std::shared_ptr<const ModelCompletionSnapshot> model_completion_{};

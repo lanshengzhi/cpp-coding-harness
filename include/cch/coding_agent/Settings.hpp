@@ -72,6 +72,16 @@ struct UserSettings {
     /// pi `retry` — nested turn auto-retry settings consumed by the
     /// session-assembly retry policy.
     std::optional<UserRetrySettings> retry{std::nullopt};
+    /// pi `hideThinkingBlock` — hide thinking blocks in assistant responses
+    /// (default false). Graduated into the #327 field subset with decision 10
+    /// of the G2 record; consumed by the interactive assistant-message
+    /// rendering and `app.thinking.toggle`.
+    std::optional<bool> hide_thinking_block{std::nullopt};
+    /// pi `outputPad` — horizontal padding for user messages, assistant
+    /// messages, and thinking (default 1; only 0 or 1). Graduated into the
+    /// #327 field subset with decision 10 of the G2 record; any non-zero
+    /// stored value resolves as 1 (pi `settings.outputPad === 0 ? 0 : 1`).
+    std::optional<std::size_t> output_pad{std::nullopt};
 };
 
 /// One `settings.json` scope (pi `SettingsScope`).
@@ -156,6 +166,33 @@ public:
     [[nodiscard]] util::ExpectedVoid set_default_thinking_level(
         SettingsScope scope,
         std::string_view value);
+
+    /// Resolved pi `hideThinkingBlock` over the merged view (default false).
+    [[nodiscard]] bool hide_thinking_block() const noexcept;
+    /// Resolved pi `outputPad` over the merged view (default 1; any stored
+    /// non-zero value resolves as 1).
+    [[nodiscard]] std::size_t output_pad() const noexcept;
+
+    /// Surgical field-level write of the pi `hideThinkingBlock` field in the
+    /// global scope (pi `SettingsManager.setHideThinkingBlock`, which always
+    /// writes `globalSettings`); preserves every other field. A global load
+    /// failure suppresses the write. No-op when the value is unchanged.
+    [[nodiscard]] util::ExpectedVoid set_hide_thinking_block(bool hide);
+
+    /// Surgical field-level write of the pi `outputPad` field in the global
+    /// scope (pi `SettingsManager.setOutputPad`, which always writes
+    /// `globalSettings`); preserves every other field. Only 0 and 1 are
+    /// accepted (pi's `outputPad: 0 | 1`); anything else is rejected. A global
+    /// load failure suppresses the write. No-op when the value is unchanged.
+    [[nodiscard]] util::ExpectedVoid set_output_pad(std::size_t padding);
+
+    /// Surgical field-level write of the pi `defaultProjectTrust` field in the
+    /// global scope (pi `SettingsManager.setDefaultProjectTrust`, which always
+    /// writes `globalSettings` and is global-only); preserves every other
+    /// field. A global load failure suppresses the write. No-op when
+    /// unchanged.
+    [[nodiscard]] util::ExpectedVoid set_default_project_trust(
+        DefaultProjectTrust trust);
 
     /// Surgical field-level write of the pi `defaultProvider` and
     /// `defaultModel` fields in the global scope (pi
