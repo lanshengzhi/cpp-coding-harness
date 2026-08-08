@@ -637,6 +637,7 @@ private:
 } // namespace
 
 struct SettingsManager::Impl {
+    std::filesystem::path cwd;
     std::filesystem::path global_path;
     std::filesystem::path project_path;
     bool project_trusted{true};
@@ -711,6 +712,7 @@ SettingsManager SettingsManager::create(
     std::filesystem::path agent_dir,
     bool project_trusted) {
     auto impl = std::make_unique<Impl>();
+    impl->cwd = cwd;
     if (!agent_dir.empty()) {
         impl->global_path = agent_dir / "settings.json";
     }
@@ -757,6 +759,10 @@ const std::filesystem::path& SettingsManager::global_path() const noexcept {
 
 const std::filesystem::path& SettingsManager::project_path() const noexcept {
     return impl_->project_path;
+}
+
+const std::filesystem::path& SettingsManager::cwd() const noexcept {
+    return impl_->cwd;
 }
 
 const UserSettings& SettingsManager::global_settings() const noexcept {

@@ -294,6 +294,7 @@ add_executable(cpp_harness
     src/main.cpp
     src/cli/CliParse.cpp
     src/cli/FrontendSelection.cpp
+    src/cli/ListModels.cpp
     src/coding_agent/runtime/AsyncCliRuntime.cpp
 )
 target_link_libraries(
@@ -350,6 +351,7 @@ if(CCH_BUILD_TESTS)
         tests/cli/CliSmokeTest.cpp
         tests/cli/CliParseTest.cpp
         tests/cli/FrontendSelectionTest.cpp
+        tests/cli/ListModelsTest.cpp
         tests/cli/PrintModeTest.cpp
         tests/cli/InitialPromptTest.cpp
         tests/cli/SessionFamilyCliTest.cpp
@@ -449,6 +451,7 @@ if(CCH_BUILD_TESTS)
     target_sources(cpp_harness_tests PRIVATE
         src/cli/CliParse.cpp
         src/cli/FrontendSelection.cpp
+        src/cli/ListModels.cpp
         src/coding_agent/runtime/AsyncCliRuntime.cpp
     )
     target_compile_definitions(cpp_harness_tests PRIVATE

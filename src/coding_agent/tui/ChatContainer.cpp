@@ -323,6 +323,9 @@ struct ChatContainer::Impl {
     struct DiagnosticItem {
         std::string text;
         bool raw{false};
+        /// Renders as a pi boot warning (`Warning: <text>`, warning token)
+        /// instead of the error diagnostic shape.
+        bool warning{false};
     };
 
     using ItemVariant = std::variant<MessageItem, FrontendItem, DiagnosticItem>;
@@ -611,6 +614,14 @@ struct ChatContainer::Impl {
             return render_plain(theme, frontend->text, width, ThemeToken::Text);
         }
         const auto& diagnostic = std::get<DiagnosticItem>(item);
+        if (diagnostic.warning) {
+            return render_plain(
+                theme,
+                "Warning: " + diagnostic.text,
+                width,
+                ThemeToken::Warning,
+                !diagnostic.raw);
+        }
         return render_plain(
             theme,
             "Error: " + diagnostic.text,
@@ -731,6 +742,14 @@ void ChatContainer::append_frontend_message(std::string text) {
 
 void ChatContainer::append_diagnostic(std::string text) {
     impl_->items.emplace_back(Impl::DiagnosticItem{safe_text(std::move(text))});
+}
+
+void ChatContainer::append_warning(std::string text) {
+    impl_->items.emplace_back(Impl::DiagnosticItem{
+        .text = safe_text(std::move(text)),
+        .raw = false,
+        .warning = true,
+    });
 }
 
 void ChatContainer::append_user_bash_diagnostic(std::string text) {

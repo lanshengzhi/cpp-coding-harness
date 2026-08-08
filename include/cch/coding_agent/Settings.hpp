@@ -115,6 +115,9 @@ public:
     [[nodiscard]] const std::filesystem::path& global_path() const noexcept;
     /// Resolved project settings path (`<cwd>/.pi/settings.json`).
     [[nodiscard]] const std::filesystem::path& project_path() const noexcept;
+    /// The project root `cwd` this manager was created for (the path the
+    /// project scope derives from).
+    [[nodiscard]] const std::filesystem::path& cwd() const noexcept;
 
     /// Global scope settings.
     [[nodiscard]] const UserSettings& global_settings() const noexcept;

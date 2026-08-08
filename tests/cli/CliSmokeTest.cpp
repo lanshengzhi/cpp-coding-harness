@@ -23,6 +23,7 @@
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <sys/wait.h>
+#include <format>
 #endif
 
 #ifndef CCH_BINARY
@@ -228,6 +229,20 @@ cch::tests::CliRunResult run_in_workspace(
         .args = std::move(args),
         .cwd = workspace.path(),
     });
+}
+
+/// pi `formatMissingSessionCwdError` (session-cwd.ts), verbatim.
+[[nodiscard]] std::string missing_cwd_error_text(
+    const std::filesystem::path& session_cwd,
+    const std::filesystem::path& session_file,
+    const std::filesystem::path& fallback_cwd) {
+    return std::format(
+        "Stored session working directory does not exist: {}\n"
+        "Session file: {}\n"
+        "Current working directory: {}\n",
+        session_cwd.string(),
+        session_file.string(),
+        fallback_cwd.string());
 }
 
 } // namespace
@@ -1078,15 +1093,16 @@ TEST_CASE("CLI resume falls back with a diagnostic when the stored model no long
     REQUIRE(first.exit_code == 0);
 
     // Remove the configured model, then resume: the stored identity no longer
-    // resolves, so resume falls back with a normal diagnostic.
+    // resolves, so the chain falls back through the runtime default. The
+    // fallback message is an interactive boot warning only (pi
+    // `modelFallbackMessage`); print mode drops it entirely.
     std::filesystem::remove(models_path);
     auto second = run_command_split(
         "cd " + shell_quote(workspace.path()) + " && HOME=" + shell_quote(home.path()) + " " + bin() +
         " --resume " + shell_quote(session));
 
     REQUIRE(second.exit_code == 0);
-    CHECK(second.stderr_text.find("resume_model_unresolved") != std::string::npos);
-    CHECK(second.stderr_text.find("deepseek/deepseek-v4-flash") != std::string::npos);
+    CHECK(second.stderr_text.find("Could not restore model") == std::string::npos);
 }
 
 TEST_CASE("CLI --api-key installs an in-memory runtime API key override", "[cli][api-key][issue346]") {
@@ -1735,4 +1751,59 @@ TEST_CASE("CLI unavailable session directory override fails explicitly without f
     // No fallback: neither the default root nor the workspace gains a transcript.
     CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
     CHECK_FALSE(std::filesystem::exists(workspace.path() / ".cpp-harness" / "sessions"));
+}
+
+TEST_CASE(
+    "CLI non-interactive resume of a session with a vanished cwd prints pi's error and exits 1",
+    "[cli][session-family][issue404]") {
+    cch::tests::TempWorkspace original;
+    cch::tests::TempWorkspace other;
+    cch::tests::TempWorkspace storage;
+    auto session = storage.path() / "vanished-cwd.jsonl";
+    auto first = run_in_workspace(
+        original, {"--session", session.string(), "first"});
+    REQUIRE(first.exit_code == 0);
+
+    // The session header cwd vanishes while the session file survives.
+    std::error_code ec;
+    REQUIRE(std::filesystem::remove_all(original.path(), ec) > 0);
+    CHECK_FALSE(ec);
+
+    auto resumed = cch::tests::run_cli(cch::tests::CliRunOptions{
+        .args = {"--resume", session.string(), "second"},
+        .cwd = other.path(),
+    });
+
+    REQUIRE(resumed.exit_code == 1);
+    CHECK(resumed.stdout_text.empty());
+    CHECK(resumed.stderr_text == missing_cwd_error_text(
+        original.path(), session, other.path()));
+    CHECK_FALSE(std::filesystem::exists(session.parent_path() / "sessions"));
+}
+
+TEST_CASE(
+    "CLI --session open of a session with a vanished cwd fails identically",
+    "[cli][session-family][issue404]") {
+    cch::tests::TempWorkspace original;
+    cch::tests::TempWorkspace other;
+    cch::tests::TempWorkspace storage;
+    auto session = storage.path() / "vanished-open.jsonl";
+    auto first = run_in_workspace(
+        original, {"--session", session.string(), "first"});
+    REQUIRE(first.exit_code == 0);
+
+    std::error_code ec;
+    REQUIRE(std::filesystem::remove_all(original.path(), ec) > 0);
+    CHECK_FALSE(ec);
+
+    // pi `SessionManager.open` on the existing file resumes (header cwd from
+    // the file), so the missing-cwd boot check applies to --session too.
+    auto resumed = cch::tests::run_cli(cch::tests::CliRunOptions{
+        .args = {"--session", session.string(), "second"},
+        .cwd = other.path(),
+    });
+
+    REQUIRE(resumed.exit_code == 1);
+    CHECK(resumed.stderr_text == missing_cwd_error_text(
+        original.path(), session, other.path()));
 }

@@ -3,6 +3,7 @@
 #include <cch/ai/Models.hpp>
 #include <cch/agent/AgentContext.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
+#include <cch/coding_agent/AuthGuidance.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
@@ -541,29 +542,20 @@ void refresh_availability_sync(
     return agent::detail::kDefaultModel;
 }
 
-/// pi `restoreModelFromSession` restore check: the stored `model_change`
+/// pi `sdk.ts` `createAgentSession` restore check: the stored `model_change`
 /// identity must resolve in the live runtime catalog AND its provider must
-/// have configured auth (`restoredModel && hasConfiguredAuth`). Returns pi's
-/// failure reason ("model no longer exists" | "no auth configured") or
-/// nullopt when the restore succeeds.
-[[nodiscard]] std::optional<std::string> resume_restore_failure_reason(
+/// have configured auth (`restoredModel && hasConfiguredAuth`). Returns true
+/// when the stored identity cannot be restored.
+[[nodiscard]] bool resume_model_restore_failed(
     const ModelRuntime& runtime,
     const std::string& provider,
     const std::string& model_id) {
     auto restored = runtime.model(provider, model_id);
     if (!restored) {
-        return std::string{"model no longer exists"};
+        return true;
     }
-    if (!runtime.has_configured_auth(restored->provider)) {
-        return std::string{"no auth configured"};
-    }
-    return std::nullopt;
+    return !runtime.has_configured_auth(restored->provider);
 }
-
-/// Resume restore: re-resolve the stored `model_change` identity against the
-/// live runtime catalog (pi `restoreModelFromSession`: the restored model must
-/// exist AND its provider must have configured auth). The fallback message
-/// completes with the resolved model after the chain runs.
 /// Build the session's ModelRuntime: the injected/adopted runtime wins; a
 /// default-created runtime derives its Agent Config Directory from the
 /// environment default.
@@ -783,9 +775,8 @@ struct SessionTargetNormalizationOptions {
     bool is_resume,
     const std::optional<std::string>& stored_provider,
     const std::optional<std::string>& stored_model,
-    const std::optional<std::string>& resume_restore_reason,
-    const coding_agent::UserSettings& settings,
-    std::vector<SessionDiagnostic>& diagnostics) {
+    bool resume_restore_failed,
+    const coding_agent::UserSettings& settings) {
     const auto& selection = plan.cli_selection;
 
     // 1. CLI --model (with optional --provider) wins.
@@ -807,17 +798,10 @@ struct SessionTargetNormalizationOptions {
     // 3. Resume: re-resolve the stored model_change identity against the live
     // runtime catalog and require configured auth (pi `restoreModelFromSession`:
     // `restoredModel && hasConfiguredAuth`). A restored model wins immediately;
-    // a missing/unauthenticated model produces pi's fallback message (reason
-    // precomputed in run_assembly) and the chain continues through settings
-    // and runtime defaults without silent substitution.
-    if (resume_restore_reason) {
-        diagnostics.push_back(make_diag(
-            SessionDiagnostic::Severity::Warning,
-            "resume_model_unresolved",
-            std::format(
-                "Could not restore model {}/{} ({}).",
-                *stored_provider, *stored_model, *resume_restore_reason)));
-    } else if (stored_provider && stored_model) {
+    // a missing/unauthenticated model continues through settings and runtime
+    // defaults without silent substitution — the boot fallback message is
+    // assembled by run_assembly after the chain lands.
+    if (!resume_restore_failed && stored_provider && stored_model) {
         if (auto restored = runtime.model(*stored_provider, *stored_model);
             restored && runtime.has_configured_auth(restored->provider)) {
             return *restored;
@@ -853,6 +837,26 @@ struct SessionTargetNormalizationOptions {
     return runtime_default_model(runtime);
 }
 
+/// pi `session-cwd.ts` `MissingSessionCwdError` + `formatMissingSessionCwdError`,
+/// verbatim: the non-interactive boot error for a resumed session whose stored
+/// header cwd no longer exists. The CLI prints the message alone (no
+/// "could not resume session:" prefix) and exits 1; the interactive
+/// Continue/Cancel prompt lands with the startup-TUI host.
+[[nodiscard]] util::Error missing_session_cwd_error(
+    const std::filesystem::path& session_file,
+    const std::filesystem::path& session_cwd,
+    const std::filesystem::path& fallback_cwd) {
+    return util::make_error(
+        util::ErrorCode::MissingSessionCwd,
+        std::format(
+            "Stored session working directory does not exist: {}\n"
+            "Session file: {}\n"
+            "Current working directory: {}",
+            session_cwd.string(),
+            session_file.string(),
+            fallback_cwd.string()));
+}
+
 [[nodiscard]] util::Expected<CreateAgentSessionResult> run_assembly(
     AssemblyPlan plan,
     SettingsSnapshot& snapshot,
@@ -864,6 +868,8 @@ struct SessionTargetNormalizationOptions {
     // with a most-recent session) prepare their resume view first so the
     // model chain below re-resolves the stored identity.
     std::filesystem::path workspace;
+    const auto launch_cwd = std::visit(
+        [](const auto& target) { return target.workspace; }, plan.target);
     PreparedResumeTarget prepared_resume;
     std::optional<NewSessionPublication> new_publication;
     bool is_resume = false;
@@ -977,6 +983,33 @@ struct SessionTargetNormalizationOptions {
             "unsupported session target"));
     }
 
+    // pi main.ts missing-cwd recovery (session-cwd.ts): a resumed session
+    // whose stored header cwd no longer exists fails the boot with pi's
+    // MissingSessionCwdError text. The check engages only when the header
+    // cwd replaced the launch cwd (an empty header keeps the launch cwd, and
+    // forks always target the launch cwd). The interactive Continue/Cancel
+    // prompt lands with the startup-TUI host; until then both frontends
+    // surface the stderr error and exit 1.
+    if (is_resume && workspace != launch_cwd) {
+        std::error_code exists_ec;
+        if (!std::filesystem::exists(workspace, exists_ec)) {
+            return std::unexpected(missing_session_cwd_error(
+                prepared_resume.resume_path, workspace, launch_cwd));
+        }
+    }
+
+    // pi main.ts: cwd-bound services (settings, resources, provider
+    // registrations, models) resolve against the target session cwd, not the
+    // process cwd — a resumed session from another project binds the project
+    // settings scope to the session header cwd. The project scope stays
+    // untrusted until the trust decision below reloads it.
+    if (is_resume && snapshot.manager.cwd() != workspace) {
+        snapshot.manager = coding_agent::SettingsManager::create(
+            workspace,
+            coding_agent::agent_config_dir(),
+            /* project_trusted */ false);
+    }
+
     // 2. Settings load errors stay observable as warning diagnostics. Global
     // errors are known at bootstrap; project-scope errors surface after the
     // project trust decision below reloads the project scope.
@@ -1088,15 +1121,15 @@ struct SessionTargetNormalizationOptions {
         stored_model = prepared_resume.resume.model;
     }
 
-    // Resume: record why the stored `model_change {provider, modelId}` cannot
-    // be restored against the live runtime (pi `restoreModelFromSession`: the
-    // restored model must exist AND its provider must have configured auth).
-    // The fallback message completes with the resolved model after the chain
-    // runs; an explicit `--model`/request model skips the restore check and
-    // never produces the diagnostic.
-    std::optional<std::string> resume_restore_reason;
-    if (is_resume && stored_provider && stored_model) {
-        resume_restore_reason = resume_restore_failure_reason(
+    // Resume: record whether the stored `model_change {provider, modelId}`
+    // can be restored against the live runtime (pi `sdk.ts` `createAgentSession`:
+    // the restored model must exist AND its provider must have configured
+    // auth). An explicit `--model`/request model skips the restore check and
+    // never produces the fallback message.
+    bool resume_restore_failed = false;
+    if (is_resume && stored_provider && stored_model &&
+        !plan.cli_selection.model && !plan.requested_model && !plan.cli_fake) {
+        resume_restore_failed = resume_model_restore_failed(
             *runtime, *stored_provider, *stored_model);
     }
 
@@ -1124,7 +1157,7 @@ struct SessionTargetNormalizationOptions {
     } else {
         auto resolved = resolve_cli_request_model(
             plan, *runtime, is_resume, stored_provider, stored_model,
-            resume_restore_reason, settings, diagnostics);
+            resume_restore_failed, settings);
         if (!resolved) {
             return std::unexpected(resolved.error());
         }
@@ -1142,16 +1175,31 @@ struct SessionTargetNormalizationOptions {
     resolved_provider = request_model.provider;
     resolved_model = request_model.id;
 
-    // pi `restoreModelFromSession`: once the chain lands on the fallback
-    // model, the resume fallback message completes with the resolved identity
-    // (`Could not restore model p/m (reason). Using fp/fm.`).
-    if (resume_restore_reason) {
-        for (auto& diagnostic : diagnostics) {
-            if (diagnostic.code == "resume_model_unresolved") {
-                diagnostic.message += std::format(
-                    " Using {}/{}.", request_model.provider, request_model.id);
-            }
+    // pi `sdk.ts` `createAgentSession` `modelFallbackMessage`: when the stored
+    // identity cannot be restored, the boot warning names the resolved
+    // fallback (`. Using <provider>/<model>`); when nothing is available the
+    // message is pi's `formatNoModelsAvailableMessage()` instead — including
+    // for fresh sessions whose resolution chain lands on the unknown
+    // placeholder (pi `if (!model)`). Never a stderr diagnostic: the
+    // interactive frontend surfaces it as a boot warning and print mode
+    // drops it.
+    std::optional<std::string> model_fallback_message;
+    const bool landed_on_placeholder =
+        request_model.provider == agent::detail::kDefaultModel.provider &&
+        request_model.id == agent::detail::kDefaultModel.id;
+    if (resume_restore_failed) {
+        if (landed_on_placeholder) {
+            model_fallback_message = coding_agent::format_no_models_available_message(
+                std::filesystem::path{coding_agent::kDefaultAuthGuidanceDocsPath});
+        } else {
+            model_fallback_message = std::format(
+                "Could not restore model {}/{}. Using {}/{}",
+                *stored_provider, *stored_model,
+                request_model.provider, request_model.id);
         }
+    } else if (landed_on_placeholder) {
+        model_fallback_message = coding_agent::format_no_models_available_message(
+            std::filesystem::path{coding_agent::kDefaultAuthGuidanceDocsPath});
     }
 
     // Resume: explicit provider/model overrides are allowed but warned.
@@ -1253,6 +1301,18 @@ struct SessionTargetNormalizationOptions {
         }
     }
 
+    // pi sdk.ts `createAgentSession` thinking restore: the effective
+    // pre-clamp level is the resumed `thinking_level_change` entry (when the
+    // session has one), else the settings `defaultThinkingLevel`, else pi's
+    // DEFAULT_THINKING_LEVEL ("medium"). The Agent clamps the request at
+    // construction (ADR 0034 / #352), so the persisted initial entries below
+    // carry the same clamped value.
+    const std::string effective_thinking_level = ai::clamp_thinking_level_string(
+        request_model,
+        is_resume && prepared_resume.resume.has_thinking_level_entry
+            ? prepared_resume.resume.thinking_level
+            : settings.default_thinking_level.value_or("medium"));
+
     // 9. Publish the session only after all fallible prerequisites succeeded.
     OpenSession open;
     if (is_resume) {
@@ -1262,6 +1322,20 @@ struct SessionTargetNormalizationOptions {
             return std::unexpected(published.error());
         }
         open = std::move(*published);
+        // pi sdk.ts: a resumed session without a `thinking_level_change`
+        // entry gets the restored level appended so a later resume restores
+        // it; a session that already carries the entry stays untouched.
+        if (!prepared_resume.resume.has_thinking_level_entry) {
+            if (auto* jsonl_store =
+                    dynamic_cast<harness::session::JsonlSessionStore*>(open.store.get())) {
+                if (auto appended = jsonl_store->append_thinking_level_change(
+                        std::nullopt, effective_thinking_level);
+                    !appended) {
+                    cleanup_on_failure();
+                    return std::unexpected(appended.error());
+                }
+            }
+        }
     } else {
         auto published = publish_session(
             std::move(*new_publication),
@@ -1273,13 +1347,29 @@ struct SessionTargetNormalizationOptions {
         }
         open = std::move(*published);
         // Persist the session's `model_change {provider, modelId}` as the first
-        // content entry (pi `setModel` → `appendModelChange`). Resume re-resolves
-        // this identity against the live runtime catalog; no baseUrl, key-source,
+        // content entry (pi `setModel` → `appendModelChange`) — skipped for the
+        // unknown placeholder, exactly like pi's `if (model)` guard, so a
+        // zero-model session never records a spurious unknown/unknown identity
+        // that a later resume would warn about. Resume re-resolves this
+        // identity against the live runtime catalog; no baseUrl, key-source,
         // or authentication material ever enters the session file (ADR 0031).
+        const bool placeholder_model =
+            resolved_provider == agent::detail::kDefaultModel.provider &&
+            resolved_model == agent::detail::kDefaultModel.id;
         if (auto* jsonl_store =
                 dynamic_cast<harness::session::JsonlSessionStore*>(open.store.get())) {
-            if (auto appended = jsonl_store->append_model_change(
-                    std::nullopt, resolved_provider, resolved_model);
+            if (!placeholder_model) {
+                if (auto appended = jsonl_store->append_model_change(
+                        std::nullopt, resolved_provider, resolved_model);
+                    !appended) {
+                    cleanup_on_failure();
+                    return std::unexpected(appended.error());
+                }
+            }
+            // pi sdk.ts: new sessions persist the initial thinking level as
+            // the second entry so a later resume restores it.
+            if (auto appended = jsonl_store->append_thinking_level_change(
+                    std::nullopt, effective_thinking_level);
                 !appended) {
                 cleanup_on_failure();
                 return std::unexpected(appended.error());
@@ -1349,6 +1439,7 @@ struct SessionTargetNormalizationOptions {
     CreateAgentSessionResult result;
     result.runtime = std::move(runtime_handle);
     result.diagnostics = std::move(diagnostics);
+    result.model_fallback_message = std::move(model_fallback_message);
     result.session_id = metadata.session_id;
     result.provider = resolved_provider;
     result.model = resolved_model;

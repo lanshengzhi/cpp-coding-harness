@@ -29,6 +29,10 @@ struct InteractiveModeConfig {
     std::unique_ptr<AsyncClipboardReader> clipboard_reader{nullptr};
     std::optional<std::string> initial_prompt{std::nullopt};
     PromptOptions initial_prompt_options{};
+    /// pi `modelFallbackMessage` (sdk.ts `createAgentSession`): shown as a
+    /// `Warning: <message>` boot line in the chat container (pi
+    /// `interactive-mode.ts` `showWarning`). Absent in print mode.
+    std::optional<std::string> model_fallback_message{std::nullopt};
 };
 
 /// Run the private Native TUI composition until its exit binding is received.

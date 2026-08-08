@@ -28,6 +28,14 @@ inline constexpr std::string_view kDefaultAuthGuidanceDocsPath = "~/.pi/docs";
            "  " + (docs_path / "models.md").string();
 }
 
+/// pi `formatNoModelsAvailableMessage` (`auth-guidance.ts`), verbatim: the
+/// no-models boot/list-models message, with the two docs-path lines resolved
+/// from `docs_path`.
+[[nodiscard]] inline std::string format_no_models_available_message(
+    const std::filesystem::path& docs_path) {
+    return "No models available. " + get_provider_login_help(docs_path);
+}
+
 /// pi `formatNoApiKeyFoundMessage` (`auth-guidance.ts`), verbatim: the
 /// no-key re-auth branch. An `unknown` provider id renders as "the selected
 /// model".

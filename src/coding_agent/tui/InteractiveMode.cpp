@@ -659,6 +659,11 @@ public:
         chat_.append_diagnostic(std::move(text));
     }
 
+    void append_warning(std::string text) {
+        std::lock_guard lock(mutex_);
+        chat_.append_warning(std::move(text));
+    }
+
     void append_user_bash_diagnostic(std::string text) {
         std::lock_guard lock(mutex_);
         chat_.append_user_bash_diagnostic(std::move(text));
@@ -1181,6 +1186,7 @@ public:
 
     [[nodiscard]] util::ExpectedVoid start(InteractiveModeConfig config) {
         clipboard_reader_ = std::move(config.clipboard_reader);
+        model_fallback_message_ = std::move(config.model_fallback_message);
         if (auto registered = register_commands(); !registered) {
             return fail_start(registered.error());
         }
@@ -1399,6 +1405,11 @@ private:
         const auto snapshot = session_.snapshot();
         view_->initialize(snapshot);
         view_->set_pending_input(snapshot.agent_state.input_queues);
+        // pi `interactive-mode.ts` `init()`: the model fallback message shows
+        // as a boot warning line (`showWarning`) before the initial prompt.
+        if (model_fallback_message_) {
+            view_->append_warning(*model_fallback_message_);
+        }
         for (const auto& diagnostic : snapshot.agent_state.diagnostics) {
             auto text = combined_error_text(diagnostic);
             view_->append_diagnostic(text);
@@ -2104,6 +2115,7 @@ private:
     std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings_;
     std::optional<ThemeController> theme_controller_;
     std::unique_ptr<AsyncClipboardReader> clipboard_reader_;
+    std::optional<std::string> model_fallback_message_;
     boost::asio::any_io_executor executor_;
     boost::asio::steady_timer exit_wait_;
     std::optional<EventSubscription> subscription_;

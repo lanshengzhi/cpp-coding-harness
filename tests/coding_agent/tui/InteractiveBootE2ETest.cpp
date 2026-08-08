@@ -469,3 +469,43 @@ TEST_CASE(
     REQUIRE(run_result);
     CHECK(*run_result);
 }
+
+TEST_CASE(
+    "E2E: the model fallback message renders as a boot warning line",
+    "[coding_agent][tui][e2e][issue404]") {
+    auto fixture = make_e2e_session(scripted_turn_runtime());
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 24});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *fixture->session,
+            terminal,
+            {.agent_config_directory = fixture->config.path(),
+             .model_fallback_message =
+                 "Could not restore model deepseek/deepseek-v4-flash. "
+                 "Using openai-codex/gpt-5.5"}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    // pi interactive-mode.ts `showWarning`: `Warning: <modelFallbackMessage>`
+    // renders in the chat container before the initial prompt (wrapped at
+    // the terminal width like pi's Text component).
+    const auto screen = visible_screen(terminal);
+    CHECK(screen.find(
+              "Warning: Could not restore model deepseek/deepseek-v4-flash.") !=
+          std::string::npos);
+    CHECK(screen.find("openai-codex/gpt-5.5") != std::string::npos);
+    // The resumed history still renders below the warning.
+    CHECK(screen.find("Resume request: check the notes file.") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}

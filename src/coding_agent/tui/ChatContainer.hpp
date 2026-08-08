@@ -45,6 +45,9 @@ public:
     void clear();
     void append_frontend_message(std::string text);
     void append_diagnostic(std::string text);
+    /// Append one pi-shaped boot warning (`Warning: <text>`, warning token) —
+    /// the `modelFallbackMessage` presentation of interactive boot.
+    void append_warning(std::string text);
     /// Append one User Bash diagnostic. ADR 0028: User Bash command, output,
     /// and error-diagnostic values pass through raw like pi — bounded, never
     /// redacted.

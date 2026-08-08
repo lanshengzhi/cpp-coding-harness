@@ -26,6 +26,10 @@ struct CreateAgentSessionResult {
     /// Diagnostics collected during creation (provider fallback,
     /// resource load warnings, etc.).
     std::vector<coding_agent::SessionDiagnostic> diagnostics;
+    /// pi `modelFallbackMessage`: set when a persisted session's stored
+    /// `model_change` identity could not be restored (interactive boot
+    /// warning only; never a stderr diagnostic).
+    std::optional<std::string> model_fallback_message;
     /// Resolved session metadata.
     std::string session_id;
     std::string provider;

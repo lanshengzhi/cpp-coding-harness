@@ -2,6 +2,7 @@
 
 #include "cli/CliParse.hpp"
 #include "cli/InitialPrompt.hpp"
+#include "cli/ListModels.hpp"
 #include "cli/PrintMode.hpp"
 #include "cli/SessionFamily.hpp"
 #include "coding_agent/AgentSession.hpp"
@@ -113,7 +114,8 @@ void print_session_diagnostics(
 
 [[nodiscard]] int run_native_tui(
     coding_agent::AgentSession& session,
-    InitialMessageResult initial) {
+    InitialMessageResult initial,
+    std::optional<std::string> model_fallback_message) {
     cch::tui::ProcessTerminal terminal;
     boost::asio::io_context io;
     auto future = boost::asio::co_spawn(
@@ -130,6 +132,7 @@ void print_session_diagnostics(
                     .expand_prompt_templates = true,
                     .images = std::move(initial.initial_images),
                 },
+                .model_fallback_message = std::move(model_fallback_message),
             }),
         boost::asio::use_future);
     io.run();
@@ -193,6 +196,68 @@ void print_session_diagnostics(
         return 1;
     }
 
+    coding_agent::runtime::AgentSessionCreationRequest request;
+    // The interactive Native TUI always receives its independent User Shell
+    // (ADR 0026); the one-shot print path keeps ordinary-prompt semantics
+    // for leading '!' text.
+    const bool is_resume_target =
+        std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(
+            assembly->target);
+    request.provide_user_shell = frontend == Frontend::Interactive;
+    request.project_trust_override = config.project_trust_override;
+    request.disable_project_skills = config.no_skills;
+    request.disable_prompt_templates = config.no_prompt_templates;
+    request.prompt_template_paths = config.prompt_template_paths;
+    request.workspace = config.workspace;
+    request.session_target = std::move(assembly->target);
+    request.session_name = config.name;
+    request.session_dir = config.session_dir;
+    request.provider = config.provider;
+    request.model = config.model;
+    request.models = config.models;
+    request.api_key = config.api_key;
+
+    const auto print_creation_failure = [&](const util::Error& error) {
+        // pi `MissingSessionCwdError`: the resumed session's stored header
+        // cwd no longer exists — the stderr error is pi's verbatim text with
+        // no "could not resume session:" prefix, and the run exits 1. The
+        // interactive Continue/Cancel prompt lands with the startup-TUI
+        // host; until then both frontends surface this error.
+        if (error.code == util::ErrorCode::MissingSessionCwd) {
+            streams.error << error.message << '\n';
+        } else {
+            print_creation_error(is_resume_target, streams.error, error);
+        }
+        return 1;
+    };
+
+    // The private test seam injects the deterministic fake catalog; at most
+    // one of the two call sites below executes per run, so moving `models`
+    // here is safe.
+    const auto create_session = [&]() {
+        return models
+            ? coding_agent::create_agent_session_for_testing(
+                  std::move(request), std::move(models))
+            : coding_agent::create_agent_session(std::move(request));
+    };
+
+    // pi main.ts: `--list-models` runs post-runtime pre-stdin and exits 0
+    // after printing (the in-memory session is a means to the runtime; the
+    // table prints before any diagnostics, matching pi's
+    // listModels-before-reportDiagnostics order).
+    if (config.list_models) {
+        auto created = create_session();
+        if (!created) {
+            return print_creation_failure(created.error());
+        }
+        print_list_models(
+            *created->session->model_runtime(),
+            config.list_models,
+            streams.output,
+            streams.error);
+        return 0;
+    }
+
     // pi `readPipedStdin`: piped stdin is trimmed and only present when it
     // has content; a TTY stdin contributes nothing.
     auto piped_input = read_piped_input(
@@ -222,34 +287,9 @@ void print_session_diagnostics(
         return 1;
     }
 
-    coding_agent::runtime::AgentSessionCreationRequest request;
-    // The interactive Native TUI always receives its independent User Shell
-    // (ADR 0026); the one-shot print path keeps ordinary-prompt semantics
-    // for leading '!' text.
-    const bool is_resume_target =
-        std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(
-            assembly->target);
-    request.provide_user_shell = frontend == Frontend::Interactive;
-    request.project_trust_override = config.project_trust_override;
-    request.disable_project_skills = config.no_skills;
-    request.disable_prompt_templates = config.no_prompt_templates;
-    request.prompt_template_paths = config.prompt_template_paths;
-    request.workspace = config.workspace;
-    request.session_target = std::move(assembly->target);
-    request.session_name = config.name;
-    request.session_dir = config.session_dir;
-    request.provider = config.provider;
-    request.model = config.model;
-    request.models = config.models;
-    request.api_key = config.api_key;
-
-    auto created = models
-        ? coding_agent::create_agent_session_for_testing(
-              std::move(request), std::move(models))
-        : coding_agent::create_agent_session(std::move(request));
+    auto created = create_session();
     if (!created) {
-        print_creation_error(is_resume_target, streams.error, created.error());
-        return 1;
+        return print_creation_failure(created.error());
     }
     print_session_diagnostics(streams.error, created->diagnostics);
 
@@ -265,7 +305,10 @@ void print_session_diagnostics(
         }
         initial->initial_message = std::move(interactive_text);
         initial->remaining_messages.clear();
-        return run_native_tui(session, std::move(*initial));
+        return run_native_tui(
+            session,
+            std::move(*initial),
+            std::move(created->model_fallback_message));
     }
 
     return run_print_mode(
