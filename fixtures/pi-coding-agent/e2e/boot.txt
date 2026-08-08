@@ -1,0 +1,24 @@
+escape interrupt · ctrl+c/ctrl+d · / commands · ctrl+o more             
+                                                                        
+ Resume request: check the notes file.                                  
+                                                                        
+                                                                
+ Resumed reply: the notes file is ready.                                
+                                                                        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

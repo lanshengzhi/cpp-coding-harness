@@ -17,14 +17,12 @@
 #include "coding_agent/ImageInput.hpp"
 #include "coding_agent/prompt/SlashCommandParser.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
-#include "coding_agent/tui/InteractionPolicy.hpp"
-#include "coding_agent/tui/InterruptAdmission.hpp"
+#include "coding_agent/tui/BashExecutionComponent.hpp"
+#include "coding_agent/tui/ChatContainer.hpp"
 #include "coding_agent/tui/KeybindingCatalog.hpp"
 #include "coding_agent/tui/KeybindingHelp.hpp"
+#include "coding_agent/tui/KeybindingHints.hpp"
 #include "coding_agent/tui/ThemeCatalog.hpp"
-#include "coding_agent/tui/Transcript.hpp"
-#include "coding_agent/tui/UserBashPresentation.hpp"
-#include "coding_agent/tui/UserBashSyntax.hpp"
 #include "util/UniqueFd.hpp"
 #include "util/TerminalText.hpp"
 
@@ -83,6 +81,65 @@ struct EditorInterruptRequest {
 
 using InterruptSink = std::move_only_function<void(EditorInterruptRequest)>;
 using SubmitSink = std::move_only_function<void(EditorSubmissionRequest)>;
+
+// ── Focused-editor User Bash syntax (ADR 0026) ────────────────────────────
+// Folded from the deleted UserBashSyntax module: only a direct focused
+// Native TUI editor submission interprets the `!`/`!!` prefixes.
+
+struct UserBashInvocation {
+    std::string command;
+    bool exclude_from_context{false};
+};
+
+/// Trims ASCII whitespace from both ends of one editor submission.
+[[nodiscard]] std::string trim_editor_submission(std::string text) {
+    const auto first = std::find_if_not(text.begin(), text.end(), [](unsigned char value) {
+        return std::isspace(value) != 0;
+    });
+    const auto last = std::find_if_not(text.rbegin(), text.rend(), [](unsigned char value) {
+        return std::isspace(value) != 0;
+    }).base();
+    if (first >= last) return {};
+    return {first, last};
+}
+
+/// Parses one trimmed submission as User Bash. `!` runs with later model
+/// context; `!!` runs excluded from model conversion; `!!!foo` is excluded
+/// User Bash running `!foo`. A bare `!` or `!!` yields no invocation and
+/// falls through to an ordinary Agent Prompt.
+[[nodiscard]] std::optional<UserBashInvocation> parse_user_bash_invocation(
+    std::string text) {
+    text = trim_editor_submission(std::move(text));
+    if (!text.starts_with('!')) return std::nullopt;
+    const bool excluded = text.starts_with("!!");
+    auto command = trim_editor_submission(text.substr(excluded ? 2 : 1));
+    if (command.empty()) return std::nullopt;
+    return UserBashInvocation{
+        .command = std::move(command),
+        .exclude_from_context = excluded,
+    };
+}
+
+/// Bash mode is the unsubmitted editor state whose trimmed text begins with
+/// `!`; it exists only where User Bash dispatch is available.
+[[nodiscard]] bool user_bash_editor_mode(
+    std::string text,
+    bool user_bash_available) {
+    return user_bash_available &&
+        trim_editor_submission(std::move(text)).starts_with('!');
+}
+
+// ── Submission kinds (folded from the deleted InteractionPolicy) ──────────
+
+enum class InputSubmission { Ordinary, FollowUp };
+enum class SubmissionOrigin { FocusedEditor, InitialPrompt };
+
+enum class InterruptRoute {
+    AbortAgentRun,
+    CancelUserBash,
+    ClearPendingBash,
+    None,
+};
 
 struct InteractiveStartupDiagnostics {
     std::vector<KeybindingDiagnostic> keybindings;
@@ -506,14 +563,18 @@ private:
     bool focused_{false};
 };
 
+/// The pi main-screen composition: header (keybinding hints only, no logo),
+/// chat, pending-messages, status, editor, and footer containers, stacked in
+/// pi's order with the chat absorbing the flexible space. The status and
+/// footer containers are placeholders whose content lands with the
+/// footer/status ticket (P15); the editor, chat, pending display, header
+/// hints, and the interrupt binding follow pi's interactive-mode routing.
 class InteractiveView final
     : public cch::tui::Component,
       public cch::tui::InputHandler,
       public cch::tui::Focusable,
       public cch::tui::ViewportAware {
 public:
-    // Runtime activity stays with InteractiveState; the view contributes only
-    // the pending-Bash fact sampled from editor state when interrupt is pressed.
     InteractiveView(
         std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
         ActionSink on_invalidate,
@@ -539,7 +600,8 @@ public:
           on_interrupt_(std::move(on_interrupt)),
           on_exit_(std::move(on_exit)),
           user_bash_available_(user_bash_available),
-          transcript_(theme, *keybindings_),
+          header_(theme, *keybindings_, user_bash_available, on_clipboard_paste_ != nullptr),
+          chat_(theme, *keybindings_),
           theme_(&theme),
           editor_(
               cch::tui::EditorOptions{
@@ -558,10 +620,7 @@ public:
                       .text = std::move(text),
                       .editor_revision = editor_revision_,
                   });
-              }),
-          pending_bash_([this](bool exclude_from_context) {
-              return make_bash_loader(exclude_from_context);
-          }) {
+              }) {
         editor_.set_autocomplete_provider(std::move(autocomplete_provider));
     }
     InteractiveView(InteractiveView&&) = delete;
@@ -572,37 +631,37 @@ public:
 
     void initialize(const AgentSessionSnapshot& snapshot) {
         std::lock_guard lock(mutex_);
-        transcript_.initialize(snapshot);
+        chat_.initialize(snapshot);
     }
 
     void apply_event(const agent::AgentLifecycleEvent& event) {
         std::lock_guard lock(mutex_);
-        transcript_.apply_event(event);
+        chat_.apply_event(event);
     }
 
     void append_committed_message(ai::MessageVariant message) {
         std::lock_guard lock(mutex_);
-        transcript_.append_committed_message(std::move(message));
+        chat_.append_committed_message(std::move(message));
     }
 
     void clear_transcript() {
         std::lock_guard lock(mutex_);
-        transcript_.clear();
+        chat_.clear();
     }
 
     void append_frontend_message(std::string text) {
         std::lock_guard lock(mutex_);
-        transcript_.append_frontend_message(std::move(text));
+        chat_.append_frontend_message(std::move(text));
     }
 
     void append_diagnostic(std::string text) {
         std::lock_guard lock(mutex_);
-        transcript_.append_diagnostic(std::move(text));
+        chat_.append_diagnostic(std::move(text));
     }
 
     void append_user_bash_diagnostic(std::string text) {
         std::lock_guard lock(mutex_);
-        transcript_.append_user_bash_diagnostic(std::move(text));
+        chat_.append_user_bash_diagnostic(std::move(text));
     }
 
     void restore_submitted_text(const std::string& text) {
@@ -647,12 +706,42 @@ public:
 
     void set_user_bash_progress(runtime::UserBashProgress progress) {
         std::lock_guard lock(mutex_);
-        pending_bash_.update(std::move(progress));
+        if (!pending_bash_) {
+            pending_bash_ = std::make_unique<BashExecutionComponent>(
+                *theme_,
+                *keybindings_,
+                progress.command,
+                progress.exclude_from_context);
+            pending_bash_->start_loader([this] {
+                if (!on_invalidate_) return;
+                try {
+                    on_invalidate_();
+                } catch (...) {
+                }
+            });
+            last_bash_output_size_ = 0;
+            bash_outcome_set_ = false;
+        }
+        if (progress.output.size() > last_bash_output_size_) {
+            pending_bash_->append_output(progress.output.substr(last_bash_output_size_));
+        }
+        last_bash_output_size_ = progress.output.size();
+        if (progress.awaiting_commitment && !bash_outcome_set_) {
+            bash_outcome_set_ = true;
+            pending_bash_->set_complete(
+                progress.exit_code,
+                progress.cancelled,
+                progress.truncated,
+                progress.full_output_path);
+        }
+        pending_bash_->set_expanded(chat_.tools_expanded());
     }
 
     void clear_user_bash_progress() {
         std::lock_guard lock(mutex_);
-        pending_bash_.clear();
+        pending_bash_.reset();
+        last_bash_output_size_ = 0;
+        bash_outcome_set_ = false;
     }
 
     /// Replaces the pending block with its committed transcript entry in one
@@ -660,14 +749,77 @@ public:
     /// at call sites.
     void commit_user_bash(ai::MessageVariant message) {
         std::lock_guard lock(mutex_);
-        pending_bash_.clear();
-        transcript_.append_committed_message(std::move(message));
+        pending_bash_.reset();
+        last_bash_output_size_ = 0;
+        bash_outcome_set_ = false;
+        chat_.append_committed_message(std::move(message));
     }
 
     [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override {
         std::lock_guard lock(mutex_);
         if (callback_error_) return std::unexpected(*callback_error_);
-        editor_.set_available_height(available_rows_);
+
+        // Header (keybinding hints), pending-messages, status, and footer
+        // render first so the editor and autocomplete capacities account for
+        // their fixed rows (pi's dock below the chat).
+        std::vector<std::string> header_lines;
+        if (auto header = header_.render(width); !header) {
+            return std::unexpected(header.error());
+        } else {
+            header_lines = std::move(header->lines);
+        }
+        // Status and footer containers are part of the composition; their
+        // content lands with the footer/status ticket (P15).
+        std::vector<std::string> status_lines;
+        std::vector<std::string> footer_lines;
+
+        std::vector<std::string> pending_lines;
+        pending_lines.reserve(pending_steering_.size() + pending_follow_up_.size() + 3);
+        if (pending_bash_) {
+            // One Bash block while pending; it becomes an ordinary chat entry
+            // through the same component after commitment.
+            pending_bash_->set_expanded(chat_.tools_expanded());
+            auto block = pending_bash_->render(width);
+            if (!block) return std::unexpected(block.error());
+            pending_lines.insert(
+                pending_lines.end(),
+                std::make_move_iterator(block->lines.begin()),
+                std::make_move_iterator(block->lines.end()));
+        }
+        for (const auto& message : pending_steering_) {
+            cch::tui::TruncatedText item{"Steering: " + message};
+            if (auto rendered = item.render(width); !rendered) {
+                return std::unexpected(rendered.error());
+            } else if (!rendered->lines.empty()) {
+                pending_lines.push_back(std::move(rendered->lines.front()));
+            }
+        }
+        for (const auto& message : pending_follow_up_) {
+            cch::tui::TruncatedText item{"Follow-up: " + message};
+            if (auto rendered = item.render(width); !rendered) {
+                return std::unexpected(rendered.error());
+            } else if (!rendered->lines.empty()) {
+                pending_lines.push_back(std::move(rendered->lines.front()));
+            }
+        }
+        if (!pending_lines.empty()) {
+            const auto hint = keybindings_->key_text("app.message.dequeue");
+            cch::tui::TruncatedText item{std::format(
+                "↳ {} to edit all queued messages",
+                hint.empty() ? "Unbound" : format_key_text(hint, true))};
+            if (auto rendered = item.render(width); !rendered) {
+                return std::unexpected(rendered.error());
+            } else if (!rendered->lines.empty()) {
+                pending_lines.push_back(std::move(rendered->lines.front()));
+            }
+        }
+        const auto fixed_rows =
+            header_lines.size() + pending_lines.size() + status_lines.size() +
+            footer_lines.size();
+
+        editor_.set_available_height(available_rows_ > fixed_rows
+            ? available_rows_ - fixed_rows
+            : 1);
         // The editor enters Bash mode as soon as the trimmed input begins
         // with `!` (where User Bash dispatch is available).
         editor_.set_theme(unsubmitted_bash_mode()
@@ -686,8 +838,8 @@ public:
         const auto autocomplete = editor_.autocomplete_items();
         const auto selected = editor_.autocomplete_selected_index();
         constexpr std::size_t kMaxAutocompleteRows = 5;
-        const auto autocomplete_capacity = available_rows_ > editor_lines.size()
-            ? std::min(kMaxAutocompleteRows, available_rows_ - editor_lines.size())
+        const auto autocomplete_capacity = available_rows_ > fixed_rows + editor_lines.size()
+            ? std::min(kMaxAutocompleteRows, available_rows_ - fixed_rows - editor_lines.size())
             : 0;
         const auto first_autocomplete = selected < autocomplete_capacity || autocomplete_capacity == 0
             ? 0
@@ -710,66 +862,13 @@ public:
                 autocomplete_lines.push_back(std::move(rendered->lines.front()));
             }
         }
-
-        std::vector<std::string> pending_lines;
-        pending_lines.reserve(pending_steering_.size() + pending_follow_up_.size() + 3);
-        if (pending_bash_.active()) {
-            // One Bash block while pending; it becomes an ordinary transcript
-            // entry through the same presentation after commitment.
-            auto block = pending_bash_.render(
-                *theme_,
-                *keybindings_,
-                transcript_.tools_expanded(),
-                width);
-            if (!block) return std::unexpected(block.error());
-            pending_lines.insert(
-                pending_lines.end(),
-                std::make_move_iterator(block->begin()),
-                std::make_move_iterator(block->end()));
-        }
-        for (const auto& message : pending_steering_) {
-            cch::tui::TruncatedText item{"Steering: " + message};
-            if (auto rendered = item.render(width); !rendered) {
-                return std::unexpected(rendered.error());
-            } else if (!rendered->lines.empty()) {
-                pending_lines.push_back(std::move(rendered->lines.front()));
-            }
-        }
-        for (const auto& message : pending_follow_up_) {
-            cch::tui::TruncatedText item{"Follow-up: " + message};
-            if (auto rendered = item.render(width); !rendered) {
-                return std::unexpected(rendered.error());
-            } else if (!rendered->lines.empty()) {
-                pending_lines.push_back(std::move(rendered->lines.front()));
-            }
-        }
-        if (!pending_lines.empty()) {
-            const auto hint = keybindings_->key_text("app.message.dequeue");
-            cch::tui::TruncatedText item{std::format(
-                "↳ {} to edit all queued messages",
-                hint.empty() ? "Unbound" : hint)};
-            if (auto rendered = item.render(width); !rendered) {
-                return std::unexpected(rendered.error());
-            } else if (!rendered->lines.empty()) {
-                pending_lines.push_back(std::move(rendered->lines.front()));
-            }
-        }
-
-        const auto editor_occupied_rows = editor_lines.size() + autocomplete_lines.size();
-        const auto pending_capacity = available_rows_ > editor_occupied_rows
-            ? available_rows_ - editor_occupied_rows
+        const auto chat_capacity = available_rows_ > fixed_rows + editor_lines.size() + autocomplete_lines.size()
+            ? available_rows_ - fixed_rows - editor_lines.size() - autocomplete_lines.size()
             : 0;
-        if (pending_lines.size() > pending_capacity) {
-            pending_lines.erase(
-                pending_lines.begin(),
-                pending_lines.end() - static_cast<std::ptrdiff_t>(pending_capacity));
-        }
 
-        cch::tui::RenderResult transcript_result;
-        const auto occupied_rows = editor_occupied_rows + pending_lines.size();
-        if (available_rows_ > occupied_rows) {
-            const auto capacity = available_rows_ - occupied_rows;
-            auto rendered = transcript_.render(width);
+        cch::tui::RenderResult chat_result;
+        if (chat_capacity > 0) {
+            auto rendered = chat_.render(width);
             if (!rendered) return std::unexpected(rendered.error());
 
             std::vector<std::size_t> materialized_rows(rendered->lines.size(), 1);
@@ -785,8 +884,8 @@ public:
             while (first_row > 0) {
                 const auto candidate_row = first_row - 1;
                 const auto row_cost = materialized_rows[candidate_row];
-                if (row_cost > capacity - used_rows) {
-                    if (used_rows < capacity) {
+                if (row_cost > chat_capacity - used_rows) {
+                    if (used_rows < chat_capacity) {
                         first_row = candidate_row;
                         fallback_only_row = candidate_row;
                     }
@@ -795,7 +894,7 @@ public:
                 first_row = candidate_row;
                 used_rows += row_cost;
             }
-            transcript_result.lines.assign(
+            chat_result.lines.assign(
                 rendered->lines.begin() + static_cast<std::ptrdiff_t>(first_row),
                 rendered->lines.end());
             for (auto& image : rendered->images) {
@@ -805,14 +904,28 @@ public:
                     continue;
                 }
                 image.region.row -= first_row;
-                transcript_result.images.push_back(std::move(image));
+                chat_result.images.push_back(std::move(image));
             }
         }
 
+        cch::tui::RenderResult transcript_result;
+        transcript_result.lines = std::move(header_lines);
+        for (auto& image : chat_result.images) {
+            image.region.row += transcript_result.lines.size();
+            transcript_result.images.push_back(std::move(image));
+        }
+        transcript_result.lines.insert(
+            transcript_result.lines.end(),
+            std::make_move_iterator(chat_result.lines.begin()),
+            std::make_move_iterator(chat_result.lines.end()));
         transcript_result.lines.insert(
             transcript_result.lines.end(),
             std::make_move_iterator(pending_lines.begin()),
             std::make_move_iterator(pending_lines.end()));
+        transcript_result.lines.insert(
+            transcript_result.lines.end(),
+            std::make_move_iterator(status_lines.begin()),
+            std::make_move_iterator(status_lines.end()));
         editor_row_offset_ = transcript_result.lines.size();
         transcript_result.lines.insert(
             transcript_result.lines.end(),
@@ -822,6 +935,10 @@ public:
             transcript_result.lines.end(),
             std::make_move_iterator(autocomplete_lines.begin()),
             std::make_move_iterator(autocomplete_lines.end()));
+        transcript_result.lines.insert(
+            transcript_result.lines.end(),
+            std::make_move_iterator(footer_lines.begin()),
+            std::make_move_iterator(footer_lines.end()));
         return transcript_result;
     }
 
@@ -844,8 +961,9 @@ public:
             if (keybindings_->matches(*key, "app.interrupt") &&
                 !editor_cancels_interrupt) {
                 // Autocomplete cancellation stays in the view. Interrupt
-                // Admission owns every later precedence decision and receives
-                // Bash mode as it existed at key-press time.
+                // precedence is pi's onEscape chain and owns every later
+                // decision; it receives Bash mode as it existed at key-press
+                // time.
                 invoke_interrupt(EditorInterruptRequest{
                     .pending_bash_text = editor_.expanded_text(),
                     .editor_revision = editor_revision_,
@@ -872,12 +990,13 @@ public:
                 return;
             }
             if (keybindings_->matches(*key, "app.tools.expand")) {
-                transcript_.toggle_tool_output();
+                chat_.toggle_tool_output();
+                header_.set_expanded(chat_.tools_expanded());
                 invoke_action(on_invalidate_, "Native TUI invalidation callback failed");
                 return;
             }
             if (keybindings_->matches(*key, "app.thinking.toggle")) {
-                transcript_.toggle_thinking();
+                chat_.toggle_thinking();
                 invoke_action(on_invalidate_, "Native TUI invalidation callback failed");
                 return;
             }
@@ -908,7 +1027,12 @@ public:
     [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override {
         std::lock_guard lock(mutex_);
         auto cursor = editor_.cursor_location();
-        if (cursor) cursor->row += editor_row_offset_;
+        if (cursor) {
+            cursor->row += editor_row_offset_;
+            // The header/chat may overflow tiny terminals; keep the IME
+            // cursor on the last visible row so rendering never fails.
+            cursor->row = std::min(cursor->row, available_rows_ - 1);
+        }
         return cursor;
     }
 
@@ -1004,28 +1128,6 @@ private:
         return user_bash_editor_mode(editor_.expanded_text(), user_bash_available_);
     }
 
-    [[nodiscard]] std::unique_ptr<cch::tui::Loader> make_bash_loader(
-        bool exclude_from_context) {
-        const auto cancel_key = keybindings_->key_text("app.interrupt");
-        cch::tui::LoaderOptions options;
-        // Render scheduling is thread-safe; failures surface on the next
-        // render rather than through callback state.
-        options.request_render = [this] {
-            if (!on_invalidate_) return;
-            try {
-                on_invalidate_();
-            } catch (...) {
-            }
-        };
-        options.spinner_style = theme_->foreground_hook(
-            exclude_from_context ? ThemeToken::Dim : ThemeToken::BashMode);
-        options.message_style = theme_->foreground_hook(ThemeToken::Muted);
-        options.message = std::format(
-            "Running... ({} to cancel)",
-            cancel_key.empty() ? "Unbound" : cancel_key);
-        return std::make_unique<cch::tui::Loader>(std::move(options));
-    }
-
     std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings_;
     cch::tui::TerminalCapabilities terminal_capabilities_;
     ActionSink on_invalidate_;
@@ -1038,15 +1140,18 @@ private:
     bool user_bash_available_{false};
     std::optional<util::Error> callback_error_;
     mutable std::mutex mutex_;
-    Transcript transcript_;
+    // pi's main-screen containers.
+    KeybindingHints header_;
+    ChatContainer chat_;
     const LiveTheme* theme_; // must outlive the view: controller-owned live theme.
     cch::tui::Editor editor_;
     std::size_t editor_revision_{0};
     std::vector<std::string> pending_steering_;
     std::vector<std::string> pending_follow_up_;
-    // Declared after every sink its loader may invoke so destruction stops
-    // the loader first.
-    PendingUserBashPresentation pending_bash_;
+    // The live pending User Bash block (pi's pendingMessagesContainer).
+    std::unique_ptr<BashExecutionComponent> pending_bash_;
+    std::size_t last_bash_output_size_{0};
+    bool bash_outcome_set_{false};
     std::size_t available_rows_{24};
     std::size_t editor_row_offset_{0};
 };
@@ -1442,7 +1547,7 @@ private:
 
     void post_interrupt(EditorInterruptRequest request) {
         const auto weak = weak_from_this();
-        const auto prompt_generation = interrupt_admission_.generation();
+        const auto prompt_generation = generation();
         boost::asio::post(
             executor_,
             [weak, prompt_generation, request = std::move(request)] {
@@ -1626,27 +1731,66 @@ private:
         }
     }
 
-    [[nodiscard]] InteractionActivity interaction_activity() const {
-        return InteractionActivity{
-            .user_shell_available =
-                detail::AgentSessionInteractiveAccess::has_user_shell(session_),
-            .user_bash_active = user_bash_active_,
-            .prompt_active = prompt_active_,
-            .interrupt_requested = interrupt_admission_.interrupt_requested(),
-        };
+    // ── Interrupt admission (pi onEscape precedence, folded from the
+    //    deleted InterruptAdmission) ──────────────────────────────────────
+
+    /// The prompt generation captured when an input-thread request is posted.
+    [[nodiscard]] std::size_t generation() const noexcept {
+        return prompt_generation_.load();
     }
 
+    /// Advances admission state immediately before a new Agent prompt starts.
+    void note_prompt_started() noexcept {
+        (void)prompt_generation_.fetch_add(1);
+        interrupt_requested_generation_.reset();
+    }
+
+    /// Invalidates requests captured before the active Agent prompt finished.
+    void note_prompt_finished() noexcept {
+        (void)prompt_generation_.fetch_add(1);
+        interrupt_requested_generation_.reset();
+    }
+
+    /// Reports whether the active prompt generation already admitted an abort.
+    [[nodiscard]] bool interrupt_requested() const noexcept {
+        return interrupt_requested_generation_ == prompt_generation_.load();
+    }
+
+    /// Admits a current interrupt request and selects its pi-ordered target:
+    /// an active Agent run aborts first, then a running User Bash cancels,
+    /// then a pending User Bash submission clears the editor.
+    [[nodiscard]] InterruptRoute admit_interrupt(
+        std::size_t captured_generation,
+        bool pending_bash) noexcept {
+        if (captured_generation != prompt_generation_.load()) return InterruptRoute::None;
+        if (prompt_active_) {
+            if (interrupt_requested_generation_ == prompt_generation_.load()) {
+                return InterruptRoute::None;
+            }
+            interrupt_requested_generation_ = prompt_generation_.load();
+            return InterruptRoute::AbortAgentRun;
+        }
+        if (user_bash_active_) return InterruptRoute::CancelUserBash;
+        if (pending_bash) return InterruptRoute::ClearPendingBash;
+        return InterruptRoute::None;
+    }
+
+    // ── Submission routing (pi setupEditorSubmitHandler, folded from the
+    //    deleted InteractionPolicy) ───────────────────────────────────────
+
     [[nodiscard]] bool dispatch_user_bash(const std::string& text, SubmissionOrigin origin) {
-        auto route = route_user_bash(text, origin, interaction_activity());
-        if (!route) return false;
-        if (const auto* busy = std::get_if<RestoreUserBashBusy>(&*route)) {
-            view_->restore_submitted_text(busy->recall);
+        if (origin != SubmissionOrigin::FocusedEditor) return false;
+        if (!detail::AgentSessionInteractiveAccess::has_user_shell(session_)) return false;
+        auto invocation = parse_user_bash_invocation(text);
+        if (!invocation) return false;
+        if (user_bash_active_) {
+            // pi: "A bash command is already running..." and setText(text).
+            view_->restore_submitted_text(trim_editor_submission(text));
             view_->append_user_bash_diagnostic(
                 "A User Bash command is already in flight");
             tui_.invalidate();
             return true;
         }
-        auto invocation = std::get<LaunchUserBash>(std::move(*route)).invocation;
 
         user_bash_active_ = true;
         // The original trimmed submission is what failure restores to the
@@ -1660,8 +1804,8 @@ private:
              recall = std::move(recall)]() mutable -> boost::asio::awaitable<void> {
                 auto result = co_await detail::AgentSessionInteractiveAccess::run_user_bash(
                     self->session_,
-                    std::move(invocation.command),
-                    invocation.exclude_from_context,
+                    std::move(invocation->command),
+                    invocation->exclude_from_context,
                     [self](
                         const runtime::UserBashProgress& progress) -> util::ExpectedVoid {
                         if (self->running_ && self->view_ != nullptr) {
@@ -1692,10 +1836,7 @@ private:
         std::size_t prompt_generation,
         const EditorInterruptRequest& request) {
         if (!running_ || exit_requested_) return;
-        switch (interrupt_admission_.admit(
-            interaction_activity(),
-            prompt_generation,
-            request.pending_bash)) {
+        switch (admit_interrupt(prompt_generation, request.pending_bash)) {
         case InterruptRoute::AbortAgentRun:
             // pi restores queued input before aborting the Agent run.
             dequeue_pending_input(false);
@@ -1729,30 +1870,37 @@ private:
         }
         if (dispatch_user_bash(text, origin)) return;
         if (dispatch_command(text)) return;
-        const auto route = route_prompt(submission, interaction_activity());
-        if (route == PromptRoute::RestoreInterrupted) {
-            view_->restore_submitted_text(text);
-            view_->append_diagnostic("A prompt is already in flight");
-            tui_.invalidate();
-            return;
-        }
-        if (route == PromptRoute::QueueSteering || route == PromptRoute::QueueFollowUp) {
-            if (auto admitted = route == PromptRoute::QueueFollowUp
-                    ? session_.follow_up(text)
-                    : session_.steer(text);
-                !admitted) {
+
+        if (prompt_active_) {
+            if (interrupt_requested()) {
+                // The active run was already asked to abort; queued input
+                // would die with it, so the text returns to the editor.
                 view_->restore_submitted_text(text);
-                view_->append_diagnostic(bounded_redacted_presentation(std::format(
-                    "Unable to queue {} input: {}",
-                    route == PromptRoute::QueueFollowUp ? "follow-up" : "steering",
-                    combined_error_text(admitted.error()))));
+                view_->append_diagnostic("A prompt is already in flight");
+                tui_.invalidate();
+                return;
+            }
+            if (submission == InputSubmission::FollowUp) {
+                if (auto admitted = session_.follow_up(text); !admitted) {
+                    view_->restore_submitted_text(text);
+                    view_->append_diagnostic(bounded_redacted_presentation(std::format(
+                        "Unable to queue follow-up input: {}",
+                        combined_error_text(admitted.error()))));
+                }
+            } else {
+                if (auto admitted = session_.steer(text); !admitted) {
+                    view_->restore_submitted_text(text);
+                    view_->append_diagnostic(bounded_redacted_presentation(std::format(
+                        "Unable to queue steering input: {}",
+                        combined_error_text(admitted.error()))));
+                }
             }
             sync_pending_input();
             tui_.invalidate();
             return;
         }
 
-        interrupt_admission_.note_prompt_started();
+        note_prompt_started();
         prompt_active_ = true;
         const auto self = shared_from_this();
         boost::asio::co_spawn(
@@ -1821,7 +1969,7 @@ private:
     }
 
     void prompt_launch_failed(std::exception_ptr exception) {
-        interrupt_admission_.note_prompt_finished();
+        note_prompt_finished();
         prompt_active_ = false;
         std::string detail = "unknown exception";
         try {
@@ -1838,7 +1986,7 @@ private:
     }
 
     void prompt_finished(util::ExpectedVoid result, const std::string& submitted_text) {
-        interrupt_admission_.note_prompt_finished();
+        note_prompt_finished();
         prompt_active_ = false;
         sync_session_observations();
         if (!result && view_ != nullptr && running_) {
@@ -1951,7 +2099,12 @@ private:
     std::atomic<bool> running_{false};
     std::atomic<bool> prompt_active_{false};
     std::atomic<bool> user_bash_active_{false};
-    InterruptAdmission interrupt_admission_;
+    // Prompt-generation staleness for interrupt requests (pi onEscape
+    // routing; the deleted InterruptAdmission's generation). The generation
+    // is read from the input thread at post time, so it stays atomic; the
+    // admitted-generation marker is executor-confined.
+    std::atomic<std::size_t> prompt_generation_{0};
+    std::optional<std::size_t> interrupt_requested_generation_;
     // Suppresses a submission already decoded from Bash text cleared by an
     // earlier key-time interrupt decision.
     std::optional<std::size_t> cleared_editor_revision_;

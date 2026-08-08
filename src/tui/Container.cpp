@@ -21,6 +21,10 @@ util::Expected<std::reference_wrapper<Component>> Container::add_child(
     return detail::attach_child(children_, std::move(component), "Container");
 }
 
+void Container::clear() {
+    children_.clear();
+}
+
 util::Expected<RenderResult> Container::render(std::size_t width) {
     if (width == 0) {
         return std::unexpected(util::make_error(
@@ -69,6 +73,10 @@ util::Expected<std::reference_wrapper<Component>> Box::add_child(
 
 void Box::clear() {
     children_.clear();
+}
+
+void Box::set_background_hook(BackgroundHook background_hook) {
+    background_hook_ = std::move(background_hook);
 }
 
 util::Expected<RenderResult> Box::render(std::size_t width) {

@@ -33,6 +33,53 @@ struct RecordedStreamSimpleCall {
 /// virtual stream surface is callable; the base runtime holds no impl.
 class FakeModelRuntime final : public coding_agent::ModelRuntime {
 public:
+    /// Session-seam overrides (the §7.2 recorded exception): the impl-less
+    /// fake serves model resolution and auth preflight so a session can run a
+    /// scripted turn end to end. The served model uses the scripted-fake API
+    /// identity like the Models-seam fake provider.
+    [[nodiscard]] std::optional<ai::Model> model(
+        std::string_view provider_id,
+        std::string_view model_id) const override {
+        ai::Model model;
+        model.id = std::string{model_id};
+        model.name = model.id;
+        model.api = "scripted-fake";
+        model.provider = std::string{provider_id};
+        model.reasoning = false;
+        model.input = {ai::ModelInput::Text};
+        model.context_window = 128000;
+        model.max_tokens = 16384;
+        return model;
+    }
+
+    boost::asio::awaitable<util::Expected<std::vector<ai::Model>>> get_available(
+        std::optional<std::string_view> provider_id = std::nullopt) override {
+        std::vector<ai::Model> models;
+        if (auto resolved = model(
+                provider_id.value_or("fake"), "fake-model")) {
+            models.push_back(std::move(*resolved));
+        }
+        co_return models;
+    }
+
+    boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>> check_auth(
+        std::string provider_id) override {
+        (void)provider_id;
+        co_return ai::AuthCheck{
+            .source = "fake",
+            .type = ai::AuthType::ApiKey,
+        };
+    }
+
+    bool has_configured_auth(std::string_view provider_id) const override {
+        (void)provider_id;
+        return true;
+    }
+
+    std::vector<std::string> configured_api_key_env_names() const override {
+        return {};
+    }
+
     boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
         ai::Model model,
         ai::AiContext context,

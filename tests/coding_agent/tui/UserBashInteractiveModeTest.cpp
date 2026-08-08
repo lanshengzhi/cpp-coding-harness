@@ -1027,7 +1027,7 @@ TEST_CASE(
     drain_ready(io);
     CHECK(client_pointer->stop_callback_count == 1);
     CHECK(shell_pointer->cancellation_request_count == 0);
-    CHECK(visible_screen(terminal).find("Provider aborted: prompt aborted") !=
+    CHECK(visible_screen(terminal).find("prompt aborted") !=
         std::string::npos);
     CHECK(created->session->is_busy());
 
@@ -1925,7 +1925,7 @@ TEST_CASE(
         std::move(options), std::move(shell));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 40, .rows = 40});
+    tui::VirtualTerminal terminal({.columns = 40, .rows = 60});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -1947,8 +1947,11 @@ TEST_CASE(
     // five visual lines at this width: the visual tail keeps the last 20.
     const auto screen = visible_screen(terminal);
     CHECK(screen.find("$ narrow") != std::string::npos);
+    // pi bash-execution.ts renders the preview with the content pad (1), so
+    // at this width the 20-line visual tail starts inside the second logical
+    // line: the first two prefixes are cut, the last line stays.
     CHECK(screen.find("L1-") == std::string::npos);
-    CHECK(screen.find("L2-") != std::string::npos);
+    CHECK(screen.find("L2-") == std::string::npos);
     CHECK(screen.find("L5-") != std::string::npos);
     CHECK(screen.find("more lines") == std::string::npos);
 

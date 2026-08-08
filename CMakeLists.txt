@@ -98,15 +98,11 @@ target_link_libraries(cch_tui
 )
 
 add_library(cch_coding_agent_tui
-    src/coding_agent/tui/BashBlock.cpp
-    src/coding_agent/tui/InteractionPolicy.cpp
-    src/coding_agent/tui/InterruptAdmission.cpp
     src/coding_agent/tui/KeybindingCatalog.cpp
     src/coding_agent/tui/KeybindingHelp.cpp
     src/coding_agent/tui/Theme.cpp
     src/coding_agent/tui/ThemeCatalog.cpp
     src/coding_agent/tui/ThemeSettings.cpp
-    src/coding_agent/tui/UserBashSyntax.cpp
 )
 cch_target_defaults(cch_coding_agent_tui)
 target_link_libraries(cch_coding_agent_tui
@@ -273,8 +269,13 @@ target_link_libraries(cch_coding_agent_runtime
 
 add_library(cch_coding_agent_interactive
     src/coding_agent/tui/InteractiveMode.cpp
-    src/coding_agent/tui/Transcript.cpp
-    src/coding_agent/tui/UserBashPresentation.cpp
+    src/coding_agent/tui/AssistantMessageComponent.cpp
+    src/coding_agent/tui/BashExecutionComponent.cpp
+    src/coding_agent/tui/ChatContainer.cpp
+    src/coding_agent/tui/DiffRenderer.cpp
+    src/coding_agent/tui/KeybindingHints.cpp
+    src/coding_agent/tui/ToolExecutionComponent.cpp
+    src/coding_agent/tui/UserMessageComponent.cpp
 )
 cch_target_defaults(cch_coding_agent_interactive)
 target_link_libraries(cch_coding_agent_interactive
@@ -374,15 +375,12 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/SkillLoaderTest.cpp
         tests/coding_agent/PromptTemplateLoaderTest.cpp
         tests/coding_agent/tui/InteractiveModeTest.cpp
-        tests/coding_agent/tui/InterruptAdmissionTest.cpp
         tests/coding_agent/tui/KeybindingCatalogTest.cpp
         tests/coding_agent/tui/ProcessInteractiveModeTest.cpp
         tests/coding_agent/tui/ThemeTest.cpp
         tests/coding_agent/tui/ThemeCatalogTest.cpp
         tests/coding_agent/tui/UserBashInteractiveModeTest.cpp
-        tests/coding_agent/tui/InteractionPolicyTest.cpp
-        tests/coding_agent/tui/UserBashPresentationTest.cpp
-        tests/coding_agent/tui/UserBashSyntaxTest.cpp
+        tests/coding_agent/tui/InteractiveBootE2ETest.cpp
         tests/coding_agent/AgentSessionCompactionTest.cpp
         tests/coding_agent/ReAuthGuidanceTest.cpp
         tests/coding_agent/TurnAutoRetryTest.cpp

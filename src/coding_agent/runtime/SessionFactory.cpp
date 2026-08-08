@@ -665,7 +665,7 @@ struct SessionTargetNormalizationOptions {
     }
     plan.target = std::move(*target);
 
-    plan.model_runtime = nullptr;
+    plan.model_runtime = std::move(request.model_runtime);
     plan.cli_selection = AssemblyPlan::CliModelSelection{
         .provider = std::move(request.provider),
         .model = std::move(request.model),
@@ -1235,12 +1235,17 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
     if (!plan) {
         return std::unexpected(with_settings_fallback_context(plan.error(), snapshot));
     }
-    // The injected Models is the runtime's catalog; its scripted fake
-    // provider serves streams, and the request model is fabricated from it
-    // (the deterministic provider surface the `--fake` flag used to drive).
-    plan->model_runtime = std::move(*wrapped);
-    plan->model_runtime_owned = true;
-    plan->cli_fake = true;
+    // A host-injected runtime (the private E2E seam) wins; otherwise the
+    // injected Models is the runtime's catalog: its scripted fake provider
+    // serves streams, and the request model is fabricated from it (the
+    // deterministic provider surface the `--fake` flag used to drive).
+    if (plan->model_runtime) {
+        plan->model_runtime_owned = false;
+    } else {
+        plan->model_runtime = std::move(*wrapped);
+        plan->model_runtime_owned = true;
+        plan->cli_fake = true;
+    }
     return finish_creation(std::move(plan), snapshot);
 }
 
@@ -1265,9 +1270,15 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
     if (!plan) {
         return std::unexpected(with_settings_fallback_context(plan.error(), snapshot));
     }
-    plan->model_runtime = std::move(*wrapped);
-    plan->model_runtime_owned = true;
-    plan->cli_fake = true;
+    // A host-injected runtime (the private E2E seam) wins; otherwise the
+    // injected Models is the runtime's catalog (see the two-argument seam).
+    if (plan->model_runtime) {
+        plan->model_runtime_owned = false;
+    } else {
+        plan->model_runtime = std::move(*wrapped);
+        plan->model_runtime_owned = true;
+        plan->cli_fake = true;
+    }
     return finish_creation(std::move(plan), snapshot, std::move(user_shell));
 }
 

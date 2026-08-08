@@ -23,6 +23,9 @@ public:
 
     [[nodiscard]] util::Expected<std::reference_wrapper<Component>> add_child(
         std::unique_ptr<Component> component);
+    /// Remove all children (pi `Container.clear`); used by streaming
+    /// components that rebuild their content on update.
+    void clear();
 
     [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
@@ -48,6 +51,9 @@ public:
     [[nodiscard]] util::Expected<std::reference_wrapper<Component>> add_child(
         std::unique_ptr<Component> component);
     void clear();
+    /// Replace the background hook (pi `Box.setBgFn`); used by tool
+    /// execution to transition pending/success/error backgrounds.
+    void set_background_hook(BackgroundHook background_hook);
 
     [[nodiscard]] util::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;

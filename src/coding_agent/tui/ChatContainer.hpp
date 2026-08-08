@@ -19,21 +19,24 @@ namespace cch::coding_agent::tui {
 
 class LiveTheme;
 
-/// Local presentation reducer for one ordered Agent Session transcript.
-/// It copies shared message values and keeps collapse/stream/tool state private
-/// to the Native TUI.
-class Transcript final {
+/// The chat container of the pi main-screen composition: one ordered
+/// sequence of pi-shaped message components (user-message, assistant-message,
+/// tool-execution, bash-execution, custom/compaction/branch summaries) plus
+/// frontend notices and diagnostics. Owns the streaming assistant update
+/// path and the tool-call/result settlement that pi's interactive-mode chat
+/// container performs.
+class ChatContainer final : public cch::tui::Component {
 public:
-    /// The theme must outlive this Transcript.
-    explicit Transcript(
+    /// The theme must outlive this container.
+    explicit ChatContainer(
         const LiveTheme& theme,
         const cch::tui::KeybindingRegistry& keybindings);
-    Transcript(Transcript&&) noexcept;
-    Transcript& operator=(Transcript&&) noexcept;
-    ~Transcript();
+    ChatContainer(ChatContainer&&) noexcept;
+    ChatContainer& operator=(ChatContainer&&) noexcept;
+    ~ChatContainer() override;
 
-    Transcript(const Transcript&) = delete;
-    Transcript& operator=(const Transcript&) = delete;
+    ChatContainer(const ChatContainer&) = delete;
+    ChatContainer& operator=(const ChatContainer&) = delete;
 
     void initialize(const AgentSessionSnapshot& snapshot);
     void apply_event(const agent::AgentLifecycleEvent& event);
@@ -51,7 +54,8 @@ public:
     /// Whether tool and User Bash output currently renders in full.
     [[nodiscard]] bool tools_expanded() const;
 
-    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) const;
+    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override;
+    void invalidate() override;
 
 private:
     struct Impl;

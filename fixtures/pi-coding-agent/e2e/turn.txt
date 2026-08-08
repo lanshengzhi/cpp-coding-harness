@@ -1,0 +1,24 @@
+escape interrupt · ctrl+c/ctrl+d · / commands · ctrl+o more             
+                                                                        
+ Resume request: check the notes file.                                  
+                                                                        
+                                                                
+ Resumed reply: the notes file is ready.                                
+                                                                        
+ continue the work                                                      
+                                                                        
+                                                                        
+ Check the notes file content, then update the line.                    
+                                                                        
+ I will edit notes.txt to replace the placeholder line.                 
+                                                                        
+ edit notes.txt                                                         
+                                                                        
+ {"path":"notes.txt","edits":[{"oldText":"alpha","newText":"beta"}]}    
+                                                                        
+ -1 alpha                                                               
+ +1 beta                                                                
+                                                                        
+                                                                
+ Done: the notes file now says beta.                                    
+                                                                        

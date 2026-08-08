@@ -109,7 +109,11 @@ public:
         std::string_view provider_id) const;
     [[nodiscard]] std::vector<ai::Model> models(
         std::optional<std::string_view> provider_id = std::nullopt) const;
-    [[nodiscard]] std::optional<ai::Model> model(
+    /// Virtual for recording test fakes that stand in for the runtime at the
+    /// session seam (the §7.2 recorded exception: only `stream_simple` is
+    /// callable on an impl-less fake, so session model resolution overrides
+    /// it).
+    [[nodiscard]] virtual std::optional<ai::Model> model(
         std::string_view provider_id,
         std::string_view model_id) const;
 
@@ -118,16 +122,18 @@ public:
     /// Live availability: models whose provider has configured auth. Without a
     /// provider id this runs an availability refresh against the live runtime
     /// and refreshes the snapshot. Cached snapshots never replace live
-    /// `get_auth`/`check_auth` semantics.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::vector<ai::Model>>> get_available(
+    /// `get_auth`/`check_auth` semantics. Virtual for recording test fakes
+    /// (same recorded exception as `model`).
+    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<std::vector<ai::Model>>> get_available(
         std::optional<std::string_view> provider_id = std::nullopt);
     /// Last availability snapshot (synchronous). Never replaces live semantics.
     [[nodiscard]] std::vector<ai::Model> get_available_snapshot() const;
 
     // ── Authentication ─────────────────────────────────────────────────────
 
-    /// Side-effect-free; OAuth credentials are never refreshed.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>> check_auth(
+    /// Side-effect-free; OAuth credentials are never refreshed. Virtual for
+    /// recording test fakes (same recorded exception as `model`).
+    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>> check_auth(
         std::string provider_id);
     /// Live authentication resolution (delegates to `ai::Models`).
     [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> get_auth(
@@ -138,7 +144,8 @@ public:
         std::optional<std::string> explicit_api_key = std::nullopt);
 
     /// True when the provider currently resolves as configured (snapshot).
-    [[nodiscard]] bool has_configured_auth(std::string_view provider_id) const;
+    /// Virtual for recording test fakes (same recorded exception as `model`).
+    [[nodiscard]] virtual bool has_configured_auth(std::string_view provider_id) const;
     /// True when the provider authenticates through an OAuth credential.
     [[nodiscard]] bool is_using_oauth(std::string_view provider_id) const;
 
@@ -198,8 +205,9 @@ public:
 
     /// Env var names referenced by configured models.json `apiKey` templates
     /// (pi `getConfigValueEnvVarNames`). Used for execution environment secret
-    /// filtering.
-    [[nodiscard]] std::vector<std::string> configured_api_key_env_names() const;
+    /// filtering. Virtual for recording test fakes (same recorded exception
+    /// as `model`); the impl-less fake serves no env names.
+    [[nodiscard]] virtual std::vector<std::string> configured_api_key_env_names() const;
 
     /// Frozen default-model table for the supported provider subset.
     [[nodiscard]] static std::optional<std::string> default_model_for_provider(

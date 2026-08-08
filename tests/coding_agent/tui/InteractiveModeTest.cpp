@@ -1490,7 +1490,7 @@ TEST_CASE(
 
     const auto authoritative_before = resumed->session->snapshot().agent_state.messages;
     REQUIRE(authoritative_before.size() == 6);
-    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -1506,15 +1506,15 @@ TEST_CASE(
     drain_ready(io);
 
     const auto screen = visible_screen(terminal);
-    const auto user_position = screen.find("You: resume request");
-    const auto thinking_position = screen.find("Thinking: inspect the saved state");
-    const auto assistant_position = screen.find("Assistant: I will read the persisted file.");
-    const auto tool_position = screen.find("Tool success: read#resume-call-7");
-    const auto result_position = screen.find("Tool result: persisted tool output");
-    const auto followup_position = screen.find("Assistant: I will continue after the tool.");
-    const auto custom_position = screen.find("Custom notice: custom persisted content");
-    const auto compaction_position = screen.find("Compaction summary: 1200 tokens");
-    const auto branch_position = screen.find("Branch summary: abandoned branch context");
+    const auto user_position = screen.find("resume request");
+    const auto thinking_position = screen.find("inspect the saved state");
+    const auto assistant_position = screen.find("I will read the persisted file.");
+    const auto tool_position = screen.find("read saved.txt");
+    const auto result_position = screen.find("persisted tool output");
+    const auto followup_position = screen.find("I will continue after the tool.");
+    const auto custom_position = screen.find("[notice]");
+    const auto compaction_position = screen.find("Compacted from 1,200 tokens");
+    const auto branch_position = screen.find("[branch]");
     REQUIRE(user_position != std::string::npos);
     REQUIRE(thinking_position != std::string::npos);
     REQUIRE(assistant_position != std::string::npos);
@@ -1528,21 +1528,21 @@ TEST_CASE(
     CHECK(compaction_position < user_position);
     CHECK(user_position < thinking_position);
     CHECK(thinking_position < assistant_position);
-    CHECK(assistant_position < tool_position);
+    // pi renders tool components after the whole assistant message.
+    CHECK(assistant_position < followup_position);
+    CHECK(followup_position < tool_position);
     CHECK(tool_position < result_position);
-    CHECK(result_position < followup_position);
-    CHECK(followup_position < custom_position);
+    CHECK(result_position < custom_position);
     CHECK(custom_position < branch_position);
     REQUIRE(terminal.inject_input("\x1b[19~"));
     drain_ready(io);
     CHECK(visible_screen(terminal).find("inspect the saved state") == std::string::npos);
     CHECK(visible_screen(terminal).find("THINKING END") == std::string::npos);
-    CHECK(visible_screen(terminal).find("Thinking: (collapsed; f8 to expand)") !=
-        std::string::npos);
+    // pi assistant-message.ts hidden-thinking label.
+    CHECK(visible_screen(terminal).find("Thinking...") != std::string::npos);
     REQUIRE(terminal.inject_input("\x1b[19~"));
     drain_ready(io);
-    CHECK(visible_screen(terminal).find("Thinking: inspect the saved state") !=
-        std::string::npos);
+    CHECK(visible_screen(terminal).find("inspect the saved state") != std::string::npos);
 
     const auto unchanged = resumed->session->snapshot().agent_state.messages;
     REQUIRE(unchanged.size() == authoritative_before.size());
@@ -1556,7 +1556,7 @@ TEST_CASE(
     REQUIRE(terminal.inject_input("continue here\r"));
     drain_ready(io);
     CHECK(resumed->session->message_count() == authoritative_before.size() + 2);
-    CHECK(visible_screen(terminal).find("Assistant: fake: continue here") != std::string::npos);
+    CHECK(visible_screen(terminal).find("fake: continue here") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -1661,23 +1661,25 @@ TEST_CASE(
     drain_ready(io);
     REQUIRE(tool_pointer->started);
     auto screen = visible_screen(terminal);
-    CHECK(count_text(screen, "Tool pending: probe-read#fake-read-1") == 1);
-    CHECK(count_text(screen, "Tool result: partial tool output") == 1);
+    // pi tool-execution: one title per tool component; the call id is not
+    // presented.
+    CHECK(count_text(screen, "probe-read") == 1);
+    CHECK(count_text(screen, "partial tool output") == 1);
     CHECK(screen.find("STALE ARGUMENT") == std::string::npos);
-    CHECK(screen.find(R"(Tool arguments: {"path":"large.txt"})") != std::string::npos);
+    CHECK(screen.find(R"({"path":"large.txt"})") != std::string::npos);
     CHECK(screen.find("STALE SNAPSHOT") == std::string::npos);
     CHECK(count_text(screen, "LATEST SNAPSHOT") == 1);
 
     tool_pointer->release();
     drain_ready(io);
     screen = visible_screen(terminal);
-    CHECK(count_text(screen, "Tool success: probe-read#fake-read-1") == 1);
-    CHECK(screen.find("Tool result: line 1") != std::string::npos);
+    CHECK(count_text(screen, "probe-read") == 1);
+    CHECK(screen.find("line 1") != std::string::npos);
     CHECK(screen.find("TOOL OUTPUT END") == std::string::npos);
     REQUIRE(tool_pointer->emit_late_update());
     drain_ready(io);
     screen = visible_screen(terminal);
-    CHECK(count_text(screen, "Tool success: probe-read#fake-read-1") == 1);
+    CHECK(count_text(screen, "probe-read") == 1);
     CHECK(screen.find("LATE TOOL UPDATE") == std::string::npos);
 
     REQUIRE(terminal.inject_input("\x0f"));
@@ -1690,17 +1692,18 @@ TEST_CASE(
     drain_ready(io);
     REQUIRE(tool_pointer->started);
     screen = visible_screen(terminal);
-    CHECK(count_text(screen, "Tool pending: probe-read#fake-read-1") == 1);
-    CHECK(count_text(screen, "Tool result: partial tool output") == 1);
+    CHECK(count_text(screen, "probe-read") == 1);
+    CHECK(count_text(screen, "partial tool output") == 1);
     CHECK(screen.find("STALE SNAPSHOT") == std::string::npos);
     CHECK(count_text(screen, "LATEST SNAPSHOT") == 1);
 
     tool_pointer->release();
     drain_ready(io);
     screen = visible_screen(terminal);
-    CHECK(count_text(screen, "probe-read#fake-read-1") == 2);
-    CHECK(count_text(screen, "Tool success: probe-read#fake-read-1") == 1);
-    CHECK(count_text(screen, "Tool failed: probe-read#fake-read-1") == 1);
+    // The repeated call id settles one component; the failure renders its
+    // error text in the error-colored box.
+    CHECK(count_text(screen, "probe-read") == 1);
+    CHECK(screen.find("final tool failure") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -1761,13 +1764,13 @@ TEST_CASE(
     CHECK(client_pointer->stop_callback_count == 1);
     auto screen = visible_screen(terminal);
     CHECK(count_text(screen, "partial assistant output") == 1);
-    CHECK(count_text(screen, "Provider aborted: prompt aborted") == 1);
+    CHECK(count_text(screen, "prompt aborted") == 1);
 
     REQUIRE(terminal.inject_input("\x03recover\r"));
     drain_ready(io);
     CHECK_FALSE(client_pointer->recovery_stop_requested);
     CHECK(client_pointer->recovery_uses_fresh_token);
-    CHECK(visible_screen(terminal).find("Assistant: recovered after TUI abort") !=
+    CHECK(visible_screen(terminal).find("recovered after TUI abort") !=
         std::string::npos);
 
     REQUIRE(terminal.inject_input("draft"));
@@ -1823,7 +1826,7 @@ TEST_CASE(
     REQUIRE(run_result);
     CHECK(*run_result);
     CHECK(client_pointer->stop_callback_count == 1);
-    CHECK(count_text(visible_screen(terminal), "Provider aborted: prompt aborted") == 1);
+    CHECK(count_text(visible_screen(terminal), "prompt aborted") == 1);
     CHECK_FALSE(created->session->is_open());
     CHECK_FALSE(created->session->is_busy());
     CHECK_FALSE(terminal.modes().started);
@@ -1894,15 +1897,16 @@ TEST_CASE(
     drain_ready(io);
     CHECK_FALSE(created->session->is_busy());
     auto screen = visible_screen(terminal);
-    CHECK(count_text(screen, "Provider aborted: tool prompt aborted") == 1);
-    CHECK(count_text(screen, "Tool failed: delayed#delayed-call") == 1);
+    CHECK(count_text(screen, "tool prompt aborted") == 1);
+    // The cancelled tool's failure renders inside its tool-execution block.
+    CHECK(count_text(screen, "delayed tool aborted") == 1);
     REQUIRE(client_pointer->completion_stop_token.has_value());
     CHECK(*client_pointer->completion_stop_token == *client_pointer->first_stop_token);
 
     REQUIRE(terminal.inject_input("\r"));
     drain_ready(io);
     CHECK(created->session->message_count() == 6);
-    CHECK(visible_screen(terminal).find("Assistant: recovered after tool abort") !=
+    CHECK(visible_screen(terminal).find("recovered after tool abort") !=
         std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
@@ -1953,7 +1957,7 @@ TEST_CASE(
     REQUIRE(terminal.inject_input("survive subscriber failure\r"));
     drain_ready(io);
     auto screen = visible_screen(terminal);
-    CHECK(screen.find("Assistant: fake: survive subscriber failure") != std::string::npos);
+    CHECK(screen.find("fake: survive subscriber failure") != std::string::npos);
     CHECK(screen.find("agent event observer failed") != std::string::npos);
     CHECK(screen.find("sk-subscriber-secret-123456") == std::string::npos);
     CHECK(screen.find("[REDACTED]") != std::string::npos);
@@ -1970,7 +1974,7 @@ TEST_CASE(
     CHECK(created->session->message_count() == 4);
     CHECK(visible_screen(terminal).find("late subscriber rollover") !=
         std::string::npos);
-    CHECK(visible_screen(terminal).find("Assistant: fake: recover subscriber") !=
+    CHECK(visible_screen(terminal).find("fake: recover subscriber") !=
         std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
@@ -2011,14 +2015,14 @@ TEST_CASE(
     REQUIRE(terminal.inject_input("fail persistence\r"));
     drain_ready(io);
     auto screen = visible_screen(terminal);
-    CHECK(screen.find("Assistant: fake: fail persistence") != std::string::npos);
+    CHECK(screen.find("fake: fail persistence") != std::string::npos);
     CHECK(screen.find("could not persist session entry") != std::string::npos);
     CHECK(screen.find("fail persistence") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x03recover persistence\r"));
     drain_ready(io);
     CHECK(created->session->message_count() == 4);
-    CHECK(visible_screen(terminal).find("Assistant: fake: recover persistence") !=
+    CHECK(visible_screen(terminal).find("fake: recover persistence") !=
         std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
@@ -2055,32 +2059,35 @@ TEST_CASE(
     REQUIRE(terminal.inject_input("provider error\r"));
     drain_ready(io);
     auto screen = visible_screen(terminal);
-    CHECK(count_text(screen, "Provider error: accepted provider failure") == 1);
+    CHECK(count_text(screen, "Error: accepted provider failure") == 1);
 
     REQUIRE(terminal.inject_input("provider abort\r"));
     drain_ready(io);
     screen = visible_screen(terminal);
-    CHECK(count_text(screen, "Provider error: accepted provider failure") == 1);
-    CHECK(count_text(screen, "Provider aborted: Operation aborted") == 1);
+    CHECK(count_text(screen, "Error: accepted provider failure") == 1);
+    CHECK(count_text(screen, "Operation aborted") == 1);
 
     REQUIRE(terminal.inject_input("provider tool error\r"));
     drain_ready(io);
     screen = visible_screen(terminal);
     CHECK(count_text(screen, "accepted tool-call provider failure") == 1);
-    CHECK(count_text(screen, "Provider error: accepted tool-call provider failure") == 0);
-    CHECK(count_text(screen, "Tool failed: read#failed-before-execution") == 1);
+    // Provider outcomes suppress the assistant notice when tool calls render
+    // separately (pi assistant-message.ts); the settled tool block shows the
+    // failure detail.
+    CHECK(count_text(screen, "Error: accepted tool-call provider failure") == 0);
+    CHECK(screen.find("read never.txt") != std::string::npos);
 
     REQUIRE(terminal.inject_input("provider tool abort\r"));
     drain_ready(io);
     screen = visible_screen(terminal);
     CHECK(count_text(screen, "custom provider abort detail") == 1);
-    CHECK(count_text(screen, "Provider aborted: custom provider abort detail") == 0);
-    CHECK(count_text(screen, "Tool failed: read#aborted-before-execution") == 1);
+    CHECK(count_text(screen, "Error: custom provider abort detail") == 0);
+    CHECK(screen.find("read never.txt") != std::string::npos);
 
     REQUIRE(terminal.inject_input("recover\r"));
     drain_ready(io);
     CHECK(created->session->message_count() == 10);
-    CHECK(visible_screen(terminal).find("Assistant: recovered after accepted outcomes") !=
+    CHECK(visible_screen(terminal).find("recovered after accepted outcomes") !=
         std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
@@ -2171,7 +2178,7 @@ TEST_CASE(
         ai::providers::make_scripted_fake_provider()));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 60, .rows = 10});
+    tui::VirtualTerminal terminal({.columns = 60, .rows = 13});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -2191,15 +2198,16 @@ TEST_CASE(
     drain_ready(io);
     CHECK(created->session->message_count() == 2);
     auto screen = visible_screen(terminal);
-    CHECK(count_text(screen, "You: first prompt") == 1);
-    CHECK(count_text(screen, "Assistant: fake: first prompt") == 1);
+    // The user box and the assistant reply both carry the prompt text.
+    CHECK(count_text(screen, "first prompt") == 2);
+    CHECK(count_text(screen, "fake: first prompt") == 1);
 
     REQUIRE(terminal.inject_input("second prompt\r"));
     drain_ready(io);
     CHECK(created->session->message_count() == 4);
     screen = visible_screen(terminal);
-    CHECK(count_text(screen, "Assistant: fake: first prompt") == 1);
-    CHECK(count_text(screen, "Assistant: fake: second prompt") == 1);
+    CHECK(count_text(screen, "fake: first prompt") == 1);
+    CHECK(count_text(screen, "fake: second prompt") == 1);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -2252,7 +2260,7 @@ TEST_CASE(
     CHECK(screen.find("Steering: steer one") != std::string::npos);
     CHECK(screen.find("Steering: steer two") != std::string::npos);
     CHECK(screen.find("Follow-up: follow one") != std::string::npos);
-    CHECK(screen.find("alt+up to edit all queued messages") != std::string::npos);
+    CHECK(screen.find("Alt+Up to edit all queued messages") != std::string::npos);
 
     client_pointer->release();
     drain_ready(io);
@@ -2446,7 +2454,7 @@ TEST_CASE(
     CHECK_FALSE(created->session->is_busy());
     REQUIRE(created->session->snapshot().agent_state.input_queues.follow_up.messages.size() == 1);
     auto screen = visible_screen(terminal);
-    CHECK(count_text(screen, "Provider error: accepted queued error") == 1);
+    CHECK(count_text(screen, "Error: accepted queued error") == 1);
     CHECK(screen.find("Follow-up: follow after error") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x1b[1;3A"));
@@ -2458,7 +2466,7 @@ TEST_CASE(
     client_pointer->release();
     drain_ready(io);
     CHECK_FALSE(created->session->is_busy());
-    CHECK(visible_screen(terminal).find("Assistant: turn 2") != std::string::npos);
+    CHECK(visible_screen(terminal).find("turn 2") != std::string::npos);
 
     REQUIRE(terminal.inject_input("continued\r"));
     drain_ready(io);
@@ -2525,12 +2533,12 @@ TEST_CASE(
     REQUIRE(draft != std::string::npos);
     CHECK(steering < follow_up);
     CHECK(follow_up < draft);
-    CHECK(count_text(screen, "Provider aborted: prompt aborted") == 1);
+    CHECK(count_text(screen, "prompt aborted") == 1);
 
     REQUIRE(terminal.inject_input("\x03recover\r"));
     drain_ready(io);
     CHECK_FALSE(created->session->is_busy());
-    CHECK(visible_screen(terminal).find("Assistant: recovered after TUI abort") !=
+    CHECK(visible_screen(terminal).find("recovered after TUI abort") !=
         std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
@@ -2551,7 +2559,7 @@ TEST_CASE(
         std::move(client)));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 60, .rows = 12});
+    tui::VirtualTerminal terminal({.columns = 60, .rows = 13});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -2571,7 +2579,7 @@ TEST_CASE(
     REQUIRE(client_pointer->started);
     CHECK(created->session->message_count() == 1);
     auto screen = visible_screen(terminal);
-    CHECK(screen.find("You: first batched") != std::string::npos);
+    CHECK(screen.find("first batched") != std::string::npos);
     CHECK(screen.find("Steering: second batched") != std::string::npos);
     REQUIRE(created->session->snapshot().agent_state.input_queues.steering.messages.size() == 1);
 
@@ -2583,9 +2591,9 @@ TEST_CASE(
     drain_ready(io);
     CHECK(created->session->message_count() == 4);
     screen = visible_screen(terminal);
-    CHECK(screen.find("You: first batched") != std::string::npos);
-    CHECK(screen.find("You: second batched") != std::string::npos);
-    CHECK(count_text(screen, "Assistant: released") == 2);
+    CHECK(screen.find("first batched") != std::string::npos);
+    CHECK(screen.find("second batched") != std::string::npos);
+    CHECK(count_text(screen, "released") == 2);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -2603,7 +2611,7 @@ TEST_CASE(
     auto created = coding_agent::create_agent_session(session_options(workspace, std::move(client)));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 30, .rows = 3});
+    tui::VirtualTerminal terminal({.columns = 30, .rows = 6});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -2747,7 +2755,7 @@ TEST_CASE(
     drain_ready(io);
     CHECK(created->session->message_count() == 2);
     screen = visible_screen(terminal);
-    CHECK(screen.find("Assistant: fake: /missing") != std::string::npos);
+    CHECK(screen.find("fake: /missing") != std::string::npos);
     CHECK(screen.find("Available commands:") == std::string::npos);
 
     REQUIRE(terminal.inject_input("/exit\r"));
@@ -2782,7 +2790,7 @@ TEST_CASE(
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 100, .rows = 5});
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 8});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -2907,7 +2915,7 @@ TEST_CASE(
         std::make_shared<FailOnceChatProvider>()));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 100, .rows = 12});
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 13});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -2925,14 +2933,14 @@ TEST_CASE(
     drain_ready(io);
     auto screen = visible_screen(terminal);
     CHECK(screen.find("sk-abcdefghijklmnopqrstuvwxyz123456") == std::string::npos);
-    CHECK(screen.find("Provider error: provider failed") != std::string::npos);
+    CHECK(screen.find("Error: provider failed") != std::string::npos);
     CHECK(screen.size() < 12000);
     CHECK(created->session->message_count() == 2);
 
     REQUIRE(terminal.inject_input("retry\r"));
     drain_ready(io);
     CHECK(created->session->message_count() == 4);
-    CHECK(visible_screen(terminal).find("Assistant: recovered") != std::string::npos);
+    CHECK(visible_screen(terminal).find("recovered") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);

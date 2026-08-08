@@ -195,10 +195,10 @@ TEST_CASE(
     CHECK(block_mentions(runtime_sources, "src/coding_agent/ImageInput.cpp"));
     CHECK(block_mentions(runtime_sources, "src/cli/InitialPrompt.cpp"));
     CHECK(block_mentions(interactive_sources, "src/coding_agent/tui/InteractiveMode.cpp"));
-    CHECK(block_mentions(interactive_sources, "src/coding_agent/tui/Transcript.cpp"));
+    CHECK(block_mentions(interactive_sources, "src/coding_agent/tui/ChatContainer.cpp"));
     CHECK_FALSE(block_mentions(tui_sources, "ImageInput"));
     CHECK_FALSE(block_mentions(tui_sources, "ClipboardReader"));
-    CHECK_FALSE(block_mentions(tui_sources, "Transcript.cpp"));
+    CHECK_FALSE(block_mentions(tui_sources, "ChatContainer.cpp"));
     const auto runtime_links = cmake_command_block(
         cmake, "target_link_libraries(cch_coding_agent_runtime");
     const auto tui_links = cmake_command_block(cmake, "target_link_libraries(cch_tui");

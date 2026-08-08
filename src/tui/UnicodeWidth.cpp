@@ -137,8 +137,17 @@ namespace {
             return std::unexpected(invalid_terminal_text("Incomplete OSC sequence"));
         }
         const auto body = text.substr(position + 2, cursor - position - 2);
-        if (!body.starts_with("8;") || body.find(';', 2) == std::string_view::npos) {
-            return std::unexpected(invalid_terminal_text("Only OSC 8 hyperlinks are supported"));
+        // OSC 8 hyperlinks carry `8;<params>;<uri>` bodies. OSC 133 prompt
+        // zones (`133;A`/`133;B`/`133;C`, pi's coding-agent user/assistant
+        // message wrappers) are accepted as zero-width control tokens so
+        // message lines can carry them through the differential renderer.
+        const auto is_hyperlink =
+            body.starts_with("8;") && body.find(';', 2) != std::string_view::npos;
+        const auto is_osc133 =
+            (body == "133;A" || body == "133;B" || body == "133;C");
+        if (!is_hyperlink && !is_osc133) {
+            return std::unexpected(invalid_terminal_text(
+                "Only OSC 8 hyperlinks and OSC 133 zones are supported"));
         }
         return AnsiCode{
             .code = std::string(text.substr(position, cursor + terminator_length - position)),
