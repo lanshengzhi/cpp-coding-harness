@@ -27,8 +27,13 @@ struct AgentSessionCreationRequest {
     /// print path never gains a User Shell.
     bool provide_user_shell{false};
     std::optional<bool> project_trust_override;
-    bool disable_project_skills{false};
-    bool disable_prompt_templates{false};
+    /// pi `--no-skills`: drops user and project skill discovery (explicit
+    /// `--skill` paths stay; the explicit-path surface lands with skill
+    /// discovery).
+    bool no_skills{false};
+    /// pi `--no-prompt-templates`: drops user and project prompt discovery
+    /// (explicit `--prompt-template` paths still load).
+    bool no_prompt_templates{false};
     std::vector<std::string> prompt_template_paths;
     std::size_t max_queued_messages{agent::kDefaultMaxQueuedMessages};
     std::size_t max_queued_bytes{agent::kDefaultMaxQueuedBytes};

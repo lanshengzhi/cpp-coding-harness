@@ -156,8 +156,8 @@ TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point",
     REQUIRE(resumed_store->append_leaf(std::nullopt, first_id));
 
     runtime::AgentSessionCreationRequest request;
-    request.disable_project_skills = true;
-    request.disable_prompt_templates = true;
+    request.no_skills = true;
+    request.no_prompt_templates = true;
     request.workspace = workspace.path();
     request.session_target = coding_agent::ExplicitResumeSessionTarget{path};
 
@@ -200,8 +200,8 @@ TEST_CASE(
     REQUIRE(resumed_store->append_leaf(std::nullopt, first_id));
 
     runtime::AgentSessionCreationRequest request;
-    request.disable_project_skills = true;
-    request.disable_prompt_templates = true;
+    request.no_skills = true;
+    request.no_prompt_templates = true;
     request.workspace = workspace.path();
     request.session_target = coding_agent::ExplicitResumeSessionTarget{path};
 

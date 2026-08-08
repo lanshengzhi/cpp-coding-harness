@@ -205,8 +205,8 @@ void print_session_diagnostics(
             assembly->target);
     request.provide_user_shell = frontend == Frontend::Interactive;
     request.project_trust_override = config.project_trust_override;
-    request.disable_project_skills = config.no_skills;
-    request.disable_prompt_templates = config.no_prompt_templates;
+    request.no_skills = config.no_skills;
+    request.no_prompt_templates = config.no_prompt_templates;
     request.prompt_template_paths = config.prompt_template_paths;
     request.workspace = config.workspace;
     request.session_target = std::move(assembly->target);

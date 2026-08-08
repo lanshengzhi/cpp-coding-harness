@@ -28,8 +28,8 @@ namespace {
     bool provide_user_shell) {
     runtime::AgentSessionCreationRequest request;
     request.provide_user_shell = provide_user_shell;
-    request.disable_project_skills = true;
-    request.disable_prompt_templates = true;
+    request.no_skills = true;
+    request.no_prompt_templates = true;
     request.workspace = workspace.path();
     request.session_target = coding_agent::InMemorySessionTarget{};
     return coding_agent::create_agent_session_for_testing(

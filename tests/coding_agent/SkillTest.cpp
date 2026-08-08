@@ -76,16 +76,24 @@ TEST_CASE("SkillLoadResult construction with content", "[coding_agent][skill][u1
             .filePath = "/a/SKILL.md",
         }},
         .diagnostics = {coding_agent::SkillDiagnostic{
-            .code = coding_agent::SkillDiagnosticCode::duplicate_name,
-            .message = "duplicate skill name 'a-skill'",
+            .type = "collision",
+            .code = coding_agent::SkillDiagnosticCode::collision,
+            .message = "name \"a-skill\" collision",
             .path = "/b/SKILL.md",
+            .collision = coding_agent::ResourceCollision{
+                .resource_type = coding_agent::ResourceCollisionResourceType::Skill,
+                .name = "a-skill",
+                .winner_path = "/a/SKILL.md",
+                .loser_path = "/b/SKILL.md",
+            },
         }},
     };
 
     REQUIRE(result.skills.size() == 1);
     CHECK(result.skills[0].name == "a-skill");
     REQUIRE(result.diagnostics.size() == 1);
-    CHECK(result.diagnostics[0].code == coding_agent::SkillDiagnosticCode::duplicate_name);
+    CHECK(result.diagnostics[0].code == coding_agent::SkillDiagnosticCode::collision);
+    CHECK(result.diagnostics[0].collision.has_value());
 }
 
 TEST_CASE("SkillLoadResult empty construction", "[coding_agent][skill][u1]") {
@@ -102,7 +110,7 @@ TEST_CASE("SkillDiagnosticCode enum values are distinct", "[coding_agent][skill]
     CHECK(static_cast<int>(SCC::list_failed) != static_cast<int>(SCC::read_failed));
     CHECK(static_cast<int>(SCC::read_failed) != static_cast<int>(SCC::parse_failed));
     CHECK(static_cast<int>(SCC::parse_failed) != static_cast<int>(SCC::invalid_metadata));
-    CHECK(static_cast<int>(SCC::invalid_metadata) != static_cast<int>(SCC::duplicate_name));
+    CHECK(static_cast<int>(SCC::invalid_metadata) != static_cast<int>(SCC::collision));
 }
 
 } // namespace

@@ -250,8 +250,8 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     auto* no_approve_option = app.add_flag("--no-approve", no_approve_project, "Do not trust project resources for this run");
     approve_option->excludes(no_approve_option);
     no_approve_option->excludes(approve_option);
-    app.add_flag("--no-skills", config.no_skills, "Disable project-local skills for this run");
-    app.add_flag("--no-prompt-templates", config.no_prompt_templates, "Disable all prompt template loading");
+    app.add_flag("--no-skills", config.no_skills, "Disable skills discovery and loading");
+    app.add_flag("--no-prompt-templates", config.no_prompt_templates, "Disable prompt template discovery and loading");
     app.add_flag("--no-context-files", config.no_context_files, "Disable AGENTS.md and CLAUDE.md discovery and loading");
     app.add_flag("--no-themes", config.no_themes, "Disable theme discovery and loading");
     app.add_option("--prompt-template", config.prompt_template_paths, "Load a prompt template file or directory (repeatable)")

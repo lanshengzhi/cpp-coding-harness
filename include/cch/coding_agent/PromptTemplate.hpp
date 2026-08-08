@@ -12,6 +12,9 @@ struct PromptTemplate {
     std::string content;
     /// Optional argument hint for autocomplete display (stored for future TUI use).
     std::optional<std::string> argument_hint = std::nullopt;
+    /// Absolute path to the template file (pi `PromptTemplate.filePath`),
+    /// used for collision diagnostics and source presentation.
+    std::string filePath;
 };
 
 } // namespace cch::coding_agent

@@ -5,6 +5,7 @@
 #include "../harness/WorkspaceFileSystem.hpp"
 
 #include <algorithm>
+#include <filesystem>
 #include <iostream>
 #include <string>
 
@@ -105,11 +106,16 @@ PromptTemplateLoadResult loadPromptTemplateFromFile(
         argument_hint = hintIt->second;
     }
 
+    const std::filesystem::path absolute_path = std::filesystem::path{filePath}.is_absolute()
+        ? std::filesystem::path{filePath}
+        : (fs.root() / filePath);
+
     result.templates.push_back(PromptTemplate{
         .name = std::move(name),
         .description = std::move(description),
         .content = std::move(fm.body),
         .argument_hint = std::move(argument_hint),
+        .filePath = absolute_path.lexically_normal().string(),
     });
 
     return result;
@@ -124,21 +130,10 @@ PromptTemplateLoadResult loadPromptTemplates(
         if (spec.is_file) {
             // Explicit file path — load directly.
             auto file_result = loadPromptTemplateFromFile(fs, spec.path);
-            // Deduplicate by name.
-            for (auto& tmpl : file_result.templates) {
-                auto dup = std::find_if(result.templates.begin(), result.templates.end(),
-                    [&](const PromptTemplate& existing) { return existing.name == tmpl.name; });
-                if (dup != result.templates.end()) {
-                    result.diagnostics.push_back(PromptTemplateDiagnostic{
-                        .type = "warning",
-                        .code = PromptTemplateDiagnosticCode::duplicate_name,
-                        .message = std::string("duplicate template name '") + tmpl.name + "'",
-                        .path = spec.path,
-                    });
-                } else {
-                    result.templates.push_back(std::move(tmpl));
-                }
-            }
+            result.templates.insert(
+                result.templates.end(),
+                std::make_move_iterator(file_result.templates.begin()),
+                std::make_move_iterator(file_result.templates.end()));
             result.diagnostics.insert(result.diagnostics.end(),
                 std::make_move_iterator(file_result.diagnostics.begin()),
                 std::make_move_iterator(file_result.diagnostics.end()));
@@ -178,21 +173,10 @@ PromptTemplateLoadResult loadPromptTemplates(
 
             auto file_result = loadPromptTemplateFromFile(fs, relative_path);
 
-            // Deduplicate by name.
-            for (auto& tmpl : file_result.templates) {
-                auto dup = std::find_if(result.templates.begin(), result.templates.end(),
-                    [&](const PromptTemplate& existing) { return existing.name == tmpl.name; });
-                if (dup != result.templates.end()) {
-                    result.diagnostics.push_back(PromptTemplateDiagnostic{
-                        .type = "warning",
-                        .code = PromptTemplateDiagnosticCode::duplicate_name,
-                        .message = std::string("duplicate template name '") + tmpl.name + "'",
-                        .path = relative_path,
-                    });
-                } else {
-                    result.templates.push_back(std::move(tmpl));
-                }
-            }
+            result.templates.insert(
+                result.templates.end(),
+                std::make_move_iterator(file_result.templates.begin()),
+                std::make_move_iterator(file_result.templates.end()));
             result.diagnostics.insert(result.diagnostics.end(),
                 std::make_move_iterator(file_result.diagnostics.begin()),
                 std::make_move_iterator(file_result.diagnostics.end()));

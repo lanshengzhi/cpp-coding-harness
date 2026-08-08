@@ -2066,14 +2066,14 @@ TEST_CASE(
     "[coding_agent][tui][issue89]") {
     tests::TempWorkspace workspace;
     workspace.write(
-        ".cpp-harness/skills/bang-skill/SKILL.md",
+        ".pi/skills/bang-skill/SKILL.md",
         "---\n"
         "name: bang-skill\n"
         "description: Skill whose body begins with a bang.\n"
         "---\n"
         "!echo skill-body\n");
     workspace.write(
-        ".cpp-harness/prompts/bang-prompt.md",
+        ".pi/prompts/bang-prompt.md",
         "---\n"
         "description: Template whose expansion begins with a bang.\n"
         "---\n"

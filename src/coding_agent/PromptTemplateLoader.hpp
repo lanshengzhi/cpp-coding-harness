@@ -18,7 +18,6 @@ enum class PromptTemplateDiagnosticCode {
     list_failed,
     read_failed,
     parse_failed,
-    duplicate_name,
     unsupported_type,
 };
 
@@ -59,8 +58,10 @@ struct PromptTemplateDirSpec {
 ///
 /// Each PromptTemplateDirSpec specifies a directory to scan (non-recursively)
 /// or an explicit file to load. Directories are scanned for direct .md children.
-/// Missing directories are silently skipped. Duplicate template names produce
-/// diagnostics (first found wins). Dot-prefixed entries are skipped.
+/// Missing directories are silently skipped. Dot-prefixed entries are skipped.
+/// Duplicate names are NOT deduplicated here (pi `loadPromptTemplates` returns
+/// the raw list); the resource loader resolves collisions with pi-shaped
+/// collision diagnostics and winner/loser paths.
 [[nodiscard]] PromptTemplateLoadResult loadPromptTemplates(
     const harness::WorkspaceFileSystem& fs,
     const std::vector<PromptTemplateDirSpec>& dirs);

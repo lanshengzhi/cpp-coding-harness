@@ -130,8 +130,8 @@ struct AssemblyPlan {
     std::vector<std::unique_ptr<agent::AsyncAgentTool>> custom_tools;
     std::vector<std::string> prompt_template_paths;
     std::optional<DefaultProjectTrust> default_project_trust;
-    std::optional<ResourceEnablement> project_skills_enablement;
-    bool prompt_templates_enabled{true};
+    bool no_skills{false};
+    bool no_prompt_templates{false};
     std::optional<bool> project_trust_override;
     std::size_t max_queued_messages{agent::kDefaultMaxQueuedMessages};
     std::size_t max_queued_bytes{agent::kDefaultMaxQueuedBytes};
@@ -189,16 +189,40 @@ struct SettingsSnapshot {
     return error;
 }
 
-[[nodiscard]] SessionDiagnostic::Severity to_session_severity(ResourceDiagnosticSeverity severity) {
-    switch (severity) {
-    case ResourceDiagnosticSeverity::Info:
-        return SessionDiagnostic::Severity::Info;
-    case ResourceDiagnosticSeverity::Warning:
+[[nodiscard]] SessionDiagnostic::Severity to_session_severity(ResourceDiagnosticType type) {
+    switch (type) {
+    case ResourceDiagnosticType::Warning:
         return SessionDiagnostic::Severity::Warning;
-    case ResourceDiagnosticSeverity::Error:
+    case ResourceDiagnosticType::Error:
         return SessionDiagnostic::Severity::Error;
+    case ResourceDiagnosticType::Collision:
+        return SessionDiagnostic::Severity::Warning;
     }
     return SessionDiagnostic::Severity::Warning;
+}
+
+/// pi `ResourceDiagnostic` values carry no machine-readable code; the session
+/// seam derives a stable code from the type (and collision resource type).
+[[nodiscard]] std::string resource_diagnostic_code(const ResourceDiagnostic& diagnostic) {
+    switch (diagnostic.type) {
+    case ResourceDiagnosticType::Warning:
+        return "resource:warning";
+    case ResourceDiagnosticType::Error:
+        return "resource:error";
+    case ResourceDiagnosticType::Collision:
+        if (diagnostic.collision) {
+            switch (diagnostic.collision->resource_type) {
+            case ResourceCollisionResourceType::Skill:
+                return "resource:skill_collision";
+            case ResourceCollisionResourceType::Prompt:
+                return "resource:prompt_collision";
+            case ResourceCollisionResourceType::Theme:
+                return "resource:theme_collision";
+            }
+        }
+        return "resource:collision";
+    }
+    return "resource:warning";
 }
 
 void add_project_resource_loading_diagnostics(
@@ -206,8 +230,8 @@ void add_project_resource_loading_diagnostics(
     const ProjectResourceLoadingResult& loading) {
     for (const auto& diag : loading.diagnostics) {
         diagnostics.push_back(make_diag(
-            to_session_severity(diag.severity),
-            project_resource_loading_diagnostic_code(diag),
+            to_session_severity(diag.type),
+            resource_diagnostic_code(diag),
             diag.message,
             diag.path));
     }
@@ -748,9 +772,8 @@ struct SessionTargetNormalizationOptions {
     plan.project_trust_override = request.project_trust_override;
     plan.default_project_trust =
         settings.default_project_trust().value_or(DefaultProjectTrust::Ask);
-    plan.project_skills_enablement =
-        request.disable_project_skills ? ResourceEnablement::Off : ResourceEnablement::Auto;
-    plan.prompt_templates_enabled = !request.disable_prompt_templates;
+    plan.no_skills = request.no_skills;
+    plan.no_prompt_templates = request.no_prompt_templates;
     plan.prompt_template_paths = request.prompt_template_paths;
     plan.max_queued_messages = request.max_queued_messages;
     plan.max_queued_bytes = request.max_queued_bytes;
@@ -1051,18 +1074,14 @@ struct SessionTargetNormalizationOptions {
     {
         auto fs = harness::WorkspaceFileSystem::create(workspace);
         if (fs) {
-            ProjectResourcePolicy resource_policy;
-            resource_policy.project_skills = plan.project_skills_enablement.value_or(ResourceEnablement::Auto);
-
             ProjectResourceLoadingRequest resource_request;
             resource_request.workspace = workspace;
-            resource_request.policy = resource_policy;
+            resource_request.agent_config_directory = coding_agent::agent_config_dir();
             resource_request.default_project_trust = plan.default_project_trust.value_or(DefaultProjectTrust::Ask);
             resource_request.project_trust_override = plan.project_trust_override;
-            resource_request.prompt_templates_enabled = plan.prompt_templates_enabled;
-            if (plan.prompt_templates_enabled) {
-                resource_request.explicit_prompt_templates = make_explicit_template_inputs(*fs, plan.prompt_template_paths);
-            }
+            resource_request.no_skills = plan.no_skills;
+            resource_request.no_prompt_templates = plan.no_prompt_templates;
+            resource_request.explicit_prompt_templates = make_explicit_template_inputs(*fs, plan.prompt_template_paths);
 
             ProjectTrustStore trust_store{trust_store_path};
             auto resource_loading = load_project_resources(*fs, trust_store, std::move(resource_request));

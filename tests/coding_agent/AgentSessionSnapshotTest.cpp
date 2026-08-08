@@ -68,8 +68,8 @@ struct TestPaths {
 [[nodiscard]] util::Expected<coding_agent::CreateAgentSessionResult> resume_for_frontend(
     const TestPaths& paths) {
     coding_agent::runtime::AgentSessionCreationRequest request;
-    request.disable_project_skills = true;
-    request.disable_prompt_templates = true;
+    request.no_skills = true;
+    request.no_prompt_templates = true;
     request.workspace = paths.workspace.path();
     request.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
     return coding_agent::create_agent_session_for_testing(

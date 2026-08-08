@@ -653,7 +653,7 @@ TEST_CASE("CLI terminal auth failure after malformed settings keeps the warning 
 TEST_CASE("CLI skips project skills by default when project trust is unknown", "[cli][project-trust]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    workspace.write(".cpp-harness/skills/demo/SKILL.md",
+    workspace.write(".pi/skills/demo/SKILL.md",
                     "---\n"
                     "name: demo\n"
                     "description: Demo skill.\n"
@@ -669,13 +669,12 @@ TEST_CASE("CLI skips project skills by default when project trust is unknown", "
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.find("project_skills skipped: untrusted") != std::string::npos);
-    CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
+        CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
 }
 
 TEST_CASE("CLI project-controlled default trust store cannot authorize project skills", "[cli][project-trust]") {
     cch::tests::TempWorkspace workspace;
-    workspace.write(".cpp-harness/skills/demo/SKILL.md",
+    workspace.write(".pi/skills/demo/SKILL.md",
                     "---\n"
                     "name: demo\n"
                     "description: Demo skill.\n"
@@ -694,15 +693,16 @@ TEST_CASE("CLI project-controlled default trust store cannot authorize project s
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.find("[trust:warn] trust_store_unavailable") != std::string::npos);
-    CHECK(result.stderr_text.find("project_skills skipped: untrusted") != std::string::npos);
+    // The project-controlled trust store is rejected at the session seam, so
+    // the store error surfaces as a pi-shaped warning without authorizing.
+    CHECK(result.stderr_text.find("[resource:warn] warning: trust store path is empty") != std::string::npos);
     CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
 }
 
 TEST_CASE("CLI approve loads project skills for one run", "[cli][project-trust]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    workspace.write(".cpp-harness/skills/demo/SKILL.md",
+    workspace.write(".pi/skills/demo/SKILL.md",
                     "---\n"
                     "name: demo\n"
                     "description: Demo skill.\n"
@@ -718,7 +718,7 @@ TEST_CASE("CLI approve loads project skills for one run", "[cli][project-trust]"
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.find("project_skills skipped") == std::string::npos);
+    CHECK(result.stderr_text.find("[resource:warn]") == std::string::npos);
     CHECK(result.stdout_text.find("<skill name=\"demo\"") != std::string::npos);
     CHECK(result.stdout_text.find("Do demo.") != std::string::npos);
 }
@@ -726,7 +726,7 @@ TEST_CASE("CLI approve loads project skills for one run", "[cli][project-trust]"
 TEST_CASE("CLI no-approve skips project skills for one run", "[cli][project-trust]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    workspace.write(".cpp-harness/skills/demo/SKILL.md",
+    workspace.write(".pi/skills/demo/SKILL.md",
                     "---\n"
                     "name: demo\n"
                     "description: Demo skill.\n"
@@ -742,14 +742,13 @@ TEST_CASE("CLI no-approve skips project skills for one run", "[cli][project-trus
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.find("project_skills skipped: untrusted") != std::string::npos);
-    CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
+        CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
 }
 
 TEST_CASE("CLI -na short carries pi's no-approve semantics", "[cli][project-trust]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    workspace.write(".cpp-harness/skills/demo/SKILL.md",
+    workspace.write(".pi/skills/demo/SKILL.md",
                     "---\n"
                     "name: demo\n"
                     "description: Demo skill.\n"
@@ -765,14 +764,13 @@ TEST_CASE("CLI -na short carries pi's no-approve semantics", "[cli][project-trus
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.find("project_skills skipped: untrusted") != std::string::npos);
-    CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
+        CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
 }
 
 TEST_CASE("CLI approve loads project prompt templates for one run", "[cli][project-resources]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    workspace.write(".cpp-harness/prompts/greet.md",
+    workspace.write(".pi/prompts/greet.md",
                     "---\n"
                     "description: Greet someone\n"
                     "---\n"
@@ -786,14 +784,14 @@ TEST_CASE("CLI approve loads project prompt templates for one run", "[cli][proje
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.find("project_prompts skipped") == std::string::npos);
+    CHECK(result.stderr_text.find("[resource:warn]") == std::string::npos);
     CHECK(result.stdout_text.find("Project hello Ada.") != std::string::npos);
 }
 
 TEST_CASE("CLI no-skills disables project skills even when approved", "[cli][project-trust]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    workspace.write(".cpp-harness/skills/demo/SKILL.md",
+    workspace.write(".pi/skills/demo/SKILL.md",
                     "---\n"
                     "name: demo\n"
                     "description: Demo skill.\n"
@@ -809,14 +807,13 @@ TEST_CASE("CLI no-skills disables project skills even when approved", "[cli][pro
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.find("project_skills skipped: disabled") != std::string::npos);
-    CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
+        CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
 }
 
 TEST_CASE("CLI -ns short disables project skills even when approved", "[cli][project-trust]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    workspace.write(".cpp-harness/skills/demo/SKILL.md",
+    workspace.write(".pi/skills/demo/SKILL.md",
                     "---\n"
                     "name: demo\n"
                     "description: Demo skill.\n"
@@ -832,20 +829,21 @@ TEST_CASE("CLI -ns short disables project skills even when approved", "[cli][pro
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.find("project_skills skipped: disabled") != std::string::npos);
-    CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
+        CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
 }
 
-TEST_CASE("CLI no-skills disables project prompt templates even when approved", "[cli][project-resources]") {
+TEST_CASE("CLI no-skills keeps project prompt templates", "[cli][project-resources][issue405]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    workspace.write(".cpp-harness/prompts/greet.md",
+    workspace.write(".pi/prompts/greet.md",
                     "---\n"
                     "description: Greet someone\n"
                     "---\n"
                     "Project hello $1.\n");
-    auto session = workspace.path() / "disabled-prompts.jsonl";
+    auto session = workspace.path() / "kept-prompts.jsonl";
 
+    // pi semantics: --no-skills drops skill discovery only; prompt templates
+    // still load from the trust-gated project directory.
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
         .args = {"--approve", "--no-skills", "--session", session.string(), "/greet Ada"},
         .cwd = workspace.path(),
@@ -853,8 +851,8 @@ TEST_CASE("CLI no-skills disables project prompt templates even when approved", 
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.find("project_prompts skipped: disabled") != std::string::npos);
-    CHECK(result.stdout_text.find("Project hello Ada.") == std::string::npos);
+    CHECK(result.stderr_text.find("[resource:warn]") == std::string::npos);
+    CHECK(result.stdout_text.find("Project hello Ada.") != std::string::npos);
 }
 
 TEST_CASE("CLI explicit prompt template file loads through resource inputs", "[cli][project-resources]") {
@@ -874,11 +872,11 @@ TEST_CASE("CLI explicit prompt template file loads through resource inputs", "[c
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.find("template:warn") == std::string::npos);
+    CHECK(result.stderr_text.find("[resource:warn]") == std::string::npos);
     CHECK(result.stdout_text.find("Custom hello Ada.") != std::string::npos);
 }
 
-TEST_CASE("CLI no-prompt-templates disables explicit prompt template files", "[cli][project-resources]") {
+TEST_CASE("CLI no-prompt-templates keeps explicit prompt template files", "[cli][project-resources][issue405]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     workspace.write("custom.md",
@@ -886,8 +884,10 @@ TEST_CASE("CLI no-prompt-templates disables explicit prompt template files", "[c
                     "description: Custom greeting\n"
                     "---\n"
                     "Custom hello $1.\n");
-    auto session = workspace.path() / "explicit-template-disabled.jsonl";
+    auto session = workspace.path() / "explicit-template-kept.jsonl";
 
+    // pi semantics: --no-prompt-templates drops user and project discovery
+    // but keeps explicit --prompt-template paths.
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
         .args = {"--session", session.string(), "--prompt-template", "custom.md",
                  "--no-prompt-templates", "/custom Ada"},
@@ -896,10 +896,10 @@ TEST_CASE("CLI no-prompt-templates disables explicit prompt template files", "[c
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("Custom hello Ada.") == std::string::npos);
+    CHECK(result.stdout_text.find("Custom hello Ada.") != std::string::npos);
 }
 
-TEST_CASE("CLI -np short disables explicit prompt template files", "[cli][project-resources]") {
+TEST_CASE("CLI -np short keeps explicit prompt template files", "[cli][project-resources][issue405]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     workspace.write("custom.md",
@@ -907,7 +907,7 @@ TEST_CASE("CLI -np short disables explicit prompt template files", "[cli][projec
                     "description: Custom greeting\n"
                     "---\n"
                     "Custom hello $1.\n");
-    auto session = workspace.path() / "short-explicit-template-disabled.jsonl";
+    auto session = workspace.path() / "short-explicit-template-kept.jsonl";
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
         .args = {"--session", session.string(), "--prompt-template", "custom.md",
@@ -917,18 +917,18 @@ TEST_CASE("CLI -np short disables explicit prompt template files", "[cli][projec
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text.find("Custom hello Ada.") == std::string::npos);
+    CHECK(result.stdout_text.find("Custom hello Ada.") != std::string::npos);
 }
 
 TEST_CASE("CLI text mode shows malformed project resource diagnostics on stderr", "[cli][project-resources]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    workspace.write(".cpp-harness/skills/bad/SKILL.md",
+    workspace.write(".pi/skills/bad/SKILL.md",
                     "---\n"
                     "name: bad\n"
                     "---\n"
                     "Bad skill body.\n");
-    workspace.write(".cpp-harness/prompts/bad.md",
+    workspace.write(".pi/prompts/bad.md",
                     "---\n"
                     "bad line without colon\n"
                     "---\n"
@@ -942,8 +942,10 @@ TEST_CASE("CLI text mode shows malformed project resource diagnostics on stderr"
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.find("[skill:warn] invalid_metadata") != std::string::npos);
-    CHECK(result.stderr_text.find("[template:warn] parse_failed") != std::string::npos);
+    // pi ResourceDiagnostic shape: no C++-invented codes, the message carries
+    // the detail under a stable resource:warning code.
+    CHECK(result.stderr_text.find("[resource:warn] warning: description is required") != std::string::npos);
+    CHECK(result.stderr_text.find("[resource:warn] warning: YAML frontmatter parse error") != std::string::npos);
     CHECK(result.stdout_text == "fake: hello\n");
 }
 

@@ -168,7 +168,7 @@ TEST_CASE("loadPromptTemplates missing directory is silent", "[coding_agent][pro
     CHECK(result.diagnostics.empty());
 }
 
-TEST_CASE("loadPromptTemplates duplicate name dedup", "[coding_agent][prompt][loader]") {
+TEST_CASE("loadPromptTemplates keeps duplicate names for the loader dedupe", "[coding_agent][prompt][loader][issue405]") {
     LoaderTestFixture fix;
     fix.writeFile("prompts/greet.md",
         "---\n"
@@ -184,12 +184,14 @@ TEST_CASE("loadPromptTemplates duplicate name dedup", "[coding_agent][prompt][lo
 
     std::vector<coding_agent::PromptTemplateDirSpec> dirs = {{"prompts"}, {"more"}};
     auto result = coding_agent::loadPromptTemplates(fix.fs, dirs);
-    REQUIRE(result.templates.size() == 1);
-    CHECK(result.templates[0].name == "greet");
-    CHECK(result.templates[0].description == "First"); // first wins
-
-    REQUIRE(result.diagnostics.size() == 1);
-    CHECK(result.diagnostics[0].code == coding_agent::PromptTemplateDiagnosticCode::duplicate_name);
+    // pi `loadPromptTemplates` returns the raw list; the resource loader
+    // deduplicates with pi-shaped collision diagnostics (winner/loser paths).
+    REQUIRE(result.templates.size() == 2);
+    CHECK(result.diagnostics.empty());
+    for (const auto& tmpl : result.templates) {
+        CHECK(tmpl.name == "greet");
+        CHECK_FALSE(tmpl.filePath.empty());
+    }
 }
 
 TEST_CASE("loadPromptTemplates explicit file path", "[coding_agent][prompt][loader]") {

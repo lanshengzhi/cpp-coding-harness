@@ -360,7 +360,7 @@ TEST_CASE("loadSkills skips node_modules", "[coding_agent][skill][u4]") {
     CHECK(result.skills[0].name == "my-skill");
 }
 
-TEST_CASE("loadSkills deduplicates by name", "[coding_agent][skill][u4]") {
+TEST_CASE("loadSkills deduplicates by name with a collision diagnostic", "[coding_agent][skill][u4][issue405]") {
     SkillTestFixture fix;
     fix.writeSkill("dir-a/SKILL.md",
         "---\nname: same-name\ndescription: First occurrence.\n---\nBody A.\n");
@@ -372,12 +372,20 @@ TEST_CASE("loadSkills deduplicates by name", "[coding_agent][skill][u4]") {
 
     REQUIRE(result.skills.size() == 1);
     CHECK(result.skills[0].name == "same-name");
-    // Should have one duplicate_name diagnostic.
-    bool hasDupDiag = false;
-    for (const auto& d : result.diagnostics) {
-        if (d.code == coding_agent::SkillDiagnosticCode::duplicate_name) hasDupDiag = true;
-    }
-    CHECK(hasDupDiag);
+    // One pi-shaped collision diagnostic with winner/loser paths (other
+    // diagnostics are name-validation warnings from the loader).
+    const auto collision = std::find_if(
+        result.diagnostics.begin(),
+        result.diagnostics.end(),
+        [](const auto& d) { return d.code == coding_agent::SkillDiagnosticCode::collision; });
+    REQUIRE(collision != result.diagnostics.end());
+    CHECK(collision->type == "collision");
+    CHECK(collision->message == "name \"same-name\" collision");
+    REQUIRE(collision->collision.has_value());
+    CHECK(collision->collision->resource_type == coding_agent::ResourceCollisionResourceType::Skill);
+    CHECK(collision->collision->name == "same-name");
+    CHECK(collision->collision->winner_path.find("dir-a/SKILL.md") != std::string::npos);
+    CHECK(collision->collision->loser_path.find("dir-b/SKILL.md") != std::string::npos);
 }
 
 TEST_CASE("loadSkills silently skips missing input directory", "[coding_agent][skill][u4]") {

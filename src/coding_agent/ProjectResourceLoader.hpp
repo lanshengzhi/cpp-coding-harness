@@ -8,7 +8,6 @@
 #include <filesystem>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace cch::harness {
@@ -16,24 +15,6 @@ class WorkspaceFileSystem;
 }
 
 namespace cch::coding_agent {
-
-enum class ProjectResourceLoadingDiagnosticCategory {
-    Trust,
-    LoadPlan,
-    SkillAdapter,
-    PromptTemplateAdapter,
-    ThemeAdapter,
-    Duplicate,
-};
-
-struct ProjectResourceLoadingDiagnostic {
-    ResourceDiagnosticSeverity severity{ResourceDiagnosticSeverity::Warning};
-    ProjectResourceLoadingDiagnosticCategory category{ProjectResourceLoadingDiagnosticCategory::LoadPlan};
-    std::string code;
-    std::string message;
-    std::optional<std::string> path;
-    std::optional<ProjectResourceKind> kind;
-};
 
 struct ExplicitPromptTemplateInput {
     std::string path;
@@ -53,39 +34,42 @@ struct LoadedProjectResources {
     std::vector<LoadedProjectThemeResource> project_themes;
 };
 
+/// Project resource loading request — the pi `DefaultResourceLoader` subset
+/// without extensions/package-manager (ADR 0036 G4): `.pi/` markers, no
+/// per-resource enablement policy ("trusted means load", #327),
+/// trust-deferred loading at session creation and on `/reload`.
 struct ProjectResourceLoadingRequest {
     std::filesystem::path workspace;
-    ProjectResourcePolicy policy;
+    /// User-level resource root (`~/.pi/agent`). User prompt templates load
+    /// from `<agent_config_directory>/prompts`; an empty path skips them.
+    std::optional<std::filesystem::path> agent_config_directory;
     DefaultProjectTrust default_project_trust{DefaultProjectTrust::Ask};
     std::optional<bool> project_trust_override;
-    bool prompt_templates_enabled{true};
+    /// pi `--no-skills`: drops user and project skill discovery (explicit
+    /// `--skill` paths stay; the explicit-path surface lands with skill
+    /// discovery).
+    bool no_skills{false};
+    /// pi `--no-prompt-templates`: drops user and project prompt discovery
+    /// (explicit `--prompt-template` paths still load).
+    bool no_prompt_templates{false};
     /// False for every existing non-TUI assembly. A Native TUI assembly opts
     /// in only after it has decided to consume theme resources.
     bool theme_resources_enabled{false};
-    std::vector<Skill> host_skills;
-    std::vector<PromptTemplate> host_prompt_templates;
     std::vector<ExplicitPromptTemplateInput> explicit_prompt_templates;
 };
 
 struct ProjectResourceLoadingResult {
     ProjectResourceDetectionResult detection;
     ProjectTrustResolution trust;
-    ProjectResourceLoadPlan load_plan;
     LoadedProjectResources resources;
     /// Errors that must abort session creation (e.g. explicit resource failures).
-    std::vector<ProjectResourceLoadingDiagnostic> fatal_errors;
-    std::vector<ProjectResourceLoadingDiagnostic> diagnostics;
+    std::vector<ResourceDiagnostic> fatal_errors;
+    std::vector<ResourceDiagnostic> diagnostics;
 };
 
 [[nodiscard]] ProjectResourceLoadingResult load_project_resources(
     const harness::WorkspaceFileSystem& fs,
     const ProjectTrustStore& trust_store,
     ProjectResourceLoadingRequest request);
-
-[[nodiscard]] std::string_view project_resource_loading_diagnostic_category_name(
-    ProjectResourceLoadingDiagnosticCategory category);
-
-[[nodiscard]] std::string project_resource_loading_diagnostic_code(
-    const ProjectResourceLoadingDiagnostic& diagnostic);
 
 } // namespace cch::coding_agent

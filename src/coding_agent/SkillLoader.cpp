@@ -8,7 +8,7 @@
 #include <cctype>
 #include <regex>
 #include <string>
-#include <unordered_set>
+#include <unordered_map>
 
 namespace cch::coding_agent {
 
@@ -81,6 +81,45 @@ constexpr std::size_t kMaxDescriptionLength = 1024;
     return filePath.substr(start, lastSlash - start);
 }
 
+/// pi `ResourceDiagnostic` collision for a duplicate skill name: the first
+/// loaded skill wins and the loser carries the winner/loser paths.
+[[nodiscard]] SkillDiagnostic skill_collision_diagnostic(
+    const std::string& name,
+    const std::string& winner_path,
+    const std::string& loser_path) {
+    return SkillDiagnostic{
+        .type = "collision",
+        .code = SkillDiagnosticCode::collision,
+        .message = "name \"" + name + "\" collision",
+        .path = loser_path,
+        .collision = ResourceCollision{
+            .resource_type = ResourceCollisionResourceType::Skill,
+            .name = name,
+            .winner_path = winner_path,
+            .loser_path = loser_path,
+            .winner_source = std::nullopt,
+            .loser_source = std::nullopt,
+        },
+    };
+}
+
+/// Deduplicates one loaded skill by name (first wins) and emits the
+/// collision diagnostic when the name is already taken.
+void append_unique_skill(
+    std::unordered_map<std::string, std::string>& seenNames,
+    SkillLoadResult& result,
+    Skill skill) {
+    if (auto it = seenNames.find(skill.name); it != seenNames.end()) {
+        result.diagnostics.push_back(skill_collision_diagnostic(
+            skill.name,
+            it->second,
+            skill.filePath));
+        return;
+    }
+    seenNames.emplace(skill.name, skill.filePath);
+    result.skills.push_back(std::move(skill));
+}
+
 } // namespace
 
 // Forward declaration for recursive directory walk.
@@ -88,7 +127,7 @@ static void loadSkillsFromDir(
     const harness::WorkspaceFileSystem& fs,
     const std::string& dirPath,
     bool includeRootFiles,
-    std::unordered_set<std::string>& seenNames,
+    std::unordered_map<std::string, std::string>& seenNames,
     SkillLoadResult& result);
 
 SkillLoadResult loadSkillFromFile(
@@ -112,6 +151,7 @@ SkillLoadResult loadSkillFromFile(
             .code = SkillDiagnosticCode::read_failed,
             .message = readResult.error().message,
             .path = filePath,
+            .collision = std::nullopt,
         });
         return result;
     }
@@ -123,6 +163,7 @@ SkillLoadResult loadSkillFromFile(
             .code = SkillDiagnosticCode::parse_failed,
             .message = parsed.error().message,
             .path = filePath,
+            .collision = std::nullopt,
         });
         return result;
     }
@@ -146,6 +187,7 @@ SkillLoadResult loadSkillFromFile(
             .code = SkillDiagnosticCode::invalid_metadata,
             .message = err,
             .path = filePath,
+            .collision = std::nullopt,
         });
     }
 
@@ -175,6 +217,7 @@ SkillLoadResult loadSkillFromFile(
             .code = SkillDiagnosticCode::invalid_metadata,
             .message = err,
             .path = filePath,
+            .collision = std::nullopt,
         });
     }
 
@@ -206,7 +249,7 @@ void loadSkillsFromDir(
     const harness::WorkspaceFileSystem& fs,
     const std::string& dirPath,
     bool includeRootFiles,
-    std::unordered_set<std::string>& seenNames,
+    std::unordered_map<std::string, std::string>& seenNames,
     SkillLoadResult& result) {
 
     auto entriesResult = fs.listDir(dirPath);
@@ -216,6 +259,7 @@ void loadSkillsFromDir(
             .code = SkillDiagnosticCode::list_failed,
             .message = entriesResult.error().message,
             .path = dirPath,
+            .collision = std::nullopt,
         });
         return;
     }
@@ -246,19 +290,9 @@ void loadSkillsFromDir(
         }
 
         auto fileResult = loadSkillFromFile(fs, entry.path);
-        // Deduplicate by name.
+        // Deduplicate by name (first wins; collisions carry winner/loser paths).
         for (auto& skill : fileResult.skills) {
-            if (seenNames.contains(skill.name)) {
-                result.diagnostics.push_back(SkillDiagnostic{
-                    .type = "warning",
-                    .code = SkillDiagnosticCode::duplicate_name,
-                    .message = "duplicate skill name '" + skill.name + "'",
-                    .path = entry.path,
-                });
-            } else {
-                seenNames.insert(skill.name);
-                result.skills.push_back(std::move(skill));
-            }
+            append_unique_skill(seenNames, result, std::move(skill));
         }
         result.diagnostics.insert(result.diagnostics.end(),
                                   std::make_move_iterator(fileResult.diagnostics.begin()),
@@ -297,17 +331,7 @@ void loadSkillsFromDir(
             // Root-level .md file treated as a skill (global dir behavior).
             auto fileResult = loadSkillFromFile(fs, childPath);
             for (auto& skill : fileResult.skills) {
-                if (seenNames.contains(skill.name)) {
-                    result.diagnostics.push_back(SkillDiagnostic{
-                        .type = "warning",
-                        .code = SkillDiagnosticCode::duplicate_name,
-                        .message = "duplicate skill name '" + skill.name + "'",
-                        .path = childPath,
-                    });
-                } else {
-                    seenNames.insert(skill.name);
-                    result.skills.push_back(std::move(skill));
-                }
+                append_unique_skill(seenNames, result, std::move(skill));
             }
             result.diagnostics.insert(result.diagnostics.end(),
                                       std::make_move_iterator(fileResult.diagnostics.begin()),
@@ -320,7 +344,7 @@ SkillLoadResult loadSkills(
     const harness::WorkspaceFileSystem& fs,
     const std::vector<SkillDirSpec>& dirs) {
     SkillLoadResult result;
-    std::unordered_set<std::string> seenNames;
+    std::unordered_map<std::string, std::string> seenNames;
 
     for (const auto& dirSpec : dirs) {
         // Convert absolute paths beneath the workspace to relative paths for
@@ -339,6 +363,7 @@ SkillLoadResult loadSkills(
                     .code = SkillDiagnosticCode::file_info_failed,
                     .message = infoResult.error().message,
                     .path = *dir_path,
+                    .collision = std::nullopt,
                 });
             }
             continue;

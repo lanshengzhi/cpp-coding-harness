@@ -257,8 +257,8 @@ struct E2eSession {
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     request.workspace = fixture->workspace.path();
-    request.disable_project_skills = true;
-    request.disable_prompt_templates = true;
+    request.no_skills = true;
+    request.no_prompt_templates = true;
     request.model_runtime = fixture->runtime;
     auto created = coding_agent::create_agent_session_for_testing(
         std::move(request), ai::providers::make_scripted_fake_models());

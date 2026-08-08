@@ -6,7 +6,7 @@ namespace cch::coding_agent {
 
 /// User-level state root shared directly with pi (`~/.pi/agent/`). All
 /// user-level state files (auth, settings, trust) live under this single root,
-/// separate from project-level `.cpp-harness/` resources.
+/// separate from project-level `.pi/` resources.
 ///
 /// Resolution order:
 ///   1. `PI_CODING_AGENT_DIR` environment override,

@@ -5,6 +5,7 @@
 #include <array>
 #include <filesystem>
 #include <optional>
+#include <string>
 
 namespace cch::coding_agent {
 namespace {
@@ -15,45 +16,34 @@ struct MarkerSpec {
     harness::FileKind expected_kind;
 };
 
-constexpr std::array<MarkerSpec, 8> kMarkers{{
-    {
-        .kind = ProjectResourceKind::ProjectSettings,
-        .path = ".cpp-harness/settings.json",
-        .expected_kind = harness::FileKind::File,
-    },
+/// pi `TRUST_REQUIRING_PROJECT_CONFIG_RESOURCES` subset (`core/trust-manager.ts`)
+/// without extensions/packages and without `settings.json` (Settings Manager
+/// owns that marker). The legacy marker names are deleted with no fallback
+/// read.
+constexpr std::array<MarkerSpec, 5> kMarkers{{
     {
         .kind = ProjectResourceKind::ProjectSkills,
-        .path = ".cpp-harness/skills",
+        .path = ".pi/skills",
         .expected_kind = harness::FileKind::Directory,
     },
     {
         .kind = ProjectResourceKind::ProjectPrompts,
-        .path = ".cpp-harness/prompts",
+        .path = ".pi/prompts",
         .expected_kind = harness::FileKind::Directory,
     },
     {
         .kind = ProjectResourceKind::ProjectThemes,
-        .path = ".cpp-harness/themes",
-        .expected_kind = harness::FileKind::Directory,
-    },
-    {
-        .kind = ProjectResourceKind::ProjectExtensions,
-        .path = ".cpp-harness/extensions",
-        .expected_kind = harness::FileKind::Directory,
-    },
-    {
-        .kind = ProjectResourceKind::ProjectPackages,
-        .path = ".cpp-harness/packages",
+        .path = ".pi/themes",
         .expected_kind = harness::FileKind::Directory,
     },
     {
         .kind = ProjectResourceKind::ProjectSystemPrompt,
-        .path = ".cpp-harness/SYSTEM.md",
+        .path = ".pi/SYSTEM.md",
         .expected_kind = harness::FileKind::File,
     },
     {
         .kind = ProjectResourceKind::ProjectAppendSystemPrompt,
-        .path = ".cpp-harness/APPEND_SYSTEM.md",
+        .path = ".pi/APPEND_SYSTEM.md",
         .expected_kind = harness::FileKind::File,
     },
 }};
@@ -78,118 +68,33 @@ constexpr std::array<MarkerSpec, 8> kMarkers{{
 }
 
 [[nodiscard]] ResourceDiagnostic diagnostic(
-    ResourceDiagnosticSeverity severity,
-    std::string code,
+    ResourceDiagnosticType type,
     std::string message,
-    std::string path,
-    ProjectResourceKind kind) {
+    std::string path) {
     return ResourceDiagnostic{
-        .severity = severity,
-        .code = std::move(code),
+        .type = type,
         .message = std::move(message),
         .path = std::move(path),
-        .kind = kind,
+        .collision = std::nullopt,
     };
-}
-
-[[nodiscard]] ResourceEnablement enablement_for(
-    const ProjectResourcePolicy& policy,
-    ProjectResourceKind kind) {
-    switch (kind) {
-    case ProjectResourceKind::ProjectSkills:
-        return policy.project_skills;
-    case ProjectResourceKind::ProjectPrompts:
-        if (policy.project_skills == ResourceEnablement::Off ||
-            policy.project_prompts == ResourceEnablement::Off) {
-            return ResourceEnablement::Off;
-        }
-        if (policy.project_prompts == ResourceEnablement::On) {
-            return ResourceEnablement::On;
-        }
-        return policy.project_skills;
-    case ProjectResourceKind::ProjectThemes:
-        return policy.project_themes;
-    case ProjectResourceKind::ProjectSettings:
-    case ProjectResourceKind::ProjectExtensions:
-    case ProjectResourceKind::ProjectPackages:
-    case ProjectResourceKind::ProjectSystemPrompt:
-    case ProjectResourceKind::ProjectAppendSystemPrompt:
-        return ResourceEnablement::Auto;
-    }
-    return ResourceEnablement::Auto;
-}
-
-[[nodiscard]] bool has_implemented_loader(ProjectResourceKind kind) {
-    return kind == ProjectResourceKind::ProjectSkills ||
-           kind == ProjectResourceKind::ProjectPrompts ||
-           kind == ProjectResourceKind::ProjectThemes;
 }
 
 } // namespace
 
-std::string to_string(ProjectResourceKind kind) {
+std::string_view to_string(ProjectResourceKind kind) {
     switch (kind) {
-    case ProjectResourceKind::ProjectSettings:
-        return "project_settings";
     case ProjectResourceKind::ProjectSkills:
         return "project_skills";
     case ProjectResourceKind::ProjectPrompts:
         return "project_prompts";
     case ProjectResourceKind::ProjectThemes:
         return "project_themes";
-    case ProjectResourceKind::ProjectExtensions:
-        return "project_extensions";
-    case ProjectResourceKind::ProjectPackages:
-        return "project_packages";
     case ProjectResourceKind::ProjectSystemPrompt:
         return "project_system_prompt";
     case ProjectResourceKind::ProjectAppendSystemPrompt:
         return "project_append_system_prompt";
     }
     return "project_resource";
-}
-
-std::string to_string(ResourceEnablement enablement) {
-    switch (enablement) {
-    case ResourceEnablement::Auto:
-        return "auto";
-    case ResourceEnablement::On:
-        return "on";
-    case ResourceEnablement::Off:
-        return "off";
-    }
-    return "auto";
-}
-
-std::string to_string(ResourceSkipReason reason) {
-    switch (reason) {
-    case ResourceSkipReason::NotDetected:
-        return "not_detected";
-    case ResourceSkipReason::Allowed:
-        return "allowed";
-    case ResourceSkipReason::Disabled:
-        return "disabled";
-    case ResourceSkipReason::Untrusted:
-        return "untrusted";
-    case ResourceSkipReason::Unsupported:
-        return "unsupported";
-    case ResourceSkipReason::DetectionError:
-        return "detection_error";
-    }
-    return "unknown";
-}
-
-std::optional<ResourceEnablement> parse_resource_enablement(const std::string& value) {
-    if (value == "auto") {
-        return ResourceEnablement::Auto;
-    }
-    if (value == "on") {
-        return ResourceEnablement::On;
-    }
-    if (value == "off") {
-        return ResourceEnablement::Off;
-    }
-    return std::nullopt;
 }
 
 ProjectResourceDetectionResult detect_project_resources(const harness::WorkspaceFileSystem& fs) {
@@ -202,11 +107,9 @@ ProjectResourceDetectionResult detect_project_resources(const harness::Workspace
                 continue;
             }
             result.diagnostics.push_back(diagnostic(
-                ResourceDiagnosticSeverity::Warning,
-                "marker_info_failed",
+                ResourceDiagnosticType::Warning,
                 info.error().message,
-                marker.path,
-                marker.kind));
+                marker.path));
             continue;
         }
 
@@ -215,28 +118,22 @@ ProjectResourceDetectionResult detect_project_resources(const harness::Workspace
             auto canonical = fs.canonicalPath(marker.path);
             if (!canonical) {
                 result.diagnostics.push_back(diagnostic(
-                    ResourceDiagnosticSeverity::Warning,
-                    "marker_symlink_invalid",
+                    ResourceDiagnosticType::Warning,
                     canonical.error().message,
-                    marker.path,
-                    marker.kind));
+                    marker.path));
                 loadable = false;
             } else if (!kind_matches(canonical_kind(*canonical), marker.expected_kind)) {
                 result.diagnostics.push_back(diagnostic(
-                    ResourceDiagnosticSeverity::Warning,
-                    "marker_kind_mismatch",
+                    ResourceDiagnosticType::Warning,
                     "resource marker has unexpected kind: " + std::string(marker.path),
-                    marker.path,
-                    marker.kind));
+                    marker.path));
                 loadable = false;
             }
         } else if (!kind_matches(info->kind, marker.expected_kind)) {
             result.diagnostics.push_back(diagnostic(
-                ResourceDiagnosticSeverity::Warning,
-                "marker_kind_mismatch",
+                ResourceDiagnosticType::Warning,
                 "resource marker has unexpected kind: " + std::string(marker.path),
-                marker.path,
-                marker.kind));
+                marker.path));
             loadable = false;
         }
 
@@ -262,87 +159,9 @@ bool has_detected_kind(
 }
 
 bool needs_project_trust_resolution(
-    const ProjectResourceDetectionResult& detection,
-    const ProjectResourcePolicy& policy) {
+    const ProjectResourceDetectionResult& detection) {
     for (const auto& resource : detection.resources) {
-        if (!resource.loadable) {
-            continue;
-        }
-        if (!has_implemented_loader(resource.kind)) {
-            continue;
-        }
-        if (enablement_for(policy, resource.kind) == ResourceEnablement::Off) {
-            continue;
-        }
-        return true;
-    }
-    return false;
-}
-
-ProjectResourceLoadPlan build_project_resource_load_plan(
-    const ProjectResourceDetectionResult& detection,
-    const ProjectResourcePolicy& policy,
-    const ProjectTrustResolution& trust) {
-    ProjectResourceLoadPlan plan;
-    plan.diagnostics = detection.diagnostics;
-    plan.project_trust_required = needs_project_trust_resolution(detection, policy);
-
-    for (const auto& resource : detection.resources) {
-        ResourceLoadDecision decision{
-            .kind = resource.kind,
-            .detected = true,
-            .allowed = false,
-            .reason = ResourceSkipReason::Unsupported,
-            .path = resource.path,
-            .message = "resource kind is not implemented yet",
-        };
-
-        if (!resource.loadable) {
-            decision.reason = ResourceSkipReason::DetectionError;
-            decision.message = "resource marker could not be validated";
-        } else if (!has_implemented_loader(resource.kind)) {
-            decision.reason = ResourceSkipReason::Unsupported;
-            decision.message = "resource kind is detected but no loader exists yet";
-        } else if (enablement_for(policy, resource.kind) == ResourceEnablement::Off) {
-            decision.reason = ResourceSkipReason::Disabled;
-            decision.message = "resource kind disabled by user policy";
-        } else if (trust.decision == ProjectTrustDecision::Trusted) {
-            decision.allowed = true;
-            decision.reason = ResourceSkipReason::Allowed;
-            decision.message = "resource kind allowed";
-        } else {
-            decision.reason = ResourceSkipReason::Untrusted;
-            decision.message = "project is not trusted";
-            plan.skipped_for_untrusted = true;
-        }
-
-        plan.decisions.push_back(std::move(decision));
-    }
-
-    return plan;
-}
-
-bool project_skills_allowed(const ProjectResourceLoadPlan& plan) {
-    for (const auto& decision : plan.decisions) {
-        if (decision.kind == ProjectResourceKind::ProjectSkills && decision.allowed) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool project_prompts_allowed(const ProjectResourceLoadPlan& plan) {
-    for (const auto& decision : plan.decisions) {
-        if (decision.kind == ProjectResourceKind::ProjectPrompts && decision.allowed) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool project_themes_allowed(const ProjectResourceLoadPlan& plan) {
-    for (const auto& decision : plan.decisions) {
-        if (decision.kind == ProjectResourceKind::ProjectThemes && decision.allowed) {
+        if (resource.loadable) {
             return true;
         }
     }

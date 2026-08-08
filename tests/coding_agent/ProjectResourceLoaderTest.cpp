@@ -37,7 +37,7 @@ struct LoaderFixture {
 
 void write_valid_project_skill(const LoaderFixture& fix, std::string name = "project-skill") {
     fix.write(
-        ".cpp-harness/skills/" + name + "/SKILL.md",
+        ".pi/skills/" + name + "/SKILL.md",
         "---\n"
         "name: " + name + "\n"
         "description: Project skill.\n"
@@ -47,7 +47,7 @@ void write_valid_project_skill(const LoaderFixture& fix, std::string name = "pro
 
 void write_valid_project_prompt(const LoaderFixture& fix, std::string name = "review") {
     fix.write(
-        ".cpp-harness/prompts/" + name + ".md",
+        ".pi/prompts/" + name + ".md",
         "---\n"
         "description: Project prompt.\n"
         "---\n"
@@ -61,61 +61,32 @@ void write_valid_project_prompt(const LoaderFixture& fix, std::string name = "re
     return content.str();
 }
 
-const coding_agent::ResourceLoadDecision* find_decision(
-    const coding_agent::ProjectResourceLoadPlan& plan,
-    coding_agent::ProjectResourceKind kind) {
-    auto it = std::find_if(
-        plan.decisions.begin(),
-        plan.decisions.end(),
-        [kind](const auto& decision) { return decision.kind == kind; });
-    return it == plan.decisions.end() ? nullptr : &*it;
-}
-
-void require_decision_reason(
-    const coding_agent::ProjectResourceLoadPlan& plan,
-    coding_agent::ProjectResourceKind kind,
-    coding_agent::ResourceSkipReason reason) {
-    const auto* decision = find_decision(plan, kind);
-    REQUIRE(decision != nullptr);
-    CHECK(decision->reason == reason);
-}
-
-bool has_diag_source(
-    const coding_agent::ProjectResourceLoadingResult& result,
-    coding_agent::ProjectResourceLoadingDiagnosticCategory category) {
-    return std::any_of(
-        result.diagnostics.begin(),
-        result.diagnostics.end(),
-        [category](const auto& diagnostic) { return diagnostic.category == category; });
-}
-
 bool has_diag(
     const coding_agent::ProjectResourceLoadingResult& result,
-    coding_agent::ProjectResourceLoadingDiagnosticCategory category,
-    std::string_view code) {
+    coding_agent::ResourceDiagnosticType type,
+    std::string_view message_fragment = {}) {
     return std::any_of(
         result.diagnostics.begin(),
         result.diagnostics.end(),
-        [category, code](const auto& diagnostic) {
-            return diagnostic.category == category && diagnostic.code == code;
+        [type, message_fragment](const auto& diagnostic) {
+            return diagnostic.type == type &&
+                   (message_fragment.empty() ||
+                    diagnostic.message.find(message_fragment) != std::string::npos);
         });
 }
 
 std::size_t count_diag(
     const coding_agent::ProjectResourceLoadingResult& result,
-    coding_agent::ProjectResourceLoadingDiagnosticCategory category,
-    std::string_view code) {
+    coding_agent::ResourceDiagnosticType type) {
     return static_cast<std::size_t>(std::count_if(
         result.diagnostics.begin(),
         result.diagnostics.end(),
-        [category, code](const auto& diagnostic) {
-            return diagnostic.category == category && diagnostic.code == code;
-        }));
+        [type](const auto& diagnostic) { return diagnostic.type == type; }));
 }
 
 } // namespace
 
-TEST_CASE("project resource loader loads trusted skills and prompts", "[coding_agent][project-resource-loader]") {
+TEST_CASE("project resource loader loads trusted .pi/ skills and prompts", "[coding_agent][project-resource-loader][issue405]") {
     LoaderFixture fix;
     write_valid_project_skill(fix);
     write_valid_project_prompt(fix);
@@ -126,53 +97,44 @@ TEST_CASE("project resource loader loads trusted skills and prompts", "[coding_a
     auto result = fix.load(std::move(request));
 
     CHECK(result.trust.decision == coding_agent::ProjectTrustDecision::Trusted);
-    CHECK(coding_agent::project_skills_allowed(result.load_plan));
-    CHECK(coding_agent::project_prompts_allowed(result.load_plan));
     REQUIRE(result.resources.skills.size() == 1);
     CHECK(result.resources.skills[0].name == "project-skill");
     REQUIRE(result.resources.prompt_templates.size() == 1);
     CHECK(result.resources.prompt_templates[0].name == "review");
+    CHECK(result.resources.prompt_templates[0].filePath.find(".pi/prompts/review.md") != std::string::npos);
     CHECK(result.diagnostics.empty());
 }
 
 TEST_CASE(
-    "project resource loader returns raw themes only when the TUI requests trusted resources",
-    "[coding_agent][project-resource-loader][theme][issue56]") {
+    "project resource loader returns raw .pi/ themes only when the TUI requests trusted resources",
+    "[coding_agent][project-resource-loader][theme][issue56][issue405]") {
     LoaderFixture fix;
-    fix.write(".cpp-harness/themes/project.json", valid_theme_json());
+    fix.write(".pi/themes/project.json", valid_theme_json());
 
     coding_agent::ProjectResourceLoadingRequest default_request;
     default_request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
     const auto disabled = fix.load(std::move(default_request));
     CHECK(disabled.resources.project_themes.empty());
-    CHECK(disabled.trust.source == coding_agent::ProjectTrustSource::NoProjectResources);
 
     coding_agent::ProjectResourceLoadingRequest untrusted_request;
     untrusted_request.theme_resources_enabled = true;
     const auto untrusted = fix.load(std::move(untrusted_request));
     CHECK(untrusted.resources.project_themes.empty());
-    require_decision_reason(
-        untrusted.load_plan,
-        coding_agent::ProjectResourceKind::ProjectThemes,
-        coding_agent::ResourceSkipReason::Untrusted);
-    CHECK_FALSE(has_diag_source(
-        untrusted,
-        coding_agent::ProjectResourceLoadingDiagnosticCategory::ThemeAdapter));
+    CHECK(untrusted.trust.decision == coding_agent::ProjectTrustDecision::Untrusted);
 
     coding_agent::ProjectResourceLoadingRequest trusted_request;
     trusted_request.theme_resources_enabled = true;
     trusted_request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
     const auto trusted = fix.load(std::move(trusted_request));
     REQUIRE(trusted.resources.project_themes.size() == 1);
-    CHECK(trusted.resources.project_themes[0].path == ".cpp-harness/themes/project.json");
+    CHECK(trusted.resources.project_themes[0].path == ".pi/themes/project.json");
     CHECK(trusted.resources.project_themes[0].json == valid_theme_json());
-    CHECK(coding_agent::project_themes_allowed(trusted.load_plan));
 }
 
-TEST_CASE("project resource loader skips untrusted resources before parsing adapters", "[coding_agent][project-resource-loader]") {
+TEST_CASE("project resource loader skips untrusted resources before parsing adapters", "[coding_agent][project-resource-loader][issue405]") {
     LoaderFixture fix;
     fix.write(
-        ".cpp-harness/skills/bad/SKILL.md",
+        ".pi/skills/bad/SKILL.md",
         "---\n"
         "name: bad\n"
         "this line has no colon\n"
@@ -180,7 +142,7 @@ TEST_CASE("project resource loader skips untrusted resources before parsing adap
         "---\n"
         "Body.\n");
     fix.write(
-        ".cpp-harness/prompts/bad.md",
+        ".pi/prompts/bad.md",
         "---\n"
         "bad line without colon\n"
         "---\n"
@@ -191,92 +153,64 @@ TEST_CASE("project resource loader skips untrusted resources before parsing adap
     CHECK(result.trust.decision == coding_agent::ProjectTrustDecision::Untrusted);
     CHECK(result.resources.skills.empty());
     CHECK(result.resources.prompt_templates.empty());
-    const auto* skill_decision = find_decision(result.load_plan, coding_agent::ProjectResourceKind::ProjectSkills);
-    REQUIRE(skill_decision != nullptr);
-    CHECK(skill_decision->reason == coding_agent::ResourceSkipReason::Untrusted);
-    CHECK_FALSE(has_diag_source(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::SkillAdapter));
-    CHECK_FALSE(has_diag_source(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter));
+    CHECK_FALSE(has_diag(result, coding_agent::ResourceDiagnosticType::Warning, "bad line"));
+    CHECK_FALSE(has_diag(result, coding_agent::ResourceDiagnosticType::Warning, "description"));
 }
 
-TEST_CASE("project resource loader skips disabled project resources without trust or parsing", "[coding_agent][project-resource-loader]") {
+TEST_CASE("project resource loader treats marker presence as trust-requiring under --no-skills", "[coding_agent][project-resource-loader][issue405]") {
+    LoaderFixture fix;
+    write_valid_project_skill(fix);
+    write_valid_project_prompt(fix);
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.no_skills = true;
+
+    auto result = fix.load(std::move(request));
+
+    // pi semantics: marker presence triggers the trust decision regardless of
+    // the no-* flags; the flags only gate which adapters load.
+    CHECK(result.trust.decision == coding_agent::ProjectTrustDecision::Untrusted);
+    CHECK(result.resources.skills.empty());
+    CHECK(result.resources.prompt_templates.empty());
+}
+
+TEST_CASE("project resource loader --no-skills drops skills discovery only", "[coding_agent][project-resource-loader][issue405]") {
     LoaderFixture fix;
     write_valid_project_skill(fix);
     write_valid_project_prompt(fix);
 
     coding_agent::ProjectResourceLoadingRequest request;
     request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
-    request.policy.project_skills = coding_agent::ResourceEnablement::Off;
+    request.no_skills = true;
 
     auto result = fix.load(std::move(request));
 
-    CHECK(result.trust.source == coding_agent::ProjectTrustSource::NoProjectResources);
+    CHECK(result.trust.decision == coding_agent::ProjectTrustDecision::Trusted);
     CHECK(result.resources.skills.empty());
-    CHECK(result.resources.prompt_templates.empty());
-    const auto* skill_decision = find_decision(result.load_plan, coding_agent::ProjectResourceKind::ProjectSkills);
-    REQUIRE(skill_decision != nullptr);
-    CHECK(skill_decision->reason == coding_agent::ResourceSkipReason::Disabled);
-    const auto* prompt_decision = find_decision(result.load_plan, coding_agent::ProjectResourceKind::ProjectPrompts);
-    REQUIRE(prompt_decision != nullptr);
-    CHECK(prompt_decision->reason == coding_agent::ResourceSkipReason::Disabled);
-    CHECK_FALSE(has_diag_source(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::SkillAdapter));
-    CHECK_FALSE(has_diag_source(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter));
+    REQUIRE(result.resources.prompt_templates.size() == 1);
+    CHECK(result.resources.prompt_templates[0].name == "review");
 }
 
-TEST_CASE("project resource loader marks project prompts disabled when prompt templates are off", "[coding_agent][project-resource-loader]") {
+TEST_CASE("project resource loader --no-prompt-templates drops discovery but keeps explicit inputs", "[coding_agent][project-resource-loader][issue405]") {
     LoaderFixture fix;
-    write_valid_project_prompt(fix);
+    write_valid_project_prompt(fix, "shared");
+    fix.write(
+        "explicit.md",
+        "---\n"
+        "description: Explicit prompt.\n"
+        "---\n"
+        "Explicit body.\n");
 
     coding_agent::ProjectResourceLoadingRequest request;
     request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
-    request.prompt_templates_enabled = false;
+    request.no_prompt_templates = true;
+    request.explicit_prompt_templates.push_back({.path = "explicit.md", .is_file = true});
 
     auto result = fix.load(std::move(request));
 
-    CHECK(result.trust.source == coding_agent::ProjectTrustSource::NoProjectResources);
-    CHECK_FALSE(coding_agent::project_prompts_allowed(result.load_plan));
-    const auto* prompt_decision = find_decision(result.load_plan, coding_agent::ProjectResourceKind::ProjectPrompts);
-    REQUIRE(prompt_decision != nullptr);
-    CHECK(prompt_decision->reason == coding_agent::ResourceSkipReason::Disabled);
-    CHECK(result.resources.prompt_templates.empty());
-    CHECK_FALSE(has_diag_source(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter));
-}
-
-TEST_CASE("project resource loader reports unsupported markers without resolving trust", "[coding_agent][project-resource-loader]") {
-    LoaderFixture fix;
-    fix.write(".cpp-harness/settings.json", "{}");
-    std::filesystem::create_directories(fix.workspace.path() / ".cpp-harness" / "extensions");
-    std::filesystem::create_directories(fix.workspace.path() / ".cpp-harness" / "packages");
-    fix.write(".cpp-harness/SYSTEM.md", "system");
-    fix.write(".cpp-harness/APPEND_SYSTEM.md", "append");
-    fix.write("trust.json", "{not json");
-
-    auto result = fix.load();
-
-    CHECK(result.trust.source == coding_agent::ProjectTrustSource::NoProjectResources);
-    REQUIRE(result.load_plan.decisions.size() == 5);
-    require_decision_reason(
-        result.load_plan,
-        coding_agent::ProjectResourceKind::ProjectSettings,
-        coding_agent::ResourceSkipReason::Unsupported);
-    require_decision_reason(
-        result.load_plan,
-        coding_agent::ProjectResourceKind::ProjectExtensions,
-        coding_agent::ResourceSkipReason::Unsupported);
-    require_decision_reason(
-        result.load_plan,
-        coding_agent::ProjectResourceKind::ProjectPackages,
-        coding_agent::ResourceSkipReason::Unsupported);
-    require_decision_reason(
-        result.load_plan,
-        coding_agent::ProjectResourceKind::ProjectSystemPrompt,
-        coding_agent::ResourceSkipReason::Unsupported);
-    require_decision_reason(
-        result.load_plan,
-        coding_agent::ProjectResourceKind::ProjectAppendSystemPrompt,
-        coding_agent::ResourceSkipReason::Unsupported);
-    CHECK(result.resources.skills.empty());
-    CHECK(result.resources.prompt_templates.empty());
-    CHECK(result.diagnostics.empty());
+    CHECK(result.trust.decision == coding_agent::ProjectTrustDecision::Trusted);
+    REQUIRE(result.resources.prompt_templates.size() == 1);
+    CHECK(result.resources.prompt_templates[0].name == "explicit");
 }
 
 TEST_CASE("project resource loader loads explicit prompt template inputs apart from project markers", "[coding_agent][project-resource-loader]") {
@@ -293,14 +227,14 @@ TEST_CASE("project resource loader loads explicit prompt template inputs apart f
 
     auto result = fix.load(std::move(request));
 
+    CHECK(result.trust.decision == coding_agent::ProjectTrustDecision::Trusted);
     CHECK(result.trust.source == coding_agent::ProjectTrustSource::NoProjectResources);
-    CHECK(result.load_plan.decisions.empty());
     REQUIRE(result.resources.prompt_templates.size() == 1);
     CHECK(result.resources.prompt_templates[0].name == "explicit");
     CHECK(result.resources.skills.empty());
 }
 
-TEST_CASE("project resource loader explicit prompt templates take precedence over project prompts", "[coding_agent][project-resource-loader]") {
+TEST_CASE("project resource loader explicit prompt templates take precedence over project prompts", "[coding_agent][project-resource-loader][issue405]") {
     LoaderFixture fix;
     write_valid_project_prompt(fix, "shared");
     fix.write(
@@ -320,20 +254,87 @@ TEST_CASE("project resource loader explicit prompt templates take precedence ove
     CHECK(result.resources.prompt_templates[0].name == "shared");
     CHECK(result.resources.prompt_templates[0].content.find("Explicit body") != std::string::npos);
     CHECK(result.resources.prompt_templates[0].content.find("Project prompt body") == std::string::npos);
-    CHECK(has_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::Duplicate, "duplicate_template_skipped"));
+    REQUIRE(has_diag(result, coding_agent::ResourceDiagnosticType::Collision, "name \"/shared\" collision"));
+    const auto collision = std::find_if(
+        result.diagnostics.begin(),
+        result.diagnostics.end(),
+        [](const auto& diag) { return diag.type == coding_agent::ResourceDiagnosticType::Collision; });
+    REQUIRE(collision != result.diagnostics.end());
+    REQUIRE(collision->collision.has_value());
+    CHECK(collision->collision->resource_type == coding_agent::ResourceCollisionResourceType::Prompt);
+    CHECK(collision->collision->name == "shared");
+    CHECK(collision->collision->winner_path.find("shared.md") != std::string::npos);
+    CHECK(collision->collision->loser_path.find(".pi/prompts/shared.md") != std::string::npos);
 }
 
-TEST_CASE("project resource loader surfaces adapter diagnostics for malformed trusted inputs", "[coding_agent][project-resource-loader]") {
+TEST_CASE("project resource loader loads user prompt templates below project precedence", "[coding_agent][project-resource-loader][issue405]") {
+    LoaderFixture fix;
+    write_valid_project_prompt(fix, "shared");
+    tests::TempWorkspace agent_dir;
+    agent_dir.write("prompts/shared.md",
+        "---\n"
+        "description: User prompt.\n"
+        "---\n"
+        "User body.\n");
+    agent_dir.write("prompts/only-user.md",
+        "---\n"
+        "description: User-only prompt.\n"
+        "---\n"
+        "User-only body.\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    request.agent_config_directory = agent_dir.path();
+
+    auto result = fix.load(std::move(request));
+
+    // User templates load; a project template with the same name wins.
+    REQUIRE(result.resources.prompt_templates.size() == 2);
+    const auto shared = std::find_if(
+        result.resources.prompt_templates.begin(),
+        result.resources.prompt_templates.end(),
+        [](const auto& tmpl) { return tmpl.name == "shared"; });
+    REQUIRE(shared != result.resources.prompt_templates.end());
+    CHECK(shared->content.find("Project prompt body") != std::string::npos);
+    const auto user_only = std::find_if(
+        result.resources.prompt_templates.begin(),
+        result.resources.prompt_templates.end(),
+        [](const auto& tmpl) { return tmpl.name == "only-user"; });
+    REQUIRE(user_only != result.resources.prompt_templates.end());
+    CHECK(user_only->filePath.find("prompts/only-user.md") != std::string::npos);
+    CHECK(has_diag(result, coding_agent::ResourceDiagnosticType::Collision, "name \"/shared\" collision"));
+}
+
+TEST_CASE("project resource loader user prompt templates load without project trust", "[coding_agent][project-resource-loader][issue405]") {
+    LoaderFixture fix;
+    tests::TempWorkspace agent_dir;
+    agent_dir.write("prompts/user-only.md",
+        "---\n"
+        "description: User prompt.\n"
+        "---\n"
+        "User body.\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.agent_config_directory = agent_dir.path();
+
+    auto result = fix.load(std::move(request));
+
+    CHECK(result.trust.decision == coding_agent::ProjectTrustDecision::Trusted);
+    REQUIRE(result.resources.prompt_templates.size() == 1);
+    CHECK(result.resources.prompt_templates[0].name == "user-only");
+}
+
+TEST_CASE("project resource loader surfaces adapter diagnostics for malformed trusted inputs", "[coding_agent][project-resource-loader][issue405]") {
     LoaderFixture fix;
     fix.write(
-        ".cpp-harness/skills/bad/SKILL.md",
+        ".pi/skills/bad/SKILL.md",
         "---\n"
         "name: bad\n"
         "description:\n"
         "---\n"
         "Body.\n");
     fix.write(
-        ".cpp-harness/prompts/bad.md",
+        ".pi/prompts/bad.md",
         "---\n"
         "bad line without colon\n"
         "---\n"
@@ -346,94 +347,57 @@ TEST_CASE("project resource loader surfaces adapter diagnostics for malformed tr
 
     CHECK(result.resources.skills.empty());
     CHECK(result.resources.prompt_templates.empty());
-    CHECK(has_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::SkillAdapter, "invalid_metadata"));
-    CHECK(has_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter, "parse_failed"));
+    CHECK(has_diag(result, coding_agent::ResourceDiagnosticType::Warning, "description is required"));
+    CHECK(has_diag(result, coding_agent::ResourceDiagnosticType::Warning, "YAML frontmatter parse error"));
 }
 
-TEST_CASE("project resource loader diagnoses project duplicates against host resources", "[coding_agent][project-resource-loader]") {
-    LoaderFixture fix;
-    write_valid_project_skill(fix, "same-name");
-    write_valid_project_prompt(fix, "same-template");
-
-    coding_agent::ProjectResourceLoadingRequest request;
-    request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
-    request.host_skills.push_back(coding_agent::Skill{
-        .name = "same-name",
-        .description = "Host skill.",
-        .content = "Host skill body.",
-        .filePath = "/host/same-name/SKILL.md",
-    });
-    request.host_prompt_templates.push_back(coding_agent::PromptTemplate{
-        .name = "same-template",
-        .description = "Host template.",
-        .content = "Host template body.",
-    });
-
-    auto result = fix.load(std::move(request));
-
-    REQUIRE(result.resources.skills.size() == 1);
-    CHECK(result.resources.skills[0].content == "Host skill body.");
-    REQUIRE(result.resources.prompt_templates.size() == 1);
-    CHECK(result.resources.prompt_templates[0].content == "Host template body.");
-    CHECK(has_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::Duplicate, "duplicate_skill_skipped"));
-    CHECK(has_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::Duplicate, "duplicate_template_skipped"));
-}
-
-TEST_CASE("project resource loader uses stable diagnostic categories and formatted codes", "[coding_agent][project-resource-loader]") {
-    LoaderFixture fix;
-    write_valid_project_skill(fix);
-    fix.write("trust.json", "{not json");
-
-    auto result = fix.load();
-
-    CHECK(has_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::Trust, "trust_store_unavailable"));
-    CHECK(has_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::LoadPlan, "project_skills"));
-
-    const auto trust_diag = std::find_if(
-        result.diagnostics.begin(),
-        result.diagnostics.end(),
-        [](const auto& diag) {
-            return diag.category == coding_agent::ProjectResourceLoadingDiagnosticCategory::Trust;
-        });
-    REQUIRE(trust_diag != result.diagnostics.end());
-    CHECK(coding_agent::project_resource_loading_diagnostic_code(*trust_diag) ==
-          "trust:trust_store_unavailable");
-
-    const auto load_plan_diag = std::find_if(
-        result.diagnostics.begin(),
-        result.diagnostics.end(),
-        [](const auto& diag) {
-            return diag.category == coding_agent::ProjectResourceLoadingDiagnosticCategory::LoadPlan;
-        });
-    REQUIRE(load_plan_diag != result.diagnostics.end());
-    CHECK(coding_agent::project_resource_loading_diagnostic_code(*load_plan_diag) ==
-          "resource:project_skills");
-}
-
-TEST_CASE("project resource loader classifies adapter duplicate diagnostics once", "[coding_agent][project-resource-loader]") {
+TEST_CASE("project resource loader diagnoses skill name collisions with winner and loser paths", "[coding_agent][project-resource-loader][issue405]") {
     LoaderFixture fix;
     fix.write(
-        ".cpp-harness/skills/first/SKILL.md",
+        ".pi/skills/first/SKILL.md",
         "---\n"
         "name: dupe-skill\n"
         "description: First skill.\n"
         "---\n"
         "First skill body.\n");
     fix.write(
-        ".cpp-harness/skills/second/SKILL.md",
+        ".pi/skills/second/SKILL.md",
         "---\n"
         "name: dupe-skill\n"
         "description: Duplicate skill.\n"
         "---\n"
         "Duplicate skill body.\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+
+    auto result = fix.load(std::move(request));
+
+    REQUIRE(result.resources.skills.size() == 1);
+    CHECK(result.resources.skills[0].content.find("First skill body") != std::string::npos);
+    REQUIRE(count_diag(result, coding_agent::ResourceDiagnosticType::Collision) == 1);
+    const auto& diagnostic = *std::find_if(
+        result.diagnostics.begin(),
+        result.diagnostics.end(),
+        [](const auto& diag) { return diag.type == coding_agent::ResourceDiagnosticType::Collision; });
+    CHECK(diagnostic.message == "name \"dupe-skill\" collision");
+    REQUIRE(diagnostic.collision.has_value());
+    CHECK(diagnostic.collision->resource_type == coding_agent::ResourceCollisionResourceType::Skill);
+    CHECK(diagnostic.collision->name == "dupe-skill");
+    CHECK(diagnostic.collision->winner_path.find(".pi/skills/first/SKILL.md") != std::string::npos);
+    CHECK(diagnostic.collision->loser_path.find(".pi/skills/second/SKILL.md") != std::string::npos);
+}
+
+TEST_CASE("project resource loader diagnoses prompt collisions within one project directory", "[coding_agent][project-resource-loader][issue405]") {
+    LoaderFixture fix;
     fix.write(
-        ".cpp-harness/prompts/dupe.md",
+        ".pi/prompts/dupe.md",
         "---\n"
         "description: First prompt.\n"
         "---\n"
         "First prompt body.\n");
     fix.write(
-        ".cpp-harness/prompts/dupe.MD",
+        ".pi/prompts/dupe.MD",
         "---\n"
         "description: Duplicate prompt.\n"
         "---\n"
@@ -444,16 +408,34 @@ TEST_CASE("project resource loader classifies adapter duplicate diagnostics once
 
     auto result = fix.load(std::move(request));
 
-    REQUIRE(result.resources.skills.size() == 1);
     REQUIRE(result.resources.prompt_templates.size() == 1);
-    CHECK(count_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::Duplicate,
-                     "duplicate_skill_skipped") == 1);
-    CHECK(count_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::Duplicate,
-                     "duplicate_template_skipped") == 1);
-    CHECK(count_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::SkillAdapter,
-                     "duplicate_name") == 0);
-    CHECK(count_diag(result, coding_agent::ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter,
-                     "duplicate_name") == 0);
+    CHECK(result.resources.prompt_templates[0].name == "dupe");
+    REQUIRE(count_diag(result, coding_agent::ResourceDiagnosticType::Collision) == 1);
+    const auto& diagnostic = *std::find_if(
+        result.diagnostics.begin(),
+        result.diagnostics.end(),
+        [](const auto& diag) { return diag.type == coding_agent::ResourceDiagnosticType::Collision; });
+    REQUIRE(diagnostic.collision.has_value());
+    CHECK(diagnostic.collision->resource_type == coding_agent::ResourceCollisionResourceType::Prompt);
+    CHECK(diagnostic.collision->name == "dupe");
+}
+
+TEST_CASE("project resource loader surfaces trust store failures as pi-shaped warnings", "[coding_agent][project-resource-loader][issue405]") {
+    LoaderFixture fix;
+    write_valid_project_skill(fix);
+    fix.write("trust.json", "{not json");
+
+    auto result = fix.load();
+
+    CHECK(result.trust.decision == coding_agent::ProjectTrustDecision::Untrusted);
+    CHECK(has_diag(result, coding_agent::ResourceDiagnosticType::Warning, "failed to parse trust store"));
+    const auto diag = std::find_if(
+        result.diagnostics.begin(),
+        result.diagnostics.end(),
+        [](const auto& d) { return d.message.find("trust store") != std::string::npos; });
+    REQUIRE(diag != result.diagnostics.end());
+    REQUIRE(diag->path.has_value());
+    CHECK(diag->path->find("trust.json") != std::string::npos);
 }
 
 TEST_CASE(
@@ -463,7 +445,7 @@ TEST_CASE(
     const std::string secret = "sk-resource-diagnostic-secret-123456";
     const std::string hostile_name = secret + std::string(1100, 'x');
     fix.write(
-        ".cpp-harness/skills/safe/SKILL.md",
+        ".pi/skills/safe/SKILL.md",
         "---\nname: " + hostile_name + "\ndescription: Hostile metadata.\n---\nBody.\n");
 
     coding_agent::ProjectResourceLoadingRequest request;
@@ -494,7 +476,7 @@ TEST_CASE(
         std::string(200, 'd') + "/" + std::string(200, 'e') + "/" +
         std::string(200, 'f');
     fix.write(
-        ".cpp-harness/skills/" + long_dir + "/SKILL.md",
+        ".pi/skills/" + long_dir + "/SKILL.md",
         "---\nname: deep-skill\ndescription: Deep.\n---\nBody.\n");
 
     coding_agent::ProjectResourceLoadingRequest request;
@@ -517,7 +499,52 @@ TEST_CASE("project resource loader treats explicit prompt template read failure 
     auto result = fix.load(std::move(request));
 
     REQUIRE(!result.fatal_errors.empty());
-    CHECK(result.fatal_errors[0].category == coding_agent::ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter);
+    CHECK(result.fatal_errors[0].type == coding_agent::ResourceDiagnosticType::Error);
+    CHECK(result.fatal_errors[0].message.find("could not open file") != std::string::npos ||
+          result.fatal_errors[0].message.find("not found") != std::string::npos ||
+          result.fatal_errors[0].message.find("could not read") != std::string::npos);
+    CHECK(result.resources.prompt_templates.empty());
+    CHECK(result.diagnostics.empty());
+}
+
+TEST_CASE("project resource loader treats explicit non-markdown input as fatal", "[coding_agent][project-resource-loader]") {
+    LoaderFixture fix;
+    fix.write("notes.txt", "not a template");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.explicit_prompt_templates.push_back({.path = "notes.txt", .is_file = true});
+
+    auto result = fix.load(std::move(request));
+
+    REQUIRE(!result.fatal_errors.empty());
+    CHECK(result.fatal_errors[0].type == coding_agent::ResourceDiagnosticType::Error);
+    CHECK(result.fatal_errors[0].message.find(".md extension") != std::string::npos);
+}
+
+TEST_CASE("project resource loader rejects legacy .cpp-harness/ markers without loading them", "[coding_agent][project-resource-loader][issue405]") {
+    LoaderFixture fix;
+    // A legacy marker tree must be invisible: no trust trigger, no load.
+    fix.write(
+        ".cpp-harness/skills/legacy/SKILL.md",
+        "---\n"
+        "name: legacy\n"
+        "description: Legacy skill.\n"
+        "---\n"
+        "Legacy body.\n");
+    fix.write(
+        ".cpp-harness/prompts/legacy.md",
+        "---\n"
+        "description: Legacy prompt.\n"
+        "---\n"
+        "Legacy body.\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+
+    auto result = fix.load(std::move(request));
+
+    CHECK(result.trust.source == coding_agent::ProjectTrustSource::NoProjectResources);
+    CHECK(result.resources.skills.empty());
     CHECK(result.resources.prompt_templates.empty());
     CHECK(result.diagnostics.empty());
 }

@@ -1482,8 +1482,8 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest resume;
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     resume.workspace = workspace.path();
-    resume.disable_project_skills = true;
-    resume.disable_prompt_templates = true;
+    resume.no_skills = true;
+    resume.no_prompt_templates = true;
     auto resumed = coding_agent::create_agent_session_for_testing(
         std::move(resume), ai::providers::make_scripted_fake_models());
     REQUIRE(resumed);
@@ -3067,14 +3067,14 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     workspace.write(
-        ".cpp-harness/skills/project-skill/SKILL.md",
+        ".pi/skills/project-skill/SKILL.md",
         "---\n"
         "name: project-skill\n"
         "description: Project skill completion.\n"
         "---\n"
         "Project skill body.\n");
     workspace.write(
-        ".cpp-harness/prompts/project-prompt.md",
+        ".pi/prompts/project-prompt.md",
         "---\n"
         "description: Project prompt completion.\n"
         "---\n"

@@ -20,37 +20,44 @@ bool detected(const coding_agent::ProjectResourceDetectionResult& result, coding
     return coding_agent::has_detected_kind(result, kind);
 }
 
-coding_agent::ProjectTrustResolution trust_resolution(
-    coding_agent::ProjectTrustDecision decision,
-    coding_agent::ProjectTrustSource source) {
-    return coding_agent::ProjectTrustResolution{
-        .decision = decision,
-        .source = source,
-        .matched_path = std::nullopt,
-        .diagnostics = {},
-    };
-}
-
 } // namespace
 
-TEST_CASE("project resource detection ignores empty harness and sessions", "[coding_agent][project-resources]") {
+TEST_CASE("project resource detection ignores an empty project and sessions dir", "[coding_agent][project-resources]") {
     tests::TempWorkspace workspace;
-    std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "sessions");
+    std::filesystem::create_directories(workspace.path() / ".pi" / "sessions");
 
     auto result = coding_agent::detect_project_resources(fs_for(workspace));
 
     CHECK(result.resources.empty());
     CHECK(result.diagnostics.empty());
+    CHECK_FALSE(coding_agent::needs_project_trust_resolution(result));
 }
 
 TEST_CASE(
-    "project resource detection maps protected markers",
-    "[coding_agent][project-resources][issue56]") {
+    "project resource detection maps the .pi/ trust-requiring markers",
+    "[coding_agent][project-resources][issue405]") {
     tests::TempWorkspace workspace;
-    workspace.write(".cpp-harness/settings.json", "{}");
+    std::filesystem::create_directories(workspace.path() / ".pi" / "skills");
+    std::filesystem::create_directories(workspace.path() / ".pi" / "prompts");
+    std::filesystem::create_directories(workspace.path() / ".pi" / "themes");
+    workspace.write(".pi/SYSTEM.md", "system");
+    workspace.write(".pi/APPEND_SYSTEM.md", "append");
+
+    auto result = coding_agent::detect_project_resources(fs_for(workspace));
+
+    CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectSkills));
+    CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectPrompts));
+    CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectThemes));
+    CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectSystemPrompt));
+    CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectAppendSystemPrompt));
+    CHECK(result.diagnostics.empty());
+    CHECK(coding_agent::needs_project_trust_resolution(result));
+}
+
+TEST_CASE("project resource detection ignores legacy .cpp-harness/ markers with no fallback read", "[coding_agent][project-resources][issue405]") {
+    tests::TempWorkspace workspace;
     std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "skills");
     std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "prompts");
-    std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "themes");
     std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "extensions");
     std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "packages");
     workspace.write(".cpp-harness/SYSTEM.md", "system");
@@ -58,111 +65,48 @@ TEST_CASE(
 
     auto result = coding_agent::detect_project_resources(fs_for(workspace));
 
-    CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectSettings));
-    CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectSkills));
-    CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectPrompts));
-    CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectThemes));
-    CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectExtensions));
-    CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectPackages));
-    CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectSystemPrompt));
-    CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectAppendSystemPrompt));
+    CHECK(result.resources.empty());
     CHECK(result.diagnostics.empty());
+    CHECK_FALSE(coding_agent::needs_project_trust_resolution(result));
 }
 
 TEST_CASE("project resource detection is case-sensitive", "[coding_agent][project-resources]") {
     tests::TempWorkspace workspace;
-    std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "Skills");
-    workspace.write(".cpp-harness/system.md", "lowercase");
+    std::filesystem::create_directories(workspace.path() / ".pi" / "Skills");
+    workspace.write(".pi/system.md", "lowercase");
 
     auto result = coding_agent::detect_project_resources(fs_for(workspace));
 
     CHECK_FALSE(detected(result, coding_agent::ProjectResourceKind::ProjectSkills));
     CHECK_FALSE(detected(result, coding_agent::ProjectResourceKind::ProjectSystemPrompt));
-}
-
-TEST_CASE("project resource load plan gates skills by trust and enablement", "[coding_agent][project-resources]") {
-    tests::TempWorkspace workspace;
-    std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "skills");
-    auto detection = coding_agent::detect_project_resources(fs_for(workspace));
-
-    coding_agent::ProjectResourcePolicy policy{};
-    CHECK(coding_agent::needs_project_trust_resolution(detection, policy));
-
-    auto trusted_plan = coding_agent::build_project_resource_load_plan(
-        detection,
-        policy,
-        trust_resolution(
-            coding_agent::ProjectTrustDecision::Trusted,
-            coding_agent::ProjectTrustSource::CliOverride));
-    CHECK(coding_agent::project_skills_allowed(trusted_plan));
-
-    auto untrusted_plan = coding_agent::build_project_resource_load_plan(
-        detection,
-        policy,
-        trust_resolution(
-            coding_agent::ProjectTrustDecision::Untrusted,
-            coding_agent::ProjectTrustSource::DefaultAskNoUi));
-    CHECK_FALSE(coding_agent::project_skills_allowed(untrusted_plan));
-    CHECK(untrusted_plan.skipped_for_untrusted);
-
-    policy.project_skills = coding_agent::ResourceEnablement::Off;
-    CHECK_FALSE(coding_agent::needs_project_trust_resolution(detection, policy));
-    auto disabled_plan = coding_agent::build_project_resource_load_plan(
-        detection,
-        policy,
-        trust_resolution(
-            coding_agent::ProjectTrustDecision::Trusted,
-            coding_agent::ProjectTrustSource::CliOverride));
-    CHECK_FALSE(coding_agent::project_skills_allowed(disabled_plan));
-    REQUIRE(disabled_plan.decisions.size() == 1);
-    CHECK(disabled_plan.decisions[0].reason == coding_agent::ResourceSkipReason::Disabled);
+    CHECK_FALSE(coding_agent::needs_project_trust_resolution(result));
 }
 
 TEST_CASE(
-    "project resource load plan gates themes independently",
-    "[coding_agent][project-resources][theme][issue56]") {
+    "project resource detection treats every loadable marker as trust-requiring",
+    "[coding_agent][project-resources][issue405]") {
     tests::TempWorkspace workspace;
-    std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "themes");
-    const auto detection = coding_agent::detect_project_resources(fs_for(workspace));
+    workspace.write(".pi/SYSTEM.md", "system");
 
-    coding_agent::ProjectResourcePolicy policy{};
-    CHECK(coding_agent::needs_project_trust_resolution(detection, policy));
-    const auto trusted_plan = coding_agent::build_project_resource_load_plan(
-        detection,
-        policy,
-        trust_resolution(
-            coding_agent::ProjectTrustDecision::Trusted,
-            coding_agent::ProjectTrustSource::CliOverride));
-    CHECK(coding_agent::project_themes_allowed(trusted_plan));
+    auto result = coding_agent::detect_project_resources(fs_for(workspace));
 
-    policy.project_themes = coding_agent::ResourceEnablement::Off;
-    CHECK_FALSE(coding_agent::needs_project_trust_resolution(detection, policy));
-    const auto disabled_plan = coding_agent::build_project_resource_load_plan(
-        detection,
-        policy,
-        trust_resolution(
-            coding_agent::ProjectTrustDecision::Trusted,
-            coding_agent::ProjectTrustSource::CliOverride));
-    CHECK_FALSE(coding_agent::project_themes_allowed(disabled_plan));
+    CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectSystemPrompt));
+    CHECK(coding_agent::needs_project_trust_resolution(result));
 }
 
-TEST_CASE("project resource load plan does not force trust for unsupported future markers", "[coding_agent][project-resources]") {
+TEST_CASE("project resource detection reports marker kind mismatches and keeps them untrusted", "[coding_agent][project-resources]") {
     tests::TempWorkspace workspace;
-    std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "extensions");
+    workspace.write(".pi/skills", "a file where a directory is expected");
 
-    auto detection = coding_agent::detect_project_resources(fs_for(workspace));
-    coding_agent::ProjectResourcePolicy policy{};
+    auto result = coding_agent::detect_project_resources(fs_for(workspace));
 
-    CHECK_FALSE(coding_agent::needs_project_trust_resolution(detection, policy));
-    auto plan = coding_agent::build_project_resource_load_plan(
-        detection,
-        policy,
-        trust_resolution(
-            coding_agent::ProjectTrustDecision::Trusted,
-            coding_agent::ProjectTrustSource::NoProjectResources));
-    REQUIRE(plan.decisions.size() == 1);
-    CHECK(plan.decisions[0].reason == coding_agent::ResourceSkipReason::Unsupported);
-    CHECK_FALSE(plan.decisions[0].allowed);
+    CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectSkills));
+    REQUIRE_FALSE(result.diagnostics.empty());
+    CHECK(result.diagnostics[0].type == coding_agent::ResourceDiagnosticType::Warning);
+    CHECK(result.diagnostics[0].message.find("unexpected kind") != std::string::npos);
+    CHECK(result.diagnostics[0].path == ".pi/skills");
+    CHECK_FALSE(result.resources[0].loadable);
+    CHECK_FALSE(coding_agent::needs_project_trust_resolution(result));
 }
 
 #if defined(__unix__) || defined(__APPLE__)
@@ -171,99 +115,41 @@ TEST_CASE("project resource detection rejects escaping symlink marker", "[coding
     auto outside = std::filesystem::temp_directory_path() / "cch-outside-skills";
     std::filesystem::remove_all(outside);
     std::filesystem::create_directories(outside);
-    std::filesystem::create_directories(workspace.path() / ".cpp-harness");
-    std::filesystem::create_directory_symlink(outside, workspace.path() / ".cpp-harness" / "skills");
+    std::filesystem::create_directories(workspace.path() / ".pi");
+    std::filesystem::create_directory_symlink(outside, workspace.path() / ".pi" / "skills");
 
     auto result = coding_agent::detect_project_resources(fs_for(workspace));
 
     CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectSkills));
     REQUIRE_FALSE(result.diagnostics.empty());
-    CHECK(result.diagnostics[0].code == "marker_symlink_invalid");
+    CHECK(result.diagnostics[0].message.find("marker symlink") != std::string::npos ||
+          result.diagnostics[0].message.find("path escapes") != std::string::npos ||
+          result.diagnostics[0].message.find("outside") != std::string::npos);
     CHECK_FALSE(result.resources[0].loadable);
 
     std::filesystem::remove_all(outside);
 }
 #endif
 
-// ── project_prompts_allowed trust gating ──
-
-TEST_CASE("project_prompts_allowed returns true when trusted with prompts marker", "[coding_agent][project-resources][prompts]") {
+TEST_CASE("project resource detection maps markers with pi diagnostic shape", "[coding_agent][project-resources][issue405]") {
     tests::TempWorkspace workspace;
-    std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "prompts");
+    workspace.write(".pi/skills", "not a directory");
 
-    auto detection = coding_agent::detect_project_resources(fs_for(workspace));
-    coding_agent::ProjectResourcePolicy policy{};
-    CHECK(coding_agent::needs_project_trust_resolution(detection, policy));
+    auto result = coding_agent::detect_project_resources(fs_for(workspace));
 
-    auto plan = coding_agent::build_project_resource_load_plan(
-        detection, policy,
-        trust_resolution(
-            coding_agent::ProjectTrustDecision::Trusted,
-            coding_agent::ProjectTrustSource::CliOverride));
-    CHECK(coding_agent::project_prompts_allowed(plan));
-    REQUIRE(plan.decisions.size() == 1);
-    CHECK(plan.decisions[0].allowed);
-    CHECK(plan.decisions[0].reason == coding_agent::ResourceSkipReason::Allowed);
+    REQUIRE(result.diagnostics.size() == 1);
+    const auto& diagnostic = result.diagnostics[0];
+    CHECK(diagnostic.type == coding_agent::ResourceDiagnosticType::Warning);
+    CHECK_FALSE(diagnostic.message.empty());
+    CHECK(diagnostic.path == ".pi/skills");
+    CHECK_FALSE(diagnostic.collision.has_value());
 }
 
-TEST_CASE("project_prompts_allowed returns false when no prompts marker", "[coding_agent][project-resources][prompts]") {
-    tests::TempWorkspace workspace;
-    // No .cpp-harness/prompts directory
-    auto detection = coding_agent::detect_project_resources(fs_for(workspace));
-    coding_agent::ProjectResourcePolicy policy{};
-    auto plan = coding_agent::build_project_resource_load_plan(
-        detection, policy,
-        trust_resolution(
-            coding_agent::ProjectTrustDecision::Trusted,
-            coding_agent::ProjectTrustSource::NoProjectResources));
-    CHECK_FALSE(coding_agent::project_prompts_allowed(plan));
-}
-
-TEST_CASE("project_prompts_allowed returns false when untrusted", "[coding_agent][project-resources][prompts]") {
-    tests::TempWorkspace workspace;
-    std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "prompts");
-
-    auto detection = coding_agent::detect_project_resources(fs_for(workspace));
-    coding_agent::ProjectResourcePolicy policy{};
-
-    auto plan = coding_agent::build_project_resource_load_plan(
-        detection, policy,
-        trust_resolution(
-            coding_agent::ProjectTrustDecision::Untrusted,
-            coding_agent::ProjectTrustSource::DefaultAskNoUi));
-    CHECK_FALSE(coding_agent::project_prompts_allowed(plan));
-    REQUIRE(plan.decisions.size() == 1);
-    CHECK(plan.decisions[0].reason == coding_agent::ResourceSkipReason::Untrusted);
-}
-
-TEST_CASE("project_prompts_allowed returns false when skills disabled", "[coding_agent][project-resources][prompts]") {
-    tests::TempWorkspace workspace;
-    std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "prompts");
-
-    auto detection = coding_agent::detect_project_resources(fs_for(workspace));
-    coding_agent::ProjectResourcePolicy policy{};
-    policy.project_skills = coding_agent::ResourceEnablement::Off;
-
-    auto plan = coding_agent::build_project_resource_load_plan(
-        detection, policy,
-        trust_resolution(
-            coding_agent::ProjectTrustDecision::Trusted,
-            coding_agent::ProjectTrustSource::CliOverride));
-    CHECK_FALSE(coding_agent::project_prompts_allowed(plan));
-    // Note: project_prompts_allowed uses the same project_skills enablement field;
-    // --no-skills disables prompts as well.
-}
-
-TEST_CASE("project_prompts_allowed returns false when unsupported", "[coding_agent][project-resources][prompts]") {
-    // Regression: has_implemented_loader must return true for ProjectPrompts.
-    // This test verifies the loader gate is open.
-    tests::TempWorkspace workspace;
-    std::filesystem::create_directories(workspace.path() / ".cpp-harness" / "prompts");
-
-    auto detection = coding_agent::detect_project_resources(fs_for(workspace));
-    // Verify detection finds the prompts marker
-    CHECK(coding_agent::has_detected_kind(detection, coding_agent::ProjectResourceKind::ProjectPrompts));
-    
-    coding_agent::ProjectResourcePolicy policy{};
-    CHECK(coding_agent::needs_project_trust_resolution(detection, policy));
+TEST_CASE("to_string names the .pi/ marker kinds", "[coding_agent][project-resources]") {
+    CHECK(coding_agent::to_string(coding_agent::ProjectResourceKind::ProjectSkills) == "project_skills");
+    CHECK(coding_agent::to_string(coding_agent::ProjectResourceKind::ProjectPrompts) == "project_prompts");
+    CHECK(coding_agent::to_string(coding_agent::ProjectResourceKind::ProjectThemes) == "project_themes");
+    CHECK(coding_agent::to_string(coding_agent::ProjectResourceKind::ProjectSystemPrompt) == "project_system_prompt");
+    CHECK(coding_agent::to_string(coding_agent::ProjectResourceKind::ProjectAppendSystemPrompt) ==
+          "project_append_system_prompt");
 }

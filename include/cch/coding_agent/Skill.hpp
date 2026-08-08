@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cch/coding_agent/ProjectResources.hpp>
+
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -12,13 +15,15 @@ enum class SkillDiagnosticCode {
     read_failed,
     parse_failed,
     invalid_metadata,
-    duplicate_name,
+    collision,
 };
 
-/// Warning produced while loading skills. Failures are warnings, not errors —
-/// invalid or unreadable skills are skipped rather than aborting startup.
+/// Diagnostic produced while loading skills, in pi's `ResourceDiagnostic`
+/// shape (`core/skills.ts`): failures are warnings, not errors — invalid or
+/// unreadable skills are skipped rather than aborting startup; duplicate
+/// names emit the collision kind with winner/loser paths.
 struct SkillDiagnostic {
-    /// Diagnostic severity. Currently only "warning" is emitted.
+    /// pi `ResourceDiagnostic.type` — "warning" | "collision".
     std::string type{"warning"};
     /// Stable diagnostic code.
     SkillDiagnosticCode code{SkillDiagnosticCode::invalid_metadata};
@@ -26,6 +31,9 @@ struct SkillDiagnostic {
     std::string message;
     /// Path associated with the diagnostic.
     std::string path;
+    /// pi `ResourceDiagnostic.collision` payload for duplicate-name
+    /// collisions (winner/loser paths).
+    std::optional<ResourceCollision> collision;
 };
 
 /// Skill loaded from a SKILL.md file.

@@ -1231,3 +1231,56 @@ TEST_CASE(
         CHECK(cch::tui::is_known_unassembled_tui_keybinding(id));
     }
 }
+
+TEST_CASE(
+    "the loader subset keeps .pi/ markers and deletes the enablement policy and .cpp-harness markers",
+    "[architecture][coding_agent][issue405]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto project_resources_header = read_text(
+        source_root / "include" / "cch" / "coding_agent" / "ProjectResources.hpp");
+    const auto loader_header = read_text(
+        source_root / "src" / "coding_agent" / "ProjectResourceLoader.hpp");
+    const auto loader_source = read_text(
+        source_root / "src" / "coding_agent" / "ProjectResourceLoader.cpp") +
+        read_text(source_root / "src" / "coding_agent" / "ProjectResources.cpp");
+
+    // The ResourceEnablement auto/on/off policy is deleted ("trusted means
+    // load", #327): no policy types anywhere in the loader surface.
+    for (const auto& deleted : {
+             "ResourceEnablement",
+             "ProjectResourcePolicy",
+             "ResourceSkipReason",
+             "ProjectResourceLoadPlan",
+             "ResourceLoadDecision",
+             "ResourceDiagnosticSeverity",
+             "parse_resource_enablement",
+             "build_project_resource_load_plan",
+             "project_skills_allowed",
+             "project_prompts_allowed",
+             "project_themes_allowed",
+         }) {
+        CHECK(project_resources_header.find(deleted) == std::string::npos);
+        CHECK(loader_header.find(deleted) == std::string::npos);
+        CHECK(loader_source.find(deleted) == std::string::npos);
+    }
+
+    // The .cpp-harness/ marker names are deleted with no fallback read; the
+    // .pi/ markers are the only project markers.
+    CHECK(loader_source.find(".cpp-harness") == std::string::npos);
+    CHECK(loader_source.find("\".pi/skills\"") != std::string::npos);
+    CHECK(loader_source.find("\".pi/prompts\"") != std::string::npos);
+    CHECK(loader_source.find("\".pi/themes\"") != std::string::npos);
+    CHECK(loader_source.find("\".pi/SYSTEM.md\"") != std::string::npos);
+    CHECK(loader_source.find("\".pi/APPEND_SYSTEM.md\"") != std::string::npos);
+    CHECK(project_resources_header.find("ProjectExtensions") == std::string::npos);
+    CHECK(project_resources_header.find("ProjectPackages") == std::string::npos);
+
+    // Diagnostics are the pi ResourceDiagnostic shape: type/message/path/
+    // collision, no C++-invented codes or categories.
+    CHECK(project_resources_header.find("ResourceDiagnosticType") != std::string::npos);
+    CHECK(project_resources_header.find("ResourceCollision") != std::string::npos);
+    CHECK(project_resources_header.find("winner_path") != std::string::npos);
+    CHECK(project_resources_header.find("loser_path") != std::string::npos);
+    CHECK(loader_header.find("ProjectResourceLoadingDiagnostic") == std::string::npos);
+    CHECK(loader_header.find("project_resource_loading_diagnostic_code") == std::string::npos);
+}

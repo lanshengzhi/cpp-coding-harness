@@ -7,278 +7,171 @@
 
 #include <algorithm>
 #include <array>
-#include <format>
-#include <iterator>
-#include <set>
 #include <string>
+#include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 namespace cch::coding_agent {
 namespace {
 
-struct LoadedResourceNames {
-    std::set<std::string> skill_names;
-    std::set<std::string> prompt_template_names;
-};
+constexpr std::string_view kProjectSkillsMarker = ".pi/skills";
+constexpr std::string_view kProjectPromptsMarker = ".pi/prompts";
+constexpr std::string_view kProjectThemesMarker = ".pi/themes";
 
-struct ProjectResourceAdapter {
-    ProjectResourceKind kind;
-    const char* marker_path;
-    bool (*plan_allows)(const ProjectResourceLoadPlan&);
-    void (*load)(
-        const harness::WorkspaceFileSystem&,
-        ProjectResourceLoadingResult&,
-        LoadedResourceNames&);
-};
-
-[[nodiscard]] ProjectResourceLoadingDiagnostic loading_diagnostic(
-    ResourceDiagnosticSeverity severity,
-    ProjectResourceLoadingDiagnosticCategory category,
-    std::string code,
+[[nodiscard]] ResourceDiagnostic warning_diagnostic(
     std::string message,
-    std::optional<std::string> path = std::nullopt,
-    std::optional<ProjectResourceKind> kind = std::nullopt) {
-    return ProjectResourceLoadingDiagnostic{
-        .severity = severity,
-        .category = category,
-        .code = std::move(code),
+    std::optional<std::string> path = std::nullopt) {
+    return ResourceDiagnostic{
+        .type = ResourceDiagnosticType::Warning,
         .message = std::move(message),
         .path = std::move(path),
-        .kind = kind,
+        .collision = std::nullopt,
     };
 }
 
-[[nodiscard]] ResourceDiagnosticSeverity to_resource_severity(ProjectTrustDiagnosticSeverity severity) {
-    switch (severity) {
-    case ProjectTrustDiagnosticSeverity::Info:
-        return ResourceDiagnosticSeverity::Info;
-    case ProjectTrustDiagnosticSeverity::Warning:
-        return ResourceDiagnosticSeverity::Warning;
-    case ProjectTrustDiagnosticSeverity::Error:
-        return ResourceDiagnosticSeverity::Error;
-    }
-    return ResourceDiagnosticSeverity::Warning;
+[[nodiscard]] ResourceDiagnostic error_diagnostic(
+    std::string message,
+    std::optional<std::string> path = std::nullopt) {
+    return ResourceDiagnostic{
+        .type = ResourceDiagnosticType::Error,
+        .message = std::move(message),
+        .path = std::move(path),
+        .collision = std::nullopt,
+    };
 }
 
-[[nodiscard]] std::string to_code(SkillDiagnosticCode code) {
-    switch (code) {
-    case SkillDiagnosticCode::file_info_failed:
-        return "file_info_failed";
-    case SkillDiagnosticCode::list_failed:
-        return "list_failed";
-    case SkillDiagnosticCode::read_failed:
-        return "read_failed";
-    case SkillDiagnosticCode::parse_failed:
-        return "parse_failed";
-    case SkillDiagnosticCode::invalid_metadata:
-        return "invalid_metadata";
-    case SkillDiagnosticCode::duplicate_name:
-        return "duplicate_name";
-    }
-    return "invalid_metadata";
-}
-
-[[nodiscard]] std::string to_code(PromptTemplateDiagnosticCode code) {
-    switch (code) {
-    case PromptTemplateDiagnosticCode::file_info_failed:
-        return "file_info_failed";
-    case PromptTemplateDiagnosticCode::list_failed:
-        return "list_failed";
-    case PromptTemplateDiagnosticCode::read_failed:
-        return "read_failed";
-    case PromptTemplateDiagnosticCode::parse_failed:
-        return "parse_failed";
-    case PromptTemplateDiagnosticCode::duplicate_name:
-        return "duplicate_name";
-    case PromptTemplateDiagnosticCode::unsupported_type:
-        return "unsupported_type";
-    }
-    return "parse_failed";
+/// pi `dedupePrompts` collision diagnostic (`resource-loader.ts`):
+/// first loaded template wins; the loser carries winner/loser paths.
+[[nodiscard]] ResourceDiagnostic prompt_collision_diagnostic(
+    const ResourceCollision& collision) {
+    return ResourceDiagnostic{
+        .type = ResourceDiagnosticType::Collision,
+        .message = "name \"/" + collision.name + "\" collision",
+        .path = collision.loser_path,
+        .collision = collision,
+    };
 }
 
 void add_trust_diagnostics(
-    ProjectResourceLoadingResult& result,
+    std::vector<ResourceDiagnostic>& diagnostics,
     const ProjectTrustResolution& trust) {
     for (const auto& diagnostic : trust.diagnostics) {
-        result.diagnostics.push_back(loading_diagnostic(
-            to_resource_severity(diagnostic.severity),
-            ProjectResourceLoadingDiagnosticCategory::Trust,
-            diagnostic.code,
+        diagnostics.push_back(warning_diagnostic(
             diagnostic.message,
             diagnostic.path));
     }
 }
 
-void add_load_plan_diagnostics(
-    ProjectResourceLoadingResult& result,
-    const ProjectResourceLoadPlan& plan) {
-    for (const auto& diagnostic : plan.diagnostics) {
-        result.diagnostics.push_back(loading_diagnostic(
-            diagnostic.severity,
-            ProjectResourceLoadingDiagnosticCategory::LoadPlan,
-            diagnostic.code,
-            diagnostic.message,
-            diagnostic.path.empty() ? std::nullopt : std::optional<std::string>{diagnostic.path},
-            diagnostic.kind));
-    }
-
-    for (const auto& decision : plan.decisions) {
-        if (!decision.detected || decision.allowed || decision.reason == ResourceSkipReason::Unsupported) {
-            continue;
+/// Tracks loaded template names to their first-seen source path so that
+/// cross-source duplicates produce pi-shaped collision diagnostics with
+/// winner/loser paths.
+class PromptNameTracker {
+public:
+    /// Appends one source batch, dropping duplicate names (first wins).
+    void append(
+        std::vector<PromptTemplate>& out,
+        std::vector<ResourceDiagnostic>& diagnostics,
+        std::vector<PromptTemplate> incoming) {
+        for (auto& tmpl : incoming) {
+            if (auto it = by_name_.find(tmpl.name); it != by_name_.end()) {
+                diagnostics.push_back(prompt_collision_diagnostic(ResourceCollision{
+                    .resource_type = ResourceCollisionResourceType::Prompt,
+                    .name = tmpl.name,
+                    .winner_path = it->second,
+                    .loser_path = tmpl.filePath,
+                    .winner_source = std::nullopt,
+                    .loser_source = std::nullopt,
+                }));
+                continue;
+            }
+            by_name_.emplace(tmpl.name, tmpl.filePath);
+            out.push_back(std::move(tmpl));
         }
-        result.diagnostics.push_back(loading_diagnostic(
-            ResourceDiagnosticSeverity::Info,
-            ProjectResourceLoadingDiagnosticCategory::LoadPlan,
-            to_string(decision.kind),
-            to_string(decision.kind) + " skipped: " + to_string(decision.reason),
-            decision.path.empty() ? std::nullopt : std::optional<std::string>{decision.path},
-            decision.kind));
     }
-}
 
-void add_skill_diagnostics(
-    ProjectResourceLoadingResult& result,
-    const SkillLoadResult& load,
-    ProjectResourceKind kind) {
-    for (const auto& diagnostic : load.diagnostics) {
-        auto category = ProjectResourceLoadingDiagnosticCategory::SkillAdapter;
-        auto code = to_code(diagnostic.code);
-        if (diagnostic.code == SkillDiagnosticCode::duplicate_name) {
-            category = ProjectResourceLoadingDiagnosticCategory::Duplicate;
-            code = "duplicate_skill_skipped";
-        }
-        result.diagnostics.push_back(loading_diagnostic(
-            ResourceDiagnosticSeverity::Warning,
-            category,
-            std::move(code),
-            diagnostic.message,
-            diagnostic.path.empty() ? std::nullopt : std::optional<std::string>{diagnostic.path},
-            kind));
-    }
-}
-
-void add_prompt_template_diagnostics(
-    ProjectResourceLoadingResult& result,
-    const PromptTemplateLoadResult& load,
-    std::optional<ProjectResourceKind> kind) {
-    for (const auto& diagnostic : load.diagnostics) {
-        auto category = ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter;
-        auto code = to_code(diagnostic.code);
-        if (diagnostic.code == PromptTemplateDiagnosticCode::duplicate_name) {
-            category = ProjectResourceLoadingDiagnosticCategory::Duplicate;
-            code = "duplicate_template_skipped";
-        }
-        result.diagnostics.push_back(loading_diagnostic(
-            ResourceDiagnosticSeverity::Warning,
-            category,
-            std::move(code),
-            diagnostic.message,
-            diagnostic.path.empty() ? std::nullopt : std::optional<std::string>{diagnostic.path},
-            kind));
-    }
-}
-
-void append_project_skills(
-    ProjectResourceLoadingResult& result,
-    SkillLoadResult load,
-    LoadedResourceNames& names) {
-    add_skill_diagnostics(result, load, ProjectResourceKind::ProjectSkills);
-
-    for (auto& skill : load.skills) {
-        if (names.skill_names.contains(skill.name)) {
-            result.diagnostics.push_back(loading_diagnostic(
-                ResourceDiagnosticSeverity::Info,
-                ProjectResourceLoadingDiagnosticCategory::Duplicate,
-                "duplicate_skill_skipped",
-                std::format(
-                    "project skill '{}' skipped: earlier resource takes precedence",
-                    skill.name),
-                skill.filePath.empty() ? std::nullopt : std::optional<std::string>{skill.filePath},
-                ProjectResourceKind::ProjectSkills));
-            continue;
-        }
-        names.skill_names.insert(skill.name);
-        result.resources.skills.push_back(std::move(skill));
-    }
-}
-
-void append_prompt_templates(
-    ProjectResourceLoadingResult& result,
-    PromptTemplateLoadResult load,
-    LoadedResourceNames& names,
-    std::optional<ProjectResourceKind> kind) {
-    add_prompt_template_diagnostics(result, load, kind);
-
-    for (auto& tmpl : load.templates) {
-        if (names.prompt_template_names.contains(tmpl.name)) {
-            result.diagnostics.push_back(loading_diagnostic(
-                ResourceDiagnosticSeverity::Info,
-                ProjectResourceLoadingDiagnosticCategory::Duplicate,
-                "duplicate_template_skipped",
-                std::format(
-                    "prompt template '{}' skipped: earlier resource takes precedence",
-                    tmpl.name),
-                std::nullopt,
-                kind));
-            continue;
-        }
-        names.prompt_template_names.insert(tmpl.name);
-        result.resources.prompt_templates.push_back(std::move(tmpl));
-    }
-}
+private:
+    std::unordered_map<std::string, std::string> by_name_;
+};
 
 void load_project_skills_adapter(
     const harness::WorkspaceFileSystem& fs,
     ProjectResourceLoadingResult& result,
-    LoadedResourceNames& names) {
-    append_project_skills(
-        result,
-        loadSkills(fs, {SkillDirSpec{.path = ".cpp-harness/skills", .includeRootFiles = false}}),
-        names);
+    std::vector<ResourceDiagnostic>& diagnostics) {
+    auto load = loadSkills(fs, {SkillDirSpec{.path = std::string{kProjectSkillsMarker}, .includeRootFiles = false}});
+    for (auto& diagnostic : load.diagnostics) {
+        auto type = diagnostic.type == "collision"
+            ? ResourceDiagnosticType::Collision
+            : ResourceDiagnosticType::Warning;
+        diagnostics.push_back(ResourceDiagnostic{
+            .type = type,
+            .message = std::move(diagnostic.message),
+            .path = diagnostic.path.empty() ? std::nullopt
+                                            : std::optional<std::string>{std::move(diagnostic.path)},
+            .collision = std::move(diagnostic.collision),
+        });
+    }
+    result.resources.skills = std::move(load.skills);
 }
 
 void load_project_prompts_adapter(
     const harness::WorkspaceFileSystem& fs,
     ProjectResourceLoadingResult& result,
-    LoadedResourceNames& names) {
-    append_prompt_templates(
-        result,
-        loadPromptTemplates(
-            fs,
-            {PromptTemplateDirSpec{.path = ".cpp-harness/prompts", .is_file = false}}),
-        names,
-        ProjectResourceKind::ProjectPrompts);
+    std::vector<ResourceDiagnostic>& diagnostics,
+    PromptNameTracker& names) {
+    auto load = loadPromptTemplates(
+        fs,
+        {PromptTemplateDirSpec{.path = std::string{kProjectPromptsMarker}, .is_file = false}});
+    for (auto& diagnostic : load.diagnostics) {
+        diagnostics.push_back(warning_diagnostic(
+            std::move(diagnostic.message),
+            std::move(diagnostic.path)));
+    }
+    names.append(result.resources.prompt_templates, diagnostics, std::move(load.templates));
+}
+
+void load_user_prompts_adapter(
+    const std::filesystem::path& agent_config_directory,
+    ProjectResourceLoadingResult& result,
+    std::vector<ResourceDiagnostic>& diagnostics,
+    PromptNameTracker& names) {
+    auto fs = harness::WorkspaceFileSystem::create(agent_config_directory);
+    if (!fs) {
+        // The Agent Config Directory does not exist (or is unreadable); a
+        // fresh setup has no user prompts. Best-effort by contract.
+        return;
+    }
+    auto load = loadPromptTemplates(
+        *fs,
+        {PromptTemplateDirSpec{.path = "prompts", .is_file = false}});
+    for (auto& diagnostic : load.diagnostics) {
+        diagnostics.push_back(warning_diagnostic(
+            std::move(diagnostic.message),
+            (agent_config_directory / diagnostic.path).string()));
+    }
+    names.append(result.resources.prompt_templates, diagnostics, std::move(load.templates));
 }
 
 void load_project_themes_adapter(
     const harness::WorkspaceFileSystem& fs,
     ProjectResourceLoadingResult& result,
-    LoadedResourceNames& names) {
-    (void)names;
-    if (auto listed = fs.listDir(".cpp-harness/themes"); !listed) {
-        result.diagnostics.push_back(loading_diagnostic(
-            ResourceDiagnosticSeverity::Warning,
-            ProjectResourceLoadingDiagnosticCategory::ThemeAdapter,
-            "list_failed",
+    std::vector<ResourceDiagnostic>& diagnostics) {
+    if (auto listed = fs.listDir(std::string{kProjectThemesMarker}); !listed) {
+        diagnostics.push_back(warning_diagnostic(
             listed.error().message,
-            ".cpp-harness/themes",
-            ProjectResourceKind::ProjectThemes));
+            std::string{kProjectThemesMarker}));
     } else {
         std::sort(listed->begin(), listed->end(), [](const auto& left, const auto& right) {
             return left.name < right.name;
         });
         for (const auto& entry : *listed) {
             if (entry.kind != harness::FileKind::File || !entry.name.ends_with(".json")) continue;
-            const auto path = ".cpp-harness/themes/" + entry.name;
+            const auto path = std::string{kProjectThemesMarker} + "/" + entry.name;
             if (auto content = fs.readTextFile(path); !content) {
-                result.diagnostics.push_back(loading_diagnostic(
-                    ResourceDiagnosticSeverity::Warning,
-                    ProjectResourceLoadingDiagnosticCategory::ThemeAdapter,
-                    "read_failed",
+                diagnostics.push_back(warning_diagnostic(
                     content.error().message,
-                    path,
-                    ProjectResourceKind::ProjectThemes));
+                    path));
             } else {
                 result.resources.project_themes.push_back({
                     .path = path,
@@ -289,44 +182,58 @@ void load_project_themes_adapter(
     }
 }
 
-constexpr std::array<ProjectResourceAdapter, 3> kProjectResourceAdapters{{
-    {
-        .kind = ProjectResourceKind::ProjectSkills,
-        .marker_path = ".cpp-harness/skills",
-        .plan_allows = project_skills_allowed,
-        .load = load_project_skills_adapter,
-    },
-    {
-        .kind = ProjectResourceKind::ProjectPrompts,
-        .marker_path = ".cpp-harness/prompts",
-        .plan_allows = project_prompts_allowed,
-        .load = load_project_prompts_adapter,
-    },
-    {
-        .kind = ProjectResourceKind::ProjectThemes,
-        .marker_path = ".cpp-harness/themes",
-        .plan_allows = project_themes_allowed,
-        .load = load_project_themes_adapter,
-    },
-}};
+/// Loads one explicit `--prompt-template` input. Missing or unreadable
+/// explicit inputs are fatal (session assembly must fail consistently);
+/// duplicate names resolve through the shared tracker as non-fatal
+/// collisions.
+void load_explicit_prompt_template_input(
+    const harness::WorkspaceFileSystem& fs,
+    ProjectResourceLoadingResult& result,
+    std::vector<ResourceDiagnostic>& diagnostics,
+    PromptNameTracker& names,
+    ExplicitPromptTemplateInput input) {
+    auto input_path = std::move(input.path);
+    auto explicit_load = loadPromptTemplates(
+        fs,
+        {PromptTemplateDirSpec{
+            .path = input_path,
+            .is_file = input.is_file,
+        }});
 
-[[nodiscard]] ProjectResourcePolicy effective_policy_for(
-    const ProjectResourceLoadingRequest& request) {
-    auto policy = request.policy;
-    if (!request.prompt_templates_enabled) {
-        policy.project_prompts = ResourceEnablement::Off;
+    if (explicit_load.templates.empty() && explicit_load.diagnostics.empty()) {
+        result.fatal_errors.push_back(error_diagnostic(
+            "explicit prompt template input contains no loadable .md files",
+            input_path));
+        return;
     }
-    if (!request.theme_resources_enabled) {
-        policy.project_themes = ResourceEnablement::Off;
+
+    for (auto& diag : explicit_load.diagnostics) {
+        result.fatal_errors.push_back(error_diagnostic(
+            std::move(diag.message),
+            std::move(diag.path)));
     }
-    return policy;
+
+    names.append(result.resources.prompt_templates, diagnostics, std::move(explicit_load.templates));
 }
 
 void bound_diagnostics(ProjectResourceLoadingResult& result) {
     const auto bound = [](auto& diagnostics) {
         for (auto& diagnostic : diagnostics) {
             detail::bound_resource_diagnostic_text(diagnostic.message);
-            if (diagnostic.path) detail::bound_resource_diagnostic_text(*diagnostic.path);
+            if (diagnostic.path) {
+                detail::bound_resource_diagnostic_text(*diagnostic.path);
+            }
+            if (diagnostic.collision) {
+                detail::bound_resource_diagnostic_text(diagnostic.collision->name);
+                detail::bound_resource_diagnostic_text(diagnostic.collision->winner_path);
+                detail::bound_resource_diagnostic_text(diagnostic.collision->loser_path);
+                if (diagnostic.collision->winner_source) {
+                    detail::bound_resource_diagnostic_text(*diagnostic.collision->winner_source);
+                }
+                if (diagnostic.collision->loser_source) {
+                    detail::bound_resource_diagnostic_text(*diagnostic.collision->loser_source);
+                }
+            }
         }
     };
     bound(result.diagnostics);
@@ -337,10 +244,7 @@ void bound_diagnostics(ProjectResourceLoadingResult& result) {
     }
 
     result.diagnostics.resize(detail::kMaxResourceDiagnostics - 1);
-    result.diagnostics.push_back(loading_diagnostic(
-        ResourceDiagnosticSeverity::Warning,
-        ProjectResourceLoadingDiagnosticCategory::LoadPlan,
-        "diagnostics_truncated",
+    result.diagnostics.push_back(warning_diagnostic(
         "Additional project resource diagnostics were omitted"));
 }
 
@@ -351,20 +255,13 @@ ProjectResourceLoadingResult load_project_resources(
     const ProjectTrustStore& trust_store,
     ProjectResourceLoadingRequest request) {
     ProjectResourceLoadingResult result;
-    result.resources.skills = std::move(request.host_skills);
-    result.resources.prompt_templates = std::move(request.host_prompt_templates);
+    std::vector<ResourceDiagnostic> diagnostics;
 
-    LoadedResourceNames names;
-    for (const auto& skill : result.resources.skills) {
-        names.skill_names.insert(skill.name);
-    }
-    for (const auto& tmpl : result.resources.prompt_templates) {
-        names.prompt_template_names.insert(tmpl.name);
-    }
-
-    const auto policy = effective_policy_for(request);
+    // 1. Detect `.pi/` markers. The mere presence of any loadable marker
+    // triggers the Project Trust decision; the decision then gates all
+    // project resource loading ("trusted means load").
     result.detection = detect_project_resources(fs);
-    const bool trust_needed = needs_project_trust_resolution(result.detection, policy);
+    const bool trust_needed = needs_project_trust_resolution(result.detection);
     const auto workspace = request.workspace.empty() ? fs.root() : request.workspace;
     result.trust = resolve_project_trust(
         workspace,
@@ -372,114 +269,43 @@ ProjectResourceLoadingResult load_project_resources(
         trust_store,
         request.default_project_trust,
         request.project_trust_override);
-    result.load_plan = build_project_resource_load_plan(
-        result.detection,
-        policy,
-        result.trust);
+    add_trust_diagnostics(diagnostics, result.trust);
 
-    add_trust_diagnostics(result, result.trust);
-    add_load_plan_diagnostics(result, result.load_plan);
+    const bool project_trusted = result.trust.decision == ProjectTrustDecision::Trusted;
 
-    if (request.prompt_templates_enabled && !request.explicit_prompt_templates.empty()) {
-        std::vector<PromptTemplate> explicit_templates;
-        for (auto& input : request.explicit_prompt_templates) {
-            auto input_path = std::move(input.path);
-            auto explicit_load = loadPromptTemplates(
-                fs,
-                {PromptTemplateDirSpec{
-                    .path = input_path,
-                    .is_file = input.is_file,
-                }});
-
-            if (explicit_load.templates.empty() && explicit_load.diagnostics.empty()) {
-                result.fatal_errors.push_back(loading_diagnostic(
-                    ResourceDiagnosticSeverity::Error,
-                    ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter,
-                    "no_templates_found",
-                    "explicit prompt template input contains no loadable .md files",
-                    input_path));
-            }
-
-            for (auto& diag : explicit_load.diagnostics) {
-                if (diag.code == PromptTemplateDiagnosticCode::duplicate_name) {
-                    result.diagnostics.push_back(loading_diagnostic(
-                        ResourceDiagnosticSeverity::Warning,
-                        ProjectResourceLoadingDiagnosticCategory::Duplicate,
-                        "duplicate_template_skipped",
-                        diag.message,
-                        diag.path.empty() ? std::nullopt : std::optional<std::string>{diag.path}));
-                } else {
-                    result.fatal_errors.push_back(loading_diagnostic(
-                        ResourceDiagnosticSeverity::Error,
-                        ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter,
-                        to_code(diag.code),
-                        diag.message,
-                        diag.path.empty() ? std::nullopt : std::optional<std::string>{diag.path}));
-                }
-            }
-
-            for (auto& tmpl : explicit_load.templates) {
-                if (names.prompt_template_names.contains(tmpl.name)) {
-                    result.diagnostics.push_back(loading_diagnostic(
-                        ResourceDiagnosticSeverity::Info,
-                        ProjectResourceLoadingDiagnosticCategory::Duplicate,
-                        "duplicate_template_skipped",
-                        std::format(
-                            "explicit prompt template '{}' skipped: earlier resource takes precedence",
-                            tmpl.name),
-                        input_path));
-                    continue;
-                }
-                names.prompt_template_names.insert(tmpl.name);
-                explicit_templates.push_back(std::move(tmpl));
-            }
-        }
-
-        std::sort(
-            explicit_templates.begin(),
-            explicit_templates.end(),
-            [](const PromptTemplate& left, const PromptTemplate& right) {
-                return left.name < right.name;
-            });
-        result.resources.prompt_templates.insert(
-            result.resources.prompt_templates.end(),
-            std::make_move_iterator(explicit_templates.begin()),
-            std::make_move_iterator(explicit_templates.end()));
+    // 2. Prompt templates load in pi's order — explicit `--prompt-template`
+    // inputs, then the trust-gated project `.pi/prompts`, then user
+    // `<agent_config_directory>/prompts` — with first-wins dedupe and
+    // collision diagnostics. `--no-prompt-templates` drops user and project
+    // discovery but keeps explicit inputs.
+    PromptNameTracker names;
+    for (auto& input : request.explicit_prompt_templates) {
+        load_explicit_prompt_template_input(fs, result, diagnostics, names, std::move(input));
+    }
+    if (!request.no_prompt_templates && project_trusted) {
+        load_project_prompts_adapter(fs, result, diagnostics, names);
+    }
+    if (!request.no_prompt_templates && request.agent_config_directory &&
+        !request.agent_config_directory->empty()) {
+        load_user_prompts_adapter(*request.agent_config_directory, result, diagnostics, names);
     }
 
-    for (const auto& adapter : kProjectResourceAdapters) {
-        if (adapter.plan_allows(result.load_plan)) {
-            adapter.load(fs, result, names);
-        }
+    // 3. Project skills load only while the project is trusted
+    // (`--no-skills` drops discovery; the explicit `--skill` path surface
+    // lands with skill discovery).
+    if (!request.no_skills && project_trusted) {
+        load_project_skills_adapter(fs, result, diagnostics);
     }
 
+    // 4. Project themes load only for a TUI assembly that opted in, while
+    // the project is trusted.
+    if (request.theme_resources_enabled && project_trusted) {
+        load_project_themes_adapter(fs, result, diagnostics);
+    }
+
+    result.diagnostics = std::move(diagnostics);
     bound_diagnostics(result);
     return result;
-}
-
-std::string_view project_resource_loading_diagnostic_category_name(
-    ProjectResourceLoadingDiagnosticCategory category) {
-    switch (category) {
-    case ProjectResourceLoadingDiagnosticCategory::Trust:
-        return "trust";
-    case ProjectResourceLoadingDiagnosticCategory::LoadPlan:
-        return "resource";
-    case ProjectResourceLoadingDiagnosticCategory::SkillAdapter:
-        return "skill";
-    case ProjectResourceLoadingDiagnosticCategory::PromptTemplateAdapter:
-        return "template";
-    case ProjectResourceLoadingDiagnosticCategory::ThemeAdapter:
-        return "theme";
-    case ProjectResourceLoadingDiagnosticCategory::Duplicate:
-        return "duplicate";
-    }
-    return "resource";
-}
-
-std::string project_resource_loading_diagnostic_code(
-    const ProjectResourceLoadingDiagnostic& diagnostic) {
-    return std::string{project_resource_loading_diagnostic_category_name(diagnostic.category)} +
-           ":" + diagnostic.code;
 }
 
 } // namespace cch::coding_agent

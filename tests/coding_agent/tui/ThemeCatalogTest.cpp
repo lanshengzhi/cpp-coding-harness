@@ -93,7 +93,7 @@ TEST_CASE(
     request.explicit_path_base = explicit_base.path();
     request.explicit_paths = {"explicit.json", "later.json"};
     request.trusted_project_themes = {{
-        .label = ".cpp-harness/themes/project.json",
+        .label = ".pi/themes/project.json",
         .json = fixture_theme("shared", "#222222"),
     }};
     request.explicit_active_theme = "shared";
@@ -119,7 +119,7 @@ TEST_CASE(
     "Theme catalog consumes only project themes admitted by Project Trust",
     "[coding_agent][theme][issue56]") {
     tests::TempWorkspace workspace;
-    workspace.write(".cpp-harness/themes/dark.json", fixture_theme("dark", "#010203"));
+    workspace.write(".pi/themes/dark.json", fixture_theme("dark", "#010203"));
     auto fs = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(fs);
     coding_agent::ProjectTrustStore trust_store(workspace.path() / "trust.json");
