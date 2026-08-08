@@ -1,0 +1,1 @@
+Invalid theme name "bad/name": theme names cannot contain "/" because it is reserved for automatic light/dark theme settings.

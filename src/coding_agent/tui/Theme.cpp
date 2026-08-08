@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -62,6 +61,14 @@ static_assert(static_cast<std::size_t>(ThemeToken::BashMode) + 1 == kThemeTokenC
         bounded_redacted_presentation(std::move(detail)));
 }
 
+/// Bounds a pi-verbatim validation message without re-running secret
+/// redaction over the fixed wording: the redactor's secret-key heuristic
+/// would mangle pi's "Missing required color tokens:" lines. Every
+/// user-controlled fragment is bounded and redacted before composition.
+[[nodiscard]] util::Error verbatim_validation_error(util::ErrorCode code, std::string message) {
+    return util::make_error(code, bounded_presentation(std::move(message)));
+}
+
 [[nodiscard]] std::string safe_label(std::string_view label) {
     return bounded_redacted_presentation(std::string(label));
 }
@@ -73,77 +80,104 @@ static_assert(static_cast<std::size_t>(ThemeToken::BashMode) + 1 == kThemeTokenC
     return std::nullopt;
 }
 
-[[nodiscard]] util::Expected<const util::JsonValue::object_t*> require_object(
-    const util::JsonValue& value,
-    std::string path) {
-    const auto* object = value.get_if<util::JsonValue::object_t>();
-    if (object != nullptr) return object;
-    return std::unexpected(theme_error(
-        util::ErrorCode::Validation,
-        "invalid theme schema",
-        std::move(path) + " must be a JSON object"));
+/// One typebox-verbatim schema error line (`  - <path>: <message>`), shaped
+/// exactly like pi's `parseThemeJson` "Other errors" entries (theme.ts).
+struct SchemaErrorLine {
+    std::string path;
+    std::string message;
+};
+
+/// Composes pi's verbatim `parseThemeJson` error message: the missing-color
+/// block first, then the "Other errors" block, both byte-for-byte (theme.ts).
+[[nodiscard]] std::string invalid_theme_message(
+    std::string_view label,
+    const std::vector<std::string>& missing_colors,
+    const std::vector<SchemaErrorLine>& other_errors) {
+    // pi sorts the collected missing names before listing them.
+    auto sorted_missing = missing_colors;
+    std::sort(sorted_missing.begin(), sorted_missing.end());
+    std::string message = std::format("Invalid theme \"{}\":\n", safe_label(label));
+    if (!sorted_missing.empty()) {
+        message += "\nMissing required color tokens:\n";
+        for (std::size_t index = 0; index < sorted_missing.size(); ++index) {
+            if (index > 0) message += "\n";
+            message += "  - " + sorted_missing[index];
+        }
+        message += "\n\nPlease add these colors to your theme's \"colors\" object.\n";
+        message += "See the built-in themes (dark.json, light.json) for reference values.";
+    }
+    if (!other_errors.empty()) {
+        message += "\n\nOther errors:\n";
+        for (std::size_t index = 0; index < other_errors.size(); ++index) {
+            if (index > 0) message += "\n";
+            message += "  - " + other_errors[index].path + ": " + other_errors[index].message;
+        }
+    }
+    return message;
 }
 
-[[nodiscard]] util::Expected<RawColorValue> parse_raw_color(
-    const util::JsonValue& value,
-    std::string path) {
-    if (const auto* text = value.get_if<std::string>()) {
-        if (text->starts_with('#')) {
-            const auto valid_hex = text->size() == 7 &&
-                std::all_of(text->begin() + 1, text->end(), [](unsigned char digit) {
-                    return std::isxdigit(digit) != 0;
-                });
-            if (!valid_hex) {
-                return std::unexpected(theme_error(
-                    util::ErrorCode::Validation,
-                    "invalid theme color",
-                    std::move(path) + " must use exact #RRGGBB syntax"));
-            }
-        }
-        return *text;
-    }
+/// Appends pi's typebox-verbatim error lines when `value` does not satisfy
+/// the ColorValueSchema union (any string, or an integer in 0..255); returns
+/// the raw value otherwise. The per-case line set mirrors Ajv's output for
+/// the union `[Type.String(), Type.Integer({minimum: 0, maximum: 255})]`.
+[[nodiscard]] std::optional<RawColorValue> check_color_value(
+    std::vector<SchemaErrorLine>& errors,
+    std::string path,
+    const util::JsonValue& value) {
+    if (const auto* text = value.get_if<std::string>()) return *text;
     if (const auto* number = value.get_if<double>()) {
-        if (std::floor(*number) != *number || *number < 0 || *number > 255) {
-            return std::unexpected(theme_error(
-                util::ErrorCode::Validation,
-                "invalid theme color",
-                std::move(path) + " xterm palette index must be an integer in 0..255"));
+        const auto integral = std::floor(*number) == *number;
+        if (integral && *number >= 0 && *number <= 255) {
+            return static_cast<int>(*number);
         }
-        return static_cast<int>(*number);
+        errors.push_back({path, "must be string"});
+        if (!integral) errors.push_back({path, "must be integer"});
+        if (*number < 0) errors.push_back({path, "must be >= 0"});
+        if (*number > 255) errors.push_back({path, "must be <= 255"});
+        errors.push_back({path, "must match a schema in anyOf"});
+        return std::nullopt;
     }
-    return std::unexpected(theme_error(
-        util::ErrorCode::Validation,
-        "invalid theme color",
-        std::move(path) + " must be #RRGGBB, a variable reference, an empty string, or an integer in 0..255"));
+    errors.push_back({path, "must be string"});
+    errors.push_back({path, "must be integer"});
+    errors.push_back({path, "must match a schema in anyOf"});
+    return std::nullopt;
 }
 
-[[nodiscard]] util::ExpectedVoid reject_unknown_fields(
-    const util::JsonValue::object_t& object,
-    std::span<const std::string_view> allowed,
-    std::string_view description) {
-    for (const auto& [name, value] : object) {
-        (void)value;
-        if (std::find(allowed.begin(), allowed.end(), name) == allowed.end()) {
-            return std::unexpected(theme_error(
-                util::ErrorCode::Validation,
-                "invalid theme schema",
-                std::format("unknown {} '{}'", description, name)));
-        }
-    }
-    return {};
-}
-
-[[nodiscard]] int hex_digit(char value) {
+[[nodiscard]] std::optional<int> hex_digit(char value) {
     if (value >= '0' && value <= '9') return value - '0';
     if (value >= 'a' && value <= 'f') return 10 + value - 'a';
-    return 10 + value - 'A';
+    if (value >= 'A' && value <= 'F') return 10 + value - 'A';
+    return std::nullopt;
 }
 
-[[nodiscard]] RgbThemeColor parse_rgb(std::string_view value) {
-    const auto channel = [&](std::size_t offset) {
-        return static_cast<std::uint8_t>(hex_digit(value[offset]) * 16 + hex_digit(value[offset + 1]));
+[[nodiscard]] util::Expected<RgbThemeColor> parse_rgb(std::string_view value) {
+    // Mirrors pi's hexToRgb (theme.ts): exactly six characters after '#', with
+    // each channel pair parsed like parseInt(pair, 16) — the first character
+    // must be a hex digit, and a non-hex second character ends the parse.
+    // pi's sign/whitespace prefixes would yield channel values outside the
+    // uint8_t color model and are rejected here as C++ hardening.
+    if (value.size() != 7) {
+        return std::unexpected(verbatim_validation_error(
+            util::ErrorCode::Validation,
+            "Invalid hex color: " + bounded_redacted_presentation(std::string(value))));
+    }
+    const auto channel = [&](std::size_t offset) -> std::optional<std::uint8_t> {
+        const auto high = hex_digit(value[offset]);
+        if (!high) return std::nullopt;
+        if (const auto low = hex_digit(value[offset + 1])) {
+            return static_cast<std::uint8_t>(*high * 16 + *low);
+        }
+        return static_cast<std::uint8_t>(*high);
     };
-    return {.red = channel(1), .green = channel(3), .blue = channel(5)};
+    const auto red = channel(1);
+    const auto green = channel(3);
+    const auto blue = channel(5);
+    if (!red || !green || !blue) {
+        return std::unexpected(verbatim_validation_error(
+            util::ErrorCode::Validation,
+            "Invalid hex color: " + bounded_redacted_presentation(std::string(value))));
+    }
+    return RgbThemeColor{.red = *red, .green = *green, .blue = *blue};
 }
 
 [[nodiscard]] util::Expected<ResolvedThemeColor> resolve_color(
@@ -157,30 +191,26 @@ static_assert(static_cast<std::size_t>(ThemeToken::BashMode) + 1 == kThemeTokenC
         }
         const auto& text = std::get<std::string>(*current);
         if (text.empty()) return TerminalDefaultThemeColor{};
-        if (text.starts_with('#')) return parse_rgb(text);
+        if (text.starts_with('#')) {
+            auto rgb = parse_rgb(text);
+            if (!rgb) return std::unexpected(rgb.error());
+            return *rgb;
+        }
         if (visited.contains(text)) {
-            return std::unexpected(theme_error(
+            return std::unexpected(verbatim_validation_error(
                 util::ErrorCode::Validation,
-                "invalid theme variable reference",
-                "Circular variable reference detected: " + text));
+                "Circular variable reference detected: " +
+                    bounded_redacted_presentation(text)));
         }
         const auto found = variables.find(text);
         if (found == variables.end()) {
-            return std::unexpected(theme_error(
+            return std::unexpected(verbatim_validation_error(
                 util::ErrorCode::Validation,
-                "invalid theme variable reference",
-                "Variable reference not found: " + text));
+                "Variable reference not found: " + bounded_redacted_presentation(text)));
         }
         visited.insert(text);
         current = &found->second;
     }
-}
-
-[[nodiscard]] std::string join_names(std::vector<std::string> names) {
-    std::sort(names.begin(), names.end());
-    std::string result;
-    for (const auto& name : names) result += "\n  - " + name;
-    return result;
 }
 
 [[nodiscard]] int closest_index(int value, std::span<const int> candidates) {
@@ -284,117 +314,162 @@ const ResolvedThemeColor& color_for(const ResolvedTheme& theme, ThemeToken token
 
 namespace {
 
-[[nodiscard]] util::Expected<ResolvedTheme> resolve_theme_value(const util::JsonValue& parsed) {
-    auto root_result = require_object(parsed, "/");
-    if (!root_result) return std::unexpected(root_result.error());
-    const auto& root = **root_result;
-    constexpr std::array<std::string_view, 5> top_level_fields{
-        "$schema", "name", "vars", "colors", "export"};
-    if (auto checked = reject_unknown_fields(root, top_level_fields, "top-level field"); !checked) {
-        return std::unexpected(checked.error());
+[[nodiscard]] util::Expected<ResolvedTheme> resolve_theme_value(
+    std::string_view label,
+    const util::JsonValue& parsed) {
+    std::vector<SchemaErrorLine> other_errors;
+    std::vector<std::string> missing_colors;
+
+    const auto* root = parsed.get_if<util::JsonValue::object_t>();
+    if (root == nullptr) {
+        return std::unexpected(verbatim_validation_error(
+            util::ErrorCode::Validation,
+            invalid_theme_message(label, missing_colors, {{ "/", "must be object" }})));
     }
 
-    if (const auto schema = root.find("$schema");
-        schema != root.end() && schema->second.get_if<std::string>() == nullptr) {
-        return std::unexpected(theme_error(
-            util::ErrorCode::Validation,
-            "invalid theme schema",
-            "/$schema must be a string"));
+    if (const auto schema = root->find("$schema"); schema != root->end()) {
+        if (schema->second.get_if<std::string>() == nullptr) {
+            other_errors.push_back({"/$schema", "must be string"});
+        }
     }
-    const auto name_value = root.find("name");
-    if (name_value == root.end() || name_value->second.get_if<std::string>() == nullptr) {
-        return std::unexpected(theme_error(
-            util::ErrorCode::Validation,
-            "invalid theme schema",
-            "/name is required and must be a string"));
-    }
-    const auto& name = *name_value->second.get_if<std::string>();
-    if (name.empty()) {
-        return std::unexpected(theme_error(
-            util::ErrorCode::Validation,
-            "invalid theme name",
-            "theme name must contain at least one character"));
-    }
-    if (name.find('/') != std::string::npos) {
-        return std::unexpected(theme_error(
-            util::ErrorCode::Validation,
-            "invalid theme name",
-            "theme name '" + name + "' cannot contain '/'"));
+    std::string name;
+    const auto name_value = root->find("name");
+    if (name_value == root->end()) {
+        other_errors.push_back({"/", "must have required properties name"});
+    } else if (const auto* name_string = name_value->second.get_if<std::string>()) {
+        name = *name_string;
+    } else {
+        other_errors.push_back({"/name", "must be string"});
     }
 
     RawColorMap variables;
-    if (const auto vars_value = root.find("vars"); vars_value != root.end()) {
-        auto vars_result = require_object(vars_value->second, "/vars");
-        if (!vars_result) return std::unexpected(vars_result.error());
-        for (const auto& [variable_name, value] : **vars_result) {
-            auto raw = parse_raw_color(value, "/vars/" + variable_name);
-            if (!raw) return std::unexpected(raw.error());
-            variables.emplace(variable_name, std::move(*raw));
+    if (const auto vars_value = root->find("vars"); vars_value != root->end()) {
+        const auto* vars_object = vars_value->second.get_if<util::JsonValue::object_t>();
+        if (vars_object == nullptr) {
+            other_errors.push_back({"/vars", "must be object"});
+        } else {
+            for (const auto& [variable_name, value] : *vars_object) {
+                auto raw = check_color_value(
+                    other_errors,
+                    bounded_redacted_presentation("/vars/" + variable_name),
+                    value);
+                if (!raw) continue;
+                variables.emplace(variable_name, std::move(*raw));
+            }
         }
     }
 
-    const auto colors_value = root.find("colors");
-    if (colors_value == root.end()) {
-        return std::unexpected(theme_error(
-            util::ErrorCode::Validation,
-            "invalid theme schema",
-            "/colors is required and must be an object"));
-    }
-    auto colors_result = require_object(colors_value->second, "/colors");
-    if (!colors_result) return std::unexpected(colors_result.error());
-    const auto& colors_object = **colors_result;
     RawColorMap raw_colors;
-    for (const auto& [color_name, value] : colors_object) {
-        if (!token_for_name(color_name)) {
-            return std::unexpected(theme_error(
-                util::ErrorCode::Validation,
-                "invalid theme schema",
-                "unknown color token '" + color_name + "'"));
+    ThemeExportColors export_colors;
+    const util::JsonValue::object_t* colors_object = nullptr;
+    const auto colors_value = root->find("colors");
+    if (colors_value == root->end()) {
+        other_errors.push_back({"/", "must have required properties colors"});
+    } else if (colors_object = colors_value->second.get_if<util::JsonValue::object_t>();
+               colors_object == nullptr) {
+        other_errors.push_back({"/colors", "must be object"});
+    } else {
+        for (const auto& [color_name, value] : *colors_object) {
+            if (!token_for_name(color_name)) {
+                // pi's runtime schema accepts unknown color tokens; only
+                // string/integer values are retained and resolved (pi crashes
+                // on other value types). Unknown tokens never reach the
+                // resolved theme.
+                if (const auto* text = value.get_if<std::string>()) {
+                    raw_colors.emplace(color_name, *text);
+                } else if (const auto* number = value.get_if<double>()) {
+                    if (std::floor(*number) == *number && *number >= 0 && *number <= 255) {
+                        raw_colors.emplace(color_name, static_cast<int>(*number));
+                    }
+                }
+                continue;
+            }
+            auto raw = check_color_value(
+                other_errors,
+                bounded_redacted_presentation("/colors/" + color_name),
+                value);
+            if (!raw) continue;
+            raw_colors.emplace(color_name, std::move(*raw));
         }
-        auto raw = parse_raw_color(value, "/colors/" + color_name);
-        if (!raw) return std::unexpected(raw.error());
-        raw_colors.emplace(color_name, std::move(*raw));
     }
 
-    std::vector<std::string> missing;
-    for (std::size_t index = 0; index < kAllThemeTokens.size(); ++index) {
-        if (!kThemeTokenRequired[index]) continue;
-        const auto name_view = kThemeTokenNames[index];
-        if (!raw_colors.contains(name_view)) missing.emplace_back(name_view);
+    if (const auto export_value = root->find("export"); export_value != root->end()) {
+        const auto* export_object = export_value->second.get_if<util::JsonValue::object_t>();
+        if (export_object == nullptr) {
+            other_errors.push_back({"/export", "must be object"});
+        } else {
+            for (const auto& [export_name, value] : *export_object) {
+                // Unknown export fields are accepted and ignored; pi's runtime
+                // schema validates only the three known keys.
+                if (export_name != "pageBg" && export_name != "cardBg" && export_name != "infoBg") {
+                    continue;
+                }
+                auto raw = check_color_value(
+                    other_errors,
+                    bounded_redacted_presentation("/export/" + export_name),
+                    value);
+                if (!raw) continue;
+                if (export_name == "pageBg") {
+                    export_colors.pageBg = std::move(*raw);
+                } else if (export_name == "cardBg") {
+                    export_colors.cardBg = std::move(*raw);
+                } else {
+                    export_colors.infoBg = std::move(*raw);
+                }
+            }
+        }
     }
-    if (!missing.empty()) {
-        return std::unexpected(theme_error(
+
+    // Missing-token presence is checked against the colors object itself, so
+    // a present-but-invalid value is reported as a value error only, like pi.
+    if (colors_object != nullptr) {
+        for (std::size_t index = 0; index < kAllThemeTokens.size(); ++index) {
+            if (!kThemeTokenRequired[index]) continue;
+            const auto name_view = kThemeTokenNames[index];
+            if (colors_object->find(std::string(name_view)) == colors_object->end()) {
+                missing_colors.emplace_back(name_view);
+            }
+        }
+    }
+    if (!missing_colors.empty() || !other_errors.empty()) {
+        return std::unexpected(verbatim_validation_error(
             util::ErrorCode::Validation,
-            "invalid theme schema",
-            "Missing required color tokens:" + join_names(std::move(missing)) +
-                "\nAdd these colors to the theme's colors object; see the built-in dark and light themes."));
+            invalid_theme_message(label, missing_colors, other_errors)));
     }
+
+    // pi's withThemeColorFallbacks: optional tokens fall back to the raw
+    // value of their companion token (both companions are required, so the
+    // schema failure above would have returned already).
     if (!raw_colors.contains("thinkingMax")) {
         raw_colors.emplace("thinkingMax", raw_colors.at("thinkingXhigh"));
     }
-
-    if (const auto export_value = root.find("export"); export_value != root.end()) {
-        auto export_result = require_object(export_value->second, "/export");
-        if (!export_result) return std::unexpected(export_result.error());
-        constexpr std::array<std::string_view, 3> export_fields{"pageBg", "cardBg", "infoBg"};
-        if (auto checked = reject_unknown_fields(**export_result, export_fields, "export field"); !checked) {
-            return std::unexpected(checked.error());
-        }
-        for (const auto& [export_name, value] : **export_result) {
-            auto raw = parse_raw_color(value, "/export/" + export_name);
-            if (!raw) return std::unexpected(raw.error());
-            auto resolved = resolve_color(*raw, variables);
-            if (!resolved) return std::unexpected(resolved.error());
-        }
+    if (!raw_colors.contains("scrollbarThumb")) {
+        raw_colors.emplace("scrollbarThumb", raw_colors.at("selectedBg"));
     }
 
-    ResolvedTheme theme{.name = name};
-    for (const auto token : kAllThemeTokens) {
-        auto resolved = resolve_color(
-            raw_colors.at(std::string(theme_token_name(token))),
-            variables);
+    // pi's assertThemeNameIsValid runs after schema validation and rejects
+    // the slash reserved for automatic light/dark theme settings.
+    if (name.find('/') != std::string::npos) {
+        return std::unexpected(verbatim_validation_error(
+            util::ErrorCode::Validation,
+            std::format(
+                "Invalid theme name \"{}\": theme names cannot contain \"/\" because it is reserved for automatic light/dark theme settings.",
+                bounded_redacted_presentation(name))));
+    }
+
+    // pi's createTheme resolves every colors entry (including unknown tokens
+    // and fallbacks) before splitting fg/bg; any failure aborts the load.
+    std::map<std::string, ResolvedThemeColor, std::less<>> resolved_colors;
+    for (const auto& [color_name, raw] : raw_colors) {
+        auto resolved = resolve_color(raw, variables);
         if (!resolved) return std::unexpected(resolved.error());
-        theme.colors[static_cast<std::size_t>(token)] = std::move(*resolved);
+        resolved_colors.emplace(color_name, std::move(*resolved));
+    }
+
+    ResolvedTheme theme{.name = std::move(name), .export_colors = std::move(export_colors)};
+    for (const auto token : kAllThemeTokens) {
+        theme.colors[static_cast<std::size_t>(token)] =
+            std::move(resolved_colors.at(std::string(theme_token_name(token))));
     }
     return theme;
 }
@@ -404,19 +479,14 @@ namespace {
 util::Expected<ResolvedTheme> parse_theme_json(std::string_view label, std::string_view json) {
     auto parsed = util::read_json<util::JsonValue>(json);
     if (!parsed) {
-        return std::unexpected(theme_error(
+        const auto& parse_error = parsed.error();
+        const auto& detail = parse_error.detail.empty() ? parse_error.message : parse_error.detail;
+        return std::unexpected(verbatim_validation_error(
             util::ErrorCode::JsonParse,
-            "failed to parse theme " + safe_label(label),
-            parsed.error().detail));
+            "Failed to parse theme " + safe_label(label) + ": " +
+                bounded_redacted_presentation(detail)));
     }
-    auto resolved = resolve_theme_value(*parsed);
-    if (!resolved) {
-        auto error = resolved.error();
-        error.message = bounded_redacted_presentation(
-            std::format("invalid theme '{}': {}", safe_label(label), error.message));
-        return std::unexpected(std::move(error));
-    }
-    return resolved;
+    return resolve_theme_value(label, *parsed);
 }
 
 util::Expected<ResolvedTheme> load_theme_file(const std::filesystem::path& path) {

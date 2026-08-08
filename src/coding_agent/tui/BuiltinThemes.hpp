@@ -4,7 +4,9 @@
 
 namespace cch::coding_agent::tui::detail {
 
-// Transcribed from pi baseline commit 864b35c462f9623579b068e9cab848419f9e1d0f.
+// Transcribed from pi baseline commit 83114817c68f5413e4d7ba6d7003ddc511cd31d2.
+// The only 864b35c -> 83114817 delta in pi's builtin themes is the added
+// optional `scrollbarThumb: "selectedBg"` color entry (ADR 0036).
 inline constexpr std::string_view kBuiltinDarkThemeJson = R"CCH_THEME(
 {
 	"$schema": "https://raw.githubusercontent.com/earendil-works/pi/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
@@ -41,6 +43,7 @@ inline constexpr std::string_view kBuiltinDarkThemeJson = R"CCH_THEME(
 		"thinkingText": "gray",
 
 		"selectedBg": "selectedBg",
+		"scrollbarThumb": "selectedBg",
 		"userMessageBg": "userMsgBg",
 		"userMessageText": "text",
 		"customMessageBg": "customMsgBg",
@@ -130,6 +133,7 @@ inline constexpr std::string_view kBuiltinLightThemeJson = R"CCH_THEME(
 		"thinkingText": "mediumGray",
 
 		"selectedBg": "selectedBg",
+		"scrollbarThumb": "selectedBg",
 		"userMessageBg": "userMsgBg",
 		"userMessageText": "text",
 		"customMessageBg": "customMsgBg",

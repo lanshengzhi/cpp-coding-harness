@@ -1,0 +1,8 @@
+Invalid theme "missing-colors":
+
+Missing required color tokens:
+  - accent
+  - border
+
+Please add these colors to your theme's "colors" object.
+See the built-in themes (dark.json, light.json) for reference values.

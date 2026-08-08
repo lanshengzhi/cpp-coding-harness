@@ -1,0 +1,5 @@
+Invalid theme "export-not-object":
+
+
+Other errors:
+  - /export: must be object

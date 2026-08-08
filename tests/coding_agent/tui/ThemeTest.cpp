@@ -10,9 +10,9 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -25,11 +25,34 @@ namespace {
     return std::filesystem::path(CCH_SOURCE_DIR) / "tests" / "fixtures" / "themes" / name;
 }
 
+[[nodiscard]] std::filesystem::path golden_path(std::string_view name) {
+    return fixture_path("goldens") / name;
+}
+
+[[nodiscard]] std::string read_text_file(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    return std::string{
+        std::istreambuf_iterator<char>{input},
+        std::istreambuf_iterator<char>{}};
+}
+
 [[nodiscard]] std::string read_fixture(std::string_view name) {
-    std::ifstream input(fixture_path(name));
-    std::ostringstream content;
-    content << input.rdbuf();
-    return content.str();
+    return read_text_file(fixture_path(name));
+}
+
+/// Writes the observed message to the committed golden when
+/// CCH_CAPTURE_GOLDENS=1 (messages carry no trailing newline, like pi's).
+void capture_golden(std::string_view name, const std::string& message) {
+    if (std::getenv("CCH_CAPTURE_GOLDENS") == nullptr) return;
+    std::ofstream output(golden_path(name), std::ios::binary);
+    output << message;
+}
+
+/// Byte-compares the error message against the committed pi-verbatim golden.
+void check_parse_error_golden(std::string_view golden_name, const util::Error& error) {
+    const auto expected = read_text_file(golden_path(golden_name));
+    capture_golden(golden_name, error.message);
+    CHECK(error.message == expected);
 }
 
 void replace_once(std::string& text, std::string_view old_text, std::string_view new_text) {
@@ -49,15 +72,12 @@ void replace_once(std::string& text, std::string_view old_text, std::string_view
     replace_once(json, "\"text\": \"text\"", "\"text\": \"\"");
     replace_once(json, "\"selectedBg\": \"selectedBg\"", "\"selectedBg\": 255");
     replace_once(json, "\"toolPendingBg\": \"toolPendingBg\"", "\"toolPendingBg\": \"\"");
+    replace_once(json, "\t\t\"scrollbarThumb\": \"selectedBg\",\n", "");
     replace_once(
         json,
         "\"thinkingXhigh\": \"#d183e8\",\n\t\t\"thinkingMax\": \"#ff5fff\"",
         "\"thinkingXhigh\": \"fallbackA\"");
     return json;
-}
-
-[[nodiscard]] std::string diagnostic_text(const util::Error& error) {
-    return error.message + "\n" + error.detail;
 }
 
 void write_render_result(tui::VirtualTerminal& terminal, const tui::RenderResult& rendered) {
@@ -121,9 +141,18 @@ TEST_CASE(
     CHECK(*light_fixture == coding_agent::tui::builtin_light_theme());
     CHECK(coding_agent::tui::all_theme_tokens().size() == coding_agent::tui::kThemeTokenCount);
     CHECK(coding_agent::tui::kRequiredThemeTokenCount == 51);
-    CHECK(coding_agent::tui::kThemeTokenCount == 52);
+    CHECK(coding_agent::tui::kThemeTokenCount == 53);
     for (const auto token : coding_agent::tui::all_theme_tokens()) {
         CHECK_FALSE(coding_agent::tui::theme_token_name(token).empty());
+    }
+    // The baseline builtins carry the explicit scrollbarThumb var reference;
+    // it must resolve exactly like selectedBg.
+    for (const auto& theme : {coding_agent::tui::builtin_dark_theme(), coding_agent::tui::builtin_light_theme()}) {
+        CHECK(coding_agent::tui::color_for(theme, coding_agent::tui::ThemeToken::ScrollbarThumb) ==
+            coding_agent::tui::color_for(theme, coding_agent::tui::ThemeToken::SelectedBg));
+        CHECK(theme.export_colors.pageBg);
+        CHECK(theme.export_colors.cardBg);
+        CHECK(theme.export_colors.infoBg);
     }
 }
 
@@ -144,7 +173,7 @@ TEST_CASE("Built-in themes keep content readable against semantic backgrounds", 
 }
 
 TEST_CASE(
-    "Theme parsing accepts schema variables RGB xterm defaults references and thinking fallback",
+    "Theme parsing accepts schema variables RGB xterm defaults references and fallbacks",
     "[coding_agent][theme][issue55]") {
     const auto parsed = coding_agent::tui::parse_theme_json("custom fixture", valid_custom_theme());
 
@@ -168,27 +197,62 @@ TEST_CASE(
         &coding_agent::tui::color_for(*parsed, coding_agent::tui::ThemeToken::ThinkingMax));
     REQUIRE(maximum != nullptr);
     CHECK(maximum->index == 17);
+    // scrollbarThumb is omitted by the fixture mutation and falls back to the
+    // raw selectedBg value (xterm 255), like pi's withThemeColorFallbacks.
+    const auto* thumb = std::get_if<coding_agent::tui::XtermThemeColor>(
+        &coding_agent::tui::color_for(*parsed, coding_agent::tui::ThemeToken::ScrollbarThumb));
+    REQUIRE(thumb != nullptr);
+    CHECK(thumb->index == 255);
+    // An explicitly configured scrollbarThumb wins over the fallback.
+    auto explicit_thumb = valid_custom_theme();
+    replace_once(explicit_thumb, "\"selectedBg\": 255", "\"selectedBg\": 255,\n\t\t\"scrollbarThumb\": \"#123456\"");
+    const auto with_thumb = coding_agent::tui::parse_theme_json("thumb fixture", explicit_thumb);
+    REQUIRE(with_thumb);
+    const auto* thumb_rgb = std::get_if<coding_agent::tui::RgbThemeColor>(
+        &coding_agent::tui::color_for(*with_thumb, coding_agent::tui::ThemeToken::ScrollbarThumb));
+    REQUIRE(thumb_rgb != nullptr);
+    CHECK(thumb_rgb->red == 0x12);
+    CHECK(thumb_rgb->green == 0x34);
+    CHECK(thumb_rgb->blue == 0x56);
 }
 
-TEST_CASE("Theme parsing reports invalid names and missing required tokens", "[coding_agent][theme][issue55]") {
+TEST_CASE(
+    "Theme parsing accepts empty names and rejects names containing a slash with pi's error",
+    "[coding_agent][theme][issue400]") {
+    // pi's Type.String() name accepts the empty string; only the '/' rule
+    // applies (assertThemeNameIsValid).
     auto empty_name = valid_custom_theme();
     replace_once(empty_name, "\"name\": \"custom\"", "\"name\": \"\"");
     const auto empty = coding_agent::tui::parse_theme_json("empty name fixture", empty_name);
-    REQUIRE_FALSE(empty);
-    CHECK(diagnostic_text(empty.error()).find("at least one character") != std::string::npos);
+    REQUIRE(empty);
+    CHECK(empty->name.empty());
 
     auto invalid_name = valid_custom_theme();
     replace_once(invalid_name, "\"name\": \"custom\"", "\"name\": \"bad/name\"");
     const auto named = coding_agent::tui::parse_theme_json("name fixture", invalid_name);
     REQUIRE_FALSE(named);
-    CHECK(diagnostic_text(named.error()).find("cannot contain '/'") != std::string::npos);
+    check_parse_error_golden("name-slash-rejection.txt", named.error());
+}
 
+TEST_CASE("Theme parsing reports missing required tokens with pi's wording", "[coding_agent][theme][issue400]") {
     auto missing = valid_custom_theme();
-    replace_once(missing, "\n\t\t\"accent\": \"#010203\",", "");
-    const auto required = coding_agent::tui::parse_theme_json("missing fixture", missing);
+    replace_once(missing, "\t\t\"accent\": \"#010203\",\n\t\t\"border\": \"blue\",\n", "");
+    const auto required = coding_agent::tui::parse_theme_json("missing-colors", missing);
     REQUIRE_FALSE(required);
-    CHECK(diagnostic_text(required.error()).find("Missing required color tokens") != std::string::npos);
-    CHECK(diagnostic_text(required.error()).find("accent") != std::string::npos);
+    check_parse_error_golden("missing-colors.txt", required.error());
+
+    // The missing list is sorted like pi's Array.sort(), independent of the
+    // schema order (dim/success appear out of schema order in the list).
+    auto unsorted = valid_custom_theme();
+    replace_once(unsorted, "\t\t\"success\": \"green\",\n", "");
+    replace_once(unsorted, "\t\t\"dim\": \"dimGray\",\n", "");
+    const auto sorted = coding_agent::tui::parse_theme_json("sorted fixture", unsorted);
+    REQUIRE_FALSE(sorted);
+    const auto dim_position = sorted.error().message.find("  - dim");
+    const auto success_position = sorted.error().message.find("  - success");
+    CHECK(dim_position != std::string::npos);
+    CHECK(success_position != std::string::npos);
+    CHECK(dim_position < success_position);
 }
 
 TEST_CASE(
@@ -198,7 +262,7 @@ TEST_CASE(
     replace_once(unresolved_json, "\"accent\": \"#010203\"", "\"accent\": \"missingRef\"");
     const auto unresolved = coding_agent::tui::parse_theme_json("unresolved fixture", unresolved_json);
     REQUIRE_FALSE(unresolved);
-    CHECK(diagnostic_text(unresolved.error()).find("Variable reference not found: missingRef") != std::string::npos);
+    CHECK(unresolved.error().message == "Variable reference not found: missingRef");
 
     auto cyclic_json = valid_custom_theme();
     replace_once(
@@ -208,39 +272,162 @@ TEST_CASE(
     replace_once(cyclic_json, "\"accent\": \"#010203\"", "\"accent\": \"cycleA\"");
     const auto cyclic = coding_agent::tui::parse_theme_json("cycle fixture", cyclic_json);
     REQUIRE_FALSE(cyclic);
-    CHECK(diagnostic_text(cyclic.error()).find("Circular variable reference") != std::string::npos);
+    check_parse_error_golden("circular-variable-reference.txt", cyclic.error());
 
     auto malformed_hex_json = valid_custom_theme();
     replace_once(malformed_hex_json, "\"accent\": \"#010203\"", "\"accent\": \"#xyz\"");
     const auto malformed_hex = coding_agent::tui::parse_theme_json("hex fixture", malformed_hex_json);
     REQUIRE_FALSE(malformed_hex);
-    CHECK(diagnostic_text(malformed_hex.error()).find("#RRGGBB") != std::string::npos);
+    CHECK(malformed_hex.error().message == "Invalid hex color: #xyz");
+
+    auto short_hex_json = valid_custom_theme();
+    replace_once(short_hex_json, "\"accent\": \"#010203\"", "\"accent\": \"#01020\"");
+    const auto short_hex = coding_agent::tui::parse_theme_json("short hex fixture", short_hex_json);
+    REQUIRE_FALSE(short_hex);
+    CHECK(short_hex.error().message == "Invalid hex color: #01020");
 
     auto range_json = valid_custom_theme();
     replace_once(range_json, "\"selectedBg\": 255", "\"selectedBg\": 256");
     const auto range = coding_agent::tui::parse_theme_json("range fixture", range_json);
     REQUIRE_FALSE(range);
-    CHECK(diagnostic_text(range.error()).find("0..255") != std::string::npos);
+    CHECK(range.error().message ==
+        "Invalid theme \"range fixture\":\n\n\nOther errors:\n"
+        "  - /colors/selectedBg: must be string\n"
+        "  - /colors/selectedBg: must be <= 255\n"
+        "  - /colors/selectedBg: must match a schema in anyOf");
+
+    auto negative_json = valid_custom_theme();
+    replace_once(negative_json, "\"selectedBg\": 255", "\"selectedBg\": -1");
+    const auto negative = coding_agent::tui::parse_theme_json("negative fixture", negative_json);
+    REQUIRE_FALSE(negative);
+    CHECK(negative.error().message ==
+        "Invalid theme \"negative fixture\":\n\n\nOther errors:\n"
+        "  - /colors/selectedBg: must be string\n"
+        "  - /colors/selectedBg: must be >= 0\n"
+        "  - /colors/selectedBg: must match a schema in anyOf");
+
+    auto fractional_json = valid_custom_theme();
+    replace_once(fractional_json, "\"selectedBg\": 255", "\"selectedBg\": 1.5");
+    const auto fractional = coding_agent::tui::parse_theme_json("fractional fixture", fractional_json);
+    REQUIRE_FALSE(fractional);
+    CHECK(fractional.error().message ==
+        "Invalid theme \"fractional fixture\":\n\n\nOther errors:\n"
+        "  - /colors/selectedBg: must be string\n"
+        "  - /colors/selectedBg: must be integer\n"
+        "  - /colors/selectedBg: must match a schema in anyOf");
 }
 
-TEST_CASE("Theme parsing rejects unknown schema members", "[coding_agent][theme][issue55]") {
+TEST_CASE("Theme parsing accepts unknown schema members like pi", "[coding_agent][theme][issue400]") {
+    // pi's runtime TypeBox schema does not reject additional properties at
+    // any level; unknown members are accepted and ignored.
     auto top_level_json = valid_custom_theme();
     replace_once(top_level_json, "\"name\": \"custom\",", "\"name\": \"custom\",\n\t\"version\": 1,");
     const auto top_level = coding_agent::tui::parse_theme_json("top-level fixture", top_level_json);
-    REQUIRE_FALSE(top_level);
-    CHECK(diagnostic_text(top_level.error()).find("unknown top-level field") != std::string::npos);
+    REQUIRE(top_level);
+    CHECK(top_level->name == "custom");
 
     auto color_json = valid_custom_theme();
-    replace_once(color_json, "\"accent\": \"#010203\",", "\"accent\": \"#010203\",\n\t\t\"unknownColor\": 1,");
+    replace_once(
+        color_json,
+        "\"accent\": \"#010203\",",
+        "\"accent\": \"#010203\",\n\t\t\"futureToken\": {\"nested\": true},");
     const auto color = coding_agent::tui::parse_theme_json("color fixture", color_json);
-    REQUIRE_FALSE(color);
-    CHECK(diagnostic_text(color.error()).find("unknown color token") != std::string::npos);
+    REQUIRE(color);
 
     auto export_json = valid_custom_theme();
-    replace_once(export_json, "\"pageBg\": \"#18181e\",", "\"pageBg\": \"#18181e\",\n\t\t\"unknownExport\": 1,");
+    replace_once(
+        export_json,
+        "\"pageBg\": \"#18181e\",",
+        "\"pageBg\": \"#18181e\",\n\t\t\"unknownExport\": {\"nested\": true},");
     const auto exported = coding_agent::tui::parse_theme_json("export fixture", export_json);
-    REQUIRE_FALSE(exported);
-    CHECK(diagnostic_text(exported.error()).find("unknown export field") != std::string::npos);
+    REQUIRE(exported);
+    CHECK(std::get<std::string>(*exported->export_colors.pageBg) == "#18181e");
+
+    // Unknown color tokens still resolve like pi: a valid reference loads,
+    // an unresolvable reference fails the load.
+    auto valid_ref_json = valid_custom_theme();
+    replace_once(
+        valid_ref_json,
+        "\"accent\": \"#010203\",",
+        "\"accent\": \"#010203\",\n\t\t\"futureToken\": \"fallbackA\",");
+    const auto valid_ref = coding_agent::tui::parse_theme_json("unknown token fixture", valid_ref_json);
+    REQUIRE(valid_ref);
+
+    auto bad_ref_json = valid_custom_theme();
+    replace_once(
+        bad_ref_json,
+        "\"accent\": \"#010203\",",
+        "\"accent\": \"#010203\",\n\t\t\"futureToken\": \"missingRef\",");
+    const auto bad_ref = coding_agent::tui::parse_theme_json("unknown token ref fixture", bad_ref_json);
+    REQUIRE_FALSE(bad_ref);
+    CHECK(bad_ref.error().message == "Variable reference not found: missingRef");
+}
+
+TEST_CASE("Theme diagnostics redact secret-shaped user keys", "[coding_agent][theme][issue400]") {
+    // Schema error lines embed user-controlled key names; secret-shaped keys
+    // are redacted before the pi-verbatim message is composed.
+    auto secret_key = valid_custom_theme();
+    replace_once(
+        secret_key,
+        "\"fallbackB\": 17",
+        "\"fallbackB\": 17,\n\t\t\"sk-abcdefghijklmnopqrstuvwxyz123456\": true");
+    const auto secret = coding_agent::tui::parse_theme_json("secret key fixture", secret_key);
+    REQUIRE_FALSE(secret);
+    CHECK(secret.error().message.find("sk-abcdefghijklmnopqrstuvwxyz123456") == std::string::npos);
+    CHECK(secret.error().message.find("[REDACTED]") != std::string::npos);
+}
+
+TEST_CASE("Theme export section is validated and retained as passive data", "[coding_agent][theme][issue400]") {
+    auto no_export = valid_custom_theme();
+    replace_once(
+        no_export,
+        "\t},\n\t\"export\": {\n\t\t\"pageBg\": \"#18181e\",\n\t\t\"cardBg\": \"#1e1e24\",\n\t\t\"infoBg\": \"#3c3728\"\n\t}\n",
+        "\t}\n");
+    const auto without = coding_agent::tui::parse_theme_json("no export fixture", no_export);
+    REQUIRE(without);
+    CHECK_FALSE(without->export_colors.pageBg);
+    CHECK_FALSE(without->export_colors.cardBg);
+    CHECK_FALSE(without->export_colors.infoBg);
+
+    auto empty_export = valid_custom_theme();
+    replace_once(
+        empty_export,
+        "\t\"export\": {\n\t\t\"pageBg\": \"#18181e\",\n\t\t\"cardBg\": \"#1e1e24\",\n\t\t\"infoBg\": \"#3c3728\"\n\t}",
+        "\t\"export\": {}");
+    const auto empty = coding_agent::tui::parse_theme_json("empty export fixture", empty_export);
+    REQUIRE(empty);
+    CHECK_FALSE(empty->export_colors.pageBg);
+    CHECK_FALSE(empty->export_colors.cardBg);
+    CHECK_FALSE(empty->export_colors.infoBg);
+
+    // Raw values are retained verbatim: hex, var references (unresolved),
+    // xterm indices, and the terminal-default empty string.
+    auto raw_export = valid_custom_theme();
+    replace_once(
+        raw_export,
+        "\t\"export\": {\n\t\t\"pageBg\": \"#18181e\",\n\t\t\"cardBg\": \"#1e1e24\",\n\t\t\"infoBg\": \"#3c3728\"\n\t}",
+        "\t\"export\": {\n\t\t\"pageBg\": \"accent\",\n\t\t\"cardBg\": 24,\n\t\t\"infoBg\": \"\"\n\t}");
+    const auto raw = coding_agent::tui::parse_theme_json("raw export fixture", raw_export);
+    REQUIRE(raw);
+    CHECK(std::get<std::string>(*raw->export_colors.pageBg) == "accent");
+    CHECK(std::get<int>(*raw->export_colors.cardBg) == 24);
+    CHECK(std::get<std::string>(*raw->export_colors.infoBg).empty());
+
+    // Schema validation failures use pi's verbatim wording.
+    auto not_object = valid_custom_theme();
+    replace_once(
+        not_object,
+        "\t\"export\": {\n\t\t\"pageBg\": \"#18181e\",\n\t\t\"cardBg\": \"#1e1e24\",\n\t\t\"infoBg\": \"#3c3728\"\n\t}",
+        "\t\"export\": 42");
+    const auto invalid_object = coding_agent::tui::parse_theme_json("export-not-object", not_object);
+    REQUIRE_FALSE(invalid_object);
+    check_parse_error_golden("export-not-object.txt", invalid_object.error());
+
+    auto bad_value = valid_custom_theme();
+    replace_once(bad_value, "\"pageBg\": \"#18181e\"", "\"pageBg\": true");
+    const auto invalid_value = coding_agent::tui::parse_theme_json("export-bad-value", bad_value);
+    REQUIRE_FALSE(invalid_value);
+    check_parse_error_golden("export-bad-value.txt", invalid_value.error());
 }
 
 TEST_CASE("Malformed theme JSON produces a bounded redacted diagnostic", "[coding_agent][theme][issue55]") {
@@ -252,8 +439,8 @@ TEST_CASE("Malformed theme JSON produces a bounded redacted diagnostic", "[codin
     CHECK(malformed.error().code == util::ErrorCode::JsonParse);
     CHECK(malformed.error().message.size() <= coding_agent::kMaxPresentationPayloadBytes);
     CHECK(malformed.error().detail.size() <= coding_agent::kMaxPresentationPayloadBytes);
-    CHECK(diagnostic_text(malformed.error()).find("failed to parse theme") != std::string::npos);
-    CHECK(diagnostic_text(malformed.error()).find("sk-abcdefghijklmnopqrstuvwxyz123456") == std::string::npos);
+    CHECK(malformed.error().message.starts_with("Failed to parse theme malformed fixture: "));
+    CHECK(malformed.error().message.find("sk-abcdefghijklmnopqrstuvwxyz123456") == std::string::npos);
 }
 
 TEST_CASE("Theme styling selects safe built-ins and maps color capability", "[coding_agent][theme][issue55]") {

@@ -59,9 +59,26 @@ struct XtermThemeColor {
 
 using ResolvedThemeColor = std::variant<TerminalDefaultThemeColor, RgbThemeColor, XtermThemeColor>;
 
+/// One raw `export`-section value retained as passive data: `#RRGGBB` hex, a
+/// `vars` reference (kept unresolved — resolution is the Deferred HTML export
+/// layer's job), `""` for the terminal default, or an xterm palette index
+/// 0..255. Like pi, the section is schema-validated at load and its values
+/// resolved only by the export layer.
+using ThemeExportValueVariant = std::variant<std::string, int>;
+
+/// The theme's optional `export` section, retained with pi's wire names.
+struct ThemeExportColors {
+    std::optional<ThemeExportValueVariant> pageBg;
+    std::optional<ThemeExportValueVariant> cardBg;
+    std::optional<ThemeExportValueVariant> infoBg;
+
+    bool operator==(const ThemeExportColors&) const = default;
+};
+
 struct ResolvedTheme {
     std::string name;
     std::array<ResolvedThemeColor, kThemeTokenCount> colors{};
+    ThemeExportColors export_colors;
 
     bool operator==(const ResolvedTheme&) const = default;
 };

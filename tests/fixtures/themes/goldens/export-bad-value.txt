@@ -1,0 +1,7 @@
+Invalid theme "export-bad-value":
+
+
+Other errors:
+  - /export/pageBg: must be string
+  - /export/pageBg: must be integer
+  - /export/pageBg: must match a schema in anyOf
