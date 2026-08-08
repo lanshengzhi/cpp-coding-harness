@@ -19,6 +19,51 @@ struct SessionInfoLite {
     std::filesystem::file_time_type modified{};
 };
 
+/// pi `SessionInfo` — the full selector-facing session facts
+/// (session-manager.ts `buildSessionInfo`): the file path, header id/cwd,
+/// the latest non-blank `session_info` name, the header parent session, the
+/// header creation timestamp, the modification time (latest message
+/// activity, else the header timestamp, else the file mtime), the message
+/// count, the first user message text, and the space-joined user/assistant
+/// message texts. `first_message` defaults to "(no messages)" like pi.
+struct SessionInfo {
+    std::filesystem::path path;
+    std::string id;
+    std::string cwd;
+    std::optional<std::string> name;
+    std::optional<std::filesystem::path> parent_session_path;
+    std::string created;
+    std::filesystem::file_time_type modified{};
+    std::size_t message_count{0};
+    std::string first_message;
+    std::string all_messages_text;
+};
+
+/// pi `buildSessionInfo`: parse one session file into selector-facing facts.
+/// Returns nullopt for unreadable files and for files whose first entry is
+/// not a session header. Malformed later lines are skipped (pi
+/// `parseSessionEntryLine` returns null and the loop continues).
+[[nodiscard]] std::optional<SessionInfo> build_session_info(
+    const std::filesystem::path& path);
+
+/// pi `SessionManager.list`: every `*.jsonl` file in `directory` whose first
+/// line parses as a session header, newest modification time first. When
+/// `cwd_filter` is set, only sessions whose header cwd resolves to the filter
+/// path are kept (an empty header cwd never matches). Best effort: a missing
+/// directory, unreadable files, and header parse failures yield an empty
+/// list (pi `listSessionsFromDir` catches and returns empty).
+[[nodiscard]] std::vector<SessionInfo> list_sessions_info(
+    const std::filesystem::path& directory,
+    const std::optional<std::filesystem::path>& cwd_filter);
+
+/// pi `SessionManager.listAll`: with a custom session directory, the sessions
+/// in that directory; otherwise every session under the sessions root's
+/// per-project directories (one level deep, no cwd filter). Best effort,
+/// newest first. `listAll` powers the in-session selector's "All" scope.
+[[nodiscard]] std::vector<SessionInfo> list_all_sessions_info(
+    const std::filesystem::path& sessions_root,
+    const std::optional<std::filesystem::path>& custom_directory);
+
 /// pi `SessionManager.list`: every `*.jsonl` file in `directory` whose first
 /// line parses as a session header, newest modification time first. When
 /// `cwd_filter` is set, only sessions whose header cwd resolves to the filter

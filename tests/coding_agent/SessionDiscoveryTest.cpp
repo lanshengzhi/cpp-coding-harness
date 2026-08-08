@@ -267,3 +267,174 @@ TEST_CASE("resolve session arg honors the engaged cwd filter", "[coding_agent][s
         "mine-1", workspace, local_dir, workspace, {}, std::nullopt);
     CHECK(match.kind == discovery::SessionArgKind::Local);
 }
+
+TEST_CASE("build session info parses name, counts, first message, and activity", "[coding_agent][session-discovery][issue409]") {
+    tests::TempWorkspace temp;
+    const auto workspace = temp.path() / "workspace";
+    std::filesystem::create_directory(workspace);
+    const auto session_path = temp.path() / "session.jsonl";
+    {
+        std::ofstream output(session_path, std::ios::binary);
+        output << "{\"type\":\"session\",\"version\":3,\"id\":\"forked-1\","
+                  "\"timestamp\":\"2026-08-08T00:00:00.000Z\",\"cwd\":\""
+               << workspace.string()
+               << "\",\"parentSession\":\"/old/source.jsonl\"}\n";
+        // session_info name (latest wins), a user message (string content),
+        // an assistant message (text block), a blank user message (no text), a
+        // tool-result message (no text), and a later name clear.
+        output << "{\"type\":\"session_info\",\"id\":\"e1\",\"timestamp\":1,"
+                  "\"name\":\"First name\"}\n";
+        output << "{\"type\":\"message\",\"id\":\"m1\",\"timestamp\":2,"
+                  "\"message\":{\"role\":\"user\",\"content\":\"hello world\"}}\n";
+        output << "{\"type\":\"message\",\"id\":\"m2\",\"timestamp\":3,"
+                  "\"message\":{\"role\":\"assistant\",\"content\":["
+                  "{\"type\":\"text\",\"text\":\"assistant says\"}]}}\n";
+        output << "{\"type\":\"message\",\"id\":\"m3\",\"timestamp\":4,"
+                  "\"message\":{\"role\":\"user\",\"content\":\"   \"}}\n";
+        output << "{\"type\":\"message\",\"id\":\"m4\",\"timestamp\":5,"
+                  "\"message\":{\"role\":\"tool_result\",\"content\":\"nope\"}}\n";
+        output << "{\"type\":\"session_info\",\"id\":\"e2\",\"timestamp\":6,"
+                  "\"name\":\"Renamed\"}\n";
+    }
+
+    const auto info = discovery::build_session_info(session_path);
+    REQUIRE(info.has_value());
+    CHECK(info->id == "forked-1");
+    CHECK(info->cwd == workspace.string());
+    CHECK(info->name == "Renamed");
+    REQUIRE(info->parent_session_path.has_value());
+    CHECK(*info->parent_session_path == std::filesystem::path{"/old/source.jsonl"});
+    CHECK(info->created == "2026-08-08T00:00:00.000Z");
+    // Message count counts every message entry (blank/tool included); the
+    // first message is the first user message with text; the all-messages
+    // text joins user/assistant texts with spaces (pi does not trim, so the
+    // blank user text is joined too).
+    CHECK(info->message_count == 4);
+    CHECK(info->first_message == "hello world");
+    CHECK(info->all_messages_text == "hello world assistant says    ");
+
+    // No name and no messages: first message defaults to "(no messages)".
+    const auto bare = temp.path() / "bare.jsonl";
+    {
+        std::ofstream output(bare, std::ios::binary);
+        output << "{\"type\":\"session\",\"version\":3,\"id\":\"bare-1\","
+                  "\"timestamp\":\"2026-08-08T00:00:00.000Z\",\"cwd\":\""
+               << workspace.string() << "\"}\n";
+    }
+    const auto bare_info = discovery::build_session_info(bare);
+    REQUIRE(bare_info.has_value());
+    CHECK_FALSE(bare_info->name.has_value());
+    CHECK(bare_info->message_count == 0);
+    CHECK(bare_info->first_message == "(no messages)");
+    CHECK(bare_info->all_messages_text.empty());
+}
+
+TEST_CASE("build session info skips malformed lines and non-session files", "[coding_agent][session-discovery][issue409]") {
+    tests::TempWorkspace temp;
+    const auto workspace = temp.path() / "workspace";
+    std::filesystem::create_directory(workspace);
+    const auto session_path = temp.path() / "session.jsonl";
+    {
+        std::ofstream output(session_path, std::ios::binary);
+        output << "{\"type\":\"session\",\"version\":3,\"id\":\"ok-1\","
+                  "\"timestamp\":\"2026-08-08T00:00:00.000Z\",\"cwd\":\""
+               << workspace.string() << "\"}\n";
+        // A malformed middle line is skipped, not fatal (pi `continue`).
+        output << "this is not json\n";
+        output << "{\"type\":\"message\",\"id\":\"m1\",\"timestamp\":2,"
+                  "\"message\":{\"role\":\"user\",\"content\":\"survived\"}}\n";
+    }
+    const auto info = discovery::build_session_info(session_path);
+    REQUIRE(info.has_value());
+    CHECK(info->id == "ok-1");
+    CHECK(info->message_count == 1);
+    CHECK(info->first_message == "survived");
+
+    // No session header: nullopt.
+    const auto not_session = temp.path() / "other.jsonl";
+    {
+        std::ofstream output(not_session, std::ios::binary);
+        output << "{\"type\":\"header\",\"id\":\"x\"}\n";
+    }
+    CHECK_FALSE(discovery::build_session_info(not_session).has_value());
+    CHECK_FALSE(discovery::build_session_info(temp.path() / "missing.jsonl").has_value());
+}
+
+TEST_CASE("list sessions info scans, cwd-filters, and sorts newest first", "[coding_agent][session-discovery][issue409]") {
+    tests::TempWorkspace temp;
+    const auto directory = temp.path() / "sessions";
+    const auto workspace = temp.path() / "workspace";
+    const auto other_cwd = temp.path() / "other";
+    std::filesystem::create_directory(directory);
+    std::filesystem::create_directory(workspace);
+    std::filesystem::create_directory(other_cwd);
+
+    const auto newer = directory / "newer.jsonl";
+    const auto older = directory / "older.jsonl";
+    const auto foreign = directory / "foreign.jsonl";
+    write_session_header(newer, "id-new", workspace.string());
+    write_session_header(older, "id-old", workspace.string());
+    write_session_header(foreign, "id-foreign", other_cwd.string());
+    // Distinct message activity timestamps drive the sort (pi `modified` = the
+    // latest message activity, which beats the header timestamp and mtime).
+    {
+        std::ofstream output(newer, std::ios::app);
+        output << "{\"type\":\"message\",\"id\":\"m1\",\"timestamp\":3000,"
+                  "\"message\":{\"role\":\"user\",\"content\":\"newest\"}}\n";
+    }
+    {
+        std::ofstream output(older, std::ios::app);
+        output << "{\"type\":\"message\",\"id\":\"m1\",\"timestamp\":2000,"
+                  "\"message\":{\"role\":\"user\",\"content\":\"older\"}}\n";
+    }
+    {
+        std::ofstream output(foreign, std::ios::app);
+        output << "{\"type\":\"message\",\"id\":\"m1\",\"timestamp\":1000,"
+                  "\"message\":{\"role\":\"user\",\"content\":\"foreign\"}}\n";
+    }
+    const auto newer_time = std::filesystem::last_write_time(directory) +
+        std::chrono::hours(2);
+    const auto older_time = std::filesystem::last_write_time(directory);
+    std::filesystem::last_write_time(newer, newer_time);
+    std::filesystem::last_write_time(older, older_time);
+
+    const auto all = discovery::list_sessions_info(directory, std::nullopt);
+    REQUIRE(all.size() == 3);
+    CHECK(all.front().id == "id-new");
+    CHECK(all.back().id == "id-foreign");
+
+    const auto filtered =
+        discovery::list_sessions_info(directory, workspace);
+    REQUIRE(filtered.size() == 2);
+    CHECK(filtered.front().id == "id-new");
+    CHECK(filtered.back().id == "id-old");
+
+    CHECK(discovery::list_sessions_info(temp.path() / "missing", std::nullopt).empty());
+}
+
+TEST_CASE("list all sessions info scans projects and honors a custom directory", "[coding_agent][session-discovery][issue409]") {
+    tests::TempWorkspace temp;
+    const auto sessions_root = temp.path() / "root";
+    const auto workspace = temp.path() / "workspace";
+    std::filesystem::create_directory(workspace);
+    const auto project_a = sessions_root / "--project-a--";
+    const auto project_b = sessions_root / "--project-b--";
+    std::filesystem::create_directories(project_a);
+    std::filesystem::create_directories(project_b);
+
+    write_session_header(project_a / "a.jsonl", "id-a", workspace.string());
+    write_session_header(project_b / "b.jsonl", "id-b", workspace.string());
+
+    const auto all = discovery::list_all_sessions_info(sessions_root, std::nullopt);
+    REQUIRE(all.size() == 2);
+
+    // Custom directory: only that directory, no cwd filter.
+    const auto custom = temp.path() / "custom";
+    std::filesystem::create_directory(custom);
+    write_session_header(custom / "c.jsonl", "id-c", workspace.string());
+    const auto custom_all =
+        discovery::list_all_sessions_info(sessions_root, custom);
+    REQUIRE(custom_all.size() == 1);
+    CHECK(custom_all.front().id == "id-c");
+}
+

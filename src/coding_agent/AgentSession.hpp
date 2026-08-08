@@ -17,6 +17,7 @@
 #include <cch/util/Error.hpp>
 #include <cch/util/JsonValue.hpp>
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
+#include "coding_agent/runtime/SessionFork.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
@@ -307,6 +308,29 @@ public:
     /// The session's scoped-model set (pi `AgentSession.scopedModels`),
     /// seeded from the `--models` CLI scope.
     [[nodiscard]] const std::vector<ScopedModel>& scoped_models() const;
+
+    // ── Session fork (pi `AgentSessionRuntime.fork` preparation) ──────────
+
+    /// pi `getUserMessagesForForking`: every user message with non-blank text
+    /// in session order. Persisted sessions read the file's entries (real
+    /// entry ids); in-memory sessions derive messages from the live history
+    /// with synthetic ids that only the fork flow understands.
+    [[nodiscard]] std::vector<runtime::UserForkMessage>
+    get_user_messages_for_forking() const;
+
+    /// pi `AgentSessionRuntime.fork` preparation: validates the entry and
+    /// computes the branched target (`ForkPosition::Before` requires a user
+    /// message and branches before it; `ForkPosition::At` branches at the
+    /// entry itself). Persisted sessions write the branched session file
+    /// into the source session's directory; in-memory sessions produce the
+    /// branch seed for a newly created in-memory session. Verbatim pi
+    /// errors: "Invalid entry ID for forking", "This session has not been
+    /// saved yet. Wait for the first assistant response before cloning or
+    /// forking it.", "Failed to create forked session", and the G3 "Cannot
+    /// fork: ..." source-file strings.
+    [[nodiscard]] util::Expected<runtime::ForkPreparation> prepare_fork(
+        std::string_view entry_id,
+        runtime::ForkPosition position) const;
 
     // ── Compaction ───────────────────────────────────────────────────────
 

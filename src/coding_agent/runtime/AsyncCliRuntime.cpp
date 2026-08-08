@@ -115,9 +115,44 @@ void print_session_diagnostics(
 [[nodiscard]] int run_native_tui(
     coding_agent::AgentSession& session,
     InitialMessageResult initial,
-    std::optional<std::string> model_fallback_message) {
+    std::optional<std::string> model_fallback_message,
+    const CliConfig& config,
+    std::shared_ptr<ai::Models> models) {
     cch::tui::ProcessTerminal terminal;
     boost::asio::io_context io;
+    // pi `createAgentSessionRuntime`: the in-session session flows reuse the
+    // CLI-owned facts (model selection, resource flags) and the test seam's
+    // deterministic catalog when injected.
+    // pi `createAgentSessionRuntime`: the in-session session flows reuse the
+    // CLI-owned facts (model selection, resource flags); the factory applies
+    // them to each replacement request, and the state keeps the same facts
+    // for building them.
+    coding_agent::tui::InteractiveSessionFacts facts;
+    facts.project_trust_override = config.project_trust_override;
+    facts.no_skills = config.no_skills;
+    facts.no_prompt_templates = config.no_prompt_templates;
+    facts.prompt_template_paths = config.prompt_template_paths;
+    facts.provider = config.provider;
+    facts.model = config.model;
+    facts.models = config.models;
+    facts.api_key = config.api_key;
+    coding_agent::tui::SessionFactorySink session_factory =
+        [facts, models](coding_agent::runtime::AgentSessionCreationRequest request)
+        -> util::Expected<coding_agent::CreateAgentSessionResult> {
+            request.provide_user_shell = true;
+            request.project_trust_override = facts.project_trust_override;
+            request.no_skills = facts.no_skills;
+            request.no_prompt_templates = facts.no_prompt_templates;
+            request.prompt_template_paths = facts.prompt_template_paths;
+            request.provider = facts.provider;
+            request.model = facts.model;
+            request.models = facts.models;
+            request.api_key = facts.api_key;
+            return models
+                ? coding_agent::create_agent_session_for_testing(
+                      std::move(request), models)
+                : coding_agent::create_agent_session(std::move(request));
+        };
     auto future = boost::asio::co_spawn(
         io,
         coding_agent::tui::run_interactive_mode(
@@ -133,6 +168,8 @@ void print_session_diagnostics(
                     .images = std::move(initial.initial_images),
                 },
                 .model_fallback_message = std::move(model_fallback_message),
+                .session_factory = std::move(session_factory),
+                .session_facts = std::move(facts),
             }),
         boost::asio::use_future);
     io.run();
@@ -308,7 +345,9 @@ void print_session_diagnostics(
         return run_native_tui(
             session,
             std::move(*initial),
-            std::move(created->model_fallback_message));
+            std::move(created->model_fallback_message),
+            config,
+            models);
     }
 
     return run_print_mode(

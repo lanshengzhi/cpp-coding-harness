@@ -67,11 +67,15 @@ using NewSessionPublication = std::variant<
     InMemoryPublication>;
 
 /// Read-only resume target preparation. Does not open a writable store and
-/// does not modify the existing session file.
+/// does not modify the existing session file. `cwd_override` (pi
+/// `SessionManager.open(path, dir, cwdOverride)`) binds the runtime to the
+/// override even when the header stores a different (missing) cwd; the
+/// header keeps its stored value.
 [[nodiscard]] util::Expected<PreparedResumeTarget> prepare_resume_target(
     std::filesystem::path resume_path,
     std::filesystem::path explicit_workspace,
-    bool workspace_explicit);
+    bool workspace_explicit,
+    std::optional<std::filesystem::path> cwd_override = std::nullopt);
 
 /// Publish a newly created session after all fallible prerequisites have
 /// succeeded. Session Publication is the single mutation point: it derives

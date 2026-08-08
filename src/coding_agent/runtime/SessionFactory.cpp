@@ -139,6 +139,13 @@ struct AssemblyPlan {
     /// Shell (ADR 0026). Set only by CLI normalization for the interactive
     /// frontend.
     bool provide_user_shell{false};
+    /// pi `switchSession` cwdOverride (in-session resume only): bind the
+    /// resumed session's runtime to this cwd even when the header stores a
+    /// different (missing) cwd.
+    std::optional<std::filesystem::path> resume_cwd_override;
+    /// Private in-session seam: the pi in-memory `createBranchedSession`
+    /// seed (meaningful only with `InMemorySessionTarget`).
+    std::optional<runtime::InMemoryBranchSeed> in_memory_branch_seed;
     /// pi `--name`: the session display name appended as a `session_info`
     /// entry after publication (pi appendSessionInfo).
     std::optional<std::string> session_name;
@@ -762,6 +769,8 @@ struct SessionTargetNormalizationOptions {
     plan.max_queued_bytes = request.max_queued_bytes;
     plan.provide_user_shell = request.provide_user_shell;
     plan.session_name = std::move(request.session_name);
+    plan.resume_cwd_override = std::move(request.resume_cwd_override);
+    plan.in_memory_branch_seed = std::move(request.in_memory_branch_seed);
 
     return plan;
 }
@@ -906,7 +915,8 @@ struct SessionTargetNormalizationOptions {
 
     if (const auto* target = std::get_if<ResumeSessionTarget>(&plan.target)) {
         auto prepared = prepare_resume_target(
-            target->resume_path, target->workspace, target->workspace_explicit);
+            target->resume_path, target->workspace, target->workspace_explicit,
+            plan.resume_cwd_override);
         if (!prepared) {
             return std::unexpected(prepared.error());
         }
@@ -932,7 +942,8 @@ struct SessionTargetNormalizationOptions {
         }
         if (regular && std::filesystem::file_size(target->session_path, ec) > 0) {
             auto prepared = prepare_resume_target(
-                target->session_path, workspace, false);
+                target->session_path, workspace, false,
+                plan.resume_cwd_override);
             if (!prepared) {
                 return std::unexpected(prepared.error());
             }
@@ -1374,6 +1385,23 @@ struct SessionTargetNormalizationOptions {
             return std::unexpected(published.error());
         }
         open = std::move(*published);
+        // Private in-session seam: pi in-memory `createBranchedSession` — the
+        // branch's message projection and derived state seed the new
+        // in-memory session (the C++ in-memory store keeps no entries). The
+        // header parent pointer comes from the seed; the model/thinking
+        // restore rides the branch context like a resumed session.
+        if (plan.in_memory_branch_seed) {
+            const auto& seed = *plan.in_memory_branch_seed;
+            open.metadata.parent_session = seed.parent_session;
+            open.history = seed.context.messages;
+            open.context_model = seed.context.model;
+            open.context_thinking_level =
+                seed.context.thinking_level == "off" &&
+                    !seed.context.has_thinking_level_entry
+                ? std::nullopt
+                : std::optional<std::string>{seed.context.thinking_level};
+            open.topology = harness::session::SessionTopology::Branched;
+        }
         // Persist the session's `model_change {provider, modelId}` as the first
         // content entry (pi `setModel` → `appendModelChange`) — skipped for the
         // unknown placeholder, exactly like pi's `if (model)` guard, so a

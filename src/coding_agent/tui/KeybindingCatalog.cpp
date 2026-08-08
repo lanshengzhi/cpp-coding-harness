@@ -40,8 +40,9 @@ struct ApplicationTemplate {
 }
 
 [[nodiscard]] const std::vector<ApplicationTemplate>& application_templates() {
-    // Compatibility baseline: pi 864b35c,
-    // packages/coding-agent/src/core/keybindings.ts.
+    // Compatibility baseline: pi 83114817,
+    // packages/coding-agent/src/core/keybindings.ts (the G2 record re-pinned
+    // the app-layer baseline 864b35c -> 83114817).
     static const std::vector<ApplicationTemplate> kTemplates{
         make_application_template("app.interrupt", {"escape"}, "Cancel or abort", "Application"),
         make_application_template("app.clear", {"ctrl+c"}, "Clear editor", "Application"),

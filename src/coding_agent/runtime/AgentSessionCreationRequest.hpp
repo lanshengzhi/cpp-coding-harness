@@ -3,6 +3,8 @@
 #include <cch/agent/AgentContext.hpp>
 #include <cch/agent/AgentTool.hpp>
 #include <cch/ai/Model.hpp>
+#include <cch/coding_agent/ModelRuntime.hpp>
+#include <cch/harness/session/SessionTree.hpp>
 #include "coding_agent/SessionTarget.hpp"
 
 #include <cstddef>
@@ -13,6 +15,20 @@
 #include <vector>
 
 namespace cch::coding_agent::runtime {
+
+/// pi in-memory `createBranchedSession`: the derived branch facts seeded into
+/// a newly created in-memory session. The C++ in-memory store is a no-op, so
+/// the branch's message projection and derived state travel as a seed; the
+/// in-session fork flow carries it through `in_memory_branch_seed`.
+struct InMemoryBranchSeed {
+    /// Branch context projection: messages, model, thinking level (pi
+    /// `createBranchedSession` fileEntries minus the header, projected like
+    /// `buildSessionContext`).
+    harness::session::SessionContext context;
+    /// The source session file (pi header `parentSession`); absent when the
+    /// source session is itself in-memory.
+    std::optional<std::filesystem::path> parent_session;
+};
 
 /// Internal creation request shared by the CLI adapters. Session assembly is
 /// SessionFactory-authoritative; the request carries only CLI-owned facts
@@ -49,6 +65,16 @@ struct AgentSessionCreationRequest {
     /// entry after publication (pi appendSessionInfo sanitization). The CLI
     /// already enforced the non-empty guard.
     std::optional<std::string> session_name;
+    /// pi `switchSession` cwdOverride (in-session resume only): bind the
+    /// resumed session's runtime to this cwd even when the session header
+    /// stores a different (missing) cwd. The header keeps its stored value
+    /// (pi `SessionManager.open(path, dir, cwdOverride)`). The boot path
+    /// never sets it.
+    std::optional<std::filesystem::path> resume_cwd_override;
+    /// Private in-session seam: the pi in-memory `createBranchedSession`
+    /// seed for a newly created in-memory session. Meaningful only with
+    /// `InMemorySessionTarget`; production callers never set it.
+    std::optional<InMemoryBranchSeed> in_memory_branch_seed;
     /// Raw --session-dir value: the highest-priority CLI automatic-directory
     /// override, ahead of PI_CODING_AGENT_SESSION_DIR and settings
     /// sessionDir. Consulted only for default persisted creation.

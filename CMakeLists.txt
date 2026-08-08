@@ -248,6 +248,7 @@ add_library(cch_coding_agent_runtime
     src/cli/PrintMode.cpp
     src/cli/SessionFamily.cpp
     src/coding_agent/runtime/SessionFactory.cpp
+    src/coding_agent/runtime/SessionFork.cpp
     src/coding_agent/runtime/SessionLifecycle.cpp
 )
 cch_target_defaults(cch_coding_agent_runtime)
@@ -282,9 +283,12 @@ add_library(cch_coding_agent_interactive
     src/coding_agent/tui/OpenBrowser.cpp
     src/coding_agent/tui/ScopedModelsSelector.cpp
     src/coding_agent/tui/SettingsSelector.cpp
+    src/coding_agent/tui/SessionSelector.cpp
+    src/coding_agent/tui/SessionSelectorSearch.cpp
     src/coding_agent/tui/StringListSelector.cpp
     src/coding_agent/tui/ToolExecutionComponent.cpp
     src/coding_agent/tui/UserMessageComponent.cpp
+    src/coding_agent/tui/UserMessageSelector.cpp
 )
 cch_target_defaults(cch_coding_agent_interactive)
 target_link_libraries(cch_coding_agent_interactive
@@ -399,6 +403,9 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/tui/ModelSelectorTest.cpp
         tests/coding_agent/tui/OAuthSelectorTest.cpp
         tests/coding_agent/tui/ScopedModelsSelectorTest.cpp
+        tests/coding_agent/tui/SessionSelectorSearchTest.cpp
+        tests/coding_agent/tui/SessionSelectorComponentTest.cpp
+        tests/coding_agent/tui/SessionSelectorInteractiveTest.cpp
         tests/coding_agent/tui/SettingsSelectorTest.cpp
         tests/coding_agent/tui/StringListSelectorTest.cpp
         tests/coding_agent/tui/ProcessInteractiveModeTest.cpp
@@ -415,6 +422,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/runtime/SessionFactoryUserShellTest.cpp
         tests/coding_agent/runtime/SessionEventCommitmentTest.cpp
         tests/coding_agent/runtime/SessionLifecycleTest.cpp
+        tests/coding_agent/runtime/SessionForkTest.cpp
         tests/coding_agent/runtime/UserBashCancellationTest.cpp
         tests/coding_agent/runtime/UserBashOutputAccumulatorTest.cpp
         tests/coding_agent/runtime/UserBashOverlapTest.cpp

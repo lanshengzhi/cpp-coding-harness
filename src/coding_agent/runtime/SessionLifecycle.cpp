@@ -386,14 +386,20 @@ util::Expected<OpenSession> publish_session(
 util::Expected<PreparedResumeTarget> prepare_resume_target(
     std::filesystem::path resume_path,
     std::filesystem::path explicit_workspace,
-    bool workspace_explicit) {
+    bool workspace_explicit,
+    std::optional<std::filesystem::path> cwd_override) {
     auto resumed = harness::session::resume_session(resume_path);
     if (!resumed) {
         return std::unexpected(resumed.error());
     }
 
     std::filesystem::path workspace = explicit_workspace;
-    if (!resumed->metadata.workspace.empty()) {
+    if (cwd_override) {
+        // pi `switchSession` cwdOverride: the runtime binds to the override
+        // unconditionally; the header keeps its stored (possibly missing)
+        // cwd.
+        workspace = *cwd_override;
+    } else if (!resumed->metadata.workspace.empty()) {
         if (workspace_explicit && !same_workspace(workspace, resumed->metadata.workspace)) {
             return std::unexpected(util::make_error(
                 util::ErrorCode::Session,

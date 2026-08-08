@@ -3,6 +3,7 @@
 #include "coding_agent/tui/ClipboardReader.hpp"
 
 #include "coding_agent/AgentSession.hpp"
+#include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 #include <cch/tui/Keybindings.hpp>
 #include <cch/util/Error.hpp>
 
@@ -24,6 +25,27 @@ class Terminal;
 
 namespace cch::coding_agent::tui {
 
+/// CLI-owned facts reused for in-session session replacement requests (pi's
+/// `createRuntime` closure captures the CLI model selection and resource
+/// flags; the workspace and session target change per flow).
+struct InteractiveSessionFacts {
+    std::optional<bool> project_trust_override;
+    bool no_skills{false};
+    bool no_prompt_templates{false};
+    std::vector<std::string> prompt_template_paths;
+    std::optional<std::string> provider;
+    std::optional<std::string> model;
+    std::vector<std::string> models;
+    std::optional<std::string> api_key;
+};
+
+/// In-session session replacement (pi `AgentSessionRuntime` createRuntime
+/// closure): creates the next Agent Session for `switchSession`/
+/// `newSession`/`fork`. The interactive host supplies it; focused tests
+/// inject a deterministic factory.
+using SessionFactorySink = std::move_only_function<
+    util::Expected<CreateAgentSessionResult>(runtime::AgentSessionCreationRequest)>;
+
 struct InteractiveModeConfig {
     std::filesystem::path agent_config_directory;
     cch::tui::KeybindingPlatform platform{cch::tui::native_keybinding_platform()};
@@ -38,6 +60,12 @@ struct InteractiveModeConfig {
     /// `openBrowser`: detached argv spawn, never through a shell, best-effort).
     /// Null installs the real platform spawn; tests inject a recorder.
     std::move_only_function<void(std::string)> open_browser_sink{nullptr};
+    /// In-session session replacement factory (pi `AgentSessionRuntime`
+    /// `createRuntime`). Null installs no replacement: the session flows
+    /// report an error. The interactive host always supplies it.
+    SessionFactorySink session_factory{nullptr};
+    /// CLI-owned facts reused for in-session session replacement requests.
+    InteractiveSessionFacts session_facts{};
 };
 
 /// Run the private Native TUI composition until its exit binding is received.

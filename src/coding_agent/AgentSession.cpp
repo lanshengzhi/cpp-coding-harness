@@ -652,6 +652,58 @@ const std::vector<PromptTemplate>& AgentSession::templates() const {
     return impl_ && impl_->runtime ? impl_->runtime->templates() : empty;
 }
 
+namespace {
+/// The in-memory fork source: the live context projection (pi in-memory
+/// SessionManager entries; the C++ in-memory store keeps none), shared by
+/// the user-message list and the fork preparation.
+[[nodiscard]] std::optional<harness::session::SessionContext> live_session_context(
+    const AgentSession::Impl& impl) {
+    const auto snapshot = impl.runtime->snapshot(impl.session_path);
+    harness::session::SessionContext context;
+    context.messages = snapshot.agent_state.messages;
+    context.thinking_level = snapshot.agent_state.thinking_level;
+    context.provider =
+        snapshot.metadata.provider.empty()
+            ? std::nullopt
+            : std::optional<std::string>{snapshot.metadata.provider};
+    context.model =
+        snapshot.metadata.model.empty()
+            ? std::nullopt
+            : std::optional<std::string>{snapshot.metadata.model};
+    return context;
+}
+} // namespace
+
+std::vector<runtime::UserForkMessage> AgentSession::get_user_messages_for_forking() const {
+    runtime::ForkSource source;
+    if (!impl_ || !impl_->runtime) {
+        return {};
+    }
+    source.session_path = impl_->runtime->session_path();
+    source.workspace = impl_->runtime->workspace();
+    if (!source.session_path) {
+        source.live_context = live_session_context(*impl_);
+    }
+    return runtime::user_messages_for_forking(source);
+}
+
+util::Expected<runtime::ForkPreparation> AgentSession::prepare_fork(
+    std::string_view entry_id,
+    runtime::ForkPosition position) const {
+    runtime::ForkSource source;
+    if (!impl_ || !impl_->runtime) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Session,
+            "Invalid entry ID for forking"));
+    }
+    source.session_path = impl_->runtime->session_path();
+    source.workspace = impl_->runtime->workspace();
+    if (!source.session_path) {
+        source.live_context = live_session_context(*impl_);
+    }
+    return runtime::prepare_fork(source, entry_id, position);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Factory
 // ─────────────────────────────────────────────────────────────────────────────
