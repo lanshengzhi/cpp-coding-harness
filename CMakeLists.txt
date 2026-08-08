@@ -276,6 +276,9 @@ add_library(cch_coding_agent_interactive
     src/coding_agent/tui/ChatContainer.cpp
     src/coding_agent/tui/ClipboardWrite.cpp
     src/coding_agent/tui/DiffRenderer.cpp
+    src/coding_agent/tui/ExternalEditor.cpp
+    src/coding_agent/tui/Footer.cpp
+    src/coding_agent/tui/FooterDataProvider.cpp
     src/coding_agent/tui/KeybindingHints.cpp
     src/coding_agent/tui/LoginDialog.cpp
     src/coding_agent/tui/LoginPresentation.cpp
@@ -286,6 +289,7 @@ add_library(cch_coding_agent_interactive
     src/coding_agent/tui/SettingsSelector.cpp
     src/coding_agent/tui/SessionSelector.cpp
     src/coding_agent/tui/SessionSelectorSearch.cpp
+    src/coding_agent/tui/StatusIndicator.cpp
     src/coding_agent/tui/StringListSelector.cpp
     src/coding_agent/tui/ToolExecutionComponent.cpp
     src/coding_agent/tui/TreeSelector.cpp
@@ -398,6 +402,8 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/PromptTemplateLoaderTest.cpp
         tests/coding_agent/tui/InteractiveModeTest.cpp
         tests/coding_agent/tui/KeybindingCatalogTest.cpp
+        tests/coding_agent/tui/FooterTest.cpp
+        tests/coding_agent/tui/FooterStatusInteractiveTest.cpp
         tests/coding_agent/tui/ChatContainerStatusTest.cpp
         tests/coding_agent/tui/LoginDialogTest.cpp
         tests/coding_agent/tui/LoginInteractiveModeTest.cpp

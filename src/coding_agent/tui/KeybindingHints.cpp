@@ -117,19 +117,36 @@ util::Expected<cch::tui::RenderResult> KeybindingHints::render(std::size_t width
         };
         append(key_hint(theme_, keybindings_, "app.interrupt", "to interrupt"));
         append(key_hint(theme_, keybindings_, "app.clear", "to clear"));
+        append(raw_key_hint(
+            theme_,
+            std::format(
+                "{} twice",
+                format_key_text(keybindings_.key_text("app.clear"))),
+            "to exit"));
         append(key_hint(theme_, keybindings_, "app.exit", "to exit (empty)"));
+        append(key_hint(theme_, keybindings_, "app.suspend", "to suspend"));
+        append(key_hint(theme_, keybindings_, "app.thinking.cycle", "to cycle thinking level"));
+        append(raw_key_hint(
+            theme_,
+            std::format(
+                "{}/{}",
+                format_key_text(keybindings_.key_text("app.model.cycleForward")),
+                format_key_text(keybindings_.key_text("app.model.cycleBackward"))),
+            "to cycle models"));
+        append(key_hint(theme_, keybindings_, "app.model.select", "to select model"));
         append(key_hint(theme_, keybindings_, "app.tools.expand", "to expand tools"));
         append(key_hint(theme_, keybindings_, "app.thinking.toggle", "to expand thinking"));
+        append(key_hint(theme_, keybindings_, "app.editor.external", "for external editor"));
+        append(raw_key_hint(theme_, "/", "for commands"));
+        if (user_bash_available_) {
+            append(raw_key_hint(theme_, "!", "to run bash"));
+            append(raw_key_hint(theme_, "!!", "to run bash (no context)"));
+        }
         append(key_hint(theme_, keybindings_, "app.message.followUp", "to queue follow-up"));
         append(key_hint(theme_, keybindings_, "app.message.dequeue", "to edit all queued messages"));
         if (clipboard_paste_available_) {
             append(key_hint(
                 theme_, keybindings_, "app.clipboard.pasteImage", "to paste image (with text fallback)"));
-        }
-        append(raw_key_hint(theme_, "/", "for commands"));
-        if (user_bash_available_) {
-            append(raw_key_hint(theme_, "!", "to run bash"));
-            append(raw_key_hint(theme_, "!!", "to run bash (no context)"));
         }
     }
 

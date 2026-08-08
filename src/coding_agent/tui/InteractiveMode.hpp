@@ -64,6 +64,10 @@ struct InteractiveModeConfig {
     /// editor's copy action (pi `copyToClipboard` platform-tools path). Null
     /// installs the real platform tools; tests inject a recorder.
     std::move_only_function<bool(std::string)> clipboard_write_sink{nullptr};
+    /// The suspend process action (pi `handleCtrlZ` `process.kill(0,
+    /// "SIGTSTP")`). Null sends SIGTSTP to the process group; tests inject a
+    /// recorder so the test process is never stopped.
+    std::move_only_function<void()> suspend_process_sink{nullptr};
     /// In-session session replacement factory (pi `AgentSessionRuntime`
     /// `createRuntime`). Null installs no replacement: the session flows
     /// report an error. The interactive host always supplies it.

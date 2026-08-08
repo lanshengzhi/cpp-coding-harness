@@ -38,6 +38,15 @@ struct Segment {
 using Line = std::vector<Segment>;
 using Document = std::vector<Line>;
 
+/// U+2500 BOX DRAWINGS LIGHT HORIZONTAL repeated to the width (the editor
+/// border rule, matching pi's `borderColor("─").repeat(width)`).
+[[nodiscard]] std::string horizontal_rule(std::size_t width) {
+    std::string rule;
+    rule.reserve(width * 3);
+    for (std::size_t index = 0; index < width; ++index) rule += "─";
+    return rule;
+}
+
 [[nodiscard]] std::string normalize_input(std::string text) {
     std::string normalized;
     normalized.reserve(text.size());
@@ -176,6 +185,39 @@ struct Editor::Impl {
 
     [[nodiscard]] Snapshot snapshot() const {
         return {.document = document, .cursor = cursor, .pastes = pastes, .paste_counter = paste_counter};
+    }
+
+    /// Rows reserved for the optional top/bottom border (pi's editor always
+    /// renders both border lines; an empty hook renders none).
+    [[nodiscard]] std::size_t border_rows() const {
+        return theme.border ? 2 : 0;
+    }
+
+    /// Content rows available inside the border, at least 1.
+    [[nodiscard]] std::size_t content_height() const {
+        const auto bordered = available_height > border_rows()
+            ? available_height - border_rows()
+            : 1;
+        return std::max<std::size_t>(1, std::min(options.max_visible_lines, bordered));
+    }
+
+    /// pi `createScrollBorder`: `─── ↑ N more ` (or ↓) plus the fill, with
+    /// ellipsis truncation on tiny widths.
+    [[nodiscard]] std::string scroll_border(
+        std::string_view direction,
+        std::size_t hidden_line_count,
+        std::size_t width) const {
+        const auto indicator = std::format("─── {} {} more ", direction, hidden_line_count);
+        const auto indicator_width = visible_width(indicator);
+        if (indicator_width >= width) {
+            // pi: `"...".slice(0, availableWidth)` + a column-sliced indicator.
+            const auto ellipsis = std::string{std::string_view{"..."}.substr(0, width)};
+            const auto slice_width =
+                width > visible_width(ellipsis) ? width - visible_width(ellipsis) : 0;
+            auto sliced = slice_by_column(indicator, 0, slice_width, true);
+            return (sliced ? *sliced : std::string{}) + ellipsis;
+        }
+        return indicator + horizontal_rule(width - indicator_width);
     }
 
     void push_undo() {
@@ -1322,24 +1364,48 @@ util::Expected<RenderResult> Editor::render(std::size_t width) {
             break;
         }
     }
-    const auto visible_count = std::max<std::size_t>(
-        1,
-        std::min(impl_->options.max_visible_lines, impl_->available_height));
+    const auto visible_count = std::max<std::size_t>(1, impl_->content_height());
     if (cursor_line < impl_->scroll_offset) impl_->scroll_offset = cursor_line;
     if (cursor_line >= impl_->scroll_offset + visible_count) impl_->scroll_offset = cursor_line + 1 - visible_count;
     std::vector<std::string> result;
+    if (impl_->theme.border) {
+        // pi editor render: the top border shows the scroll-up indicator when
+        // scrolled, otherwise a plain full-width rule.
+        auto top_border = impl_->scroll_offset > 0
+            ? impl_->scroll_border("↑", impl_->scroll_offset, width)
+            : horizontal_rule(width);
+        auto styled_border = detail::apply_text_style(
+            impl_->theme.border, std::move(top_border), "Editor border");
+        if (!styled_border) return std::unexpected(styled_border.error());
+        result.push_back(std::move(*styled_border));
+    }
     const auto end = std::min(visual.size(), impl_->scroll_offset + visible_count);
     for (std::size_t index = impl_->scroll_offset; index < end; ++index) {
         auto line = visual[index].text;
         const auto line_width = visible_width(line);
         if (line_width < width) line.append(width - line_width, ' ');
-        result.push_back(std::move(line));
-    }
-    if (result.empty()) result.emplace_back(width, ' ');
-    for (auto& line : result) {
         auto styled = detail::apply_text_style(impl_->theme.text, std::move(line), "Editor text");
         if (!styled) return std::unexpected(styled.error());
-        line = std::move(*styled);
+        result.push_back(std::move(*styled));
+    }
+    if (result.size() == (impl_->theme.border ? 1 : 0)) {
+        auto styled = detail::apply_text_style(
+            impl_->theme.text, std::string(width, ' '), "Editor text");
+        if (!styled) return std::unexpected(styled.error());
+        result.push_back(std::move(*styled));
+    }
+    if (impl_->theme.border) {
+        // pi editor render: the bottom border shows the scroll-down indicator
+        // when more content remains below.
+        const auto shown = impl_->scroll_offset + visible_count;
+        const auto lines_below = visual.size() > shown ? visual.size() - shown : 0;
+        auto bottom_border = lines_below > 0
+            ? impl_->scroll_border("↓", lines_below, width)
+            : horizontal_rule(width);
+        auto styled_border = detail::apply_text_style(
+            impl_->theme.border, std::move(bottom_border), "Editor border");
+        if (!styled_border) return std::unexpected(styled_border.error());
+        result.push_back(std::move(*styled_border));
     }
     return RenderResult{.lines = std::move(result)};
 }
@@ -1547,14 +1613,12 @@ std::optional<CursorPosition> Editor::cursor_location() const {
     }
     if (!found) return std::nullopt;
 
-    // Account for scroll offset
-    const auto visible_count = std::max<std::size_t>(
-        1,
-        std::min(impl_->options.max_visible_lines, impl_->available_height));
+    // Account for scroll offset and the optional top border row.
+    const auto visible_count = std::max<std::size_t>(1, impl_->content_height());
     if (visual_row < impl_->scroll_offset) return std::nullopt;
     if (visual_row >= impl_->scroll_offset + visible_count) return std::nullopt;
 
-    const auto display_row = visual_row - impl_->scroll_offset;
+    const auto display_row = impl_->border_rows() + visual_row - impl_->scroll_offset;
 
     // The column within the visual line is based on the actual rendered text
     // of the visual line, mapped from the cursor's logical column position.

@@ -945,3 +945,52 @@ TEST_CASE("Editor select.confirm applies without submitting outside slash comman
     CHECK(editor.text() == "@src/");
     CHECK(submitted.empty());
 }
+
+TEST_CASE("Editor renders pi's top and bottom borders when a border hook is set", "[tui][editor][theme][issue411]") {
+    cch::tui::Editor editor;
+    cch::tui::EditorTheme theme;
+    theme.text = [](std::string text) { return text; };
+    theme.border = [](std::string text) { return "\x1b[35m" + text + "\x1b[39m"; };
+    editor.set_theme(std::move(theme));
+    editor.set_text("hello");
+
+    const auto rendered = editor.render(8);
+    REQUIRE(rendered);
+    // Top border, one content line, bottom border.
+    REQUIRE(rendered->lines.size() == 3);
+    const auto rule = std::string{"\x1b[35m"} + "────────" + "\x1b[39m";
+    CHECK(rendered->lines[0] == rule);
+    CHECK(rendered->lines[1] == "hello   ");
+    CHECK(rendered->lines[2] == rule);
+}
+
+TEST_CASE("Editor border shows pi scroll indicators while scrolled", "[tui][editor][theme][issue411]") {
+    cch::tui::Editor editor(cch::tui::EditorOptions{.max_visible_lines = 2});
+    cch::tui::EditorTheme theme;
+    theme.border = [](std::string text) { return text; };
+    editor.set_theme(std::move(theme));
+    editor.set_available_height(4);  // 2 border rows + 2 content rows.
+    editor.set_text("line one\nline two\nline three\nline four");
+    key(editor, "end");
+    key(editor, "down");
+    key(editor, "down");
+    key(editor, "down");
+
+    const auto rendered = editor.render(20);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 4);
+    CHECK(rendered->lines[0].find("↑ 2 more") != std::string::npos);
+    CHECK(rendered->lines[1].find("line three") != std::string::npos);
+    CHECK(rendered->lines[2].find("line four") != std::string::npos);
+    CHECK(rendered->lines[3].find("─────") != std::string::npos);
+    CHECK(rendered->lines[3].find("↓") == std::string::npos);
+}
+
+TEST_CASE("Editor border does not render without a border hook", "[tui][editor][theme][issue411]") {
+    cch::tui::Editor editor;
+    editor.set_text("hello");
+    const auto rendered = editor.render(8);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 1);
+    CHECK(rendered->lines[0] == "hello   ");
+}

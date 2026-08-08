@@ -44,9 +44,33 @@ struct AutoRetryEndEvent {
     std::optional<std::string> final_error{};
 };
 
+/// pi `AgentSessionEvent` `compaction_start` — emitted before a manual or
+/// automatic compaction runs, so the Compaction status indicator can show
+/// with pi's reason-specific wording.
+struct CompactionStartEvent {
+    /// pi `reason`: `"manual"` | `"threshold"` | `"overflow"`.
+    std::string reason{};
+};
+
+/// pi `AgentSessionEvent` `compaction_end` — emitted when compaction
+/// settles: the result was applied, or the run was aborted / failed.
+struct CompactionEndEvent {
+    /// pi `reason`: `"manual"` | `"threshold"` | `"overflow"`.
+    std::string reason{};
+    /// Whether the compaction was cancelled before applying (pi `aborted`).
+    bool aborted{false};
+    /// Failure message when the summarization failed (pi `errorMessage`).
+    std::optional<std::string> error_message{std::nullopt};
+};
+
 /// Session-assembly lifecycle events beyond the Agent lifecycle stream (pi
-/// `AgentSessionEvent` subset: `auto_retry_start`/`auto_retry_end`).
-using AgentSessionEvent = std::variant<AutoRetryStartEvent, AutoRetryEndEvent>;
+/// `AgentSessionEvent` subset: `auto_retry_start`/`auto_retry_end` and the
+/// compaction start/end pair).
+using AgentSessionEvent = std::variant<
+    AutoRetryStartEvent,
+    AutoRetryEndEvent,
+    CompactionStartEvent,
+    CompactionEndEvent>;
 
 /// Weak observer for session-assembly events. The runtime owns the registry:
 /// a failing observer is deactivated and never vetoes retry progress (the

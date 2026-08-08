@@ -380,6 +380,9 @@ bool ModelRuntime::has_configured_auth(std::string_view provider_id) const {
 }
 
 bool ModelRuntime::is_using_oauth(std::string_view provider_id) const {
+    // Impl-less recording fakes (the §7.2 test seam) resolve no provider
+    // instead of dereferencing a null impl.
+    if (!impl_) return false;
     const auto selected = provider(provider_id);
     return selected != nullptr && selected->auth().oauth.has_value();
 }

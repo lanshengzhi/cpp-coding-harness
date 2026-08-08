@@ -1,10 +1,4 @@
 escape interrupt · ctrl+c/ctrl+d · / commands · ctrl+o more             
-                                                                        
- Resume request: check the notes file.                                  
-                                                                        
-                                                                
- Resumed reply: the notes file is ready.                                
-                                                                        
  continue the work                                                      
                                                                         
                                                                         
@@ -22,3 +16,9 @@ escape interrupt · ctrl+c/ctrl+d · / commands · ctrl+o more
                                                                 
  Done: the notes file now says beta.                                    
                                                                         
+                                                                        
+────────────────────────────────────────────────────────────────────────
+                                                                        
+────────────────────────────────────────────────────────────────────────
+/tmp/cpp-harness-e2e-workspace                          
+0.1%/128k (auto)                                              fake-model

@@ -332,7 +332,7 @@ TEST_CASE(
         std::move(options), std::move(shell));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -495,7 +495,7 @@ TEST_CASE(
         });
     REQUIRE(subscription);
 
-    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -870,7 +870,7 @@ TEST_CASE(
         std::move(options), std::move(shell));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -981,7 +981,7 @@ TEST_CASE(
         std::move(options), std::move(shell));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -1279,7 +1279,7 @@ TEST_CASE(
         std::move(options), std::move(shell));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -1354,7 +1354,7 @@ TEST_CASE(
         std::move(options), std::move(shell));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -1431,7 +1431,10 @@ TEST_CASE(
         std::move(options), std::move(shell));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    // The expanded header (17 assembled-action hint lines) plus the status,
+    // editor borders, and footer reserve 22 fixed rows; 54 rows keep the
+    // full expanded bash block in the chat viewport.
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 54});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -1545,7 +1548,7 @@ TEST_CASE(
     auto resumed = coding_agent::create_agent_session(std::move(options));
     REQUIRE(resumed);
 
-    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -1619,7 +1622,7 @@ TEST_CASE(
         std::move(options), std::move(shell));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -1705,7 +1708,7 @@ TEST_CASE(
         std::move(options), std::move(shell));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -1769,7 +1772,7 @@ TEST_CASE(
         std::move(options), std::move(shell));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -1863,7 +1866,7 @@ TEST_CASE(
         std::move(options), std::move(shell));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -2001,7 +2004,7 @@ TEST_CASE(
         std::move(options), std::move(shell));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -2092,7 +2095,7 @@ TEST_CASE(
         std::move(options), std::move(shell));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -2145,7 +2148,7 @@ TEST_CASE(
         std::move(options), std::move(shell));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 72, .rows = 40});
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(

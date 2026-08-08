@@ -1631,6 +1631,10 @@ AgentSessionRuntime::compact(std::string custom_instructions) {
     // calls reject here instead of interleaving at the summarization await.
     compaction_active_ = true;
 
+    // pi `AgentSession.compact`: emit `compaction_start` before the run is
+    // aborted so the Compaction status indicator shows for the whole flow.
+    emit_session_event(CompactionStartEvent{.reason = "manual"});
+
     // pi AgentSession.compact: abort the active run first, then wait for it
     // to settle before compacting (the run settles with the ordinary aborted
     // terminal; its assistant message is already committed to the store).
@@ -1652,6 +1656,13 @@ AgentSessionRuntime::compact(std::string custom_instructions) {
         result = std::unexpected(failure.error());
     }
     compaction_active_ = false;
+    emit_session_event(CompactionEndEvent{
+        .reason = "manual",
+        .aborted = false,
+        .error_message = result
+            ? std::nullopt
+            : std::optional<std::string>{result.error().message},
+    });
     co_return result;
 }
 
@@ -1824,7 +1835,8 @@ AgentSessionRuntime::execute_compaction(
 }
 
 boost::asio::awaitable<bool> AgentSessionRuntime::run_auto_compaction(
-    bool will_retry) {
+    bool will_retry,
+    std::string reason) {
     const auto settings = effective_compaction_settings();
     if (!agent_ || !session_.store) {
         co_return false;
@@ -1860,8 +1872,16 @@ boost::asio::awaitable<bool> AgentSessionRuntime::run_auto_compaction(
         co_return false;
     }
 
+    // pi `_runAutoCompaction`: the auto trigger emits `compaction_start`
+    // with its reason before summarizing.
+    emit_session_event(CompactionStartEvent{.reason = reason});
     auto result = co_await execute_compaction(prep, settings, {});
     if (!result) {
+        emit_session_event(CompactionEndEvent{
+            .reason = reason,
+            .aborted = false,
+            .error_message = result.error().message,
+        });
         co_return false;
     }
 
@@ -1869,13 +1889,25 @@ boost::asio::awaitable<bool> AgentSessionRuntime::run_auto_compaction(
         // The rebuilt context can still end in the failed error assistant
         // message (it lives in the retained tail); drop it so the
         // continuation's last message is the user prompt (pi
-        // `_runAutoCompaction` willRetry branch).
+        // `_runAutoCompaction` willRetry branch). The end event fires after
+        // the drop so a chat rebuild on `compaction_end` never renders the
+        // stale error.
         if (auto popped =
                 agent::detail::AgentMessageAccess::pop_trailing_assistant(*agent_);
             !popped) {
+            emit_session_event(CompactionEndEvent{
+                .reason = reason,
+                .aborted = false,
+                .error_message = popped.error().message,
+            });
             co_return false;
         }
     }
+    emit_session_event(CompactionEndEvent{
+        .reason = std::move(reason),
+        .aborted = false,
+        .error_message = std::nullopt,
+    });
     co_return will_retry;
 }
 
@@ -1920,7 +1952,7 @@ AgentSessionRuntime::check_auto_compaction(
         const bool will_retry =
             assistant_message.stop_reason != ai::AssistantStopReason::Stop;
         if (!will_retry) {
-            if (co_await run_auto_compaction(false)) {
+            if (co_await run_auto_compaction(false, "overflow")) {
                 co_return AutoCompactionOutcome::Compacted;
             }
             co_return AutoCompactionOutcome::None;
@@ -1937,7 +1969,7 @@ AgentSessionRuntime::check_auto_compaction(
             !popped) {
             co_return AutoCompactionOutcome::None;
         }
-        if (co_await run_auto_compaction(true)) {
+        if (co_await run_auto_compaction(true, "overflow")) {
             co_return AutoCompactionOutcome::OverflowRetry;
         }
         co_return AutoCompactionOutcome::None;
@@ -1983,7 +2015,7 @@ AgentSessionRuntime::check_auto_compaction(
     }
     if (harness::session::should_compact(
             context_tokens, context_window, settings)) {
-        if (co_await run_auto_compaction(false)) {
+        if (co_await run_auto_compaction(false, "threshold")) {
             co_return AutoCompactionOutcome::Compacted;
         }
     }

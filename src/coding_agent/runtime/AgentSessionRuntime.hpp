@@ -352,8 +352,11 @@ private:
     /// through the session's `ModelRuntime`, persist, and rebuild context.
     /// Returns whether the run should continue (`will_retry`). Skips silently
     /// when the session is unpersisted, has no model, has nothing to compact,
-    /// or summarization fails (pi returns false in every such case).
-    [[nodiscard]] boost::asio::awaitable<bool> run_auto_compaction(bool will_retry);
+    /// or summarization fails (pi returns false in every such case). `reason`
+    /// feeds the emitted `compaction_start`/`compaction_end` events.
+    [[nodiscard]] boost::asio::awaitable<bool> run_auto_compaction(
+        bool will_retry,
+        std::string reason);
     /// Shared compaction execution for the manual trigger and the auto policy:
     /// summarize `preparation` through the session's `ModelRuntime`, persist
     /// the `compaction` entry, and rebuild the live Agent context as

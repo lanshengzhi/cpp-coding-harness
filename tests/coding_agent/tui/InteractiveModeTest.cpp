@@ -1246,7 +1246,7 @@ TEST_CASE(
     REQUIRE(created);
     tui::VirtualTerminal terminal({
         .columns = 72,
-        .rows = 36,
+        .rows = 42,
         .capabilities = {
             .synchronized_output = true,
             .inline_images = tui::InlineImageProtocol::ITerm2,
@@ -1547,7 +1547,10 @@ TEST_CASE(
 
     const auto authoritative_before = resumed->session->snapshot().agent_state.messages;
     REQUIRE(authoritative_before.size() == 6);
-    tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
+    // The pi-shaped composition reserves fixed rows for the status, the
+    // editor borders, and the footer; 52 rows keep the full rich transcript
+    // (compaction summary through branch summary) in the chat viewport.
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 52});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -2235,7 +2238,7 @@ TEST_CASE(
         ai::providers::make_scripted_fake_provider()));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 60, .rows = 13});
+    tui::VirtualTerminal terminal({.columns = 60, .rows = 19});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -2912,7 +2915,7 @@ TEST_CASE(
         std::move(client)));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 60, .rows = 13});
+    tui::VirtualTerminal terminal({.columns = 60, .rows = 19});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -2964,7 +2967,10 @@ TEST_CASE(
     auto created = coding_agent::create_agent_session(session_options(workspace, std::move(client)));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 30, .rows = 6});
+    // The pi-shaped composition reserves fixed rows for the status, the
+    // editor borders, and the footer; 12 rows keep the chat tail anchored so
+    // the streaming message's head scrolls out.
+    tui::VirtualTerminal terminal({.columns = 30, .rows = 12});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -3011,7 +3017,7 @@ TEST_CASE(
     auto created = coding_agent::create_agent_session(session_options(workspace, std::move(client)));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 40, .rows = 8});
+    tui::VirtualTerminal terminal({.columns = 40, .rows = 16});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -3028,10 +3034,10 @@ TEST_CASE(
     REQUIRE(terminal.inject_input("wait\r"));
     drain_ready(io);
     REQUIRE(client_pointer->started);
-    REQUIRE(terminal.inject_resize({.columns = 30, .rows = 6}));
+    REQUIRE(terminal.inject_resize({.columns = 30, .rows = 12}));
     REQUIRE(terminal.inject_input("draft"));
     drain_ready(io);
-    const tui::TerminalDimensions expected_dimensions{.columns = 30, .rows = 6};
+    const tui::TerminalDimensions expected_dimensions{.columns = 30, .rows = 12};
     CHECK(terminal.dimensions() == expected_dimensions);
     CHECK(visible_screen(terminal).find("draft") != std::string::npos);
 
@@ -3143,7 +3149,7 @@ TEST_CASE(
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 100, .rows = 8});
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 18});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -3269,7 +3275,9 @@ TEST_CASE(
     CHECK(screen.find("app.message.dequeue") != std::string::npos);
     CHECK(screen.find("alt+up") != std::string::npos);
     CHECK(screen.find("app.session.new") == std::string::npos);
-    CHECK(screen.find("app.suspend") == std::string::npos);
+    // app.suspend and app.editor.external assembled with P15's editor chrome.
+    CHECK(screen.find("app.suspend") != std::string::npos);
+    CHECK(screen.find("app.editor.external") != std::string::npos);
     CHECK(screen.find("app.clipboard.pasteImage") == std::string::npos);
     CHECK(created->session->message_count() == 0);
 
@@ -3293,7 +3301,7 @@ TEST_CASE(
         std::make_shared<FailOnceChatProvider>()));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 100, .rows = 13});
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 20});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(

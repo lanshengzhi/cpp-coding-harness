@@ -210,26 +210,48 @@ private:
 };
 
 /// One resumed session with a fixed workspace file the scripted edit tool
-/// modifies. The session carries the injected fake ModelRuntime.
+/// modifies. The session carries the injected fake ModelRuntime. The
+/// workspace lives at the deterministic `e2e_workspace_path()` so the
+/// CLI-level goldens (which render the footer's pwd line) stay byte-stable.
 struct E2eSession {
-    tests::TempWorkspace workspace;
+    std::filesystem::path workspace;
     tests::TempWorkspace config;
     std::shared_ptr<coding_agent::ModelRuntime> runtime;
     std::unique_ptr<coding_agent::AgentSession> session;
 };
 
+/// Deterministic workspace path for the CLI-level goldens: the footer's pwd
+/// line renders the workspace, so a random temp path would make the goldens
+/// nondeterministic. The fixture removes and recreates the directory at
+/// boot, so a crashed prior run cannot leak stale state.
+[[nodiscard]] std::filesystem::path e2e_workspace_path() {
+    std::error_code error;
+    const auto base = std::filesystem::temp_directory_path(error);
+    REQUIRE(!error);
+    const auto path = base / "cpp-harness-e2e-workspace";
+    std::filesystem::remove_all(path, error);
+    error.clear();
+    std::filesystem::create_directories(path, error);
+    REQUIRE(!error);
+    return path;
+}
+
 [[nodiscard]] std::unique_ptr<E2eSession> make_e2e_session(
     std::shared_ptr<coding_agent::ModelRuntime> runtime) {
     auto fixture = std::make_unique<E2eSession>();
-    fixture->workspace.write("notes.txt", "alpha\n");
+    fixture->workspace = e2e_workspace_path();
+    {
+        std::ofstream notes(fixture->workspace / "notes.txt", std::ios::binary);
+        notes << "alpha\n";
+    }
 
-    const auto session_file = fixture->workspace.path() / "e2e-session.jsonl";
+    const auto session_file = fixture->workspace / "e2e-session.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(
         session_file,
         {
             .session_id = "e2e-session",
             .created_at = "2026-08-10T00:00:00Z",
-            .workspace = fixture->workspace.path(),
+            .workspace = fixture->workspace,
             .provider = "fake",
             .model = "fake-model",
         });
@@ -256,7 +278,7 @@ struct E2eSession {
 
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
-    request.workspace = fixture->workspace.path();
+    request.workspace = fixture->workspace;
     request.no_skills = true;
     request.no_prompt_templates = true;
     request.model_runtime = fixture->runtime;
@@ -296,6 +318,8 @@ struct E2eSession {
     runtime->responses.push_back(std::move(final_answer));
     return runtime;
 }
+
+
 
 } // namespace
 
@@ -383,16 +407,25 @@ TEST_CASE(
     CHECK(screen.find("You: continue the work") == std::string::npos);
     CHECK(screen.find("continue the work") != std::string::npos);
 
-    // OSC 133 zones wrap the rendered user and assistant blocks: the A zone
-    // rides the block's first rendered line and the B/C zones the last.
+    // OSC 133 zones wrap the rendered user and assistant blocks: an A-zone
+    // line precedes the block and the B/C-zone line follows its last line.
+    // (The write sequence is frame-timing dependent — the status indicator
+    // animation interleaves renders — so the zones are asserted by ordering
+    // in the output stream, and the committed screen golden stays the
+    // byte-level gate.)
     const auto& output = terminal.output();
-    const auto first_user_line = std::find_if(output.begin(), output.end(), [](const auto& line) {
+    const auto user_line = std::find_if(output.begin(), output.end(), [](const auto& line) {
         return line.find("continue the work") != std::string::npos;
     });
-    REQUIRE(first_user_line != output.end());
-    CHECK(first_user_line->find("\x1b]133;A\x07") != std::string::npos ||
-        (first_user_line != output.begin() &&
-         (first_user_line - 1)->find("\x1b]133;A\x07") != std::string::npos));
+    REQUIRE(user_line != output.end());
+    const auto user_zone_a = std::find_if(output.begin(), user_line, [](const auto& line) {
+        return line.find("\x1b]133;A\x07") != std::string::npos;
+    });
+    CHECK(user_zone_a != user_line);
+    const auto user_zone_bc = std::find_if(user_line, output.end(), [](const auto& line) {
+        return line.find("\x1b]133;B\x07\x1b]133;C\x07") != std::string::npos;
+    });
+    CHECK(user_zone_bc != output.end());
     // The assistant message that carries the tool call renders without the
     // zones (pi suppresses them while tool components render separately); the
     // final answer message carries them.
@@ -406,7 +439,7 @@ TEST_CASE(
     CHECK(any_output_line_has(terminal, "\x1b]133;B\x07\x1b]133;C\x07"));
 
     // The edit tool applied the replacement in the workspace.
-    CHECK(read_text_file(fixture->workspace.path() / "notes.txt") == "beta\n");
+    CHECK(read_text_file(fixture->workspace / "notes.txt") == "beta\n");
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);

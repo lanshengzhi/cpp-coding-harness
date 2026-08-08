@@ -5,12 +5,12 @@ escape interrupt · ctrl+c/ctrl+d · / commands · ctrl+o more
                                                                 
  Resumed reply: the notes file is ready.                                
                                                                         
-
-
-
-
-
-
+                                                                        
+────────────────────────────────────────────────────────────────────────
+                                                                        
+────────────────────────────────────────────────────────────────────────
+/tmp/cpp-harness-e2e-workspace                          
+0.0%/128k (auto)                                              fake-model
 
 
 

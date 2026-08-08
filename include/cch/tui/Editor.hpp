@@ -49,6 +49,11 @@ struct EditorOptions {
 
 struct EditorTheme {
     TextStyleHook text{};
+    /// Optional top/bottom border hook (pi `editor-component.ts`
+    /// `borderColor`). An empty hook renders no border lines. When set, the
+    /// editor reserves two rows for the borders and renders pi's scroll
+    /// indicators (`─── ↑ N more` / `─── ↓ N more`) while scrolled.
+    TextStyleHook border{};
 };
 
 /// A reusable multiline Unicode editor controlled through semantic input.
