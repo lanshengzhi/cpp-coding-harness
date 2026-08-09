@@ -1,0 +1,24 @@
+escape interrupt · ctrl+c/ctrl+d · / commands · ctrl+o more             
+Press ctrl+o to show full startup help and loaded resources.            
+                                                                        
+ Resume request: check the notes file.                                  
+                                                                        
+                                                                
+ Resumed reply: the notes file is ready.                                
+                                                                        
+ start the run                                                          
+                                                                        
+                                                                        
+ Operation aborted                                                      
+                                                                        
+                                                                        
+────────────────────────────────────────────────────────────────────────
+                                                                        
+────────────────────────────────────────────────────────────────────────
+/tmp/cpp-harness-rendering-interrupt                    
+0.0%/128k (auto)                                              fake-model
+
+
+
+
+

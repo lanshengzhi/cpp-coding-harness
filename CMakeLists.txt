@@ -389,6 +389,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/PromptExpansionTest.cpp
         tests/coding_agent/PromptTemplateProcessingTest.cpp
         tests/coding_agent/SystemPromptBuilderTest.cpp
+        tests/coding_agent/SystemPromptGoldenTest.cpp
         tests/coding_agent/SystemPromptFlowTest.cpp
         tests/coding_agent/AuthStorageTest.cpp
         tests/coding_agent/KimiOAuthLifecycleTest.cpp
@@ -434,6 +435,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/tui/ThemeControllerTest.cpp
         tests/coding_agent/tui/UserBashInteractiveModeTest.cpp
         tests/coding_agent/tui/InteractiveBootE2ETest.cpp
+        tests/coding_agent/tui/InteractiveRenderingGoldenTest.cpp
         tests/coding_agent/tui/BootTrustInteractiveTest.cpp
         tests/coding_agent/AgentSessionCompactionTest.cpp
         tests/coding_agent/ReAuthGuidanceTest.cpp

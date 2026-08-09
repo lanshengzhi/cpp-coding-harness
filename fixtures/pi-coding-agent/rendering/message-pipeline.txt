@@ -1,0 +1,52 @@
+escape interrupt · ctrl+c/ctrl+d · / commands · ctrl+o more             
+Press ctrl+o to show full startup help and loaded resources.            
+                                                                        
+ [compaction]                                                           
+                                                                        
+ Compacted from 1,200 tokens (ctrl+o to expand)                         
+                                                                        
+                                                                        
+ resume request                                                         
+                                                                        
+                                                                        
+ inspect the saved state                                                
+ compare the active path                                                
+ THINKING END                                                           
+                                                                        
+ I will read the persisted file.                                        
+ I will continue after the tool.                                        
+                                                                        
+ read saved.txt                                                         
+                                                                        
+ {"path":"saved.txt"}                                                   
+                                                                        
+ persisted tool output                                                  
+                                                                        
+                                                                        
+────────────────────────────────────────────────────────────────────────
+ $ ls -la                                                               
+                                                                        
+ alpha                                                                  
+ beta                                                                   
+                                                                        
+────────────────────────────────────────────────────────────────────────
+                                                                        
+ [notice]                                                               
+                                                                        
+ custom persisted content (ctrl+o to expand)                            
+                                                                        
+                                                                        
+ [branch]                                                               
+                                                                        
+ Branch summary (ctrl+o to expand)                                      
+                                                                        
+                                                                        
+                                                                        
+────────────────────────────────────────────────────────────────────────
+                                                                        
+────────────────────────────────────────────────────────────────────────
+/tmp/cpp-harness-rendering-message-pipeline             
+?/128k (auto)                                                 fake-model
+
+
+

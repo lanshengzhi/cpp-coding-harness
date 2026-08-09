@@ -102,13 +102,47 @@ and usage are engine-specific estimates and are projected out.
 
 Regenerate deterministically with the capture sidecar below (capture + byte-verify pass).
 
-### Golden families landing with the differential-golden tickets
+### System Prompt message goldens (`prompts/`)
 
-The remaining committed family extends this bundle via the capture sidecar:
+Committed differential goldens of the System Prompt ([#422]), driven by the capture sidecar
+against the **frozen** pi `buildSystemPrompt` (`core/system-prompt.ts` at `83114817`, docs paths
+scrubbed to `/pi/*` via `PI_PACKAGE_DIR=/pi`) and byte-compared by
+`tests/coding_agent/SystemPromptGoldenTest.cpp` through the C++ `SystemPromptBuilder` with
+identical inputs. Each snapshot pins pi's prompt at **message level** (a `system` message with
+one text content block, the same message/content-block projection as the session suites) and
+carries the pinned baseline citation in `meta`. The `identityDelta` pins the only delta from
+pi: the identity line and the documentation block, in both forms (pi vs the C++ binary's own
+"cch"); the C++ test swaps the regions into pi's message and byte-compares, so the golden pins
+"structure byte-identical, identity lines swapped" (ADR 0036 G4 / [#392]). The custom branch
+carries no identity regions and is pinned byte-identical.
 
-- **System Prompt and interactive rendering goldens** — the System Prompt golden pins the cch
-  identity delta at message level; the interactive/rendering goldens pin boot, the message
-  pipeline, and key flows through the VirtualTerminal seam ([#422]).
+- `system-prompt-default-message.json` — the default branch (four fixed tools, the always-
+  lines, a skill) with the identity delta.
+- `system-prompt-custom-message.json` — the custom branch (custom prompt + append + context
+  files + skill) with an empty delta (byte-identical to pi).
+- `system-prompt-empty-tools-message.json` — the default branch with an explicitly empty tool
+  set and the identity delta.
+
+Regenerate deterministically with the capture sidecar below (capture + byte-verify pass).
+
+### Interactive/rendering goldens (`rendering/`)
+
+Committed C++-side screen goldens of the interactive/rendering surface ([#422]), byte-compared
+by `tests/coding_agent/tui/InteractiveRenderingGoldenTest.cpp`. The interactive/rendering
+surface is C++-side only (pi keeps no golden renders — G6), so these screens (plus the boot
+pinned by `e2e/boot.txt`) are the committed byte-level gate:
+
+- `rendering/message-pipeline.txt` — the full message/execution pipeline in one screen at
+  72×52: compaction-summary, user message, assistant thinking/text, tool-execution, bash-
+  execution, custom `[notice]`, and `[branch]` branch-summary messages.
+- `rendering/model-switch.txt` — the Ctrl+L model-selector switch at 72×24 with the `Model:`
+  status and the footer model.
+- `rendering/fork.txt` — the fork flow's user-message selector overlay at 100×24.
+- `rendering/interrupt.txt` — `app.interrupt` aborting an active run at 72×24.
+
+The workspaces live at the deterministic `cpp-harness-rendering-<name>` temp paths (recreated
+at boot). Regenerate with the capture sidecar below, or directly with
+`CCH_CAPTURE_GOLDENS=1 ./build/cpp_harness_tests "[issue422]"`.
 
 Existing value goldens already live in the test tree and are referenced from the checklist:
 `tests/fixtures/prompts/goldens/` (the cch-identity system-prompt goldens), `tests/fixtures/themes/`
@@ -120,13 +154,13 @@ Existing value goldens already live in the test tree and are referenced from the
 checkout (mirroring `fixtures/pi-ai/capture/` and `fixtures/pi-tui/capture/`): it refuses to run
 unless the checkout sits at `83114817` **and** declares `@earendil-works/pi-coding-agent@0.83.0`
 (the artifact pin, verified in the frozen checkout), pins the deterministic environment, and
-regenerates the committed E2E goldens deterministically — once in capture mode, once in byte-compare
-mode, so a nondeterministic capture fails loudly. The E2E screens are C++-generated (G6's
-"interactive/rendering → C++-side only"); the TS side of the sidecar owns the frozen-checkout
-guard, the artifact-pin assertion, the deterministic environment, and the canonical projection
-helpers (zeroed timestamps, dropped machine-specific fields, sorted-key signature serialization)
-that the [#421]/[#422] golden families extend — their TS-side captures import the frozen pi
-sources under these same pins.
+regenerates the committed E2E and rendering screens deterministically — once in capture mode,
+once in byte-compare mode, so a nondeterministic capture fails loudly. The screens are
+C++-generated (G6's "interactive/rendering → C++-side only"); the TS side of the sidecar owns the
+frozen-checkout guard, the artifact-pin assertion, the deterministic environment, and the
+canonical projection helpers (zeroed timestamps, dropped machine-specific fields, sorted-key
+signature serialization) that the [#421]/[#422] golden families extend — their TS-side captures
+import the frozen pi sources under these same pins.
 
 `capture/session-snapshots.mts` (spawned by the main sidecar; runnable standalone) regenerates
 the session- and value-suite goldens ([#421]): it re-asserts the frozen-checkout guard, provisions
@@ -135,7 +169,16 @@ absent, and the gitignored `packages/ai/src/providers/data/` generated model dat
 scenarios never read it), writes a capture `tsconfig.capture.json` into the frozen checkout that
 maps the `@earendil-works/*` workspace packages to the frozen `packages/` sources, drives the
 five scripted scenarios through `session-scenarios.mts`, and byte-verifies determinism with a
-second capture pass. Regenerate with:
+second capture pass.
+
+`capture/system-prompt-snapshots.mts` (spawned by the main sidecar; runnable standalone)
+regenerates the System Prompt message goldens ([#422]): it re-asserts the frozen-checkout
+guard, pins `PI_PACKAGE_DIR=/pi` (scrubbing pi's resolved docs paths), drives the frozen
+`buildSystemPrompt` through the three scripted scenarios, extracts the identity-delta regions
+(identity line + docs block, both pi and cch forms), and byte-verifies determinism with a second
+capture pass.
+
+Regenerate with:
 
 ```bash
 ../pi/node_modules/.bin/tsx fixtures/pi-coding-agent/capture/capture-gate-snapshots.mts
@@ -166,14 +209,14 @@ classification claims are accurate.
 | 4 | Initial-prompt merge: piped stdin + `@file` text + first positional with no separator; remaining positionals sequential, output = last response; no prompt → nothing printed, exit 0 | `pi:packages/coding-agent/src/cli/initial-message.ts`, `cli/file-processor.ts` | `src/cli/InitialPrompt.*` | `InitialPromptTest` (`[cli][initial-prompt]`): stdin merge, `@file` order, pi merge order, no-prompt exit 0 |
 | 5 | Exit codes unify to pi (usage errors → 1); SIGTERM/SIGHUP → dispose + 143/129 (SIGHUP outside Windows) | `pi:packages/coding-agent/src/main.ts` | `src/main.cpp`, `src/cli/PrintMode.*` | `PrintModeTest` (`[cli][print][signals]`) `"print mode disposes the session and exits 143 on SIGTERM"` |
 | 6 | `--list-models [search]`: pi's exact six-column table (`provider model context max-out thinking images`) with K/M formatting and fuzzy search | `pi:packages/coding-agent/src/cli/list-models.ts` | `src/cli/ListModels.*` | `ListModelsTest` (`[cli][list-models][issue404]`): six-column header, K/M formatting, fuzzy filter |
-| 7 | Binary identity: `--version` prints the C++ binary's own version; help/prompt identity are the binary's own | `pi:packages/coding-agent/src/cli.ts` (prompt identity surface; `--version` is C++-own per G1, "`--version` new") | `src/main.cpp`, `src/cli/CliParse.*` | `CliSmokeTest` `"CLI --version prints the binary's own CMake project version"`; the prompt identity delta is pinned by the System Prompt goldens (`tests/fixtures/prompts/goldens/`, [#422]) |
+| 7 | Binary identity: `--version` prints the C++ binary's own version; help/prompt identity are the binary's own | `pi:packages/coding-agent/src/cli.ts` (prompt identity surface; `--version` is C++-own per G1, "`--version` new") | `src/main.cpp`, `src/cli/CliParse.*` | `CliSmokeTest` `"CLI --version prints the binary's own CMake project version"`; the prompt identity delta is pinned by the System Prompt goldens (`tests/fixtures/prompts/goldens/` byte-level + `fixtures/pi-coding-agent/prompts/*-message.json` message-level, [#422]) |
 
 ### Supported Capabilities — G2, interactive-mode components ([#390])
 
 | # | Capability | Frozen pi source | C++ surface | Evidence (tests → fixtures) |
 | --- | --- | --- | --- | --- |
-| 8 | Interactive composition: pi's main-screen container structure (header, chat, pending-messages, status, editor, footer; hints only, no logo), boot renders the initial Agent Session snapshot before focus, OSC 133 A/B/C zones, `app.interrupt` precedence with the stale-generation guard | `pi:packages/coding-agent/src/modes/interactive/interactive-mode.ts` at `83114817` | `src/coding_agent/tui/InteractiveMode.*`, `ChatContainer.*` | `InteractiveBootE2ETest` (`[coding_agent][tui][e2e][issue399]`) → `e2e/boot.txt` + `e2e/turn.txt` (CLI-level goldens) |
-| 9 | Message/execution pipeline: assistant and user messages (pi box shape), tool-execution with the `diff` renderer, bash-execution with visual truncate, compaction/skill-invocation summary messages, branch-summary/custom rendering | `pi:packages/coding-agent/src/modes/interactive/components/{assistant-message,user-message,tool-execution,bash-execution,diff,visual-truncate,compaction-summary-message,skill-invocation-message,branch-summary-message,custom-message,custom-entry,dynamic-border}.ts` | `src/coding_agent/tui/{AssistantMessageComponent,UserMessageComponent,ToolExecutionComponent,BashExecutionComponent,DiffRenderer,DynamicBorder}.{hpp,cpp}` | `InteractiveBootE2ETest` (thinking blocks, edit diff renderer, final answer rows), `UserBashInteractiveModeTest`, `InteractiveModeTest`, `ProcessInteractiveModeTest` |
+| 8 | Interactive composition: pi's main-screen container structure (header, chat, pending-messages, status, editor, footer; hints only, no logo), boot renders the initial Agent Session snapshot before focus, OSC 133 A/B/C zones, `app.interrupt` precedence with the stale-generation guard | `pi:packages/coding-agent/src/modes/interactive/interactive-mode.ts` at `83114817` | `src/coding_agent/tui/InteractiveMode.*`, `ChatContainer.*` | `InteractiveBootE2ETest` (`[coding_agent][tui][e2e][issue399]`) → `e2e/boot.txt` + `e2e/turn.txt` (CLI-level goldens); `InteractiveRenderingGoldenTest` (`[issue422]`) → `rendering/{model-switch,fork,interrupt}.txt` (key-flow goldens) |
+| 9 | Message/execution pipeline: assistant and user messages (pi box shape), tool-execution with the `diff` renderer, bash-execution with visual truncate, compaction/skill-invocation summary messages, branch-summary/custom rendering | `pi:packages/coding-agent/src/modes/interactive/components/{assistant-message,user-message,tool-execution,bash-execution,diff,visual-truncate,compaction-summary-message,skill-invocation-message,branch-summary-message,custom-message,custom-entry,dynamic-border}.ts` | `src/coding_agent/tui/{AssistantMessageComponent,UserMessageComponent,ToolExecutionComponent,BashExecutionComponent,DiffRenderer,DynamicBorder}.{hpp,cpp}` | `InteractiveBootE2ETest` (thinking blocks, edit diff renderer, final answer rows), `InteractiveRenderingGoldenTest` → `rendering/message-pipeline.txt` (the full pipeline screen, [#422]), `UserBashInteractiveModeTest`, `InteractiveModeTest`, `ProcessInteractiveModeTest` |
 | 10 | Login/auth: `login-dialog`, `oauth-selector`, the generic string-list selector for the auth-type picker / `select`-type AuthPrompts | `pi:.../components/{login-dialog,oauth-selector,extension-selector}.ts` | `src/coding_agent/tui/{LoginDialog,LoginPresentation,OAuthSelector,StringListSelector}.*` | `LoginDialogTest`, `OAuthSelectorTest`, `LoginInteractiveModeTest`, `StringListSelectorTest`, `KimiOAuthLifecycleTest` |
 | 11 | Trust presentation: `trust-selector`, the boot trust prompt as a main-TUI overlay (recorded presentation divergence), the untrusted-project chat warning, `/trust` decision UI | `pi:.../components/trust-selector.ts`, `cli/project-trust.ts`, `core/project-trust.ts` | `InteractiveMode.*` (boot trust prompt via `StringListSelector`), `ChatContainer.*` (untrusted-project warning), `ProjectTrust.*` | `BootTrustInteractiveTest`, `ProjectTrustTest`, `CliSmokeTest` (approve/no-approve) |
 | 12 | Footer/status: two-line footer minus extension-statuses (usage-totals + cache-stats data), status-indicator (Working/Compaction/Retry) with the retry countdown | `pi:.../components/{footer,status-indicator,countdown-timer,keybinding-hints}.ts`, `core/{footer-data-provider,usage-totals,cache-stats}.ts` | `src/coding_agent/tui/{Footer,FooterDataProvider,StatusIndicator,KeybindingHints}.*` | `FooterTest`, `FooterStatusInteractiveTest`, `ChatContainerStatusTest`, `KeybindingHints` rows in `InteractiveBootE2ETest` |
@@ -196,7 +239,7 @@ classification claims are accurate.
 
 | # | Capability | Frozen pi source | C++ surface | Evidence (tests → fixtures) |
 | --- | --- | --- | --- | --- |
-| 22 | System Prompt built at session construction and on `/reload` in pi's exact shape (default/custom branches, tool snippets + guidelines, `<project_context>`, skills section, cwd line) with the cch identity delta confined to identity lines | `pi:packages/coding-agent/src/core/system-prompt.ts` | `src/coding_agent/prompt/SystemPromptBuilder.*` | `SystemPromptBuilderTest` (`[coding_agent][prompt]`) → `tests/fixtures/prompts/goldens/{system-prompt-default,system-prompt-custom,system-prompt-empty-tools}.txt` (byte-level cch identity goldens), `SystemPromptFlowTest`; message-level pin lands with [#422] |
+| 22 | System Prompt built at session construction and on `/reload` in pi's exact shape (default/custom branches, tool snippets + guidelines, `<project_context>`, skills section, cwd line) with the cch identity delta confined to identity lines | `pi:packages/coding-agent/src/core/system-prompt.ts` | `src/coding_agent/prompt/SystemPromptBuilder.*` | `SystemPromptBuilderTest` (`[coding_agent][prompt]`) → `tests/fixtures/prompts/goldens/{system-prompt-default,system-prompt-custom,system-prompt-empty-tools}.txt` (byte-level cch identity goldens), `SystemPromptGoldenTest` (`[issue422]`) → `fixtures/pi-coding-agent/prompts/{system-prompt-default,system-prompt-custom,system-prompt-empty-tools}-message.json` (message-level differential golden: structure byte-identical, identity lines swapped), `SystemPromptFlowTest` |
 | 23 | Tool contract additions: the four fixed tools' pi-verbatim `promptSnippet`/`promptGuidelines` (bash, read, write, edit incl. the four edit guidelines); `PI_SESSION_ID`/`PI_SESSION_FILE`/`PI_PROVIDER`/`PI_MODEL`/`PI_REASONING_LEVEL` from live session context | `pi:packages/coding-agent/src/core/tools/{bash,read,write,edit,edit-diff}.ts`, `core/system-prompt.ts` | `src/coding_agent/prompt/SystemPromptBuilder.*`, tool adapters in `src/tools/` | `SystemPromptBuilderTest` tool-snippet rows, `SystemPromptFlowTest`, `TurnAutoRetryTest`, `AsyncToolsTest` |
 | 24 | Project Context Files (global + cwd ancestor chain, AGENTS.md/AGENTS.MD/CLAUDE.md/CLAUDE.MD, linked-worktree shadowing) rendered as `<project_context>`/`<project_instructions path="...">`, **not** Project Trust gated; `--no-context-files`/`-nc` | `pi:packages/coding-agent/src/core/system-prompt.ts` (`loadProjectContextFiles`), `core/resource-loader.ts` | `src/coding_agent/prompt/SystemPromptBuilder.*`, `src/cli/CliParse.*` (`-nc`) | `SystemPromptBuilderTest` project-instructions rows, `ResourceReloadTest` (`[coding_agent][reload][issue418]`), `CliParseTest` |
 | 25 | SYSTEM.md/APPEND_SYSTEM.md discovery (project `.pi/` trust-gated, then global) and repeatable `--system-prompt`/`--append-system-prompt` with pi's text-or-file resolution and `"\n\n"` joining | `pi:packages/coding-agent/src/core/resource-loader.ts`, `core/system-prompt.ts` | `src/coding_agent/ProjectResourceLoader.*`, `src/coding_agent/prompt/SystemPromptBuilder.*` | `ResourceReloadTest`, `ProjectResourceLoaderTest`, `SystemPromptFlowTest` |
@@ -306,9 +349,10 @@ shims, and — per the charted strict-subset ruling — no Intentional Divergenc
 in the phase (the boot trust prompt's main-TUI-overlay presentation is the sole recorded
 presentation difference, decided by G2).
 
-Full test suite: **1848 test(s), 0 failure(s)** at the [#421] bundle — the five
-`SessionSuiteGoldenTest` differential-golden cases were added to the [#420] baseline's 1843 (see
-the gate report below; the gate pass [#424] re-runs the suite and closes the series).
+Full test suite: **1855 test(s), 0 failure(s)** at the [#422] bundle — the three
+`SystemPromptGoldenTest` message-level golden cases and the four
+`InteractiveRenderingGoldenTest` rendering-golden cases were added to the [#421] baseline's
+1848 (see the gate report below; the gate pass [#424] re-runs the suite and closes the series).
 
 ## Gate report
 
@@ -318,8 +362,9 @@ the gate report below; the gate pass [#424] re-runs the suite and closes the ser
   `PrintModeTest` (final-text output, terminal outcomes, signals), `FrontendSelectionTest`,
   `InitialPromptTest`, `ListModelsTest`, `CliSmokeTest`.
 - **Interactive composition (G2)** — `InteractiveBootE2ETest` → `e2e/boot.txt` + `e2e/turn.txt`
-  (the E2E leg), plus the component suites (login/trust/footer/selectors/keybindings) and the
-  selector interactive tests; rendering goldens land with [#422].
+  (the E2E leg), `InteractiveRenderingGoldenTest` → `rendering/{message-pipeline,model-switch,fork,interrupt}.txt`
+  (the message-pipeline and key-flow rendering goldens, [#422]), plus the component suites
+  (login/trust/footer/selectors/keybindings) and the selector interactive tests.
 - **Sessions (G3)** — `SessionFamilyCliTest`, `StartupTuiTest`, `SessionLifecycleTest`,
   `SessionForkTest`, `SetModelTest`, `ModelCycleTest`, `ModelResolutionTest`,
   `SessionEventCommitmentTest`, `AgentSessionSnapshotTest`, `AgentSessionCompactionTest`,
@@ -328,7 +373,8 @@ the gate report below; the gate pass [#424] re-runs the suite and closes the ser
   `SessionSuiteGoldenTest` (`[coding-agent][runtime][golden][issue421]`) and cover lifecycle,
   resume, compaction, model switching, and the session-family flows.
 - **Prompts/slash/skills/templates (G4)** — `SystemPromptBuilderTest` + `tests/fixtures/prompts/goldens/`,
-  `BuiltinSlashCommandsTest`, `PromptExpansionTest`, `Skill*Test`, `PromptTemplate*Test`,
+  `SystemPromptGoldenTest` → `prompts/*-message.json` (the message-level cch-identity golden,
+  [#422]), `BuiltinSlashCommandsTest`, `PromptExpansionTest`, `Skill*Test`, `PromptTemplate*Test`,
   `ProjectResourceLoaderTest`, `ResourceReloadTest`, `LoadedResourcesTest`.
 - **Theme (G5)** — `ThemeTest` + `tests/fixtures/themes/` (+ `goldens/`), `ThemeControllerTest`,
   `SettingsSelectorTest` theme rows.
@@ -354,7 +400,9 @@ the gate report below; the gate pass [#424] re-runs the suite and closes the ser
    (or `PI_CHECKOUT=...` pointing at one).
 5. **The session/value-suite differential goldens landed with [#421]** and plug into this
    bundle (`sessions/session-*.json`, byte-compared by `SessionSuiteGoldenTest`); the System
-   Prompt message-level golden and the interactive/rendering goldens still land with [#422].
+   Prompt message-level golden (`prompts/*-message.json`, byte-compared by
+   `SystemPromptGoldenTest`) and the interactive/rendering goldens
+   (`rendering/*.txt`, byte-compared by `InteractiveRenderingGoldenTest`) landed with [#422].
 
 ### Handoff surface (confirmed)
 

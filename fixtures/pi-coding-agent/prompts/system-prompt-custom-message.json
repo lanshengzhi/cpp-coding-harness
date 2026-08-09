@@ -1,0 +1,17 @@
+{
+  "meta": {
+    "baseline": "83114817c68f5413e4d7ba6d7003ddc511cd31d2",
+    "artifact": "@earendil-works/pi-coding-agent@0.83.0",
+    "family": "system-prompt-message-custom"
+  },
+  "message": {
+    "role": "system",
+    "content": [
+      {
+        "type": "text",
+        "text": "You are a custom assistant.\n\nCustom append section.\n\n<project_context>\n\nProject-specific instructions and guidelines:\n\n<project_instructions path=\"AGENTS.md\">\nProject-specific instructions and guidelines:\n\nBe careful.\n</project_instructions>\n\n</project_context>\n\n\nThe following skills provide specialized instructions for specific tasks.\nUse the read tool to load a skill's file when the task matches its description.\nWhen a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.\n\n<available_skills>\n  <skill>\n    <name>my-skill</name>\n    <description>Do things.</description>\n    <location>/home/user/.agents/skills/my-skill/SKILL.md</location>\n  </skill>\n</available_skills>\nCurrent working directory: /tmp/workspace"
+      }
+    ]
+  },
+  "identityDelta": {}
+}
