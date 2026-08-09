@@ -881,3 +881,433 @@ TEST_CASE(
     CHECK(result.resources.skills.empty());
     CHECK(result.fatal_errors.empty());
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P20 (#416): Project Context Files and SYSTEM.md/APPEND_SYSTEM.md
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST_CASE(
+    "project resource loader discovers project context files from the global dir and the cwd ancestor chain",
+    "[coding_agent][project-resource-loader][context-files][issue416]") {
+    LoaderFixture fix;
+    // Global context file from the Agent Config Directory.
+    tests::TempWorkspace agent_config;
+    agent_config.write("AGENTS.md", "global instructions\n");
+
+    // Ancestor chain: repo (AGENTS.md) -> sub (AGENTS.MD) -> deep (AGENTS.md
+    // wins over CLAUDE.md in the same directory).
+    fix.write("repo/AGENTS.md", "repo instructions\n");
+    fix.write("repo/sub/AGENTS.MD", "sub instructions\n");
+    fix.write("repo/sub/deep/CLAUDE.md", "deep claude instructions\n");
+    fix.write("repo/sub/deep/AGENTS.md", "deep instructions\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.agent_config_directory = agent_config.path();
+    request.workspace = fix.workspace.path() / "repo" / "sub" / "deep";
+    auto result =
+        coding_agent::load_project_resources(fix.fs, fix.trust_store, std::move(request));
+
+    // pi `loadProjectContextFiles` order: the global file first, then the
+    // ancestor chain root-most first (the cwd-ward walk unshifts each find).
+    REQUIRE(result.resources.agents_files.size() == 4);
+    CHECK(result.resources.agents_files[0].path == (agent_config.path() / "AGENTS.md").string());
+    CHECK(result.resources.agents_files[0].content == "global instructions\n");
+    CHECK(result.resources.agents_files[1].path == (fix.workspace.path() / "repo" / "AGENTS.md").string());
+    CHECK(result.resources.agents_files[1].content == "repo instructions\n");
+    CHECK(result.resources.agents_files[2].path == (fix.workspace.path() / "repo" / "sub" / "AGENTS.MD").string());
+    CHECK(result.resources.agents_files[2].content == "sub instructions\n");
+    // AGENTS.md wins over CLAUDE.md as the first candidate in the same dir.
+    CHECK(result.resources.agents_files[3].path == (fix.workspace.path() / "repo" / "sub" / "deep" / "AGENTS.md").string());
+    CHECK(result.resources.agents_files[3].content == "deep instructions\n");
+}
+
+TEST_CASE(
+    "project resource loader context files are not trust-gated and --no-context-files disables discovery",
+    "[coding_agent][project-resource-loader][context-files][issue416]") {
+    LoaderFixture fix;
+    fix.write("AGENTS.md", "workspace instructions\n");
+
+    // No trust markers, so the decision is Trusted without a prompt; the
+    // context file loads either way (pinned fact: Project Context Files are
+    // never Project Trust gated).
+    auto untrusted = fix.load();
+    CHECK(untrusted.trust.decision == coding_agent::ProjectTrustDecision::Trusted);
+    REQUIRE(untrusted.resources.agents_files.size() == 1);
+    CHECK(untrusted.resources.agents_files[0].content == "workspace instructions\n");
+
+    // pi `--no-context-files`: discovery disabled entirely.
+    coding_agent::ProjectResourceLoadingRequest disabled;
+    disabled.no_context_files = true;
+    auto result = fix.load(std::move(disabled));
+    CHECK(result.resources.agents_files.empty());
+}
+
+/// Builds a linked-worktree skeleton (no git binary needed): the main
+/// repo's `.git/worktrees/<name>/` holds `HEAD` plus a `commondir` pointing
+/// back at the main `.git`, and the worktree's working tree carries a `.git`
+/// *file* whose `gitdir:` resolves to it (pi `resource-loader.test.ts`
+/// `linkWorktree`).
+void link_worktree(
+    const LoaderFixture& fix,
+    const std::filesystem::path& main_dir,
+    const std::filesystem::path& worktree_dir,
+    const std::string& name) {
+    const auto git_dir = main_dir / ".git" / "worktrees" / name;
+    fix.write((main_dir / ".git" / "HEAD").string(), "ref: refs/heads/main\n");
+    fix.write((git_dir / "HEAD").string(), "ref: refs/heads/feat\n");
+    fix.write((git_dir / "commondir").string(), "../..");
+    fix.write(
+        (worktree_dir / ".git").string(),
+        "gitdir: " + git_dir.string() + "\n");
+}
+
+[[nodiscard]] coding_agent::ProjectResourceLoadingResult load_context_files_at(
+    const LoaderFixture& fix,
+    const std::filesystem::path& workspace) {
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.workspace = workspace;
+    return coding_agent::load_project_resources(fix.fs, fix.trust_store, std::move(request));
+}
+
+[[nodiscard]] std::vector<std::string> context_contents(
+    const coding_agent::ProjectResourceLoadingResult& result) {
+    std::vector<std::string> contents;
+    for (const auto& file : result.resources.agents_files) {
+        contents.push_back(file.content);
+    }
+    return contents;
+}
+
+TEST_CASE(
+    "project resource loader context files load even under an untrusted decision",
+    "[coding_agent][project-resource-loader][context-files][issue416]") {
+    LoaderFixture fix;
+    // A trust-requiring marker forces an Untrusted decision (default ask),
+    // yet the context file still loads: Project Context Files are never
+    // Project Trust gated (pinned fact).
+    write_valid_project_skill(fix);
+    fix.write("AGENTS.md", "workspace instructions\n");
+
+    auto result = fix.load();
+    CHECK(result.trust.decision == coding_agent::ProjectTrustDecision::Untrusted);
+    REQUIRE(result.resources.agents_files.size() == 1);
+    CHECK(result.resources.agents_files[0].content == "workspace instructions\n");
+    // The trust decision still gates the project resources.
+    CHECK(result.resources.skills.empty());
+}
+
+TEST_CASE(
+    "project resource loader dedupes a global context file that is also an ancestor",
+    "[coding_agent][project-resource-loader][context-files][issue416]") {
+    LoaderFixture fix;
+    fix.write("repo/AGENTS.md", "repo instructions\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    // The Agent Config Directory is an ancestor of the workspace: the global
+    // file and the ancestor file are the same path and load once.
+    request.agent_config_directory = fix.workspace.path() / "repo";
+    request.workspace = fix.workspace.path() / "repo" / "sub";
+    auto result =
+        coding_agent::load_project_resources(fix.fs, fix.trust_store, std::move(request));
+
+    REQUIRE(result.resources.agents_files.size() == 1);
+    CHECK(result.resources.agents_files[0].content == "repo instructions\n");
+}
+
+TEST_CASE(
+    "project resource loader shadows the main repo context file in a nested linked worktree",
+    "[coding_agent][project-resource-loader][context-files][issue416]") {
+    LoaderFixture fix;
+    // Fake git layout: a main repo at repo/ and a nested linked worktree at
+    // repo/wt (the `.git` file's `gitdir:` pointer + commondir like `git
+    // worktree add` writes them).
+    fix.write("repo/.git/HEAD", "ref: refs/heads/main\n");
+    fix.write("repo/.git/worktrees/wt/HEAD", "ref: refs/heads/main\n");
+    fix.write("repo/.git/worktrees/wt/commondir", "../..\n");
+    fix.write(
+        "repo/wt/.git",
+        "gitdir: " +
+            (fix.workspace.path() / "repo" / ".git" / "worktrees" / "wt").string() +
+            "\n");
+    fix.write("repo/AGENTS.md", "main repo copy\n");
+    fix.write("repo/wt/AGENTS.md", "worktree copy\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.workspace = fix.workspace.path() / "repo" / "wt";
+    auto result =
+        coding_agent::load_project_resources(fix.fs, fix.trust_store, std::move(request));
+
+    // The worktree's own copy wins; the main repo's copy of the same tracked
+    // file is shadowed and loads once.
+    REQUIRE(result.resources.agents_files.size() == 1);
+    CHECK(result.resources.agents_files[0].path ==
+          (fix.workspace.path() / "repo" / "wt" / "AGENTS.md").string());
+    CHECK(result.resources.agents_files[0].content == "worktree copy\n");
+}
+
+TEST_CASE(
+    "project resource loader worktree shadowing matches pi's dedupe cases",
+    "[coding_agent][project-resource-loader][context-files][issue416]") {
+    // 1. The worktree root has no context file: the main repo's copy loads
+    // (shadowing needs the worktree's own copy to exist).
+    {
+        LoaderFixture fix;
+        const auto main = fix.workspace.path() / "repo";
+        const auto wt = main / "worktrees" / "feat";
+        const auto src = wt / "src";
+        fix.write("repo/AGENTS.md", "main repo instructions");
+        link_worktree(fix, main, wt, "feat");
+        auto result = load_context_files_at(fix, src);
+        CHECK(context_contents(result) == std::vector<std::string>{"main repo instructions"});
+    }
+    // 2. Only the same filename is shadowed: the worktree tracks AGENTS.md
+    // while the main repo tracks CLAUDE.md, so the main repo's CLAUDE.md is
+    // nobody's duplicate and still loads.
+    {
+        LoaderFixture fix;
+        const auto main = fix.workspace.path() / "repo";
+        const auto wt = main / "worktrees" / "feat";
+        const auto src = wt / "src";
+        fix.write("repo/CLAUDE.md", "main repo instructions");
+        fix.write("repo/worktrees/feat/AGENTS.md", "worktree instructions");
+        link_worktree(fix, main, wt, "feat");
+        auto result = load_context_files_at(fix, src);
+        CHECK((context_contents(result) ==
+              std::vector<std::string>{"main repo instructions", "worktree instructions"}));
+    }
+    // 3. An ordinary repo root (plain `.git` directory) keeps climbing: the
+    // repo root and the worktree root are the same dir, so nothing is
+    // shadowed.
+    {
+        LoaderFixture fix;
+        fix.write("outer/repo/.git/HEAD", "ref: refs/heads/main\n");
+        fix.write("outer/AGENTS.md", "outer instructions");
+        fix.write("outer/repo/AGENTS.md", "repo instructions");
+        fix.write("outer/repo/src/AGENTS.md", "leaf instructions");
+        auto result = load_context_files_at(fix, fix.workspace.path() / "outer" / "repo" / "src");
+        CHECK((context_contents(result) ==
+              std::vector<std::string>{"outer instructions", "repo instructions", "leaf instructions"}));
+    }
+    // 4. A sibling worktree (main repo not an ancestor) shadows nothing.
+    {
+        LoaderFixture fix;
+        const auto main = fix.workspace.path() / "outer" / "main";
+        const auto sib = fix.workspace.path() / "outer" / "sib-feat";
+        const auto sib_src = sib / "src";
+        fix.write("outer/AGENTS.md", "outer instructions");
+        fix.write("outer/sib-feat/AGENTS.md", "sibling worktree instructions");
+        link_worktree(fix, main, sib, "sib");
+        auto result = load_context_files_at(fix, sib_src);
+        CHECK((context_contents(result) ==
+              std::vector<std::string>{"outer instructions", "sibling worktree instructions"}));
+    }
+    // 5. A bare layout (`proj/.bare` + `proj/main`): dirname of the common
+    // git dir is the plain `proj` container, which tracks nothing, so its
+    // context file is not a duplicate.
+    {
+        LoaderFixture fix;
+        const auto proj = fix.workspace.path() / "proj";
+        const auto bare = proj / ".bare";
+        const auto wt = proj / "main";
+        const auto wt_git_dir = bare / "worktrees" / "main";
+        fix.write("proj/.bare/HEAD", "ref: refs/heads/main\n");
+        fix.write("proj/.bare/worktrees/main/HEAD", "ref: refs/heads/main\n");
+        fix.write("proj/.bare/worktrees/main/commondir", "../..");
+        fix.write("proj/main/.git", "gitdir: " + wt_git_dir.string() + "\n");
+        fix.write("proj/AGENTS.md", "container instructions");
+        fix.write("proj/main/AGENTS.md", "worktree instructions");
+        auto result = load_context_files_at(fix, wt);
+        CHECK((context_contents(result) ==
+              std::vector<std::string>{"container instructions", "worktree instructions"}));
+    }
+    // 6. A submodule's gitdir resolves under `.git/modules` — never an
+    // ancestor of cwd — so the superproject's context loads alongside.
+    {
+        LoaderFixture fix;
+        const auto sup = fix.workspace.path() / "super";
+        const auto sub = sup / "vendor" / "lib";
+        const auto sub_src = sub / "src";
+        const auto sub_git_dir = sup / ".git" / "modules" / "vendor" / "lib";
+        fix.write("super/AGENTS.md", "superproject instructions");
+        fix.write("super/vendor/lib/AGENTS.md", "submodule instructions");
+        fix.write("super/.git/modules/vendor/lib/HEAD", "ref: refs/heads/main\n");
+        fix.write("super/vendor/lib/.git", "gitdir: " + sub_git_dir.string() + "\n");
+        auto result = load_context_files_at(fix, sub_src);
+        CHECK((context_contents(result) ==
+              std::vector<std::string>{"superproject instructions", "submodule instructions"}));
+    }
+    // 7. A corrupt `gitdir:` target that does not exist keeps normal climbing.
+    {
+        LoaderFixture fix;
+        fix.write("repo/.git", "gitdir: /nonexistent/path/worktrees/feat\n");
+        fix.write("repo/AGENTS.md", "repo instructions");
+        fix.write("repo/src/AGENTS.md", "src instructions");
+        auto result = load_context_files_at(fix, fix.workspace.path() / "repo" / "src");
+        CHECK((context_contents(result) ==
+              std::vector<std::string>{"repo instructions", "src instructions"}));
+    }
+}
+
+TEST_CASE(
+    "project resource loader resolves SYSTEM.md trust-gated project file then global",
+    "[coding_agent][project-resource-loader][system-prompt][issue416]") {
+    LoaderFixture fix;
+    tests::TempWorkspace agent_config;
+    agent_config.write("SYSTEM.md", "global system prompt\n");
+    fix.write(".pi/SYSTEM.md", "project system prompt\n");
+
+    // Untrusted project: the `.pi/SYSTEM.md` marker triggers the trust
+    // decision, the project file is skipped, and the global file loads.
+    coding_agent::ProjectResourceLoadingRequest untrusted_request;
+    untrusted_request.agent_config_directory = agent_config.path();
+    auto untrusted = fix.load(std::move(untrusted_request));
+    CHECK(untrusted.trust.decision == coding_agent::ProjectTrustDecision::Untrusted);
+    REQUIRE(untrusted.resources.system_prompt.has_value());
+    CHECK(*untrusted.resources.system_prompt == "global system prompt\n");
+    REQUIRE(untrusted.resources.system_prompt_source.has_value());
+    CHECK(*untrusted.resources.system_prompt_source ==
+          (agent_config.path() / "SYSTEM.md").string());
+
+    // Trusted project: the project `.pi/SYSTEM.md` wins over the global.
+    coding_agent::ProjectResourceLoadingRequest trusted_request;
+    trusted_request.agent_config_directory = agent_config.path();
+    trusted_request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    auto trusted = fix.load(std::move(trusted_request));
+    REQUIRE(trusted.resources.system_prompt.has_value());
+    CHECK(*trusted.resources.system_prompt == "project system prompt\n");
+    REQUIRE(trusted.resources.system_prompt_source.has_value());
+    CHECK(*trusted.resources.system_prompt_source ==
+          (fix.workspace.path() / ".pi" / "SYSTEM.md").string());
+}
+
+TEST_CASE(
+    "project resource loader resolves APPEND_SYSTEM.md trust-gated project file then global",
+    "[coding_agent][project-resource-loader][system-prompt][issue416]") {
+    LoaderFixture fix;
+    tests::TempWorkspace agent_config;
+    agent_config.write("APPEND_SYSTEM.md", "global append\n");
+    fix.write(".pi/APPEND_SYSTEM.md", "project append\n");
+
+    // Untrusted project: the global file loads.
+    coding_agent::ProjectResourceLoadingRequest untrusted_request;
+    untrusted_request.agent_config_directory = agent_config.path();
+    auto untrusted = fix.load(std::move(untrusted_request));
+    REQUIRE(untrusted.resources.append_system_prompt.size() == 1);
+    CHECK(untrusted.resources.append_system_prompt[0] == "global append\n");
+    REQUIRE(untrusted.resources.append_system_prompt_sources.size() == 1);
+    CHECK(untrusted.resources.append_system_prompt_sources[0] ==
+          (agent_config.path() / "APPEND_SYSTEM.md").string());
+
+    // Trusted project: the project `.pi/APPEND_SYSTEM.md` wins.
+    coding_agent::ProjectResourceLoadingRequest trusted_request;
+    trusted_request.agent_config_directory = agent_config.path();
+    trusted_request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    auto trusted = fix.load(std::move(trusted_request));
+    REQUIRE(trusted.resources.append_system_prompt.size() == 1);
+    CHECK(trusted.resources.append_system_prompt[0] == "project append\n");
+}
+
+TEST_CASE(
+    "project resource loader --system-prompt and --append-system-prompt resolve text-or-file per pi",
+    "[coding_agent][project-resource-loader][system-prompt][issue416]") {
+    LoaderFixture fix;
+    fix.write("custom.md", "custom file prompt\n");
+    // Discovery must not win over the CLI values.
+    fix.write(".pi/SYSTEM.md", "discovered prompt\n");
+    fix.write(".pi/APPEND_SYSTEM.md", "discovered append\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    request.system_prompt = (fix.workspace.path() / "custom.md").string();
+    request.append_system_prompt = {"first append", (fix.workspace.path() / "custom.md").string()};
+    auto result = fix.load(std::move(request));
+
+    // An existing path resolves to the file contents (pi `resolvePromptInput`);
+    // a plain value stays the text.
+    REQUIRE(result.resources.system_prompt.has_value());
+    CHECK(*result.resources.system_prompt == "custom file prompt\n");
+    REQUIRE(result.resources.append_system_prompt.size() == 2);
+    CHECK(result.resources.append_system_prompt[0] == "first append");
+    CHECK(result.resources.append_system_prompt[1] == "custom file prompt\n");
+    REQUIRE(result.resources.system_prompt_source.has_value());
+    CHECK(*result.resources.system_prompt_source ==
+          (fix.workspace.path() / "custom.md").string());
+    REQUIRE(result.resources.append_system_prompt_sources.size() == 1);
+    CHECK(*result.resources.append_system_prompt_sources.begin() ==
+          (fix.workspace.path() / "custom.md").string());
+}
+
+TEST_CASE(
+    "project resource loader --system-prompt raw text wins over discovery and empty suppresses it",
+    "[coding_agent][project-resource-loader][system-prompt][issue416]") {
+    LoaderFixture fix;
+    fix.write(".pi/SYSTEM.md", "discovered prompt\n");
+
+    // Raw text: not a path, used verbatim, no source path recorded.
+    coding_agent::ProjectResourceLoadingRequest text_request;
+    text_request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    text_request.system_prompt = "custom system prompt";
+    auto text = fix.load(std::move(text_request));
+    REQUIRE(text.resources.system_prompt.has_value());
+    CHECK(*text.resources.system_prompt == "custom system prompt");
+    CHECK_FALSE(text.resources.system_prompt_source.has_value());
+
+    // pi: an empty `--system-prompt` value suppresses discovery entirely and
+    // resolves to no custom prompt.
+    coding_agent::ProjectResourceLoadingRequest empty_request;
+    empty_request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    empty_request.system_prompt = "";
+    auto empty = fix.load(std::move(empty_request));
+    CHECK_FALSE(empty.resources.system_prompt.has_value());
+
+    // A missing path is treated as the prompt text itself (pi
+    // `resolvePromptInput`), with no diagnostic.
+    coding_agent::ProjectResourceLoadingRequest missing_request;
+    missing_request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    missing_request.system_prompt = "missing/prompt.md";
+    auto missing = fix.load(std::move(missing_request));
+    REQUIRE(missing.resources.system_prompt.has_value());
+    CHECK(*missing.resources.system_prompt == "missing/prompt.md");
+    CHECK(missing.diagnostics.empty());
+}
+
+TEST_CASE(
+    "project resource loader unreadable --system-prompt file warns and falls back to the raw value",
+    "[coding_agent][project-resource-loader][system-prompt][issue416]") {
+    LoaderFixture fix;
+    fix.write("adir/note.txt", "x");
+
+    // A directory exists but cannot be read as text: pi warns and uses the
+    // value itself as the prompt text.
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.system_prompt = (fix.workspace.path() / "adir").string();
+    auto result = fix.load(std::move(request));
+
+    CHECK(has_diag(result, coding_agent::ResourceDiagnosticType::Warning,
+                   "Could not read system prompt file"));
+    REQUIRE(result.resources.system_prompt.has_value());
+    CHECK(*result.resources.system_prompt == (fix.workspace.path() / "adir").string());
+    // pi `systemPromptSourcePath`: any existing source path is recorded —
+    // the directory exists, so it is the recorded source even though the
+    // read failed.
+    REQUIRE(result.resources.system_prompt_source.has_value());
+    CHECK(*result.resources.system_prompt_source ==
+          (fix.workspace.path() / "adir").string());
+}
+
+TEST_CASE(
+    "project resource loader no SYSTEM.md or APPEND_SYSTEM.md loads nothing",
+    "[coding_agent][project-resource-loader][system-prompt][issue416]") {
+    LoaderFixture fix;
+    tests::TempWorkspace agent_config;
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.agent_config_directory = agent_config.path();
+    auto result = fix.load(std::move(request));
+
+    CHECK_FALSE(result.resources.system_prompt.has_value());
+    CHECK(result.resources.append_system_prompt.empty());
+    CHECK(result.resources.system_prompt_source.has_value() == false);
+    CHECK(result.resources.append_system_prompt_sources.empty());
+    CHECK(result.diagnostics.empty());
+}

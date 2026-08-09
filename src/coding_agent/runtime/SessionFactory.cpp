@@ -139,6 +139,11 @@ struct AssemblyPlan {
     /// resolved against the workspace).
     bool no_themes{false};
     std::vector<std::string> theme_paths;
+    /// pi `--no-context-files` and the raw `--system-prompt` /
+    /// `--append-system-prompt` values (P20).
+    bool no_context_files{false};
+    std::optional<std::string> system_prompt;
+    std::vector<std::string> append_system_prompt;
     std::optional<bool> project_trust_override;
     std::size_t max_queued_messages{agent::kDefaultMaxQueuedMessages};
     std::size_t max_queued_bytes{agent::kDefaultMaxQueuedBytes};
@@ -776,6 +781,9 @@ struct SessionTargetNormalizationOptions {
     plan.skill_paths = request.skill_paths;
     plan.no_themes = request.no_themes;
     plan.theme_paths = request.theme_paths;
+    plan.no_context_files = request.no_context_files;
+    plan.system_prompt = request.system_prompt;
+    plan.append_system_prompt = request.append_system_prompt;
     plan.max_queued_messages = request.max_queued_messages;
     plan.max_queued_bytes = request.max_queued_bytes;
     plan.provide_user_shell = request.provide_user_shell;
@@ -1094,6 +1102,11 @@ struct SessionTargetNormalizationOptions {
     std::vector<Skill> skills;
     std::vector<PromptTemplate> templates;
     std::vector<LoadedThemeResource> theme_documents;
+    // P20 loader outputs that flow into the System Prompt: Project Context
+    // Files, the custom system prompt, and the append strings.
+    std::vector<prompt::ProjectContextFile> agents_files;
+    std::optional<std::string> system_prompt_text;
+    std::vector<std::string> append_system_prompt_texts;
     std::filesystem::path trust_store_path =
         coding_agent::trust_store_file_path();
     if (auto valid = validate_trust_store_path(trust_store_path, workspace); !valid) {
@@ -1114,6 +1127,9 @@ struct SessionTargetNormalizationOptions {
             resource_request.skill_paths = plan.skill_paths;
             resource_request.no_themes = plan.no_themes;
             resource_request.theme_paths = plan.theme_paths;
+            resource_request.no_context_files = plan.no_context_files;
+            resource_request.system_prompt = plan.system_prompt;
+            resource_request.append_system_prompt = plan.append_system_prompt;
             resource_request.explicit_prompt_templates = make_explicit_template_inputs(*fs, plan.prompt_template_paths);
 
             ProjectTrustStore trust_store{trust_store_path};
@@ -1129,6 +1145,10 @@ struct SessionTargetNormalizationOptions {
             skills = std::move(resource_loading.resources.skills);
             templates = std::move(resource_loading.resources.prompt_templates);
             theme_documents = std::move(resource_loading.resources.themes);
+            agents_files = std::move(resource_loading.resources.agents_files);
+            system_prompt_text = std::move(resource_loading.resources.system_prompt);
+            append_system_prompt_texts =
+                std::move(resource_loading.resources.append_system_prompt);
         } else {
             diagnostics.push_back(make_diag(
                 SessionDiagnostic::Severity::Warning,
@@ -1491,6 +1511,11 @@ struct SessionTargetNormalizationOptions {
     // lands with the flag's session plumbing).
     runtime_config.default_thinking_level =
         scoped_thinking_level ? scoped_thinking_level : settings.default_thinking_level;
+    // pi `_rebuildSystemPrompt` inputs resolved by the resource loader (P20):
+    // the custom prompt, the append strings, and the Project Context Files.
+    runtime_config.custom_prompt = std::move(system_prompt_text);
+    runtime_config.append_system_prompt = std::move(append_system_prompt_texts);
+    runtime_config.context_files = std::move(agents_files);
     const auto shell_path = settings.shell_path;
     const auto shell_command_prefix = settings.shell_command_prefix;
 

@@ -156,10 +156,24 @@ AgentSessionRuntime::AgentSessionRuntime(
     // shape (ADR 0036 G4; `core/agent-session.ts` `_rebuildSystemPrompt` +
     // `core/system-prompt.ts` `buildSystemPrompt`) and flows into every run
     // through `AgentContext.system_prompt`, exactly like pi's
-    // `agent.state.systemPrompt`. Custom/append prompts and project context
-    // files arrive with P20 (#416); until then the default branch renders
-    // the four fixed tools and the loaded skills.
+    // `agent.state.systemPrompt`. The resource loader's P20 inputs land
+    // here: the custom prompt (`--system-prompt` / SYSTEM.md), the append
+    // strings joined with `"\n\n"` (`--append-system-prompt` /
+    // APPEND_SYSTEM.md), and the Project Context Files (never trust-gated).
     prompt::BuildSystemPromptOptions prompt_options;
+    prompt_options.customPrompt = config_.custom_prompt;
+    // pi `_rebuildSystemPrompt`: append strings join with `"\n\n"`; an
+    // empty list appends nothing.
+    if (!config_.append_system_prompt.empty()) {
+        std::string joined = config_.append_system_prompt.front();
+        for (std::size_t index = 1; index < config_.append_system_prompt.size();
+             ++index) {
+            joined += "\n\n";
+            joined += config_.append_system_prompt[index];
+        }
+        prompt_options.appendSystemPrompt = std::move(joined);
+    }
+    prompt_options.contextFiles = config_.context_files;
     // pi `_refreshToolRegistry` → `_toolPromptSnippets`/`_toolPromptGuidelines`:
     // prompt metadata for the active tools, collected before the registry
     // moves into the Agent below. pi's default active tool order

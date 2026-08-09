@@ -132,3 +132,180 @@ TEST_CASE("system prompt is built at session construction and flows through Agen
 
     created->session->close();
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P20 (#416): Project Context Files and SYSTEM.md/APPEND_SYSTEM.md flow
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace {
+
+/// Build a scripted session request against a nested workspace the test
+/// controls (so the cwd ancestor chain is fully deterministic).
+[[nodiscard]] tests::ModelsSessionOptions context_session_options(
+    const std::filesystem::path& session_file,
+    const std::filesystem::path& workspace,
+    std::shared_ptr<RecordingProvider> client) {
+    tests::ModelsSessionOptions options;
+    options.session_target =
+        coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
+    options.workspace = workspace;
+    options.models = cch::tests::models_from_provider(std::move(client));
+    options.request_model = cch::tests::scripted_request_model("sdk-host", "sdk-model");
+    return options;
+}
+
+} // namespace
+
+TEST_CASE(
+    "system prompt default branch renders project context files in pi's order",
+    "[coding_agent][system-prompt][context-files][issue416]") {
+    tests::TempWorkspace workspace;
+    // Controlled ancestor chain: parent (AGENTS.md) and child (CLAUDE.md),
+    // global agent dir absent (isolated test home).
+    workspace.write("parent/AGENTS.md", "parent instructions\n");
+    workspace.write("parent/child/CLAUDE.md", "child instructions\n");
+    const auto child = workspace.path() / "parent" / "child";
+    const auto session_file = child / "session.jsonl";
+    auto client = std::make_shared<RecordingProvider>();
+
+    auto options = context_session_options(session_file, child, client);
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created.has_value());
+
+    auto prompted = created->session->prompt_blocking("hello");
+    REQUIRE(prompted.has_value());
+    REQUIRE(client->requests.size() == 1);
+    REQUIRE(client->requests[0].system_prompt.has_value());
+    const std::string prompt = *client->requests[0].system_prompt;
+
+    // The default branch still renders the tools; the context section lands
+    // between the append area and the trailing cwd line, root-most first.
+    CHECK(prompt.find("Available tools:") != std::string::npos);
+    const std::string expected_section =
+        "\n\n<project_context>\n\n"
+        "Project-specific instructions and guidelines:\n\n"
+        "<project_instructions path=\"" +
+        (workspace.path() / "parent" / "AGENTS.md").string() +
+        "\">\n"
+        "parent instructions\n\n"
+        "</project_instructions>\n\n"
+        "<project_instructions path=\"" +
+        (child / "CLAUDE.md").string() +
+        "\">\n"
+        "child instructions\n\n"
+        "</project_instructions>\n\n"
+        "</project_context>\n";
+    CHECK(prompt.find(expected_section) != std::string::npos);
+    CHECK(prompt.find("\nCurrent working directory: " + child.string()) !=
+          std::string::npos);
+
+    created->session->close();
+}
+
+TEST_CASE(
+    "system prompt custom branch renders the custom prompt, joined appends, and context files",
+    "[coding_agent][system-prompt][context-files][issue416]") {
+    tests::TempWorkspace workspace;
+    workspace.write("parent/AGENTS.md", "parent instructions\n");
+    workspace.write("parent/child/AGENTS.md", "child instructions\n");
+    workspace.write("parent/child/custom.md", "custom file prompt\n");
+    const auto child = workspace.path() / "parent" / "child";
+    const auto session_file = child / "session.jsonl";
+    auto client = std::make_shared<RecordingProvider>();
+
+    auto options = context_session_options(session_file, child, client);
+    // pi `--system-prompt <file>`: text-or-file resolution reads the file.
+    options.system_prompt = (child / "custom.md").string();
+    // pi `--append-system-prompt` repeatable: joined with "\n\n".
+    options.append_system_prompt = {"first append", "second append"};
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created.has_value());
+
+    auto prompted = created->session->prompt_blocking("hello");
+    REQUIRE(prompted.has_value());
+    REQUIRE(client->requests.size() == 1);
+    REQUIRE(client->requests[0].system_prompt.has_value());
+    const std::string prompt = *client->requests[0].system_prompt;
+
+    // Custom branch: no default tools section; the prompt opens with the
+    // resolved file content.
+    CHECK(prompt.starts_with("custom file prompt\n"));
+    CHECK(prompt.find("Available tools:") == std::string::npos);
+    // Append strings joined with "\n\n" right after the custom prompt.
+    // The resolved file content carries its trailing newline; pi appends the
+    // section with another "\n\n" prefix, and the two append strings join
+    // with "\n\n".
+    CHECK(prompt.find("custom file prompt\n\n\nfirst append\n\nsecond append") !=
+          std::string::npos);
+    // Context files still render, root-most first.
+    CHECK(prompt.find(
+              "<project_instructions path=\"" +
+              (workspace.path() / "parent" / "AGENTS.md").string() + "\">") !=
+          std::string::npos);
+    CHECK(prompt.find(
+              "<project_instructions path=\"" + (child / "AGENTS.md").string() +
+              "\">") != std::string::npos);
+    CHECK(prompt.find("\nCurrent working directory: " + child.string()) !=
+          std::string::npos);
+
+    created->session->close();
+}
+
+TEST_CASE(
+    "system prompt flows the discovered SYSTEM.md and APPEND_SYSTEM.md through the custom branch",
+    "[coding_agent][system-prompt][context-files][issue416]") {
+    tests::TempWorkspace workspace;
+    workspace.write(".pi/SYSTEM.md", "custom system prompt from SYSTEM.md\n");
+    workspace.write(".pi/APPEND_SYSTEM.md", "append from APPEND_SYSTEM.md\n");
+    const auto session_file = workspace.path() / "session.jsonl";
+    auto client = std::make_shared<RecordingProvider>();
+
+    auto options = context_session_options(session_file, workspace.path(), client);
+    // The `.pi/` markers trigger the trust decision; `--approve` trusts the
+    // project so the project SYSTEM.md/APPEND_SYSTEM.md load.
+    options.project_trust_override = true;
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created.has_value());
+
+    auto prompted = created->session->prompt_blocking("hello");
+    REQUIRE(prompted.has_value());
+    REQUIRE(client->requests.size() == 1);
+    REQUIRE(client->requests[0].system_prompt.has_value());
+    const std::string prompt = *client->requests[0].system_prompt;
+
+    CHECK(prompt.starts_with("custom system prompt from SYSTEM.md\n"));
+    // The SYSTEM.md content carries its trailing newline before pi's "\n\n"
+    // append-section prefix.
+    CHECK(prompt.find("custom system prompt from SYSTEM.md\n\n\nappend from APPEND_SYSTEM.md\n") !=
+          std::string::npos);
+    CHECK(prompt.find("Available tools:") == std::string::npos);
+    CHECK(prompt.find("\nCurrent working directory: " + workspace.path().string()) !=
+          std::string::npos);
+
+    created->session->close();
+}
+
+TEST_CASE(
+    "system prompt drops project context files under --no-context-files",
+    "[coding_agent][system-prompt][context-files][issue416]") {
+    tests::TempWorkspace workspace;
+    workspace.write("AGENTS.md", "should not appear\n");
+    const auto session_file = workspace.path() / "session.jsonl";
+    auto client = std::make_shared<RecordingProvider>();
+
+    auto options = context_session_options(session_file, workspace.path(), client);
+    options.no_context_files = true;
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created.has_value());
+
+    auto prompted = created->session->prompt_blocking("hello");
+    REQUIRE(prompted.has_value());
+    REQUIRE(client->requests.size() == 1);
+    REQUIRE(client->requests[0].system_prompt.has_value());
+    const std::string prompt = *client->requests[0].system_prompt;
+
+    CHECK(prompt.find("<project_context>") == std::string::npos);
+    CHECK(prompt.find("should not appear") == std::string::npos);
+
+    created->session->close();
+}

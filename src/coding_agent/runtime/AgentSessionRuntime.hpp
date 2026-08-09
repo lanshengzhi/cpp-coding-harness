@@ -7,6 +7,7 @@
 #include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/Skill.hpp>
 #include <cch/util/Error.hpp>
+#include "coding_agent/prompt/SystemPromptBuilder.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionEventCommitment.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
@@ -44,6 +45,19 @@ struct AgentSessionRuntimeConfig {
     /// `settingsManager.getDefaultThinkingLevel() ?? DEFAULT_THINKING_LEVEL`);
     /// a resumed `thinking_level_change` entry wins over it (T04).
     std::optional<std::string> default_thinking_level{std::nullopt};
+    /// pi `_rebuildSystemPrompt` inputs from the resource loader
+    /// (`resourceLoader.getSystemPrompt()`): the custom system prompt text
+    /// (`--system-prompt` text-or-file, else the discovered SYSTEM.md
+    /// content) rendering as the custom-prompt branch.
+    std::optional<std::string> custom_prompt{std::nullopt};
+    /// pi `resourceLoader.getAppendSystemPrompt()`: the resolved append
+    /// strings in source order; joined with `"\n\n"` into the append
+    /// section (pi `_rebuildSystemPrompt`).
+    std::vector<std::string> append_system_prompt;
+    /// pi `resourceLoader.getAgentsFiles().agentsFiles`: the Project Context
+    /// Files rendering as `<project_context>`/`<project_instructions
+    /// path="...">`. Not Project Trust gated (pinned fact).
+    std::vector<prompt::ProjectContextFile> context_files;
 };
 
 /// Resolved turn auto-retry settings (pi `settings-manager.ts`

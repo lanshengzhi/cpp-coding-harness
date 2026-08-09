@@ -62,6 +62,18 @@ struct AgentSessionCreationRequest {
     /// inputs load after every discovered source and stay effective under
     /// `--no-themes`.
     std::vector<std::string> theme_paths;
+    /// pi `--no-context-files`: disables Project Context File discovery
+    /// (global AGENTS.md/CLAUDE.md + the cwd ancestor chain). Context files
+    /// are never Project Trust gated (pinned fact).
+    bool no_context_files{false};
+    /// pi `--system-prompt`: raw text-or-file value; wins over SYSTEM.md
+    /// discovery and renders as the custom-prompt branch of the System
+    /// Prompt.
+    std::optional<std::string> system_prompt;
+    /// pi `--append-system-prompt` (repeatable): raw text-or-file values;
+    /// win over APPEND_SYSTEM.md discovery and join with `"\n\n"` into the
+    /// append section.
+    std::vector<std::string> append_system_prompt;
     std::size_t max_queued_messages{agent::kDefaultMaxQueuedMessages};
     std::size_t max_queued_bytes{agent::kDefaultMaxQueuedBytes};
     /// The internal workspace containment seam: always the current working

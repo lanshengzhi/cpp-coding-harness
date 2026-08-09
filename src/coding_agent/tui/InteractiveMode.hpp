@@ -40,6 +40,12 @@ struct InteractiveSessionFacts {
     /// workspace-relative), used by in-session session replacement.
     bool no_themes{false};
     std::vector<std::string> theme_paths;
+    /// pi `--no-context-files`, `--system-prompt`, and repeatable
+    /// `--append-system-prompt`, used by in-session session replacement
+    /// (P20).
+    bool no_context_files{false};
+    std::optional<std::string> system_prompt;
+    std::vector<std::string> append_system_prompt;
     std::optional<std::string> provider;
     std::optional<std::string> model;
     std::vector<std::string> models;

@@ -133,6 +133,9 @@ void print_session_diagnostics(
     facts.skill_paths = config.skills;
     facts.no_themes = config.no_themes;
     facts.theme_paths = config.themes;
+    facts.no_context_files = config.no_context_files;
+    facts.system_prompt = config.system_prompt;
+    facts.append_system_prompt = config.append_system_prompt;
     facts.provider = config.provider;
     facts.model = config.model;
     facts.models = config.models;
@@ -148,6 +151,9 @@ void print_session_diagnostics(
             request.skill_paths = facts.skill_paths;
             request.no_themes = facts.no_themes;
             request.theme_paths = facts.theme_paths;
+            request.no_context_files = facts.no_context_files;
+            request.system_prompt = facts.system_prompt;
+            request.append_system_prompt = facts.append_system_prompt;
             request.provider = facts.provider;
             request.model = facts.model;
             request.models = facts.models;
@@ -270,6 +276,9 @@ void print_session_diagnostics(
     request.skill_paths = config.skills;
     request.no_themes = config.no_themes;
     request.theme_paths = config.themes;
+    request.no_context_files = config.no_context_files;
+    request.system_prompt = config.system_prompt;
+    request.append_system_prompt = config.append_system_prompt;
     request.workspace = config.workspace;
     request.session_target = std::move(assembly->target);
     request.session_name = config.name;

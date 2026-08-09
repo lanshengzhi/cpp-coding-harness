@@ -1,6 +1,7 @@
 #include "coding_agent/ProjectResourceLoader.hpp"
 
 #include <cch/coding_agent/AgentConfigDir.hpp>
+#include <cch/util/Error.hpp>
 
 #include "coding_agent/PromptTemplateLoader.hpp"
 #include "coding_agent/ResourceDiagnosticPolicy.hpp"
@@ -10,7 +11,11 @@
 #include <algorithm>
 #include <array>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <optional>
+#include <set>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -23,6 +28,24 @@ namespace {
 constexpr std::string_view kProjectSkillsMarker = ".pi/skills";
 constexpr std::string_view kProjectPromptsMarker = ".pi/prompts";
 constexpr std::string_view kProjectThemesMarker = ".pi/themes";
+
+/// pi `loadContextFileFromDir` candidate names (`resource-loader.ts`), in
+/// order; the first existing regular file wins.
+constexpr std::array<std::string_view, 4> kContextFileCandidates{
+    "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD"};
+
+/// pi `String.prototype.trim()`.
+[[nodiscard]] std::string_view trim(std::string_view text) {
+    while (!text.empty() &&
+           std::isspace(static_cast<unsigned char>(text.front()))) {
+        text.remove_prefix(1);
+    }
+    while (!text.empty() &&
+           std::isspace(static_cast<unsigned char>(text.back()))) {
+        text.remove_suffix(1);
+    }
+    return text;
+}
 
 [[nodiscard]] ResourceDiagnostic warning_diagnostic(
     std::string message,
@@ -44,6 +67,356 @@ constexpr std::string_view kProjectThemesMarker = ".pi/themes";
         .path = std::move(path),
         .collision = std::nullopt,
     };
+}
+
+/// Raw text read for pi `readFileSync(path, "utf-8")` on the loader's
+/// out-of-workspace paths (the ancestor chain and the Agent Config
+/// Directory). A non-regular entry fails like pi's `readFileSync` throw on
+/// a directory.
+[[nodiscard]] util::Expected<std::string> read_text_file(
+    const std::filesystem::path& path) {
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec) || ec) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Unknown,
+            "could not read " + path.string()));
+    }
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Unknown,
+            "could not read " + path.string()));
+    }
+    std::ostringstream content;
+    content << input.rdbuf();
+    if (input.bad()) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Unknown,
+            "could not read " + path.string()));
+    }
+    return content.str();
+}
+
+/// pi `canonicalizePath` (`utils/paths.ts`): `realpathSync` with the input
+/// path as the fallback when the real path cannot be resolved.
+[[nodiscard]] std::filesystem::path canonicalize_path(
+    const std::filesystem::path& path) {
+    std::error_code ec;
+    auto canonical = std::filesystem::canonical(path, ec);
+    return ec ? path : canonical;
+}
+
+/// pi `loadContextFileFromDir` (`resource-loader.ts`): the first existing
+/// regular file among the AGENTS.md/AGENTS.MD/CLAUDE.md/CLAUDE.MD
+/// candidates. A read failure warns (pi `console.error(chalk.yellow(...))`)
+/// and moves to the next candidate.
+[[nodiscard]] std::optional<prompt::ProjectContextFile> load_context_file_from_dir(
+    const std::filesystem::path& dir,
+    std::vector<ResourceDiagnostic>& diagnostics) {
+    for (const auto& filename : kContextFileCandidates) {
+        const auto file_path = dir / filename;
+        std::error_code ec;
+        if (!std::filesystem::exists(file_path, ec) || ec) {
+            continue;
+        }
+        std::error_code file_ec;
+        if (!std::filesystem::is_regular_file(file_path, file_ec) || file_ec) {
+            // pi `!statSync(filePath).isFile() → continue`.
+            continue;
+        }
+        auto content = read_text_file(file_path);
+        if (!content) {
+            diagnostics.push_back(warning_diagnostic(
+                "Could not read " + file_path.string() + ": " +
+                    content.error().message,
+                file_path.string()));
+            continue;
+        }
+        return prompt::ProjectContextFile{
+            .path = file_path.string(),
+            .content = std::move(*content),
+        };
+    }
+    return std::nullopt;
+}
+
+/// pi `findGitPaths` (`footer-data-provider.ts`): walk up from `start`; the
+/// first directory with a `.git` entry — a linked-worktree pointer file
+/// whose `gitdir:` target carries `HEAD`, or a plain directory with `HEAD`
+/// — yields the repo root and the common git directory. A `.git` entry that
+/// fails its check stops the walk (pi returns null); an entry that is not a
+/// file or directory is skipped.
+struct GitPaths {
+    std::filesystem::path repo_dir;
+    std::filesystem::path common_git_dir;
+};
+
+[[nodiscard]] std::optional<GitPaths> find_git_paths(
+    const std::filesystem::path& start) {
+    std::error_code ec;
+    auto dir = std::filesystem::absolute(start, ec);
+    if (ec) {
+        return std::nullopt;
+    }
+    dir = dir.lexically_normal();
+    while (true) {
+        const auto git_path = dir / ".git";
+        std::error_code exists_ec;
+        if (std::filesystem::exists(git_path, exists_ec) && !exists_ec) {
+            std::error_code stat_ec;
+            const auto status = std::filesystem::status(git_path, stat_ec);
+            // pi: `statSync` inside the try — an entry that exists but
+            // cannot be statted stops the walk (returns null).
+            if (stat_ec) {
+                return std::nullopt;
+            }
+            if (std::filesystem::is_regular_file(status)) {
+                auto content = read_text_file(git_path);
+                // pi: `readFileSync` throws → catch → null.
+                if (!content) {
+                    return std::nullopt;
+                }
+                const auto trimmed = trim(*content);
+                if (trimmed.starts_with("gitdir: ")) {
+                    // pi `resolve(dir, content.slice(8).trim())`.
+                    const auto git_dir =
+                        (dir / trimmed.substr(8)).lexically_normal();
+                    const auto head_path = git_dir / "HEAD";
+                    if (!std::filesystem::exists(head_path, ec) || ec) {
+                        return std::nullopt;
+                    }
+                    std::filesystem::path common_git_dir = git_dir;
+                    const auto commondir_path = git_dir / "commondir";
+                    if (std::filesystem::exists(commondir_path, ec) &&
+                        !ec) {
+                        auto commondir = read_text_file(commondir_path);
+                        // pi: a commondir read failure also throws inside
+                        // the try → null.
+                        if (!commondir) {
+                            return std::nullopt;
+                        }
+                        // pi `resolve(gitDir, ...)`.
+                        common_git_dir =
+                            (git_dir /
+                             std::filesystem::path{trim(*commondir)})
+                                .lexically_normal();
+                    }
+                    return GitPaths{
+                        .repo_dir = dir,
+                        .common_git_dir = std::move(common_git_dir),
+                    };
+                }
+            } else if (std::filesystem::is_directory(status)) {
+                const auto head_path = git_path / "HEAD";
+                if (!std::filesystem::exists(head_path, ec) || ec) {
+                    return std::nullopt;
+                }
+                return GitPaths{
+                    .repo_dir = dir,
+                    .common_git_dir = git_path,
+                };
+            }
+        }
+        const auto parent = dir.parent_path();
+        if (parent == dir) {
+            return std::nullopt;
+        }
+        dir = parent;
+    }
+}
+
+/// pi `findShadowedContextFile` (`resource-loader.ts`): the main repo's
+/// context file that a nested linked worktree's own copy shadows — both are
+/// the same tracked AGENTS.md/CLAUDE.md, so loading both loads it twice.
+/// Returns nullopt when nothing is shadowed, leaving normal ancestor
+/// inheritance alone. Both compared paths are canonicalized (realpath),
+/// because `git worktree add` writes the `.git` file's `gitdir:` target in
+/// realpath form while cwd may still be symlinked.
+[[nodiscard]] std::optional<std::filesystem::path> find_shadowed_context_file(
+    const std::filesystem::path& cwd,
+    std::vector<ResourceDiagnostic>& diagnostics) {
+    const auto git_paths = find_git_paths(cwd);
+    if (!git_paths) {
+        return std::nullopt;
+    }
+    const auto common_git_dir = canonicalize_path(git_paths->common_git_dir);
+    const auto worktree_root = canonicalize_path(git_paths->repo_dir);
+    const auto main_repo_root = common_git_dir.parent_path();
+    // False for an ordinary repo, where the two are the same dir, and for a
+    // sibling worktree (`git worktree add ../feat`), whose main repo is not
+    // an ancestor.
+    // `string + char` appends the separator; `std::string{1, sep}` would
+    // pick the initializer-list constructor (two chars), not a run.
+    const std::string main_repo_prefix =
+        main_repo_root.string() +
+        std::filesystem::path::preferred_separator;
+    if (!worktree_root.string().starts_with(main_repo_prefix)) {
+        return std::nullopt;
+    }
+    // dirname of the common git dir is the main worktree root only when
+    // that dir is itself checked out from the same repo. In a bare layout
+    // (`proj/.bare` + `proj/main`) it is just the directory holding `.bare`,
+    // which tracks nothing; a submodule's gitdir has no `commondir`, so it
+    // lands under `.git/modules`.
+    if (canonicalize_path(main_repo_root / ".git") != common_git_dir) {
+        return std::nullopt;
+    }
+    const auto worktree_context_file =
+        load_context_file_from_dir(worktree_root, diagnostics);
+    if (!worktree_context_file) {
+        return std::nullopt;
+    }
+    return main_repo_root / std::filesystem::path{worktree_context_file->path}.filename();
+}
+
+/// pi `loadProjectContextFiles` (`resource-loader.ts`): the global context
+/// file from the Agent Config Directory, then the cwd ancestor chain
+/// root-most first (the walk unshifts each found file), with linked-worktree
+/// shadowing and raw-path dedupe. Not Project Trust gated.
+[[nodiscard]] std::vector<prompt::ProjectContextFile> load_project_context_files(
+    const std::filesystem::path& cwd,
+    const std::optional<std::filesystem::path>& agent_config_directory,
+    bool no_context_files,
+    std::vector<ResourceDiagnostic>& diagnostics) {
+    if (no_context_files) {
+        return {};
+    }
+    // pi `resolvePath` (lexical normalization, no symlink resolution).
+    const auto resolved_cwd =
+        std::filesystem::absolute(cwd).lexically_normal();
+
+    std::vector<prompt::ProjectContextFile> context_files;
+    std::set<std::string> seen_paths;
+
+    if (agent_config_directory && !agent_config_directory->empty()) {
+        const auto resolved_agent_dir =
+            std::filesystem::absolute(*agent_config_directory)
+                .lexically_normal();
+        if (auto global =
+                load_context_file_from_dir(resolved_agent_dir, diagnostics)) {
+            context_files.push_back(std::move(*global));
+            seen_paths.insert(context_files.back().path);
+        }
+    }
+
+    const auto shadowed_context_file =
+        find_shadowed_context_file(resolved_cwd, diagnostics);
+
+    std::vector<prompt::ProjectContextFile> ancestor_context_files;
+    auto current_dir = resolved_cwd;
+    while (true) {
+        auto context_file =
+            load_context_file_from_dir(current_dir, diagnostics);
+        // pi: the shadow check compares canonicalized paths against the
+        // (already canonical) main-repo copy.
+        const bool is_shadowed =
+            shadowed_context_file.has_value() &&
+            canonicalize_path(
+                context_file ? std::filesystem::path{context_file->path}
+                             : std::filesystem::path{})
+                    .string() == shadowed_context_file->string();
+        if (context_file && !is_shadowed &&
+            !seen_paths.contains(context_file->path)) {
+            const auto path = context_file->path;
+            // pi `ancestorContextFiles.unshift(...)`: the walk runs cwd-first,
+            // so the final order is root-most first, cwd last.
+            ancestor_context_files.insert(
+                ancestor_context_files.begin(), std::move(*context_file));
+            seen_paths.insert(path);
+        }
+        const auto parent = current_dir.parent_path();
+        if (parent == current_dir) {
+            break;
+        }
+        current_dir = parent;
+    }
+    context_files.insert(
+        context_files.end(),
+        std::make_move_iterator(ancestor_context_files.begin()),
+        std::make_move_iterator(ancestor_context_files.end()));
+    return context_files;
+}
+
+/// pi `resolvePromptInput` (`resource-loader.ts`): a value naming an
+/// existing file is read as text — a read failure warns (pi
+/// `console.error(chalk.yellow("Warning: ..."))`) and falls back to the raw
+/// value; anything else is the prompt text itself. An absent or empty value
+/// resolves to no prompt.
+[[nodiscard]] std::optional<std::string> resolve_prompt_input(
+    const std::optional<std::string>& input,
+    std::string_view description,
+    std::vector<ResourceDiagnostic>& diagnostics) {
+    if (!input || input->empty()) {
+        return std::nullopt;
+    }
+    std::error_code ec;
+    if (std::filesystem::exists(*input, ec) && !ec) {
+        auto content = read_text_file(*input);
+        if (!content) {
+            diagnostics.push_back(warning_diagnostic(
+                "Could not read " + std::string{description} + " file " +
+                    *input + ": " + content.error().message,
+                *input));
+            return input;
+        }
+        return *content;
+    }
+    return input;
+}
+
+/// pi `discoverSystemPromptFile` (`resource-loader.ts`): the project
+/// `.pi/SYSTEM.md` (Project Trust gated), then the global
+/// `<agent_config_directory>/SYSTEM.md`.
+[[nodiscard]] std::optional<std::filesystem::path> discover_system_prompt_file(
+    const std::filesystem::path& workspace,
+    const std::optional<std::filesystem::path>& agent_config_directory,
+    bool project_trusted) {
+    const auto project_path = workspace / ".pi" / "SYSTEM.md";
+    if (project_trusted && std::filesystem::exists(project_path)) {
+        return project_path;
+    }
+    if (agent_config_directory && !agent_config_directory->empty()) {
+        const auto global_path = *agent_config_directory / "SYSTEM.md";
+        if (std::filesystem::exists(global_path)) {
+            return global_path;
+        }
+    }
+    return std::nullopt;
+}
+
+/// pi `discoverAppendSystemPromptFile` (`resource-loader.ts`): the project
+/// `.pi/APPEND_SYSTEM.md` (Project Trust gated), then the global
+/// `<agent_config_directory>/APPEND_SYSTEM.md`.
+[[nodiscard]] std::optional<std::filesystem::path> discover_append_system_prompt_file(
+    const std::filesystem::path& workspace,
+    const std::optional<std::filesystem::path>& agent_config_directory,
+    bool project_trusted) {
+    const auto project_path = workspace / ".pi" / "APPEND_SYSTEM.md";
+    if (project_trusted && std::filesystem::exists(project_path)) {
+        return project_path;
+    }
+    if (agent_config_directory && !agent_config_directory->empty()) {
+        const auto global_path = *agent_config_directory / "APPEND_SYSTEM.md";
+        if (std::filesystem::exists(global_path)) {
+            return global_path;
+        }
+    }
+    return std::nullopt;
+}
+
+/// pi `systemPromptSourcePath`: the resolved SYSTEM.md source path when the
+/// resolved custom prompt came from a file (the loaded-resources Context
+/// presentation reads it).
+[[nodiscard]] std::optional<std::string> resolved_source_path(
+    const std::optional<std::string>& source) {
+    if (!source) {
+        return std::nullopt;
+    }
+    std::error_code ec;
+    if (!std::filesystem::exists(*source, ec) || ec) {
+        return std::nullopt;
+    }
+    return std::filesystem::absolute(*source).lexically_normal().string();
 }
 
 /// pi `dedupePrompts` collision diagnostic (`resource-loader.ts`):
@@ -691,6 +1064,62 @@ ProjectResourceLoadingResult load_project_resources(
         load_user_themes_adapter(*request.agent_config_directory, result, diagnostics);
     }
     load_explicit_theme_paths(fs, request.theme_paths, result, diagnostics);
+
+    // 5. Project Context Files (pi `loadProjectContextFiles`): the global
+    // context file from the Agent Config Directory plus the cwd ancestor
+    // chain with linked-worktree shadowing. NOT gated by Project Trust
+    // (pinned fact); `--no-context-files` disables discovery. The files
+    // render into the System Prompt as `<project_context>`/
+    // `<project_instructions path="...">`.
+    result.resources.agents_files = load_project_context_files(
+        workspace,
+        request.agent_config_directory,
+        request.no_context_files,
+        diagnostics);
+
+    // 6. SYSTEM.md / APPEND_SYSTEM.md (pi `discoverSystemPromptFile` /
+    // `discoverAppendSystemPromptFile`): the project `.pi/` files are
+    // Project Trust gated (their mere presence already triggers the trust
+    // decision through the markers above), then the global Agent Config
+    // Directory. The CLI `--system-prompt`/`--append-system-prompt` values
+    // win over discovery (pi `systemPromptSource ?? discovery`); each source
+    // resolves through pi's `resolvePromptInput` text-or-file semantics.
+    std::optional<std::string> system_prompt_source = request.system_prompt;
+    if (!system_prompt_source) {
+        if (auto discovered = discover_system_prompt_file(
+                workspace,
+                request.agent_config_directory,
+                project_trusted)) {
+            system_prompt_source = discovered->string();
+        }
+    }
+    result.resources.system_prompt =
+        resolve_prompt_input(system_prompt_source, "system prompt", diagnostics);
+    result.resources.system_prompt_source =
+        resolved_source_path(system_prompt_source);
+
+    std::vector<std::string> append_sources;
+    if (!request.append_system_prompt.empty()) {
+        append_sources = request.append_system_prompt;
+    } else if (auto discovered = discover_append_system_prompt_file(
+                   workspace,
+                   request.agent_config_directory,
+                   project_trusted)) {
+        append_sources.push_back(discovered->string());
+    }
+    for (const auto& source : append_sources) {
+        if (auto resolved = resolve_prompt_input(
+                std::optional<std::string>{source},
+                "append system prompt",
+                diagnostics)) {
+            result.resources.append_system_prompt.push_back(std::move(*resolved));
+        }
+        if (auto source_path = resolved_source_path(
+                std::optional<std::string>{source})) {
+            result.resources.append_system_prompt_sources.push_back(
+                std::move(*source_path));
+        }
+    }
 
     result.diagnostics = std::move(diagnostics);
     bound_diagnostics(result);

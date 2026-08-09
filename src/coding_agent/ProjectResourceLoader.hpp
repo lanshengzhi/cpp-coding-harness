@@ -4,6 +4,7 @@
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
 #include <cch/coding_agent/Skill.hpp>
+#include "coding_agent/prompt/SystemPromptBuilder.hpp"
 
 #include <filesystem>
 #include <optional>
@@ -30,6 +31,29 @@ struct LoadedProjectResources {
     /// contract lives in the public `ProjectResources.hpp` header so the
     /// coding-agent TUI package can consume it without a runtime dependency.
     std::vector<LoadedThemeResource> themes;
+    /// pi `getAgentsFiles()`: Project Context Files in pi's load order — the
+    /// global context file from the Agent Config Directory, then the cwd
+    /// ancestor chain root-most first (linked-worktree shadowing applied).
+    /// Not Project Trust gated (pinned fact) and disabled by
+    /// `--no-context-files`.
+    std::vector<prompt::ProjectContextFile> agents_files;
+    /// pi `getSystemPrompt()`: the resolved custom system prompt text — the
+    /// CLI `--system-prompt` value (text-or-file per `resolvePromptInput`),
+    /// else the discovered SYSTEM.md content (project `.pi/` trust-gated,
+    /// then the global Agent Config Directory).
+    std::optional<std::string> system_prompt;
+    /// pi `getAppendSystemPrompt()`: the resolved append strings in source
+    /// order (CLI `--append-system-prompt` values, else the discovered
+    /// APPEND_SYSTEM.md content). The System Prompt joins them with
+    /// `"\n\n"`.
+    std::vector<std::string> append_system_prompt;
+    /// pi `getSystemPromptSource()`: the SYSTEM.md source path when the
+    /// resolved custom prompt came from a file (loaded-resources Context
+    /// presentation).
+    std::optional<std::string> system_prompt_source;
+    /// pi `getAppendSystemPromptSources()`: the APPEND_SYSTEM.md source
+    /// paths when the resolved append strings came from files.
+    std::vector<std::string> append_system_prompt_sources;
 };
 
 /// Project resource loading request — the pi `DefaultResourceLoader` subset
@@ -59,6 +83,19 @@ struct ProjectResourceLoadingRequest {
     /// trust-gated project `.pi/themes` discovery (explicit `--theme`
     /// paths still load).
     bool no_themes{false};
+    /// pi `--no-context-files`: disables Project Context File discovery
+    /// (global AGENTS.md/CLAUDE.md + the cwd ancestor chain). Context files
+    /// are never Project Trust gated (pinned fact).
+    bool no_context_files{false};
+    /// pi `--system-prompt`: the raw text-or-file value. Wins over SYSTEM.md
+    /// discovery even when empty (pi `systemPromptSource ?? discovery`); an
+    /// empty value resolves to no custom prompt.
+    std::optional<std::string> system_prompt;
+    /// pi `--append-system-prompt` (repeatable): raw text-or-file values.
+    /// Win over APPEND_SYSTEM.md discovery when non-empty (pi
+    /// `appendSystemPromptSource ?? discovery`); each entry resolves through
+    /// pi's `resolvePromptInput`.
+    std::vector<std::string> append_system_prompt;
     /// Repeatable pi `--theme` paths (files or directories): explicit theme
     /// inputs load after every discovered source (discovered themes win
     /// name collisions, pi's merge order) and stay effective under
