@@ -1,0 +1,162 @@
+{
+  "meta": {
+    "baseline": "83114817c68f5413e4d7ba6d7003ddc511cd31d2",
+    "artifact": "@earendil-works/pi-coding-agent@0.83.0",
+    "family": "session-compaction"
+  },
+  "messages": [
+    {
+      "role": "compactionSummary",
+      "summary": "summary of the work so far.\n\n---\n\n**Turn Context (split turn):**\n\nturn context summary."
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "third reply."
+        }
+      ],
+      "api": "fake",
+      "provider": "fake",
+      "model": "faux-1",
+      "stopReason": "stop"
+    }
+  ],
+  "context": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "The conversation history before this point was compacted into the following summary:\n\n<summary>\nsummary of the work so far.\n\n---\n\n**Turn Context (split turn):**\n\nturn context summary.\n</summary>"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "third reply."
+        }
+      ],
+      "api": "fake",
+      "provider": "fake",
+      "model": "faux-1",
+      "stopReason": "stop"
+    }
+  ],
+  "entries": [
+    {
+      "type": "model_change",
+      "id": "entry-0",
+      "provider": "fake",
+      "modelId": "faux-1"
+    },
+    {
+      "type": "thinking_level_change",
+      "id": "entry-1",
+      "thinkingLevel": "off"
+    },
+    {
+      "type": "message",
+      "id": "entry-2",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "first"
+          }
+        ]
+      }
+    },
+    {
+      "type": "message",
+      "id": "entry-3",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "first reply."
+          }
+        ],
+        "api": "fake",
+        "provider": "fake",
+        "model": "faux-1",
+        "stopReason": "stop"
+      }
+    },
+    {
+      "type": "message",
+      "id": "entry-4",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "second"
+          }
+        ]
+      }
+    },
+    {
+      "type": "message",
+      "id": "entry-5",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "second reply."
+          }
+        ],
+        "api": "fake",
+        "provider": "fake",
+        "model": "faux-1",
+        "stopReason": "stop"
+      }
+    },
+    {
+      "type": "message",
+      "id": "entry-6",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "third"
+          }
+        ]
+      }
+    },
+    {
+      "type": "message",
+      "id": "entry-7",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "third reply."
+          }
+        ],
+        "api": "fake",
+        "provider": "fake",
+        "model": "faux-1",
+        "stopReason": "stop"
+      }
+    },
+    {
+      "type": "compaction",
+      "id": "entry-8",
+      "summary": "summary of the work so far.\n\n---\n\n**Turn Context (split turn):**\n\nturn context summary.",
+      "firstKeptEntryId": "entry-7"
+    }
+  ],
+  "values": {
+    "summary": "summary of the work so far.\n\n---\n\n**Turn Context (split turn):**\n\nturn context summary."
+  }
+}

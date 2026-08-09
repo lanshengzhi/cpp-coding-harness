@@ -1,0 +1,188 @@
+{
+  "meta": {
+    "baseline": "83114817c68f5413e4d7ba6d7003ddc511cd31d2",
+    "artifact": "@earendil-works/pi-coding-agent@0.83.0",
+    "family": "session-model-switch"
+  },
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "hi"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello there!"
+        }
+      ],
+      "api": "fake",
+      "provider": "fake",
+      "model": "faux-1",
+      "stopReason": "stop"
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "after switch"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "After the switch."
+        }
+      ],
+      "api": "fake",
+      "provider": "fake",
+      "model": "faux-2",
+      "stopReason": "stop"
+    }
+  ],
+  "context": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "hi"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello there!"
+        }
+      ],
+      "api": "fake",
+      "provider": "fake",
+      "model": "faux-1",
+      "stopReason": "stop"
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "after switch"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "After the switch."
+        }
+      ],
+      "api": "fake",
+      "provider": "fake",
+      "model": "faux-2",
+      "stopReason": "stop"
+    }
+  ],
+  "entries": [
+    {
+      "type": "model_change",
+      "id": "entry-0",
+      "provider": "fake",
+      "modelId": "faux-1"
+    },
+    {
+      "type": "thinking_level_change",
+      "id": "entry-1",
+      "thinkingLevel": "off"
+    },
+    {
+      "type": "message",
+      "id": "entry-2",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "hi"
+          }
+        ]
+      }
+    },
+    {
+      "type": "message",
+      "id": "entry-3",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "Hello there!"
+          }
+        ],
+        "api": "fake",
+        "provider": "fake",
+        "model": "faux-1",
+        "stopReason": "stop"
+      }
+    },
+    {
+      "type": "model_change",
+      "id": "entry-4",
+      "provider": "fake",
+      "modelId": "faux-2"
+    },
+    {
+      "type": "thinking_level_change",
+      "id": "entry-5",
+      "thinkingLevel": "medium"
+    },
+    {
+      "type": "message",
+      "id": "entry-6",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "after switch"
+          }
+        ]
+      }
+    },
+    {
+      "type": "message",
+      "id": "entry-7",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "After the switch."
+          }
+        ],
+        "api": "fake",
+        "provider": "fake",
+        "model": "faux-2",
+        "stopReason": "stop"
+      }
+    }
+  ],
+  "values": {
+    "model": "faux-2",
+    "provider": "fake",
+    "thinkingLevel": "medium"
+  }
+}

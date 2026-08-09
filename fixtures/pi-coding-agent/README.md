@@ -69,13 +69,43 @@ zones are asserted on the recorded output stream in the test, not in these files
 deterministically with the capture sidecar below, or directly with
 `CCH_CAPTURE_GOLDENS=1 ./build/cpp_harness_tests "[issue399]"`.
 
+### Session and value suites (`sessions/`)
+
+Committed differential goldens of the session surfaces ([#421]), driven by the capture sidecar
+against the **frozen** pi `packages/coding-agent` sources (sdk `createAgentSession` + the suite
+harness seams: `registerFauxProvider`, in-memory `SessionManager`/`SettingsManager`/`AuthStorage`,
+offline model registry) through the five scripted scenarios, and byte-compared by
+`tests/coding_agent/runtime/SessionSuiteGoldenTest.cpp` through the same canonical projection
+(message/content-block level). Each snapshot carries the pinned baseline citation in `meta`
+(`baseline`/`artifact`/`family`); every value is fixture-authored dummy content (`faux-1`,
+`Hello there!`, `/workspace`), never copied from a live session. Per R2 §6 the captureable
+surface is message/content-block level, not raw delta level (the legacy harness chunks text
+randomly): the projection keeps role/content blocks + assistant identity (api/provider/model/
+stopReason), drops wall-clock timestamps, usage, diagnostics, entry ids, parentId chains, and
+machine paths, and maps `firstKeptEntryId`/most-recent selection to ordinals/ids. `tokensBefore`
+and usage are engine-specific estimates and are projected out.
+
+- `session-lifecycle.json` — a new persisted session through two scripted turns: the session
+  messages, the LLM context projection, and the persisted entries (initial `model_change` +
+  `thinking_level_change` per pi sdk `createAgentSession`, then user/assistant messages).
+- `session-resume.json` — the same session reopened: the restored message-level history, the
+  context, and the restored model/thinking chain (no new entries until a turn).
+- `session-compaction.json` — three turns then a manual compact (scripted split-turn summary):
+  the post-compaction messages (`compactionSummary` + retained tail), the rebuilt context, the
+  `compaction` entry, and the merged summary value.
+- `session-model-switch.json` — `setModel` to a second reasoning faux model: the `model_change`
+  entries, the thinking re-clamp (`off` → `medium`), the post-switch message identity, and the
+  live model/thinking values.
+- `session-family.json` — the session-manager value outputs: `findMostRecentSession` selection
+  over a deterministic session directory (the `--continue` flow) plus the selected session's
+  JSONL entries.
+
+Regenerate deterministically with the capture sidecar below (capture + byte-verify pass).
+
 ### Golden families landing with the differential-golden tickets
 
-The remaining committed families extend this bundle via the capture sidecar:
+The remaining committed family extends this bundle via the capture sidecar:
 
-- **Session and value suites** — harness-driven session suites and value suites with the TS side
-  pinned as committed snapshots at message/content-block level (session lifecycle, resume,
-  compaction, model switching, the session-family flows) per R2 §6 ([#421]).
 - **System Prompt and interactive rendering goldens** — the System Prompt golden pins the cch
   identity delta at message level; the interactive/rendering goldens pin boot, the message
   pipeline, and key flows through the VirtualTerminal seam ([#422]).
@@ -96,14 +126,27 @@ mode, so a nondeterministic capture fails loudly. The E2E screens are C++-genera
 guard, the artifact-pin assertion, the deterministic environment, and the canonical projection
 helpers (zeroed timestamps, dropped machine-specific fields, sorted-key signature serialization)
 that the [#421]/[#422] golden families extend — their TS-side captures import the frozen pi
-sources under these same pins. Regenerate with:
+sources under these same pins.
+
+`capture/session-snapshots.mts` (spawned by the main sidecar; runnable standalone) regenerates
+the session- and value-suite goldens ([#421]): it re-asserts the frozen-checkout guard, provisions
+the frozen checkout's dev prerequisites (a `node_modules` symlink to the sibling checkout when
+absent, and the gitignored `packages/ai/src/providers/data/` generated model data — the faux
+scenarios never read it), writes a capture `tsconfig.capture.json` into the frozen checkout that
+maps the `@earendil-works/*` workspace packages to the frozen `packages/` sources, drives the
+five scripted scenarios through `session-scenarios.mts`, and byte-verifies determinism with a
+second capture pass. Regenerate with:
 
 ```bash
 ../pi/node_modules/.bin/tsx fixtures/pi-coding-agent/capture/capture-gate-snapshots.mts
 ```
 
 `PI_CHECKOUT` overrides the default sibling `../pi`; `CCH_TEST_BINARY` overrides the default
-`./build/cpp_harness_tests`. The pi checkout MUST sit at the frozen baseline commit.
+`./build/cpp_harness_tests`. The pi checkout MUST sit at the frozen baseline commit (a frozen
+worktree is typical; the session capture also needs `node_modules` — the sidecar symlinks the
+sibling checkout's when absent — and the generated `packages/ai/src/providers/data/` model data,
+which it provisions from the sibling checkout or a minimal stub, since the faux scenarios never
+read it).
 
 ## Capability-to-source checklist
 
@@ -144,10 +187,10 @@ classification claims are accurate.
 | # | Capability | Frozen pi source | C++ surface | Evidence (tests → fixtures) |
 | --- | --- | --- | --- | --- |
 | 17 | Startup-TUI host: the `--resume` picker and the boot missing-cwd prompt as a minimal pi-shaped startup TUI | `pi:packages/coding-agent/src/cli/{session-picker,startup-ui}.ts` | `src/cli/StartupTui.*` | `StartupTuiTest`: resume picker lists/selects, Escape cancel + scope toggle, missing-cwd Continue/Cancel |
-| 18 | Session-family CLI semantics: `--session` open-or-create-at-path with ID exact→prefix local→global resolution + cross-project fork prompt, `--resume`, `--continue`, `--fork` conflicts + local-only target check, `--session-id` validation, `--no-session` silent short-circuit, `--name` guard, custom `--session-dir` cwd-filter | `pi:packages/coding-agent/src/cli.ts`, `core/session-manager.ts`, `core/session-cwd.ts` | `src/cli/SessionFamily.*`, `src/coding_agent/{SessionDiscovery,SessionPathPolicy,SessionTarget,SessionCwd}.*` | `SessionFamilyCliTest` (`[cli][session-family]`), `SessionDiscoveryTest`, `SessionPathPolicyTest` |
-| 19 | In-session switching: `switchSession`/`newSession`/`fork` (+ `createBranchedSession`, `getUserMessagesForForking`) with pi's verbatim flows and the user-message selector | `pi:packages/coding-agent/src/core/session-manager.ts` | `src/coding_agent/runtime/{SessionLifecycle,SessionFork}.*`, `UserMessageSelector.*` | `SessionLifecycleTest`, `SessionForkTest`, `SessionSelectorInteractiveTest`, `UserBashInteractiveModeTest` (unsaved-session error rows) |
-| 20 | Model switching: runtime `setModel` (auth guard `No API key for <provider>/<model>`, `model_change` entry, settings-default update, thinking re-clamp) and `cycleModel` (scoped auth-filtered / available not auth-filtered) | `pi:packages/coding-agent/src/core/{model-resolver,model-runtime,model-registry,models-store,model-config,settings-manager}.ts` | `src/coding_agent/{ModelResolver,ModelRuntime,ModelConfig,SettingsManager}.*`, `SetModel`/`ModelCycle` runtime | `SetModelTest`, `ModelCycleTest`, `ModelResolutionTest`, `ModelRuntimeTest`, `SettingsManagerTest` |
-| 21 | Persisted-session resume chain (CLI model → leaf-path model + auth → settings default → provider default → first available) with the `Could not restore model <p>/<m>` boot warning and no "Restored model:" print | `pi:packages/coding-agent/src/core/agent-session.ts`, `core/model-resolver.ts` | `src/coding_agent/runtime/SessionFactory.*`, `ModelResolver.*` | `SessionLifecycleTest`, `ModelResolutionTest`, `InteractiveBootE2ETest` `"the model fallback message renders as a boot warning line"` (`[issue404]`) |
+| 18 | Session-family CLI semantics: `--session` open-or-create-at-path with ID exact→prefix local→global resolution + cross-project fork prompt, `--resume`, `--continue`, `--fork` conflicts + local-only target check, `--session-id` validation, `--no-session` silent short-circuit, `--name` guard, custom `--session-dir` cwd-filter | `pi:packages/coding-agent/src/cli.ts`, `core/session-manager.ts`, `core/session-cwd.ts` | `src/cli/SessionFamily.*`, `src/coding_agent/{SessionDiscovery,SessionPathPolicy,SessionTarget,SessionCwd}.*` | `SessionFamilyCliTest` (`[cli][session-family]`), `SessionDiscoveryTest`, `SessionPathPolicyTest`; `sessions/session-family.json` (most-recent selection + JSONL values, [#421]) |
+| 19 | In-session switching: `switchSession`/`newSession`/`fork` (+ `createBranchedSession`, `getUserMessagesForForking`) with pi's verbatim flows and the user-message selector | `pi:packages/coding-agent/src/core/session-manager.ts` | `src/coding_agent/runtime/{SessionLifecycle,SessionFork}.*`, `UserMessageSelector.*` | `SessionLifecycleTest`, `SessionForkTest`, `SessionSelectorInteractiveTest`, `UserBashInteractiveModeTest` (unsaved-session error rows); `sessions/session-lifecycle.json` + `sessions/session-resume.json` (message-level goldens, [#421]) |
+| 20 | Model switching: runtime `setModel` (auth guard `No API key for <provider>/<model>`, `model_change` entry, settings-default update, thinking re-clamp) and `cycleModel` (scoped auth-filtered / available not auth-filtered) | `pi:packages/coding-agent/src/core/{model-resolver,model-runtime,model-registry,models-store,model-config,settings-manager}.ts` | `src/coding_agent/{ModelResolver,ModelRuntime,ModelConfig,SettingsManager}.*`, `SetModel`/`ModelCycle` runtime | `SetModelTest`, `ModelCycleTest`, `ModelResolutionTest`, `ModelRuntimeTest`, `SettingsManagerTest`; `sessions/session-model-switch.json` (entries + re-clamp golden, [#421]) |
+| 21 | Persisted-session resume chain (CLI model → leaf-path model + auth → settings default → provider default → first available) with the `Could not restore model <p>/<m>` boot warning and no "Restored model:" print | `pi:packages/coding-agent/src/core/agent-session.ts`, `core/model-resolver.ts` | `src/coding_agent/runtime/SessionFactory.*`, `ModelResolver.*` | `SessionLifecycleTest`, `ModelResolutionTest`, `InteractiveBootE2ETest` `"the model fallback message renders as a boot warning line"` (`[issue404]`); `sessions/session-resume.json` (restored model/thinking + history, [#421]) |
 
 ### Supported Capabilities — G4, system prompt / slash / skills / templates ([#392])
 
@@ -263,8 +306,9 @@ shims, and — per the charted strict-subset ruling — no Intentional Divergenc
 in the phase (the boot trust prompt's main-TUI-overlay presentation is the sole recorded
 presentation difference, decided by G2).
 
-Full test suite: **1843 test(s), 0 failure(s)** at the [#420] bundle (see the gate report below; the
-gate pass [#424] re-runs the suite and closes the series).
+Full test suite: **1848 test(s), 0 failure(s)** at the [#421] bundle — the five
+`SessionSuiteGoldenTest` differential-golden cases were added to the [#420] baseline's 1843 (see
+the gate report below; the gate pass [#424] re-runs the suite and closes the series).
 
 ## Gate report
 
@@ -279,8 +323,10 @@ gate pass [#424] re-runs the suite and closes the series).
 - **Sessions (G3)** — `SessionFamilyCliTest`, `StartupTuiTest`, `SessionLifecycleTest`,
   `SessionForkTest`, `SetModelTest`, `ModelCycleTest`, `ModelResolutionTest`,
   `SessionEventCommitmentTest`, `AgentSessionSnapshotTest`, `AgentSessionCompactionTest`,
-  `SessionDiscoveryTest`, `SessionPathPolicyTest`; the session/value-suite goldens land with
-  [#421].
+  `SessionDiscoveryTest`, `SessionPathPolicyTest`; the session/value-suite differential goldens
+  (`sessions/session-*.json`, [#421]) are byte-compared by
+  `SessionSuiteGoldenTest` (`[coding-agent][runtime][golden][issue421]`) and cover lifecycle,
+  resume, compaction, model switching, and the session-family flows.
 - **Prompts/slash/skills/templates (G4)** — `SystemPromptBuilderTest` + `tests/fixtures/prompts/goldens/`,
   `BuiltinSlashCommandsTest`, `PromptExpansionTest`, `Skill*Test`, `PromptTemplate*Test`,
   `ProjectResourceLoaderTest`, `ResourceReloadTest`, `LoadedResourcesTest`.
@@ -306,10 +352,9 @@ gate pass [#424] re-runs the suite and closes the series).
 4. **The capture sidecar requires the frozen checkout at `83114817`** and refuses otherwise; the
    local `../pi` checkout often sits at a later commit, so regenerate against a frozen worktree
    (or `PI_CHECKOUT=...` pointing at one).
-5. **Golden families landing with [#421]/[#422] plug into this bundle** (the session/value suites,
-   the System Prompt message-level golden, and the interactive/rendering goldens); the checklist
-   rows above cite their deterministic test evidence today and mark the golden evidence columns
-   they add.
+5. **The session/value-suite differential goldens landed with [#421]** and plug into this
+   bundle (`sessions/session-*.json`, byte-compared by `SessionSuiteGoldenTest`); the System
+   Prompt message-level golden and the interactive/rendering goldens still land with [#422].
 
 ### Handoff surface (confirmed)
 

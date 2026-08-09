@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "baseline": "83114817c68f5413e4d7ba6d7003ddc511cd31d2",
+    "artifact": "@earendil-works/pi-coding-agent@0.83.0",
+    "family": "session-family"
+  },
+  "mostRecent": "newer",
+  "entries": [
+    {
+      "type": "message",
+      "id": "entry-0",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "hello"
+          }
+        ]
+      }
+    },
+    {
+      "type": "message",
+      "id": "entry-1",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "hi there"
+          }
+        ],
+        "api": "fake",
+        "provider": "fake",
+        "model": "faux-1",
+        "stopReason": "stop"
+      }
+    }
+  ]
+}
