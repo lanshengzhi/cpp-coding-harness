@@ -1,7 +1,7 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
 #include "coding_agent/SkillFormatting.hpp"
-#include "coding_agent/prompt/PromptProcessor.hpp"
+#include "coding_agent/prompt/PromptExpansion.hpp"
 #include "../support/TempWorkspace.hpp"
 
 #include <filesystem>
@@ -41,12 +41,14 @@ namespace {
     };
 }
 
-[[nodiscard]] std::string process_with_skills(
+[[nodiscard]] std::string expand_with_skills(
     std::string input,
     std::vector<coding_agent::Skill> skills) {
-    coding_agent::prompt::PromptProcessor processor{
-        std::move(skills), std::vector<coding_agent::PromptTemplate>{}};
-    return processor.process(std::move(input), true).text;
+    return coding_agent::prompt::expand_prompt_input(
+        std::move(input),
+        std::move(skills),
+        std::vector<coding_agent::PromptTemplate>{},
+        true);
 }
 
 } // namespace
@@ -61,9 +63,9 @@ TEST_CASE("formatSkillsForPrompt integration with steering", "[coding_agent][ski
     CHECK(block.find("int-skill") != std::string::npos);
 }
 
-TEST_CASE("prompt processor expands a skill by reading its file at invocation", "[coding_agent][skill-integration][u5]") {
+TEST_CASE("prompt expansion expands a skill by reading its file at invocation", "[coding_agent][skill-integration][u5]") {
     tests::TempWorkspace workspace;
-    const auto expanded = process_with_skills(
+    const auto expanded = expand_with_skills(
         "/skill:int-skill",
         {test_skill_on_disk(workspace, "int-skill", "# Integration Skill\n\nDo the thing.\n")});
 
@@ -72,19 +74,19 @@ TEST_CASE("prompt processor expands a skill by reading its file at invocation", 
     CHECK(expanded.find("</skill>") != std::string::npos);
 }
 
-TEST_CASE("prompt processor appends skill invocation arguments", "[coding_agent][skill-integration][u5]") {
+TEST_CASE("prompt expansion appends skill invocation arguments", "[coding_agent][skill-integration][u5]") {
     tests::TempWorkspace workspace;
-    const auto expanded = process_with_skills(
+    const auto expanded = expand_with_skills(
         "/skill:arg-skill extra args here",
         {test_skill_on_disk(workspace, "arg-skill", "Process input.\n")});
 
     CHECK(expanded.find("</skill>\n\nextra args here") != std::string::npos);
 }
 
-TEST_CASE("prompt processor trims skill invocation arguments like pi", "[coding_agent][skill-integration][u5][issue412]") {
+TEST_CASE("prompt expansion trims skill invocation arguments like pi", "[coding_agent][skill-integration][u5][issue412]") {
     tests::TempWorkspace workspace;
     // pi `_expandSkillCommand`: `args = text.slice(spaceIndex + 1).trim()`.
-    const auto expanded = process_with_skills(
+    const auto expanded = expand_with_skills(
         "/skill:trim-skill   padded args here  \t \n",
         {test_skill_on_disk(workspace, "trim-skill", "Trim.\n")});
 
@@ -92,18 +94,18 @@ TEST_CASE("prompt processor trims skill invocation arguments like pi", "[coding_
     CHECK(expanded.find("padded args here \t") == std::string::npos);
 }
 
-TEST_CASE("prompt processor passes through unknown skill input without printing", "[coding_agent][skill-integration][u5]") {
+TEST_CASE("prompt expansion passes through unknown skill input without printing", "[coding_agent][skill-integration][u5]") {
     std::stringstream stderr_capture;
     auto* old_stderr = std::cerr.rdbuf(stderr_capture.rdbuf());
-    const auto result = process_with_skills("/skill:unknown-skill", {});
+    const auto result = expand_with_skills("/skill:unknown-skill", {});
     std::cerr.rdbuf(old_stderr);
 
     CHECK(result == "/skill:unknown-skill");
     CHECK(stderr_capture.str().empty());
 }
 
-TEST_CASE("prompt processor passes through malformed and non-skill input", "[coding_agent][skill-integration][u5]") {
-    CHECK(process_with_skills("/skill:", {}) == "/skill:");
-    CHECK(process_with_skills("regular text", {}) == "regular text");
-    CHECK(process_with_skills("/skills", {}) == "/skills");
+TEST_CASE("prompt expansion passes through malformed and non-skill input", "[coding_agent][skill-integration][u5]") {
+    CHECK(expand_with_skills("/skill:", {}) == "/skill:");
+    CHECK(expand_with_skills("regular text", {}) == "regular text");
+    CHECK(expand_with_skills("/skills", {}) == "/skills");
 }

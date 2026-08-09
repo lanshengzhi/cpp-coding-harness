@@ -241,6 +241,49 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "the model bash tool's live PI_* facts follow the session model and thinking level",
+    "[coding_agent][set-model][issue414]") {
+    Fixture fixture;
+    fixture.write_models(kReasoningAndPlainProviders);
+
+    auto request = cli_request(fixture);
+    auto bash_environment =
+        std::make_shared<tools::BashSessionEnvironment>();
+    request.bash_session_environment = bash_environment;
+    auto result = coding_agent::create_agent_session(std::move(request));
+    REQUIRE(result.has_value());
+    REQUIRE(result->model == "alpha-1");
+
+    // At session construction the holder carries the live session facts (pi
+    // `resolveSpawnContext`: session id always, session file for persisted
+    // sessions, model and clamped thinking level).
+    CHECK(bash_environment->session_id == result->session_id);
+    REQUIRE(bash_environment->session_file.has_value());
+    CHECK(*bash_environment->session_file == fixture.session_file.string());
+    CHECK(bash_environment->provider == "alpha");
+    CHECK(bash_environment->model == "alpha-1");
+    CHECK(bash_environment->reasoning_level == "medium");
+
+    // A direct thinking change refreshes the holder's reasoning level.
+    auto raised = result->session->set_thinking_level("high");
+    REQUIRE(raised.has_value());
+    CHECK(*raised == "high");
+    CHECK(bash_environment->reasoning_level == "high");
+
+    // set_model refreshes the holder from the new live Agent state, and the
+    // thinking re-clamp follows.
+    const auto target = result->session->model_runtime()->model("beta", "beta-1");
+    REQUIRE(target.has_value());
+    auto switched = result->session->set_model_blocking(*target);
+    REQUIRE(switched.has_value());
+    CHECK(bash_environment->provider == "beta");
+    CHECK(bash_environment->model == "beta-1");
+    // beta-1 has no reasoning support: the level re-clamps to off.
+    CHECK(bash_environment->reasoning_level == "off");
+    result->session->close();
+}
+
+TEST_CASE(
     "set_model to a non-thinking model re-clamps the level and persists the thinking_level_change entry",
     "[coding_agent][set-model][issue406]") {
     Fixture fixture;

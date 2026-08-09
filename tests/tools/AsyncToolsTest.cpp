@@ -14,6 +14,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -124,6 +125,7 @@ public:
         last_command = std::move(command);
         last_timeout = options.timeout.value_or(std::chrono::milliseconds{0});
         last_stop_token = options.stop_token;
+        last_env = options.env;
         if (options.onStdout && !streamed_stdout.empty()) {
             (*options.onStdout)(streamed_stdout);
         }
@@ -136,6 +138,7 @@ public:
     std::string last_command;
     std::chrono::milliseconds last_timeout{0};
     std::stop_token last_stop_token;
+    std::optional<std::map<std::string, std::string>> last_env;
     std::string streamed_stdout;
     std::string streamed_stderr;
     harness::ShellExecResult next_shell_result{
@@ -468,6 +471,72 @@ TEST_CASE(
     CHECK(env->last_command == "echo hi");
     CHECK(env->last_timeout == std::chrono::milliseconds(5000));
     CHECK(env->last_stop_token == stop_source.get_token());
+}
+
+TEST_CASE(
+    "async bash tool exposes live PI_* session facts when a session environment is provided",
+    "[tools][async][issue414]") {
+    tests::TempWorkspace workspace;
+    auto env = std::make_shared<CapturingEnv>(workspace.path());
+    auto session_environment =
+        std::make_shared<tools::BashSessionEnvironment>();
+    session_environment->session_id = "session-42";
+    session_environment->session_file = "/tmp/session-42.jsonl";
+    session_environment->provider = "openai-codex";
+    session_environment->model = "gpt-5.2-codex";
+    session_environment->reasoning_level = "high";
+    auto tool = tools::make_async_bash_tool(env, session_environment);
+
+    auto result = run_tool([&]() {
+        return tool->execute(
+            invocation("bash", R"({"command":"env | grep PI_"})"),
+            std::stop_token{});
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    REQUIRE(env->last_env.has_value());
+    CHECK(env->last_env->at("PI_SESSION_ID") == "session-42");
+    CHECK(env->last_env->at("PI_SESSION_FILE") == "/tmp/session-42.jsonl");
+    CHECK(env->last_env->at("PI_PROVIDER") == "openai-codex");
+    CHECK(env->last_env->at("PI_MODEL") == "gpt-5.2-codex");
+    CHECK(env->last_env->at("PI_REASONING_LEVEL") == "high");
+}
+
+TEST_CASE(
+    "async bash tool shadows absent PI_* facts with empty values and injects nothing without a holder",
+    "[tools][async][issue414]") {
+    tests::TempWorkspace workspace;
+    auto env = std::make_shared<CapturingEnv>(workspace.path());
+    auto session_environment =
+        std::make_shared<tools::BashSessionEnvironment>();
+    session_environment->session_id = "session-7";
+    auto tool = tools::make_async_bash_tool(env, session_environment);
+
+    auto result = run_tool([&]() {
+        return tool->execute(
+            invocation("bash", R"({"command":"echo hi"})"),
+            std::stop_token{});
+    });
+
+    REQUIRE(result);
+    REQUIRE(env->last_env.has_value());
+    CHECK(env->last_env->at("PI_SESSION_ID") == "session-7");
+    CHECK(env->last_env->at("PI_SESSION_FILE") == "");
+    CHECK(env->last_env->at("PI_PROVIDER") == "");
+    CHECK(env->last_env->at("PI_MODEL") == "");
+    CHECK(env->last_env->at("PI_REASONING_LEVEL") == "");
+
+    // Without a session environment the tool injects no environment at all
+    // (pi `exposeSessionEnvironment: false`).
+    auto plain_tool = tools::make_async_bash_tool(env);
+    auto plain_result = run_tool([&]() {
+        return plain_tool->execute(
+            invocation("bash", R"({"command":"echo hi"})"),
+            std::stop_token{});
+    });
+    REQUIRE(plain_result);
+    CHECK_FALSE(env->last_env.has_value());
 }
 
 TEST_CASE("async bash tool spill file contains complete output beyond the visible limit", "[tools][async][issue73]") {

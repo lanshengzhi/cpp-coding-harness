@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstddef>
 #include <exception>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <utility>
@@ -129,6 +130,14 @@ class AsyncReadFileTool final : public AsyncToolBase {
 public:
     using AsyncToolBase::AsyncToolBase;
 
+    // pi `core/tools/read.ts` promptSnippet/promptGuidelines (verbatim).
+    [[nodiscard]] std::optional<std::string> prompt_snippet() const override {
+        return "Read file contents";
+    }
+    [[nodiscard]] std::vector<std::string> prompt_guidelines() const override {
+        return {"Use read to examine files instead of cat or sed."};
+    }
+
     const ai::Tool& definition() const override {
         static const ai::Tool tool{
             "read",
@@ -203,6 +212,14 @@ class AsyncWriteFileTool final : public AsyncToolBase {
 public:
     using AsyncToolBase::AsyncToolBase;
 
+    // pi `core/tools/write.ts` promptSnippet/promptGuidelines (verbatim).
+    [[nodiscard]] std::optional<std::string> prompt_snippet() const override {
+        return "Create or overwrite files";
+    }
+    [[nodiscard]] std::vector<std::string> prompt_guidelines() const override {
+        return {"Use write only for new files or complete rewrites."};
+    }
+
     const ai::Tool& definition() const override {
         static const ai::Tool tool{
             "write",
@@ -242,6 +259,26 @@ public:
 class AsyncEditTool final : public AsyncToolBase {
 public:
     using AsyncToolBase::AsyncToolBase;
+
+    // pi `core/tools/edit.ts` promptSnippet/promptGuidelines (verbatim): the
+    // snippet plus the four edit guidelines.
+    [[nodiscard]] std::optional<std::string> prompt_snippet() const override {
+        return "Make precise file edits with exact text replacement, including "
+               "multiple disjoint edits in one call";
+    }
+    [[nodiscard]] std::vector<std::string> prompt_guidelines() const override {
+        return {
+            "Use edit for precise changes (edits[].oldText must match exactly)",
+            "When changing multiple separate locations in one file, use one "
+            "edit call with multiple entries in edits[] instead of multiple "
+            "edit calls",
+            "Each edits[].oldText is matched against the original file, not "
+            "after earlier edits are applied. Do not emit overlapping or "
+            "nested edits. Merge nearby changes into one edit.",
+            "Keep edits[].oldText as small as possible while still being "
+            "unique in the file. Do not pad with large unchanged regions.",
+        };
+    }
 
     const ai::Tool& definition() const override {
         static const auto edit_entry_schema = object_schema(
@@ -347,7 +384,28 @@ public:
 
 class AsyncBashTool final : public AsyncToolBase {
 public:
-    using AsyncToolBase::AsyncToolBase;
+    AsyncBashTool(
+        std::shared_ptr<harness::AsyncExecutionEnv> env,
+        std::shared_ptr<BashSessionEnvironment> session_environment = {})
+        : AsyncToolBase(std::move(env)),
+          session_environment_(std::move(session_environment)) {}
+
+    // pi `core/tools/bash.ts` promptSnippet/promptGuidelines (verbatim): the
+    // guideline is the PI_* environment-exposure note, supplied exactly like
+    // pi's `exposeSessionEnvironment ? [...] : undefined` — only when the
+    // session facts holder is wired in.
+    [[nodiscard]] std::optional<std::string> prompt_snippet() const override {
+        return "Execute bash commands (ls, grep, find, etc.)";
+    }
+    [[nodiscard]] std::vector<std::string> prompt_guidelines() const override {
+        if (!session_environment_) {
+            return {};
+        }
+        return {
+            "Inspect PI_* environment variables for current model and session "
+            "details.",
+        };
+    }
 
     const ai::Tool& definition() const override {
         static const ai::Tool tool{
@@ -379,6 +437,23 @@ public:
         exec_options.timeout = parsed->timeout
             ? std::chrono::milliseconds(std::chrono::seconds(*parsed->timeout))
             : std::chrono::milliseconds{0};
+        // pi `resolveSpawnContext` (`core/tools/bash.ts`): delete the five
+        // PI_* variables from the inherited environment, then re-set the ones
+        // present in the live session context. The execution environment
+        // shadows base keys through the override map; absent facts shadow
+        // with an empty value (the closest analogue of pi's delete).
+        if (session_environment_) {
+            const auto& session = *session_environment_;
+            std::map<std::string, std::string> pi_environment;
+            pi_environment["PI_SESSION_ID"] = session.session_id;
+            pi_environment["PI_SESSION_FILE"] =
+                session.session_file.value_or("");
+            pi_environment["PI_PROVIDER"] = session.provider;
+            pi_environment["PI_MODEL"] = session.model;
+            pi_environment["PI_REASONING_LEVEL"] =
+                session.reasoning_level.value_or("");
+            exec_options.env = std::move(pi_environment);
+        }
         std::string full_stdout;
         std::string full_stderr;
         bool received_stdout = false;
@@ -439,6 +514,8 @@ public:
             .is_error = shell->exitCode != 0,
         };
     }
+
+    std::shared_ptr<BashSessionEnvironment> session_environment_;
 };
 
 } // namespace
@@ -455,8 +532,11 @@ std::unique_ptr<agent::AsyncAgentTool> make_async_edit_tool(std::shared_ptr<harn
     return std::make_unique<AsyncEditTool>(std::move(env));
 }
 
-std::unique_ptr<agent::AsyncAgentTool> make_async_bash_tool(std::shared_ptr<harness::AsyncExecutionEnv> env) {
-    return std::make_unique<AsyncBashTool>(std::move(env));
+std::unique_ptr<agent::AsyncAgentTool> make_async_bash_tool(
+    std::shared_ptr<harness::AsyncExecutionEnv> env,
+    std::shared_ptr<BashSessionEnvironment> session_environment) {
+    return std::make_unique<AsyncBashTool>(
+        std::move(env), std::move(session_environment));
 }
 
 } // namespace cch::tools

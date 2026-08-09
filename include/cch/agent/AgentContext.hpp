@@ -178,6 +178,12 @@ struct AsyncAgentOptions {
     /// option (pi AgentOptions.sessionId / harness `sessionMetadata.id`). Empty
     /// means the host provided none.
     std::string session_id;
+    /// The session System Prompt (pi `AgentState.systemPrompt`, built by the
+    /// harness at session construction): seeded into every per-run request
+    /// `AiContext.system_prompt`, exactly like pi's `createContextSnapshot`.
+    /// Empty (the default) forwards no system prompt, mirroring pi's default
+    /// `""` and the adapters' empty-string guard.
+    std::string system_prompt{};
     /// Thinking level for the run. Empty means the pi `DEFAULT_THINKING_LEVEL`
     /// ("medium") is requested; the loop normalizes it and clamps the request
     /// against the active model's supported set at construction and on model
@@ -224,6 +230,10 @@ struct AsyncAgentOptions {
 };
 
 struct AgentState {
+    /// The session System Prompt (pi `AgentState.systemPrompt`): the value
+    /// seeded into per-run request contexts from `AsyncAgentOptions`, kept in
+    /// sync with the loop options like the model and thinking level.
+    std::string system_prompt{};
     std::vector<ai::MessageVariant> messages;
     bool is_running{false};
     std::optional<ai::AssistantMessage> streaming_message;

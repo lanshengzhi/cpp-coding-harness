@@ -7,7 +7,6 @@
 #include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/Skill.hpp>
 #include <cch/util/Error.hpp>
-#include "coding_agent/prompt/PromptProcessor.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionEventCommitment.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
@@ -58,13 +57,15 @@ struct RetrySettings {
 };
 
 /// Internal runtime behind AgentSession. Composes the stateful Agent with
-/// session persistence, prompt processing, resources, and session presentation.
+/// session persistence, the pi-shaped System Prompt (built at session
+/// construction), resources, and session presentation.
 class AgentSessionRuntime {
 public:
     AgentSessionRuntime(
         RuntimeServices services,
         OpenSession session,
-        prompt::PromptProcessor prompt_processor,
+        std::vector<Skill> skills,
+        std::vector<PromptTemplate> templates,
         AgentSessionRuntimeConfig config);
 
     AgentSessionRuntime(const AgentSessionRuntime&) = delete;
@@ -322,6 +323,11 @@ private:
 
     /// Shared preflight outcome for entry points that require a non-closed session.
     [[nodiscard]] util::ExpectedVoid reject_if_closed() const;
+    /// Refresh the model Bash Tool's live PI_* session facts from the current
+    /// Agent state (pi `resolveSpawnContext` reads `ctx.model`/
+    /// `ctx.thinkingLevel` at execution time). Called after the Agent is
+    /// constructed and after every model/thinking change.
+    void refresh_bash_session_environment();
     /// pi `_getThinkingLevelForModelSwitch`: an explicit scoped-model level
     /// wins; otherwise a current model without thinking support falls back to
     /// the merged settings default (then pi's DEFAULT_THINKING_LEVEL);
@@ -405,7 +411,12 @@ private:
 
     RuntimeServices services_;
     OpenSession session_;
-    std::optional<prompt::PromptProcessor> prompt_processor_;
+    /// Immutable skill/template snapshots loaded at session creation (pi
+    /// `_resourceLoader` results the session was assembled under). The
+    /// System Prompt is built from the skills at construction; `/skill:`
+    /// expansion and prompt-template expansion read the same snapshots.
+    std::vector<Skill> skills_;
+    std::vector<PromptTemplate> templates_;
     // Declared after the borrowed client/store owners so it is destroyed first.
     std::optional<agent::Agent> agent_;
     /// Request-time re-auth guidance decorator (pi `_getRequiredRequestAuth`):

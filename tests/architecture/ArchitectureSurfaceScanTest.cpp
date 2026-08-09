@@ -438,6 +438,15 @@ TEST_CASE("concrete prompt processors stay out of the public contract surface", 
     CHECK_FALSE(std::filesystem::exists(public_prompt_dir / "PromptProcessor.hpp"));
     CHECK_FALSE(std::filesystem::exists(public_prompt_dir / "PromptTemplateExpander.hpp"));
     CHECK_FALSE(std::filesystem::exists(public_prompt_dir / "SkillExpander.hpp"));
+    // The pi-shaped prompt machinery (ADR 0036 G4) stays private: the System
+    // Prompt builder and the expansion composition have no public header, and
+    // the own PromptProcessor is deleted with no shim.
+    CHECK_FALSE(std::filesystem::exists(public_prompt_dir / "SystemPromptBuilder.hpp"));
+    CHECK_FALSE(std::filesystem::exists(public_prompt_dir / "PromptExpansion.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "prompt" / "PromptProcessor.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "prompt" / "PromptProcessor.cpp"));
 }
 
 TEST_CASE("RuntimeServices remains internal to the coding_agent runtime package", "[architecture][session]") {

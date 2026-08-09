@@ -140,6 +140,10 @@ struct Agent::Impl {
         // construction; live state reflects the effective (clamped) level so
         // `state()` and the wire never diverge (#352).
         state.thinking_level = loop.current_thinking_level();
+        // The session System Prompt lives on the loop options (pi
+        // `AgentState.systemPrompt`) and is mirrored into live state like the
+        // model and thinking level.
+        state.system_prompt = loop.current_system_prompt();
         state.input_queues.max_messages = loop.max_queued_messages();
         state.input_queues.max_bytes = loop.max_queued_bytes();
         state.input_queues.steering.mode = loop.steering_mode();
@@ -335,6 +339,7 @@ struct Agent::Impl {
         const auto finish_run = [impl] {
             impl->state.model = impl->loop.current_model();
             impl->state.thinking_level = impl->loop.current_thinking_level();
+            impl->state.system_prompt = impl->loop.current_system_prompt();
             impl->state.streaming_message.reset();
             impl->state.pending_tool_call_ids.clear();
             impl->state.is_running = false;

@@ -113,6 +113,20 @@ public:
     virtual ~AsyncAgentTool() = default;
 
     [[nodiscard]] virtual const ai::Tool& definition() const = 0;
+
+    /// pi `ToolDefinition.promptSnippet` (`core/tools/*.ts`): the one-line
+    /// model-visible summary rendered into the System Prompt's `Available
+    /// tools` list (`core/system-prompt.ts` `buildSystemPrompt`).
+    /// `std::nullopt` keeps the tool out of the list.
+    [[nodiscard]] virtual std::optional<std::string> prompt_snippet() const {
+        return std::nullopt;
+    }
+
+    /// pi `ToolDefinition.promptGuidelines`: guideline bullets appended to
+    /// the System Prompt's Guidelines section, in declaration order.
+    [[nodiscard]] virtual std::vector<std::string> prompt_guidelines() const {
+        return {};
+    }
     [[nodiscard]] virtual boost::asio::awaitable<util::Expected<AsyncToolExecutionResult>> execute(
         ToolInvocation invocation,
         std::stop_token stop_token) = 0;

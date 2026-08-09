@@ -373,13 +373,40 @@ TEST_CASE("async agent loop emits deterministic lifecycle events for text", "[ag
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }
 
+TEST_CASE(
+    "async agent loop seeds the session system prompt into every request context",
+    "[agent][async][issue414]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("first"));
+    client->responses.push_back(ai::assistant_text_message("second"));
+    agent::AsyncToolRegistry registry;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 3;
+    options.model = tests::make_model("gpt-test");
+    // The session System Prompt (pi `AgentState.systemPrompt`): seeded into
+    // every per-run request context exactly like pi's `createContextSnapshot`.
+    options.system_prompt =
+        "You are an expert coding assistant operating inside cch, a coding "
+        "agent harness.\n\nCurrent working directory: /workspace";
+    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
 
+    auto run = run_loop(loop, "hi");
+    REQUIRE(run.result);
+    REQUIRE(client->requests.size() == 1);
+    REQUIRE(client->requests[0].context.system_prompt.has_value());
+    const std::string expected_prompt =
+        "You are an expert coding assistant operating inside cch, a coding "
+        "agent harness.\n\nCurrent working directory: /workspace";
+    CHECK(*client->requests[0].context.system_prompt == expected_prompt);
+    CHECK(run.result->state.system_prompt == expected_prompt);
 
-
-
-
-
-
+    // A second run re-seeds the same prompt from the loop options.
+    auto second = run_loop(loop, "again");
+    REQUIRE(second.result);
+    REQUIRE(client->requests.size() == 2);
+    REQUIRE(client->requests[1].context.system_prompt.has_value());
+    CHECK(*client->requests[1].context.system_prompt == expected_prompt);
+}
 
 TEST_CASE(
     "async agent loop synthesizes the assistant start for a done terminal before any start",

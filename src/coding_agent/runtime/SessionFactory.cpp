@@ -14,7 +14,6 @@
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
-#include "coding_agent/prompt/PromptProcessor.hpp"
 #include "coding_agent/runtime/AgentSessionRuntime.hpp"
 #include "coding_agent/runtime/LocalUserShell.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
@@ -128,6 +127,9 @@ struct AssemblyPlan {
     /// Private test seam: custom tools registered alongside the fixed built-in
     /// tool set (retry-continuation tests).
     std::vector<std::unique_ptr<agent::AsyncAgentTool>> custom_tools;
+    /// Private test seam: the shared live PI_* facts holder wired into the
+    /// model Bash Tool (live-refresh tests).
+    std::shared_ptr<tools::BashSessionEnvironment> bash_session_environment;
     std::vector<std::string> prompt_template_paths;
     std::vector<std::string> skill_paths;
     std::optional<DefaultProjectTrust> default_project_trust;
@@ -760,6 +762,7 @@ struct SessionTargetNormalizationOptions {
     // through the plan unchanged.
     plan.requested_model = std::move(request.request_model);
     plan.custom_tools = std::move(request.custom_tools);
+    plan.bash_session_environment = std::move(request.bash_session_environment);
     plan.project_trust_override = request.project_trust_override;
     plan.default_project_trust =
         settings.default_project_trust().value_or(DefaultProjectTrust::Ask);
@@ -1314,7 +1317,16 @@ struct SessionTargetNormalizationOptions {
         return std::unexpected(added.error());
     }
     builtin_names.insert("bash");
-    if (auto added = tools.add(tools::make_async_bash_tool(exec_env)); !added) {
+    // Live PI_* session facts for the model Bash Tool (pi
+    // `resolveSpawnContext`): the runtime refreshes this holder as the model
+    // and thinking level change. The private test seam's holder wins;
+    // production assembly creates one.
+    auto bash_session_environment = plan.bash_session_environment
+        ? plan.bash_session_environment
+        : std::make_shared<tools::BashSessionEnvironment>();
+    if (auto added = tools.add(tools::make_async_bash_tool(
+            exec_env, bash_session_environment));
+        !added) {
         cleanup_on_failure();
         return std::unexpected(added.error());
     }
@@ -1488,16 +1500,16 @@ struct SessionTargetNormalizationOptions {
                 .command_prefix = shell_command_prefix,
             });
     }
+    services.bash_session_environment = std::move(bash_session_environment);
     services.tools = std::move(tools);
-
-    prompt::PromptProcessor prompt_processor{std::move(skills), std::move(templates)};
 
     const auto session_path = open.store->path();
     const auto metadata = open.metadata;
     auto runtime_handle = std::make_unique<AgentSessionRuntime>(
         std::move(services),
         std::move(open),
-        std::move(prompt_processor),
+        std::move(skills),
+        std::move(templates),
         std::move(runtime_config));
 
     CreateAgentSessionResult result;

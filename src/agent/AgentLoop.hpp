@@ -79,6 +79,11 @@ private:
     [[nodiscard]] const std::string& current_thinking_level() const noexcept {
         return options_.thinking_level;
     }
+    /// The session System Prompt seeded into every per-run request context
+    /// (pi `state.systemPrompt`).
+    [[nodiscard]] const std::string& current_system_prompt() const noexcept {
+        return options_.system_prompt;
+    }
     /// Apply a clamped thinking level for subsequent turns (pi
     /// `agent-session.ts` setThinkingLevel). The caller has already clamped
     /// the request against the active model; this keeps the loop's option and

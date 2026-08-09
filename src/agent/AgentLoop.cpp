@@ -215,6 +215,10 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
     InputQueueDrainer drain_queued_messages) {
     ai::AiContext context;
     context.tools = registry_.definitions();
+    // pi `createContextSnapshot` (`agent.ts`): the state's system prompt is
+    // the per-run request context seed; a prepare-next-turn replacement can
+    // override it for the remainder of the run (apply_turn_update).
+    context.system_prompt = options_.system_prompt;
     context.messages = std::move(history);
     std::vector<ai::MessageVariant> new_messages;
     const auto emit_agent_end = [&]() -> util::ExpectedVoid {
@@ -224,6 +228,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
     AgentState state;
     state.model = options_.model;
     state.thinking_level = options_.thinking_level;
+    state.system_prompt = options_.system_prompt;
 
     CCH_TRY_VOID(emit_agent_event(sink, AgentStartEvent{}));
 

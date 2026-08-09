@@ -5,6 +5,7 @@
 #include <cch/ai/Model.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/harness/session/SessionTree.hpp>
+#include <cch/tools/ToolFactories.hpp>
 #include "coding_agent/SessionTarget.hpp"
 
 #include <cstddef>
@@ -106,6 +107,11 @@ struct AgentSessionCreationRequest {
     /// tool set. Production callers never set it (the fixed #331 tool set is
     /// always available); retry-continuation tests inject recording tools.
     std::vector<std::unique_ptr<agent::AsyncAgentTool>> custom_tools;
+    /// Private test seam: the shared live PI_* facts holder wired into the
+    /// model Bash Tool. Production callers never set it (SessionFactory
+    /// creates and wires the holder); focused tests capture it to assert the
+    /// session refreshes the facts as the model and thinking level change.
+    std::shared_ptr<tools::BashSessionEnvironment> bash_session_environment;
 };
 
 } // namespace cch::coding_agent::runtime

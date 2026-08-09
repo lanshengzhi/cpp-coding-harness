@@ -1,9 +1,10 @@
 #pragma once
 
-#include "../../../include/cch/agent/ToolRegistry.hpp"
-#include "../../../include/cch/coding_agent/ModelRuntime.hpp"
-#include "../../../include/cch/coding_agent/Settings.hpp"
-#include "../../../include/cch/harness/LocalExecutionEnv.hpp"
+#include <cch/agent/ToolRegistry.hpp>
+#include <cch/coding_agent/ModelRuntime.hpp>
+#include <cch/coding_agent/Settings.hpp>
+#include <cch/harness/LocalExecutionEnv.hpp>
+#include <cch/tools/ToolFactories.hpp>
 #include "coding_agent/runtime/AsyncUserShell.hpp"
 
 #include <filesystem>
@@ -38,6 +39,11 @@ struct RuntimeServices {
     /// Independently owned direct-user capability; absence keeps User Bash
     /// unavailable without changing model tool authorization.
     std::unique_ptr<AsyncUserShell> user_shell;
+    /// Live PI_* session facts for the model Bash Tool (pi
+    /// `resolveSpawnContext`): the session runtime refreshes this holder as
+    /// the model and thinking level change; null only when the model Bash
+    /// Tool is absent or env-exposure-disabled.
+    std::shared_ptr<tools::BashSessionEnvironment> bash_session_environment;
     agent::AsyncToolRegistry tools;
 };
 

@@ -11,6 +11,9 @@
 #include "ai/utils/RetryClassifier.hpp"
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/SkillFormatting.hpp"
+#include "coding_agent/prompt/PromptExpansion.hpp"
+#include "coding_agent/prompt/PromptTemplateExpander.hpp"
+#include "coding_agent/prompt/SystemPromptBuilder.hpp"
 #include "coding_agent/runtime/AuthGuidanceStreamRuntime.hpp"
 #include "coding_agent/runtime/UserBashOutputAccumulator.hpp"
 #include "harness/compaction/Compaction.hpp"
@@ -26,6 +29,7 @@
 #include <boost/asio/use_awaitable.hpp>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <exception>
@@ -115,16 +119,16 @@ inline constexpr std::string_view kOverflowRecoveryFailedMessage =
 AgentSessionRuntime::AgentSessionRuntime(
     RuntimeServices services,
     OpenSession session,
-    prompt::PromptProcessor prompt_processor,
+    std::vector<Skill> skills,
+    std::vector<PromptTemplate> templates,
     AgentSessionRuntimeConfig config)
     : services_(std::move(services)),
       session_(std::move(session)),
-      prompt_processor_(std::move(prompt_processor)),
+      skills_(std::move(skills)),
+      templates_(std::move(templates)),
       config_(std::move(config)) {
     // Seed the session's scoped-model set (pi `scopedModels: config.scopedModels`).
     scoped_models_ = config_.scoped_models;
-    // Build the <available_skills> block once from the same immutable snapshot
-    // used for explicit /skill:name invocation.
     agent::AsyncAgentOptions options;
     options.max_queued_messages = config_.max_queued_messages;
     options.max_queued_bytes = config_.max_queued_bytes;
@@ -133,42 +137,64 @@ AgentSessionRuntime::AgentSessionRuntime(
     // The session id is forwarded as the per-turn `sessionId` streamSimple
     // option (pi harness `sessionMetadata.id`).
     options.session_id = session_.metadata.session_id;
-    options.transform_context = [](
-                                    std::vector<ai::MessageVariant> messages,
-                                    std::stop_token) -> boost::asio::awaitable<
-                                        util::Expected<std::vector<ai::MessageVariant>>> {
+    // pi `sdk.ts` wires `convertToLlm` (`core/messages.ts`, which drops
+    // `excludeFromContext` bash messages) into the Agent at construction; the
+    // deleted `transform_context` hook's filter re-homes here, exactly like
+    // pi's harness boundary (agent-loop.ts `streamAssistantResponse`). The
+    // provider conversion layer repeats the drop defensively.
+    options.convert_to_llm = [](
+                                  std::vector<ai::MessageVariant> messages)
+        -> boost::asio::awaitable<
+            util::Expected<std::vector<ai::MessageVariant>>> {
         std::erase_if(messages, [](const ai::MessageVariant& message) {
             const auto* bash = std::get_if<ai::BashExecutionMessage>(&message);
             return bash != nullptr && bash->exclude_from_context;
         });
         co_return messages;
     };
-
-    std::string skills_block = formatSkillsForPrompt(prompt_processor_->skills());
-    if (!skills_block.empty()) {
-        auto existing_transform = std::move(options.transform_context);
-        options.transform_context = [block = std::move(skills_block),
-                                     existing = std::move(existing_transform)](
-                                        std::vector<ai::MessageVariant> messages,
-                                        std::stop_token stop_token) mutable
-            -> boost::asio::awaitable<util::Expected<std::vector<ai::MessageVariant>>> {
-            std::vector<ai::MessageVariant> transformed;
-            if (existing) {
-                auto prior = co_await (*existing)(std::move(messages), stop_token);
-                if (!prior) {
-                    co_return std::unexpected(prior.error());
-                }
-                transformed = std::move(*prior);
-            } else {
-                transformed = std::move(messages);
-            }
-
-            ai::SystemMessage msg;
-            msg.content = block;
-            transformed.insert(transformed.begin(), ai::MessageVariant{std::move(msg)});
-            co_return transformed;
-        };
+    // The System Prompt is built once at session construction in pi's exact
+    // shape (ADR 0036 G4; `core/agent-session.ts` `_rebuildSystemPrompt` +
+    // `core/system-prompt.ts` `buildSystemPrompt`) and flows into every run
+    // through `AgentContext.system_prompt`, exactly like pi's
+    // `agent.state.systemPrompt`. Custom/append prompts and project context
+    // files arrive with P20 (#416); until then the default branch renders
+    // the four fixed tools and the loaded skills.
+    prompt::BuildSystemPromptOptions prompt_options;
+    // pi `_refreshToolRegistry` → `_toolPromptSnippets`/`_toolPromptGuidelines`:
+    // prompt metadata for the active tools, collected before the registry
+    // moves into the Agent below. pi's default active tool order
+    // `["read", "bash", "edit", "write"]` is kept for the rendered list.
+    static constexpr std::array kFixedToolNames{"read", "bash", "edit", "write"};
+    std::vector<std::string> selected_tools;
+    for (const char* name : kFixedToolNames) {
+        auto metadata = services_.tools.prompt_metadata(name);
+        if (!metadata) {
+            continue;
+        }
+        selected_tools.emplace_back(name);
+        if (metadata->snippet) {
+            prompt_options.toolSnippets.emplace(name, *metadata->snippet);
+        }
+        prompt_options.promptGuidelines.insert(
+            prompt_options.promptGuidelines.end(),
+            metadata->guidelines.begin(),
+            metadata->guidelines.end());
     }
+    prompt_options.selectedTools = std::move(selected_tools);
+    prompt_options.cwd = session_.workspace.string();
+    prompt_options.skills = skills_;
+    // Identity delta: the C++ binary's own documentation paths (pi
+    // `config.ts` `getReadmePath`/`getDocsPath`/`getExamplesPath` resolve the
+    // pi package; cch resolves its own source tree).
+#ifndef CCH_SOURCE_DIR
+    constexpr std::string_view kSourceDir = "";
+#else
+    constexpr std::string_view kSourceDir = CCH_SOURCE_DIR;
+#endif
+    prompt_options.readmePath = std::string{kSourceDir} + "/README.md";
+    prompt_options.docsPath = std::string{kSourceDir} + "/docs";
+    prompt_options.examplesPath = std::string{kSourceDir} + "/examples";
+    options.system_prompt = buildSystemPrompt(prompt_options);
 
     // Resumed history is transferred exactly once into the authoritative Agent
     // state. AgentSession retains product metadata and durable storage only.
@@ -198,6 +224,10 @@ AgentSessionRuntime::AgentSessionRuntime(
         std::move(services_.tools),
         std::move(options),
         std::move(initial_state));
+
+    // Expose the live session facts to the model Bash Tool (pi
+    // `resolveSpawnContext`); the Agent's clamped state is authoritative.
+    refresh_bash_session_environment();
 }
 
 util::ExpectedVoid AgentSessionRuntime::reject_if_closed() const {
@@ -207,6 +237,29 @@ util::ExpectedVoid AgentSessionRuntime::reject_if_closed() const {
             "session is closed"));
     }
     return {};
+}
+
+void AgentSessionRuntime::refresh_bash_session_environment() {
+    if (!services_.bash_session_environment || !agent_) {
+        return;
+    }
+    auto& session_environment = *services_.bash_session_environment;
+    // pi `resolveSpawnContext`: `getSessionId()` always; `getSessionFile()`
+    // only for persisted sessions; `ctx.model`/`ctx.thinkingLevel` from the
+    // Agent's live (clamped) state.
+    session_environment.session_id = session_.metadata.session_id;
+    if (session_.store) {
+        if (auto path = session_.store->path()) {
+            session_environment.session_file = path->string();
+        }
+    }
+    const auto state = agent_->state();
+    session_environment.provider = state.model.provider;
+    session_environment.model = state.model.id;
+    session_environment.reasoning_level =
+        state.thinking_level.empty()
+            ? std::nullopt
+            : std::optional<std::string>{state.thinking_level};
 }
 
 util::ExpectedVoid AgentSessionRuntime::reject_if_busy() const {
@@ -272,21 +325,17 @@ void AgentSessionRuntime::flush_pending_user_bash() {
 namespace {
 
 /// One admission shaping for every user input path (Prompt, steering,
-/// follow-up): optional Prompt Template expansion, then image content
+/// follow-up): optional skill/prompt-template expansion, then image content
 /// appended to one complete user Agent Message.
-[[nodiscard]] util::Expected<ai::UserMessage> make_admitted_user_message(
-    std::optional<prompt::PromptProcessor>& prompt_processor,
+[[nodiscard]] ai::UserMessage make_admitted_user_message(
     std::string text,
+    const std::vector<Skill>& skills,
+    const std::vector<PromptTemplate>& templates,
     std::vector<ai::ImageContent> images,
     bool expand_prompt_templates) {
-    if (!prompt_processor) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "session is closed"));
-    }
-    auto expanded = prompt_processor->process(
-        std::move(text), expand_prompt_templates);
-    auto message = ai::user_text_message(std::move(expanded.text));
+    auto expanded = prompt::expand_prompt_input(
+        std::move(text), skills, templates, expand_prompt_templates);
+    auto message = ai::user_text_message(std::move(expanded));
     auto& blocks = std::get<std::vector<ai::Content>>(message.content);
     blocks.reserve(blocks.size() + images.size());
     for (auto& image : images) {
@@ -359,31 +408,23 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
 
     util::ExpectedVoid result;
     try {
-        bool run_agent = true;
-        ai::UserMessage user_message;
-        if (auto message = make_admitted_user_message(
-                prompt_processor_,
-                std::move(prompt),
-                std::move(images),
-                expand_prompt_templates);
-            !message) {
-            result = std::unexpected(message.error());
-            run_agent = false;
-        } else {
-            user_message = std::move(*message);
-        }
+        ai::UserMessage user_message = make_admitted_user_message(
+            std::move(prompt),
+            skills_,
+            templates_,
+            std::move(images),
+            expand_prompt_templates);
 
-        if (run_agent) {
-            // pi `prompt()` auth preflight: a real model whose provider has no
-            // configured auth fails with pi's verbatim re-auth guidance
-            // before the run starts (the `kDefaultModel` placeholder is
-            // skipped and keeps its ordinary "Unknown provider: unknown"
-            // streaming failure).
-            if (auto admitted = co_await preflight_auth_guidance();
-                !admitted) {
-                result = std::unexpected(admitted.error());
-                run_agent = false;
-            }
+        // pi `prompt()` auth preflight: a real model whose provider has no
+        // configured auth fails with pi's verbatim re-auth guidance
+        // before the run starts (the `kDefaultModel` placeholder is
+        // skipped and keeps its ordinary "Unknown provider: unknown"
+        // streaming failure).
+        bool run_agent = true;
+        if (auto admitted = co_await preflight_auth_guidance();
+            !admitted) {
+            result = std::unexpected(admitted.error());
+            run_agent = false;
         }
         if (run_agent && on_preflight_accepted) {
             if (auto acknowledged = on_preflight_accepted(); !acknowledged) {
@@ -879,11 +920,8 @@ util::ExpectedVoid AgentSessionRuntime::steer(
         return rejected;
     }
     auto message = make_admitted_user_message(
-        prompt_processor_, std::move(text), std::move(images), expand_prompt_templates);
-    if (!message) {
-        return std::unexpected(message.error());
-    }
-    return agent_->steer(ai::MessageVariant{std::move(*message)});
+        std::move(text), skills_, templates_, std::move(images), expand_prompt_templates);
+    return agent_->steer(ai::MessageVariant{std::move(message)});
 }
 
 util::ExpectedVoid AgentSessionRuntime::follow_up(
@@ -894,11 +932,8 @@ util::ExpectedVoid AgentSessionRuntime::follow_up(
         return rejected;
     }
     auto message = make_admitted_user_message(
-        prompt_processor_, std::move(text), std::move(images), expand_prompt_templates);
-    if (!message) {
-        return std::unexpected(message.error());
-    }
-    return agent_->follow_up(ai::MessageVariant{std::move(*message)});
+        std::move(text), skills_, templates_, std::move(images), expand_prompt_templates);
+    return agent_->follow_up(ai::MessageVariant{std::move(message)});
 }
 
 util::ExpectedVoid AgentSessionRuntime::set_steering_mode(agent::InputQueueMode mode) {
@@ -959,6 +994,8 @@ util::Expected<std::string> AgentSessionRuntime::set_thinking_level(
     if (*effective == previous) {
         return effective;
     }
+    // The model Bash Tool reads the live thinking level at execution time.
+    refresh_bash_session_environment();
 
     // Persist the `thinking_level_change` session entry (pi
     // `appendThinkingLevelChange`). In-memory sessions have no v3 tree entry
@@ -1073,6 +1110,8 @@ AgentSessionRuntime::apply_model_switch(
     if (auto clamped = set_thinking_level(std::move(thinking_level)); !clamped) {
         co_return std::unexpected(std::move(clamped.error()));
     }
+    // The model Bash Tool reads the live model at execution time.
+    refresh_bash_session_environment();
     co_return util::ExpectedVoid{};
 }
 
@@ -1309,9 +1348,9 @@ live_context_entries(const std::vector<ai::MessageVariant>& messages) {
     for (std::size_t message_index = 0; message_index < messages.size();
          ++message_index) {
         const auto& message = messages[message_index];
-        // The live context never carries SystemMessages (the system prompt
-        // is injected per run through transform_context); skip defensively
-        // so the id-to-message mapping stays exact.
+        // The live context never carries SystemMessages (the session system
+        // prompt is delivered per run through `AgentContext.system_prompt`);
+        // skip defensively so the id-to-message mapping stays exact.
         if (std::holds_alternative<ai::SystemMessage>(message)) {
             continue;
         }
@@ -2191,13 +2230,11 @@ std::optional<std::string> AgentSessionRuntime::last_assistant_text() const {
 }
 
 const std::vector<Skill>& AgentSessionRuntime::skills() const {
-    static const std::vector<Skill> kEmptySkills;
-    return prompt_processor_ ? prompt_processor_->skills() : kEmptySkills;
+    return skills_;
 }
 
 const std::vector<PromptTemplate>& AgentSessionRuntime::templates() const {
-    static const std::vector<PromptTemplate> kEmptyTemplates;
-    return prompt_processor_ ? prompt_processor_->templates() : kEmptyTemplates;
+    return templates_;
 }
 
 void AgentSessionRuntime::abort() {
@@ -2237,7 +2274,8 @@ AgentSessionRuntime::release_close_resources() noexcept {
     // reference above, so the canonical runtime is freed once the owned
     // reference below is reset (runtimes carry no dispose ceremony).
     auth_guided_runtime_.reset();
-    prompt_processor_.reset();
+    skills_.clear();
+    templates_.clear();
     session_.store.reset();
     services_.user_shell.reset();
     if (services_.model_runtime_owned) {

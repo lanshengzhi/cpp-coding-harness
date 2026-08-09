@@ -233,7 +233,8 @@ add_library(cch_coding_agent_runtime
     src/coding_agent/ProjectResourceLoader.cpp
     src/coding_agent/ProjectResources.cpp
     src/coding_agent/ProjectTrust.cpp
-    src/coding_agent/prompt/PromptProcessor.cpp
+    src/coding_agent/prompt/SystemPromptBuilder.cpp
+    src/coding_agent/prompt/PromptExpansion.cpp
     src/coding_agent/prompt/PromptTemplateExpander.cpp
     src/coding_agent/prompt/SlashCommandParser.cpp
     src/coding_agent/AgentSession.cpp
@@ -257,6 +258,12 @@ target_include_directories(cch_coding_agent_runtime
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb
+)
+# The System Prompt's identity-adjusted documentation block resolves the C++
+# binary's own docs paths from the source tree (pi `config.ts`
+# getReadmePath/getDocsPath/getExamplesPath resolve the pi package).
+target_compile_definitions(cch_coding_agent_runtime PRIVATE
+    CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
 target_link_libraries(cch_coding_agent_runtime
     PUBLIC
@@ -379,8 +386,10 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/BuiltinCommandsTest.cpp
         tests/coding_agent/CommandRegistryTest.cpp
         tests/coding_agent/ImageInputTest.cpp
-        tests/coding_agent/PromptProcessorTest.cpp
+        tests/coding_agent/PromptExpansionTest.cpp
         tests/coding_agent/PromptTemplateProcessingTest.cpp
+        tests/coding_agent/SystemPromptBuilderTest.cpp
+        tests/coding_agent/SystemPromptFlowTest.cpp
         tests/coding_agent/AuthStorageTest.cpp
         tests/coding_agent/KimiOAuthLifecycleTest.cpp
         tests/coding_agent/AgentConfigDirTest.cpp
