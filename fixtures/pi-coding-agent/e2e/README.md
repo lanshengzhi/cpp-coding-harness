@@ -18,8 +18,12 @@ final answer), byte-compared by
 The workspace lives at the deterministic `cpp-harness-e2e-workspace` temp
 path (recreated at boot) so the footer's pwd line stays byte-stable.
 
-Regenerate deterministically with `CCH_CAPTURE_GOLDENS=1 ./build/cpp_harness_tests "[issue399]"`.
-The screens are plain cell text (styles are stripped by the VirtualTerminal);
-the OSC 133 zones are asserted on the recorded output stream in the test, not
-in these files. P24 wraps this directory into the `fixtures/pi-coding-agent/`
-gate bundle (baseline pins, sanitization rules, capability checklist).
+Regenerate deterministically from the frozen checkout with the gate capture
+sidecar (`fixtures/pi-coding-agent/capture/capture-gate-snapshots.mts`, which
+drives `CCH_CAPTURE_GOLDENS=1 ./build/cpp_harness_tests "[issue399]"` and then
+byte-verifies the result), or directly with the same command. The screens are
+plain cell text (styles are stripped by the VirtualTerminal); the OSC 133
+zones are asserted on the recorded output stream in the test, not in these
+files. P24 wrapped this directory into the `fixtures/pi-coding-agent/` gate
+bundle (baseline pins, sanitization rules, capability checklist — see the
+bundle README).
