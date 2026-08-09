@@ -106,29 +106,102 @@ TEST_CASE("project resource loader loads trusted .pi/ skills and prompts", "[cod
 }
 
 TEST_CASE(
-    "project resource loader returns raw .pi/ themes only when the TUI requests trusted resources",
-    "[coding_agent][project-resource-loader][theme][issue56][issue405]") {
+    "project resource loader collects trust-gated project themes and skips them with --no-themes",
+    "[coding_agent][project-resource-loader][theme][issue405][issue415]") {
     LoaderFixture fix;
     fix.write(".pi/themes/project.json", valid_theme_json());
 
-    coding_agent::ProjectResourceLoadingRequest default_request;
-    default_request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
-    const auto disabled = fix.load(std::move(default_request));
-    CHECK(disabled.resources.project_themes.empty());
-
     coding_agent::ProjectResourceLoadingRequest untrusted_request;
-    untrusted_request.theme_resources_enabled = true;
     const auto untrusted = fix.load(std::move(untrusted_request));
-    CHECK(untrusted.resources.project_themes.empty());
+    CHECK(untrusted.resources.themes.empty());
     CHECK(untrusted.trust.decision == coding_agent::ProjectTrustDecision::Untrusted);
 
     coding_agent::ProjectResourceLoadingRequest trusted_request;
-    trusted_request.theme_resources_enabled = true;
     trusted_request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
     const auto trusted = fix.load(std::move(trusted_request));
-    REQUIRE(trusted.resources.project_themes.size() == 1);
-    CHECK(trusted.resources.project_themes[0].path == ".pi/themes/project.json");
-    CHECK(trusted.resources.project_themes[0].json == valid_theme_json());
+    REQUIRE(trusted.resources.themes.size() == 1);
+    CHECK(trusted.resources.themes[0].path == ".pi/themes/project.json");
+    CHECK(trusted.resources.themes[0].json == valid_theme_json());
+    CHECK(trusted.resources.themes[0].scope == coding_agent::SourceScope::Project);
+
+    // pi `--no-themes`: drops auto-discovery of the default directories
+    // (user `<agent_config_directory>/themes` and project `.pi/themes`).
+    coding_agent::ProjectResourceLoadingRequest no_themes_request;
+    no_themes_request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    no_themes_request.no_themes = true;
+    const auto no_themes = fix.load(std::move(no_themes_request));
+    CHECK(no_themes.resources.themes.empty());
+}
+
+TEST_CASE(
+    "project resource loader collects user themes from the agent config directory",
+    "[coding_agent][project-resource-loader][theme][issue415]") {
+    LoaderFixture fix;
+    tests::TempWorkspace agent_config;
+    agent_config.write("themes/user.json", valid_theme_json());
+    agent_config.write("themes/notes.txt", "not a theme");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.agent_config_directory = agent_config.path();
+    auto result = fix.load(std::move(request));
+
+    REQUIRE(result.resources.themes.size() == 1);
+    CHECK(result.resources.themes[0].path.find("themes/user.json") != std::string::npos);
+    CHECK(result.resources.themes[0].json == valid_theme_json());
+    CHECK(result.resources.themes[0].scope == coding_agent::SourceScope::User);
+    // A missing user themes directory loads nothing silently.
+    tests::TempWorkspace empty_config;
+    coding_agent::ProjectResourceLoadingRequest empty_request;
+    empty_request.agent_config_directory = empty_config.path();
+    const auto empty = fix.load(std::move(empty_request));
+    CHECK(empty.resources.themes.empty());
+    CHECK(empty.diagnostics.empty());
+}
+
+TEST_CASE(
+    "project resource loader --theme explicit paths load directories and files",
+    "[coding_agent][project-resource-loader][theme][issue415]") {
+    LoaderFixture fix;
+    fix.write("explicit-dir/one.json", valid_theme_json());
+    fix.write("explicit-dir/two.json", valid_theme_json());
+    fix.write("explicit.json", valid_theme_json());
+    fix.write("not-theme.txt", "not json");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.theme_paths = {"explicit.json", "explicit-dir", "not-theme.txt"};
+    auto result = fix.load(std::move(request));
+
+    // Explicit paths stay effective without trust and collect in CLI order.
+    REQUIRE(result.resources.themes.size() == 3);
+    CHECK(result.resources.themes[0].path == "explicit.json");
+    CHECK(result.resources.themes[0].scope == coding_agent::SourceScope::Temporary);
+    CHECK(result.resources.themes[1].path == "explicit-dir/one.json");
+    CHECK(result.resources.themes[2].path == "explicit-dir/two.json");
+    CHECK(has_diag(result, coding_agent::ResourceDiagnosticType::Warning, "theme path is not a json file"));
+
+    // `--no-themes` drops discovery but keeps explicit paths.
+    coding_agent::ProjectResourceLoadingRequest no_themes_request;
+    no_themes_request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    no_themes_request.no_themes = true;
+    no_themes_request.theme_paths = {"explicit.json"};
+    const auto no_themes = fix.load(std::move(no_themes_request));
+    REQUIRE(no_themes.resources.themes.size() == 1);
+    CHECK(no_themes.resources.themes[0].path == "explicit.json");
+}
+
+TEST_CASE(
+    "project resource loader missing --theme paths carry pi's two non-fatal diagnostics",
+    "[coding_agent][project-resource-loader][theme][issue415]") {
+    LoaderFixture fix;
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.theme_paths = {"missing-theme.json"};
+    auto result = fix.load(std::move(request));
+
+    CHECK(has_diag(result, coding_agent::ResourceDiagnosticType::Warning, "theme path does not exist"));
+    CHECK(has_diag(result, coding_agent::ResourceDiagnosticType::Error, "Theme path does not exist"));
+    CHECK(result.resources.themes.empty());
+    CHECK(result.fatal_errors.empty());
 }
 
 TEST_CASE("project resource loader skips untrusted resources before parsing adapters", "[coding_agent][project-resource-loader][issue405]") {

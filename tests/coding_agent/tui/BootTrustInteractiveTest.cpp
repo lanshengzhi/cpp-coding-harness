@@ -8,6 +8,7 @@
 #include "support/CliRunFixture.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/ThemeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/coding_agent/AgentConfigDir.hpp>
@@ -428,4 +429,70 @@ TEST_CASE(
     CHECK(failure_text.find("could not create session:") != std::string::npos);
     REQUIRE(run_result);
     CHECK_FALSE(*run_result);
+}
+
+TEST_CASE(
+    "boot registers discovered themes and the settings Theme submenu commits one",
+    "[coding_agent][tui][boot-trust][issue415]") {
+    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    TrustIsolatedWorkspace fixture;
+    agent_dir.set(fixture.agent_dir.string());
+    // All three pi sources: trust-gated project `.pi/themes`, the user
+    // `<agent_config_directory>/themes` directory, and an explicit
+    // `--theme` path.
+    fixture.write(".pi/themes/solarized.json", tests::fixture_theme("solarized", "#abcdef"));
+    fixture.write("agent/themes/user-theme.json", tests::fixture_theme("user-theme", "#111111"));
+    fixture.write("cli-theme.json", tests::fixture_theme("cli-theme", "#222222"));
+
+    auto request = boot_request(fixture);
+    request.project_trust_override = true;
+    request.theme_paths = {"cli-theme.json"};
+
+    BootTrustRun run;
+    run.start(fixture, std::move(request), ai::providers::make_scripted_fake_models());
+
+    // Open /settings, navigate to the Theme item (index 5), open the
+    // single-mode ThemeSubmenu: the builtins plus every discovered theme are
+    // listed sorted, with the `(current)` marker on the active theme.
+    run.type("/settings\r");
+    run.type("\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\r");
+    auto screen = visible_screen(run.terminal);
+    CHECK(screen.find("(current)") != std::string::npos);
+    CHECK(screen.find("dark") != std::string::npos);
+    CHECK(screen.find("light") != std::string::npos);
+    CHECK(screen.find("solarized") != std::string::npos);
+    CHECK(screen.find("user-theme") != std::string::npos);
+    CHECK(screen.find("cli-theme") != std::string::npos);
+
+    // Select solarized (sorted order: cli-theme, dark, light, solarized,
+    // user-theme — the active dark theme sits at index 1): down twice, then
+    // confirm. The global-scope settings write persists and re-applies.
+    run.type("\x1b[B\x1b[B\r");
+    const auto settings_path = fixture.agent_dir / "settings.json";
+    std::error_code settings_error;
+    REQUIRE(std::filesystem::exists(settings_path, settings_error));
+    std::ifstream settings_file(settings_path);
+    const std::string settings_json{
+        std::istreambuf_iterator<char>(settings_file),
+        std::istreambuf_iterator<char>()};
+    CHECK(settings_json.find("\"theme\":\"solarized\"") != std::string::npos ||
+        settings_json.find("\"theme\": \"solarized\"") != std::string::npos);
+
+    // Esc closes the settings selector; Ctrl+C then Ctrl+D exits (the exit
+    // binding needs the empty editor).
+    // Esc closes the settings selector (async restore); then Ctrl+C clears
+    // the editor and Ctrl+D exits (the exit binding needs the empty editor).
+    // A bare Esc needs the decoder flush to disambiguate it from a sequence
+    // prefix (the established VirtualTerminal pattern).
+    REQUIRE(run.terminal.inject_input("\x1b"));
+    REQUIRE(run.terminal.flush_input());
+    drain_ready(run.io);
+    REQUIRE(run.terminal.inject_input("\x03"));
+    REQUIRE(run.terminal.flush_input());
+    drain_ready(run.io);
+    REQUIRE(run.terminal.inject_input("\x04"));
+    REQUIRE(run.terminal.flush_input());
+    drain_ready(run.io);
+    REQUIRE(run.run_result);
+    CHECK(*run.run_result);
 }

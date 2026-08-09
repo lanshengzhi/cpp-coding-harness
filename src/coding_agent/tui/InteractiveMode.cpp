@@ -50,7 +50,7 @@
 #include "coding_agent/tui/SessionSelector.hpp"
 #include "coding_agent/tui/SettingsSelector.hpp"
 #include "coding_agent/tui/StringListSelector.hpp"
-#include "coding_agent/tui/ThemeCatalog.hpp"
+#include "coding_agent/tui/ThemeController.hpp"
 #include "coding_agent/tui/TreeSelector.hpp"
 #include "coding_agent/tui/UserMessageSelector.hpp"
 #include "util/UniqueFd.hpp"
@@ -180,7 +180,9 @@ enum class InterruptRoute {
 
 struct InteractiveStartupDiagnostics {
     std::vector<KeybindingDiagnostic> keybindings;
-    std::vector<ThemeDiagnostic> themes;
+    /// Theme parse/collision diagnostics from the boot session's theme
+    /// discovery (pi `resource-loader.ts` `getThemes` diagnostics).
+    std::vector<ResourceDiagnostic> themes;
 };
 
 [[nodiscard]] std::string combined_error_text(const util::Error& error) {
@@ -1900,6 +1902,20 @@ public:
             boot_diagnostics_sink_(created->diagnostics);
         }
         model_fallback_message_ = std::move(created->model_fallback_message);
+        // pi interactive-mode ctor `setRegisteredThemes(...)` + init
+        // `applyFromSettings()`: register the boot session's discovered
+        // themes (project `.pi/themes` trust-gated, user directory,
+        // explicit `--theme`) and re-apply the active theme from the
+        // settings with dark fallback (pi `/reload` re-runs the same two
+        // steps). Parse/collision diagnostics render with the startup
+        // diagnostics.
+        if (theme_controller_) {
+            auto discovery = coding_agent::tui::discover_themes(
+                std::move(created->theme_resources));
+            startup_diagnostics_.themes = std::move(discovery.diagnostics);
+            theme_controller_->set_registered_themes(std::move(discovery.themes));
+            theme_controller_->apply_from_settings();
+        }
         // 3. Bind: the boot-created session replaces the borrowed null
         //    session and the presentation renders its snapshot like pi's
         //    `renderInitialMessages`.
@@ -2175,30 +2191,46 @@ private:
         hide_thinking_block_ = settings_manager_->hide_thinking_block();
         output_pad_ = settings_manager_->output_pad();
         const auto capabilities = terminal_.capabilities();
-        ThemeCatalogRequest request;
-        request.agent_config_directory = config.agent_config_directory;
-        request.user_active_theme = settings_manager_->global_settings().theme;
-        request.terminal_capabilities = capabilities;
-        if (auto catalog = load_theme_catalog(std::move(request)); !catalog) {
-            return std::unexpected(catalog.error());
-        } else {
-            diagnostics.themes = catalog->diagnostics;
-            ThemeSelectionCommitter committer;
-            if (!config.agent_config_directory.empty()) {
-                committer = [manager = settings_manager_.has_value()
-                                 ? &*settings_manager_
-                                 : nullptr](std::string_view name) mutable {
-                    return manager != nullptr
-                        ? manager->set_theme(coding_agent::SettingsScope::Global, name)
-                        : util::ExpectedVoid{};
-                };
-            }
-            theme_controller_.emplace(
-                std::move(*catalog),
-                tui_,
-                capabilities.color,
-                std::move(committer));
-        }
+        // pi interactive-mode ctor (`setRegisteredThemes` + the
+        // `InteractiveThemeController`): the controller boots from the
+        // global-scope theme setting (slash automatic-pair values read as
+        // unset) against the env-only COLORFGBG terminal theme with pi's
+        // silent dark fallback, and owns the live palette every component
+        // renders through. Registered themes arrive with the boot session
+        // (pi registers the resource loader's themes in the ctor; the C++
+        // boot defers session creation until after the boot trust prompt,
+        // so registration happens at bind and `applyFromSettings` re-applies
+        // afterwards).
+        const auto weak_controller = weak_from_this();
+        theme_controller_.emplace(
+            config.agent_config_directory.empty()
+                ? std::filesystem::path{}
+                : config.agent_config_directory / "themes",
+            /* registered */ std::vector<RegisteredTheme>{},
+            [manager = &*settings_manager_]() {
+                return manager->global_settings().theme;
+            },
+            [manager = &*settings_manager_](std::string_view name) {
+                return manager->set_theme(coding_agent::SettingsScope::Global, name);
+            },
+            capabilities.color,
+            tui_,
+            [weak_controller](std::string message) {
+                if (const auto self = weak_controller.lock()) {
+                    self->post_from_view([message = std::move(message)](InteractiveState& state) {
+                        state.show_error(std::move(message));
+                    });
+                }
+            },
+            [weak_controller] {
+                // pi `onChanged` → `updateEditorBorderColor`: the C++ editor
+                // border re-derives from the live palette at render, so the
+                // change notification requests a render (pi's
+                // `ui.requestRender`); the controller itself invalidates.
+                if (const auto self = weak_controller.lock()) {
+                    self->post_invalidate();
+                }
+            });
         return diagnostics;
     }
 
@@ -2639,8 +2671,9 @@ private:
     /// slot (pi's `showSelector` editorContainer swap) over the #327 settings
     /// subset plus the two graduated render settings. Changes persist through
     /// the settings manager (global scope, surgical field-level merge) and
-    /// apply live; the Theme item keeps the G5 single-mode submenu reachable
-    /// until the G5 ticket re-expresses it with preview.
+    /// apply live; the Theme item opens the G5 single-mode ThemeSubmenu with
+    /// in-memory preview, a global-scope settings commit on confirm, and
+    /// cancel-does-not-revert.
     void show_settings_selector() {
         if (!running_ || view_ == nullptr || !session_->is_open() ||
             !theme_controller_ || !keybindings_ || !settings_manager_) {
@@ -2664,7 +2697,12 @@ private:
         }
         config.default_project_trust =
             settings_manager_->default_project_trust().value_or(DefaultProjectTrust::Ask);
-        config.current_theme = std::string{theme_controller_->active_theme_name()};
+        // pi settings-selector.ts config: the raw theme setting (`|| "dark"`),
+        // the active theme name (the `(current)` marker source), and the
+        // sorted available themes.
+        config.current_theme = settings_manager_->global_settings().theme.value_or("dark");
+        config.active_theme = std::string{theme_controller_->active_theme_name()};
+        config.available_themes = theme_controller_->available_theme_names();
 
         const auto weak = weak_from_this();
         SettingsSelectorCallbacks callbacks;
@@ -2726,16 +2764,32 @@ private:
                 self->post_from_view([](InteractiveState& state) { state.restore_editor_slot(); });
             }
         };
-        callbacks.theme_submenu_factory = make_theme_settings_submenu_factory(
-            *theme_controller_,
-            keybindings_,
-            [weak](util::Error error) {
-                if (const auto self = weak.lock()) {
-                    self->post_from_view([error = std::move(error)](InteractiveState& state) {
-                        state.show_error(combined_error_text(error));
-                    });
-                }
-            });
+        callbacks.on_theme_change = [weak](std::string theme_setting) {
+            if (const auto self = weak.lock()) {
+                self->post_from_view([theme_setting = std::move(theme_setting)](InteractiveState& state) {
+                    // pi `onThemeChange`: `settingsManager.setTheme(themeSetting)`
+                    // then `themeController.applyFromSettings()`.
+                    if (auto saved = state.settings_manager_->set_theme(
+                            coding_agent::SettingsScope::Global,
+                            theme_setting);
+                        !saved) {
+                        state.show_error(combined_error_text(saved.error()));
+                    }
+                    if (state.theme_controller_) {
+                        state.theme_controller_->apply_from_settings();
+                    }
+                });
+            }
+        };
+        callbacks.on_theme_preview = [weak](std::string theme_name) {
+            if (const auto self = weak.lock()) {
+                self->post_from_view([theme_name = std::move(theme_name)](InteractiveState& state) {
+                    if (state.theme_controller_) {
+                        state.theme_controller_->preview(theme_name);
+                    }
+                });
+            }
+        };
 
         auto selector = std::make_shared<SettingsSelectorComponent>(
             theme_controller_->live_theme(),

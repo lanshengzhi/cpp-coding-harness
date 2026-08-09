@@ -1,5 +1,7 @@
 #pragma once
 
+#include "coding_agent/tui/ThemeController.hpp"
+
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Keybindings.hpp>
@@ -33,8 +35,16 @@ struct SettingsSelectorConfig {
     std::vector<std::string> available_thinking_levels{};
     /// The global-only default project trust (pi `getDefaultProjectTrust`).
     DefaultProjectTrust default_project_trust{DefaultProjectTrust::Ask};
-    /// The active theme name (pi `settingsManager.getThemeSetting() || "dark"`).
+    /// pi `settingsManager.getThemeSetting() || "dark"`: the raw global
+    /// theme setting (slash automatic-pair values included) shown as the
+    /// Theme item's value and re-previewed on submenu cancel.
     std::string current_theme{};
+    /// The currently applied theme name (pi `theme-selector.ts` `(current)`
+    /// marker source).
+    std::string active_theme{};
+    /// pi `getAvailableThemes()`: builtins + custom directory + registered
+    /// themes, deduped and sorted by name.
+    std::vector<std::string> available_themes{};
 };
 
 using SettingsSelectorHideThinkingSink = std::move_only_function<void(bool)>;
@@ -43,6 +53,8 @@ using SettingsSelectorEnableSkillCommandsSink = std::move_only_function<void(boo
 using SettingsSelectorThinkingLevelSink = std::move_only_function<void(std::string)>;
 using SettingsSelectorDefaultProjectTrustSink =
     std::move_only_function<void(DefaultProjectTrust)>;
+using SettingsSelectorThemeChangeSink = std::move_only_function<void(std::string)>;
+using SettingsSelectorThemePreviewSink = std::move_only_function<void(std::string)>;
 using SettingsSelectorCancelSink = std::move_only_function<void()>;
 
 /// pi `settings-selector.ts` callbacks: one sink per rendered subset item.
@@ -52,12 +64,12 @@ struct SettingsSelectorCallbacks {
     SettingsSelectorEnableSkillCommandsSink on_enable_skill_commands_change{};
     SettingsSelectorThinkingLevelSink on_thinking_level_change{};
     SettingsSelectorDefaultProjectTrustSink on_default_project_trust_change{};
+    /// pi `onThemeChange`: commit a ThemeSubmenu selection (global-scope
+    /// settings write) and re-apply the theme from settings.
+    SettingsSelectorThemeChangeSink on_theme_change{};
+    /// pi `onThemePreview`: in-memory preview of one theme name or setting.
+    SettingsSelectorThemePreviewSink on_theme_preview{};
     SettingsSelectorCancelSink on_cancel{};
-    /// The G5 single-mode ThemeSubmenu factory; when set, the Theme item
-    /// renders with it (commit already happens inside the submenu, pi's
-    /// `onThemeChange` shape is deferred to the G5 ticket). When empty the
-    /// Theme item is omitted.
-    cch::tui::SettingsSubmenuFactoryHook theme_submenu_factory{};
 };
 
 /// The settings selector (pi `settings-selector.ts`): renders the #327
@@ -65,7 +77,9 @@ struct SettingsSelectorCallbacks {
 /// outputPad) and the graduated enableSkillCommands toggle as a searchable
 /// settings list in the editor slot. Value items cycle on confirm; the
 /// thinking-level item opens a select submenu with pi's per-level
-/// descriptions; the optional Theme item opens the single-mode theme submenu.
+/// descriptions; the Theme item opens the single-mode ThemeSubmenu (pi's
+/// `ThemeSubmenu` subset, no Automatic entry) with in-memory preview, a
+/// global-scope settings commit on confirm, and cancel-does-not-revert.
 ///
 /// Threading: constructed and driven on the TUI thread; callbacks fire on
 /// the input thread like every selector sink, and callers post to their

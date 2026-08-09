@@ -374,14 +374,21 @@ void load_user_prompts_adapter(
     names.append(result.resources.prompt_templates, diagnostics, std::move(load.templates));
 }
 
+/// Trust-gated project themes from `.pi/themes` — pi `resource-loader.ts`
+/// `loadThemes` default directory. The loader cannot parse themes (parsing
+/// stays in the coding-agent TUI package), so it collects the source
+/// documents and reports only path-level diagnostics; name-level dedupe
+/// happens in the TUI layer's `discover_themes`.
 void load_project_themes_adapter(
     const harness::WorkspaceFileSystem& fs,
     ProjectResourceLoadingResult& result,
     std::vector<ResourceDiagnostic>& diagnostics) {
     if (auto listed = fs.listDir(std::string{kProjectThemesMarker}); !listed) {
-        diagnostics.push_back(warning_diagnostic(
-            listed.error().message,
-            std::string{kProjectThemesMarker}));
+        if (listed.error().code != harness::FileErrorCode::NotFound) {
+            diagnostics.push_back(warning_diagnostic(
+                listed.error().message,
+                std::string{kProjectThemesMarker}));
+        }
     } else {
         std::sort(listed->begin(), listed->end(), [](const auto& left, const auto& right) {
             return left.name < right.name;
@@ -394,9 +401,126 @@ void load_project_themes_adapter(
                     content.error().message,
                     path));
             } else {
-                result.resources.project_themes.push_back({
+                result.resources.themes.push_back({
                     .path = path,
                     .json = std::move(*content),
+                    .scope = SourceScope::Project,
+                });
+            }
+        }
+    }
+}
+
+/// User themes from `<agent_config_directory>/themes` — pi
+/// `resource-loader.ts` `loadThemes` default directory. Not trust-gated. A
+/// missing agent config directory (or missing themes directory) loads
+/// nothing silently.
+void load_user_themes_adapter(
+    const std::filesystem::path& agent_config_directory,
+    ProjectResourceLoadingResult& result,
+    std::vector<ResourceDiagnostic>& diagnostics) {
+    auto fs = harness::WorkspaceFileSystem::create(agent_config_directory);
+    if (!fs) {
+        return;
+    }
+    if (auto listed = fs->listDir("themes"); !listed) {
+        if (listed.error().code != harness::FileErrorCode::NotFound) {
+            diagnostics.push_back(warning_diagnostic(
+                listed.error().message,
+                (agent_config_directory / "themes").string()));
+        }
+    } else {
+        std::sort(listed->begin(), listed->end(), [](const auto& left, const auto& right) {
+            return left.name < right.name;
+        });
+        for (const auto& entry : *listed) {
+            if (entry.kind != harness::FileKind::File || !entry.name.ends_with(".json")) continue;
+            const auto path = (agent_config_directory / "themes" / entry.name).string();
+            if (auto content = fs->readTextFile("themes/" + entry.name); !content) {
+                diagnostics.push_back(warning_diagnostic(
+                    content.error().message,
+                    path));
+            } else {
+                result.resources.themes.push_back({
+                    .path = path,
+                    .json = std::move(*content),
+                    .scope = SourceScope::User,
+                });
+            }
+        }
+    }
+}
+
+/// pi `--theme` explicit inputs (resource-loader.ts `loadThemes` path
+/// branch): repeatable files or directories that load after every
+/// discovered source (discovered themes win name collisions, pi's merge
+/// order) and stay effective under `--no-themes`. Missing inputs carry pi's
+/// two diagnostics (the loader warning and the resource-loader error, both
+/// non-fatal); a non-JSON file and unreadable inputs are warnings.
+void load_explicit_theme_paths(
+    const harness::WorkspaceFileSystem& fs,
+    const std::vector<std::string>& theme_paths,
+    ProjectResourceLoadingResult& result,
+    std::vector<ResourceDiagnostic>& diagnostics) {
+    for (const auto& path : theme_paths) {
+        const auto info = fs.fileInfo(path);
+        if (!info) {
+            if (info.error().code == harness::FileErrorCode::NotFound) {
+                diagnostics.push_back(warning_diagnostic(
+                    "theme path does not exist",
+                    path));
+                diagnostics.push_back(error_diagnostic(
+                    "Theme path does not exist",
+                    path));
+            } else {
+                diagnostics.push_back(warning_diagnostic(
+                    info.error().message,
+                    path));
+            }
+            continue;
+        }
+
+        std::vector<std::string> files;
+        if (info->kind == harness::FileKind::Directory) {
+            if (auto listed = fs.listDir(path); !listed) {
+                diagnostics.push_back(warning_diagnostic(
+                    listed.error().message,
+                    path));
+                continue;
+            } else {
+                std::sort(listed->begin(), listed->end(), [](const auto& left, const auto& right) {
+                    return left.name < right.name;
+                });
+                for (const auto& entry : *listed) {
+                    if (entry.kind != harness::FileKind::File || !entry.name.ends_with(".json")) continue;
+                    files.push_back(path + "/" + entry.name);
+                }
+            }
+        } else if (info->kind == harness::FileKind::File) {
+            if (!path.ends_with(".json")) {
+                diagnostics.push_back(warning_diagnostic(
+                    "theme path is not a json file",
+                    path));
+                continue;
+            }
+            files.push_back(path);
+        } else {
+            diagnostics.push_back(warning_diagnostic(
+                "theme path is not a json file",
+                path));
+            continue;
+        }
+
+        for (const auto& file : files) {
+            if (auto content = fs.readTextFile(file); !content) {
+                diagnostics.push_back(warning_diagnostic(
+                    content.error().message,
+                    file));
+            } else {
+                result.resources.themes.push_back({
+                    .path = file,
+                    .json = std::move(*content),
+                    .scope = SourceScope::Temporary,
                 });
             }
         }
@@ -551,11 +675,22 @@ ProjectResourceLoadingResult load_project_resources(
     }
     load_explicit_skill_paths(fs, request.skill_paths, result, diagnostics, skill_names);
 
-    // 4. Project themes load only for a TUI assembly that opted in, while
-    // the project is trusted.
-    if (request.theme_resources_enabled && project_trusted) {
+    // 4. Themes load in pi's order (resource-loader.ts `mergePaths` puts
+    // the auto-discovered paths before the `--theme` additions, and
+    // `dedupeThemes` is first-wins): trust-gated project `.pi/themes`, user
+    // `<agent_config_directory>/themes`, then the explicit `--theme` paths
+    // LAST (discovered themes win name collisions). `--no-themes` drops
+    // every discovery source but keeps the explicit paths. Parsing and
+    // name-level dedupe stay in the coding-agent TUI package
+    // (`discover_themes`), which receives the collected documents.
+    if (!request.no_themes && project_trusted) {
         load_project_themes_adapter(fs, result, diagnostics);
     }
+    if (!request.no_themes && request.agent_config_directory &&
+        !request.agent_config_directory->empty()) {
+        load_user_themes_adapter(*request.agent_config_directory, result, diagnostics);
+    }
+    load_explicit_theme_paths(fs, request.theme_paths, result, diagnostics);
 
     result.diagnostics = std::move(diagnostics);
     bound_diagnostics(result);

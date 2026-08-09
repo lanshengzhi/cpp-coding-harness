@@ -2,7 +2,10 @@
 
 #include "coding_agent/tui/Theme.hpp"
 
+#include <cch/tui/Container.hpp>
+#include <cch/tui/SelectList.hpp>
 #include <cch/tui/SettingsList.hpp>
+#include <cch/tui/Text.hpp>
 
 #include <memory>
 #include <optional>
@@ -97,13 +100,163 @@ struct SettingsSelectorState {
     return list;
 }
 
+/// pi `settings-selector.ts` `ThemeSubmenu` single-mode subset: no Automatic
+/// entry. Lists every available theme (pi `getAvailableThemes`, already
+/// sorted) with the `(current)` marker on the active theme, pre-selecting
+/// the active theme (falling back to `dark`, then the first item). Moving
+/// the selection previews in memory (pi `onThemePreview` →
+/// `themeController.preview`); confirming completes with the selected name
+/// (the settings-list change sink then commits the global-scope settings
+/// write and re-applies, pi `onThemeChange`); cancel re-previews the
+/// original theme setting and completes without a value — the settings are
+/// never written on cancel (cancel-does-not-revert).
+class ThemeSubmenu final : public cch::tui::Component,
+                           public cch::tui::InputHandler,
+                           public cch::tui::Focusable {
+public:
+    ThemeSubmenu(
+        const LiveTheme& theme,
+        std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
+        const SettingsSelectorConfig& config,
+        SettingsSelectorState& state,
+        cch::tui::SettingsSubmenuDoneSink done) {
+        const auto preview = [&state](std::string value) {
+            if (state.callbacks.on_theme_preview) {
+                state.callbacks.on_theme_preview(std::move(value));
+            }
+        };
+        auto completion =
+            std::make_shared<cch::tui::SettingsSubmenuDoneSink>(std::move(done));
+        const auto original_theme_setting = config.current_theme;
+
+        // pi `SelectSubmenu` chrome: bold accent title, muted description
+        // (trimmed — the subset has no Automatic entry), the select list,
+        // and the dim hint line.
+        auto content = std::make_unique<cch::tui::Container>();
+        const auto styled = [&theme](ThemeToken token, std::string text) {
+            return theme.foreground(token, std::move(text));
+        };
+        (void)content->add_child(std::make_unique<cch::tui::Text>(
+            "\x1b[1m" + styled(ThemeToken::Accent, "Theme") + "\x1b[22m",
+            /* padding_x */ 0,
+            /* padding_y */ 0));
+        (void)content->add_child(std::make_unique<cch::tui::Spacer>(1));
+        (void)content->add_child(std::make_unique<cch::tui::Text>(
+            styled(ThemeToken::Muted, "Select a theme."),
+            /* padding_x */ 0,
+            /* padding_y */ 0));
+        (void)content->add_child(std::make_unique<cch::tui::Spacer>(1));
+
+        std::vector<cch::tui::SelectItem> items;
+        items.reserve(config.available_themes.size());
+        std::size_t selected_index = 0;
+        bool active_found = false;
+        bool dark_found = false;
+        for (std::size_t index = 0; index < config.available_themes.size(); ++index) {
+            const auto& name = config.available_themes[index];
+            if (name == config.active_theme) {
+                selected_index = index;
+                active_found = true;
+            }
+            if (name == "dark") dark_found = true;
+            items.push_back({
+                .value = name,
+                .label = name,
+                .description = name == config.active_theme
+                    ? std::optional<std::string>{"(current)"}
+                    : std::nullopt,
+            });
+        }
+        if (!active_found) {
+            // pi `preferredTheme(availableThemes, current, "dark")`: fall
+            // back to `dark`, then the first item.
+            const auto dark = std::find(
+                config.available_themes.begin(),
+                config.available_themes.end(),
+                "dark");
+            selected_index = dark_found
+                ? static_cast<std::size_t>(dark - config.available_themes.begin())
+                : 0;
+        }
+
+        auto select_list = std::make_unique<cch::tui::SelectList>(
+            std::move(items),
+            cch::tui::SelectListOptions{
+                .max_visible = 10,
+                .theme = theme.select_list_theme(),
+                .on_select = [completion](const cch::tui::SelectItem& item) {
+                    (*completion)(item.value);
+                },
+                .on_cancel = [completion, preview, original_theme_setting]() {
+                    // pi `cancel()`: re-preview the original setting (never
+                    // a settings write) and complete without a value.
+                    preview(original_theme_setting);
+                    (*completion)(std::nullopt);
+                },
+                .on_selection_change = [preview](const cch::tui::SelectItem& item) {
+                    preview(item.value);
+                },
+                .keybindings = std::move(keybindings),
+            });
+        select_list_pointer_ = select_list.get();
+        select_list->set_selected_index(selected_index);
+        (void)content->add_child(std::move(select_list));
+        (void)content->add_child(std::make_unique<cch::tui::Spacer>(1));
+        (void)content->add_child(std::make_unique<cch::tui::Text>(
+            styled(ThemeToken::Dim, "  Enter to select · Esc to go back"),
+            /* padding_x */ 0,
+            /* padding_y */ 0));
+        content_ = std::move(content);
+    }
+
+    [[nodiscard]] util::Expected<cch::tui::RenderResult> render(std::size_t width) override {
+        return content_->render(width);
+    }
+
+    void invalidate() override {
+        content_->invalidate();
+    }
+
+    void handle_input(const cch::tui::InputEventVariant& input) override {
+        if (select_list_pointer_ != nullptr) {
+            select_list_pointer_->handle_input(input);
+        }
+    }
+
+    [[nodiscard]] bool accepts_key_releases() const override {
+        return select_list_pointer_ != nullptr &&
+            select_list_pointer_->accepts_key_releases();
+    }
+
+    void set_focused(bool focused) override {
+        if (select_list_pointer_ != nullptr) {
+            select_list_pointer_->set_focused(focused);
+        }
+    }
+
+    [[nodiscard]] bool focused() const override {
+        return select_list_pointer_ != nullptr && select_list_pointer_->focused();
+    }
+
+    [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override {
+        return select_list_pointer_ != nullptr
+            ? select_list_pointer_->cursor_location()
+            : std::nullopt;
+    }
+
+private:
+    std::unique_ptr<cch::tui::Container> content_;
+    // The SelectList is owned by the container; the pointer keeps input
+    // routing and focus on it.
+    cch::tui::SelectList* select_list_pointer_{nullptr};
+};
+
 /// The #327 subset items pi's settings selector renders, in pi's list order
 /// (the render-settings group precedes the base items, so output-padding
-/// renders before hide-thinking). The Theme item renders only when the
-/// theme submenu factory is wired.
+/// renders before hide-thinking). The Theme item renders always (pi's
+/// settings-selector.ts renders it unconditionally).
 [[nodiscard]] std::vector<cch::tui::SettingItem> make_items(
-    const SettingsSelectorConfig& config,
-    bool theme_wired) {
+    const SettingsSelectorConfig& config) {
     std::vector<cch::tui::SettingItem> items;
     items.push_back({
         .id = "skill-commands",
@@ -141,15 +294,13 @@ struct SettingsSelectorState {
         .current_value = config.thinking_level,
         .control = cch::tui::SettingSubmenu{},
     });
-    if (theme_wired) {
-        items.push_back({
-            .id = "theme",
-            .label = "Theme",
-            .description = "Color theme for the interface",
-            .current_value = config.current_theme,
-            .control = cch::tui::SettingSubmenu{},
-        });
-    }
+    items.push_back({
+        .id = "theme",
+        .label = "Theme",
+        .description = "Color theme for the interface",
+        .current_value = config.current_theme,
+        .control = cch::tui::SettingSubmenu{},
+    });
     return items;
 }
 
@@ -163,8 +314,7 @@ struct SettingsSelectorComponent::Impl {
         SettingsSelectorCallbacks callbacks)
         : state(std::make_shared<SettingsSelectorState>(
               SettingsSelectorState{.callbacks = std::move(callbacks)})),
-          list_(make_items(config, static_cast<bool>(state->callbacks.theme_submenu_factory)),
-                make_options(theme, std::move(keybindings), config, state)) {}
+          list_(make_items(config), make_options(theme, std::move(keybindings), config, state)) {}
 
     [[nodiscard]] static cch::tui::SettingsListOptions make_options(
         const LiveTheme& theme,
@@ -204,9 +354,18 @@ struct SettingsSelectorComponent::Impl {
                     }
                     return;
                 }
-                // `thinking` reports through the submenu's select sink and
-                // `theme` commits inside the theme submenu, so both fire a
-                // change here only to refresh the item's display value.
+                if (id == "theme") {
+                    // pi `case "theme": callbacks.onThemeChange(newValue)`
+                    // — the ThemeSubmenu completes with the selected name
+                    // and the settings-list change sink commits it.
+                    if (state->callbacks.on_theme_change) {
+                        state->callbacks.on_theme_change(std::move(new_value));
+                    }
+                    return;
+                }
+                // `thinking` reports through the submenu's select sink, so
+                // it fires a change here only to refresh the item's display
+                // value.
             },
             .on_cancel = [cancel]() {
                 if (*cancel) (*cancel)();
@@ -221,8 +380,9 @@ struct SettingsSelectorComponent::Impl {
                     make_thinking_submenu(
                         theme, submenu_keybindings, config, *state, std::move(done))};
             }
-            if (item.id == "theme" && state->callbacks.theme_submenu_factory) {
-                return state->callbacks.theme_submenu_factory(item, std::move(done));
+            if (item.id == "theme") {
+                return std::unique_ptr<cch::tui::Component>{std::make_unique<ThemeSubmenu>(
+                    theme, submenu_keybindings, config, *state, std::move(done))};
             }
             return std::unique_ptr<cch::tui::Component>{};
         };

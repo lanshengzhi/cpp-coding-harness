@@ -89,6 +89,24 @@ struct ResourceDiagnostic {
     std::optional<ResourceCollision> collision;
 };
 
+/// One theme document collected by the resource loader — pi
+/// `resource-loader.ts` `loadThemes` reads every source and hands the parsed
+/// themes to `setRegisteredThemes`. Parsing and name-level dedupe stay in
+/// the physically separate coding-agent TUI package (`discover_themes`), so
+/// the loader carries documents (source path + raw JSON), not parsed
+/// themes.
+struct LoadedThemeResource {
+    /// Display/source path (pi `Theme.sourcePath`): `.pi/themes/<name>` for
+    /// project themes, the absolute user-directory path, or the resolved
+    /// explicit `--theme` path.
+    std::string path;
+    std::string json;
+    /// pi `SourceInfo.scope` of the discovering source: `Project` (the
+    /// trust-gated `.pi/themes` directory), `User` (`~/.pi/agent/themes`),
+    /// or `Temporary` (an explicit `--theme` path).
+    SourceScope scope{SourceScope::Project};
+};
+
 /// Trust-requiring project resource markers: the `.pi/` markers (the pi
 /// `TRUST_REQUIRING_PROJECT_CONFIG_RESOURCES` subset without the extensions /
 /// package-manager markers and with `settings.json` owned by the Settings

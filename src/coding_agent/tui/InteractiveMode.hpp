@@ -36,6 +36,10 @@ struct InteractiveSessionFacts {
     /// Repeatable pi `--skill` paths: explicit skills load even when
     /// `--no-skills` drops discovery.
     std::vector<std::string> skill_paths;
+    /// pi `--no-themes` and repeatable `--theme` paths (file or directory,
+    /// workspace-relative), used by in-session session replacement.
+    bool no_themes{false};
+    std::vector<std::string> theme_paths;
     std::optional<std::string> provider;
     std::optional<std::string> model;
     std::vector<std::string> models;

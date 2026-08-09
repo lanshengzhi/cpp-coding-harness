@@ -783,6 +783,7 @@ public:
         result.diagnostics = std::move(factory_result->diagnostics);
         result.model_fallback_message =
             std::move(factory_result->model_fallback_message);
+        result.theme_resources = std::move(factory_result->theme_resources);
         result.session_id = factory_result->session_id;
         result.provider = factory_result->provider;
         result.model = factory_result->model;

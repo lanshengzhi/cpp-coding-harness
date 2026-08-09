@@ -80,9 +80,6 @@ TEST_CASE(
     config.default_project_trust = coding_agent::DefaultProjectTrust::Always;
     config.current_theme = "dark";
     coding_agent::tui::SettingsSelectorCallbacks callbacks;
-    callbacks.theme_submenu_factory = [](const tui::SettingItem&, tui::SettingsSubmenuDoneSink) {
-        return std::unique_ptr<tui::Component>{};
-    };
 
     coding_agent::tui::SettingsSelectorComponent selector(
         theme,
@@ -230,26 +227,18 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "SettingsSelector Theme item opens the injected theme submenu factory",
-    "[coding_agent][tui][settings-selector][issue408]") {
+    "SettingsSelector Theme item opens the single-mode ThemeSubmenu with preview and commit",
+    "[coding_agent][tui][settings-selector][issue408][issue415]") {
     auto theme = test_theme();
     coding_agent::tui::SettingsSelectorConfig config;
     config.current_theme = "dark";
-    std::size_t factory_calls = 0;
+    config.active_theme = "dark";
+    config.available_themes = {"dark", "light", "solarized"};
+    std::vector<std::string> committed;
+    std::vector<std::string> previewed;
     coding_agent::tui::SettingsSelectorCallbacks callbacks;
-    callbacks.theme_submenu_factory =
-        [&factory_calls](const tui::SettingItem& item, tui::SettingsSubmenuDoneSink done) {
-            ++factory_calls;
-            CHECK(item.id == "theme");
-            auto list = std::make_unique<tui::SelectList>(
-                std::vector<tui::SelectItem>{{.value = "dark", .label = "dark"}},
-                tui::SelectListOptions{
-                    .on_select = [done = std::move(done)](const tui::SelectItem& selected) mutable {
-                        done(selected.value);
-                    },
-                });
-            return list;
-        };
+    callbacks.on_theme_change = [&committed](std::string value) { committed.push_back(std::move(value)); };
+    callbacks.on_theme_preview = [&previewed](std::string value) { previewed.push_back(std::move(value)); };
 
     coding_agent::tui::SettingsSelectorComponent selector(
         theme,
@@ -262,9 +251,66 @@ TEST_CASE(
         selector.handle_input(tui::KeyEvent{.key = "down"});
     }
     selector.handle_input(tui::KeyEvent{.key = "enter"});
-    CHECK(factory_calls == 1);
+
+    // The single-mode submenu lists every available theme sorted with the
+    // `(current)` marker on the active theme and pi's SelectSubmenu chrome
+    // (no Automatic entry).
     const auto screen = render_screen(selector);
+    CHECK(screen.find("Theme") != std::string::npos);
     CHECK(screen.find("dark") != std::string::npos);
+    CHECK(screen.find("light") != std::string::npos);
+    CHECK(screen.find("solarized") != std::string::npos);
+    CHECK(screen.find("(current)") != std::string::npos);
+    CHECK(screen.find("Enter to select · Esc to go back") != std::string::npos);
+    CHECK(screen.find("Automatic") == std::string::npos);
+
+    // Moving the selection previews in memory.
+    selector.handle_input(tui::KeyEvent{.key = "down"});
+    REQUIRE(previewed.size() == 1);
+    CHECK(previewed[0] == "light");
+
+    // Confirming commits through the change sink (pi onThemeChange); the
+    // settings-list change fires with the selected theme.
+    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    REQUIRE(committed.size() == 1);
+    CHECK(committed[0] == "light");
+}
+
+TEST_CASE(
+    "SettingsSelector ThemeSubmenu cancel re-previews the original without committing",
+    "[coding_agent][tui][settings-selector][issue415]") {
+    auto theme = test_theme();
+    coding_agent::tui::SettingsSelectorConfig config;
+    config.current_theme = "light";
+    config.active_theme = "light";
+    config.available_themes = {"dark", "light"};
+    std::vector<std::string> committed;
+    std::vector<std::string> previewed;
+    coding_agent::tui::SettingsSelectorCallbacks callbacks;
+    callbacks.on_theme_change = [&committed](std::string value) { committed.push_back(std::move(value)); };
+    callbacks.on_theme_preview = [&previewed](std::string value) { previewed.push_back(std::move(value)); };
+
+    coding_agent::tui::SettingsSelectorComponent selector(
+        theme,
+        test_keybindings(),
+        config,
+        std::move(callbacks));
+
+    for (int step = 0; step < 5; ++step) {
+        selector.handle_input(tui::KeyEvent{.key = "down"});
+    }
+    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    previewed.clear();
+    selector.handle_input(tui::KeyEvent{.key = "down"});
+    REQUIRE(previewed.size() == 1);
+    CHECK(previewed[0] == "dark");
+
+    // Esc cancels: the original setting is re-previewed and nothing commits
+    // (cancel-does-not-revert).
+    selector.handle_input(tui::KeyEvent{.key = "escape"});
+    REQUIRE(previewed.size() == 2);
+    CHECK(previewed[1] == "light");
+    CHECK(committed.empty());
 }
 
 TEST_CASE(
@@ -277,9 +323,13 @@ TEST_CASE(
         coding_agent::tui::SettingsSelectorConfig{},
         coding_agent::tui::SettingsSelectorCallbacks{});
 
-    // Typing filters by label (pi settings-list.ts search).
+    // Typing filters by label (pi settings-list.ts search). The Theme item
+    // renders always now, so a "th" query matches it too.
     selector.handle_input(tui::KeyEvent{.key = "t"});
     selector.handle_input(tui::KeyEvent{.key = "h"});
+    selector.handle_input(tui::KeyEvent{.key = "i"});
+    selector.handle_input(tui::KeyEvent{.key = "n"});
+    selector.handle_input(tui::KeyEvent{.key = "k"});
     const auto screen = render_screen(selector);
     CHECK(screen.find("Thinking level") != std::string::npos);
     CHECK(screen.find("Hide thinking") != std::string::npos);
@@ -289,15 +339,26 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "SettingsSelector omits the Theme item without a wired submenu factory",
-    "[coding_agent][tui][settings-selector][issue408]") {
+    "SettingsSelector always renders the Theme item with the single-mode submenu",
+    "[coding_agent][tui][settings-selector][issue415]") {
     auto theme = test_theme();
+    coding_agent::tui::SettingsSelectorConfig config;
+    config.available_themes = {"dark", "light"};
     coding_agent::tui::SettingsSelectorComponent selector(
         theme,
         test_keybindings(),
-        coding_agent::tui::SettingsSelectorConfig{},
+        config,
         coding_agent::tui::SettingsSelectorCallbacks{});
     const auto screen = render_screen(selector);
     CHECK(screen.find("Hide thinking") != std::string::npos);
-    CHECK(screen.find("Theme") == std::string::npos);
+    // The Theme item renders always (pi settings-selector.ts renders it
+    // unconditionally); the submenu opens with the builtin themes.
+    CHECK(screen.find("Theme") != std::string::npos);
+    for (int step = 0; step < 5; ++step) {
+        selector.handle_input(tui::KeyEvent{.key = "down"});
+    }
+    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    const auto submenu = render_screen(selector);
+    CHECK(submenu.find("dark") != std::string::npos);
+    CHECK(submenu.find("light") != std::string::npos);
 }

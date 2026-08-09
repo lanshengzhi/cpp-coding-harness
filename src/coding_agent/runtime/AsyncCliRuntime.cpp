@@ -7,6 +7,7 @@
 #include "cli/SessionFamily.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/ThemeController.hpp"
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/tui/ProcessTerminal.hpp>
@@ -130,6 +131,8 @@ void print_session_diagnostics(
     facts.no_prompt_templates = config.no_prompt_templates;
     facts.prompt_template_paths = config.prompt_template_paths;
     facts.skill_paths = config.skills;
+    facts.no_themes = config.no_themes;
+    facts.theme_paths = config.themes;
     facts.provider = config.provider;
     facts.model = config.model;
     facts.models = config.models;
@@ -143,6 +146,8 @@ void print_session_diagnostics(
             request.no_prompt_templates = facts.no_prompt_templates;
             request.prompt_template_paths = facts.prompt_template_paths;
             request.skill_paths = facts.skill_paths;
+            request.no_themes = facts.no_themes;
+            request.theme_paths = facts.theme_paths;
             request.provider = facts.provider;
             request.model = facts.model;
             request.models = facts.models;
@@ -263,6 +268,8 @@ void print_session_diagnostics(
     request.no_prompt_templates = config.no_prompt_templates;
     request.prompt_template_paths = config.prompt_template_paths;
     request.skill_paths = config.skills;
+    request.no_themes = config.no_themes;
+    request.theme_paths = config.themes;
     request.workspace = config.workspace;
     request.session_target = std::move(assembly->target);
     request.session_name = config.name;
@@ -340,6 +347,25 @@ void print_session_diagnostics(
         }
         streams.error << '\n';
         return 1;
+    }
+
+    // pi main.ts `initTheme(settingsManager.getTheme(), appMode ===
+    // "interactive")`: the boot theme init runs for every mode before the
+    // no-model guard and the frontend split — resolve the settings theme
+    // (slash automatic-pair values read as unset) or the COLORFGBG-detected
+    // default and load it with pi's silent dark fallback. The palette is
+    // the one every mode boots with; the interactive controller re-inits
+    // from the same settings at TUI construction (pi
+    // `InteractiveThemeController`) and the startup-TUI host consumes the
+    // same init.
+    {
+        auto boot_settings = coding_agent::SettingsManager::create(
+            config.workspace,
+            coding_agent::agent_config_dir(),
+            /* project_trusted */ false);
+        (void)coding_agent::tui::init_boot_theme(
+            coding_agent::agent_config_dir(),
+            boot_settings.settings().theme);
     }
 
     if (frontend == Frontend::Interactive) {

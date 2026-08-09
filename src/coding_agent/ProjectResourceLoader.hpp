@@ -21,17 +21,15 @@ struct ExplicitPromptTemplateInput {
     bool is_file{true};
 };
 
-struct LoadedProjectThemeResource {
-    std::string path;
-    std::string json;
-};
-
 struct LoadedProjectResources {
     std::vector<Skill> skills;
     std::vector<PromptTemplate> prompt_templates;
-    /// Trusted, contained project theme documents. Parsing stays in the
-    /// physically separate coding-agent TUI package.
-    std::vector<LoadedProjectThemeResource> project_themes;
+    /// Theme documents in pi's load order: trust-gated project `.pi/themes`,
+    /// user `<agent_config_directory>/themes`, then explicit `--theme`
+    /// paths (discovered before explicit, pi's merge order). The document
+    /// contract lives in the public `ProjectResources.hpp` header so the
+    /// coding-agent TUI package can consume it without a runtime dependency.
+    std::vector<LoadedThemeResource> themes;
 };
 
 /// Project resource loading request — the pi `DefaultResourceLoader` subset
@@ -57,13 +55,21 @@ struct ProjectResourceLoadingRequest {
     /// pi `--no-prompt-templates`: drops user and project prompt discovery
     /// (explicit `--prompt-template` paths still load).
     bool no_prompt_templates{false};
+    /// pi `--no-themes`: drops user `<agent_config_directory>/themes` and
+    /// trust-gated project `.pi/themes` discovery (explicit `--theme`
+    /// paths still load).
+    bool no_themes{false};
+    /// Repeatable pi `--theme` paths (files or directories): explicit theme
+    /// inputs load after every discovered source (discovered themes win
+    /// name collisions, pi's merge order) and stay effective under
+    /// `--no-themes`. Missing inputs carry pi's two diagnostics (the loader
+    /// warning and the resource-loader error, both non-fatal).
+    std::vector<std::string> theme_paths;
     /// Repeatable pi `--skill` paths (files or directories): explicit skills
-    /// load first (they win name collisions) and stay effective under
-    /// `--no-skills`.
+    /// load after every discovered source (discovered skills win name
+    /// collisions, pi's merge order) and stay effective under `--no-skills`.
     std::vector<std::string> skill_paths;
-    /// False for every existing non-TUI assembly. A Native TUI assembly opts
-    /// in only after it has decided to consume theme resources.
-    bool theme_resources_enabled{false};
+    /// Repeatable pi `--prompt-template` inputs.
     std::vector<ExplicitPromptTemplateInput> explicit_prompt_templates;
 };
 

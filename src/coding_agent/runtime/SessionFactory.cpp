@@ -135,6 +135,10 @@ struct AssemblyPlan {
     std::optional<DefaultProjectTrust> default_project_trust;
     bool no_skills{false};
     bool no_prompt_templates{false};
+    /// pi `--no-themes` and repeatable `--theme` paths (file or directory,
+    /// resolved against the workspace).
+    bool no_themes{false};
+    std::vector<std::string> theme_paths;
     std::optional<bool> project_trust_override;
     std::size_t max_queued_messages{agent::kDefaultMaxQueuedMessages};
     std::size_t max_queued_bytes{agent::kDefaultMaxQueuedBytes};
@@ -770,6 +774,8 @@ struct SessionTargetNormalizationOptions {
     plan.no_prompt_templates = request.no_prompt_templates;
     plan.prompt_template_paths = request.prompt_template_paths;
     plan.skill_paths = request.skill_paths;
+    plan.no_themes = request.no_themes;
+    plan.theme_paths = request.theme_paths;
     plan.max_queued_messages = request.max_queued_messages;
     plan.max_queued_bytes = request.max_queued_bytes;
     plan.provide_user_shell = request.provide_user_shell;
@@ -1087,6 +1093,7 @@ struct SessionTargetNormalizationOptions {
     // templates come only from project discovery.
     std::vector<Skill> skills;
     std::vector<PromptTemplate> templates;
+    std::vector<LoadedThemeResource> theme_documents;
     std::filesystem::path trust_store_path =
         coding_agent::trust_store_file_path();
     if (auto valid = validate_trust_store_path(trust_store_path, workspace); !valid) {
@@ -1105,6 +1112,8 @@ struct SessionTargetNormalizationOptions {
             resource_request.no_skills = plan.no_skills;
             resource_request.no_prompt_templates = plan.no_prompt_templates;
             resource_request.skill_paths = plan.skill_paths;
+            resource_request.no_themes = plan.no_themes;
+            resource_request.theme_paths = plan.theme_paths;
             resource_request.explicit_prompt_templates = make_explicit_template_inputs(*fs, plan.prompt_template_paths);
 
             ProjectTrustStore trust_store{trust_store_path};
@@ -1119,6 +1128,7 @@ struct SessionTargetNormalizationOptions {
             project_trusted = resource_loading.trust.decision == ProjectTrustDecision::Trusted;
             skills = std::move(resource_loading.resources.skills);
             templates = std::move(resource_loading.resources.prompt_templates);
+            theme_documents = std::move(resource_loading.resources.themes);
         } else {
             diagnostics.push_back(make_diag(
                 SessionDiagnostic::Severity::Warning,
@@ -1516,6 +1526,7 @@ struct SessionTargetNormalizationOptions {
     result.runtime = std::move(runtime_handle);
     result.diagnostics = std::move(diagnostics);
     result.model_fallback_message = std::move(model_fallback_message);
+    result.theme_resources = std::move(theme_documents);
     result.session_id = metadata.session_id;
     result.provider = resolved_provider;
     result.model = resolved_model;

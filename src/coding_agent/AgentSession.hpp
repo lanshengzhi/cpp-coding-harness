@@ -8,6 +8,7 @@
 #include <cch/ai/Models.hpp>
 #include <cch/ai/Usage.hpp>
 #include <cch/coding_agent/AgentSessionEvent.hpp>
+#include "coding_agent/ProjectResourceLoader.hpp"
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/ModelResolver.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
@@ -82,6 +83,12 @@ struct CreateAgentSessionResult {
     /// warning ("Warning: <message>") and is dropped in print mode; never a
     /// stderr diagnostic.
     std::optional<std::string> model_fallback_message;
+
+    /// Theme documents collected by the resource loader (pi
+    /// `resourceLoader.getThemes()`): the interactive boot registers and
+    /// applies them through the theme controller (`setRegisteredThemes` +
+    /// `applyFromSettings`). Parsing stays in the TUI layer.
+    std::vector<LoadedThemeResource> theme_resources;
 
     /// Resolved session metadata (for host introspection).
     std::string session_id;

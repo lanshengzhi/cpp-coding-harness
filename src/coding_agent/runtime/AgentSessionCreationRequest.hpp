@@ -55,6 +55,13 @@ struct AgentSessionCreationRequest {
     /// (explicit `--prompt-template` paths still load).
     bool no_prompt_templates{false};
     std::vector<std::string> prompt_template_paths;
+    /// pi `--no-themes`: drops user and project theme discovery (explicit
+    /// `--theme` paths stay).
+    bool no_themes{false};
+    /// Repeatable pi `--theme` paths (files or directories): explicit theme
+    /// inputs load after every discovered source and stay effective under
+    /// `--no-themes`.
+    std::vector<std::string> theme_paths;
     std::size_t max_queued_messages{agent::kDefaultMaxQueuedMessages};
     std::size_t max_queued_bytes{agent::kDefaultMaxQueuedBytes};
     /// The internal workspace containment seam: always the current working

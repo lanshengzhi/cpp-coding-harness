@@ -3,6 +3,7 @@
 #include <cch/ai/Models.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include "coding_agent/AgentSession.hpp"
+#include "coding_agent/ProjectResourceLoader.hpp"
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 #include "coding_agent/runtime/AgentSessionRuntime.hpp"
 #include "coding_agent/runtime/AsyncUserShell.hpp"
@@ -30,6 +31,11 @@ struct CreateAgentSessionResult {
     /// `model_change` identity could not be restored (interactive boot
     /// warning only; never a stderr diagnostic).
     std::optional<std::string> model_fallback_message;
+    /// Theme documents collected by the resource loader (pi
+    /// `resourceLoader.getThemes()`): the interactive boot registers and
+    /// applies them through the theme controller (`setRegisteredThemes` +
+    /// `applyFromSettings`). Parsing stays in the TUI layer.
+    std::vector<coding_agent::LoadedThemeResource> theme_resources;
     /// Resolved session metadata.
     std::string session_id;
     std::string provider;
