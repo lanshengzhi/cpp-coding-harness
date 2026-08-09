@@ -2,6 +2,7 @@
 
 #include <cch/coding_agent/PromptTemplate.hpp>
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -41,6 +42,11 @@ struct PromptTemplateDirSpec {
     std::string path;
     /// When true, the path is an explicit file (not a directory).
     bool is_file{false};
+    /// pi `SourceInfo` provenance for every template loaded from this spec:
+    /// "auto" (discovered project/user) or "cli" (explicit path) with the
+    /// resource-root baseDir (pi `createPromptSourceInfo`; #418). Absent
+    /// specs carry no sourceInfo.
+    std::optional<SourceInfo> source_info{std::nullopt};
 };
 
 /// Load a single .md prompt template file.
@@ -52,7 +58,8 @@ struct PromptTemplateDirSpec {
 /// diagnostic instead of being silently ignored.
 [[nodiscard]] PromptTemplateLoadResult loadPromptTemplateFromFile(
     const harness::WorkspaceFileSystem& fs,
-    const std::string& filePath);
+    const std::string& filePath,
+    const std::optional<SourceInfo>& source_info = std::nullopt);
 
 /// Discover and load prompt templates from one or more directory specs.
 ///

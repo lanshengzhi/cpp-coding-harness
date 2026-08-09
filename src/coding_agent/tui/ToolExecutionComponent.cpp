@@ -138,12 +138,12 @@ struct ToolExecutionComponent::ImageSlot {
 
 ToolExecutionComponent::ToolExecutionComponent(
     const LiveTheme& theme,
-    const cch::tui::KeybindingRegistry& keybindings,
+    std::shared_ptr<const SharedKeybindings> keybindings,
     std::string tool_name,
     std::string tool_call_id,
     std::string arguments_json)
     : theme_(theme),
-      keybindings_(keybindings),
+      keybindings_(std::move(keybindings)),
       tool_name_(std::move(tool_name)),
       tool_call_id_(std::move(tool_call_id)),
       arguments_json_(safe_text(std::move(arguments_json))),
@@ -204,7 +204,7 @@ void ToolExecutionComponent::rebuild() {
 
     // Arguments preview.
     if (!arguments_json_.empty()) {
-        const auto expand_hint = keybindings_.key_text("app.tools.expand");
+        const auto expand_hint = keybindings_->registry().key_text("app.tools.expand");
         const auto hint = expand_hint.empty() ? "Unbound" : expand_hint;
         const auto preview = expanded_
             ? safe_text(arguments_json_)
@@ -236,7 +236,7 @@ void ToolExecutionComponent::rebuild() {
     } else {
         const auto output = result_text_content(*result_);
         if (!output.empty()) {
-            const auto expand_hint = keybindings_.key_text("app.tools.expand");
+            const auto expand_hint = keybindings_->registry().key_text("app.tools.expand");
             const auto hint = expand_hint.empty() ? "Unbound" : expand_hint;
             const auto preview = expanded_
                 ? safe_text(output)

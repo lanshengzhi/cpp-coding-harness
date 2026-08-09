@@ -182,11 +182,11 @@ TEST_CASE("Native TUI commands extend only the concrete effective registry", "[c
     REQUIRE(coding_agent::register_native_tui_commands(registry).has_value());
 
     const auto commands = registry.list_commands();
-    REQUIRE(commands.size() == 12);
+    REQUIRE(commands.size() == 13);
     CHECK(commands[4].name == "hotkeys");
     CHECK(commands[4].description == "Show all keyboard shortcuts");
-    CHECK(commands[11].name == "settings");
-    CHECK(commands[11].description == "Open settings menu");
+    CHECK(commands[12].name == "settings");
+    CHECK(commands[12].description == "Open settings menu");
     CHECK(commands[5].name == "login");
     CHECK(commands[5].description == "Configure provider authentication");
     CHECK(commands[5].argument_hint == "<provider>");
@@ -195,8 +195,14 @@ TEST_CASE("Native TUI commands extend only the concrete effective registry", "[c
     CHECK(commands[7].name == "model");
     CHECK(commands[7].description == "Select model (opens selector UI)");
     CHECK(commands[7].argument_hint == "<provider/model>");
-    CHECK(commands[9].name == "scoped-models");
-    CHECK(commands[9].description == "Enable/disable models for Ctrl+P cycling");
+    CHECK(commands[10].name == "scoped-models");
+    CHECK(commands[10].description == "Enable/disable models for Ctrl+P cycling");
+    // pi `/reload` (#418): re-read User Settings, keybindings, skills,
+    // prompts, themes, and context files; rebuild the System Prompt; refresh
+    // the loaded-resources presentation.
+    CHECK(commands[9].name == "reload");
+    CHECK(commands[9].description ==
+          "Reload keybindings, skills, prompts, themes, and context files");
     CHECK_FALSE(registry.find_command_info("new").has_value());
     CHECK_FALSE(registry.find_command_info("resume").has_value());
 
@@ -205,15 +211,22 @@ TEST_CASE("Native TUI commands extend only the concrete effective registry", "[c
     const auto hotkeys = registry.dispatch("hotkeys", context, "");
     const auto login = registry.dispatch("login", context, "deepseek");
     const auto logout = registry.dispatch("logout", context, "");
+    const auto reload = registry.dispatch("reload", context, "");
     REQUIRE(settings.has_value());
     REQUIRE(hotkeys.has_value());
     REQUIRE(login.has_value());
     REQUIRE(logout.has_value());
+    REQUIRE(reload.has_value());
     CHECK(settings->effect == coding_agent::CommandEffect::OpenSettings);
     CHECK(hotkeys->effect == coding_agent::CommandEffect::OpenHotkeys);
     CHECK(login->effect == coding_agent::CommandEffect::OpenLogin);
     CHECK(login->effect_argument == "deepseek");
     CHECK(logout->effect == coding_agent::CommandEffect::OpenLogout);
+    CHECK(reload->effect == coding_agent::CommandEffect::Reload);
+    // pi `/reload` takes no arguments.
+    const auto reload_args = registry.dispatch("reload", context, "extra");
+    REQUIRE(reload_args.has_value());
+    CHECK(reload_args->display_text == "Usage: /reload");
 }
 
 TEST_CASE("built-in /commands dispatches through the /help handler", "[coding_agent][prompt]") {

@@ -1107,6 +1107,18 @@ struct SessionTargetNormalizationOptions {
     std::vector<prompt::ProjectContextFile> agents_files;
     std::optional<std::string> system_prompt_text;
     std::vector<std::string> append_system_prompt_texts;
+    // Loaded-resources presentation + `/reload` inputs (pi
+    // `getSystemPromptSource()`/`getAppendSystemPromptSources()` and the
+    // per-kind diagnostics): dropped from the runtime today, must flow into
+    // the runtime config (#418).
+    std::optional<std::string> system_prompt_source;
+    std::vector<std::string> append_system_prompt_sources;
+    std::vector<ResourceDiagnostic> skill_diagnostics;
+    std::vector<ResourceDiagnostic> prompt_diagnostics;
+    std::vector<ResourceDiagnostic> theme_diagnostics;
+    /// The resolved loading request, retained for the runtime's `/reload`
+    /// re-run (pi's retained `DefaultResourceLoader` options, #418).
+    std::optional<ProjectResourceLoadingRequest> retained_resource_request;
     std::filesystem::path trust_store_path =
         coding_agent::trust_store_file_path();
     if (auto valid = validate_trust_store_path(trust_store_path, workspace); !valid) {
@@ -1133,6 +1145,10 @@ struct SessionTargetNormalizationOptions {
             resource_request.explicit_prompt_templates = make_explicit_template_inputs(*fs, plan.prompt_template_paths);
 
             ProjectTrustStore trust_store{trust_store_path};
+            // Retained for `/reload` (pi's `DefaultResourceLoader` instance
+            // re-runs the same discovery options); the loader takes a copy so
+            // the retained request survives.
+            const auto retained_request_copy = resource_request;
             auto resource_loading = load_project_resources(*fs, trust_store, std::move(resource_request));
             if (!resource_loading.fatal_errors.empty()) {
                 return std::unexpected(util::make_error(
@@ -1149,6 +1165,14 @@ struct SessionTargetNormalizationOptions {
             system_prompt_text = std::move(resource_loading.resources.system_prompt);
             append_system_prompt_texts =
                 std::move(resource_loading.resources.append_system_prompt);
+            system_prompt_source =
+                std::move(resource_loading.resources.system_prompt_source);
+            append_system_prompt_sources =
+                std::move(resource_loading.resources.append_system_prompt_sources);
+            skill_diagnostics = std::move(resource_loading.skill_diagnostics);
+            prompt_diagnostics = std::move(resource_loading.prompt_diagnostics);
+            theme_diagnostics = std::move(resource_loading.theme_diagnostics);
+            retained_resource_request.emplace(retained_request_copy);
         } else {
             diagnostics.push_back(make_diag(
                 SessionDiagnostic::Severity::Warning,
@@ -1516,6 +1540,17 @@ struct SessionTargetNormalizationOptions {
     runtime_config.custom_prompt = std::move(system_prompt_text);
     runtime_config.append_system_prompt = std::move(append_system_prompt_texts);
     runtime_config.context_files = std::move(agents_files);
+    // Loaded-resources presentation + `/reload` (pi `resourceLoader`
+    // getters): the SYSTEM/APPEND sources, the per-kind diagnostics, and the
+    // retained loading request (#418).
+    runtime_config.system_prompt_source = std::move(system_prompt_source);
+    runtime_config.append_system_prompt_sources =
+        std::move(append_system_prompt_sources);
+    runtime_config.skill_diagnostics = std::move(skill_diagnostics);
+    runtime_config.prompt_diagnostics = std::move(prompt_diagnostics);
+    runtime_config.theme_diagnostics = std::move(theme_diagnostics);
+    runtime_config.resource_loading_request =
+        std::move(retained_resource_request);
     const auto shell_path = settings.shell_path;
     const auto shell_command_prefix = settings.shell_command_prefix;
 

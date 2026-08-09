@@ -1,5 +1,7 @@
 #pragma once
 
+#include "coding_agent/tui/SharedKeybindings.hpp"
+
 #include <cch/ai/Message.hpp>
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Container.hpp>
@@ -12,10 +14,6 @@
 #include <string>
 #include <vector>
 
-namespace cch::tui {
-class KeybindingRegistry;
-} // namespace cch::tui
-
 namespace cch::coding_agent::tui {
 
 class LiveTheme;
@@ -27,10 +25,11 @@ class LiveTheme;
 /// title + arguments + output fallback. Result images render inline.
 class ToolExecutionComponent final : public cch::tui::Component {
 public:
-    /// The theme and keybindings must outlive this component.
+    /// The theme must outlive this component; keybindings resolve through
+    /// the shared slot (ADR 0035, #418).
     ToolExecutionComponent(
         const LiveTheme& theme,
-        const cch::tui::KeybindingRegistry& keybindings,
+        std::shared_ptr<const SharedKeybindings> keybindings,
         std::string tool_name,
         std::string tool_call_id,
         std::string arguments_json);
@@ -53,7 +52,9 @@ private:
     void rebuild();
 
     const LiveTheme& theme_; // must outlive this component.
-    const cch::tui::KeybindingRegistry& keybindings_; // must outlive this component.
+    /// The shared keybinding slot (ADR 0035); the strong reference keeps
+    /// the registry alive for every render.
+    std::shared_ptr<const SharedKeybindings> keybindings_;
     std::string tool_name_;
     std::string tool_call_id_;
     std::string arguments_json_;

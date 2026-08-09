@@ -85,6 +85,10 @@ public:
     void add_to_history(std::string text);
     void set_theme(EditorTheme theme);
     void set_autocomplete_provider(std::unique_ptr<AutocompleteProvider> provider);
+    /// Swap the live keybinding table (pi's shared KeybindingsManager reload
+    /// shape over the immutable registry, ADR 0035): subsequent input matches
+    /// the new registry. Confined to the app layer's `/reload` re-catalog.
+    void set_keybindings(std::shared_ptr<const KeybindingRegistry> keybindings);
     [[nodiscard]] bool autocomplete_open() const;
     [[nodiscard]] std::vector<AutocompleteItem> autocomplete_items() const;
     [[nodiscard]] std::size_t autocomplete_selected_index() const;

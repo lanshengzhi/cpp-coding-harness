@@ -82,12 +82,12 @@ class BoxedMessageComponent : public cch::tui::Component {
 public:
     BoxedMessageComponent(
         const LiveTheme& theme,
-        const cch::tui::KeybindingRegistry& keybindings,
+        std::shared_ptr<const SharedKeybindings> keybindings,
         std::string label,
         std::vector<ai::Content> content,
         bool expanded)
         : theme_(theme),
-          keybindings_(keybindings),
+          keybindings_(std::move(keybindings)),
           label_(std::move(label)),
           content_(std::move(content)),
           expanded_(expanded) {
@@ -137,7 +137,7 @@ public:
         (void)box.add_child(std::move(label_text));
         (void)box.add_child(std::make_unique<cch::tui::Spacer>(1));
 
-        const auto expand_key = keybindings_.key_text("app.tools.expand");
+        const auto expand_key = keybindings_->registry().key_text("app.tools.expand");
         const auto hint = expand_key.empty() ? "Unbound" : expand_key;
         if (!expanded_) {
             auto collapsed = std::make_unique<cch::tui::Text>(
@@ -193,7 +193,7 @@ protected:
     };
 
     const LiveTheme& theme_; // must outlive this component.
-    const cch::tui::KeybindingRegistry& keybindings_; // must outlive this component.
+    std::shared_ptr<const SharedKeybindings> keybindings_; // must outlive this component.
     std::string label_;
     std::vector<ai::Content> content_;
     bool expanded_{false};
@@ -207,7 +207,7 @@ class CustomMessageComponent final : public BoxedMessageComponent {
 public:
     CustomMessageComponent(
         const LiveTheme& theme,
-        const cch::tui::KeybindingRegistry& keybindings,
+        std::shared_ptr<const SharedKeybindings> keybindings,
         std::string custom_type,
         std::vector<ai::Content> content,
         bool expanded)
@@ -241,7 +241,7 @@ class CompactionSummaryComponent final : public BoxedMessageComponent {
 public:
     CompactionSummaryComponent(
         const LiveTheme& theme,
-        const cch::tui::KeybindingRegistry& keybindings,
+        std::shared_ptr<const SharedKeybindings> keybindings,
         std::string summary,
         std::int64_t tokens_before,
         bool expanded)
@@ -273,7 +273,7 @@ class BranchSummaryComponent final : public BoxedMessageComponent {
 public:
     BranchSummaryComponent(
         const LiveTheme& theme,
-        const cch::tui::KeybindingRegistry& keybindings,
+        std::shared_ptr<const SharedKeybindings> keybindings,
         std::string summary,
         bool expanded)
         : BoxedMessageComponent(theme, keybindings, "branch", {}, expanded),
@@ -349,9 +349,9 @@ struct ChatContainer::Impl {
 
     Impl(
         const LiveTheme& theme,
-        const cch::tui::KeybindingRegistry& keybindings)
+        std::shared_ptr<const SharedKeybindings> keybindings)
         : theme(theme),
-          keybindings(keybindings) {}
+          keybindings(std::move(keybindings)) {}
 
     void clear() {
         items.clear();
@@ -684,7 +684,9 @@ struct ChatContainer::Impl {
     }
 
     const LiveTheme& theme; // must outlive this presentation reducer.
-    const cch::tui::KeybindingRegistry& keybindings; // must outlive this presentation reducer.
+    /// The shared keybinding slot (ADR 0035); the strong reference keeps
+    /// the registry alive for every render.
+    std::shared_ptr<const SharedKeybindings> keybindings;
     std::deque<ItemVariant> items;
     std::unordered_map<std::string, std::unique_ptr<ToolItem>> owned_tools;
     std::optional<std::size_t> active_assistant_item;
@@ -695,8 +697,8 @@ struct ChatContainer::Impl {
 
 ChatContainer::ChatContainer(
     const LiveTheme& theme,
-    const cch::tui::KeybindingRegistry& keybindings)
-    : impl_(std::make_unique<Impl>(theme, keybindings)) {}
+    std::shared_ptr<const SharedKeybindings> keybindings)
+    : impl_(std::make_unique<Impl>(theme, std::move(keybindings))) {}
 ChatContainer::ChatContainer(ChatContainer&&) noexcept = default;
 ChatContainer& ChatContainer::operator=(ChatContainer&&) noexcept = default;
 ChatContainer::~ChatContainer() = default;

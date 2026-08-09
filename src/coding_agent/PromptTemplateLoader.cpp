@@ -47,7 +47,8 @@ namespace {
 
 PromptTemplateLoadResult loadPromptTemplateFromFile(
     const harness::WorkspaceFileSystem& fs,
-    const std::string& filePath) {
+    const std::string& filePath,
+    const std::optional<SourceInfo>& source_info) {
     PromptTemplateLoadResult result;
 
     // Only load .md files. Directory discovery filters other entries before
@@ -109,13 +110,22 @@ PromptTemplateLoadResult loadPromptTemplateFromFile(
     const std::filesystem::path absolute_path = std::filesystem::path{filePath}.is_absolute()
         ? std::filesystem::path{filePath}
         : (fs.root() / filePath);
+    const auto normalized_path = absolute_path.lexically_normal().string();
+    // pi `createPromptSourceInfo`: the spec's provenance with the per-file
+    // path (pi `SourceInfo.path`); absent specs carry an empty SourceInfo.
+    SourceInfo template_source;
+    if (source_info) {
+        template_source = *source_info;
+        template_source.path = normalized_path;
+    }
 
     result.templates.push_back(PromptTemplate{
         .name = std::move(name),
         .description = std::move(description),
         .content = std::move(fm.body),
         .argument_hint = std::move(argument_hint),
-        .filePath = absolute_path.lexically_normal().string(),
+        .filePath = normalized_path,
+        .sourceInfo = std::move(template_source),
     });
 
     return result;
@@ -129,7 +139,7 @@ PromptTemplateLoadResult loadPromptTemplates(
     for (const auto& spec : dirs) {
         if (spec.is_file) {
             // Explicit file path — load directly.
-            auto file_result = loadPromptTemplateFromFile(fs, spec.path);
+            auto file_result = loadPromptTemplateFromFile(fs, spec.path, spec.source_info);
             result.templates.insert(
                 result.templates.end(),
                 std::make_move_iterator(file_result.templates.begin()),
@@ -171,7 +181,7 @@ PromptTemplateLoadResult loadPromptTemplates(
             const auto stripped_path = strip_workspace_root(fs.root(), entry.path);
             const auto relative_path = stripped_path.value_or(spec.path + "/" + entry.name);
 
-            auto file_result = loadPromptTemplateFromFile(fs, relative_path);
+            auto file_result = loadPromptTemplateFromFile(fs, relative_path, spec.source_info);
 
             result.templates.insert(
                 result.templates.end(),

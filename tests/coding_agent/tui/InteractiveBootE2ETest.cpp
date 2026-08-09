@@ -368,7 +368,10 @@ TEST_CASE(
     auto fixture = make_e2e_session(scripted_turn_runtime());
     auto* runtime = static_cast<tests::FakeModelRuntime*>(fixture->runtime.get());
 
-    tui::VirtualTerminal terminal({.columns = 72, .rows = 24});
+    // 25 rows keep the typed user message visible below the two-line compact
+    // header (the loaded-resources notice, #418); at 24 rows the extra header
+    // row would scroll it off.
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 25});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(

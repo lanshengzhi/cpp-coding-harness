@@ -98,6 +98,12 @@ private:
     void set_model(ai::Model model) noexcept {
         options_.model = std::move(model);
     }
+    /// Replace the session System Prompt for subsequent runs (pi
+    /// `agent.state.systemPrompt = ...` on `/reload` rebuild). The caller
+    /// keeps the loop's option and the live Agent state in agreement.
+    void set_system_prompt(std::string system_prompt) noexcept {
+        options_.system_prompt = std::move(system_prompt);
+    }
     [[nodiscard]] const std::string& session_id() const noexcept {
         return options_.session_id;
     }

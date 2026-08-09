@@ -123,6 +123,12 @@ public:
     /// `setThinkingLevel` sequence.
     [[nodiscard]] util::ExpectedVoid set_model(ai::Model model);
 
+    /// Replace the session System Prompt for subsequent turns (pi's runtime
+    /// `/reload` `_rebuildSystemPrompt`: `agent.state.systemPrompt =
+    /// ...`). The new prompt seeds the next stream request's
+    /// `AiContext.system_prompt`; live state advances in step.
+    void set_system_prompt(std::string system_prompt);
+
     /// Remove all pending steering messages.
     [[nodiscard]] util::ExpectedVoid clear_steering_queue();
 

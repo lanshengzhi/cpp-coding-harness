@@ -76,11 +76,11 @@ std::string raw_key_hint(
 
 KeybindingHints::KeybindingHints(
     const LiveTheme& theme,
-    const cch::tui::KeybindingRegistry& keybindings,
+    std::shared_ptr<const SharedKeybindings> keybindings,
     bool user_bash_available,
     bool clipboard_paste_available)
     : theme_(theme),
-      keybindings_(keybindings),
+      keybindings_(std::move(keybindings)),
       user_bash_available_(user_bash_available),
       clipboard_paste_available_(clipboard_paste_available) {}
 
@@ -93,21 +93,31 @@ bool KeybindingHints::expanded() const {
 }
 
 util::Expected<cch::tui::RenderResult> KeybindingHints::render(std::size_t width) {
+    const auto& keybindings = keybindings_->registry();
     std::string text;
     if (!expanded_) {
         // pi's compact startup instructions, without the logo.
-        text += key_hint(theme_, keybindings_, "app.interrupt", "interrupt");
+        text += key_hint(theme_, keybindings, "app.interrupt", "interrupt");
         text += theme_.foreground(
             ThemeToken::Muted,
             std::format(
                 " · {} · / commands",
                 format_key_text(std::format(
                     "{}/{}",
-                    keybindings_.key_text("app.clear"),
-                    keybindings_.key_text("app.exit")))));
+                    keybindings.key_text("app.clear"),
+                    keybindings.key_text("app.exit")))));
         if (user_bash_available_) text += theme_.foreground(ThemeToken::Muted, " · ! bash");
         text += theme_.foreground(ThemeToken::Muted, " · ");
-        text += key_hint(theme_, keybindings_, "app.tools.expand", "more");
+        text += key_hint(theme_, keybindings, "app.tools.expand", "more");
+        // pi `compactOnboarding` (dim): `Press <keyText("app.tools.expand")>
+        // to show full startup help and loaded resources.` — compact body
+        // only, never the expanded body (#418).
+        const auto expand_key = keybindings.key_text("app.tools.expand");
+        text += theme_.foreground(
+            ThemeToken::Dim,
+            std::format(
+                "\nPress {} to show full startup help and loaded resources.",
+                expand_key.empty() ? "Unbound" : format_key_text(expand_key)));
     } else {
         // pi's expanded startup instructions over the assembled subset only
         // (G2: hints render the assembled subset), with no logo.
@@ -115,38 +125,38 @@ util::Expected<cch::tui::RenderResult> KeybindingHints::render(std::size_t width
             if (!text.empty()) text.push_back('\n');
             text += std::move(line);
         };
-        append(key_hint(theme_, keybindings_, "app.interrupt", "to interrupt"));
-        append(key_hint(theme_, keybindings_, "app.clear", "to clear"));
+        append(key_hint(theme_, keybindings, "app.interrupt", "to interrupt"));
+        append(key_hint(theme_, keybindings, "app.clear", "to clear"));
         append(raw_key_hint(
             theme_,
             std::format(
                 "{} twice",
-                format_key_text(keybindings_.key_text("app.clear"))),
+                format_key_text(keybindings.key_text("app.clear"))),
             "to exit"));
-        append(key_hint(theme_, keybindings_, "app.exit", "to exit (empty)"));
-        append(key_hint(theme_, keybindings_, "app.suspend", "to suspend"));
-        append(key_hint(theme_, keybindings_, "app.thinking.cycle", "to cycle thinking level"));
+        append(key_hint(theme_, keybindings, "app.exit", "to exit (empty)"));
+        append(key_hint(theme_, keybindings, "app.suspend", "to suspend"));
+        append(key_hint(theme_, keybindings, "app.thinking.cycle", "to cycle thinking level"));
         append(raw_key_hint(
             theme_,
             std::format(
                 "{}/{}",
-                format_key_text(keybindings_.key_text("app.model.cycleForward")),
-                format_key_text(keybindings_.key_text("app.model.cycleBackward"))),
+                format_key_text(keybindings.key_text("app.model.cycleForward")),
+                format_key_text(keybindings.key_text("app.model.cycleBackward"))),
             "to cycle models"));
-        append(key_hint(theme_, keybindings_, "app.model.select", "to select model"));
-        append(key_hint(theme_, keybindings_, "app.tools.expand", "to expand tools"));
-        append(key_hint(theme_, keybindings_, "app.thinking.toggle", "to expand thinking"));
-        append(key_hint(theme_, keybindings_, "app.editor.external", "for external editor"));
+        append(key_hint(theme_, keybindings, "app.model.select", "to select model"));
+        append(key_hint(theme_, keybindings, "app.tools.expand", "to expand tools"));
+        append(key_hint(theme_, keybindings, "app.thinking.toggle", "to expand thinking"));
+        append(key_hint(theme_, keybindings, "app.editor.external", "for external editor"));
         append(raw_key_hint(theme_, "/", "for commands"));
         if (user_bash_available_) {
             append(raw_key_hint(theme_, "!", "to run bash"));
             append(raw_key_hint(theme_, "!!", "to run bash (no context)"));
         }
-        append(key_hint(theme_, keybindings_, "app.message.followUp", "to queue follow-up"));
-        append(key_hint(theme_, keybindings_, "app.message.dequeue", "to edit all queued messages"));
+        append(key_hint(theme_, keybindings, "app.message.followUp", "to queue follow-up"));
+        append(key_hint(theme_, keybindings, "app.message.dequeue", "to edit all queued messages"));
         if (clipboard_paste_available_) {
             append(key_hint(
-                theme_, keybindings_, "app.clipboard.pasteImage", "to paste image (with text fallback)"));
+                theme_, keybindings, "app.clipboard.pasteImage", "to paste image (with text fallback)"));
         }
     }
 

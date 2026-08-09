@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cch/coding_agent/ProjectResources.hpp>
+
 #include <optional>
 #include <string>
 
@@ -15,6 +17,11 @@ struct PromptTemplate {
     /// Absolute path to the template file (pi `PromptTemplate.filePath`),
     /// used for collision diagnostics and source presentation.
     std::string filePath;
+    /// pi `PromptTemplate.sourceInfo`: the discovery provenance (scope,
+    /// source, and the resource-root baseDir recorded by the loader),
+    /// mirroring `Skill.sourceInfo` for the loaded-resources presentation
+    /// (#418).
+    SourceInfo sourceInfo;
 };
 
 } // namespace cch::coding_agent

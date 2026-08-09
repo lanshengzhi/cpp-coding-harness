@@ -1,5 +1,7 @@
 #pragma once
 
+#include "coding_agent/tui/SharedKeybindings.hpp"
+
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Loader.hpp>
 #include <cch/util/Error.hpp>
@@ -8,10 +10,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-
-namespace cch::tui {
-class KeybindingRegistry;
-} // namespace cch::tui
 
 namespace cch::coding_agent::tui {
 
@@ -25,10 +23,11 @@ class LiveTheme;
 /// and is shared by the live pending block and committed/resumed entries.
 class BashExecutionComponent final : public cch::tui::Component {
 public:
-    /// The theme and keybindings must outlive this component.
+    /// The theme must outlive this component; keybindings resolve through
+    /// the shared slot (ADR 0035, #418).
     BashExecutionComponent(
         const LiveTheme& theme,
-        const cch::tui::KeybindingRegistry& keybindings,
+        std::shared_ptr<const SharedKeybindings> keybindings,
         std::string command,
         bool exclude_from_context);
     ~BashExecutionComponent() override;
@@ -55,7 +54,9 @@ public:
 
 private:
     const LiveTheme& theme_; // must outlive this component.
-    const cch::tui::KeybindingRegistry& keybindings_; // must outlive this component.
+    /// The shared keybinding slot (ADR 0035); the strong reference keeps
+    /// the registry alive for every render.
+    std::shared_ptr<const SharedKeybindings> keybindings_;
     std::string command_;
     std::string output_;
     bool exclude_from_context_{false};

@@ -679,6 +679,14 @@ util::ExpectedVoid Agent::set_model(ai::Model model) {
     return {};
 }
 
+void Agent::set_system_prompt(std::string system_prompt) {
+    if (!impl_) {
+        return;
+    }
+    impl_->loop.set_system_prompt(system_prompt);
+    impl_->state.system_prompt = std::move(system_prompt);
+}
+
 util::ExpectedVoid Agent::clear_steering_queue() {
     if (!impl_) {
         return std::unexpected(util::make_error(

@@ -1,4 +1,5 @@
 escape interrupt · ctrl+c/ctrl+d · / commands · ctrl+o more             
+Press ctrl+o to show full startup help and loaded resources.            
                                                                         
  Resume request: check the notes file.                                  
                                                                         
@@ -11,7 +12,6 @@ escape interrupt · ctrl+c/ctrl+d · / commands · ctrl+o more
 ────────────────────────────────────────────────────────────────────────
 /tmp/cpp-harness-e2e-workspace                          
 0.0%/128k (auto)                                              fake-model
-
 
 
 

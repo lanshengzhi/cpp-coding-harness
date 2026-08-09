@@ -1,5 +1,7 @@
 #pragma once
 
+#include "coding_agent/tui/SharedKeybindings.hpp"
+
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
@@ -10,10 +12,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-
-namespace cch::tui {
-class KeybindingRegistry;
-} // namespace cch::tui
 
 namespace cch::coding_agent::tui {
 
@@ -27,10 +25,11 @@ class LiveTheme;
 /// container performs.
 class ChatContainer final : public cch::tui::Component {
 public:
-    /// The theme must outlive this container.
+    /// The theme must outlive this container; keybindings resolve through
+    /// the shared slot (ADR 0035, #418).
     explicit ChatContainer(
         const LiveTheme& theme,
-        const cch::tui::KeybindingRegistry& keybindings);
+        std::shared_ptr<const SharedKeybindings> keybindings);
     ChatContainer(ChatContainer&&) noexcept;
     ChatContainer& operator=(ChatContainer&&) noexcept;
     ~ChatContainer() override;

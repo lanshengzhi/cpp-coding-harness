@@ -30,6 +30,7 @@
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/prompt/SlashCommandParser.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
+#include "coding_agent/runtime/AgentSessionRuntime.hpp"
 #include "coding_agent/tui/BashExecutionComponent.hpp"
 #include "coding_agent/tui/ChatContainer.hpp"
 #include "coding_agent/tui/ClipboardWrite.hpp"
@@ -40,6 +41,9 @@
 #include "coding_agent/tui/KeybindingHelp.hpp"
 #include "coding_agent/tui/StatusIndicator.hpp"
 #include "coding_agent/tui/KeybindingHints.hpp"
+#include "coding_agent/tui/LoadedResources.hpp"
+#include "coding_agent/tui/ReloadBox.hpp"
+#include "coding_agent/tui/SharedKeybindings.hpp"
 #include "coding_agent/tui/LoginDialog.hpp"
 #include "coding_agent/tui/LoginPresentation.hpp"
 #include "coding_agent/tui/ModelSearch.hpp"
@@ -853,7 +857,7 @@ class InteractiveView final
       public cch::tui::ViewportAware {
 public:
     InteractiveView(
-        std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
+        std::shared_ptr<SharedKeybindings> keybindings,
         ActionSink on_invalidate,
         SubmitSink on_submit,
         SubmitSink on_follow_up,
@@ -905,13 +909,14 @@ public:
           on_external_editor_(std::move(on_external_editor)),
           footer_data_source_(std::move(footer_data_source)),
           user_bash_available_(user_bash_available),
-          header_(theme, *keybindings_, user_bash_available, on_clipboard_paste_ != nullptr),
-          chat_(theme, *keybindings_),
+          header_(theme, keybindings_, user_bash_available, on_clipboard_paste_ != nullptr),
+          resources_(theme),
+          chat_(theme, keybindings_),
           footer_(theme),
           theme_(&theme),
           editor_(
               cch::tui::EditorOptions{
-                  .keybindings = keybindings_,
+                  .keybindings = keybindings_->get(),
                   .autocomplete_debounce_timer = std::move(autocomplete_debounce_timer),
                   .autocomplete_render_request = std::move(autocomplete_render_request),
               },
@@ -954,6 +959,18 @@ public:
         std::unique_ptr<cch::tui::AutocompleteProvider> provider) {
         std::lock_guard lock(mutex_);
         editor_.set_autocomplete_provider(std::move(provider));
+    }
+
+    /// `/reload` keybinding re-catalog (pi `KeybindingsManager.reload()` →
+    /// shared-manager mutation, ADR 0035): swap the shared slot every durable
+    /// component observes and rebind the editor's snapshot. Serialized under
+    /// the view mutex so concurrent render/input on the terminal thread never
+    /// observes a torn registry.
+    void set_keybindings(
+        std::shared_ptr<const cch::tui::KeybindingRegistry> registry) {
+        std::lock_guard lock(mutex_);
+        keybindings_->replace(registry);
+        editor_.set_keybindings(std::move(registry));
     }
 
     void apply_event(const agent::AgentLifecycleEvent& event) {
@@ -1016,14 +1033,14 @@ public:
         std::lock_guard lock(mutex_);
         replace_status_indicator(
             StatusIndicator::Kind::Compaction,
-            compaction_status_message(*keybindings_, reason));
+            compaction_status_message(keybindings_->registry(), reason));
     }
 
     void show_status_retry(int attempt, int max_attempts, int seconds) {
         std::lock_guard lock(mutex_);
         replace_status_indicator(
             StatusIndicator::Kind::Retry,
-            retry_status_message(*keybindings_, attempt, max_attempts, seconds));
+            retry_status_message(keybindings_->registry(), attempt, max_attempts, seconds));
     }
 
     /// pi `RetryStatusIndicator` countdown tick: rewrite the retry message
@@ -1035,7 +1052,15 @@ public:
             return;
         }
         status_indicator_->set_message(
-            retry_status_message(*keybindings_, attempt, max_attempts, seconds));
+            retry_status_message(keybindings_->registry(), attempt, max_attempts, seconds));
+    }
+
+    /// pi `showLoadedResources`: replace the loaded-resources block (the
+    /// startup container between the header and the chat). A no-resources
+    /// data renders zero lines.
+    void set_loaded_resources_data(LoadedResources::Data data) {
+        std::lock_guard lock(mutex_);
+        resources_.set_data(std::move(data));
     }
 
     /// pi `clearStatusIndicator`: back to the two-row idle status.
@@ -1152,7 +1177,7 @@ public:
         if (!pending_bash_) {
             pending_bash_ = std::make_unique<BashExecutionComponent>(
                 *theme_,
-                *keybindings_,
+                keybindings_,
                 progress.command,
                 progress.exclude_from_context);
             pending_bash_->start_loader([this] {
@@ -1202,14 +1227,21 @@ public:
         std::lock_guard lock(mutex_);
         if (callback_error_) return std::unexpected(*callback_error_);
 
-        // Header (keybinding hints), pending-messages, status, and footer
-        // render first so the editor and autocomplete capacities account for
-        // their fixed rows (pi's dock below the chat).
+        // Header (keybinding hints), the loaded-resources block, pending-
+        // messages, status, and footer render first so the editor and
+        // autocomplete capacities account for their fixed rows (pi's dock
+        // below the chat).
         std::vector<std::string> header_lines;
         if (auto header = header_.render(width); !header) {
             return std::unexpected(header.error());
         } else {
             header_lines = std::move(header->lines);
+        }
+        std::vector<std::string> resources_lines;
+        if (auto resources = resources_.render(width); !resources) {
+            return std::unexpected(resources.error());
+        } else {
+            resources_lines = std::move(resources->lines);
         }
         // Status and footer containers are part of the composition: the
         // status container holds the active Working/Compaction/Retry
@@ -1270,7 +1302,7 @@ public:
             }
         }
         if (!pending_lines.empty()) {
-            const auto hint = keybindings_->key_text("app.message.dequeue");
+            const auto hint = keybindings_->registry().key_text("app.message.dequeue");
             cch::tui::TruncatedText item{std::format(
                 "↳ {} to edit all queued messages",
                 hint.empty() ? "Unbound" : format_key_text(hint, true))};
@@ -1281,8 +1313,8 @@ public:
             }
         }
         const auto fixed_rows =
-            header_lines.size() + pending_lines.size() + status_lines.size() +
-            footer_lines.size();
+            header_lines.size() + resources_lines.size() + pending_lines.size() +
+            status_lines.size() + footer_lines.size();
 
         std::vector<std::string> editor_lines;
         std::vector<std::string> autocomplete_lines;
@@ -1396,6 +1428,10 @@ public:
 
         cch::tui::RenderResult transcript_result;
         transcript_result.lines = std::move(header_lines);
+        transcript_result.lines.insert(
+            transcript_result.lines.end(),
+            std::make_move_iterator(resources_lines.begin()),
+            std::make_move_iterator(resources_lines.end()));
         for (auto& image : chat_result.images) {
             image.region.row += transcript_result.lines.size();
             transcript_result.images.push_back(std::move(image));
@@ -1448,14 +1484,18 @@ public:
         }
         const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
         if (key != nullptr && key->type != cch::tui::KeyEventType::Release) {
-            if (keybindings_->matches(*key, "app.exit") && editor_.expanded_text().empty()) {
+            // One registry reference for the whole dispatch cascade (the
+            // shared slot, ADR 0035); `replace` is serialized under this
+            // view mutex.
+            const auto& keys = keybindings_->registry();
+            if (keys.matches(*key, "app.exit") && editor_.expanded_text().empty()) {
                 invoke_action(on_exit_, "Native TUI exit callback failed");
                 return;
             }
             const auto editor_cancels_interrupt =
                 editor_.autocomplete_open() &&
-                keybindings_->matches(*key, "tui.select.cancel");
-            if (keybindings_->matches(*key, "app.interrupt") &&
+                keys.matches(*key, "tui.select.cancel");
+            if (keys.matches(*key, "app.interrupt") &&
                 !editor_cancels_interrupt) {
                 // Autocomplete cancellation stays in the view. Interrupt
                 // precedence is pi's onEscape chain and owns every later
@@ -1468,43 +1508,44 @@ public:
                 });
                 return;
             }
-            if (keybindings_->matches(*key, "app.message.followUp")) {
+            if (keys.matches(*key, "app.message.followUp")) {
                 invoke_follow_up();
                 return;
             }
-            if (keybindings_->matches(*key, "app.clipboard.pasteImage")) {
+            if (keys.matches(*key, "app.clipboard.pasteImage")) {
                 invoke_action(
                     on_clipboard_paste_,
                     "Native TUI clipboard callback failed");
                 return;
             }
-            if (keybindings_->matches(*key, "app.message.dequeue")) {
+            if (keys.matches(*key, "app.message.dequeue")) {
                 invoke_action(on_dequeue_, "Native TUI dequeue callback failed");
                 return;
             }
-            if (keybindings_->matches(*key, "app.clear")) {
+            if (keys.matches(*key, "app.clear")) {
                 editor_.set_text({});
                 return;
             }
-            if (keybindings_->matches(*key, "app.suspend")) {
+            if (keys.matches(*key, "app.suspend")) {
                 invoke_action(
                     on_suspend_,
                     "Native TUI suspend callback failed");
                 return;
             }
-            if (keybindings_->matches(*key, "app.editor.external")) {
+            if (keys.matches(*key, "app.editor.external")) {
                 invoke_action(
                     on_external_editor_,
                     "Native TUI external editor callback failed");
                 return;
             }
-            if (keybindings_->matches(*key, "app.tools.expand")) {
+            if (keys.matches(*key, "app.tools.expand")) {
                 chat_.toggle_tool_output();
                 header_.set_expanded(chat_.tools_expanded());
+                resources_.set_expanded(chat_.tools_expanded());
                 invoke_action(on_invalidate_, "Native TUI invalidation callback failed");
                 return;
             }
-            if (keybindings_->matches(*key, "app.thinking.toggle")) {
+            if (keys.matches(*key, "app.thinking.toggle")) {
                 invoke_action(
                     on_toggle_thinking_,
                     "Native TUI thinking toggle callback failed");
@@ -1513,19 +1554,19 @@ public:
             // pi's main-editor `app.model.*` / `app.thinking.cycle` bindings:
             // the cycle actions and the model selector post to the executor
             // like every session-touching action.
-            if (keybindings_->matches(*key, "app.model.cycleForward")) {
+            if (keys.matches(*key, "app.model.cycleForward")) {
                 invoke_action(on_cycle_model_forward_, "Native TUI model cycle callback failed");
                 return;
             }
-            if (keybindings_->matches(*key, "app.model.cycleBackward")) {
+            if (keys.matches(*key, "app.model.cycleBackward")) {
                 invoke_action(on_cycle_model_backward_, "Native TUI model cycle callback failed");
                 return;
             }
-            if (keybindings_->matches(*key, "app.model.select")) {
+            if (keys.matches(*key, "app.model.select")) {
                 invoke_action(on_select_model_, "Native TUI model selector callback failed");
                 return;
             }
-            if (keybindings_->matches(*key, "app.thinking.cycle")) {
+            if (keys.matches(*key, "app.thinking.cycle")) {
                 invoke_action(on_cycle_thinking_, "Native TUI thinking cycle callback failed");
                 return;
             }
@@ -1533,25 +1574,25 @@ public:
             // []) — a user-assigned keybinding triggers the flow; the
             // selector-scoped `app.session.*` bindings are matched inside the
             // SessionSelectorComponent itself.
-            if (keybindings_->matches(*key, "app.session.resume")) {
+            if (keys.matches(*key, "app.session.resume")) {
                 invoke_action(on_resume_session_, "Native TUI session resume callback failed");
                 return;
             }
-            if (keybindings_->matches(*key, "app.session.fork")) {
+            if (keys.matches(*key, "app.session.fork")) {
                 invoke_action(on_fork_session_, "Native TUI session fork callback failed");
                 return;
             }
-            if (keybindings_->matches(*key, "app.session.new")) {
+            if (keys.matches(*key, "app.session.new")) {
                 invoke_action(on_new_session_, "Native TUI new-session callback failed");
                 return;
             }
-            if (keybindings_->matches(*key, "app.session.tree")) {
+            if (keys.matches(*key, "app.session.tree")) {
                 invoke_action(on_open_tree_selector_, "Native TUI tree selector callback failed");
                 return;
             }
             // pi's main-editor `app.message.copy` binding (P14: the tree
             // selector matches the same action through the shared registry).
-            if (keybindings_->matches(*key, "app.message.copy")) {
+            if (keys.matches(*key, "app.message.copy")) {
                 invoke_action(on_copy_last_message_, "Native TUI copy callback failed");
                 return;
             }
@@ -1705,7 +1746,10 @@ private:
         return user_bash_editor_mode(editor_.expanded_text(), user_bash_available_);
     }
 
-    std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings_;
+    /// The shared keybinding slot (ADR 0035, #418): `set_keybindings`
+    /// replaces it under the view mutex so the header/chat/execution
+    /// components and the editor all observe the new registry live.
+    std::shared_ptr<SharedKeybindings> keybindings_;
     cch::tui::TerminalCapabilities terminal_capabilities_;
     ActionSink on_invalidate_;
     SubmitSink on_submit_;
@@ -1735,6 +1779,9 @@ private:
     mutable std::mutex mutex_;
     // pi's main-screen containers.
     KeybindingHints header_;
+    /// The loaded-resources startup block (pi's `loadedResourcesContainer`,
+    /// between the header and the chat; #418).
+    LoadedResources resources_;
     ChatContainer chat_;
     Footer footer_;
     const LiveTheme* theme_; // must outlive the view: controller-owned live theme.
@@ -1871,6 +1918,19 @@ public:
     /// `boot_request`/`session_factory` with the decided trust, then binds
     /// it (subscribe, initialize view, render, initial prompt).
     [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> boot_session() {
+        // pi main.ts `autoTrustOnReloadCwd`: no `--approve`-style override
+        // AND the boot workspace had no trust-requiring resources → the
+        // implicit-trust save may fire on a later `/reload` (when the
+        // workspace gains resources and the session is trusted).
+        if (!boot_request_->project_trust_override.has_value()) {
+            if (auto fs = harness::WorkspaceFileSystem::create(boot_request_->workspace); fs) {
+                auto detection = detect_project_resources(
+                    *fs, coding_agent::home_directory() / ".agents" / "skills");
+                if (!needs_project_trust_resolution(detection)) {
+                    auto_trust_on_reload_cwd_ = boot_request_->workspace;
+                }
+            }
+        }
         // 1. Resolve boot trust (pi resolveProjectTrusted): override → no
         //    trust-requiring resources → saved decision → default
         //    always/never → ask prompt (the generic string-list selector
@@ -1913,6 +1973,7 @@ public:
         if (theme_controller_) {
             auto discovery = coding_agent::tui::discover_themes(
                 std::move(created->theme_resources));
+            loaded_theme_diagnostics_ = discovery.diagnostics;
             startup_diagnostics_.themes = std::move(discovery.diagnostics);
             theme_controller_->set_registered_themes(std::move(discovery.themes));
             theme_controller_->apply_from_settings();
@@ -2017,7 +2078,7 @@ public:
         const auto weak = weak_from_this();
         auto selector = std::make_shared<StringListSelector>(
             theme_controller_->live_theme(),
-            keybindings_,
+            keybindings_->get(),
             format_project_trust_prompt(workspace),
             std::move(labels),
             [weak, slot](std::string label) {
@@ -2089,10 +2150,11 @@ private:
         return register_native_tui_commands(commands_);
     }
 
-    [[nodiscard]] util::Expected<InteractiveStartupDiagnostics> load_startup_resources(
-        const InteractiveModeConfig& config) {
-        InteractiveStartupDiagnostics diagnostics;
-        std::vector<std::string_view> actions{
+    /// The assembled main-editor keybinding action-id list (pi's shared
+    /// `KeybindingsManager` catalog surface), shared by the startup catalog
+    /// and the `/reload` re-catalog (#418).
+    [[nodiscard]] std::vector<std::string> assemble_keybinding_actions() const {
+        std::vector<std::string> actions{
             "app.interrupt",
             "app.clear",
             "app.exit",
@@ -2152,7 +2214,55 @@ private:
             "app.models.reorderDown",
         };
         if (clipboard_reader_) actions.push_back("app.clipboard.pasteImage");
-        if (auto definitions = baseline_application_keybindings(actions, config.platform); !definitions) {
+        return actions;
+    }
+
+    /// `/reload` keybinding re-catalog (pi `KeybindingsManager.reload()`):
+    /// re-run `load_keybinding_catalog` with the same assembled action list
+    /// and swap the shared slot + editor (ADR 0035). Diagnostics render like
+    /// startup.
+    [[nodiscard]] util::ExpectedVoid re_catalog_keybindings() {
+        const auto actions = assemble_keybinding_actions();
+        std::vector<std::string_view> action_views;
+        action_views.reserve(actions.size());
+        for (const auto& action : actions) {
+            action_views.push_back(action);
+        }
+        if (auto definitions = baseline_application_keybindings(action_views, keybinding_platform_);
+            !definitions) {
+            return std::unexpected(definitions.error());
+        } else {
+            KeybindingCatalogRequest request;
+            request.agent_config_directory = agent_config_directory_;
+            request.application_definitions = std::move(*definitions);
+            request.platform = keybinding_platform_;
+            if (auto catalog = load_keybinding_catalog(std::move(request)); !catalog) {
+                return std::unexpected(catalog.error());
+            } else {
+                if (view_ != nullptr) {
+                    view_->set_keybindings(catalog->registry);
+                    for (const auto& diagnostic : catalog->diagnostics) {
+                        view_->append_diagnostic(diagnostic.message);
+                    }
+                    tui_.invalidate();
+                }
+            }
+        }
+        return {};
+    }
+
+    [[nodiscard]] util::Expected<InteractiveStartupDiagnostics> load_startup_resources(
+        const InteractiveModeConfig& config) {
+        InteractiveStartupDiagnostics diagnostics;
+        keybinding_platform_ = config.platform;
+        agent_config_directory_ = config.agent_config_directory;
+        const auto actions = assemble_keybinding_actions();
+        std::vector<std::string_view> action_views;
+        action_views.reserve(actions.size());
+        for (const auto& action : actions) {
+            action_views.push_back(action);
+        }
+        if (auto definitions = baseline_application_keybindings(action_views, config.platform); !definitions) {
             return std::unexpected(definitions.error());
         } else {
             KeybindingCatalogRequest request;
@@ -2162,7 +2272,13 @@ private:
             if (auto catalog = load_keybinding_catalog(std::move(request)); !catalog) {
                 return std::unexpected(catalog.error());
             } else {
-                keybindings_ = catalog->registry;
+                // The shared slot exists before the view is composed; the
+                // `/reload` re-catalog replaces through the same slot (ADR
+                // 0035, #418).
+                if (!keybindings_) {
+                    keybindings_ = std::make_shared<SharedKeybindings>();
+                }
+                keybindings_->replace(catalog->registry);
                 diagnostics.keybindings = std::move(catalog->diagnostics);
             }
         }
@@ -2396,10 +2512,73 @@ private:
         return {};
     }
 
+    /// pi `showLoadedResources`: refresh the loaded-resources block from the
+    /// live session (Context sources, skills, templates), the registered
+    /// themes, and the per-kind diagnostics (loader read diagnostics plus the
+    /// theme discovery diagnostics stashed at boot/reload). Called at view
+    /// initialization, after `/reload`, and after session replacement.
+    void refresh_loaded_resources() {
+        if (view_ == nullptr || session_ == nullptr) {
+            return;
+        }
+        LoadedResources::Data data;
+        data.cwd = session_->workspace();
+        data.home = coding_agent::home_directory();
+        // pi `contextFiles`: `getSystemPromptSource()` then
+        // `getAppendSystemPromptSources()` then `getAgentsFiles()`.
+        if (const auto& source = session_->system_prompt_source()) {
+            data.context_paths.push_back(*source);
+        }
+        for (const auto& source : session_->append_system_prompt_sources()) {
+            data.context_paths.push_back(source);
+        }
+        for (const auto& file : session_->context_files()) {
+            data.context_paths.push_back(file.path);
+        }
+        for (const auto& skill : session_->skills()) {
+            data.skills.push_back(LoadedResources::SkillItem{
+                .name = skill.name,
+                .path = skill.filePath,
+                .source_info = skill.sourceInfo,
+            });
+        }
+        for (const auto& templ : session_->templates()) {
+            data.templates.push_back(LoadedResources::TemplateItem{
+                .name = templ.name,
+                .path = templ.filePath,
+                .source_info = templ.sourceInfo,
+            });
+        }
+        // pi `getThemes().themes` filtered to `sourcePath` (custom only).
+        if (theme_controller_) {
+            for (const auto& registered : theme_controller_->registered_themes()) {
+                if (!registered.source_path) {
+                    continue;
+                }
+                data.themes.push_back(LoadedResources::ThemeItem{
+                    .name = registered.theme.name,
+                    .path = registered.source_path->string(),
+                    .scope = registered.scope,
+                });
+            }
+        }
+        data.skill_diagnostics = session_->skill_diagnostics();
+        data.prompt_diagnostics = session_->prompt_diagnostics();
+        // Theme conflicts: the loader's theme read diagnostics plus the
+        // discovery (parse/collision) diagnostics stashed at boot/reload.
+        data.theme_diagnostics = session_->theme_diagnostics();
+        data.theme_diagnostics.insert(
+            data.theme_diagnostics.end(),
+            loaded_theme_diagnostics_.begin(),
+            loaded_theme_diagnostics_.end());
+        view_->set_loaded_resources_data(std::move(data));
+    }
+
     void initialize_view(const InteractiveStartupDiagnostics& diagnostics) {
         const auto snapshot = session_->snapshot();
         view_->initialize(snapshot);
         view_->set_pending_input(snapshot.agent_state.input_queues);
+        refresh_loaded_resources();
         // pi `interactive-mode.ts` `init()`: the model fallback message shows
         // as a boot warning line (`showWarning`) before the initial prompt.
         if (model_fallback_message_) {
@@ -2794,7 +2973,7 @@ private:
 
         auto selector = std::make_shared<SettingsSelectorComponent>(
             theme_controller_->live_theme(),
-            keybindings_,
+            keybindings_->get(),
             std::move(config),
             std::move(callbacks));
         place_editor_replacement(std::move(selector));
@@ -2869,8 +3048,8 @@ private:
         auto overlay = std::make_unique<cch::tui::Overlay>(std::move(options));
         const auto weak = weak_from_this();
         auto content = std::make_unique<DismissibleView>(
-            make_hotkey_help_view(keybindings_),
-            keybindings_,
+            make_hotkey_help_view(keybindings_->get()),
+            keybindings_->get(),
             [weak] {
                 if (const auto self = weak.lock()) self->post_close_overlay();
             });
@@ -3308,6 +3487,12 @@ private:
             return std::unexpected(subscribed.error());
         }
         displayed_agent_diagnostics_.clear();
+        // The new session's resources replace the loaded-resources block
+        // (pi `showLoadedResources` after `renderCurrentSessionState`). The
+        // theme re-registration gap (replacement drops the created session's
+        // theme documents) is pre-existing and out of scope; the themes
+        // section keeps the registered set.
+        refresh_loaded_resources();
         rebuild_chat();
         return {};
     }
@@ -3418,7 +3603,7 @@ private:
         const auto weak = weak_from_this();
         auto selector = std::make_shared<UserMessageSelectorComponent>(
             theme_controller_->live_theme(),
-            keybindings_,
+            keybindings_->get(),
             std::move(items),
             initial_selected_id,
             [weak](std::string entry_id) {
@@ -3513,7 +3698,7 @@ private:
         const auto weak = weak_from_this();
         auto selector = std::make_shared<StringListSelector>(
             theme_controller_->live_theme(),
-            keybindings_,
+            keybindings_->get(),
             title,
             std::vector<std::string>{"Yes", "No"},
             [slot, fallback_cwd](std::string selected) {
@@ -3578,7 +3763,7 @@ private:
         const auto weak = weak_from_this();
         auto selector = std::make_shared<SessionSelectorComponent>(
             theme_controller_->live_theme(),
-            keybindings_,
+            keybindings_->get(),
             current_loader,
             all_loader,
             session_->session_path(),
@@ -3645,7 +3830,7 @@ private:
         const auto weak = weak_from_this();
         auto selector = std::make_shared<TreeSelectorComponent>(
             theme_controller_->live_theme(),
-            keybindings_,
+            keybindings_->get(),
             std::move(topology->roots),
             topology->leaf_id,
             terminal_.dimensions().rows,
@@ -3815,7 +4000,7 @@ private:
         const auto weak = weak_from_this();
         auto selector = std::make_shared<ModelSelectorComponent>(
             theme_controller_->live_theme(),
-            keybindings_,
+            keybindings_->get(),
             &current_model,
             session_->model_runtime(),
             executor_,
@@ -3942,7 +4127,7 @@ private:
         const auto all_model_ids_shared = std::make_shared<const std::set<std::string, std::less<>>>(all_model_ids);
         auto selector = std::make_shared<ScopedModelsSelectorComponent>(
             theme_controller_->live_theme(),
-            keybindings_,
+            keybindings_->get(),
             all_models,
             std::move(current_enabled_ids),
             [weak, all_models = all_models_shared, ids = all_model_ids_shared](
@@ -4143,7 +4328,7 @@ private:
         const auto weak = weak_from_this();
         auto selector = std::make_shared<StringListSelector>(
             theme_controller_->live_theme(),
-            keybindings_,
+            keybindings_->get(),
             title,
             options,
             [weak, provider_options, subscription_label](std::string selected) {
@@ -4200,7 +4385,7 @@ private:
         const auto weak = weak_from_this();
         auto selector = std::make_shared<OAuthSelectorComponent>(
             theme_controller_->live_theme(),
-            keybindings_,
+            keybindings_->get(),
             AuthSelectorMode::Login,
             options,
             [weak, options](std::string provider_id, AuthSelectorType type) {
@@ -4260,7 +4445,7 @@ private:
         const auto weak = weak_from_this();
         auto dialog = std::make_shared<LoginDialogComponent>(
             theme_controller_->live_theme(),
-            keybindings_,
+            keybindings_->get(),
             option.name + " setup",
             dialog_invalidate_hook(),
             open_browser_hook(),
@@ -4290,7 +4475,7 @@ private:
         const auto previous_model = session_->snapshot().agent_state.model;
         auto dialog = std::make_shared<LoginDialogComponent>(
             theme_controller_->live_theme(),
-            keybindings_,
+            keybindings_->get(),
             "Login to " + provider_name,
             dialog_invalidate_hook(),
             open_browser_hook());
@@ -4400,7 +4585,7 @@ private:
         const auto weak = weak_from_this();
         auto selector = std::make_shared<StringListSelector>(
             theme_controller_->live_theme(),
-            keybindings_,
+            keybindings_->get(),
             select.message,
             std::move(labels),
             [weak, slot, dialog, options = select.options](std::string label) {
@@ -4537,7 +4722,7 @@ private:
         const auto weak = weak_from_this();
         auto selector = std::make_shared<OAuthSelectorComponent>(
             theme_controller_->live_theme(),
-            keybindings_,
+            keybindings_->get(),
             AuthSelectorMode::Logout,
             options,
             [weak, options](std::string provider_id, AuthSelectorType) {
@@ -4618,6 +4803,15 @@ private:
         case CommandEffect::OpenScopedModelsSelector:
             post_open_scoped_models_selector();
             return;
+        case CommandEffect::Reload: {
+            const auto shared = shared_from_this();
+            spawn_flow(
+                [shared]() -> boost::asio::awaitable<void> {
+                    co_await shared->handle_reload();
+                },
+                "Native TUI reload flow failed");
+            return;
+        }
         case CommandEffect::Shutdown:
             if (view_ != nullptr) {
                 tui_.invalidate();
@@ -4626,6 +4820,166 @@ private:
             request_exit();
             return;
         }
+    }
+
+    /// pi `maybeSaveImplicitProjectTrustAfterReload`: when the boot armed
+    /// `autoTrustOnReloadCwd` and the session is trusted but the reloaded
+    /// workspace NOW has trust-requiring resources with no saved decision,
+    /// persist the implicit trust decision. Returns whether the status line
+    /// gains pi's `"; saved project trust"` suffix.
+    [[nodiscard]] bool maybe_save_implicit_project_trust_after_reload() {
+        // The armed workspace is consumed by exactly one decision attempt
+        // (pi clears `autoTrustOnReloadCwd` on every exit path); a successful
+        // save returns true for the "; saved project trust" status suffix.
+        const auto arm = std::exchange(auto_trust_on_reload_cwd_, std::nullopt);
+        if (!arm || session_ == nullptr) {
+            return false;
+        }
+        const auto& cwd = session_->workspace();
+        if (*arm != cwd) {
+            return false;
+        }
+        if (!detail::AgentSessionInteractiveAccess::is_project_trusted(*session_)) {
+            return false;
+        }
+        auto fs = harness::WorkspaceFileSystem::create(cwd);
+        if (!fs) {
+            return false;
+        }
+        auto detection = detect_project_resources(
+            *fs, coding_agent::home_directory() / ".agents" / "skills");
+        if (!needs_project_trust_resolution(detection)) {
+            return false;
+        }
+        ProjectTrustStore store{coding_agent::trust_store_file_path()};
+        auto entry = store.getEntry(cwd);
+        if (!entry) {
+            if (view_ != nullptr) {
+                view_->append_warning(
+                    "Could not save project trust after reload: " +
+                    entry.error().message);
+                tui_.invalidate();
+            }
+            return false;
+        }
+        if (entry->has_value()) {
+            return false;
+        }
+        if (auto saved = store.setMany(std::vector<ProjectTrustUpdate>{
+                ProjectTrustUpdate{
+                    .path = cwd.string(),
+                    .decision = ProjectTrustDecision::Trusted,
+                },
+            });
+            !saved) {
+            if (view_ != nullptr) {
+                view_->append_warning(
+                    "Could not save project trust after reload: " +
+                    saved.error().message);
+                tui_.invalidate();
+            }
+            return false;
+        }
+        return true;
+    }
+
+    /// pi `handleReloadCommand` (#418): refuse while streaming/compacting
+    /// with pi's verbatim warnings, swap the reload box into the editor
+    /// slot, re-read settings/resources through the session, re-catalog
+    /// keybindings, re-register themes, re-apply render settings, rebuild
+    /// autocomplete, refresh the loaded-resources presentation, surface the
+    /// models.json error, and report the pi status line. Any failure
+    /// restores the editor and reports `Reload failed: <msg>`.
+    [[nodiscard]] boost::asio::awaitable<void> handle_reload() {
+        if (!running_ || view_ == nullptr || session_ == nullptr) {
+            co_return;
+        }
+        if (session_->is_streaming()) {
+            view_->append_warning(
+                "Wait for the current response to finish before reloading.");
+            tui_.invalidate();
+            co_return;
+        }
+        if (session_->is_compacting()) {
+            view_->append_warning(
+                "Wait for compaction to finish before reloading.");
+            tui_.invalidate();
+            co_return;
+        }
+
+        place_editor_replacement(make_reload_box(theme_controller_->live_theme()));
+        bool dismissed = false;
+        const auto dismiss = [this, &dismissed] {
+            if (dismissed) {
+                return;
+            }
+            dismissed = true;
+            restore_editor_slot();
+        };
+
+        // 1. pi `session.reload()`: settings + resources re-read, System
+        //    Prompt rebuild (trust preserved).
+        auto result = co_await session_->reload();
+        if (!result) {
+            dismiss();
+            show_error("Reload failed: " + result.error().message);
+            co_return;
+        }
+
+        // 2. Keybindings re-catalog (ADR 0035 registry read semantics);
+        //    diagnostics render like startup.
+        if (auto rebind = re_catalog_keybindings(); !rebind) {
+            dismiss();
+            show_error("Reload failed: " + rebind.error().message);
+            co_return;
+        }
+
+        // 3. pi `setRegisteredThemes(...)` + `applyFromSettings()`: re-run
+        //    theme discovery and re-apply with dark fallback; stash the
+        //    discovery diagnostics for the loaded-resources Themes conflicts
+        //    section.
+        if (theme_controller_) {
+            auto discovery = coding_agent::tui::discover_themes(
+                std::move(result->themes));
+            loaded_theme_diagnostics_ = std::move(discovery.diagnostics);
+            theme_controller_->set_registered_themes(std::move(discovery.themes));
+            theme_controller_->apply_from_settings();
+        }
+
+        // 4. pi `applyRuntimeSettings`: re-read the render settings and
+        //    re-apply to the chat.
+        if (settings_manager_) {
+            hide_thinking_block_ = settings_manager_->hide_thinking_block();
+            output_pad_ = settings_manager_->output_pad();
+        }
+        if (view_ != nullptr) {
+            view_->apply_render_settings(hide_thinking_block_, output_pad_);
+        }
+
+        // 5. pi `setupAutocompleteProvider()`: rebuild the editor's provider
+        //    (slash commands, templates, skill commands from the new set).
+        rebuild_autocomplete_provider();
+
+        // 6. Refresh the loaded-resources presentation.
+        refresh_loaded_resources();
+
+        // 7. pi `modelRuntime.getError()` → `models.json error: <e>`.
+        if (auto runtime = session_->model_runtime()) {
+            if (auto error = runtime->get_error(); error && !error->empty()) {
+                show_error("models.json error: " + *error);
+            }
+        }
+
+        // 8. pi `maybeSaveImplicitProjectTrustAfterReload` + status line
+        //    (trimmed of "extensions"; the implicit-trust save appends
+        //    pi's `"; saved project trust"` suffix).
+        const bool saved_implicit_trust =
+            maybe_save_implicit_project_trust_after_reload();
+        show_status(
+            saved_implicit_trust
+                ? "Reloaded keybindings, skills, prompts, themes, and context files; saved project trust"
+                : "Reloaded keybindings, skills, prompts, themes, and context files");
+        dismiss();
     }
 
     [[nodiscard]] bool dispatch_command(std::string_view text) {
@@ -5249,7 +5603,15 @@ private:
     cch::tui::Terminal& terminal_; // must outlive this interactive run.
     cch::tui::Tui tui_;
     CommandRegistry commands_;
-    std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings_;
+    /// pi's mutable shared KeybindingsManager consumption shape (ADR 0035,
+    /// #418): every durable view component observes this slot; `/reload`
+    /// replaces the current registry so all consumers see the new bindings
+    /// live. Selectors take an ephemeral `get()` snapshot.
+    std::shared_ptr<SharedKeybindings> keybindings_;
+    /// The platform and agent config directory the keybinding catalog was
+    /// assembled under, retained for the `/reload` re-catalog.
+    cch::tui::KeybindingPlatform keybinding_platform_{cch::tui::native_keybinding_platform()};
+    std::filesystem::path agent_config_directory_;
     /// Two-scope settings manager (global scope only; the project scope stays
     /// untrusted in the Native TUI). The theme committer and the
     /// scoped-models selector persist through it. Declared before
@@ -5297,6 +5659,17 @@ private:
     /// session binds and `initialize_view` renders them (pi
     /// `renderInitialMessages` after the trust prompt).
     InteractiveStartupDiagnostics startup_diagnostics_{};
+    /// Theme discovery (parse/collision) diagnostics for the loaded-resources
+    /// `[Theme conflicts]` section (pi `getThemes().diagnostics`), stashed at
+    /// boot bind and refreshed by `/reload` (#418).
+    std::vector<ResourceDiagnostic> loaded_theme_diagnostics_;
+    /// pi `autoTrustOnReloadCwd` (main.ts): the boot workspace where the boot
+    /// had no trust override and no trust-requiring resources. After a
+    /// `/reload`, when the workspace NOW has trust-requiring resources and
+    /// the session is trusted with no saved decision, the implicit trust
+    /// decision persists automatically (pi `maybeSaveImplicitProjectTrustAfterReload`,
+    /// `"; saved project trust"` status suffix).
+    std::optional<std::filesystem::path> auto_trust_on_reload_cwd_;
     /// Initial prompt stashed by the boot `start()` until the boot session
     /// binds (pi main.ts `initialMessage` submitted after runtime creation).
     std::optional<std::string> initial_prompt_{std::nullopt};

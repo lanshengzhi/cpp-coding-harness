@@ -57,6 +57,10 @@ enum class CommandEffect {
     OpenModelSelector,
     /// Open the scoped-models selector (pi `/scoped-models`).
     OpenScopedModelsSelector,
+    /// Re-read User Settings, keybindings, skills, prompt templates, themes,
+    /// and Project Context Files, rebuild the System Prompt, and refresh the
+    /// loaded-resources presentation (pi `/reload`, #418).
+    Reload,
     Shutdown,
 };
 

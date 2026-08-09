@@ -287,7 +287,9 @@ add_library(cch_coding_agent_interactive
     src/coding_agent/tui/Footer.cpp
     src/coding_agent/tui/FooterDataProvider.cpp
     src/coding_agent/tui/KeybindingHints.cpp
+    src/coding_agent/tui/LoadedResources.cpp
     src/coding_agent/tui/LoginDialog.cpp
+    src/coding_agent/tui/ReloadBox.cpp
     src/coding_agent/tui/LoginPresentation.cpp
     src/coding_agent/tui/ModelSelector.cpp
     src/coding_agent/tui/OAuthSelector.cpp
@@ -418,6 +420,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/tui/ChatContainerStatusTest.cpp
         tests/coding_agent/tui/LoginDialogTest.cpp
         tests/coding_agent/tui/LoginInteractiveModeTest.cpp
+        tests/coding_agent/tui/LoadedResourcesTest.cpp
         tests/coding_agent/tui/ModelSelectorInteractiveTest.cpp
         tests/coding_agent/tui/ModelSelectorTest.cpp
         tests/coding_agent/tui/OAuthSelectorTest.cpp
@@ -448,6 +451,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/runtime/TreeNavigationTest.cpp
         tests/coding_agent/runtime/UserBashCancellationTest.cpp
         tests/coding_agent/runtime/UserBashOutputAccumulatorTest.cpp
+        tests/coding_agent/runtime/ResourceReloadTest.cpp
         tests/coding_agent/runtime/UserBashOverlapTest.cpp
         tests/harness/AsyncLocalExecutionEnvTest.cpp
         tests/harness/compaction/CompactionTest.cpp

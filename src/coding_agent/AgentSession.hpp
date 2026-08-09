@@ -48,6 +48,7 @@ class AgentSessionRuntimeAccess;
 }
 namespace runtime {
 class AsyncUserShell;
+struct AgentSessionReloadResult;
 }
 
 // ── Diagnostics ──────────────────────────────────────────────────────────────
@@ -489,6 +490,26 @@ public:
     /// True while a prompt is in flight.
     [[nodiscard]] bool is_busy() const;
 
+    // ── Resource reload (pi `/reload`, #418) ────────────────────────────
+
+    /// pi `AgentSession.reload()`: re-read User Settings (preserving
+    /// `projectTrusted`), skills, prompt templates, Project Context Files,
+    /// and the SYSTEM/APPEND sources through the retained loader request,
+    /// rebuild the System Prompt, and push it into the live Agent. The
+    /// returned result carries the per-kind diagnostics and theme documents
+    /// the TUI re-registers. The caller (the TUI) refuses while
+    /// `is_streaming()`/`is_compacting()`; User Bash does not block reload.
+    /// Same `impl_` copying contract as `prompt()`.
+    [[nodiscard]] boost::asio::awaitable<
+        util::Expected<runtime::AgentSessionReloadResult>>
+    reload();
+
+    /// pi `isStreaming`: whether an Agent run is in flight (User Bash does
+    /// NOT block `/reload`).
+    [[nodiscard]] bool is_streaming() const;
+    /// pi `isCompacting`: whether a compaction is in flight.
+    [[nodiscard]] bool is_compacting() const;
+
     // ── Resource access (read-only introspection) ────────────────────────
 
     /// Skills available to the agent (loaded project skills).
@@ -496,6 +517,21 @@ public:
 
     /// Prompt templates available for expansion.
     [[nodiscard]] const std::vector<PromptTemplate>& templates() const;
+
+    /// pi `resourceLoader.getSystemPromptSource()`: the resolved SYSTEM.md
+    /// source path (loaded-resources Context presentation).
+    [[nodiscard]] const std::optional<std::string>& system_prompt_source() const;
+    /// pi `resourceLoader.getAppendSystemPromptSources()`: the resolved
+    /// APPEND_SYSTEM.md source paths.
+    [[nodiscard]] const std::vector<std::string>& append_system_prompt_sources() const;
+    /// pi `resourceLoader.getAgentsFiles().agentsFiles`: the Project Context
+    /// Files (loaded-resources Context presentation).
+    [[nodiscard]] const std::vector<prompt::ProjectContextFile>& context_files() const;
+    /// pi `resourceLoader` per-kind diagnostics (`skillDiagnostics`/
+    /// `promptDiagnostics`/`themeDiagnostics`).
+    [[nodiscard]] const std::vector<ResourceDiagnostic>& skill_diagnostics() const;
+    [[nodiscard]] const std::vector<ResourceDiagnostic>& prompt_diagnostics() const;
+    [[nodiscard]] const std::vector<ResourceDiagnostic>& theme_diagnostics() const;
 
 private:
     friend util::Expected<CreateAgentSessionResult> create_agent_session(

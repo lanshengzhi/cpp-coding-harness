@@ -2,14 +2,18 @@
 
 #include <cch/ai/Content.hpp>
 #include <cch/coding_agent/AuthGuidance.hpp>
+#include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/harness/session/JsonlSessionStore.hpp>
+#include "harness/WorkspaceFileSystem.hpp"
 
 #include "agent/AgentMessageAccess.hpp"
 #include "agent/AgentPromptAccess.hpp"
 #include "ai/ModelThinkingLevel.hpp"
 #include "ai/utils/RetryClassifier.hpp"
 #include "coding_agent/BoundedText.hpp"
+#include "coding_agent/ProjectResourceLoader.hpp"
+#include <cch/coding_agent/ProjectTrust.hpp>
 #include "coding_agent/SkillFormatting.hpp"
 #include "coding_agent/prompt/PromptExpansion.hpp"
 #include "coding_agent/prompt/PromptTemplateExpander.hpp"
@@ -152,63 +156,35 @@ AgentSessionRuntime::AgentSessionRuntime(
         });
         co_return messages;
     };
-    // The System Prompt is built once at session construction in pi's exact
-    // shape (ADR 0036 G4; `core/agent-session.ts` `_rebuildSystemPrompt` +
+    // The System Prompt is built at session construction in pi's exact shape
+    // (ADR 0036 G4; `core/agent-session.ts` `_rebuildSystemPrompt` +
     // `core/system-prompt.ts` `buildSystemPrompt`) and flows into every run
     // through `AgentContext.system_prompt`, exactly like pi's
-    // `agent.state.systemPrompt`. The resource loader's P20 inputs land
+    // `agent.state.systemPrompt`; `/reload` rebuilds it (`reload()` →
+    // `rebuild_system_prompt`). The resource loader's P20 inputs land
     // here: the custom prompt (`--system-prompt` / SYSTEM.md), the append
     // strings joined with `"\n\n"` (`--append-system-prompt` /
     // APPEND_SYSTEM.md), and the Project Context Files (never trust-gated).
-    prompt::BuildSystemPromptOptions prompt_options;
-    prompt_options.customPrompt = config_.custom_prompt;
-    // pi `_rebuildSystemPrompt`: append strings join with `"\n\n"`; an
-    // empty list appends nothing.
-    if (!config_.append_system_prompt.empty()) {
-        std::string joined = config_.append_system_prompt.front();
-        for (std::size_t index = 1; index < config_.append_system_prompt.size();
-             ++index) {
-            joined += "\n\n";
-            joined += config_.append_system_prompt[index];
+    // The tool prompt metadata is retained before the registry moves into
+    // the Agent below so `/reload` can rebuild the same shape.
+    {
+        static constexpr std::array kFixedToolNames{"read", "bash", "edit", "write"};
+        for (const char* name : kFixedToolNames) {
+            auto metadata = services_.tools.prompt_metadata(name);
+            if (!metadata) {
+                continue;
+            }
+            prompt_selected_tools_.emplace_back(name);
+            if (metadata->snippet) {
+                prompt_tool_snippets_.emplace(name, *metadata->snippet);
+            }
+            prompt_tool_guidelines_.insert(
+                prompt_tool_guidelines_.end(),
+                metadata->guidelines.begin(),
+                metadata->guidelines.end());
         }
-        prompt_options.appendSystemPrompt = std::move(joined);
     }
-    prompt_options.contextFiles = config_.context_files;
-    // pi `_refreshToolRegistry` → `_toolPromptSnippets`/`_toolPromptGuidelines`:
-    // prompt metadata for the active tools, collected before the registry
-    // moves into the Agent below. pi's default active tool order
-    // `["read", "bash", "edit", "write"]` is kept for the rendered list.
-    static constexpr std::array kFixedToolNames{"read", "bash", "edit", "write"};
-    std::vector<std::string> selected_tools;
-    for (const char* name : kFixedToolNames) {
-        auto metadata = services_.tools.prompt_metadata(name);
-        if (!metadata) {
-            continue;
-        }
-        selected_tools.emplace_back(name);
-        if (metadata->snippet) {
-            prompt_options.toolSnippets.emplace(name, *metadata->snippet);
-        }
-        prompt_options.promptGuidelines.insert(
-            prompt_options.promptGuidelines.end(),
-            metadata->guidelines.begin(),
-            metadata->guidelines.end());
-    }
-    prompt_options.selectedTools = std::move(selected_tools);
-    prompt_options.cwd = session_.workspace.string();
-    prompt_options.skills = skills_;
-    // Identity delta: the C++ binary's own documentation paths (pi
-    // `config.ts` `getReadmePath`/`getDocsPath`/`getExamplesPath` resolve the
-    // pi package; cch resolves its own source tree).
-#ifndef CCH_SOURCE_DIR
-    constexpr std::string_view kSourceDir = "";
-#else
-    constexpr std::string_view kSourceDir = CCH_SOURCE_DIR;
-#endif
-    prompt_options.readmePath = std::string{kSourceDir} + "/README.md";
-    prompt_options.docsPath = std::string{kSourceDir} + "/docs";
-    prompt_options.examplesPath = std::string{kSourceDir} + "/examples";
-    options.system_prompt = buildSystemPrompt(prompt_options);
+    options.system_prompt = rebuild_system_prompt();
 
     // Resumed history is transferred exactly once into the authoritative Agent
     // state. AgentSession retains product metadata and durable storage only.
@@ -242,6 +218,121 @@ AgentSessionRuntime::AgentSessionRuntime(
     // Expose the live session facts to the model Bash Tool (pi
     // `resolveSpawnContext`); the Agent's clamped state is authoritative.
     refresh_bash_session_environment();
+}
+
+std::string AgentSessionRuntime::rebuild_system_prompt() const {
+    // pi `_rebuildSystemPrompt` (`core/agent-session.ts`) + `buildSystemPrompt`
+    // (`core/system-prompt.ts`): the default/custom branches, tool snippets +
+    // guidelines, `<project_context>`, the skills section, and the cwd line,
+    // with the identity delta confined to the documentation paths. The tool
+    // metadata is the retained collection (the move-only tool registry moved
+    // into the Agent at construction).
+    prompt::BuildSystemPromptOptions prompt_options;
+    prompt_options.customPrompt = config_.custom_prompt;
+    // pi `_rebuildSystemPrompt`: append strings join with `"\n\n"`; an
+    // empty list appends nothing.
+    if (!config_.append_system_prompt.empty()) {
+        std::string joined = config_.append_system_prompt.front();
+        for (std::size_t index = 1; index < config_.append_system_prompt.size();
+             ++index) {
+            joined += "\n\n";
+            joined += config_.append_system_prompt[index];
+        }
+        prompt_options.appendSystemPrompt = std::move(joined);
+    }
+    prompt_options.contextFiles = config_.context_files;
+    // pi `_refreshToolRegistry` → `_toolPromptSnippets`/`_toolPromptGuidelines`:
+    // prompt metadata for the active tools, retained from construction (pi's
+    // default active tool order `["read", "bash", "edit", "write"]`).
+    prompt_options.selectedTools = prompt_selected_tools_;
+    prompt_options.toolSnippets = prompt_tool_snippets_;
+    prompt_options.promptGuidelines.insert(
+        prompt_options.promptGuidelines.end(),
+        prompt_tool_guidelines_.begin(),
+        prompt_tool_guidelines_.end());
+    prompt_options.cwd = session_.workspace.string();
+    prompt_options.skills = skills_;
+    // Identity delta: the C++ binary's own documentation paths (pi
+    // `config.ts` `getReadmePath`/`getDocsPath`/`getExamplesPath` resolve the
+    // pi package; cch resolves its own source tree).
+#ifndef CCH_SOURCE_DIR
+    constexpr std::string_view kSourceDir = "";
+#else
+    constexpr std::string_view kSourceDir = CCH_SOURCE_DIR;
+#endif
+    prompt_options.readmePath = std::string{kSourceDir} + "/README.md";
+    prompt_options.docsPath = std::string{kSourceDir} + "/docs";
+    prompt_options.examplesPath = std::string{kSourceDir} + "/examples";
+    return buildSystemPrompt(prompt_options);
+}
+
+boost::asio::awaitable<util::Expected<AgentSessionReloadResult>>
+AgentSessionRuntime::reload() {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        co_return std::unexpected(rejected.error());
+    }
+    // pi `AgentSession.reload()`: `settingsManager.reload()` first
+    // (preserving `projectTrusted`), then `resourceLoader.reload()` — the
+    // retained discovery request re-run with the creation-time trust state.
+    if (services_.settings_manager) {
+        (void)services_.settings_manager->reload();
+    }
+    if (!config_.resource_loading_request) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session has no retained resource loading request"));
+    }
+    auto fs = harness::WorkspaceFileSystem::create(session_.workspace);
+    if (!fs) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Unknown,
+            "reload failed: could not open the session workspace",
+            fs.error().message));
+    }
+    auto resource_request = *config_.resource_loading_request;
+    // pi `reload()` preserves `SettingsManager.projectTrusted`: the reload
+    // re-runs with the current trust state, never re-resolving it.
+    resource_request.project_trust_override = is_project_trusted();
+    resource_request.workspace = session_.workspace;
+    ProjectTrustStore trust_store{coding_agent::trust_store_file_path()};
+    auto loading = load_project_resources(*fs, trust_store, std::move(resource_request));
+    if (!loading.fatal_errors.empty()) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "reload failed",
+            loading.fatal_errors.front().message));
+    }
+
+    // Swap the live resource snapshots and the System Prompt inputs (pi
+    // `_rebuildSystemPrompt` reads the fresh loader results).
+    skills_ = std::move(loading.resources.skills);
+    templates_ = std::move(loading.resources.prompt_templates);
+    config_.custom_prompt = std::move(loading.resources.system_prompt);
+    config_.append_system_prompt = std::move(loading.resources.append_system_prompt);
+    config_.context_files = std::move(loading.resources.agents_files);
+    config_.system_prompt_source =
+        std::move(loading.resources.system_prompt_source);
+    config_.append_system_prompt_sources =
+        std::move(loading.resources.append_system_prompt_sources);
+    config_.skill_diagnostics = std::move(loading.skill_diagnostics);
+    config_.prompt_diagnostics = std::move(loading.prompt_diagnostics);
+    config_.theme_diagnostics = std::move(loading.theme_diagnostics);
+
+    // Rebuild the System Prompt and push it into the live Agent (pi
+    // `_rebuildSystemPrompt` → `agent.state.systemPrompt`).
+    if (!agent_) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session Agent is unavailable"));
+    }
+    agent_->set_system_prompt(rebuild_system_prompt());
+
+    AgentSessionReloadResult result;
+    result.skill_diagnostics = config_.skill_diagnostics;
+    result.prompt_diagnostics = config_.prompt_diagnostics;
+    result.theme_diagnostics = config_.theme_diagnostics;
+    result.themes = std::move(loading.resources.themes);
+    co_return result;
 }
 
 util::ExpectedVoid AgentSessionRuntime::reject_if_closed() const {

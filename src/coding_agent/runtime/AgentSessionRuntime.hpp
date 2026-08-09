@@ -20,6 +20,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -58,6 +59,25 @@ struct AgentSessionRuntimeConfig {
     /// Files rendering as `<project_context>`/`<project_instructions
     /// path="...">`. Not Project Trust gated (pinned fact).
     std::vector<prompt::ProjectContextFile> context_files;
+    /// pi `resourceLoader.getSystemPromptSource()`: the SYSTEM.md source
+    /// path when the resolved custom prompt came from a file (loaded-resources
+    /// Context presentation).
+    std::optional<std::string> system_prompt_source{std::nullopt};
+    /// pi `resourceLoader.getAppendSystemPromptSources()`: the
+    /// APPEND_SYSTEM.md source paths when the append strings came from files.
+    std::vector<std::string> append_system_prompt_sources;
+    /// Per-kind loader diagnostics (pi `skillDiagnostics`/
+    /// `promptDiagnostics`/`themeDiagnostics`) for the loaded-resources
+    /// presentation and the `/reload` refresh.
+    std::vector<ResourceDiagnostic> skill_diagnostics;
+    std::vector<ResourceDiagnostic> prompt_diagnostics;
+    std::vector<ResourceDiagnostic> theme_diagnostics;
+    /// The resolved `ProjectResourceLoadingRequest` the session was assembled
+    /// under (pi's retained `DefaultResourceLoader` options): `/reload`
+    /// re-runs the same discovery with the creation-time trust state
+    /// preserved.
+    std::optional<ProjectResourceLoadingRequest> resource_loading_request{
+        std::nullopt};
 };
 
 /// Resolved turn auto-retry settings (pi `settings-manager.ts`
@@ -68,6 +88,16 @@ struct RetrySettings {
     bool enabled{true};
     std::size_t max_retries{3};
     std::size_t base_delay_ms{2000};
+};
+
+/// Result of one `/reload` resource re-read (pi `resourceLoader.reload()`
+/// results): the per-kind diagnostics and the re-discovered theme documents
+/// the TUI re-registers through `discover_themes` (#418).
+struct AgentSessionReloadResult {
+    std::vector<ResourceDiagnostic> skill_diagnostics;
+    std::vector<ResourceDiagnostic> prompt_diagnostics;
+    std::vector<ResourceDiagnostic> theme_diagnostics;
+    std::vector<LoadedThemeResource> themes;
 };
 
 /// Internal runtime behind AgentSession. Composes the stateful Agent with
@@ -304,6 +334,51 @@ public:
     [[nodiscard]] const std::filesystem::path& workspace() const { return session_.workspace; }
     [[nodiscard]] const std::vector<Skill>& skills() const;
     [[nodiscard]] const std::vector<PromptTemplate>& templates() const;
+    /// pi `resourceLoader.getSystemPromptSource()`: the resolved SYSTEM.md
+    /// source path (loaded-resources Context presentation).
+    [[nodiscard]] const std::optional<std::string>& system_prompt_source() const {
+        return config_.system_prompt_source;
+    }
+    /// pi `resourceLoader.getAppendSystemPromptSources()`: the resolved
+    /// APPEND_SYSTEM.md source paths.
+    [[nodiscard]] const std::vector<std::string>& append_system_prompt_sources() const {
+        return config_.append_system_prompt_sources;
+    }
+    /// pi `resourceLoader.getAgentsFiles().agentsFiles`: the Project Context
+    /// Files.
+    [[nodiscard]] const std::vector<prompt::ProjectContextFile>& context_files() const {
+        return config_.context_files;
+    }
+    /// pi `resourceLoader` per-kind diagnostics (`skillDiagnostics`/
+    /// `promptDiagnostics`/`themeDiagnostics`).
+    [[nodiscard]] const std::vector<ResourceDiagnostic>& skill_diagnostics() const {
+        return config_.skill_diagnostics;
+    }
+    [[nodiscard]] const std::vector<ResourceDiagnostic>& prompt_diagnostics() const {
+        return config_.prompt_diagnostics;
+    }
+    [[nodiscard]] const std::vector<ResourceDiagnostic>& theme_diagnostics() const {
+        return config_.theme_diagnostics;
+    }
+
+    // ── Resource reload (pi `/reload`, #418) ───────────────────────────────
+
+    /// pi `AgentSession.reload()` subset: re-read User Settings (preserving
+    /// `projectTrusted`), re-run the retained `ProjectResourceLoadingRequest`
+    /// against the session workspace with the creation-time trust state,
+    /// swap skills/templates/prompt inputs, rebuild the System Prompt, and
+    /// push it into the live Agent. Fatal loader errors abort with
+    /// `std::unexpected` (the TUI shows `Reload failed: ...`). Requires an
+    /// idle session (streaming/compaction refusal is the TUI's job via
+    /// `is_streaming`/`is_compacting`).
+    [[nodiscard]] boost::asio::awaitable<util::Expected<AgentSessionReloadResult>>
+    reload();
+
+    /// pi `isStreaming`: whether an Agent run is in flight (User Bash does
+    /// NOT block `/reload`).
+    [[nodiscard]] bool is_streaming() const { return prompt_active_; }
+    /// pi `isCompacting`: whether a compaction is in flight.
+    [[nodiscard]] bool is_compacting() const { return compaction_active_; }
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -356,6 +431,11 @@ private:
         std::string thinking_level);
     /// Shared preflight outcome for entry points that reject a concurrent prompt.
     [[nodiscard]] util::ExpectedVoid reject_if_busy() const;
+    /// pi `_rebuildSystemPrompt`: build the System Prompt in pi's exact shape
+    /// from the current `config_` prompt inputs, `skills_`, and tool metadata
+    /// (the identity delta confined to the documentation paths). Called at
+    /// construction and on `/reload`.
+    [[nodiscard]] std::string rebuild_system_prompt() const;
     /// Shared preflight outcome rejecting a second concurrent User Bash.
     [[nodiscard]] util::ExpectedVoid reject_if_user_bash_busy() const;
 
@@ -431,6 +511,13 @@ private:
     /// expansion and prompt-template expansion read the same snapshots.
     std::vector<Skill> skills_;
     std::vector<PromptTemplate> templates_;
+    /// Tool prompt metadata collected before the move-only tool registry
+    /// moved into the Agent (pi `_toolPromptSnippets`/
+    /// `_toolPromptGuidelines`): `/reload` rebuilds the System Prompt from
+    /// these retained snippets/guidelines.
+    std::vector<std::string> prompt_selected_tools_;
+    std::map<std::string, std::string> prompt_tool_snippets_;
+    std::vector<std::string> prompt_tool_guidelines_;
     // Declared after the borrowed client/store owners so it is destroyed first.
     std::optional<agent::Agent> agent_;
     /// Request-time re-auth guidance decorator (pi `_getRequiredRequestAuth`):

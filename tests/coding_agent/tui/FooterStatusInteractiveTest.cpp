@@ -534,6 +534,167 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Native TUI /reload refuses during auto-compaction with pi's streaming warning",
+    "[coding_agent][tui][reload][compaction][issue418]") {
+    // The tiny keepRecentTokens budget makes the small resumed session
+    // summarizable so the overflow auto-compaction runs (same shape as the
+    // overflow Compaction indicator test).
+    ResumedSessionFixture fixture;
+    const tests::EnvVarGuard agent_dir{
+        "PI_CODING_AGENT_DIR", fixture.config.path().string()};
+    fixture.create();
+    fixture.config.write(
+        "settings.json",
+        R"({"compaction": {"enabled": true, "keepRecentTokens": 1, "reserveTokens": 1}})");
+    auto gated = std::make_shared<GatedModelRuntime>(1);
+    gated->responses.push_back(overflow_terminal());
+    gated->responses.push_back(summarization_response());
+    gated->responses.push_back(ai::assistant_text_message("Recovered after compaction"));
+    fixture.session->close();
+    coding_agent::runtime::AgentSessionCreationRequest request;
+    request.session_target =
+        coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
+    request.workspace = fixture.workspace.path();
+    request.no_skills = true;
+    request.no_prompt_templates = true;
+    request.model_runtime = gated;
+    auto created = coding_agent::create_agent_session_for_testing(
+        std::move(request), ai::providers::make_scripted_fake_models());
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = fixture.config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    // The overflow terminal triggers the auto-compaction policy; while the
+    // summarization is gated the compaction is in flight.
+    REQUIRE(terminal.inject_input("overflow me\r"));
+    drain_ready(io);
+    auto screen = visible_screen(terminal);
+    CHECK(
+        screen.find(
+            "Context overflow detected, Auto-compacting... (escape to cancel)") !=
+        std::string::npos);
+
+    // pi `handleReloadCommand` refusal: during the overflow auto-compaction,
+    // pi's `isStreaming` (`_isAgentRunActive`) is still true (the post-run
+    // continuation loop owns the compaction), so the streaming refusal is
+    // the verbatim pi warning at this seam; the reload never runs.
+    REQUIRE(terminal.inject_input("/reload\r"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(
+        screen.find("Wait for the current response to finish before reloading.") !=
+        std::string::npos);
+    // No reload status line (the reload never ran).
+    CHECK(
+        screen.find("Reloaded keybindings, skills, prompts, themes, and context files") ==
+        std::string::npos);
+
+    gated->release();
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI /reload refuses during a manual compaction with pi's compaction warning",
+    "[coding_agent][tui][reload][compaction][issue418]") {
+    ResumedSessionFixture fixture;
+    const tests::EnvVarGuard agent_dir{
+        "PI_CODING_AGENT_DIR", fixture.config.path().string()};
+    fixture.create();
+    // A tiny keepRecentTokens budget makes the small resumed session
+    // summarizable (pi's findCutPoint keeps the recent budget), so the manual
+    // compaction actually runs instead of failing "session too small".
+    fixture.config.write(
+        "settings.json",
+        R"({"compaction": {"enabled": true, "keepRecentTokens": 1, "reserveTokens": 1}})");
+    // The manual compaction's summarization is the first model call; gating
+    // it keeps `isCompacting` true while `isStreaming` stays false (the
+    // signal pair pi's `handleReloadCommand` checks second).
+    auto gated = std::make_shared<GatedModelRuntime>(0);
+    gated->responses.push_back(summarization_response());
+    fixture.session->close();
+    coding_agent::runtime::AgentSessionCreationRequest request;
+    request.session_target =
+        coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
+    request.workspace = fixture.workspace.path();
+    request.no_skills = true;
+    request.no_prompt_templates = true;
+    request.model_runtime = gated;
+    auto created = coding_agent::create_agent_session_for_testing(
+        std::move(request), ai::providers::make_scripted_fake_models());
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    std::optional<util::Expected<coding_agent::CompactionResult>> compact_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = fixture.config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    // Drive a manual compaction on the same executor: it blocks on the gated
+    // summarization, so the session reports `isCompacting` with no active
+    // Agent run.
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            compact_result = co_await created->session->compact();
+            co_return;
+        },
+        boost::asio::detached);
+    while (!created->session->is_compacting() && io.poll() != 0) {
+    }
+    REQUIRE(created->session->is_compacting());
+    CHECK_FALSE(created->session->is_streaming());
+
+    // pi `handleReloadCommand` refusal: `isCompacting` (with `isStreaming`
+    // false) warns verbatim and leaves the resources untouched.
+    REQUIRE(terminal.inject_input("/reload\r"));
+    drain_ready(io);
+    auto screen = visible_screen(terminal);
+    CHECK(
+        screen.find("Wait for compaction to finish before reloading.") !=
+        std::string::npos);
+    CHECK(
+        screen.find(
+            "Wait for the current response to finish before reloading.") ==
+        std::string::npos);
+
+    gated->release();
+    drain_ready(io);
+    REQUIRE(compact_result.has_value());
+    REQUIRE(compact_result->has_value());
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
     "Native TUI app.suspend stops the TUI, keeps the run alive, and resumes on SIGCONT",
     "[coding_agent][tui][suspend][issue411]") {
     ResumedSessionFixture fixture;

@@ -1321,6 +1321,14 @@ void Editor::set_autocomplete_provider(std::unique_ptr<AutocompleteProvider> pro
                                      : std::vector<std::string>{});
 }
 
+void Editor::set_keybindings(std::shared_ptr<const KeybindingRegistry> keybindings) {
+    std::lock_guard lock(impl_->impl_mutex);
+    if (keybindings) {
+        impl_->options.keybindings = std::move(keybindings);
+    }
+    invalidate();
+}
+
 bool Editor::autocomplete_open() const {
     std::lock_guard lock(impl_->impl_mutex);
     return impl_->autocomplete_state != Impl::AutocompleteState::None;

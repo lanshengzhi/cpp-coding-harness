@@ -663,6 +663,44 @@ bool AgentSession::is_busy() const {
     return impl_ && impl_->runtime && impl_->runtime->is_busy();
 }
 
+bool AgentSession::is_streaming() const {
+    return impl_ && impl_->runtime && impl_->runtime->is_streaming();
+}
+
+bool AgentSession::is_compacting() const {
+    return impl_ && impl_->runtime && impl_->runtime->is_compacting();
+}
+
+const std::optional<std::string>& AgentSession::system_prompt_source() const {
+    static const std::optional<std::string> empty;
+    return impl_ && impl_->runtime ? impl_->runtime->system_prompt_source() : empty;
+}
+
+const std::vector<std::string>& AgentSession::append_system_prompt_sources() const {
+    static const std::vector<std::string> empty;
+    return impl_ && impl_->runtime ? impl_->runtime->append_system_prompt_sources() : empty;
+}
+
+const std::vector<prompt::ProjectContextFile>& AgentSession::context_files() const {
+    static const std::vector<prompt::ProjectContextFile> empty;
+    return impl_ && impl_->runtime ? impl_->runtime->context_files() : empty;
+}
+
+const std::vector<ResourceDiagnostic>& AgentSession::skill_diagnostics() const {
+    static const std::vector<ResourceDiagnostic> empty;
+    return impl_ && impl_->runtime ? impl_->runtime->skill_diagnostics() : empty;
+}
+
+const std::vector<ResourceDiagnostic>& AgentSession::prompt_diagnostics() const {
+    static const std::vector<ResourceDiagnostic> empty;
+    return impl_ && impl_->runtime ? impl_->runtime->prompt_diagnostics() : empty;
+}
+
+const std::vector<ResourceDiagnostic>& AgentSession::theme_diagnostics() const {
+    static const std::vector<ResourceDiagnostic> empty;
+    return impl_ && impl_->runtime ? impl_->runtime->theme_diagnostics() : empty;
+}
+
 const std::vector<Skill>& AgentSession::skills() const {
     static const std::vector<Skill> empty;
     return impl_ && impl_->runtime ? impl_->runtime->skills() : empty;
@@ -767,6 +805,26 @@ namespace detail {
 
 class AgentSessionRuntimeAccess {
 public:
+    [[nodiscard]] static boost::asio::awaitable<util::Expected<runtime::AgentSessionReloadResult>>
+    reload(AgentSession& session) {
+        return reload_impl(session.impl_);
+    }
+
+    [[nodiscard]] static boost::asio::awaitable<util::Expected<runtime::AgentSessionReloadResult>>
+    reload_impl(std::shared_ptr<AgentSession::Impl> impl) {
+        if (!impl || !impl->runtime) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Validation,
+                "session is not initialized"));
+        }
+        try {
+            co_return co_await impl->runtime->reload();
+        } catch (...) {
+            const auto failure = prompt_exception(std::current_exception());
+            co_return std::unexpected(failure.error());
+        }
+    }
+
     [[nodiscard]] static util::Expected<CreateAgentSessionResult> wrap_factory_result(
         util::Expected<runtime::CreateAgentSessionResult> factory_result) {
         if (!factory_result) {
@@ -795,6 +853,15 @@ public:
 };
 
 } // namespace detail
+
+boost::asio::awaitable<util::Expected<runtime::AgentSessionReloadResult>>
+AgentSession::reload() {
+    // Same impl_ copying contract as prompt()/set_model: session.impl_ is
+    // copied into the reload frame synchronously at the call, so moving or
+    // destroying the public handle before the first co_await cannot
+    // invalidate the returned lazy awaitable.
+    return detail::AgentSessionRuntimeAccess::reload(*this);
+}
 
 util::Expected<CreateAgentSessionResult> create_agent_session(
     runtime::AgentSessionCreationRequest request) {

@@ -1193,3 +1193,29 @@ TEST_CASE("stateful Agent drains all follow-up messages together in FIFO order",
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[2])) == "first follow-up");
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[3])) == "second follow-up");
 }
+
+TEST_CASE(
+    "Agent::set_system_prompt reaches live state and the next stream request",
+    "[agent][stateful][issue418]") {
+    auto client = std::make_shared<ScriptedFakeRuntime>();
+    agent::AsyncAgentOptions options;
+    options.max_turns = 1;
+    options.model = tests::make_model("fake-model");
+    options.system_prompt = "original system prompt";
+    agent::Agent subject(client, agent::AsyncToolRegistry{}, std::move(options));
+
+    // The construction-time prompt mirrors into live state (pi
+    // `agent.state.systemPrompt`).
+    CHECK(subject.state().system_prompt == "original system prompt");
+
+    // `/reload` rebuild: replace the prompt; live state advances in step.
+    subject.set_system_prompt("rebuilt system prompt");
+    CHECK(subject.state().system_prompt == "rebuilt system prompt");
+
+    REQUIRE(run_prompt(subject, "hello"));
+    REQUIRE_FALSE(client->calls.empty());
+    // The rebuilt prompt seeds the next stream request's AiContext.
+    CHECK(client->calls.front().context.system_prompt == "rebuilt system prompt");
+    // Live state keeps the rebuilt prompt after the run settles.
+    CHECK(subject.state().system_prompt == "rebuilt system prompt");
+}

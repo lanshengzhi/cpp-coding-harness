@@ -3,6 +3,7 @@
 // (the login/logout flows report through it).
 
 #include "coding_agent/tui/ChatContainer.hpp"
+#include "coding_agent/tui/SharedKeybindings.hpp"
 #include "coding_agent/tui/Theme.hpp"
 
 #include <cch/tui/Keybindings.hpp>
@@ -23,6 +24,14 @@ namespace {
     auto resolved = tui::resolve_keybindings(std::move(request));
     REQUIRE(resolved);
     return resolved->registry;
+}
+
+/// One shared slot over the test registry (the view's consumption shape,
+/// ADR 0035).
+[[nodiscard]] std::shared_ptr<coding_agent::tui::SharedKeybindings>
+test_keybinding_slot() {
+    return std::make_shared<coding_agent::tui::SharedKeybindings>(
+        test_keybindings());
 }
 
 [[nodiscard]] coding_agent::tui::LiveTheme test_theme() {
@@ -77,7 +86,7 @@ TEST_CASE(
     "ChatContainer status lines replace the newest status like pi showStatus",
     "[coding_agent][tui][login][issue406]") {
     auto theme = test_theme();
-    coding_agent::tui::ChatContainer chat(theme, *test_keybindings());
+    coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());
 
     chat.append_status_message("Logged in to OpenAI Codex. Credentials saved to /tmp/auth.json");
     {
@@ -113,7 +122,7 @@ TEST_CASE(
     "ChatContainer trust warning renders pi's untrusted-project line",
     "[coding_agent][tui][issue413]") {
     auto theme = test_theme();
-    coding_agent::tui::ChatContainer chat(theme, *test_keybindings());
+    coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());
 
     // The warning alone: no leading spacer (pi adds Spacer only when the
     // chat already has children).

@@ -364,6 +364,10 @@ void ThemeController::set_registered_themes(std::vector<RegisteredTheme> registe
     impl_->registered = std::move(registered);
 }
 
+const std::vector<RegisteredTheme>& ThemeController::registered_themes() const {
+    return impl_->registered;
+}
+
 void ThemeController::apply_from_settings() {
     // pi `applyFromSettings` subset: the automatic `light/dark` pair (slash
     // settings values read as unset), the OSC 11/DSR query, auto-sync, and
@@ -520,6 +524,7 @@ ThemeDiscoveryResult discover_themes(std::vector<LoadedThemeResource> documents)
         result.themes.push_back(RegisteredTheme{
             .theme = std::move(*parsed),
             .source_path = std::filesystem::path{document.path},
+            .scope = document.scope,
         });
     }
     bound_diagnostics(diagnostics);

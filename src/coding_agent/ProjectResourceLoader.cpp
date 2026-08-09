@@ -69,6 +69,27 @@ constexpr std::array<std::string_view, 4> kContextFileCandidates{
     };
 }
 
+/// One prompt/skill/theme diagnostic producer: appends into both the merged
+/// (call-order) sequence and the producer's per-kind bucket (pi buckets
+/// diagnostics per resource kind; the merged sequence keeps pi's trust →
+/// prompts → skills → themes → context → system stderr order, #418).
+class KindedDiagnosticSink {
+public:
+    KindedDiagnosticSink(
+        std::vector<ResourceDiagnostic>& merged,
+        std::vector<ResourceDiagnostic>& kind)
+        : merged_(merged), kind_(kind) {}
+
+    void push(ResourceDiagnostic diagnostic) {
+        merged_.push_back(diagnostic);
+        kind_.push_back(std::move(diagnostic));
+    }
+
+private:
+    std::vector<ResourceDiagnostic>& merged_;
+    std::vector<ResourceDiagnostic>& kind_;
+};
+
 /// Raw text read for pi `readFileSync(path, "utf-8")` on the loader's
 /// out-of-workspace paths (the ancestor chain and the Agent Config
 /// Directory). A non-regular entry fails like pi's `readFileSync` throw on
@@ -461,11 +482,11 @@ public:
     /// Appends one source batch, dropping duplicate names (first wins).
     void append(
         std::vector<Skill>& out,
-        std::vector<ResourceDiagnostic>& diagnostics,
+        KindedDiagnosticSink& sink,
         std::vector<Skill> incoming) {
         for (auto& skill : incoming) {
             if (auto it = by_name_.find(skill.name); it != by_name_.end()) {
-                diagnostics.push_back(skill_collision_diagnostic(
+                sink.push(skill_collision_diagnostic(
                     skill.name,
                     it->second,
                     skill.filePath));
@@ -498,11 +519,11 @@ public:
     /// Appends one source batch, dropping duplicate names (first wins).
     void append(
         std::vector<PromptTemplate>& out,
-        std::vector<ResourceDiagnostic>& diagnostics,
+        KindedDiagnosticSink& sink,
         std::vector<PromptTemplate> incoming) {
         for (auto& tmpl : incoming) {
             if (auto it = by_name_.find(tmpl.name); it != by_name_.end()) {
-                diagnostics.push_back(prompt_collision_diagnostic(ResourceCollision{
+                sink.push(prompt_collision_diagnostic(ResourceCollision{
                     .resource_type = ResourceCollisionResourceType::Prompt,
                     .name = tmpl.name,
                     .winner_path = it->second,
@@ -524,7 +545,7 @@ private:
 void load_skills_adapter(
     const harness::WorkspaceFileSystem& fs,
     ProjectResourceLoadingResult& result,
-    std::vector<ResourceDiagnostic>& diagnostics,
+    KindedDiagnosticSink& sink,
     SkillNameTracker& names,
     SkillDirSpec spec) {
     auto load = loadSkills(fs, {std::move(spec)});
@@ -532,7 +553,7 @@ void load_skills_adapter(
         auto type = diagnostic.type == "collision"
             ? ResourceDiagnosticType::Collision
             : ResourceDiagnosticType::Warning;
-        diagnostics.push_back(ResourceDiagnostic{
+        sink.push(ResourceDiagnostic{
             .type = type,
             .message = std::move(diagnostic.message),
             .path = diagnostic.path.empty() ? std::nullopt
@@ -544,7 +565,7 @@ void load_skills_adapter(
     // call with a shared name map, so the assembly tracks names across the
     // per-root scans the C++ subset needs (first source wins; later
     // duplicates emit the winner/loser collision diagnostic).
-    names.append(result.resources.skills, diagnostics, std::move(load.skills));
+    names.append(result.resources.skills, sink, std::move(load.skills));
 }
 
 /// User skills from `<agent_config_directory>/skills` — pi discovery mode
@@ -554,13 +575,13 @@ void load_skills_adapter(
 void load_user_skills_adapter(
     const std::filesystem::path& agent_config_directory,
     ProjectResourceLoadingResult& result,
-    std::vector<ResourceDiagnostic>& diagnostics,
+    KindedDiagnosticSink& sink,
     SkillNameTracker& names) {
     auto fs = harness::WorkspaceFileSystem::create(agent_config_directory);
     if (!fs) {
         return;
     }
-    load_skills_adapter(*fs, result, diagnostics, names, SkillDirSpec{
+    load_skills_adapter(*fs, result, sink, names, SkillDirSpec{
         .path = "skills",
         .include_root_files = true,
         .source_context = SkillSourceContext{
@@ -607,7 +628,7 @@ void load_project_agents_skills_adapter(
     const std::filesystem::path& user_agents_skills_dir,
     bool project_trusted,
     ProjectResourceLoadingResult& result,
-    std::vector<ResourceDiagnostic>& diagnostics,
+    KindedDiagnosticSink& sink,
     SkillNameTracker& names) {
     if (!project_trusted) {
         return;
@@ -622,7 +643,7 @@ void load_project_agents_skills_adapter(
         if (agents_skills_dir != user_agents_skills_dir) {
             if (auto ancestor_fs = harness::WorkspaceFileSystem::create(dir);
                 ancestor_fs) {
-                load_skills_adapter(*ancestor_fs, result, diagnostics, names, SkillDirSpec{
+                load_skills_adapter(*ancestor_fs, result, sink, names, SkillDirSpec{
                     .path = ".agents/skills",
                     .include_root_files = false,
                     .source_context = SkillSourceContext{
@@ -650,12 +671,12 @@ void load_project_agents_skills_adapter(
 void load_user_agents_skills_adapter(
     const std::filesystem::path& user_agents_skills_dir,
     ProjectResourceLoadingResult& result,
-    std::vector<ResourceDiagnostic>& diagnostics,
+    KindedDiagnosticSink& sink,
     SkillNameTracker& names) {
     if (auto user_fs = harness::WorkspaceFileSystem::create(
             user_agents_skills_dir.parent_path());
         user_fs) {
-        load_skills_adapter(*user_fs, result, diagnostics, names, SkillDirSpec{
+        load_skills_adapter(*user_fs, result, sink, names, SkillDirSpec{
             .path = "skills",
             .include_root_files = false,
             .source_context = SkillSourceContext{
@@ -677,26 +698,26 @@ void load_explicit_skill_paths(
     const harness::WorkspaceFileSystem& fs,
     const std::vector<std::string>& skill_paths,
     ProjectResourceLoadingResult& result,
-    std::vector<ResourceDiagnostic>& diagnostics,
+    KindedDiagnosticSink& sink,
     SkillNameTracker& names) {
     for (const auto& path : skill_paths) {
         const auto info = fs.fileInfo(path);
         if (!info) {
             if (info.error().code == harness::FileErrorCode::NotFound) {
-                diagnostics.push_back(warning_diagnostic(
+                sink.push(warning_diagnostic(
                     "skill path does not exist",
                     path));
-                diagnostics.push_back(error_diagnostic(
+                sink.push(error_diagnostic(
                     "Skill path does not exist",
                     path));
             } else {
-                diagnostics.push_back(warning_diagnostic(
+                sink.push(warning_diagnostic(
                     info.error().message,
                     path));
             }
             continue;
         }
-        load_skills_adapter(fs, result, diagnostics, names, SkillDirSpec{
+        load_skills_adapter(fs, result, sink, names, SkillDirSpec{
             .path = path,
             .include_root_files = true,
             .source_context = SkillSourceContext{
@@ -712,23 +733,33 @@ void load_explicit_skill_paths(
 void load_project_prompts_adapter(
     const harness::WorkspaceFileSystem& fs,
     ProjectResourceLoadingResult& result,
-    std::vector<ResourceDiagnostic>& diagnostics,
+    KindedDiagnosticSink& sink,
     PromptNameTracker& names) {
     auto load = loadPromptTemplates(
         fs,
-        {PromptTemplateDirSpec{.path = std::string{kProjectPromptsMarker}, .is_file = false}});
+        {PromptTemplateDirSpec{
+            .path = std::string{kProjectPromptsMarker},
+            .is_file = false,
+            .source_info = SourceInfo{
+                .path = {},
+                .source = "auto",
+                .scope = SourceScope::Project,
+                .origin = SourceOrigin::TopLevel,
+                .base_dir = (fs.root() / kProjectPromptsMarker).string(),
+            },
+        }});
     for (auto& diagnostic : load.diagnostics) {
-        diagnostics.push_back(warning_diagnostic(
+        sink.push(warning_diagnostic(
             std::move(diagnostic.message),
             std::move(diagnostic.path)));
     }
-    names.append(result.resources.prompt_templates, diagnostics, std::move(load.templates));
+    names.append(result.resources.prompt_templates, sink, std::move(load.templates));
 }
 
 void load_user_prompts_adapter(
     const std::filesystem::path& agent_config_directory,
     ProjectResourceLoadingResult& result,
-    std::vector<ResourceDiagnostic>& diagnostics,
+    KindedDiagnosticSink& sink,
     PromptNameTracker& names) {
     auto fs = harness::WorkspaceFileSystem::create(agent_config_directory);
     if (!fs) {
@@ -738,13 +769,23 @@ void load_user_prompts_adapter(
     }
     auto load = loadPromptTemplates(
         *fs,
-        {PromptTemplateDirSpec{.path = "prompts", .is_file = false}});
+        {PromptTemplateDirSpec{
+            .path = "prompts",
+            .is_file = false,
+            .source_info = SourceInfo{
+                .path = {},
+                .source = "auto",
+                .scope = SourceScope::User,
+                .origin = SourceOrigin::TopLevel,
+                .base_dir = agent_config_directory.string(),
+            },
+        }});
     for (auto& diagnostic : load.diagnostics) {
-        diagnostics.push_back(warning_diagnostic(
+        sink.push(warning_diagnostic(
             std::move(diagnostic.message),
             (agent_config_directory / diagnostic.path).string()));
     }
-    names.append(result.resources.prompt_templates, diagnostics, std::move(load.templates));
+    names.append(result.resources.prompt_templates, sink, std::move(load.templates));
 }
 
 /// Trust-gated project themes from `.pi/themes` — pi `resource-loader.ts`
@@ -755,10 +796,10 @@ void load_user_prompts_adapter(
 void load_project_themes_adapter(
     const harness::WorkspaceFileSystem& fs,
     ProjectResourceLoadingResult& result,
-    std::vector<ResourceDiagnostic>& diagnostics) {
+    KindedDiagnosticSink& sink) {
     if (auto listed = fs.listDir(std::string{kProjectThemesMarker}); !listed) {
         if (listed.error().code != harness::FileErrorCode::NotFound) {
-            diagnostics.push_back(warning_diagnostic(
+            sink.push(warning_diagnostic(
                 listed.error().message,
                 std::string{kProjectThemesMarker}));
         }
@@ -770,7 +811,7 @@ void load_project_themes_adapter(
             if (entry.kind != harness::FileKind::File || !entry.name.ends_with(".json")) continue;
             const auto path = std::string{kProjectThemesMarker} + "/" + entry.name;
             if (auto content = fs.readTextFile(path); !content) {
-                diagnostics.push_back(warning_diagnostic(
+                sink.push(warning_diagnostic(
                     content.error().message,
                     path));
             } else {
@@ -791,14 +832,14 @@ void load_project_themes_adapter(
 void load_user_themes_adapter(
     const std::filesystem::path& agent_config_directory,
     ProjectResourceLoadingResult& result,
-    std::vector<ResourceDiagnostic>& diagnostics) {
+    KindedDiagnosticSink& sink) {
     auto fs = harness::WorkspaceFileSystem::create(agent_config_directory);
     if (!fs) {
         return;
     }
     if (auto listed = fs->listDir("themes"); !listed) {
         if (listed.error().code != harness::FileErrorCode::NotFound) {
-            diagnostics.push_back(warning_diagnostic(
+            sink.push(warning_diagnostic(
                 listed.error().message,
                 (agent_config_directory / "themes").string()));
         }
@@ -810,7 +851,7 @@ void load_user_themes_adapter(
             if (entry.kind != harness::FileKind::File || !entry.name.ends_with(".json")) continue;
             const auto path = (agent_config_directory / "themes" / entry.name).string();
             if (auto content = fs->readTextFile("themes/" + entry.name); !content) {
-                diagnostics.push_back(warning_diagnostic(
+                sink.push(warning_diagnostic(
                     content.error().message,
                     path));
             } else {
@@ -834,19 +875,19 @@ void load_explicit_theme_paths(
     const harness::WorkspaceFileSystem& fs,
     const std::vector<std::string>& theme_paths,
     ProjectResourceLoadingResult& result,
-    std::vector<ResourceDiagnostic>& diagnostics) {
+    KindedDiagnosticSink& sink) {
     for (const auto& path : theme_paths) {
         const auto info = fs.fileInfo(path);
         if (!info) {
             if (info.error().code == harness::FileErrorCode::NotFound) {
-                diagnostics.push_back(warning_diagnostic(
+                sink.push(warning_diagnostic(
                     "theme path does not exist",
                     path));
-                diagnostics.push_back(error_diagnostic(
+                sink.push(error_diagnostic(
                     "Theme path does not exist",
                     path));
             } else {
-                diagnostics.push_back(warning_diagnostic(
+                sink.push(warning_diagnostic(
                     info.error().message,
                     path));
             }
@@ -856,7 +897,7 @@ void load_explicit_theme_paths(
         std::vector<std::string> files;
         if (info->kind == harness::FileKind::Directory) {
             if (auto listed = fs.listDir(path); !listed) {
-                diagnostics.push_back(warning_diagnostic(
+                sink.push(warning_diagnostic(
                     listed.error().message,
                     path));
                 continue;
@@ -871,14 +912,14 @@ void load_explicit_theme_paths(
             }
         } else if (info->kind == harness::FileKind::File) {
             if (!path.ends_with(".json")) {
-                diagnostics.push_back(warning_diagnostic(
+                sink.push(warning_diagnostic(
                     "theme path is not a json file",
                     path));
                 continue;
             }
             files.push_back(path);
         } else {
-            diagnostics.push_back(warning_diagnostic(
+            sink.push(warning_diagnostic(
                 "theme path is not a json file",
                 path));
             continue;
@@ -886,7 +927,7 @@ void load_explicit_theme_paths(
 
         for (const auto& file : files) {
             if (auto content = fs.readTextFile(file); !content) {
-                diagnostics.push_back(warning_diagnostic(
+                sink.push(warning_diagnostic(
                     content.error().message,
                     file));
             } else {
@@ -907,7 +948,7 @@ void load_explicit_theme_paths(
 void load_explicit_prompt_template_input(
     const harness::WorkspaceFileSystem& fs,
     ProjectResourceLoadingResult& result,
-    std::vector<ResourceDiagnostic>& diagnostics,
+    KindedDiagnosticSink& sink,
     PromptNameTracker& names,
     ExplicitPromptTemplateInput input) {
     auto input_path = std::move(input.path);
@@ -916,6 +957,13 @@ void load_explicit_prompt_template_input(
         {PromptTemplateDirSpec{
             .path = input_path,
             .is_file = input.is_file,
+            .source_info = SourceInfo{
+                .path = {},
+                .source = "cli",
+                .scope = SourceScope::Temporary,
+                .origin = SourceOrigin::TopLevel,
+                .base_dir = std::nullopt,
+            },
         }});
 
     if (explicit_load.templates.empty() && explicit_load.diagnostics.empty()) {
@@ -931,7 +979,7 @@ void load_explicit_prompt_template_input(
             std::move(diag.path)));
     }
 
-    names.append(result.resources.prompt_templates, diagnostics, std::move(explicit_load.templates));
+    names.append(result.resources.prompt_templates, sink, std::move(explicit_load.templates));
 }
 
 void bound_diagnostics(ProjectResourceLoadingResult& result) {
@@ -955,6 +1003,9 @@ void bound_diagnostics(ProjectResourceLoadingResult& result) {
         }
     };
     bound(result.diagnostics);
+    bound(result.skill_diagnostics);
+    bound(result.prompt_diagnostics);
+    bound(result.theme_diagnostics);
     bound(result.fatal_errors);
 
     if (result.diagnostics.size() <= detail::kMaxResourceDiagnostics) {
@@ -973,7 +1024,17 @@ ProjectResourceLoadingResult load_project_resources(
     const ProjectTrustStore& trust_store,
     ProjectResourceLoadingRequest request) {
     ProjectResourceLoadingResult result;
+    // The merged diagnostics keep pi's loader order (trust → prompts →
+    // skills → themes → context → system); the per-kind sinks additionally
+    // bucket the prompt/skill/theme diagnostics for the loaded-resources
+    // presentation (#418).
     std::vector<ResourceDiagnostic> diagnostics;
+    std::vector<ResourceDiagnostic> prompt_diagnostics;
+    std::vector<ResourceDiagnostic> skill_diagnostics;
+    std::vector<ResourceDiagnostic> theme_diagnostics;
+    KindedDiagnosticSink prompt_sink{diagnostics, prompt_diagnostics};
+    KindedDiagnosticSink skill_sink{diagnostics, skill_diagnostics};
+    KindedDiagnosticSink theme_sink{diagnostics, theme_diagnostics};
 
     const auto workspace = request.workspace.empty() ? fs.root() : request.workspace;
     const auto home = request.home_directory.value_or(home_directory());
@@ -1001,14 +1062,14 @@ ProjectResourceLoadingResult load_project_resources(
     // discovery but keeps explicit inputs.
     PromptNameTracker names;
     for (auto& input : request.explicit_prompt_templates) {
-        load_explicit_prompt_template_input(fs, result, diagnostics, names, std::move(input));
+        load_explicit_prompt_template_input(fs, result, prompt_sink, names, std::move(input));
     }
     if (!request.no_prompt_templates && project_trusted) {
-        load_project_prompts_adapter(fs, result, diagnostics, names);
+        load_project_prompts_adapter(fs, result, prompt_sink, names);
     }
     if (!request.no_prompt_templates && request.agent_config_directory &&
         !request.agent_config_directory->empty()) {
-        load_user_prompts_adapter(*request.agent_config_directory, result, diagnostics, names);
+        load_user_prompts_adapter(*request.agent_config_directory, result, prompt_sink, names);
     }
 
     // 3. Skills load in pi's order (resource-loader.ts `mergePaths` puts the
@@ -1023,7 +1084,7 @@ ProjectResourceLoadingResult load_project_resources(
     SkillNameTracker skill_names;
     if (!request.no_skills) {
         if (project_trusted) {
-            load_skills_adapter(fs, result, diagnostics, skill_names, SkillDirSpec{
+            load_skills_adapter(fs, result, skill_sink, skill_names, SkillDirSpec{
                 .path = std::string{kProjectSkillsMarker},
                 .include_root_files = true,
                 .source_context = SkillSourceContext{
@@ -1039,14 +1100,14 @@ ProjectResourceLoadingResult load_project_resources(
             user_agents_skills_dir,
             project_trusted,
             result,
-            diagnostics,
+            skill_sink,
             skill_names);
         if (request.agent_config_directory && !request.agent_config_directory->empty()) {
-            load_user_skills_adapter(*request.agent_config_directory, result, diagnostics, skill_names);
+            load_user_skills_adapter(*request.agent_config_directory, result, skill_sink, skill_names);
         }
-        load_user_agents_skills_adapter(user_agents_skills_dir, result, diagnostics, skill_names);
+        load_user_agents_skills_adapter(user_agents_skills_dir, result, skill_sink, skill_names);
     }
-    load_explicit_skill_paths(fs, request.skill_paths, result, diagnostics, skill_names);
+    load_explicit_skill_paths(fs, request.skill_paths, result, skill_sink, skill_names);
 
     // 4. Themes load in pi's order (resource-loader.ts `mergePaths` puts
     // the auto-discovered paths before the `--theme` additions, and
@@ -1057,13 +1118,13 @@ ProjectResourceLoadingResult load_project_resources(
     // name-level dedupe stay in the coding-agent TUI package
     // (`discover_themes`), which receives the collected documents.
     if (!request.no_themes && project_trusted) {
-        load_project_themes_adapter(fs, result, diagnostics);
+        load_project_themes_adapter(fs, result, theme_sink);
     }
     if (!request.no_themes && request.agent_config_directory &&
         !request.agent_config_directory->empty()) {
-        load_user_themes_adapter(*request.agent_config_directory, result, diagnostics);
+        load_user_themes_adapter(*request.agent_config_directory, result, theme_sink);
     }
-    load_explicit_theme_paths(fs, request.theme_paths, result, diagnostics);
+    load_explicit_theme_paths(fs, request.theme_paths, result, theme_sink);
 
     // 5. Project Context Files (pi `loadProjectContextFiles`): the global
     // context file from the Agent Config Directory plus the cwd ancestor
@@ -1122,6 +1183,9 @@ ProjectResourceLoadingResult load_project_resources(
     }
 
     result.diagnostics = std::move(diagnostics);
+    result.skill_diagnostics = std::move(skill_diagnostics);
+    result.prompt_diagnostics = std::move(prompt_diagnostics);
+    result.theme_diagnostics = std::move(theme_diagnostics);
     bound_diagnostics(result);
     return result;
 }

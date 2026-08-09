@@ -1,15 +1,14 @@
 #pragma once
 
+#include "coding_agent/tui/SharedKeybindings.hpp"
+
 #include <cch/tui/Component.hpp>
 #include <cch/util/Error.hpp>
 
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <string_view>
-
-namespace cch::tui {
-class KeybindingRegistry;
-} // namespace cch::tui
 
 namespace cch::coding_agent::tui {
 
@@ -36,14 +35,17 @@ class LiveTheme;
     std::string_view description);
 
 /// The startup header: pi's built-in header with keybinding hints only (no
-/// logo, G2). Renders the compact instruction line by default and the full
-/// assembled-action instruction list when tools are expanded (pi
-/// `interactive-mode.ts` builtInHeader expansion minus the logo).
+/// logo, G2). Renders the compact instruction line plus the `Press <key> to
+/// show full startup help and loaded resources.` notice by default and the
+/// full assembled-action instruction list when tools are expanded (pi
+/// `interactive-mode.ts` builtInHeader expansion minus the logo and the
+/// onboarding line). Keybindings resolve through the shared slot so a
+/// `/reload` re-catalog reflects live (ADR 0035, #418).
 class KeybindingHints final : public cch::tui::Component {
 public:
     KeybindingHints(
         const LiveTheme& theme,
-        const cch::tui::KeybindingRegistry& keybindings,
+        std::shared_ptr<const SharedKeybindings> keybindings,
         bool user_bash_available,
         bool clipboard_paste_available);
 
@@ -55,7 +57,9 @@ public:
 
 private:
     const LiveTheme& theme_; // must outlive this component.
-    const cch::tui::KeybindingRegistry& keybindings_; // must outlive this component.
+    /// The shared keybinding slot (ADR 0035); the strong reference keeps the
+    /// registry alive for every render.
+    std::shared_ptr<const SharedKeybindings> keybindings_;
     bool user_bash_available_{false};
     bool clipboard_paste_available_{false};
     bool expanded_{false};

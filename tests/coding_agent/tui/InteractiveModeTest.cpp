@@ -2056,7 +2056,9 @@ TEST_CASE(
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 100, .rows = 18});
+    // 24 rows leave room for the two-line compact header (#418) plus the
+    // loaded-resources sections the fixture workspace renders.
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -2967,10 +2969,11 @@ TEST_CASE(
     auto created = coding_agent::create_agent_session(session_options(workspace, std::move(client)));
     REQUIRE(created);
 
-    // The pi-shaped composition reserves fixed rows for the status, the
-    // editor borders, and the footer; 12 rows keep the chat tail anchored so
-    // the streaming message's head scrolls out.
-    tui::VirtualTerminal terminal({.columns = 30, .rows = 12});
+    // The pi-shaped composition reserves fixed rows for the header (three
+    // wrapped compact lines plus the two-line loaded-resources notice, #418),
+    // the status, the editor borders, and the footer; 15 rows keep the chat
+    // tail anchored so the streaming message's head scrolls out.
+    tui::VirtualTerminal terminal({.columns = 30, .rows = 15});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -3149,7 +3152,9 @@ TEST_CASE(
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 100, .rows = 18});
+    // 24 rows leave room for the two-line compact header (#418) plus the
+    // loaded-resources sections the fixture workspace renders.
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -3166,7 +3171,7 @@ TEST_CASE(
 
     REQUIRE(terminal.inject_input("/"));
     drain_ready(io);
-    for (std::size_t index = 0; index < 12; ++index) {
+    for (std::size_t index = 0; index < 13; ++index) {
         REQUIRE(terminal.inject_input("\x1b[B"));
         drain_ready(io);
     }
@@ -3228,7 +3233,9 @@ TEST_CASE(
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
 
-    tui::VirtualTerminal terminal({.columns = 100, .rows = 18});
+    // 24 rows leave room for the two-line compact header (#418) plus the
+    // loaded-resources sections the fixture workspace renders.
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
     boost::asio::io_context io;
     std::optional<util::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -3247,7 +3254,7 @@ TEST_CASE(
     // autocomplete list while prompt templates and slashes still appear.
     REQUIRE(terminal.inject_input("/"));
     drain_ready(io);
-    for (std::size_t index = 0; index < 12; ++index) {
+    for (std::size_t index = 0; index < 13; ++index) {
         REQUIRE(terminal.inject_input("\x1b[B"));
         drain_ready(io);
     }
@@ -3268,7 +3275,7 @@ TEST_CASE(
     drain_ready(io);
     REQUIRE(terminal.inject_input("\x03/"));
     drain_ready(io);
-    for (std::size_t index = 0; index < 12; ++index) {
+    for (std::size_t index = 0; index < 13; ++index) {
         REQUIRE(terminal.inject_input("\x1b[B"));
         drain_ready(io);
     }
@@ -3280,6 +3287,181 @@ TEST_CASE(
 
     // Clear the editor so the exit binding reaches the app.
     REQUIRE(terminal.inject_input("\x03\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI /reload refuses while streaming with pi's verbatim warning",
+    "[coding_agent][tui][reload][issue418]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto client = std::make_shared<IncrementalGatedChatProvider>();
+    auto* client_pointer = client.get();
+    auto created = coding_agent::create_agent_session(
+        session_options(workspace, std::move(client)));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    // Start a stream and gate it so the Agent run stays in flight.
+    REQUIRE(terminal.inject_input("stream\r"));
+    drain_ready(io);
+    REQUIRE(client_pointer->started);
+
+    // pi `handleReloadCommand` refusal: `isStreaming` warns verbatim and
+    // does not touch the resources.
+    REQUIRE(terminal.inject_input("/reload\r"));
+    drain_ready(io);
+    auto screen = visible_screen(terminal);
+    CHECK(
+        screen.find(
+            "Wait for the current response to finish before reloading.") !=
+        std::string::npos);
+
+    client_pointer->release();
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI /reload re-reads resources, refreshes the presentation, and reports the pi status",
+    "[coding_agent][tui][reload][issue418]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    workspace.write(
+        ".pi/skills/proj-skill/SKILL.md",
+        "---\n"
+        "name: proj-skill\n"
+        "description: initial skill description.\n"
+        "---\n"
+        "Initial skill body.\n");
+    workspace.write(
+        ".pi/prompts/proj-prompt.md",
+        "---\n"
+        "description: initial prompt description.\n"
+        "---\n"
+        "Initial prompt body: $ARGUMENTS\n");
+    auto options = session_options(
+        workspace, ai::providers::make_scripted_fake_provider());
+    options.project_trust_override = true;
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    // The startup container renders the loaded-resources sections with the
+    // compact name lists and the two-line header notice (AC3).
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("Press ") != std::string::npos);
+    CHECK(screen.find("to show full startup help and loaded resources.") !=
+          std::string::npos);
+    CHECK(screen.find("[Skills]") != std::string::npos);
+    CHECK(screen.find("proj-skill") != std::string::npos);
+    CHECK(screen.find("[Prompts]") != std::string::npos);
+    CHECK(screen.find("/proj-prompt") != std::string::npos);
+
+    // Edit the skill between boot and reload.
+    workspace.write(
+        ".pi/skills/proj-skill/SKILL.md",
+        "---\n"
+        "name: proj-skill\n"
+        "description: reloaded skill description.\n"
+        "---\n"
+        "Reloaded skill body.\n");
+
+    REQUIRE(terminal.inject_input("/reload\r"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    // The pi-trimmed status line ("extensions" dropped, AC2) reports the
+    // successful reload.
+    CHECK(
+        screen.find(
+            "Reloaded keybindings, skills, prompts, themes, and context files") !=
+        std::string::npos);
+    CHECK(screen.find("extensions") == std::string::npos);
+    // The loaded-resources presentation refreshed from the reloaded session.
+    CHECK(created->session->skills().front().description ==
+          "reloaded skill description.");
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI /reload re-catalogs keybindings.json into the shared slot",
+    "[coding_agent][tui][reload][keybindings][issue418]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    config.write("keybindings.json", R"({"app.interrupt":"f6"})");
+    auto created = coding_agent::create_agent_session(session_options(
+        workspace,
+        ai::providers::make_scripted_fake_provider()));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    // The boot catalog reads keybindings.json: the header's interrupt hint
+    // shows the custom f6 key.
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("f6") != std::string::npos);
+    CHECK(screen.find("f7") == std::string::npos);
+
+    // Edit the file and reload: the re-catalog replaces the shared slot, so
+    // the header and dispatch observe the new binding live (ADR 0035).
+    config.write("keybindings.json", R"({"app.interrupt":"f7"})");
+    REQUIRE(terminal.inject_input("/reload\r"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("f7") != std::string::npos);
+    CHECK(screen.find("f6") == std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
     REQUIRE(run_result);
     CHECK(*run_result);

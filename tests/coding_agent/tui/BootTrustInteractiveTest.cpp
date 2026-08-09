@@ -496,3 +496,70 @@ TEST_CASE(
     REQUIRE(run.run_result);
     CHECK(*run.run_result);
 }
+
+TEST_CASE(
+    "/reload persists the implicit project trust decision when resources appear",
+    "[coding_agent][tui][boot-trust][reload][issue418]") {
+    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    TrustIsolatedWorkspace fixture;
+    agent_dir.set(fixture.agent_dir.string());
+
+    BootTrustRun run;
+    run.start(fixture, boot_request(fixture), ai::providers::make_scripted_fake_models());
+
+    // No trust-requiring resources at boot: no prompt, the session binds
+    // trusted (pi `NoProjectResources` → trusted), and pi main.ts arms
+    // `autoTrustOnReloadCwd`.
+    auto screen = visible_screen(run.terminal);
+    CHECK(screen.find("Trust project folder?") == std::string::npos);
+    CHECK(screen.find("This project is not trusted.") == std::string::npos);
+
+    // The workspace gains a trust-requiring resource, then /reload fires:
+    // the reload keeps the session trusted and pi's implicit-trust save
+    // persists the decision, appending the "; saved project trust" suffix.
+    fixture.write(".pi/skills/README.md", "project skill marker");
+    run.type("/reload\r");
+    screen = visible_screen(run.terminal);
+    CHECK(
+        screen.find(
+            "Reloaded keybindings, skills, prompts, themes, and context files; saved project trust") !=
+        std::string::npos);
+
+    // The implicit decision persisted to the trust store.
+    const auto trust_path = coding_agent::trust_store_file_path();
+    REQUIRE(std::filesystem::exists(trust_path));
+    std::ifstream trust_file(trust_path);
+    std::string trust_json{
+        std::istreambuf_iterator<char>(trust_file),
+        std::istreambuf_iterator<char>()};
+    CHECK(trust_json.find("\"trusted\"") != std::string::npos ||
+        trust_json.find("true") != std::string::npos);
+
+    run.exit();
+}
+
+TEST_CASE(
+    "/reload without the implicit-trust condition keeps the plain pi status",
+    "[coding_agent][tui][boot-trust][reload][issue418]") {
+    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    TrustIsolatedWorkspace fixture;
+    agent_dir.set(fixture.agent_dir.string());
+
+    BootTrustRun run;
+    run.start(fixture, boot_request(fixture), ai::providers::make_scripted_fake_models());
+
+    // The workspace never gains trust-requiring resources; /reload runs the
+    // plain status (no "; saved project trust" suffix).
+    run.type("/reload\r");
+    const auto screen = visible_screen(run.terminal);
+    CHECK(
+        screen.find(
+            "Reloaded keybindings, skills, prompts, themes, and context files") !=
+        std::string::npos);
+    CHECK(
+        screen.find(
+            "Reloaded keybindings, skills, prompts, themes, and context files; saved project trust") ==
+        std::string::npos);
+
+    run.exit();
+}

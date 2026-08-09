@@ -58,10 +58,17 @@ struct TerminalThemeDetection {
 
 /// One registered theme (pi `setRegisteredThemes`): the parsed theme plus
 /// its source path (pi `Theme.sourcePath`; absent only for in-memory
-/// instances, which the subset never creates).
+/// instances, which the subset never creates) and source scope (pi
+/// `SourceInfo.scope`, carried through `discover_themes` from the loader
+/// document — the loaded-resources Themes grouping dimension, #418).
 struct RegisteredTheme {
     ResolvedTheme theme;
     std::optional<std::filesystem::path> source_path{std::nullopt};
+    /// pi `SourceInfo.scope` of the discovering source: `Project` (the
+    /// trust-gated project themes directory), `User` (the agent config
+    /// directory themes directory), or `Temporary` (an explicit `--theme`
+    /// path, the "path" group).
+    SourceScope scope{SourceScope::Project};
 };
 
 /// pi `InteractiveThemeController` `showError` sink.
@@ -127,6 +134,11 @@ public:
     /// pi `setRegisteredThemes`: replace the registered-theme map (called
     /// at boot bind and by `/reload`'s re-registration).
     void set_registered_themes(std::vector<RegisteredTheme> registered);
+
+    /// The registered themes with their source scopes (pi
+    /// `resourceLoader.getThemes().themes`), for the loaded-resources
+    /// Themes section (#418).
+    [[nodiscard]] const std::vector<RegisteredTheme>& registered_themes() const;
 
     /// pi `applyFromSettings` (sync subset; see the class comment).
     void apply_from_settings();

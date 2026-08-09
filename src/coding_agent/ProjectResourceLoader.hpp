@@ -116,7 +116,15 @@ struct ProjectResourceLoadingResult {
     LoadedProjectResources resources;
     /// Errors that must abort session creation (e.g. explicit resource failures).
     std::vector<ResourceDiagnostic> fatal_errors;
+    /// Merged diagnostics in pi's loader order (trust → prompts → skills →
+    /// themes → context → system), the stderr sequence. The per-kind buckets
+    /// below carry the same prompt/skill/theme diagnostics split for the
+    /// loaded-resources presentation (pi `skillDiagnostics`/
+    /// `promptDiagnostics`/`themeDiagnostics`, #418).
     std::vector<ResourceDiagnostic> diagnostics;
+    std::vector<ResourceDiagnostic> skill_diagnostics;
+    std::vector<ResourceDiagnostic> prompt_diagnostics;
+    std::vector<ResourceDiagnostic> theme_diagnostics;
 };
 
 [[nodiscard]] ProjectResourceLoadingResult load_project_resources(

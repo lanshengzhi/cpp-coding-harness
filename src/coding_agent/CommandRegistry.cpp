@@ -409,6 +409,28 @@ util::ExpectedVoid register_native_tui_commands(CommandRegistry& registry) {
         return std::unexpected(registered.error());
     }
 
+    // /reload — pi `/reload` (issue #418): re-read User Settings,
+    // keybindings, skills, prompt templates, themes, and Project Context
+    // Files; rebuild the System Prompt; refresh the loaded-resources
+    // presentation. The pi autocomplete description drops "extensions"
+    // (no extensions surface, ADR 0036 G4).
+    if (auto registered = registry.register_command(
+            "reload",
+            "Reload keybindings, skills, prompts, themes, and context files",
+            {},
+            [](const CommandContext& /*ctx*/, std::string_view args) {
+                if (!args.empty()) {
+                    return CommandResult{.display_text = "Usage: /reload"};
+                }
+                return CommandResult{
+                    .display_text = {},
+                    .effect = CommandEffect::Reload,
+                };
+            });
+        !registered) {
+        return std::unexpected(registered.error());
+    }
+
     return {};
 }
 

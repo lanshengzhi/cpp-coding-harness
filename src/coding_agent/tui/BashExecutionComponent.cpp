@@ -86,11 +86,11 @@ void append_lines(std::vector<std::string>& destination, std::vector<std::string
 
 BashExecutionComponent::BashExecutionComponent(
     const LiveTheme& theme,
-    const cch::tui::KeybindingRegistry& keybindings,
+    std::shared_ptr<const SharedKeybindings> keybindings,
     std::string command,
     bool exclude_from_context)
     : theme_(theme),
-      keybindings_(keybindings),
+      keybindings_(std::move(keybindings)),
       command_(std::move(command)),
       exclude_from_context_(exclude_from_context) {}
 
@@ -128,7 +128,7 @@ void BashExecutionComponent::set_expanded(bool expanded) {
 void BashExecutionComponent::start_loader(cch::tui::RenderRequestSink request_render) {
     if (!running_) return;
     if (loader_ && loader_->running()) return;
-    const auto cancel_key = keybindings_.key_text("app.interrupt");
+    const auto cancel_key = keybindings_->registry().key_text("app.interrupt");
     cch::tui::LoaderOptions options;
     options.request_render = std::move(request_render);
     options.spinner_style = theme_.foreground_hook(
@@ -206,7 +206,7 @@ util::Expected<cch::tui::RenderResult> BashExecutionComponent::render(std::size_
         if (!rendered_loader) return std::unexpected(rendered_loader.error());
         append_lines(lines, std::move(rendered_loader->lines));
     } else if (!running_) {
-        const auto expand_key = keybindings_.key_text("app.tools.expand");
+        const auto expand_key = keybindings_->registry().key_text("app.tools.expand");
         const auto hint = expand_key.empty() ? "Unbound" : expand_key;
         std::string status;
         if (hidden > 0) {
