@@ -82,6 +82,10 @@ struct UserSettings {
     /// #327 field subset with decision 10 of the G2 record; any non-zero
     /// stored value resolves as 1 (pi `settings.outputPad === 0 ? 0 : 1`).
     std::optional<std::size_t> output_pad{std::nullopt};
+    /// pi `enableSkillCommands` — register skills as `/skill:name` commands
+    /// (default true). Graduated into the settings subset with decision 24
+    /// of the G4 record; gates `/skill:` registration and autocomplete.
+    std::optional<bool> enable_skill_commands{std::nullopt};
 };
 
 /// One `settings.json` scope (pi `SettingsScope`).
@@ -172,6 +176,15 @@ public:
     /// Resolved pi `outputPad` over the merged view (default 1; any stored
     /// non-zero value resolves as 1).
     [[nodiscard]] std::size_t output_pad() const noexcept;
+    /// Resolved pi `enableSkillCommands` over the merged view (default true;
+    /// pi `SettingsManager.getEnableSkillCommands`).
+    [[nodiscard]] bool get_enable_skill_commands() const noexcept;
+
+    /// Surgical field-level write of the pi `enableSkillCommands` field in
+    /// the global scope (pi `SettingsManager.setEnableSkillCommands`, which
+    /// always writes `globalSettings`); preserves every other field. A
+    /// global load failure suppresses the write. No-op when unchanged.
+    [[nodiscard]] util::ExpectedVoid set_enable_skill_commands(bool enabled);
 
     /// Surgical field-level write of the pi `hideThinkingBlock` field in the
     /// global scope (pi `SettingsManager.setHideThinkingBlock`, which always

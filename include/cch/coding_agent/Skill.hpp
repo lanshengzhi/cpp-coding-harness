@@ -39,17 +39,25 @@ struct SkillDiagnostic {
 /// Skill loaded from a SKILL.md file.
 ///
 /// name, description, and filePath are inserted into the system prompt in an
-/// XML-formatted block per the Agent Skills standard.
+/// XML-formatted block per the Agent Skills standard. The file body is NOT
+/// preloaded: `/skill:name` invocation reads the file at invocation time
+/// (pi `agent-session.ts` `_expandSkillCommand`), so the value stays a
+/// passive discovery record.
 struct Skill {
     /// Stable skill name used for lookup and model-visible listings.
     std::string name;
     /// Short model-visible description of when to use the skill.
     std::string description;
-    /// Full skill instructions (body after YAML frontmatter).
-    std::string content;
     /// Absolute path to the skill file. Used for model-visible location and
     /// resolving relative references.
     std::string filePath;
+    /// The skill directory (parent of SKILL.md / dirname of the path): the
+    /// base against which the file's relative references resolve (pi
+    /// `Skill.baseDir`).
+    std::string baseDir;
+    /// pi `Skill.sourceInfo`: the discovery provenance (scope, source, and
+    /// the resource-root baseDir recorded by the loader).
+    SourceInfo sourceInfo;
     /// Exclude this skill from model-visible skill lists while still allowing
     /// explicit application invocation.
     bool disableModelInvocation{false};

@@ -33,6 +33,9 @@ struct InteractiveSessionFacts {
     bool no_skills{false};
     bool no_prompt_templates{false};
     std::vector<std::string> prompt_template_paths;
+    /// Repeatable pi `--skill` paths: explicit skills load even when
+    /// `--no-skills` drops discovery.
+    std::vector<std::string> skill_paths;
     std::optional<std::string> provider;
     std::optional<std::string> model;
     std::vector<std::string> models;

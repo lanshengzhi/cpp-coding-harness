@@ -374,7 +374,12 @@ TEST_CASE("project resource loader diagnoses skill name collisions with winner a
     auto result = fix.load(std::move(request));
 
     REQUIRE(result.resources.skills.size() == 1);
-    CHECK(result.resources.skills[0].content.find("First skill body") != std::string::npos);
+    // The winner is the first loaded skill (its file path identifies it; the
+    // body is read at invocation time, not preloaded).
+    CHECK(result.resources.skills[0].filePath.find(".pi/skills/first/SKILL.md") != std::string::npos);
+    CHECK(result.resources.skills[0].baseDir.find(".pi/skills/first") != std::string::npos);
+    CHECK(result.resources.skills[0].sourceInfo.scope == coding_agent::SourceScope::Project);
+    CHECK(result.resources.skills[0].sourceInfo.base_dir.value_or("").find(".pi") != std::string::npos);
     REQUIRE(count_diag(result, coding_agent::ResourceDiagnosticType::Collision) == 1);
     const auto& diagnostic = *std::find_if(
         result.diagnostics.begin(),
@@ -443,28 +448,31 @@ TEST_CASE(
     "[coding_agent][project-resource-loader][issue72]") {
     LoaderFixture fix;
     const std::string secret = "sk-resource-diagnostic-secret-123456";
+    // A hostile frontmatter name that is otherwise loadable (lowercase,
+    // digits, hyphens) so it reaches the pi collision diagnostic, whose
+    // message echoes the name (pi `name \"<name>\" collision`).
     const std::string hostile_name = secret + std::string(1100, 'x');
-    fix.write(
-        ".pi/skills/safe/SKILL.md",
-        "---\nname: " + hostile_name + "\ndescription: Hostile metadata.\n---\nBody.\n");
+    for (const auto& dir : {"first", "second"}) {
+        fix.write(
+            ".pi/skills/" + std::string{dir} + "/SKILL.md",
+            "---\nname: " + hostile_name + "\ndescription: Hostile metadata.\n---\nBody.\n");
+    }
 
     coding_agent::ProjectResourceLoadingRequest request;
     request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
     const auto result = fix.load(std::move(request));
 
-    REQUIRE(!result.diagnostics.empty());
-
-    // The name mismatch diagnostic includes the hostile frontmatter name.
-    const auto secret_diag = std::find_if(
+    // The collision diagnostic includes the hostile frontmatter name.
+    const auto collision_diag = std::find_if(
         result.diagnostics.begin(),
         result.diagnostics.end(),
         [](const auto& d) {
-            return d.message.find("does not match parent directory") != std::string::npos;
+            return d.type == coding_agent::ResourceDiagnosticType::Collision;
         });
-    REQUIRE(secret_diag != result.diagnostics.end());
-    CHECK(secret_diag->message.find(secret) == std::string::npos);
-    CHECK(secret_diag->message.find("[REDACTED]") != std::string::npos);
-    CHECK(secret_diag->message.size() <= 1024);
+    REQUIRE(collision_diag != result.diagnostics.end());
+    CHECK(collision_diag->message.find(secret) == std::string::npos);
+    CHECK(collision_diag->message.find("[REDACTED]") != std::string::npos);
+    CHECK(collision_diag->message.size() <= 1024);
 }
 
 TEST_CASE(
@@ -477,7 +485,7 @@ TEST_CASE(
         std::string(200, 'f');
     fix.write(
         ".pi/skills/" + long_dir + "/SKILL.md",
-        "---\nname: deep-skill\ndescription: Deep.\n---\nBody.\n");
+        "---\nname: deep-skill\ndescription: " + std::string(1100, 'd') + "\n---\nBody.\n");
 
     coding_agent::ProjectResourceLoadingRequest request;
     request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
@@ -547,4 +555,256 @@ TEST_CASE("project resource loader rejects legacy .cpp-harness/ markers without 
     CHECK(result.resources.skills.empty());
     CHECK(result.resources.prompt_templates.empty());
     CHECK(result.diagnostics.empty());
+}
+
+// ── P16: skill discovery — user ~/.pi/agent/skills, .agents/skills, --skill ──
+
+TEST_CASE(
+    "project resource loader loads user skills with pi root-level .md inclusion",
+    "[coding_agent][project-resource-loader][issue412]") {
+    LoaderFixture fix;
+    tests::TempWorkspace agent_dir;
+    agent_dir.write("skills/user-skill/SKILL.md",
+        "---\n"
+        "name: user-skill\n"
+        "description: User skill.\n"
+        "---\n"
+        "User body.\n");
+    // pi discovery mode: root-level .md files in ~/.pi/agent/skills load.
+    agent_dir.write("skills/root-skill.md",
+        "---\n"
+        "name: root-skill\n"
+        "description: Root-level user skill.\n"
+        "---\n"
+        "Root body.\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.agent_config_directory = agent_dir.path();
+
+    auto result = fix.load(std::move(request));
+
+    // No project markers: no trust decision involved, user skills load.
+    CHECK(result.trust.decision == coding_agent::ProjectTrustDecision::Trusted);
+    CHECK(result.trust.source == coding_agent::ProjectTrustSource::NoProjectResources);
+    REQUIRE(result.resources.skills.size() == 2);
+    const auto root_skill = std::find_if(
+        result.resources.skills.begin(),
+        result.resources.skills.end(),
+        [](const auto& skill) { return skill.name == "root-skill"; });
+    REQUIRE(root_skill != result.resources.skills.end());
+    CHECK(root_skill->sourceInfo.scope == coding_agent::SourceScope::User);
+    CHECK(root_skill->sourceInfo.source == "auto");
+    CHECK(root_skill->sourceInfo.base_dir == agent_dir.path().string());
+    // The file body is not preloaded; the base directory is the file's own.
+    CHECK(root_skill->baseDir.find("skills") != std::string::npos);
+    CHECK(root_skill->filePath.find("skills/root-skill.md") != std::string::npos);
+}
+
+TEST_CASE(
+    "project resource loader loads project .pi/skills root-level .md files (pi mode)",
+    "[coding_agent][project-resource-loader][issue412]") {
+    LoaderFixture fix;
+    fix.write(
+        ".pi/skills/root-skill.md",
+        "---\n"
+        "name: root-skill\n"
+        "description: Project root-level skill.\n"
+        "---\n"
+        "Root body.\n");
+    fix.write(
+        ".pi/skills/nested/skill/SKILL.md",
+        "---\n"
+        "name: nested-skill\n"
+        "description: Nested project skill.\n"
+        "---\n"
+        "Nested body.\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+
+    auto result = fix.load(std::move(request));
+
+    REQUIRE(result.resources.skills.size() == 2);
+    const auto root_skill = std::find_if(
+        result.resources.skills.begin(),
+        result.resources.skills.end(),
+        [](const auto& skill) { return skill.name == "root-skill"; });
+    REQUIRE(root_skill != result.resources.skills.end());
+    CHECK(root_skill->sourceInfo.scope == coding_agent::SourceScope::Project);
+    CHECK(root_skill->sourceInfo.base_dir.value_or("").find(".pi") != std::string::npos);
+}
+
+TEST_CASE(
+    "project resource loader loads .agents/skills with per-directory baseDir",
+    "[coding_agent][project-resource-loader][issue412]") {
+    // A git-rooted workspace with a nested project directory: the ancestor
+    // walk covers the workspace and the git root.
+    tests::TempWorkspace git_root;
+    std::filesystem::create_directories(git_root.path() / ".git");
+    std::filesystem::create_directories(git_root.path() / "proj");
+    const auto workspace = git_root.path() / "proj";
+    auto fs = harness::WorkspaceFileSystem::create(workspace);
+    REQUIRE(fs.has_value());
+    git_root.write(".agents/skills/repo-skill/SKILL.md",
+        "---\n"
+        "name: repo-skill\n"
+        "description: Repo .agents skill.\n"
+        "---\n"
+        "Repo body.\n");
+
+    coding_agent::ProjectTrustStore trust_store{workspace / "trust.json"};
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.workspace = workspace;
+    request.home_directory = git_root.path() / "home";
+    request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    auto result = coding_agent::load_project_resources(*fs, trust_store, std::move(request));
+
+    REQUIRE(result.resources.skills.size() == 1);
+    CHECK(result.resources.skills[0].name == "repo-skill");
+    // The per-directory baseDir is the owning .agents directory.
+    CHECK(result.resources.skills[0].sourceInfo.scope == coding_agent::SourceScope::Project);
+    CHECK(result.resources.skills[0].sourceInfo.source == "auto");
+    CHECK(result.resources.skills[0].sourceInfo.base_dir.value_or("").find(".agents") != std::string::npos);
+    // The skill's own base directory remains the SKILL.md parent.
+    CHECK(result.resources.skills[0].baseDir.find("repo-skill") != std::string::npos);
+}
+
+TEST_CASE(
+    "project resource loader .agents/skills presence triggers the trust decision",
+    "[coding_agent][project-resource-loader][issue412]") {
+    LoaderFixture fix;
+    fix.write(
+        ".agents/skills/proj-skill/SKILL.md",
+        "---\n"
+        "name: proj-skill\n"
+        "description: Project .agents skill.\n"
+        "---\n"
+        "Body.\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.home_directory = fix.workspace.path() / "home";
+
+    auto result = fix.load(std::move(request));
+
+    // Mere presence gates loading: untrusted → nothing loads.
+    CHECK(result.trust.decision == coding_agent::ProjectTrustDecision::Untrusted);
+    CHECK(result.resources.skills.empty());
+}
+
+TEST_CASE(
+    "project resource loader loads the user ~/.agents/skills convention without trust",
+    "[coding_agent][project-resource-loader][issue412]") {
+    LoaderFixture fix;
+    tests::TempWorkspace home;
+    home.write(".agents/skills/user-agents-skill/SKILL.md",
+        "---\n"
+        "name: user-agents-skill\n"
+        "description: User .agents skill.\n"
+        "---\n"
+        "Body.\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.home_directory = home.path();
+
+    auto result = fix.load(std::move(request));
+
+    // The user's own ~/.agents/skills is always trusted and never triggers
+    // the project trust decision.
+    CHECK(result.trust.source == coding_agent::ProjectTrustSource::NoProjectResources);
+    REQUIRE(result.resources.skills.size() == 1);
+    CHECK(result.resources.skills[0].name == "user-agents-skill");
+    CHECK(result.resources.skills[0].sourceInfo.scope == coding_agent::SourceScope::User);
+    CHECK(result.resources.skills[0].sourceInfo.base_dir.value_or("").find(".agents") != std::string::npos);
+}
+
+TEST_CASE(
+    "project resource loader --skill explicit paths load first and survive --no-skills",
+    "[coding_agent][project-resource-loader][issue412]") {
+    LoaderFixture fix;
+    fix.write(
+        "explicit-skill.md",
+        "---\n"
+        "name: explicit-skill\n"
+        "description: Explicit skill.\n"
+        "---\n"
+        "Explicit body.\n");
+    fix.write(
+        ".pi/skills/explicit-skill/SKILL.md",
+        "---\n"
+        "name: explicit-skill\n"
+        "description: Discovered duplicate.\n"
+        "---\n"
+        "Discovered body.\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    request.no_skills = true;
+    request.skill_paths.push_back("explicit-skill.md");
+
+    auto result = fix.load(std::move(request));
+
+    // --no-skills drops discovery but keeps the explicit path.
+    REQUIRE(result.resources.skills.size() == 1);
+    CHECK(result.resources.skills[0].name == "explicit-skill");
+    CHECK(result.resources.skills[0].filePath.find("explicit-skill.md") != std::string::npos);
+    CHECK(result.resources.skills[0].sourceInfo.source == "cli");
+    CHECK(result.resources.skills[0].sourceInfo.scope == coding_agent::SourceScope::Temporary);
+    CHECK_FALSE(result.resources.skills[0].sourceInfo.base_dir.has_value());
+}
+
+TEST_CASE(
+    "project resource loader discovered skills win name collisions over explicit --skill",
+    "[coding_agent][project-resource-loader][issue412]") {
+    LoaderFixture fix;
+    fix.write(
+        "explicit-dir/skill/SKILL.md",
+        "---\n"
+        "name: shared\n"
+        "description: Explicit skill.\n"
+        "---\n"
+        "Explicit body.\n");
+    fix.write(
+        ".pi/skills/shared/SKILL.md",
+        "---\n"
+        "name: shared\n"
+        "description: Discovered skill.\n"
+        "---\n"
+        "Discovered body.\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    request.skill_paths.push_back("explicit-dir/skill/SKILL.md");
+
+    auto result = fix.load(std::move(request));
+
+    // pi resource-loader.ts `mergePaths` appends the --skill paths after the
+    // discovered ones, and `loadSkills` is first-wins: the discovered skill
+    // wins and the explicit path loses with the collision diagnostic.
+    REQUIRE(result.resources.skills.size() == 1);
+    CHECK(result.resources.skills[0].filePath.find(".pi/skills/shared/SKILL.md") != std::string::npos);
+    REQUIRE(has_diag(result, coding_agent::ResourceDiagnosticType::Collision, "name \"shared\" collision"));
+    const auto collision = std::find_if(
+        result.diagnostics.begin(),
+        result.diagnostics.end(),
+        [](const auto& diag) { return diag.type == coding_agent::ResourceDiagnosticType::Collision; });
+    REQUIRE(collision != result.diagnostics.end());
+    REQUIRE(collision->collision.has_value());
+    CHECK(collision->collision->winner_path.find(".pi/skills/shared/SKILL.md") != std::string::npos);
+    CHECK(collision->collision->loser_path.find("explicit-dir/skill/SKILL.md") != std::string::npos);
+}
+
+TEST_CASE(
+    "project resource loader missing --skill paths carry pi's two diagnostics",
+    "[coding_agent][project-resource-loader][issue412]") {
+    LoaderFixture fix;
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.skill_paths.push_back("missing-skill.md");
+
+    auto result = fix.load(std::move(request));
+
+    CHECK(has_diag(result, coding_agent::ResourceDiagnosticType::Warning, "skill path does not exist"));
+    CHECK(has_diag(result, coding_agent::ResourceDiagnosticType::Error, "Skill path does not exist"));
+    CHECK(result.resources.skills.empty());
+    CHECK(result.fatal_errors.empty());
 }

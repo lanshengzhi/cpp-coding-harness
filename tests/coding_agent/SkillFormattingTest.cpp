@@ -122,8 +122,8 @@ TEST_CASE("formatSkillsForPrompt long description included", "[coding_agent][ski
 TEST_CASE("formatSkillInvocation basic", "[coding_agent][skill-formatting][u2]") {
     coding_agent::Skill skill{.name = "my-skill",
                               .description = "Does things.",
-                              .content = "The body content.",
-                              .filePath = "/home/user/skills/my-skill/SKILL.md"};
+                              .filePath = "/home/user/skills/my-skill/SKILL.md",
+                              .baseDir = "/home/user/skills/my-skill"};
     auto result = coding_agent::formatSkillInvocation(skill, "The body content.");
     CHECK(result.find("<skill name=\"my-skill\"") != std::string::npos);
     CHECK(result.find("location=\"/home/user/skills/my-skill/SKILL.md\"") != std::string::npos);
@@ -136,8 +136,8 @@ TEST_CASE("formatSkillInvocation basic", "[coding_agent][skill-formatting][u2]")
 TEST_CASE("formatSkillInvocation with additional instructions", "[coding_agent][skill-formatting][u2]") {
     coding_agent::Skill skill{.name = "my-skill",
                               .description = "Does things.",
-                              .content = "The body content.",
-                              .filePath = "/home/user/skills/my-skill/SKILL.md"};
+                              .filePath = "/home/user/skills/my-skill/SKILL.md",
+                              .baseDir = "/home/user/skills/my-skill"};
     auto result = coding_agent::formatSkillInvocation(skill, "The body content.", "extra args here");
     CHECK(result.find("</skill>\n\nextra args here") != std::string::npos);
 }
@@ -157,7 +157,7 @@ TEST_CASE("formatSkillInvocation content with xml special chars not escaped", "[
 }
 
 TEST_CASE("formatSkillInvocation root directory", "[coding_agent][skill-formatting][u2]") {
-    coding_agent::Skill skill{.name = "root-skill", .filePath = "/SKILL.md"};
+    coding_agent::Skill skill{.name = "root-skill", .filePath = "/SKILL.md", .baseDir = "/"};
     auto result = coding_agent::formatSkillInvocation(skill, "Root content.");
     CHECK(result.find("References are relative to /") != std::string::npos);
 }

@@ -1809,3 +1809,74 @@ TEST_CASE(
     CHECK(resumed.stderr_text == missing_cwd_error_text(
         original.path(), session, other.path()));
 }
+
+TEST_CASE("CLI --skill explicit paths load and survive --no-skills", "[cli][skill][issue412]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    workspace.write("explicit-skill.md",
+                    "---\n"
+                    "name: explicit-skill\n"
+                    "description: Explicit skill.\n"
+                    "---\n"
+                    "# Explicit Skill\n\n"
+                    "Do explicit.\n");
+    auto session = workspace.path() / "explicit-skill.jsonl";
+
+    auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
+        .args = {"--no-skills", "--skill", "explicit-skill.md",
+                 "--session", session.string(), "/skill:explicit-skill"},
+        .cwd = workspace.path(),
+        .env = {{"HOME", home.path().string()}},
+    });
+
+    REQUIRE(result.exit_code == 0);
+    // --no-skills drops discovery but keeps explicit paths (pi args.ts).
+    CHECK(result.stdout_text.find("<skill name=\"explicit-skill\"") != std::string::npos);
+    CHECK(result.stdout_text.find("Do explicit.") != std::string::npos);
+}
+
+TEST_CASE("CLI --no-skills drops discovered skills but keeps the prompt", "[cli][skill][issue412]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    workspace.write(".pi/skills/demo/SKILL.md",
+                    "---\n"
+                    "name: demo\n"
+                    "description: Demo skill.\n"
+                    "---\n"
+                    "# Demo Skill\n\n"
+                    "Do demo.\n");
+    auto session = workspace.path() / "no-skills.jsonl";
+
+    auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
+        .args = {"--approve", "--no-skills", "--session", session.string(), "/skill:demo"},
+        .cwd = workspace.path(),
+        .env = {{"HOME", home.path().string()}},
+    });
+
+    REQUIRE(result.exit_code == 0);
+    // The unknown skill passes through as an ordinary prompt (no expansion).
+    CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
+}
+
+TEST_CASE("CLI loads user skills from ~/.pi/agent/skills with root-level .md inclusion", "[cli][skill][issue412]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    home.write(".pi/agent/skills/user-skill/SKILL.md",
+               "---\n"
+               "name: user-skill\n"
+               "description: User skill.\n"
+               "---\n"
+               "# User Skill\n\n"
+               "Do user.\n");
+    auto session = workspace.path() / "user-skill.jsonl";
+
+    auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
+        .args = {"--session", session.string(), "/skill:user-skill"},
+        .cwd = workspace.path(),
+        .env = {{"HOME", home.path().string()}},
+    });
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stdout_text.find("<skill name=\"user-skill\"") != std::string::npos);
+    CHECK(result.stdout_text.find("Do user.") != std::string::npos);
+}

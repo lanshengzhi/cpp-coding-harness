@@ -40,18 +40,27 @@ struct LoadedProjectResources {
 /// trust-deferred loading at session creation and on `/reload`.
 struct ProjectResourceLoadingRequest {
     std::filesystem::path workspace;
-    /// User-level resource root (`~/.pi/agent`). User prompt templates load
-    /// from `<agent_config_directory>/prompts`; an empty path skips them.
+    /// User-level resource root (`~/.pi/agent`). User skills load from
+    /// `<agent_config_directory>/skills` (pi discovery mode, root-level `.md`
+    /// included) and user prompt templates from
+    /// `<agent_config_directory>/prompts`; an empty path skips them.
     std::optional<std::filesystem::path> agent_config_directory;
+    /// The user's home directory, used for the `~/.agents/skills` convention
+    /// (user skills load; the directory is excluded from the project
+    /// `.agents/skills` ancestor walk). Defaults to `home_directory()`.
+    std::optional<std::filesystem::path> home_directory;
     DefaultProjectTrust default_project_trust{DefaultProjectTrust::Ask};
     std::optional<bool> project_trust_override;
     /// pi `--no-skills`: drops user and project skill discovery (explicit
-    /// `--skill` paths stay; the explicit-path surface lands with skill
-    /// discovery).
+    /// `--skill` paths stay).
     bool no_skills{false};
     /// pi `--no-prompt-templates`: drops user and project prompt discovery
     /// (explicit `--prompt-template` paths still load).
     bool no_prompt_templates{false};
+    /// Repeatable pi `--skill` paths (files or directories): explicit skills
+    /// load first (they win name collisions) and stay effective under
+    /// `--no-skills`.
+    std::vector<std::string> skill_paths;
     /// False for every existing non-TUI assembly. A Native TUI assembly opts
     /// in only after it has decided to consume theme resources.
     bool theme_resources_enabled{false};

@@ -3208,6 +3208,84 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Native TUI skill commands autocomplete follows the enableSkillCommands setting",
+    "[coding_agent][tui][autocomplete][issue412]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    // The global setting gates `/skill:` registration + autocomplete.
+    config.write("settings.json", R"({"enableSkillCommands": false})");
+    workspace.write(
+        ".pi/skills/project-skill/SKILL.md",
+        "---\n"
+        "name: project-skill\n"
+        "description: Project skill completion.\n"
+        "---\n"
+        "Project skill body.\n");
+    auto options = session_options(
+        workspace,
+        ai::providers::make_scripted_fake_provider());
+    options.project_trust_override = true;
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 18});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    // With the setting disabled, `skill:` entries are absent from the
+    // autocomplete list while prompt templates and slashes still appear.
+    REQUIRE(terminal.inject_input("/"));
+    drain_ready(io);
+    for (std::size_t index = 0; index < 12; ++index) {
+        REQUIRE(terminal.inject_input("\x1b[B"));
+        drain_ready(io);
+    }
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("skill:project-skill") == std::string::npos);
+    CHECK(screen.find("/settings") != std::string::npos);
+
+    // Toggle the setting on through /settings (first item, confirm), close
+    // the selector, and reopen autocomplete: `skill:` entries register (pi
+    // `onEnableSkillCommandsChange` → `setEnableSkillCommands` +
+    // `setupAutocompleteProvider`).
+    REQUIRE(terminal.inject_input("\x03/settings\r"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\r"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\x03/"));
+    drain_ready(io);
+    for (std::size_t index = 0; index < 12; ++index) {
+        REQUIRE(terminal.inject_input("\x1b[B"));
+        drain_ready(io);
+    }
+    screen = visible_screen(terminal);
+    CHECK(screen.find("skill:project-skill") != std::string::npos);
+    // The toggle persisted to the global settings file.
+    CHECK(read_binary_file(config.path() / "settings.json").find(
+              "\"enableSkillCommands\": true") != std::string::npos);
+
+    // Clear the editor so the exit binding reaches the app.
+    REQUIRE(terminal.inject_input("\x03\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
     "Native TUI settings and hotkeys commands open only supported overlays",
     "[coding_agent][tui][overlays][issue60]") {
     tests::TempWorkspace workspace;
@@ -3237,8 +3315,10 @@ TEST_CASE(
     drain_ready(io);
     auto screen = visible_screen(terminal);
     // The settings selector renders the #327 subset items plus the two
-    // graduated render settings with pi's settings-selector labels
-    // (settings-selector.ts), including the Theme submenu item.
+    // graduated render settings and the graduated skill-commands toggle with
+    // pi's settings-selector labels (settings-selector.ts), including the
+    // Theme submenu item.
+    CHECK(screen.find("Skill commands") != std::string::npos);
     CHECK(screen.find("Output padding") != std::string::npos);
     CHECK(screen.find("Hide thinking") != std::string::npos);
     CHECK(screen.find("Thinking level") != std::string::npos);
@@ -3247,8 +3327,8 @@ TEST_CASE(
     CHECK(created->session->message_count() == 0);
 
     // The Theme item opens the single-mode theme submenu with the `(current)`
-    // marker on the active theme.
-    REQUIRE(terminal.inject_input("\x1b[B\x1b[B\x1b[B\x1b[B\r"));
+    // marker on the active theme (index 5).
+    REQUIRE(terminal.inject_input("\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\r"));
     drain_ready(io);
     screen = visible_screen(terminal);
     // The `(current)` marker renders as the styled description of the active
@@ -3458,21 +3538,23 @@ TEST_CASE(
     const auto settings_path = config.path() / "settings.json";
     CHECK(visible_screen(terminal).find("inspect the saved state") != std::string::npos);
 
-    // /settings opens the selector; the first item is output-padding with the
-    // default value 1, so the user message starts one column right of the
-    // OSC zone prefix.
+    // /settings opens the selector; the first item is skill-commands with
+    // the default value true, then output-padding with the default value 1,
+    // so the user message starts one column right of the OSC zone prefix.
     REQUIRE(terminal.inject_input("/settings\r"));
     drain_ready(io);
     auto screen = visible_screen(terminal);
+    CHECK(screen.find("Skill commands") != std::string::npos);
     CHECK(screen.find("Output padding") != std::string::npos);
     CHECK(screen.find("Hide thinking") != std::string::npos);
     // The default outputPad 1 renders the user message one column right of
     // the zero-padding position.
     CHECK(column_of(screen, "resume request") == 1);
 
-    // Down to hide-thinking and confirm: the thinking block disappears live
-    // and the global setting persists.
-    REQUIRE(terminal.inject_input("\x1b[B\r"));
+    // Down twice to hide-thinking (past skill-commands and output-padding)
+    // and confirm: the thinking block disappears live and the global setting
+    // persists.
+    REQUIRE(terminal.inject_input("\x1b[B\x1b[B\r"));
     drain_ready(io);
     screen = visible_screen(terminal);
     CHECK(screen.find("inspect the saved state") == std::string::npos);

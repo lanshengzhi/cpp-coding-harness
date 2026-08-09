@@ -745,3 +745,66 @@ TEST_CASE("SettingsManager defaultProjectTrust write is a surgical global-scope 
     REQUIRE(reloaded.default_project_trust().has_value());
     CHECK(*reloaded.default_project_trust() == coding_agent::DefaultProjectTrust::Never);
 }
+
+TEST_CASE("SettingsManager loads enableSkillCommands with the pi default true", "[settings][two-scope][issue412]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"enableSkillCommands": false})");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.errors().empty());
+    // pi `getEnableSkillCommands`: `settings.enableSkillCommands ?? true`.
+    CHECK(manager.settings().enable_skill_commands == false);
+    CHECK(manager.get_enable_skill_commands() == false);
+
+    SettingsDirs empty_dirs;
+    auto defaults = coding_agent::SettingsManager::create(
+        empty_dirs.cwd, empty_dirs.agent_dir, /* project_trusted */ true);
+    CHECK(defaults.get_enable_skill_commands() == true);
+}
+
+TEST_CASE("SettingsManager deep-merges enableSkillCommands with the project scope winning", "[settings][two-scope][issue412]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"enableSkillCommands": true})");
+    dirs.write_project(R"({"enableSkillCommands": false})");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.errors().empty());
+    CHECK(manager.get_enable_skill_commands() == false);
+}
+
+TEST_CASE("SettingsManager enableSkillCommands write is a surgical global-scope merge", "[settings][two-scope][write][issue412]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"theme":"dark","future":true})");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    auto saved = manager.set_enable_skill_commands(false);
+    REQUIRE(saved);
+
+    CHECK(manager.get_enable_skill_commands() == false);
+    CHECK(manager.settings().theme == "dark");
+    const auto content = dirs.workspace.read("agent/settings.json");
+    CHECK(content.find("\"enableSkillCommands\": false") != std::string::npos);
+    // Unknown and unmodified fields survive the surgical write.
+    CHECK(content.find("\"future\": true") != std::string::npos);
+
+    // Reloading re-reads the persisted value (survives persistence).
+    auto reloaded = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    CHECK(reloaded.get_enable_skill_commands() == false);
+}
+
+TEST_CASE("SettingsManager enableSkillCommands write is a no-op when unchanged", "[settings][two-scope][write][issue412]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"enableSkillCommands": true})");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    const auto before = dirs.workspace.read("agent/settings.json");
+    REQUIRE(manager.set_enable_skill_commands(true));
+    CHECK(dirs.workspace.read("agent/settings.json") == before);
+}

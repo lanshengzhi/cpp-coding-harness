@@ -321,6 +321,11 @@ void migrate_settings(JsonObject& settings) {
                 static_cast<std::size_t>(*parsed == 0 ? 0 : 1);
         }
     }
+    if (const auto found = object.find("enableSkillCommands"); found != object.end()) {
+        if (const auto* parsed = found->second.get_if<bool>()) {
+            settings.enable_skill_commands = *parsed;
+        }
+    }
     return settings;
 }
 
@@ -711,6 +716,9 @@ struct SettingsManager::Impl {
         if (project.output_pad) {
             merged.output_pad = project.output_pad;
         }
+        if (project.enable_skill_commands) {
+            merged.enable_skill_commands = project.enable_skill_commands;
+        }
         return merged;
     }
 
@@ -1029,6 +1037,37 @@ util::ExpectedVoid SettingsManager::set_output_pad(std::size_t padding) {
         return persisted;
     }
     target.output_pad = padding;
+    impl_->recompute_merged();
+    return util::ExpectedVoid{};
+}
+
+bool SettingsManager::get_enable_skill_commands() const noexcept {
+    // pi `getEnableSkillCommands`: `this.settings.enableSkillCommands ?? true`.
+    return impl_->merged_settings.enable_skill_commands.value_or(true);
+}
+
+util::ExpectedVoid SettingsManager::set_enable_skill_commands(bool enabled) {
+    // pi `setEnableSkillCommands` always writes the global scope.
+    if (impl_->global_load_failed) {
+        return util::ExpectedVoid{};
+    }
+    if (impl_->global_path.empty()) {
+        return util::ExpectedVoid{};
+    }
+
+    auto& target = impl_->global_settings;
+    if (target.enable_skill_commands == enabled) {
+        return util::ExpectedVoid{};
+    }
+
+    // Persist first; the in-memory view advances only when the surgical write
+    // succeeded, so a persist failure never leaves memory diverged from disk.
+    if (auto persisted = persist_field(
+            impl_->global_path, "enableSkillCommands", util::JsonValue{enabled});
+        !persisted) {
+        return persisted;
+    }
+    target.enable_skill_commands = enabled;
     impl_->recompute_merged();
     return util::ExpectedVoid{};
 }

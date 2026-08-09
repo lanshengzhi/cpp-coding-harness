@@ -129,6 +129,7 @@ struct AssemblyPlan {
     /// tool set (retry-continuation tests).
     std::vector<std::unique_ptr<agent::AsyncAgentTool>> custom_tools;
     std::vector<std::string> prompt_template_paths;
+    std::vector<std::string> skill_paths;
     std::optional<DefaultProjectTrust> default_project_trust;
     bool no_skills{false};
     bool no_prompt_templates{false};
@@ -765,6 +766,7 @@ struct SessionTargetNormalizationOptions {
     plan.no_skills = request.no_skills;
     plan.no_prompt_templates = request.no_prompt_templates;
     plan.prompt_template_paths = request.prompt_template_paths;
+    plan.skill_paths = request.skill_paths;
     plan.max_queued_messages = request.max_queued_messages;
     plan.max_queued_bytes = request.max_queued_bytes;
     plan.provide_user_shell = request.provide_user_shell;
@@ -1099,6 +1101,7 @@ struct SessionTargetNormalizationOptions {
             resource_request.project_trust_override = plan.project_trust_override;
             resource_request.no_skills = plan.no_skills;
             resource_request.no_prompt_templates = plan.no_prompt_templates;
+            resource_request.skill_paths = plan.skill_paths;
             resource_request.explicit_prompt_templates = make_explicit_template_inputs(*fs, plan.prompt_template_paths);
 
             ProjectTrustStore trust_store{trust_store_path};

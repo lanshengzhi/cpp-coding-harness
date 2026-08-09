@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -10,6 +11,44 @@ class WorkspaceFileSystem;
 }
 
 namespace cch::coding_agent {
+
+/// pi `SourceScope` subset (`core/source-info.ts`): the scope recorded on a
+/// resource's `SourceInfo`. `user` and `project` group the loaded-resources
+/// presentation; `temporary` is the CLI/explicit-path scope (pi's
+/// "path" group).
+enum class SourceScope {
+    User,
+    Project,
+    Temporary,
+};
+
+/// pi `SourceOrigin` subset (`core/source-info.ts`): where a resource path
+/// came from. Only `TopLevel` is produced in the loader subset (the
+/// package-manager `package` origin is outside it, with no extensions/
+/// package-manager surface).
+enum class SourceOrigin {
+    TopLevel,
+    Package,
+};
+
+/// pi `SourceInfo` subset (`core/source-info.ts`): the provenance recorded
+/// on each loaded resource (skills, prompt templates, themes). The loader
+/// subset produces the pi resource-loader final shape: `source` "auto" for
+/// discovered resources or "cli" for explicit CLI paths, the resource
+/// scope, and the resource-root `baseDir` (agent dir, project `.pi` dir, or
+/// the owning `.agents` directory).
+struct SourceInfo {
+    /// pi `SourceInfo.path` — the resource file path.
+    std::string path;
+    /// pi `SourceInfo.source` — "auto" (discovered) or "cli" (explicit
+    /// `--skill`/`--prompt-template`/`--theme` path).
+    std::string source{"auto"};
+    SourceScope scope{SourceScope::Temporary};
+    SourceOrigin origin{SourceOrigin::TopLevel};
+    /// pi `SourceInfo.baseDir?` — the resource root the path was discovered
+    /// under; absent for explicit CLI paths.
+    std::optional<std::string> base_dir;
+};
 
 /// pi `ResourceCollision` subset (`core/diagnostics.ts`): the collision
 /// payload of a pi `ResourceDiagnostic`. The `extension` resource type is
@@ -50,10 +89,12 @@ struct ResourceDiagnostic {
     std::optional<ResourceCollision> collision;
 };
 
-/// Trust-requiring project resource markers under `.pi/` — the pi
+/// Trust-requiring project resource markers: the `.pi/` markers (the pi
 /// `TRUST_REQUIRING_PROJECT_CONFIG_RESOURCES` subset without the extensions /
 /// package-manager markers and with `settings.json` owned by the Settings
-/// Manager ("trusted means load", #327). A loadable marker's mere presence
+/// Manager, "trusted means load", #327) plus the `.agents/skills` convention
+/// directories in the workspace's ancestor chain (pi `trust-manager.ts`
+/// `hasTrustRequiringProjectResources`). A loadable marker's mere presence
 /// triggers the boot Project Trust decision.
 enum class ProjectResourceKind {
     ProjectSkills,
@@ -61,6 +102,9 @@ enum class ProjectResourceKind {
     ProjectThemes,
     ProjectSystemPrompt,
     ProjectAppendSystemPrompt,
+    /// An `.agents/skills` directory in the workspace or an ancestor up to
+    /// the filesystem root, excluding the user's `~/.agents/skills`.
+    ProjectAgentsSkills,
 };
 
 struct DetectedProjectResource {
@@ -77,7 +121,8 @@ struct ProjectResourceDetectionResult {
 [[nodiscard]] std::string_view to_string(ProjectResourceKind kind);
 
 [[nodiscard]] ProjectResourceDetectionResult detect_project_resources(
-    const harness::WorkspaceFileSystem& fs);
+    const harness::WorkspaceFileSystem& fs,
+    const std::filesystem::path& user_agents_skills_dir);
 
 [[nodiscard]] bool has_detected_kind(
     const ProjectResourceDetectionResult& detection,

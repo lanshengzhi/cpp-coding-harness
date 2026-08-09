@@ -79,6 +79,37 @@ constexpr std::array<MarkerSpec, 5> kMarkers{{
     };
 }
 
+/// pi `hasTrustRequiringProjectResources` `.agents/skills` walk
+/// (`core/trust-manager.ts`): the first `.agents/skills` directory found in
+/// `workspace` or any ancestor up to the filesystem root, excluding the
+/// user's own `~/.agents/skills` (always a trusted user resource, even when
+/// the workspace is `$HOME`). Returns nullopt when no such directory exists.
+[[nodiscard]] std::optional<std::filesystem::path> find_project_agents_skills_dir(
+    const std::filesystem::path& workspace,
+    const std::filesystem::path& user_agents_skills_dir) {
+    std::error_code ec;
+    auto current = std::filesystem::weakly_canonical(workspace, ec);
+    if (ec) {
+        current = std::filesystem::absolute(workspace, ec);
+        if (ec) {
+            return std::nullopt;
+        }
+    }
+    while (true) {
+        const auto agents_skills = current / ".agents" / "skills";
+        if (agents_skills != user_agents_skills_dir &&
+            std::filesystem::exists(agents_skills, ec)) {
+            return agents_skills;
+        }
+
+        const auto parent = current.parent_path();
+        if (parent == current) {
+            return std::nullopt;
+        }
+        current = parent;
+    }
+}
+
 } // namespace
 
 std::string_view to_string(ProjectResourceKind kind) {
@@ -93,11 +124,15 @@ std::string_view to_string(ProjectResourceKind kind) {
         return "project_system_prompt";
     case ProjectResourceKind::ProjectAppendSystemPrompt:
         return "project_append_system_prompt";
+    case ProjectResourceKind::ProjectAgentsSkills:
+        return "project_agents_skills";
     }
     return "project_resource";
 }
 
-ProjectResourceDetectionResult detect_project_resources(const harness::WorkspaceFileSystem& fs) {
+ProjectResourceDetectionResult detect_project_resources(
+    const harness::WorkspaceFileSystem& fs,
+    const std::filesystem::path& user_agents_skills_dir) {
     ProjectResourceDetectionResult result;
 
     for (const auto& marker : kMarkers) {
@@ -141,6 +176,20 @@ ProjectResourceDetectionResult detect_project_resources(const harness::Workspace
             .kind = marker.kind,
             .path = marker.path,
             .loadable = loadable,
+        });
+    }
+
+    // The `.agents/skills` convention in the workspace or any ancestor up to
+    // the filesystem root (excluding the user's own directory) is a
+    // trust-requiring project resource marker: mere presence triggers the
+    // boot Project Trust decision (pi `trust-manager.ts`
+    // `hasTrustRequiringProjectResources`). The recorded path is the
+    // directory that actually triggered it.
+    if (auto found = find_project_agents_skills_dir(fs.root(), user_agents_skills_dir)) {
+        result.resources.push_back(DetectedProjectResource{
+            .kind = ProjectResourceKind::ProjectAgentsSkills,
+            .path = found->string(),
+            .loadable = true,
         });
     }
 

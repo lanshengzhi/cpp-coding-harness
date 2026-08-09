@@ -106,6 +106,13 @@ struct SettingsSelectorState {
     bool theme_wired) {
     std::vector<cch::tui::SettingItem> items;
     items.push_back({
+        .id = "skill-commands",
+        .label = "Skill commands",
+        .description = "Register skills as /skill:name commands",
+        .current_value = config.enable_skill_commands ? "true" : "false",
+        .control = cch::tui::SettingValues{{"true", "false"}},
+    });
+    items.push_back({
         .id = "output-padding",
         .label = "Output padding",
         .description = "Horizontal padding for user messages, assistant messages, and thinking",
@@ -172,6 +179,12 @@ struct SettingsSelectorComponent::Impl {
             .enable_search = true,
             .theme = theme.settings_list_theme(),
             .on_change = [state](std::string id, std::string new_value) {
+                if (id == "skill-commands") {
+                    if (state->callbacks.on_enable_skill_commands_change) {
+                        state->callbacks.on_enable_skill_commands_change(new_value == "true");
+                    }
+                    return;
+                }
                 if (id == "hide-thinking") {
                     if (state->callbacks.on_hide_thinking_block_change) {
                         state->callbacks.on_hide_thinking_block_change(new_value == "true");

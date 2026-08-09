@@ -44,9 +44,12 @@ struct AgentSessionCreationRequest {
     bool provide_user_shell{false};
     std::optional<bool> project_trust_override;
     /// pi `--no-skills`: drops user and project skill discovery (explicit
-    /// `--skill` paths stay; the explicit-path surface lands with skill
-    /// discovery).
+    /// `--skill` paths stay).
     bool no_skills{false};
+    /// Repeatable pi `--skill` paths (files or directories): explicit skills
+    /// load first (they win name collisions) and stay effective under
+    /// `--no-skills`.
+    std::vector<std::string> skill_paths;
     /// pi `--no-prompt-templates`: drops user and project prompt discovery
     /// (explicit `--prompt-template` paths still load).
     bool no_prompt_templates{false};

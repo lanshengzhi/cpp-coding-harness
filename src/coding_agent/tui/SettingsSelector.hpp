@@ -24,6 +24,8 @@ struct SettingsSelectorConfig {
     bool hide_thinking_block{false};
     /// Resolved pi `outputPad` (default 1; 0 or 1 only).
     std::size_t output_pad{1};
+    /// Resolved pi `enableSkillCommands` (default true).
+    bool enable_skill_commands{true};
     /// The session's current thinking level (pi `session.thinkingLevel`).
     std::string thinking_level{};
     /// The thinking levels the active model supports (pi
@@ -37,6 +39,7 @@ struct SettingsSelectorConfig {
 
 using SettingsSelectorHideThinkingSink = std::move_only_function<void(bool)>;
 using SettingsSelectorOutputPadSink = std::move_only_function<void(std::size_t)>;
+using SettingsSelectorEnableSkillCommandsSink = std::move_only_function<void(bool)>;
 using SettingsSelectorThinkingLevelSink = std::move_only_function<void(std::string)>;
 using SettingsSelectorDefaultProjectTrustSink =
     std::move_only_function<void(DefaultProjectTrust)>;
@@ -46,6 +49,7 @@ using SettingsSelectorCancelSink = std::move_only_function<void()>;
 struct SettingsSelectorCallbacks {
     SettingsSelectorHideThinkingSink on_hide_thinking_block_change{};
     SettingsSelectorOutputPadSink on_output_pad_change{};
+    SettingsSelectorEnableSkillCommandsSink on_enable_skill_commands_change{};
     SettingsSelectorThinkingLevelSink on_thinking_level_change{};
     SettingsSelectorDefaultProjectTrustSink on_default_project_trust_change{};
     SettingsSelectorCancelSink on_cancel{};
@@ -57,7 +61,8 @@ struct SettingsSelectorCallbacks {
 };
 
 /// The settings selector (pi `settings-selector.ts`): renders the #327
-/// settings subset plus the two graduated render settings as a searchable
+/// settings subset plus the graduated render settings (hideThinkingBlock,
+/// outputPad) and the graduated enableSkillCommands toggle as a searchable
 /// settings list in the editor slot. Value items cycle on confirm; the
 /// thinking-level item opens a select submenu with pi's per-level
 /// descriptions; the optional Theme item opens the single-mode theme submenu.

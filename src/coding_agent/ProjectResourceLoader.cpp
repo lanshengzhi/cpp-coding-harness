@@ -1,5 +1,7 @@
 #include "coding_agent/ProjectResourceLoader.hpp"
 
+#include <cch/coding_agent/AgentConfigDir.hpp>
+
 #include "coding_agent/PromptTemplateLoader.hpp"
 #include "coding_agent/ResourceDiagnosticPolicy.hpp"
 #include "coding_agent/SkillLoader.hpp"
@@ -7,6 +9,8 @@
 
 #include <algorithm>
 #include <array>
+#include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -54,6 +58,55 @@ constexpr std::string_view kProjectThemesMarker = ".pi/themes";
     };
 }
 
+/// pi `ResourceDiagnostic` collision for a duplicate skill name: the first
+/// loaded skill wins and the loser carries the winner/loser paths.
+[[nodiscard]] ResourceDiagnostic skill_collision_diagnostic(
+    const std::string& name,
+    const std::string& winner_path,
+    const std::string& loser_path) {
+    return ResourceDiagnostic{
+        .type = ResourceDiagnosticType::Collision,
+        .message = "name \"" + name + "\" collision",
+        .path = loser_path,
+        .collision = ResourceCollision{
+            .resource_type = ResourceCollisionResourceType::Skill,
+            .name = name,
+            .winner_path = winner_path,
+            .loser_path = loser_path,
+            .winner_source = std::nullopt,
+            .loser_source = std::nullopt,
+        },
+    };
+}
+
+/// Tracks loaded skill names to their first-seen source path so that
+/// cross-source duplicates produce pi-shaped collision diagnostics with
+/// winner/loser paths (pi's one `loadSkills` call shares its name map across
+/// every source).
+class SkillNameTracker {
+public:
+    /// Appends one source batch, dropping duplicate names (first wins).
+    void append(
+        std::vector<Skill>& out,
+        std::vector<ResourceDiagnostic>& diagnostics,
+        std::vector<Skill> incoming) {
+        for (auto& skill : incoming) {
+            if (auto it = by_name_.find(skill.name); it != by_name_.end()) {
+                diagnostics.push_back(skill_collision_diagnostic(
+                    skill.name,
+                    it->second,
+                    skill.filePath));
+                continue;
+            }
+            by_name_.emplace(skill.name, skill.filePath);
+            out.push_back(std::move(skill));
+        }
+    }
+
+private:
+    std::unordered_map<std::string, std::string> by_name_;
+};
+
 void add_trust_diagnostics(
     std::vector<ResourceDiagnostic>& diagnostics,
     const ProjectTrustResolution& trust) {
@@ -95,11 +148,13 @@ private:
     std::unordered_map<std::string, std::string> by_name_;
 };
 
-void load_project_skills_adapter(
+void load_skills_adapter(
     const harness::WorkspaceFileSystem& fs,
     ProjectResourceLoadingResult& result,
-    std::vector<ResourceDiagnostic>& diagnostics) {
-    auto load = loadSkills(fs, {SkillDirSpec{.path = std::string{kProjectSkillsMarker}, .includeRootFiles = false}});
+    std::vector<ResourceDiagnostic>& diagnostics,
+    SkillNameTracker& names,
+    SkillDirSpec spec) {
+    auto load = loadSkills(fs, {std::move(spec)});
     for (auto& diagnostic : load.diagnostics) {
         auto type = diagnostic.type == "collision"
             ? ResourceDiagnosticType::Collision
@@ -112,8 +167,174 @@ void load_project_skills_adapter(
             .collision = std::move(diagnostic.collision),
         });
     }
-    result.resources.skills = std::move(load.skills);
+    // Cross-source dedupe: pi loads every source through one `loadSkills`
+    // call with a shared name map, so the assembly tracks names across the
+    // per-root scans the C++ subset needs (first source wins; later
+    // duplicates emit the winner/loser collision diagnostic).
+    names.append(result.resources.skills, diagnostics, std::move(load.skills));
 }
+
+/// User skills from `<agent_config_directory>/skills` — pi discovery mode
+/// (`loadSkillsFromDirInternal(..., "user", true)`): root-level `.md` files
+/// included, sourceInfo scope user with the agent dir as baseDir. Not
+/// trust-gated. A missing agent config directory loads nothing silently.
+void load_user_skills_adapter(
+    const std::filesystem::path& agent_config_directory,
+    ProjectResourceLoadingResult& result,
+    std::vector<ResourceDiagnostic>& diagnostics,
+    SkillNameTracker& names) {
+    auto fs = harness::WorkspaceFileSystem::create(agent_config_directory);
+    if (!fs) {
+        return;
+    }
+    load_skills_adapter(*fs, result, diagnostics, names, SkillDirSpec{
+        .path = "skills",
+        .include_root_files = true,
+        .source_context = SkillSourceContext{
+            .source = "auto",
+            .scope = SourceScope::User,
+            .base_dir = agent_config_directory.string(),
+        },
+    });
+}
+
+/// pi `findGitRepoRoot` (`core/package-manager.ts`): the nearest ancestor of
+/// `start` (inclusive) that contains a `.git` entry, or nullopt when none
+/// exists up to the filesystem root.
+[[nodiscard]] std::optional<std::filesystem::path> find_git_repo_root(
+    const std::filesystem::path& start) {
+    std::error_code ec;
+    auto dir = std::filesystem::absolute(start, ec);
+    if (ec) {
+        return std::nullopt;
+    }
+    dir = dir.lexically_normal();
+    while (true) {
+        if (std::filesystem::exists(dir / ".git", ec)) {
+            return dir;
+        }
+        const auto parent = dir.parent_path();
+        if (parent == dir) {
+            return std::nullopt;
+        }
+        dir = parent;
+    }
+}
+
+/// The project `.agents/skills` convention ancestors: from the workspace up
+/// to the git root (inclusive), each with its own baseDir (the owning
+/// `.agents` directory) and scope project, in pi's package-manager order
+/// (project `.pi/skills` → project `.agents/skills` → user sources). Loads
+/// only while the project is trusted. The ancestor whose `.agents/skills`
+/// is the user's own directory is skipped (pi `package-manager.ts`
+/// `collectAncestorAgentsSkillDirs` filter).
+void load_project_agents_skills_adapter(
+    const harness::WorkspaceFileSystem& fs,
+    const std::filesystem::path& workspace,
+    const std::filesystem::path& user_agents_skills_dir,
+    bool project_trusted,
+    ProjectResourceLoadingResult& result,
+    std::vector<ResourceDiagnostic>& diagnostics,
+    SkillNameTracker& names) {
+    if (!project_trusted) {
+        return;
+    }
+
+    // Project ancestors from the workspace up to the git root (inclusive),
+    // excluding the user's own directory.
+    const auto git_root = find_git_repo_root(workspace);
+    auto dir = std::filesystem::absolute(workspace);
+    while (true) {
+        const auto agents_skills_dir = dir / ".agents" / "skills";
+        if (agents_skills_dir != user_agents_skills_dir) {
+            if (auto ancestor_fs = harness::WorkspaceFileSystem::create(dir);
+                ancestor_fs) {
+                load_skills_adapter(*ancestor_fs, result, diagnostics, names, SkillDirSpec{
+                    .path = ".agents/skills",
+                    .include_root_files = false,
+                    .source_context = SkillSourceContext{
+                        .source = "auto",
+                        .scope = SourceScope::Project,
+                        .base_dir = (dir / ".agents").string(),
+                    },
+                });
+            }
+        }
+        if (git_root && dir == *git_root) {
+            break;
+        }
+        const auto parent = dir.parent_path();
+        if (parent == dir) {
+            break;
+        }
+        dir = parent;
+    }
+}
+
+/// User `~/.agents/skills` (pi discovery mode "agents": nested SKILL.md
+/// only, baseDir the `.agents` directory, scope user). Always trusted; loads
+/// last in pi's order (after user `~/.pi/agent/skills`).
+void load_user_agents_skills_adapter(
+    const std::filesystem::path& user_agents_skills_dir,
+    ProjectResourceLoadingResult& result,
+    std::vector<ResourceDiagnostic>& diagnostics,
+    SkillNameTracker& names) {
+    if (auto user_fs = harness::WorkspaceFileSystem::create(
+            user_agents_skills_dir.parent_path());
+        user_fs) {
+        load_skills_adapter(*user_fs, result, diagnostics, names, SkillDirSpec{
+            .path = "skills",
+            .include_root_files = false,
+            .source_context = SkillSourceContext{
+                .source = "auto",
+                .scope = SourceScope::User,
+                .base_dir = user_agents_skills_dir.parent_path().string(),
+            },
+        });
+    }
+}
+
+/// pi `--skill` explicit inputs: repeatable files or directories that load
+/// after every discovered source (resource-loader.ts `mergePaths` appends
+/// `additionalSkillPaths` last, so discovered skills win name collisions)
+/// and stay effective under `--no-skills`. Missing inputs carry pi's two
+/// diagnostics (the loader warning and the resource-loader error, both
+/// non-fatal).
+void load_explicit_skill_paths(
+    const harness::WorkspaceFileSystem& fs,
+    const std::vector<std::string>& skill_paths,
+    ProjectResourceLoadingResult& result,
+    std::vector<ResourceDiagnostic>& diagnostics,
+    SkillNameTracker& names) {
+    for (const auto& path : skill_paths) {
+        const auto info = fs.fileInfo(path);
+        if (!info) {
+            if (info.error().code == harness::FileErrorCode::NotFound) {
+                diagnostics.push_back(warning_diagnostic(
+                    "skill path does not exist",
+                    path));
+                diagnostics.push_back(error_diagnostic(
+                    "Skill path does not exist",
+                    path));
+            } else {
+                diagnostics.push_back(warning_diagnostic(
+                    info.error().message,
+                    path));
+            }
+            continue;
+        }
+        load_skills_adapter(fs, result, diagnostics, names, SkillDirSpec{
+            .path = path,
+            .include_root_files = true,
+            .source_context = SkillSourceContext{
+                .source = "cli",
+                .scope = SourceScope::Temporary,
+                .base_dir = std::nullopt,
+            },
+        });
+    }
+}
+
 
 void load_project_prompts_adapter(
     const harness::WorkspaceFileSystem& fs,
@@ -257,12 +478,15 @@ ProjectResourceLoadingResult load_project_resources(
     ProjectResourceLoadingResult result;
     std::vector<ResourceDiagnostic> diagnostics;
 
-    // 1. Detect `.pi/` markers. The mere presence of any loadable marker
-    // triggers the Project Trust decision; the decision then gates all
-    // project resource loading ("trusted means load").
-    result.detection = detect_project_resources(fs);
-    const bool trust_needed = needs_project_trust_resolution(result.detection);
     const auto workspace = request.workspace.empty() ? fs.root() : request.workspace;
+    const auto home = request.home_directory.value_or(home_directory());
+    const auto user_agents_skills_dir = home / ".agents" / "skills";
+
+    // 1. Detect `.pi/` and `.agents/skills` markers. The mere presence of
+    // any loadable marker triggers the Project Trust decision; the decision
+    // then gates all project resource loading ("trusted means load").
+    result.detection = detect_project_resources(fs, user_agents_skills_dir);
+    const bool trust_needed = needs_project_trust_resolution(result.detection);
     result.trust = resolve_project_trust(
         workspace,
         trust_needed,
@@ -290,12 +514,42 @@ ProjectResourceLoadingResult load_project_resources(
         load_user_prompts_adapter(*request.agent_config_directory, result, diagnostics, names);
     }
 
-    // 3. Project skills load only while the project is trusted
-    // (`--no-skills` drops discovery; the explicit `--skill` path surface
-    // lands with skill discovery).
-    if (!request.no_skills && project_trusted) {
-        load_project_skills_adapter(fs, result, diagnostics);
+    // 3. Skills load in pi's order (resource-loader.ts `mergePaths` puts the
+    // auto-discovered paths before the `--skill` additions, and `loadSkills`
+    // `addSkills` is first-wins): trust-gated project `.pi/skills` (pi
+    // discovery mode), the trust-gated project `.agents/skills` ancestors,
+    // user `~/.pi/agent/skills`, user `~/.agents/skills`, and the explicit
+    // `--skill` paths LAST (discovered skills win name collisions).
+    // `--no-skills` drops every discovery source but keeps the explicit
+    // paths. One name tracker spans every source like pi's single
+    // `loadSkills` call.
+    SkillNameTracker skill_names;
+    if (!request.no_skills) {
+        if (project_trusted) {
+            load_skills_adapter(fs, result, diagnostics, skill_names, SkillDirSpec{
+                .path = std::string{kProjectSkillsMarker},
+                .include_root_files = true,
+                .source_context = SkillSourceContext{
+                    .source = "auto",
+                    .scope = SourceScope::Project,
+                    .base_dir = (workspace / ".pi").string(),
+                },
+            });
+        }
+        load_project_agents_skills_adapter(
+            fs,
+            workspace,
+            user_agents_skills_dir,
+            project_trusted,
+            result,
+            diagnostics,
+            skill_names);
+        if (request.agent_config_directory && !request.agent_config_directory->empty()) {
+            load_user_skills_adapter(*request.agent_config_directory, result, diagnostics, skill_names);
+        }
+        load_user_agents_skills_adapter(user_agents_skills_dir, result, diagnostics, skill_names);
     }
+    load_explicit_skill_paths(fs, request.skill_paths, result, diagnostics, skill_names);
 
     // 4. Project themes load only for a TUI assembly that opted in, while
     // the project is trusted.

@@ -16,6 +16,12 @@ harness::WorkspaceFileSystem fs_for(const tests::TempWorkspace& workspace) {
     return *fs;
 }
 
+/// A user `.agents/skills` directory that cannot collide with any test
+/// workspace ancestor (the real `~/.agents/skills` must not gate the
+/// hermetic tests).
+const std::filesystem::path kTestUserAgentsSkills =
+    std::filesystem::path{"/nonexistent-cch-home"} / ".agents" / "skills";
+
 bool detected(const coding_agent::ProjectResourceDetectionResult& result, coding_agent::ProjectResourceKind kind) {
     return coding_agent::has_detected_kind(result, kind);
 }
@@ -26,7 +32,7 @@ TEST_CASE("project resource detection ignores an empty project and sessions dir"
     tests::TempWorkspace workspace;
     std::filesystem::create_directories(workspace.path() / ".pi" / "sessions");
 
-    auto result = coding_agent::detect_project_resources(fs_for(workspace));
+    auto result = coding_agent::detect_project_resources(fs_for(workspace), kTestUserAgentsSkills);
 
     CHECK(result.resources.empty());
     CHECK(result.diagnostics.empty());
@@ -43,7 +49,7 @@ TEST_CASE(
     workspace.write(".pi/SYSTEM.md", "system");
     workspace.write(".pi/APPEND_SYSTEM.md", "append");
 
-    auto result = coding_agent::detect_project_resources(fs_for(workspace));
+    auto result = coding_agent::detect_project_resources(fs_for(workspace), kTestUserAgentsSkills);
 
     CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectSkills));
     CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectPrompts));
@@ -63,7 +69,7 @@ TEST_CASE("project resource detection ignores legacy .cpp-harness/ markers with 
     workspace.write(".cpp-harness/SYSTEM.md", "system");
     workspace.write(".cpp-harness/APPEND_SYSTEM.md", "append");
 
-    auto result = coding_agent::detect_project_resources(fs_for(workspace));
+    auto result = coding_agent::detect_project_resources(fs_for(workspace), kTestUserAgentsSkills);
 
     CHECK(result.resources.empty());
     CHECK(result.diagnostics.empty());
@@ -75,7 +81,7 @@ TEST_CASE("project resource detection is case-sensitive", "[coding_agent][projec
     std::filesystem::create_directories(workspace.path() / ".pi" / "Skills");
     workspace.write(".pi/system.md", "lowercase");
 
-    auto result = coding_agent::detect_project_resources(fs_for(workspace));
+    auto result = coding_agent::detect_project_resources(fs_for(workspace), kTestUserAgentsSkills);
 
     CHECK_FALSE(detected(result, coding_agent::ProjectResourceKind::ProjectSkills));
     CHECK_FALSE(detected(result, coding_agent::ProjectResourceKind::ProjectSystemPrompt));
@@ -88,7 +94,7 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     workspace.write(".pi/SYSTEM.md", "system");
 
-    auto result = coding_agent::detect_project_resources(fs_for(workspace));
+    auto result = coding_agent::detect_project_resources(fs_for(workspace), kTestUserAgentsSkills);
 
     CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectSystemPrompt));
     CHECK(coding_agent::needs_project_trust_resolution(result));
@@ -98,7 +104,7 @@ TEST_CASE("project resource detection reports marker kind mismatches and keeps t
     tests::TempWorkspace workspace;
     workspace.write(".pi/skills", "a file where a directory is expected");
 
-    auto result = coding_agent::detect_project_resources(fs_for(workspace));
+    auto result = coding_agent::detect_project_resources(fs_for(workspace), kTestUserAgentsSkills);
 
     CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectSkills));
     REQUIRE_FALSE(result.diagnostics.empty());
@@ -118,7 +124,7 @@ TEST_CASE("project resource detection rejects escaping symlink marker", "[coding
     std::filesystem::create_directories(workspace.path() / ".pi");
     std::filesystem::create_directory_symlink(outside, workspace.path() / ".pi" / "skills");
 
-    auto result = coding_agent::detect_project_resources(fs_for(workspace));
+    auto result = coding_agent::detect_project_resources(fs_for(workspace), kTestUserAgentsSkills);
 
     CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectSkills));
     REQUIRE_FALSE(result.diagnostics.empty());
@@ -135,7 +141,7 @@ TEST_CASE("project resource detection maps markers with pi diagnostic shape", "[
     tests::TempWorkspace workspace;
     workspace.write(".pi/skills", "not a directory");
 
-    auto result = coding_agent::detect_project_resources(fs_for(workspace));
+    auto result = coding_agent::detect_project_resources(fs_for(workspace), kTestUserAgentsSkills);
 
     REQUIRE(result.diagnostics.size() == 1);
     const auto& diagnostic = result.diagnostics[0];
@@ -152,4 +158,56 @@ TEST_CASE("to_string names the .pi/ marker kinds", "[coding_agent][project-resou
     CHECK(coding_agent::to_string(coding_agent::ProjectResourceKind::ProjectSystemPrompt) == "project_system_prompt");
     CHECK(coding_agent::to_string(coding_agent::ProjectResourceKind::ProjectAppendSystemPrompt) ==
           "project_append_system_prompt");
+    CHECK(coding_agent::to_string(coding_agent::ProjectResourceKind::ProjectAgentsSkills) ==
+          "project_agents_skills");
+}
+
+TEST_CASE(
+    "project resource detection treats a workspace .agents/skills directory as trust-requiring",
+    "[coding_agent][project-resources][issue412]") {
+    tests::TempWorkspace workspace;
+    std::filesystem::create_directories(workspace.path() / ".agents" / "skills");
+
+    auto result = coding_agent::detect_project_resources(fs_for(workspace), kTestUserAgentsSkills);
+
+    CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectAgentsSkills));
+    CHECK(result.diagnostics.empty());
+    CHECK(coding_agent::needs_project_trust_resolution(result));
+}
+
+TEST_CASE(
+    "project resource detection walks .agents/skills into workspace ancestors",
+    "[coding_agent][project-resources][issue412]") {
+    tests::TempWorkspace root;
+    std::filesystem::create_directories(root.path() / ".agents" / "skills");
+    const auto nested = root.path() / "proj" / "sub";
+    std::filesystem::create_directories(nested);
+    auto fs = harness::WorkspaceFileSystem::create(nested);
+    REQUIRE(fs.has_value());
+
+    auto result = coding_agent::detect_project_resources(*fs, kTestUserAgentsSkills);
+
+    CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectAgentsSkills));
+    CHECK(coding_agent::needs_project_trust_resolution(result));
+}
+
+TEST_CASE(
+    "project resource detection excludes the user's own ~/.agents/skills from the walk",
+    "[coding_agent][project-resources][issue412]") {
+    tests::TempWorkspace root;
+    std::filesystem::create_directories(root.path() / ".agents" / "skills");
+    const auto nested = root.path() / "proj";
+    std::filesystem::create_directories(nested);
+    auto fs = harness::WorkspaceFileSystem::create(nested);
+    REQUIRE(fs.has_value());
+
+    // The workspace's `.agents/skills` is the user's own directory: the
+    // walk must not treat it as a project trust trigger (pi
+    // `hasTrustRequiringProjectResources` skips `~/.agents/skills` even when
+    // cwd is $HOME).
+    const auto user_agents_skills = root.path() / ".agents" / "skills";
+    auto result = coding_agent::detect_project_resources(*fs, user_agents_skills);
+
+    CHECK_FALSE(detected(result, coding_agent::ProjectResourceKind::ProjectAgentsSkills));
+    CHECK_FALSE(coding_agent::needs_project_trust_resolution(result));
 }

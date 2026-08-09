@@ -9,14 +9,24 @@ TEST_CASE("Skill aggregate construction and field access", "[coding_agent][skill
     coding_agent::Skill skill{
         .name = "my-skill",
         .description = "Does useful things.",
-        .content = "# My Skill\n\nInstructions here.",
-        .filePath = "/home/user/.cpp-harness/skills/my-skill/SKILL.md",
+        .filePath = "/home/user/.pi/agent/skills/my-skill/SKILL.md",
+        .baseDir = "/home/user/.pi/agent/skills/my-skill",
+        .sourceInfo = coding_agent::SourceInfo{
+            .path = "/home/user/.pi/agent/skills/my-skill/SKILL.md",
+            .source = "auto",
+            .scope = coding_agent::SourceScope::User,
+            .origin = coding_agent::SourceOrigin::TopLevel,
+            .base_dir = "/home/user/.pi/agent",
+        },
     };
 
     CHECK(skill.name == "my-skill");
     CHECK(skill.description == "Does useful things.");
-    CHECK(skill.content == "# My Skill\n\nInstructions here.");
-    CHECK(skill.filePath == "/home/user/.cpp-harness/skills/my-skill/SKILL.md");
+    CHECK(skill.filePath == "/home/user/.pi/agent/skills/my-skill/SKILL.md");
+    CHECK(skill.baseDir == "/home/user/.pi/agent/skills/my-skill");
+    CHECK(skill.sourceInfo.scope == coding_agent::SourceScope::User);
+    CHECK(skill.sourceInfo.source == "auto");
+    CHECK(skill.sourceInfo.base_dir == "/home/user/.pi/agent");
     CHECK(skill.disableModelInvocation == false);
 }
 
@@ -24,24 +34,42 @@ TEST_CASE("Skill with disableModelInvocation", "[coding_agent][skill][u1]") {
     coding_agent::Skill skill{
         .name = "hidden-skill",
         .description = "Only usable via explicit invocation.",
-        .content = "",
         .filePath = "/tmp/SKILL.md",
+        .baseDir = "/tmp",
+        .sourceInfo = coding_agent::SourceInfo{
+            .path = "/tmp/SKILL.md",
+            .source = "cli",
+            .scope = coding_agent::SourceScope::Temporary,
+            .origin = coding_agent::SourceOrigin::TopLevel,
+            .base_dir = std::nullopt,
+        },
         .disableModelInvocation = true,
     };
 
     CHECK(skill.disableModelInvocation == true);
+    CHECK(skill.sourceInfo.source == "cli");
+    CHECK_FALSE(skill.sourceInfo.base_dir.has_value());
 }
 
-TEST_CASE("Skill with empty content", "[coding_agent][skill][u1]") {
+TEST_CASE("Skill carries no preloaded content", "[coding_agent][skill][u1]") {
     coding_agent::Skill skill{
         .name = "frontmatter-only",
         .description = "No body content.",
-        .content = "",
         .filePath = "/tmp/SKILL.md",
+        .baseDir = "/tmp",
+        .sourceInfo = coding_agent::SourceInfo{
+            .path = "/tmp/SKILL.md",
+            .source = "auto",
+            .scope = coding_agent::SourceScope::Project,
+            .origin = coding_agent::SourceOrigin::TopLevel,
+            .base_dir = "/project/.pi",
+        },
     };
 
-    CHECK(skill.content.empty());
+    // The body is read at invocation time; the value carries provenance only.
     CHECK(skill.name == "frontmatter-only");
+    CHECK(skill.sourceInfo.scope == coding_agent::SourceScope::Project);
+    CHECK(skill.sourceInfo.base_dir == "/project/.pi");
 }
 
 TEST_CASE("SkillDiagnostic construction", "[coding_agent][skill][u1]") {
@@ -67,13 +95,20 @@ TEST_CASE("SkillDiagnostic default values", "[coding_agent][skill][u1]") {
     CHECK(diag.path.empty());
 }
 
-TEST_CASE("SkillLoadResult construction with content", "[coding_agent][skill][u1]") {
+TEST_CASE("SkillLoadResult construction with provenance", "[coding_agent][skill][u1]") {
     coding_agent::SkillLoadResult result{
         .skills = {coding_agent::Skill{
             .name = "a-skill",
             .description = "A.",
-            .content = "body",
             .filePath = "/a/SKILL.md",
+            .baseDir = "/a",
+            .sourceInfo = coding_agent::SourceInfo{
+                .path = "/a/SKILL.md",
+                .source = "auto",
+                .scope = coding_agent::SourceScope::Temporary,
+                .origin = coding_agent::SourceOrigin::TopLevel,
+                .base_dir = std::nullopt,
+            },
         }},
         .diagnostics = {coding_agent::SkillDiagnostic{
             .type = "collision",
@@ -91,6 +126,7 @@ TEST_CASE("SkillLoadResult construction with content", "[coding_agent][skill][u1
 
     REQUIRE(result.skills.size() == 1);
     CHECK(result.skills[0].name == "a-skill");
+    CHECK(result.skills[0].baseDir == "/a");
     REQUIRE(result.diagnostics.size() == 1);
     CHECK(result.diagnostics[0].code == coding_agent::SkillDiagnosticCode::collision);
     CHECK(result.diagnostics[0].collision.has_value());

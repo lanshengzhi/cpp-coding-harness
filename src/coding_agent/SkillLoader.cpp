@@ -1,14 +1,18 @@
 #include "coding_agent/SkillLoader.hpp"
 
-#include "SkillFrontmatterParser.hpp"
+#include "coding_agent/GitIgnoreMatcher.hpp"
 #include "LoaderPath.hpp"
+#include "coding_agent/SkillFrontmatterParser.hpp"
 #include "../harness/WorkspaceFileSystem.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <filesystem>
 #include <regex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace cch::coding_agent {
 
@@ -17,17 +21,21 @@ namespace {
 constexpr std::size_t kMaxNameLength = 64;
 constexpr std::size_t kMaxDescriptionLength = 1024;
 
-/// Validate skill name against Agent Skills standard (with pi leniency).
-/// Returns diagnostic messages; empty vector means valid.
+/// The `.gitignore`/`.ignore`/`.fdignore` filenames read at every directory
+/// of the walk (pi `IGNORE_FILE_NAMES`).
+constexpr std::array<std::string_view, 3> kIgnoreFileNames{
+    ".gitignore",
+    ".ignore",
+    ".fdignore",
+};
+
+/// Validate skill name against Agent Skills standard (pi leniency — no
+/// parent-directory match requirement, matching `core/skills.ts`
+/// `validateName`). Returns diagnostic messages; empty vector means valid.
 [[nodiscard]] std::vector<std::string> validateName(
-    const std::string& name,
-    const std::string& parentDirName) {
+    const std::string& name) {
     std::vector<std::string> errors;
 
-    if (name != parentDirName) {
-        errors.push_back("name \"" + name + "\" does not match parent directory \"" +
-                         parentDirName + "\"");
-    }
     if (name.size() > kMaxNameLength) {
         errors.push_back("name exceeds " + std::to_string(kMaxNameLength) +
                          " characters (" + std::to_string(name.size()) + ")");
@@ -68,17 +76,31 @@ constexpr std::size_t kMaxDescriptionLength = 1024;
     return errors;
 }
 
-/// Extract parent directory basename from a file path.
+/// The parent directory basename of a slash-separated path.
 [[nodiscard]] std::string parentDirName(const std::string& filePath) {
-    // Find the last '/' to get the parent directory.
-    std::size_t lastSlash = filePath.rfind('/');
+    const std::size_t lastSlash = filePath.rfind('/');
     if (lastSlash == std::string::npos || lastSlash == 0) {
         return "";
     }
-    // The parent directory name is between the second-to-last '/' and last '/'.
-    std::size_t secondLastSlash = filePath.rfind('/', lastSlash - 1);
-    std::size_t start = (secondLastSlash == std::string::npos) ? 0 : secondLastSlash + 1;
+    const std::size_t secondLastSlash = filePath.rfind('/', lastSlash - 1);
+    const std::size_t start =
+        (secondLastSlash == std::string::npos) ? 0 : secondLastSlash + 1;
     return filePath.substr(start, lastSlash - start);
+}
+
+/// pi `SourceScope`/`SourceInfo` construction for a discovered skill
+/// (`core/skills.ts` `createSkillSourceInfo` re-expressed through the loader
+/// subset's final `sourceInfo` shape).
+[[nodiscard]] SourceInfo make_source_info(
+    const std::string& filePath,
+    const SkillSourceContext& context) {
+    return SourceInfo{
+        .path = filePath,
+        .source = context.source,
+        .scope = context.scope,
+        .origin = SourceOrigin::TopLevel,
+        .base_dir = context.base_dir,
+    };
 }
 
 /// pi `ResourceDiagnostic` collision for a duplicate skill name: the first
@@ -103,12 +125,15 @@ constexpr std::size_t kMaxDescriptionLength = 1024;
     };
 }
 
-/// Deduplicates one loaded skill by name (first wins) and emits the
-/// collision diagnostic when the name is already taken.
+/// pi `loadSkills` `addSkills` dedupe: the same real file reached twice (via
+/// symlink) is skipped silently; a duplicate name drops the loser with the
+/// winner/loser collision diagnostic.
 void append_unique_skill(
     std::unordered_map<std::string, std::string>& seenNames,
+    std::unordered_set<std::string>& seenRealPaths,
     SkillLoadResult& result,
-    Skill skill) {
+    Skill skill,
+    std::optional<std::string> real_path) {
     if (auto it = seenNames.find(skill.name); it != seenNames.end()) {
         result.diagnostics.push_back(skill_collision_diagnostic(
             skill.name,
@@ -116,23 +141,76 @@ void append_unique_skill(
             skill.filePath));
         return;
     }
+    // The real path joins the set only when the skill is kept (pi `addSkills`
+    // records it in the else branch), so a collision loser never shadows a
+    // later distinct-named skill that shares its real file.
+    if (real_path && !seenRealPaths.insert(*real_path).second) {
+        return;
+    }
     seenNames.emplace(skill.name, skill.filePath);
     result.skills.push_back(std::move(skill));
 }
 
+/// The posix path of `path` relative to `root`, both slash-separated and
+/// relative to the same filesystem root. `path` must live under `root`.
+[[nodiscard]] std::string relative_posix(std::string_view root, std::string_view path) {
+    if (path == root) {
+        return {};
+    }
+    if (root == ".") {
+        return path.size() >= 2 && path.starts_with("./") ? std::string{path.substr(2)}
+                                                          : std::string{path};
+    }
+    if (path.starts_with(root) && path.size() > root.size() && path[root.size()] == '/') {
+        return std::string{path.substr(root.size() + 1)};
+    }
+    return std::string{path};
+}
+
+/// pi `addIgnoreRules(ig, dir, root)`: read every ignore file in `dir` and
+/// add its rules prefixed with the directory's path relative to the scan
+/// root. Read failures are silent (pi `try/catch {}`).
+void add_ignore_rules(
+    const harness::WorkspaceFileSystem& fs,
+    const std::string& dirPath,
+    std::string_view root,
+    IgnoreMatcher& matcher) {
+    const auto prefix = [&]() -> std::string {
+        const auto rel = relative_posix(root, dirPath);
+        if (rel.empty()) {
+            return {};
+        }
+        return rel + "/";
+    }();
+
+    // The addressed read path needs the directory prefix without a leading
+    // `./` (the scan root is `"."`).
+    const std::string dir = dirPath == "." ? std::string{} : dirPath + "/";
+    for (const auto filename : kIgnoreFileNames) {
+        const auto content = fs.readTextFile(dir + std::string{filename});
+        if (content) {
+            matcher.add_rules(*content, prefix);
+        }
+    }
+}
+
 } // namespace
 
-// Forward declaration for recursive directory walk.
+// Forward declaration for the recursive directory walk.
 static void loadSkillsFromDir(
     const harness::WorkspaceFileSystem& fs,
     const std::string& dirPath,
-    bool includeRootFiles,
+    const SkillDirSpec& spec,
+    std::string_view root,
+    IgnoreMatcher& matcher,
     std::unordered_map<std::string, std::string>& seenNames,
+    std::unordered_set<std::string>& seenRealPaths,
     SkillLoadResult& result);
 
 SkillLoadResult loadSkillFromFile(
     const harness::WorkspaceFileSystem& fs,
-    const std::string& filePath) {
+    const std::string& filePath,
+    SkillSourceContext source_context) {
     SkillLoadResult result;
 
     // Resolve absolute path for storage and convert paths beneath the
@@ -180,8 +258,7 @@ SkillLoadResult loadSkillFromFile(
     }
 
     // Validate name.
-    std::string dirName = parentDirName(filePath);
-    for (const auto& err : validateName(name, dirName)) {
+    for (const auto& err : validateName(name)) {
         result.diagnostics.push_back(SkillDiagnostic{
             .type = "warning",
             .code = SkillDiagnosticCode::invalid_metadata,
@@ -233,11 +310,17 @@ SkillLoadResult loadSkillFromFile(
         disableModelInvocation = (dmiIt->second == "true");
     }
 
+    // The skill directory: the base against which the file's relative
+    // references resolve (pi `Skill.baseDir`). Root-level .md files get the
+    // scan directory itself.
+    const std::string baseDir = std::filesystem::path{absolutePath}.parent_path().string();
+
     result.skills.push_back(Skill{
         .name = std::move(name),
         .description = std::move(description),
-        .content = std::move(parsed->body),
         .filePath = absolutePath,
+        .baseDir = baseDir,
+        .sourceInfo = make_source_info(absolutePath, source_context),
         .disableModelInvocation = disableModelInvocation,
     });
 
@@ -245,12 +328,22 @@ SkillLoadResult loadSkillFromFile(
 }
 
 /// Internal recursive walk: scan a single directory for skills.
+///
+/// `dirPath` is addressed relative to the filesystem root; `root` is the
+/// scan-root spec path the ignore matcher computes rel paths against; the
+/// matcher accumulates ignore rules as the walk descends (pi `addIgnoreRules`
+/// per directory).
 void loadSkillsFromDir(
     const harness::WorkspaceFileSystem& fs,
     const std::string& dirPath,
-    bool includeRootFiles,
+    const SkillDirSpec& spec,
+    std::string_view root,
+    IgnoreMatcher& matcher,
     std::unordered_map<std::string, std::string>& seenNames,
+    std::unordered_set<std::string>& seenRealPaths,
     SkillLoadResult& result) {
+
+    add_ignore_rules(fs, dirPath, root, matcher);
 
     auto entriesResult = fs.listDir(dirPath);
     if (!entriesResult.has_value()) {
@@ -271,6 +364,14 @@ void loadSkillsFromDir(
                   return a.name < b.name;
               });
 
+    const auto real_path_of = [&](const harness::FileInfo& entry)
+        -> std::optional<std::string> {
+        // pi `canonicalizePath(skill.filePath)` — used to detect the same
+        // real file reached twice via symlinks.
+        auto canonical = fs.canonicalPath(entry.path);
+        return canonical ? std::optional<std::string>{*canonical} : std::nullopt;
+    };
+
     // First pass: look for SKILL.md in this directory.
     // Only one SKILL.md per directory (stop recursing after finding one).
     for (const auto& entry : entries) {
@@ -289,10 +390,16 @@ void loadSkillsFromDir(
             continue;
         }
 
-        auto fileResult = loadSkillFromFile(fs, entry.path);
-        // Deduplicate by name (first wins; collisions carry winner/loser paths).
+        // The ignore matcher prunes ignored SKILL.md files (pi
+        // `ig.ignores(relPath)`), which falls through to the recursion pass.
+        const auto rel_path = relative_posix(root, dirPath + "/" + entry.name);
+        if (matcher.ignores(rel_path, /* is_dir */ false)) continue;
+
+        auto fileResult = loadSkillFromFile(fs, entry.path, spec.source_context);
+        // Deduplicate by real path, then by name (first wins; collisions
+        // carry winner/loser paths).
         for (auto& skill : fileResult.skills) {
-            append_unique_skill(seenNames, result, std::move(skill));
+            append_unique_skill(seenNames, seenRealPaths, result, std::move(skill), real_path_of(entry));
         }
         result.diagnostics.insert(result.diagnostics.end(),
                                   std::make_move_iterator(fileResult.diagnostics.begin()),
@@ -321,17 +428,25 @@ void loadSkillsFromDir(
         // Construct relative child path from the parent dir and entry name.
         std::string childPath = dirPath + "/" + entryName;
 
+        const auto rel_path = relative_posix(root, childPath);
+
         if (kind == harness::FileKind::Directory) {
+            // The matcher prunes ignored directories (pi checks dirs with a
+            // trailing slash), skipping their entire subtree.
+            if (matcher.ignores(rel_path, /* is_dir */ true)) continue;
             // Recurse into subdirectory.
-            loadSkillsFromDir(fs, childPath, false, seenNames, result);
+            loadSkillsFromDir(fs, childPath, spec, root, matcher, seenNames, seenRealPaths, result);
         } else if (kind == harness::FileKind::File &&
-                   includeRootFiles &&
+                   dirPath == root &&
+                   spec.include_root_files &&
                    entryName.size() > 3 &&
                    entryName.ends_with(".md")) {
-            // Root-level .md file treated as a skill (global dir behavior).
-            auto fileResult = loadSkillFromFile(fs, childPath);
+            // Root-level .md file treated as a skill (pi "pi" discovery mode,
+            // scan root only).
+            if (matcher.ignores(rel_path, /* is_dir */ false)) continue;
+            auto fileResult = loadSkillFromFile(fs, childPath, spec.source_context);
             for (auto& skill : fileResult.skills) {
-                append_unique_skill(seenNames, result, std::move(skill));
+                append_unique_skill(seenNames, seenRealPaths, result, std::move(skill), real_path_of(entry));
             }
             result.diagnostics.insert(result.diagnostics.end(),
                                       std::make_move_iterator(fileResult.diagnostics.begin()),
@@ -345,6 +460,7 @@ SkillLoadResult loadSkills(
     const std::vector<SkillDirSpec>& dirs) {
     SkillLoadResult result;
     std::unordered_map<std::string, std::string> seenNames;
+    std::unordered_set<std::string> seenRealPaths;
 
     for (const auto& dirSpec : dirs) {
         // Convert absolute paths beneath the workspace to relative paths for
@@ -369,13 +485,57 @@ SkillLoadResult loadSkills(
             continue;
         }
 
-        // Skip non-directories (symlinks are handled per-entry in the walk).
-        if (infoResult->kind != harness::FileKind::Directory) {
+        // pi `loadSkills` explicit-path handling: a file spec loads only
+        // when it is a `.md` file (anything else is a warning); symlinks are
+        // resolved through their canonical target.
+        harness::FileKind kind = infoResult->kind;
+        std::string specPath = *dir_path;
+        if (kind == harness::FileKind::Symlink) {
+            if (auto canonical = fs.canonicalPath(specPath); canonical) {
+                if (auto target = fs.fileInfo(*canonical); target) {
+                    kind = target->kind;
+                    specPath = *canonical;
+                }
+            } else {
+                continue;
+            }
+        }
+
+        if (kind == harness::FileKind::File) {
+            if (!specPath.ends_with(".md")) {
+                result.diagnostics.push_back(SkillDiagnostic{
+                    .type = "warning",
+                    .code = SkillDiagnosticCode::invalid_metadata,
+                    .message = "skill path is not a markdown file",
+                    .path = *dir_path,
+                    .collision = std::nullopt,
+                });
+                continue;
+            }
+            auto fileResult = loadSkillFromFile(fs, specPath, dirSpec.source_context);
+            auto canonical = fs.canonicalPath(specPath);
+            for (auto& skill : fileResult.skills) {
+                append_unique_skill(
+                    seenNames, seenRealPaths, result, std::move(skill),
+                    canonical ? std::optional<std::string>{*canonical} : std::nullopt);
+            }
+            result.diagnostics.insert(
+                result.diagnostics.end(),
+                std::make_move_iterator(fileResult.diagnostics.begin()),
+                std::make_move_iterator(fileResult.diagnostics.end()));
             continue;
         }
 
-        // Walk the directory recursively.
-        loadSkillsFromDir(fs, *dir_path, dirSpec.includeRootFiles, seenNames, result);
+        // Skip non-directories (symlinks are handled per-entry in the walk).
+        if (kind != harness::FileKind::Directory) {
+            continue;
+        }
+
+        // Each scan root gets a fresh ignore matcher (pi builds one per
+        // `loadSkillsFromDirInternal` call); the walk then accumulates the
+        // root's and each descendant's ignore rules.
+        IgnoreMatcher matcher;
+        loadSkillsFromDir(fs, *dir_path, dirSpec, *dir_path, matcher, seenNames, seenRealPaths, result);
     }
 
     return result;

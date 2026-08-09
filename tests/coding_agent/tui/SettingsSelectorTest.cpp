@@ -91,25 +91,33 @@ TEST_CASE(
         std::move(callbacks));
 
     const auto screen = render_screen(selector);
-    // pi settings-selector.ts item order for the C++ subset: output-padding,
-    // hide-thinking, default-project-trust, thinking, theme.
+    // pi settings-selector.ts item order for the C++ subset:
+    // skill-commands, output-padding, hide-thinking, default-project-trust,
+    // thinking, theme (pi's skill-commands toggle sits immediately before
+    // output-padding).
+    const auto skill_commands = screen.find("Skill commands");
     const auto output_padding = screen.find("Output padding");
     const auto hide_thinking = screen.find("Hide thinking");
     const auto project_trust = screen.find("Default project trust");
     const auto thinking = screen.find("Thinking level");
     const auto theme_item = screen.find("Theme");
+    REQUIRE(skill_commands != std::string::npos);
     REQUIRE(output_padding != std::string::npos);
     REQUIRE(hide_thinking != std::string::npos);
     REQUIRE(project_trust != std::string::npos);
     REQUIRE(thinking != std::string::npos);
     REQUIRE(theme_item != std::string::npos);
+    CHECK(skill_commands < output_padding);
     CHECK(output_padding < hide_thinking);
     CHECK(hide_thinking < project_trust);
     CHECK(project_trust < thinking);
     CHECK(thinking < theme_item);
     // The selected item's description renders (pi verbatim wording); the
     // other descriptions render as their rows are selected.
-    CHECK(screen.find("Horizontal padding for user messages, assistant messages, and thinking") !=
+    CHECK(screen.find("Register skills as /skill:name commands") !=
+        std::string::npos);
+    selector.handle_input(tui::KeyEvent{.key = "down"});
+    CHECK(render_screen(selector).find("Horizontal padding for user messages, assistant messages, and thinking") !=
         std::string::npos);
     selector.handle_input(tui::KeyEvent{.key = "down"});
     CHECK(render_screen(selector).find("Hide thinking blocks in assistant responses") !=
@@ -141,11 +149,13 @@ TEST_CASE(
     config.default_project_trust = coding_agent::DefaultProjectTrust::Ask;
     std::optional<bool> hide_change;
     std::optional<std::size_t> pad_change;
+    std::optional<bool> skill_change;
     std::optional<coding_agent::DefaultProjectTrust> trust_change;
     std::size_t cancellations = 0;
     coding_agent::tui::SettingsSelectorCallbacks callbacks;
     callbacks.on_hide_thinking_block_change = [&hide_change](bool hidden) { hide_change = hidden; };
     callbacks.on_output_pad_change = [&pad_change](std::size_t padding) { pad_change = padding; };
+    callbacks.on_enable_skill_commands_change = [&skill_change](bool enabled) { skill_change = enabled; };
     callbacks.on_default_project_trust_change =
         [&trust_change](coding_agent::DefaultProjectTrust trust) { trust_change = trust; };
     callbacks.on_cancel = [&cancellations] { ++cancellations; };
@@ -156,7 +166,13 @@ TEST_CASE(
         config,
         std::move(callbacks));
 
-    // Confirm on the first item (output-padding) cycles 1 → 0.
+    // Confirm on the first item (skill-commands) cycles true → false.
+    selector.handle_input(tui::KeyEvent{.key = "enter"});
+    REQUIRE(skill_change.has_value());
+    CHECK(*skill_change == false);
+
+    // Down to output-padding; confirm cycles 1 → 0.
+    selector.handle_input(tui::KeyEvent{.key = "down"});
     selector.handle_input(tui::KeyEvent{.key = "enter"});
     REQUIRE(pad_change.has_value());
     CHECK(*pad_change == 0);
@@ -195,10 +211,10 @@ TEST_CASE(
         config,
         std::move(callbacks));
 
-    // Navigate to the thinking item (index 3) and open the submenu.
-    selector.handle_input(tui::KeyEvent{.key = "down"});
-    selector.handle_input(tui::KeyEvent{.key = "down"});
-    selector.handle_input(tui::KeyEvent{.key = "down"});
+    // Navigate to the thinking item (index 4) and open the submenu.
+    for (int step = 0; step < 4; ++step) {
+        selector.handle_input(tui::KeyEvent{.key = "down"});
+    }
     selector.handle_input(tui::KeyEvent{.key = "enter"});
 
     const auto screen = render_screen(selector);
@@ -241,8 +257,8 @@ TEST_CASE(
         config,
         std::move(callbacks));
 
-    // Navigate to the theme item (last, index 4) and confirm.
-    for (int step = 0; step < 4; ++step) {
+    // Navigate to the theme item (last, index 5) and confirm.
+    for (int step = 0; step < 5; ++step) {
         selector.handle_input(tui::KeyEvent{.key = "down"});
     }
     selector.handle_input(tui::KeyEvent{.key = "enter"});

@@ -239,6 +239,7 @@ add_library(cch_coding_agent_runtime
     src/coding_agent/AgentSession.cpp
     src/coding_agent/SkillFrontmatterParser.cpp
     src/coding_agent/SkillLoader.cpp
+    src/coding_agent/GitIgnoreMatcher.cpp
     src/coding_agent/PromptTemplateLoader.cpp
     src/coding_agent/SkillFormatting.cpp
     src/coding_agent/runtime/AgentSessionRuntime.cpp

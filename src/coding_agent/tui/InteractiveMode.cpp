@@ -494,7 +494,8 @@ command_autocomplete_commands(
     const CommandRegistry& commands,
     std::span<const PromptTemplate> prompt_templates,
     std::span<const Skill> skills,
-    std::shared_ptr<const ModelCompletionSnapshot> model_completion) {
+    std::shared_ptr<const ModelCompletionSnapshot> model_completion,
+    bool include_skill_commands) {
     std::vector<std::variant<cch::tui::SlashCommand, cch::tui::AutocompleteItem>> items;
     std::set<std::string, std::less<>> names;
     for (const auto& command : commands.list_commands()) {
@@ -566,14 +567,18 @@ command_autocomplete_commands(
             .description = std::move(description),
         });
     }
-    for (const auto& skill : skills) {
-        auto name = "skill:" + skill.name;
-        if (!names.insert(name).second) continue;
-        items.push_back(cch::tui::AutocompleteItem{
-            .value = name,
-            .label = name,
-            .description = skill.description,
-        });
+    // pi `createBaseAutocompleteProvider`: skill commands register only
+    // while the `enableSkillCommands` setting is enabled.
+    if (include_skill_commands) {
+        for (const auto& skill : skills) {
+            auto name = "skill:" + skill.name;
+            if (!names.insert(name).second) continue;
+            items.push_back(cch::tui::AutocompleteItem{
+                .value = name,
+                .label = name,
+                .description = skill.description,
+            });
+        }
     }
     std::sort(items.begin(), items.end(), [](const auto& left, const auto& right) {
         const auto label = [](const auto& item) -> std::string_view {
@@ -894,6 +899,14 @@ public:
         std::lock_guard lock(mutex_);
         chat_.set_hide_thinking_block(hide_thinking_block);
         chat_.set_output_pad(output_pad);
+    }
+
+    /// Replace the editor's autocomplete provider (pi
+    /// `setupAutocompleteProvider` after a settings change).
+    void set_autocomplete_provider(
+        std::unique_ptr<cch::tui::AutocompleteProvider> provider) {
+        std::lock_guard lock(mutex_);
+        editor_.set_autocomplete_provider(std::move(provider));
     }
 
     void apply_event(const agent::AgentLifecycleEvent& event) {
@@ -2023,23 +2036,41 @@ private:
             hide_thinking_block_,
             output_pad_,
             detail::AgentSessionInteractiveAccess::has_user_shell(*session_),
-            std::make_unique<cch::tui::CombinedAutocompleteProvider>(
-                [&] {
-                    auto commands = command_autocomplete_commands(
-                        commands_,
-                        session_->templates(),
-                        session_->skills(),
-                        model_completion_);
-                    return commands;
-                }(),
-                session_->workspace(),
-                find_executable_on_path("fd")),
+            build_autocomplete_provider(),
             std::make_unique<AsioAutocompleteDebounceTimer>(executor_),
             [weak] {
                 if (const auto self = weak.lock()) self->post_invalidate();
             },
             terminal_.capabilities(),
             theme_controller_->live_theme());
+    }
+
+    /// pi `createBaseAutocompleteProvider`: the combined provider over the
+    /// effective commands, prompt templates, and (while the
+    /// `enableSkillCommands` setting is enabled) `skill:` commands. Rebuilt
+    /// after a setting change exactly like pi's `setupAutocompleteProvider`.
+    [[nodiscard]] std::unique_ptr<cch::tui::AutocompleteProvider>
+    build_autocomplete_provider() {
+        const bool include_skill_commands =
+            settings_manager_ && settings_manager_->get_enable_skill_commands();
+        return std::make_unique<cch::tui::CombinedAutocompleteProvider>(
+            command_autocomplete_commands(
+                commands_,
+                session_->templates(),
+                session_->skills(),
+                model_completion_,
+                include_skill_commands),
+            session_->workspace(),
+            find_executable_on_path("fd"));
+    }
+
+    /// pi `setupAutocompleteProvider` after a settings change: swap the
+    /// editor's autocomplete provider for a freshly built one.
+    void rebuild_autocomplete_provider() {
+        if (view_ == nullptr) {
+            return;
+        }
+        view_->set_autocomplete_provider(build_autocomplete_provider());
     }
 
     [[nodiscard]] util::ExpectedVoid subscribe_to_session(
@@ -2331,6 +2362,8 @@ private:
         SettingsSelectorConfig config;
         config.hide_thinking_block = hide_thinking_block_;
         config.output_pad = output_pad_;
+        config.enable_skill_commands =
+            settings_manager_->get_enable_skill_commands();
         config.thinking_level = snapshot.agent_state.thinking_level;
         const auto supported = ai::get_supported_thinking_levels(snapshot.agent_state.model);
         config.available_thinking_levels.reserve(supported.size());
@@ -2356,6 +2389,21 @@ private:
             if (const auto self = weak.lock()) {
                 self->post_from_view([padding](InteractiveState& state) {
                     state.set_output_pad_setting(padding);
+                });
+            }
+        };
+        callbacks.on_enable_skill_commands_change = [weak](bool enabled) {
+            if (const auto self = weak.lock()) {
+                self->post_from_view([enabled](InteractiveState& state) {
+                    // pi `onEnableSkillCommandsChange`:
+                    // `setEnableSkillCommands(enabled)` then
+                    // `setupAutocompleteProvider()`.
+                    if (auto saved =
+                            state.settings_manager_->set_enable_skill_commands(enabled);
+                        !saved) {
+                        state.show_error(combined_error_text(saved.error()));
+                    }
+                    state.rebuild_autocomplete_provider();
                 });
             }
         };
@@ -2879,6 +2927,7 @@ private:
         request.no_skills = session_facts_.no_skills;
         request.no_prompt_templates = session_facts_.no_prompt_templates;
         request.prompt_template_paths = session_facts_.prompt_template_paths;
+        request.skill_paths = session_facts_.skill_paths;
         request.workspace = std::move(workspace);
         request.session_target = std::move(target);
         request.provider = session_facts_.provider;

@@ -132,6 +132,7 @@ void print_session_diagnostics(
     facts.no_skills = config.no_skills;
     facts.no_prompt_templates = config.no_prompt_templates;
     facts.prompt_template_paths = config.prompt_template_paths;
+    facts.skill_paths = config.skills;
     facts.provider = config.provider;
     facts.model = config.model;
     facts.models = config.models;
@@ -144,6 +145,7 @@ void print_session_diagnostics(
             request.no_skills = facts.no_skills;
             request.no_prompt_templates = facts.no_prompt_templates;
             request.prompt_template_paths = facts.prompt_template_paths;
+            request.skill_paths = facts.skill_paths;
             request.provider = facts.provider;
             request.model = facts.model;
             request.models = facts.models;
@@ -245,6 +247,7 @@ void print_session_diagnostics(
     request.no_skills = config.no_skills;
     request.no_prompt_templates = config.no_prompt_templates;
     request.prompt_template_paths = config.prompt_template_paths;
+    request.skill_paths = config.skills;
     request.workspace = config.workspace;
     request.session_target = std::move(assembly->target);
     request.session_name = config.name;
