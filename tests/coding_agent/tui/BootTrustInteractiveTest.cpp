@@ -498,6 +498,46 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "boot with a failing theme keeps the main screen and the dark fallback message",
+    "[coding_agent][tui][boot-trust][issue425]") {
+    tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
+    TrustIsolatedWorkspace fixture;
+    agent_dir.set(fixture.agent_dir.string());
+    // An explicit `--theme` document that fails validation (missing required
+    // color tokens) and the settings theme referencing the same broken name:
+    // the boot discovers the document (huge validation diagnostic), the
+    // controller's apply falls back with pi's verbatim message, and the main
+    // screen must still render (the invalid-theme diagnostic used to fill the
+    // viewport and push the footer/editor off it — #425).
+    fixture.write(
+        "broken-theme.json",
+        R"({"name":"broken","colors":{"background":"#ff0000"}})");
+    fixture.write("agent/settings.json", R"({"theme":"broken"})");
+
+    auto request = boot_request(fixture);
+    request.project_trust_override = true;
+    request.theme_paths = {"broken-theme.json"};
+
+    BootTrustRun run;
+    run.start(fixture, std::move(request), ai::providers::make_scripted_fake_models());
+
+    const auto screen = visible_screen(run.terminal);
+    // The invalid document is reported in the loaded-resources block.
+    CHECK(screen.find("[Theme conflicts]") != std::string::npos);
+    CHECK(screen.find("broken-theme.json") != std::string::npos);
+    // The controller applied the settings theme, failed, and fell back with
+    // pi's verbatim message (rendered as an Error chat diagnostic).
+    CHECK(screen.find("Failed to load theme \"broken\"") != std::string::npos);
+    CHECK(screen.find("Fell back to dark theme.") != std::string::npos);
+    // The boot completes: the interactive dock (footer status line with the
+    // active model) renders below the bounded loaded-resources block.
+    CHECK(screen.find("fake-model") != std::string::npos);
+    CHECK(screen.find("Press ctrl+o to show full startup help") != std::string::npos);
+
+    run.exit();
+}
+
+TEST_CASE(
     "/reload persists the implicit project trust decision when resources appear",
     "[coding_agent][tui][boot-trust][reload][issue418]") {
     tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");

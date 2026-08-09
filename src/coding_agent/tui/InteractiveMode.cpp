@@ -1353,6 +1353,25 @@ public:
                 pending_lines.push_back(std::move(rendered->lines.front()));
             }
         }
+        // The dock (pending + status + editor + footer) and a minimum chat
+        // slice stay visible on every terminal; the loaded-resources block
+        // yields the space it needs. pi's transcript scroll keeps the dock
+        // fixed while the loaded-resources content scrolls above the chat, so
+        // a huge startup diagnostic (e.g. an invalid `--theme` document's
+        // full missing-color-token list, #425) must not push the footer and
+        // editor off a small screen and freeze the boot view.
+        constexpr std::size_t kMinDockEditorRows = 3;
+        constexpr std::size_t kMinChatRows = 3;
+        const auto dock_budget = pending_lines.size() + status_lines.size() +
+            kMinDockEditorRows + footer_lines.size();
+        const auto top_budget = available_rows_ > dock_budget + kMinChatRows
+            ? available_rows_ - dock_budget - kMinChatRows
+            : 0;
+        const auto resources_budget =
+            top_budget > header_lines.size() ? top_budget - header_lines.size() : 0;
+        if (resources_lines.size() > resources_budget) {
+            resources_lines.resize(resources_budget);
+        }
         const auto fixed_rows =
             header_lines.size() + resources_lines.size() + pending_lines.size() +
             status_lines.size() + footer_lines.size();
