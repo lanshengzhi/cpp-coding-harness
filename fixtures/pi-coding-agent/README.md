@@ -321,7 +321,7 @@ terminal and record the outcome in the gate report at the gate pass ([#424]):
 
 | # | Checklist item | Expected outcome | Real-terminal evidence |
 | --- | --- | --- | --- |
-| 1 | Kitty keyboard-protocol negotiation against a real emulator | The Native TUI under Kitty reports the Kitty protocol and modified keys arrive as `CSI u` sequences (per-component opt-in as applicable) | Manual run under Kitty ≥ 0.31 |
+| 1 | Kitty keyboard-protocol negotiation against a real emulator | The Native TUI negotiates the Kitty keyboard protocol with any protocol-capable emulator: it pushes `CSI > 7 u`, queries `CSI ? u`/`CSI c`, and parses the flags response; modified keys then arrive as `CSI u` sequences (per-component opt-in as applicable). Terminals that do not answer degrade to legacy input | Deterministic pty probe: `manual/kitty-probe.py` (startup push/query byte-verified, kitty-flags response `CSI ? 3u` accepted, injected `CSI 1;5u` keys processed, no-response degradation PASS) + manual run under a kitty-protocol-capable emulator (Kitty ≥ 0.31 or Ghostty) |
 | 2 | Theme appearance | The applied theme (dark/light/custom) renders in the terminal — colors, editor border color on change, fallback to `dark` on a failing theme | Manual run; `Failed to load theme`/`Fell back to dark theme.` observation |
 | 3 | Login dialogs | The login dialog / OAuth selector for the Codex and Kimi paths (auth URL/device code/manual code/info/waiting views) and the API-key dialog branch for the DeepSeek path render and function | Manual run with a real (or deliberately failing) auth flow; no live credentials are ever committed |
 | 4 | External editor (`app.editor.external`) | `VISUAL`/`EDITOR` launches a temp `prompt.md`, the editor resumes the session on exit, and cleanup is best-effort | Manual run with a real `EDITOR` |
@@ -331,6 +331,13 @@ expected outcomes are pinned here. It is a bounded fill-in artifact like the pi-
 checklist: it is never executed in CI, and executing it once is the maintainer's manual pass at
 [#424] (same division as the pi-ai gate's optional live smoke). Record each outcome below when
 the pass is performed, then tick the corresponding gate criterion:
+
+Item 1 additionally carries deterministic evidence beyond the manual eyeball: the negotiation is
+response-driven (the push is unconditional; any terminal answering `CSI ? <flags>u` enables the
+protocol), and `manual/kitty-probe.py` drives the binary through a scripted pty that answers the
+query and injects `CSI u` keys, asserting both protocol mode and graceful degradation. Ghostty
+qualifies as the protocol-capable emulator for the real-terminal leg (`TERM_PROGRAM=ghostty` is
+recognized by the implementation).
 
 ```
 Real-terminal pass — date, emulator, version:
