@@ -2,6 +2,7 @@
 
 #include "support/CliRunFixture.hpp"
 #include "support/ImageFixture.hpp"
+#include "support/PseudoTerminal.hpp"
 #include "support/ShellQuoting.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/TextHelpers.hpp"
@@ -502,20 +503,181 @@ TEST_CASE("CLI non-TTY stdin becomes one print prompt", "[cli][selection][issue6
     CHECK(result.stdout_text == "fake: one\ntwo\n");
 }
 
-TEST_CASE("CLI resume appends to an existing redacted session", "[cli][u6]") {
+TEST_CASE("CLI --session open resumes and appends to an existing redacted session", "[cli][u6]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "resume.jsonl";
     auto first = run_in_workspace(
         workspace, {"--session", session.string(), "first"});
     REQUIRE(first.exit_code == 0);
 
+    // pi: `--resume` is the picker; opening an existing session at a path is
+    // `--session <path>` (open-or-create resumes).
     auto second = run_in_workspace(
-        workspace, {"--resume", session.string(), "second"});
+        workspace, {"--session", session.string(), "second"});
     REQUIRE(second.exit_code == 0);
     CHECK(second.stdout_text == "fake: second\n");
 }
 
-TEST_CASE("CLI resume uses session workspace when the launch directory differs", "[cli][u6]") {
+#if defined(__unix__) || defined(__APPLE__)
+TEST_CASE(
+    "CLI interactive boot Continue recovers a vanished session cwd",
+    "[cli][startup-tui][issue417]") {
+    cch::tests::TempWorkspace original;
+    cch::tests::TempWorkspace storage;
+    cch::tests::TempWorkspace home;
+    home.write(".pi/agent/models.json", R"({
+      "providers": {
+        "deepseek": {
+          "baseUrl": "https://api.deepseek.example/v1",
+          "api": "openai-responses",
+          "apiKey": "configured-key",
+          "models": [{"id": "deepseek-v4-flash"}]
+        }
+      }
+    })");
+    const auto session = storage.path() / "vanished.jsonl";
+
+    // Seed a session whose header cwd (`original`) then vanishes while the
+    // file survives (pi `getMissingSessionCwdIssue`).
+    auto seeded = run_command_split(
+        "cd " + shell_quote(original.path()) + " && HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --session " + shell_quote(session) +
+        " --model deepseek-v4-flash");
+    REQUIRE(seeded.exit_code == 0);
+    std::error_code ec;
+    REQUIRE(std::filesystem::remove_all(original.path(), ec) > 0);
+    REQUIRE_FALSE(ec);
+
+    auto pty = cch::tests::open_pseudo_terminal(100, 40);
+    REQUIRE(pty);
+    const auto pid = ::fork();
+    REQUIRE(pid >= 0);
+    if (pid == 0) {
+        (void)::dup2(pty->slave.get(), STDIN_FILENO);
+        (void)::dup2(pty->slave.get(), STDOUT_FILENO);
+        (void)::dup2(pty->slave.get(), STDERR_FILENO);
+        (void)::setenv("HOME", home.path().string().c_str(), 1);
+        (void)::unsetenv("PI_CODING_AGENT_DIR");
+        (void)::chdir(storage.path().string().c_str());
+        ::execl(
+            CCH_BINARY, "cpp_harness", "--session", session.string().c_str(),
+            static_cast<char*>(nullptr));
+        ::_exit(127);
+    }
+
+    // The interactive boot shows pi's startup-TUI Continue/Cancel prompt
+    // with the verbatim missing-cwd text before the main TUI starts.
+    std::string output;
+    REQUIRE(cch::tests::wait_until(
+        [&] {
+            output.append(cch::tests::read_available(
+                pty->master.get(), std::chrono::milliseconds(20)));
+            return output.find("cwd from session file does not exist") !=
+                std::string::npos;
+        },
+        std::chrono::seconds(5)));
+    CHECK(output.find("continue in current cwd") != std::string::npos);
+    CHECK(output.find(original.path().string()) != std::string::npos);
+    CHECK(output.find("Continue") != std::string::npos);
+    CHECK(output.find("Cancel") != std::string::npos);
+
+    // Enter picks Continue; the main TUI boots with the resumed session
+    // (its footer shows the stored model), then Ctrl+D exits.
+    REQUIRE(::write(pty->master.get(), "\r", 1) == 1);
+    REQUIRE(cch::tests::wait_until(
+        [&] {
+            output.append(cch::tests::read_available(
+                pty->master.get(), std::chrono::milliseconds(20)));
+            return output.find("deepseek-v4-flash") != std::string::npos;
+        },
+        std::chrono::seconds(5)));
+    REQUIRE(::write(pty->master.get(), "\x04", 1) == 1);
+    int status = 0;
+    REQUIRE(cch::tests::wait_until(
+        [&] {
+            output.append(cch::tests::read_available(
+                pty->master.get(), std::chrono::milliseconds(20)));
+            return ::waitpid(pid, &status, WNOHANG) == pid;
+        },
+        std::chrono::seconds(5)));
+    REQUIRE(WIFEXITED(status));
+    CHECK(WEXITSTATUS(status) == 0);
+}
+#endif
+
+#if defined(__unix__) || defined(__APPLE__)
+TEST_CASE(
+    "CLI --resume opens the startup-TUI picker on a real terminal",
+    "[cli][startup-tui][issue417]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    home.write(".pi/agent/models.json", R"({
+      "providers": {
+        "deepseek": {
+          "baseUrl": "https://api.deepseek.example/v1",
+          "api": "openai-responses",
+          "apiKey": "configured-key",
+          "models": [{"id": "deepseek-v4-flash"}]
+        }
+      }
+    })");
+
+    // Seed an automatic session with no prompt (no network): a no-prompt
+    // print run still creates the session (pi). The picker's current-folder
+    // scope lists it.
+    auto seeded = run_command_split(
+        "cd " + shell_quote(workspace.path()) + " && HOME=" + shell_quote(home.path()) + " " + bin() +
+        " --model deepseek-v4-flash");
+    REQUIRE(seeded.exit_code == 0);
+
+    auto pty = cch::tests::open_pseudo_terminal(100, 40);
+    REQUIRE(pty);
+    const auto pid = ::fork();
+    REQUIRE(pid >= 0);
+    if (pid == 0) {
+        // The child runs the real binary with the PTY as its terminal: the
+        // startup-TUI picker (ProcessTerminal host) and the print-mode run
+        // share it (pi `selectSession` before the frontend split).
+        (void)::dup2(pty->slave.get(), STDIN_FILENO);
+        (void)::dup2(pty->slave.get(), STDOUT_FILENO);
+        (void)::dup2(pty->slave.get(), STDERR_FILENO);
+        (void)::setenv("HOME", home.path().string().c_str(), 1);
+        (void)::unsetenv("PI_CODING_AGENT_DIR");
+        (void)::chdir(workspace.path().string().c_str());
+        ::execl(CCH_BINARY, "cpp_harness", "--print", "--resume", static_cast<char*>(nullptr));
+        ::_exit(127);
+    }
+
+    // The startup TUI renders the picker on the terminal before any session
+    // machinery (pi selectSession).
+    std::string output;
+    REQUIRE(cch::tests::wait_until(
+        [&] {
+            output.append(cch::tests::read_available(
+                pty->master.get(), std::chrono::milliseconds(20)));
+            return output.find("Resume Session (Current Folder)") !=
+                std::string::npos;
+        },
+        std::chrono::seconds(5)));
+    CHECK(output.find("deepseek-v4-flash") == std::string::npos);
+
+    // Enter selects the seeded session; the picker clears, the print run
+    // resumes with no prompt (nothing printed, exit 0).
+    REQUIRE(::write(pty->master.get(), "\r", 1) == 1);
+    int status = 0;
+    REQUIRE(cch::tests::wait_until(
+        [&] {
+            output.append(cch::tests::read_available(
+                pty->master.get(), std::chrono::milliseconds(20)));
+            return ::waitpid(pid, &status, WNOHANG) == pid;
+        },
+        std::chrono::seconds(5)));
+    REQUIRE(WIFEXITED(status));
+    CHECK(WEXITSTATUS(status) == 0);
+}
+#endif
+
+TEST_CASE("CLI --session open uses session workspace when the launch directory differs", "[cli][u6]") {
     cch::tests::TempWorkspace original;
     cch::tests::TempWorkspace other;
     original.write("note.txt", "from-session-workspace");
@@ -525,7 +687,7 @@ TEST_CASE("CLI resume uses session workspace when the launch directory differs",
     REQUIRE(first.exit_code == 0);
 
     auto resumed = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--resume", session.string(), "read note.txt"},
+        .args = {"--session", session.string(), "read note.txt"},
         .cwd = other.path(),
     });
 
@@ -539,10 +701,11 @@ TEST_CASE("CLI --session wins over --resume without a conflict error", "[cli][u6
     auto other = workspace.path() / "other.jsonl";
     auto result = run_in_workspace(
         workspace,
-        {"--session", session.string(), "--resume", other.string(), "hello"});
+        {"--session", session.string(), "--resume", "hello"});
 
     // pi precedence: --session is selected before --resume; the C++-today
-    // "use either --session or --resume" error is deleted.
+    // "use either --session or --resume" error is deleted. `--resume` is a
+    // pure boolean flag, so nothing after it is consumed as a path.
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.find("use either --session or --resume") == std::string::npos);
     CHECK(result.stdout_text == "fake: hello\n");
@@ -1024,7 +1187,7 @@ TEST_CASE("CLI rejects each explicit prompt template input that has no loadable 
     CHECK_FALSE(std::filesystem::exists(session));
 }
 
-TEST_CASE("CLI resume with explicit model override reports diagnostic and uses override", "[cli][provider-resolution]") {
+TEST_CASE("CLI --session open with explicit model override reports diagnostic and uses override", "[cli][provider-resolution]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "resume-override.jsonl";
@@ -1037,7 +1200,7 @@ TEST_CASE("CLI resume with explicit model override reports diagnostic and uses o
     REQUIRE(first.exit_code == 0);
 
     auto second = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--resume", session.string(), "--model", "override-model", "second"},
+        .args = {"--session", session.string(), "--model", "override-model", "second"},
         .cwd = workspace.path(),
         .env = {{"HOME", home.path().string()}},
     });
@@ -1047,7 +1210,7 @@ TEST_CASE("CLI resume with explicit model override reports diagnostic and uses o
     CHECK(second.stdout_text == "fake: second\n");
 }
 
-TEST_CASE("CLI resume without override retains stored provider and model", "[cli][provider-resolution]") {
+TEST_CASE("CLI --session open without override retains stored provider and model", "[cli][provider-resolution]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "resume-retain.jsonl";
@@ -1060,7 +1223,7 @@ TEST_CASE("CLI resume without override retains stored provider and model", "[cli
     REQUIRE(first.exit_code == 0);
 
     auto second = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--resume", session.string(), "second"},
+        .args = {"--session", session.string(), "second"},
         .cwd = workspace.path(),
         .env = {{"HOME", home.path().string()}},
     });
@@ -1101,7 +1264,7 @@ TEST_CASE("CLI resume falls back with a diagnostic when the stored model no long
     std::filesystem::remove(models_path);
     auto second = run_command_split(
         "cd " + shell_quote(workspace.path()) + " && HOME=" + shell_quote(home.path()) + " " + bin() +
-        " --resume " + shell_quote(session));
+        " --session " + shell_quote(session));
 
     REQUIRE(second.exit_code == 0);
     CHECK(second.stderr_text.find("Could not restore model") == std::string::npos);
@@ -1264,7 +1427,7 @@ TEST_CASE("CLI explicit session targets keep their exact paths outside the defau
     CHECK_FALSE(std::filesystem::exists(agent_dir / "sessions"));
 
     auto resumed = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--resume", explicit_session.string(), "second"},
+        .args = {"--session", explicit_session.string(), "second"},
         .cwd = workspace.path(),
         .env = {{"PI_CODING_AGENT_DIR", agent_dir.string()}},
     });
@@ -1300,9 +1463,9 @@ TEST_CASE("CLI default creation ignores the old project-local sessions directory
     CHECK(jsonl_files_under(legacy_dir).size() == 1);
     require_single_automatic_session(agent_dir / "sessions", canonical_workspace);
 
-    // A valid old file remains usable only through the explicit resume contract.
+    // A valid old file remains usable only through the explicit open contract.
     auto resumed = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--resume", legacy_file.string(), "second"},
+        .args = {"--session", legacy_file.string(), "second"},
         .cwd = workspace.path(),
         .env = {{"PI_CODING_AGENT_DIR", agent_dir.string()}},
     });
@@ -1453,7 +1616,7 @@ TEST_CASE("CLI --no-session short-circuits silently over explicit create and res
     CHECK_FALSE(std::filesystem::exists(explicit_session));
 
     auto resumed = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--no-session", "--resume", explicit_session.string(), "hello"},
+        .args = {"--no-session", "--resume", "hello"},
         .cwd = workspace.path(),
         .env = {{"PI_CODING_AGENT_DIR", agent_dir.string()}},
     });
@@ -1655,7 +1818,7 @@ TEST_CASE("CLI explicit create and resume targets ignore session directory overr
     CHECK_FALSE(std::filesystem::exists(override_dir));
 
     auto resumed = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--resume", explicit_session.string(), "second"},
+        .args = {"--session", explicit_session.string(), "second"},
         .cwd = workspace.path(),
         .env = {{"PI_CODING_AGENT_DIR", agent_dir.string()},
                 {"PI_CODING_AGENT_SESSION_DIR", override_dir.string()}},
@@ -1772,7 +1935,7 @@ TEST_CASE(
     CHECK_FALSE(ec);
 
     auto resumed = cch::tests::run_cli(cch::tests::CliRunOptions{
-        .args = {"--resume", session.string(), "second"},
+        .args = {"--session", session.string(), "second"},
         .cwd = other.path(),
     });
 

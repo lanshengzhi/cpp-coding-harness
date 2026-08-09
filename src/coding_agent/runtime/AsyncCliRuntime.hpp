@@ -2,9 +2,12 @@
 
 #include "cli/CliConfig.hpp"
 #include "cli/FrontendSelection.hpp"
+#include "cli/SessionFamily.hpp"
 
 #include <cch/ai/Models.hpp>
+#include <cch/util/Error.hpp>
 
+#include <functional>
 #include <iosfwd>
 #include <memory>
 
@@ -26,6 +29,10 @@ struct CliRuntimeOptions {
     FrontendEnvironment environment{};
     bool environment_explicit{false};
     std::shared_ptr<ai::Models> models;
+    /// pi `selectSession` startup-TUI picker host seam. Null installs the
+    /// real ProcessTerminal host; the in-process CLI fixture injects a
+    /// scripted picker so the test process's terminal is never touched.
+    ResumePickerSink resume_picker{};
 };
 
 [[nodiscard]] int run_async_cli(
@@ -33,7 +40,8 @@ struct CliRuntimeOptions {
     Frontend frontend,
     CliStreams streams,
     FrontendEnvironment environment,
-    std::shared_ptr<ai::Models> models = {});
+    std::shared_ptr<ai::Models> models = {},
+    ResumePickerSink resume_picker = {});
 
 /// The CLI entry chain (bootstrap parse -> help/version -> frontend selection
 /// -> runtime), shared by main() and the in-process CLI test seam.

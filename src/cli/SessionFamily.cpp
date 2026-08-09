@@ -87,7 +87,7 @@ std::optional<std::string> session_family_guard_error(const CliConfig& config) {
         const auto conflicts = present_flags({
             {config.session_value.has_value(), "--session"},
             {config.continue_session, "--continue"},
-            {config.resume_value.has_value(), "--resume"},
+            {config.resume, "--resume"},
             {config.no_session_flag, "--no-session"},
         });
         if (!conflicts.empty()) {
@@ -103,7 +103,7 @@ std::optional<std::string> session_family_guard_error(const CliConfig& config) {
         const auto conflicts = present_flags({
             {config.session_value.has_value(), "--session"},
             {config.continue_session, "--continue"},
-            {config.resume_value.has_value(), "--resume"},
+            {config.resume, "--resume"},
         });
         if (!conflicts.empty()) {
             return "Error: --session-id cannot be combined with " +
@@ -144,7 +144,8 @@ util::Expected<SessionFamilyAssembly> assemble_session_target(
     const std::optional<std::string>& settings_session_dir,
     std::istream& input,
     std::ostream& output,
-    std::ostream& error) {
+    std::ostream& error,
+    ResumePickerSink resume_picker) {
     // pi main.ts sessionDir chain: --session-dir, then
     // PI_CODING_AGENT_SESSION_DIR, then the settings sessionDir value.
     std::optional<std::string> env_value;
@@ -170,6 +171,7 @@ util::Expected<SessionFamilyAssembly> assemble_session_target(
         return SessionFamilyAssembly{
             .target = coding_agent::InMemorySessionTarget{config.session_id},
             .aborted = false,
+            .session_file = std::nullopt,
         };
     }
 
@@ -202,6 +204,9 @@ util::Expected<SessionFamilyAssembly> assemble_session_target(
                     .session_id = config.session_id,
                 },
                 .aborted = false,
+                // Forks always target the launch cwd and never have a
+                // missing-cwd issue (SessionFactory's check skips them).
+                .session_file = std::nullopt,
             };
         case coding_agent::session_discovery::SessionArgKind::NotFound:
             return std::unexpected(util::make_error(
@@ -221,6 +226,10 @@ util::Expected<SessionFamilyAssembly> assemble_session_target(
                     .path = std::move(resolved.path),
                 },
                 .aborted = false,
+                // pi `SessionManager.getSessionFile()`: the open-or-create
+                // target's file feeds the boot missing-cwd check (a missing
+                // or empty file creates fresh and never has an issue).
+                .session_file = std::move(resolved.path),
             };
         case coding_agent::session_discovery::SessionArgKind::Global: {
             // pi: a session in another project prints its cwd and prompts to
@@ -245,12 +254,14 @@ util::Expected<SessionFamilyAssembly> assemble_session_target(
                         .session_id = std::nullopt,
                     },
                     .aborted = false,
+                    .session_file = std::nullopt,
                 };
             }
             output << "Aborted.\n";
             return SessionFamilyAssembly{
                 .target = {},
                 .aborted = true,
+                .session_file = std::nullopt,
             };
         }
         case coding_agent::session_discovery::SessionArgKind::NotFound:
@@ -260,19 +271,75 @@ util::Expected<SessionFamilyAssembly> assemble_session_target(
         }
     }
 
-    if (config.resume_value.has_value()) {
+    if (config.resume) {
+        // pi createSessionManager `--resume`: the startup-TUI session picker
+        // over the effective session space (pi `selectSession`); the picked
+        // path resumes as an exact-path target. A cancelled picker prints
+        // pi's "No session selected" line and aborts with exit 0 (pi
+        // main.ts console.log + process.exit(0); stdout lands on stderr in
+        // print mode via the output-guard takeover).
+        if (!resume_picker) {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Session,
+                "--resume requires the startup session picker"));
+        }
+        const auto local_directory = space.local_directory;
+        const auto cwd_filter = space.cwd_filter;
+        const auto custom_directory = space.custom_directory;
+        const auto sessions_root = coding_agent::sessions_root_path();
+        const auto current_loader =
+            [local_directory, cwd_filter]()
+            -> std::vector<coding_agent::session_discovery::SessionInfo> {
+                return coding_agent::session_discovery::list_sessions_info(
+                    local_directory, cwd_filter);
+            };
+        const auto all_loader =
+            [sessions_root, custom_directory]()
+            -> std::vector<coding_agent::session_discovery::SessionInfo> {
+                return coding_agent::session_discovery::list_all_sessions_info(
+                    sessions_root, custom_directory);
+            };
+        auto picked = resume_picker(
+            std::move(current_loader), std::move(all_loader));
+        if (!picked) {
+            return std::unexpected(picked.error());
+        }
+        if (!*picked) {
+            output << "No session selected\n";
+            return SessionFamilyAssembly{
+                .target = {},
+                .aborted = true,
+                .session_file = std::nullopt,
+            };
+        }
+        // The picked path is copied for the target (the optional moves into
+        // the assembly's session_file for the boot missing-cwd check).
+        auto picked_path = **picked;
         return SessionFamilyAssembly{
             .target = coding_agent::ExplicitResumeSessionTarget{
-                .path = *config.resume_value,
+                .path = std::move(picked_path),
             },
             .aborted = false,
+            .session_file = std::move(*picked),
         };
     }
 
     if (config.continue_session) {
+        // pi `SessionManager.continueRecent` file resolution for the boot
+        // missing-cwd check: the most recent session in the effective
+        // directory (cwd-filtered only for a custom override), like
+        // SessionFactory's continue branch. A fresh create carries the
+        // launch cwd and never has an issue.
+        std::optional<std::filesystem::path> session_file;
+        if (auto most_recent = coding_agent::session_discovery::
+                find_most_recent_session(
+                    space.local_directory, space.cwd_filter)) {
+            session_file = most_recent->path;
+        }
         return SessionFamilyAssembly{
             .target = coding_agent::ContinueRecentSessionTarget{},
             .aborted = false,
+            .session_file = std::move(session_file),
         };
     }
 
@@ -292,6 +359,7 @@ util::Expected<SessionFamilyAssembly> assemble_session_target(
                     .path = match->path,
                 },
                 .aborted = false,
+                .session_file = match->path,
             };
         }
         error << "Warning: No project session found with id '"
@@ -302,13 +370,37 @@ util::Expected<SessionFamilyAssembly> assemble_session_target(
                 .session_id = config.session_id,
             },
             .aborted = false,
+            .session_file = std::nullopt,
         };
     }
 
     return SessionFamilyAssembly{
         .target = coding_agent::DefaultPersistedSessionTarget{std::nullopt},
         .aborted = false,
+        .session_file = std::nullopt,
     };
+}
+
+std::optional<coding_agent::MissingSessionCwdIssue> missing_session_cwd_issue(
+    const SessionFamilyAssembly& assembly,
+    const std::filesystem::path& launch_cwd) {
+    // pi main.ts `getMissingSessionCwdIssue`: only a persisted session file
+    // with a stored header cwd that differs from the launch cwd and no
+    // longer exists prompts (an empty header keeps the launch cwd; fresh
+    // creates and forks never have one). SessionFactory applies the same
+    // condition at session creation.
+    if (!assembly.session_file) {
+        return std::nullopt;
+    }
+    const auto info = coding_agent::session_discovery::build_session_info(
+        *assembly.session_file);
+    if (!info) {
+        return std::nullopt;
+    }
+    return coding_agent::get_missing_session_cwd_issue(
+        *assembly.session_file,
+        std::filesystem::path{info->cwd},
+        launch_cwd);
 }
 
 } // namespace cch::cli

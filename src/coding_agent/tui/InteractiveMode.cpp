@@ -25,6 +25,7 @@
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/CommandRegistry.hpp"
 #include "coding_agent/ImageInput.hpp"
+#include "coding_agent/SessionCwd.hpp"
 #include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/prompt/SlashCommandParser.hpp"
@@ -3500,10 +3501,14 @@ private:
         }
         const auto executor = co_await boost::asio::this_coro::executor;
         auto slot = std::make_shared<PromptSlot>(executor);
-        const auto prompt_text = std::format(
-            "cwd from session file does not exist\n{}\n\ncontinue in current cwd\n{}",
-            session_cwd.string(),
-            fallback_cwd.string());
+        // pi `promptForMissingSessionCwd`: `Session cwd not found\n` over
+        // `formatMissingSessionCwdPrompt` (session-cwd.ts), verbatim.
+        const auto prompt_text = format_missing_session_cwd_prompt(
+            MissingSessionCwdIssue{
+                .session_file = {},
+                .session_cwd = session_cwd,
+                .fallback_cwd = fallback_cwd,
+            });
         const auto title = "Session cwd not found\n" + prompt_text;
         const auto weak = weak_from_this();
         auto selector = std::make_shared<StringListSelector>(

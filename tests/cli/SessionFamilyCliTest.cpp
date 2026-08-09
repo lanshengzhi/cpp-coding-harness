@@ -1,6 +1,7 @@
 #include "../../third_party/catch2/catch_test_macros.hpp"
 
 #include "support/CliRunFixture.hpp"
+#include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "util/Json.hpp"
@@ -17,6 +18,7 @@ namespace {
 
 using cch::tests::CliRunResult;
 using cch::tests::CliRunOptions;
+using cch::tests::EnvVarGuard;
 using cch::tests::TempWorkspace;
 using cch::tests::run_cli;
 
@@ -523,7 +525,7 @@ TEST_CASE("session-family: --name applies to resumed and forked sessions too", "
     auto created = fixture.run({"--session", source.string(), "first"});
     REQUIRE(created.exit_code == 0);
 
-    auto resumed = fixture.run({"--resume", source.string(), "--name", "Resumed Name", "second"});
+    auto resumed = fixture.run({"--session", source.string(), "--name", "Resumed Name", "second"});
     REQUIRE(resumed.exit_code == 0);
     CHECK(session_info_names(source) == std::vector<std::string>{"Resumed Name"});
 
@@ -555,10 +557,14 @@ TEST_CASE("session-family: --no-session short-circuits silently over session fla
         CHECK(session_files(fixture.agent_dir / "sessions").empty());
     }
     {
-        auto result = fixture.run({"--no-session", "--resume", session.string(), "hello"});
+        // pi: --resume is the picker flag; --no-session wins silently before
+        // the picker ever opens.
+        auto result = fixture.run({"--no-session", "--resume", "hello"});
         REQUIRE(result.exit_code == 0);
         CHECK(result.stdout_text == "fake: hello\n");
         CHECK(result.stderr_text.find("cannot be combined") == std::string::npos);
+        CHECK_FALSE(std::filesystem::exists(session));
+        CHECK(session_files(fixture.agent_dir / "sessions").empty());
     }
     {
         auto result = fixture.run({"--no-session", "--continue", "hello"});
@@ -579,13 +585,11 @@ TEST_CASE("session-family: --no-session --session-id keeps the id in memory", "[
 TEST_CASE("session-family: --session wins over --resume without a conflict error", "[cli][session-family]") {
     SessionFixture fixture;
     const auto session = fixture.workspace.path() / "wins.jsonl";
-    const auto other = fixture.workspace.path() / "other.jsonl";
 
-    auto result = fixture.run({"--session", session.string(), "--resume", other.string(), "hello"});
+    auto result = fixture.run({"--session", session.string(), "--resume", "hello"});
     REQUIRE(result.exit_code == 0);
     CHECK(result.stderr_text.find("use either --session or --resume") == std::string::npos);
     CHECK(std::filesystem::exists(session));
-    CHECK_FALSE(std::filesystem::exists(other));
 }
 
 TEST_CASE("session-family: custom --session-dir filters local id search by cwd", "[cli][session-family]") {
@@ -661,4 +665,212 @@ TEST_CASE("session-family: --session-dir equal to the default directory skips th
     auto result = fixture.run({"--session-dir", default_dir.string(), "--session", id, "again"});
     REQUIRE(result.exit_code == 0);
     CHECK(user_message_count(files.front()) == 2);
+}
+
+/// A scripted startup-TUI picker (pi `selectSession` host): records that it
+/// ran and returns the fixed path (or nullopt for a cancelled picker).
+[[nodiscard]] cch::cli::ResumePickerSink scripted_picker(
+    std::optional<std::filesystem::path> picked,
+    bool* called = nullptr) {
+    return [picked, called](
+               cch::coding_agent::tui::SessionListLoader current_loader,
+               cch::coding_agent::tui::SessionListLoader all_loader)
+        -> cch::util::Expected<std::optional<std::filesystem::path>> {
+        if (called != nullptr) *called = true;
+        // The picker host receives the effective session space loaders (pi
+        // `SessionManager.list`/`listAll`); a selected run must see the
+        // sessions the picker can offer.
+        if (picked) {
+            const auto current = current_loader();
+            const auto all = all_loader();
+            REQUIRE(!current.empty());
+            REQUIRE(!all.empty());
+        }
+        return picked;
+    };
+}
+
+TEST_CASE("session-family: --resume opens the picker and resumes the picked session", "[cli][session-family][issue417]") {
+    SessionFixture fixture;
+    auto created = fixture.run({"first"});
+    REQUIRE(created.exit_code == 0);
+    const auto files = session_files(fixture.agent_dir / "sessions");
+    REQUIRE(files.size() == 1);
+
+    bool called = false;
+    auto resumed = run_cli(CliRunOptions{
+        .args = {"--resume", "second"},
+        .cwd = fixture.workspace.path(),
+        .env = fixture.env,
+        .resume_picker = scripted_picker(files.front(), &called),
+    });
+
+    REQUIRE(resumed.exit_code == 0);
+    CHECK(called);
+    // The picked session resumes (pi selectSession → SessionManager.open).
+    CHECK(resumed.stdout_text == "fake: second\n");
+    CHECK(user_message_count(files.front()) == 2);
+}
+
+TEST_CASE("session-family: --resume cancel prints pi's No session selected and exits 0", "[cli][session-family][issue417]") {
+    SessionFixture fixture;
+    auto created = fixture.run({"first"});
+    REQUIRE(created.exit_code == 0);
+
+    bool called = false;
+    // Print frontend: the line lands on stderr (pi output-guard takeover).
+    auto cancelled = run_cli(CliRunOptions{
+        .args = {"--resume"},
+        .cwd = fixture.workspace.path(),
+        .env = fixture.env,
+        .resume_picker = scripted_picker(std::nullopt, &called),
+    });
+
+    REQUIRE(cancelled.exit_code == 0);
+    CHECK(called);
+    CHECK(cancelled.stdout_text.empty());
+    CHECK(cancelled.stderr_text.find("No session selected") != std::string::npos);
+}
+
+TEST_CASE("session-family: --no-session wins before the --resume picker opens", "[cli][session-family][issue417]") {
+    SessionFixture fixture;
+    bool called = false;
+    auto result = run_cli(CliRunOptions{
+        .args = {"--no-session", "--resume", "hello"},
+        .cwd = fixture.workspace.path(),
+        .env = fixture.env,
+        .resume_picker = scripted_picker(std::nullopt, &called),
+    });
+
+    // pi createSessionManager: the in-memory short-circuit returns before
+    // selectSession; the picker never runs.
+    REQUIRE(result.exit_code == 0);
+    CHECK_FALSE(called);
+    CHECK(result.stdout_text == "fake: hello\n");
+}
+
+/// pi main.ts `getMissingSessionCwdIssue` over the assembled target: the
+/// assembly runs chdir'd to the launch workspace (the session space is
+/// workspace-keyed).
+TEST_CASE("session-family: the boot missing-cwd issue resolves per target", "[cli][session-family][issue417]") {
+    SessionFixture fixture;
+    TempWorkspace storage;
+    TempWorkspace continue_agent;
+    TempWorkspace vanished_launch;
+    // The direct assembly calls below resolve the sessions root from the
+    // process environment; point it at the continue-session agent dir.
+    EnvVarGuard agent_guard{"PI_CODING_AGENT_DIR"};
+    agent_guard.set(continue_agent.path().string());
+
+    // A resume-shaped session whose header cwd (the fixture workspace) is
+    // removed while the file survives.
+    const auto session = storage.path() / "vanished.jsonl";
+    auto created = fixture.run({"--session", session.string(), "first"});
+    REQUIRE(created.exit_code == 0);
+    std::error_code ec;
+    REQUIRE(std::filesystem::remove_all(fixture.workspace.path(), ec) > 0);
+    REQUIRE_FALSE(ec);
+
+    // An automatic-space session inside the storage workspace-keyed
+    // directory whose header cwd (`vanished_launch`) is removed:
+    // --continue resolves it as most recent without a cwd filter (pi
+    // continueRecent: the filter engages only for a custom override).
+    const auto storage_key =
+        cch::coding_agent::session_paths::encode_workspace_key(
+            std::filesystem::weakly_canonical(storage.path()));
+    const auto storage_default_dir =
+        continue_agent.path() / "sessions" / storage_key;
+    std::filesystem::create_directories(storage_default_dir, ec);
+    REQUIRE_FALSE(ec);
+    const auto continue_session =
+        storage_default_dir / "continue-session.jsonl";
+    auto launched = run_cli(CliRunOptions{
+        .args = {"--session", continue_session.string(), "from-elsewhere"},
+        .cwd = vanished_launch.path(),
+        .env = {{"PI_CODING_AGENT_DIR", continue_agent.path().string()}},
+    });
+    REQUIRE(launched.exit_code == 0);
+    REQUIRE(std::filesystem::exists(continue_session));
+    REQUIRE(std::filesystem::remove_all(vanished_launch.path(), ec) > 0);
+    REQUIRE_FALSE(ec);
+
+    // The assembly helpers resolve the workspace-keyed session space from
+    // the process cwd (the shared CLI fixture guard restores it after).
+    cch::tests::detail::CliRunCwdGuard cwd_guard{
+        std::optional<std::filesystem::path>{storage.path()}};
+    const auto assemble_with = [&](std::vector<std::string> args,
+                                   cch::cli::ResumePickerSink picker = {}) {
+        args.insert(args.begin(), "cpp-harness");
+        std::vector<char*> argv;
+        argv.reserve(args.size());
+        for (auto& argument : args) {
+            argv.push_back(argument.data());
+        }
+        auto config = cch::cli::parse_args(
+            static_cast<int>(argv.size()), argv.data());
+        REQUIRE(config);
+        std::istringstream input;
+        std::ostringstream output;
+        std::ostringstream error;
+        return cch::cli::assemble_session_target(
+            *config, std::nullopt, input, output, error,
+            std::move(picker));
+    };
+
+    // The resume-shaped targets report the stored header cwd (pi
+    // `getMissingSessionCwdIssue`): the picked resume target...
+    {
+        // The picked path comes from the picker directly; the effective
+        // space here is `storage` (empty of automatic sessions).
+        auto assembly = assemble_with(
+            {"--resume"},
+            [session](cch::coding_agent::tui::SessionListLoader,
+                      cch::coding_agent::tui::SessionListLoader)
+                -> cch::util::Expected<
+                    std::optional<std::filesystem::path>> {
+                return session;
+            });
+        REQUIRE(assembly);
+        auto issue = cch::cli::missing_session_cwd_issue(*assembly, storage.path());
+        REQUIRE(issue);
+        CHECK(issue->session_file == session);
+        CHECK(issue->session_cwd == fixture.workspace.path());
+        CHECK(issue->fallback_cwd == storage.path());
+    }
+    // ...the open-or-create target on the same file...
+    {
+        auto assembly = assemble_with({"--session", session.string()});
+        REQUIRE(assembly);
+        auto issue = cch::cli::missing_session_cwd_issue(*assembly, storage.path());
+        REQUIRE(issue);
+        CHECK(issue->session_cwd == fixture.workspace.path());
+    }
+    // ...and --continue's most recent session.
+    {
+        auto assembly = assemble_with({"--continue"});
+        REQUIRE(assembly);
+        auto issue = cch::cli::missing_session_cwd_issue(*assembly, storage.path());
+        REQUIRE(issue);
+        CHECK(issue->session_file == continue_session);
+        CHECK(issue->session_cwd == vanished_launch.path());
+    }
+    // A fresh create target never has an issue (an empty header keeps the
+    // launch cwd; pi's create writes the launch cwd).
+    {
+        auto assembly = assemble_with({"--session", "fresh.jsonl"});
+        REQUIRE(assembly);
+        CHECK_FALSE(cch::cli::missing_session_cwd_issue(*assembly, storage.path()));
+    }
+    // Forks always target the launch cwd and never have an issue.
+    {
+        auto assembly = assemble_with({"--fork", session.string()});
+        REQUIRE(assembly);
+        CHECK_FALSE(cch::cli::missing_session_cwd_issue(*assembly, storage.path()));
+    }
+    // An in-memory run never has an issue.
+    {
+        auto assembly = assemble_with({"--no-session"});
+        REQUIRE(assembly);
+        CHECK_FALSE(cch::cli::missing_session_cwd_issue(*assembly, storage.path()));
+    }
 }

@@ -321,6 +321,7 @@ add_executable(cpp_harness
     src/cli/CliParse.cpp
     src/cli/FrontendSelection.cpp
     src/cli/ListModels.cpp
+    src/cli/StartupTui.cpp
     src/coding_agent/runtime/AsyncCliRuntime.cpp
 )
 target_link_libraries(
@@ -381,6 +382,7 @@ if(CCH_BUILD_TESTS)
         tests/cli/PrintModeTest.cpp
         tests/cli/InitialPromptTest.cpp
         tests/cli/SessionFamilyCliTest.cpp
+        tests/cli/StartupTuiTest.cpp
         tests/coding_agent/SessionDiscoveryTest.cpp
         tests/coding_agent/BuiltinCommandsTest.cpp
         tests/coding_agent/CommandRegistryTest.cpp
@@ -502,6 +504,7 @@ if(CCH_BUILD_TESTS)
         src/cli/CliParse.cpp
         src/cli/FrontendSelection.cpp
         src/cli/ListModels.cpp
+        src/cli/StartupTui.cpp
         src/coding_agent/runtime/AsyncCliRuntime.cpp
     )
     target_compile_definitions(cpp_harness_tests PRIVATE

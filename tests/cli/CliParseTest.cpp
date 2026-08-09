@@ -353,7 +353,7 @@ TEST_CASE("parse_args records an omitted session family as no flags", "[cli][par
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
     CHECK_FALSE(parsed->session_value.has_value());
-    CHECK_FALSE(parsed->resume_value.has_value());
+    CHECK_FALSE(parsed->resume);
     CHECK_FALSE(parsed->continue_session);
     CHECK_FALSE(parsed->no_session_flag);
     CHECK_FALSE(parsed->session_id.has_value());
@@ -369,24 +369,29 @@ TEST_CASE("parse_args records --session and --resume as raw flags", "[cli][parse
         REQUIRE(parsed);
         REQUIRE(parsed->session_value.has_value());
         CHECK(*parsed->session_value == "new.jsonl");
-        CHECK_FALSE(parsed->resume_value.has_value());
+        CHECK_FALSE(parsed->resume);
     }
     {
+        // pi: --resume is a pure boolean flag; the following token is a
+        // positional message, never a path (the picker selects the session).
         std::vector<std::string> args{"cpp-harness", "--resume", "old.jsonl", "hello"};
         auto argv = argv_from_strings(args);
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
-        REQUIRE(parsed->resume_value.has_value());
-        CHECK(*parsed->resume_value == "old.jsonl");
+        CHECK(parsed->resume);
         CHECK_FALSE(parsed->session_value.has_value());
+        REQUIRE(parsed->messages.size() == 2);
+        CHECK(parsed->messages[0] == "old.jsonl");
+        CHECK(parsed->messages[1] == "hello");
     }
     {
         std::vector<std::string> args{"cpp-harness", "-r", "old.jsonl", "hello"};
         auto argv = argv_from_strings(args);
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
-        REQUIRE(parsed->resume_value.has_value());
-        CHECK(*parsed->resume_value == "old.jsonl");
+        CHECK(parsed->resume);
+        REQUIRE(parsed->messages.size() == 2);
+        CHECK(parsed->messages[0] == "old.jsonl");
     }
 }
 
@@ -414,7 +419,7 @@ TEST_CASE("parse_args records --no-session as a raw flag without conflict errors
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
         CHECK(parsed->no_session_flag);
-        REQUIRE(parsed->resume_value.has_value());
+        CHECK(parsed->resume);
     }
     {
         // pi: --session wins over --resume without a parse-time exclusion.
@@ -423,7 +428,10 @@ TEST_CASE("parse_args records --no-session as a raw flag without conflict errors
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
         REQUIRE(parsed->session_value.has_value());
-        REQUIRE(parsed->resume_value.has_value());
+        CHECK(parsed->resume);
+        REQUIRE(parsed->messages.size() == 2);
+        CHECK(parsed->messages[0] == "b.jsonl");
+        CHECK(parsed->messages[1] == "hello");
     }
 }
 
@@ -532,7 +540,7 @@ TEST_CASE("parse_args captures --session-dir as the automatic-directory override
     CHECK(*parsed->session_dir == "/data/sessions");
     // The automatic-directory override rides alongside the raw session flags.
     CHECK_FALSE(parsed->session_value.has_value());
-    CHECK_FALSE(parsed->resume_value.has_value());
+    CHECK_FALSE(parsed->resume);
     CHECK_FALSE(parsed->no_session_flag);
 }
 
@@ -560,8 +568,10 @@ TEST_CASE("parse_args accepts --session-dir alongside explicit and in-memory tar
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
         REQUIRE(parsed->session_dir.has_value());
-        REQUIRE(parsed->resume_value.has_value());
-        CHECK(*parsed->resume_value == "explicit.jsonl");
+        CHECK(parsed->resume);
+        REQUIRE(parsed->messages.size() == 2);
+        CHECK(parsed->messages[0] == "explicit.jsonl");
+        CHECK(parsed->messages[1] == "hello");
     }
     {
         std::vector<std::string> args{"cpp-harness", "--session-dir", "/data", "--no-session", "hello"};

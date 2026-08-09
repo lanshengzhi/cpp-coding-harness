@@ -12,6 +12,7 @@
 #include <cch/tools/ToolFactories.hpp>
 #include <cch/util/Error.hpp>
 #include "coding_agent/ProjectResourceLoader.hpp"
+#include "coding_agent/SessionCwd.hpp"
 #include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/runtime/AgentSessionRuntime.hpp"
@@ -904,15 +905,14 @@ struct SessionTargetNormalizationOptions {
     const std::filesystem::path& session_file,
     const std::filesystem::path& session_cwd,
     const std::filesystem::path& fallback_cwd) {
+    // pi `MissingSessionCwdError.message` (session-cwd.ts), verbatim.
     return util::make_error(
         util::ErrorCode::MissingSessionCwd,
-        std::format(
-            "Stored session working directory does not exist: {}\n"
-            "Session file: {}\n"
-            "Current working directory: {}",
-            session_cwd.string(),
-            session_file.string(),
-            fallback_cwd.string()));
+        format_missing_session_cwd_error(MissingSessionCwdIssue{
+            .session_file = session_file,
+            .session_cwd = session_cwd,
+            .fallback_cwd = fallback_cwd,
+        }));
 }
 
 [[nodiscard]] util::Expected<CreateAgentSessionResult> run_assembly(

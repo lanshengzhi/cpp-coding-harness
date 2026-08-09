@@ -5,7 +5,9 @@
 #include "cli/ListModels.hpp"
 #include "cli/PrintMode.hpp"
 #include "cli/SessionFamily.hpp"
+#include "cli/StartupTui.hpp"
 #include "coding_agent/AgentSession.hpp"
+#include "coding_agent/SessionCwd.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/ThemeController.hpp"
 #include <cch/coding_agent/AgentConfigDir.hpp>
@@ -102,15 +104,28 @@ void print_session_diagnostics(
     }
 }
 
-/// pi main.ts session selection: the startup settings manager supplies the
-/// sessionDir chain value used during session-family resolution, exactly like
-/// pi's `startupSettingsManager.getSessionDir()`.
-[[nodiscard]] std::optional<std::string> startup_settings_session_dir(
+/// pi main.ts: the startup settings manager supplies the sessionDir chain
+/// value used during session-family resolution and the global-scope `theme`
+/// value for the boot and startup-TUI theme init, exactly like pi's
+/// `startupSettingsManager` (main.ts `startupSettingsManager.getSessionDir()`
+/// / `createStartupTui(settingsManager)`).
+[[nodiscard]] coding_agent::SettingsManager startup_settings(
     const std::filesystem::path& workspace) {
-    auto settings = coding_agent::SettingsManager::create(
+    return coding_agent::SettingsManager::create(
         workspace, coding_agent::agent_config_dir(),
         /* project_trusted */ false);
-    return settings.settings().session_dir;
+}
+
+/// pi `createStartupTui` options for the startup-TUI hosts (the `--resume`
+/// picker and the boot missing-cwd Continue/Cancel prompt): the agent
+/// config directory (keybindings.json read + boot theme load) and the raw
+/// global-scope `theme` setting for the G5 controller default init.
+[[nodiscard]] StartupTuiOptions startup_tui_options(
+    const coding_agent::SettingsManager& settings) {
+    return StartupTuiOptions{
+        .agent_config_directory = coding_agent::agent_config_dir(),
+        .theme_setting = settings.settings().theme,
+    };
 }
 
 [[nodiscard]] int run_native_tui_boot(
@@ -229,7 +244,8 @@ void print_session_diagnostics(
     Frontend frontend,
     CliStreams streams,
     FrontendEnvironment environment,
-    std::shared_ptr<ai::Models> models) {
+    std::shared_ptr<ai::Models> models,
+    ResumePickerSink resume_picker) {
     // pi main.ts boot order: the session-family flag guards run before any
     // session machinery, the cross-project fork prompt happens during session
     // selection (before piped stdin is read), and the `--name` guard follows
@@ -239,15 +255,35 @@ void print_session_diagnostics(
         return 1;
     }
 
+    // pi main.ts: the startup settings manager resolves the sessionDir chain
+    // value and the global-scope theme for the startup-TUI hosts.
+    auto settings = startup_settings(config.workspace);
+
+    // pi main.ts `selectSession`: `--resume` opens the startup-TUI session
+    // picker on its own terminal before any session machinery. The real host
+    // requires TTY descriptors (pi's ProcessTerminal crashes on piped stdin
+    // the same way); the in-process CLI fixture injects a scripted picker.
+    if (!resume_picker) {
+        const auto options = startup_tui_options(settings);
+        resume_picker = [options](
+                             coding_agent::tui::SessionListLoader current_loader,
+                             coding_agent::tui::SessionListLoader all_loader) {
+            return run_process_terminal_resume_picker(
+                options, std::move(current_loader), std::move(all_loader));
+        };
+    }
+
     auto assembly = assemble_session_target(
         config,
-        startup_settings_session_dir(config.workspace),
+        settings.settings().session_dir,
         streams.input,
         // pi takes over stdout outside interactive mode (output-guard.ts), so
-        // the cross-project notice, fork prompt, and "Aborted." line land on
-        // stderr in print mode and never pollute the one-shot stdout.
+        // the cross-project notice, fork prompt, "Aborted.", and "No session
+        // selected" lines land on stderr in print mode and never pollute the
+        // one-shot stdout.
         frontend == Frontend::Interactive ? streams.output : streams.error,
-        streams.error);
+        streams.error,
+        std::move(resume_picker));
     if (!assembly) {
         streams.error << assembly.error().message << '\n';
         return 1;
@@ -256,6 +292,40 @@ void print_session_diagnostics(
         // pi: the declined fork printed "Aborted." during session selection.
         return 0;
     }
+
+    // pi main.ts missing-cwd recovery: `getMissingSessionCwdIssue` runs
+    // right after session selection, before the `--name` guard. The
+    // interactive host prompts Continue/Cancel through the startup TUI
+    // before the main TUI starts (G3; pi `promptForMissingSessionCwd` →
+    // `showStartupSelector`); cancel exits 0 silently (pi
+    // `process.exit(0)`). The non-interactive host prints pi's verbatim
+    // stderr error and exits 1 (pi main.ts `new MissingSessionCwdError(...)`
+    // + exit(1)). The chosen override flows into the creation request
+    // exactly like pi's `SessionManager.open(file, sessionDir, selectedCwd)`;
+    // SessionFactory's creation-time check stays as the race fallback.
+    std::optional<std::filesystem::path> boot_cwd_override;
+    if (auto issue = missing_session_cwd_issue(*assembly, config.workspace);
+        issue) {
+        if (frontend == Frontend::Interactive) {
+            auto prompt = run_process_terminal_missing_cwd_prompt(
+                startup_tui_options(settings),
+                coding_agent::format_missing_session_cwd_prompt(*issue));
+            if (!prompt) {
+                streams.error << prompt.error().message << '\n';
+                return 1;
+            }
+            if (!*prompt) {
+                return 0;
+            }
+            boot_cwd_override = issue->fallback_cwd;
+        } else {
+            streams.error
+                << coding_agent::format_missing_session_cwd_error(*issue)
+                << '\n';
+            return 1;
+        }
+    }
+
     if (auto name_guard = session_name_guard_error(config); name_guard) {
         streams.error << *name_guard << '\n';
         return 1;
@@ -281,6 +351,7 @@ void print_session_diagnostics(
     request.append_system_prompt = config.append_system_prompt;
     request.workspace = config.workspace;
     request.session_target = std::move(assembly->target);
+    request.resume_cwd_override = boot_cwd_override;
     request.session_name = config.name;
     request.session_dir = config.session_dir;
     request.provider = config.provider;
@@ -292,8 +363,9 @@ void print_session_diagnostics(
         // pi `MissingSessionCwdError`: the resumed session's stored header
         // cwd no longer exists — the stderr error is pi's verbatim text with
         // no "could not resume session:" prefix, and the run exits 1. The
-        // interactive Continue/Cancel prompt lands with the startup-TUI
-        // host; until then both frontends surface this error.
+        // missing-cwd recovery above already resolved the interactive
+        // prompt and the non-interactive error; this path covers the race
+        // where the header changes between the check and session creation.
         if (error.code == util::ErrorCode::MissingSessionCwd) {
             streams.error << error.message << '\n';
         } else {
@@ -457,7 +529,12 @@ void print_session_diagnostics(
         return 1;
     } else {
         return run_async_cli(
-            config, *frontend, streams, environment, std::move(options.models));
+            config,
+            *frontend,
+            streams,
+            environment,
+            std::move(options.models),
+            std::move(options.resume_picker));
     }
 }
 

@@ -225,7 +225,6 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
     const int normalized_argc = static_cast<int>(normalized_argv.size());
 
     std::string session_text;
-    std::string resume_text;
     std::string session_dir_text;
     std::vector<std::string> prompt_parts;
     bool approve_project = false;
@@ -264,7 +263,10 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
         ->expected(1, -1)
         ->allow_extra_args(false);
     auto* session_option = app.add_option("--session", session_text, "Create a new JSONL session at an explicit path");
-    auto* resume_option = app.add_option("--resume", resume_text, "Resume and append to an existing JSONL session");
+    // pi: `--resume, -r` is a pure boolean flag that opens the startup-TUI
+    // session picker; a following token is a positional message, never a
+    // path (pi args.ts).
+    app.add_flag("--resume", config.resume, "Select a session to resume");
     app.add_flag("--no-session", config.no_session_flag, "Run the session in memory without persisting a transcript");
     auto* session_dir_option = app.add_option("--session-dir", session_dir_text,
         "Directory for automatic session storage (overrides PI_CODING_AGENT_SESSION_DIR and settings.json sessionDir)");
@@ -305,9 +307,6 @@ cch::util::Expected<CliConfig> parse_args(int argc, char** argv) {
 
     if (session_option->count() > 0 && !session_text.empty()) {
         config.session_value = session_text;
-    }
-    if (resume_option->count() > 0 && !resume_text.empty()) {
-        config.resume_value = resume_text;
     }
     if (session_dir_option->count() > 0) {
         config.session_dir = session_dir_text;

@@ -38,16 +38,17 @@ struct CliConfig {
     /// pi session-family raw flags (pi args.ts surface). The CLI runtime
     /// assembles the session target from these in pi's boot order (pi main.ts
     /// `createSessionManager`): `--session` opens-or-creates at a path or
-    /// resolves an id (cross-project fork prompt), `--resume` resumes at an
-    /// exact path (the picker lands with the startup-TUI ticket), `--continue`
-    /// resumes the most recent session, `--fork` forks from a target id,
+    /// resolves an id (cross-project fork prompt), `--resume` opens the
+    /// startup-TUI session picker (pi boolean flag — a following token is a
+    /// positional message, never a path), `--continue` resumes the most
+    /// recent session, `--fork` forks from a target id,
     /// `--session-id` names/validates/conflicts/warns-creates, `--name` sets
     /// the session display name, and `--no-session` short-circuits silently.
-    /// The `--session`/`--fork`/`--resume` values engage only for non-empty
-    /// values: pi's hand parser treats an empty value as absent (args.ts
-    /// truthiness).
+    /// The `--session`/`--fork` values engage only for non-empty values: pi's
+    /// hand parser treats an empty value as absent (args.ts truthiness).
     std::optional<std::string> session_value;
-    std::optional<std::string> resume_value;
+    /// pi `--resume, -r` boolean: the startup-TUI session picker.
+    bool resume{false};
     bool no_session_flag{false};
     bool continue_session{false};
     std::optional<std::string> session_id;

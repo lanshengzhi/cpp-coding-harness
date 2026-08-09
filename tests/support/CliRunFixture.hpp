@@ -21,7 +21,9 @@ namespace cch::tests {
 /// name; `cwd` chdirs for the run (restored after); `env` applies environment
 /// overrides for the run (nullopt value unsets); `stdin_text` feeds the piped
 /// stream; `models` injects the deterministic fake provider catalog (the
-/// surface the deleted `--fake` flag used to drive).
+/// surface the deleted `--fake` flag used to drive); `resume_picker` injects
+/// the scripted startup-TUI picker (pi `selectSession` host) so the test
+/// process's terminal is never touched.
 struct CliRunOptions {
     std::vector<std::string> args;
     std::optional<std::filesystem::path> cwd;
@@ -30,6 +32,7 @@ struct CliRunOptions {
     std::shared_ptr<ai::Models> models;
     bool stdin_is_terminal{false};
     bool stdout_is_terminal{false};
+    cli::ResumePickerSink resume_picker{};
 };
 
 struct CliRunResult {
@@ -124,6 +127,26 @@ inline CliRunResult run_cli(CliRunOptions options) {
             "PI_CODING_AGENT_DIR", isolated_config.path().string());
     }
 
+    // The in-process seam never touches the test process's terminal: a
+    // `--resume` run without an explicit scripted picker fails fast instead
+    // of opening the real ProcessTerminal host.
+    if (!options.resume_picker) {
+        const bool requests_resume =
+            std::find(options.args.begin(), options.args.end(), "--resume") !=
+            options.args.end();
+        if (requests_resume) {
+            options.resume_picker =
+                [](coding_agent::tui::SessionListLoader,
+                   coding_agent::tui::SessionListLoader)
+                -> util::Expected<std::optional<std::filesystem::path>> {
+                    return std::unexpected(util::make_error(
+                        util::ErrorCode::Validation,
+                        "the in-process CLI seam has no startup-TUI picker; "
+                        "inject a scripted resume_picker"));
+                };
+        }
+    }
+
     detail::CliRunCwdGuard cwd_guard{options.cwd};
     detail::CliRunEnvGuard env_guard{options.env};
 
@@ -157,6 +180,7 @@ inline CliRunResult run_cli(CliRunOptions options) {
             .environment = environment,
             .environment_explicit = true,
             .models = std::move(models),
+            .resume_picker = std::move(options.resume_picker),
         });
     return CliRunResult{
         .exit_code = exit_code,
