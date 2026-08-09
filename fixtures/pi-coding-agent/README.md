@@ -195,8 +195,8 @@ read it).
 
 One line per scoped capability, tying it to the frozen pi source, the G record that decided it,
 the C++ surface, and the committed evidence. This is the gate's evidence spine: rows carry their
-deterministic test evidence today, the golden families land with [#421]/[#422], and the gate pass
-([#424]) verifies every row carries evidence (test, golden, scan, or manual) and that the Final
+deterministic test evidence today, the golden families landed with [#421]/[#422], and the gate pass
+([#424]) verified every row carries evidence (test, golden, scan, or manual) and that the Final
 classification claims are accurate.
 
 ### Supported Capabilities — G1, CLI assembly and flag surface ([#389])
@@ -222,7 +222,7 @@ classification claims are accurate.
 | 12 | Footer/status: two-line footer minus extension-statuses (usage-totals + cache-stats data), status-indicator (Working/Compaction/Retry) with the retry countdown | `pi:.../components/{footer,status-indicator,countdown-timer,keybinding-hints}.ts`, `core/{footer-data-provider,usage-totals,cache-stats}.ts` | `src/coding_agent/tui/{Footer,FooterDataProvider,StatusIndicator,KeybindingHints}.*` | `FooterTest`, `FooterStatusInteractiveTest`, `ChatContainerStatusTest`, `KeybindingHints` rows in `InteractiveBootE2ETest` |
 | 13 | Selectors: `model-selector` + `model-search` (Ctrl+L), `scoped-models-selector` (Ctrl+P cycling), `settings-selector` over the [#327] subset + the graduated `hideThinkingBlock`/`outputPad`, `session-selector` + search, `tree-selector` with the thirteen `app.tree.*` actions, `user-message-selector` | `pi:.../components/{model-selector,scoped-models-selector,settings-selector,session-selector,session-selector-search,tree-selector,user-message-selector}.ts`, `modes/interactive/model-search.ts` | `src/coding_agent/tui/{ModelSelector,ModelSearch,ScopedModelsSelector,SettingsSelector,SessionSelector,SessionSelectorSearch,TreeSelector,UserMessageSelector}.*` | `ModelSelectorTest`, `ModelSelectorInteractiveTest`, `ScopedModelsSelectorTest`, `SettingsSelectorTest`, `SessionSelectorComponentTest`, `SessionSelectorInteractiveTest`, `SessionSelectorSearchTest`, `TreeSelectorComponentTest`, `TreeSelectorInteractiveTest`, `SessionForkTest` |
 | 14 | Keybinding catalog: pi's full 42-action `app.*` table, the assembled main-editor subset (15 actions), selector-scoped bindings, `app.session.*` recognized-but-unbound, `/hotkeys` and hints render the assembled subset only | `pi:packages/coding-agent/src/core/keybindings.ts` at `83114817` (`core/keybindings.ts:13-54`, 42 actions) | `src/coding_agent/tui/{KeybindingsManager,SharedKeybindings}.*`, `docs/keybindings.md` | `KeybindingsManagerTest` (`[coding_agent][keybindings][issue57]`), `BuiltinSlashCommandsTest` (`[issue419]`) dispatch rows, `ArchitectureSurfaceScanTest` (known-but-unassembled) |
-| 15 | Editor chrome: custom-editor routing, `app.message.copy`, `app.suspend`, external editor via `VISUAL`/`EDITOR` (temp `prompt.md`, resume on exit), paste-image on Ctrl+V with `pi-clipboard-<UUID>.<ext>` under the OS temp dir, editor border-color transitions | `pi:.../modes/interactive/external-editor.ts`, `modes/interactive/interactive-mode.ts` call sites, `utils/clipboard-image.ts` | `src/coding_agent/tui/{ExternalEditor,ClipboardReader,ClipboardWrite}.*`, `InteractiveMode.*` | `ProcessInteractiveModeTest`, `InteractiveModeTest`, `UserBashInteractiveModeTest`; the external-editor leg is manual evidence (see below) |
+| 15 | Editor chrome: custom-editor routing, `app.message.copy`, `app.suspend`, external editor via `VISUAL`/`EDITOR` (temp `prompt.md`, resume on exit), paste-image on Ctrl+V with `pi-clipboard-<UUID>.<ext>` under the OS temp dir, editor border-color transitions | `pi:.../modes/interactive/external-editor.ts`, `modes/interactive/interactive-mode.ts` call sites, `utils/clipboard-image.ts` | `src/coding_agent/tui/{ExternalEditor,ClipboardReader,ClipboardWrite}.*`, `InteractiveMode.*` | `ProcessInteractiveModeTest`, `InteractiveModeTest`, `UserBashInteractiveModeTest`, `FooterStatusInteractiveTest` (`app.editor.external` through `VISUAL` + `app.suspend`/SIGTSTP rows, `[issue411]`); the real-`EDITOR` smoke remains manual evidence (see below) |
 | 16 | Tree navigation capability: `navigateTree`-equivalent on the session runtime (active-path switching, tree topology, `label`-entry creation); branch summarization generation stays Deferred | `pi:packages/coding-agent/src/core/session-manager.ts`, `core/agent-session.ts` | `include/cch/harness/session/SessionTree.hpp`, session runtime (`AgentSessionRuntime.*`), `TreeSelector.*` | `TreeNavigationTest` (`[coding_agent][runtime]`), `TreeSelectorComponentTest`, `TreeSelectorInteractiveTest`, `SessionTreeTest` |
 
 ### Supported Capabilities — G3, configuration/resume/session behaviors ([#391])
@@ -327,9 +327,10 @@ terminal and record the outcome in the gate report at the gate pass ([#424]):
 | 4 | External editor (`app.editor.external`) | `VISUAL`/`EDITOR` launches a temp `prompt.md`, the editor resumes the session on exit, and cleanup is best-effort | Manual run with a real `EDITOR` |
 
 **Recording.** The checklist above is the committed, bounded manual artifact of this gate; the
-expected outcomes are pinned here. Executing it is the maintainer's manual pass at [#424] (same
-division as the pi-ai gate's optional live smoke and the pi-tui real-terminal checklist). Record
-each outcome in the gate report when the pass is performed:
+expected outcomes are pinned here. It is a bounded fill-in artifact like the pi-tui real-terminal
+checklist: it is never executed in CI, and executing it once is the maintainer's manual pass at
+[#424] (same division as the pi-ai gate's optional live smoke). Record each outcome below when
+the pass is performed, then tick the corresponding gate criterion:
 
 ```
 Real-terminal pass — date, emulator, version:
@@ -349,10 +350,12 @@ shims, and — per the charted strict-subset ruling — no Intentional Divergenc
 in the phase (the boot trust prompt's main-TUI-overlay presentation is the sole recorded
 presentation difference, decided by G2).
 
-Full test suite: **1855 test(s), 0 failure(s)** at the [#422] bundle — the three
+Full test suite: **1858 test(s), 0 failure(s)** at the [#424] gate pass — the three
 `SystemPromptGoldenTest` message-level golden cases and the four
 `InteractiveRenderingGoldenTest` rendering-golden cases were added to the [#421] baseline's
-1848 (see the gate report below; the gate pass [#424] re-runs the suite and closes the series).
+1848 with [#422], and the three `ArchitectureSurfaceScanTest` full-removal-list cases were
+added with [#423]; the gate pass re-ran the full suite green and closes the series per the G6
+record.
 
 ## Gate report
 
@@ -403,6 +406,11 @@ Full test suite: **1855 test(s), 0 failure(s)** at the [#422] bundle — the thr
    Prompt message-level golden (`prompts/*-message.json`, byte-compared by
    `SystemPromptGoldenTest`) and the interactive/rendering goldens
    (`rendering/*.txt`, byte-compared by `InteractiveRenderingGoldenTest`) landed with [#422].
+6. **The gate pass ([#424]) verified the evidence spine** — every checklist row's referenced
+   suite, quoted test case, `[issue…]` tag, and fixture/golden path was confirmed against the
+   built test binary and the committed fixtures, and the full suite re-ran green at 1858 tests /
+   0 failures; the four manual items remain the bounded fill-in artifact for the maintainer's
+   real-terminal pass.
 
 ### Handoff surface (confirmed)
 
@@ -426,4 +434,5 @@ checklist row carries evidence and the full suite passes ([#424]).
 [#420]: https://github.com/lanshengzhi/cpp-coding-harness/issues/420
 [#421]: https://github.com/lanshengzhi/cpp-coding-harness/issues/421
 [#422]: https://github.com/lanshengzhi/cpp-coding-harness/issues/422
+[#423]: https://github.com/lanshengzhi/cpp-coding-harness/issues/423
 [#424]: https://github.com/lanshengzhi/cpp-coding-harness/issues/424
