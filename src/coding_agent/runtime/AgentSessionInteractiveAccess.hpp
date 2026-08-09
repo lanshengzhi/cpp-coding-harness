@@ -17,6 +17,10 @@ class AgentSessionInteractiveAccess {
 public:
     [[nodiscard]] static bool has_user_shell(const AgentSession& session);
 
+    /// Whether the session's project scope is trusted (pi
+    /// `settingsManager.isProjectTrusted()`).
+    [[nodiscard]] static bool is_project_trusted(const AgentSession& session);
+
     [[nodiscard]] static boost::asio::awaitable<util::Expected<runtime::UserBashCompletion>>
     run_user_bash(
         AgentSession& session,

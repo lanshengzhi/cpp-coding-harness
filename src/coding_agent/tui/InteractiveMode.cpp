@@ -9,6 +9,10 @@
 #include <cch/ai/Model.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/coding_agent/ModelResolver.hpp>
+#include <cch/coding_agent/ProjectResources.hpp>
+#include <cch/coding_agent/ProjectTrust.hpp>
+#include <cch/coding_agent/AgentConfigDir.hpp>
+#include "harness/WorkspaceFileSystem.hpp"
 #include <cch/tui/Autocomplete.hpp>
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Fuzzy.hpp>
@@ -427,6 +431,46 @@ struct InteractiveStartupDiagnostics {
 /// error so the login flows suppress failure UI on kind, not string (#328).
 [[nodiscard]] util::Error prompt_cancelled_error() {
     return util::make_error(util::ErrorCode::Cancelled, "Login cancelled");
+}
+
+/// pi `formatProjectTrustPrompt` (`core/project-trust.ts`): the boot trust
+/// prompt title, with the C++ binary's own identity and the absent
+/// packages/extensions clause dropped (the loader subset has no such
+/// surfaces).
+[[nodiscard]] std::string format_project_trust_prompt(
+    const std::filesystem::path& cwd) {
+    return std::format(
+        "Trust project folder?\n{}\n\nThis allows cch to load .pi settings "
+        "and resources.",
+        cwd.string());
+}
+
+/// pi `reportDiagnostics` subset for the boot trust resolution: convert the
+/// resolution's diagnostics to session diagnostics, with the `trust:` code
+/// prefix marking their source.
+[[nodiscard]] std::vector<SessionDiagnostic> convert_trust_diagnostics(
+    const std::vector<ProjectTrustDiagnostic>& diagnostics) {
+    std::vector<SessionDiagnostic> converted;
+    converted.reserve(diagnostics.size());
+    for (const auto& diagnostic : diagnostics) {
+        converted.push_back(SessionDiagnostic{
+            .severity =
+                diagnostic.severity == ProjectTrustDiagnosticSeverity::Error
+                ? SessionDiagnostic::Severity::Error
+                : SessionDiagnostic::Severity::Warning,
+            .code = "trust:" + diagnostic.code,
+            .message = diagnostic.message,
+            .path = diagnostic.path,
+        });
+    }
+    return converted;
+}
+
+/// pi `renderProjectTrustWarningIfNeeded` chat warning text, with the C++
+/// binary's own identity and the absent packages clause dropped.
+[[nodiscard]] std::string project_trust_warning_text() {
+    return "This project is not trusted. Project .pi resources are ignored. "
+           "Use /trust to save a trust decision, then restart cch.";
 }
 
 /// pi `isUnknownModel`: the unresolved placeholder identity.
@@ -937,6 +981,11 @@ public:
     void append_warning(std::string text) {
         std::lock_guard lock(mutex_);
         chat_.append_warning(std::move(text));
+    }
+
+    void append_trust_warning(std::string text) {
+        std::lock_guard lock(mutex_);
+        chat_.append_trust_warning(std::move(text));
     }
 
     void append_status_message(std::string text) {
@@ -1711,10 +1760,10 @@ private:
 class InteractiveState final : public std::enable_shared_from_this<InteractiveState> {
 public:
     InteractiveState(
-        AgentSession& session,
+        AgentSession* session,
         cch::tui::Terminal& terminal,
         boost::asio::any_io_executor executor)
-        : session_(&session),
+        : session_(session),
           terminal_(terminal),
           tui_(terminal),
           executor_(std::move(executor)),
@@ -1732,6 +1781,10 @@ public:
         model_fallback_message_ = std::move(config.model_fallback_message);
         session_factory_ = std::move(config.session_factory);
         session_facts_ = std::move(config.session_facts);
+        boot_request_ = std::move(config.boot_request);
+        boot_diagnostics_sink_ = std::move(config.boot_diagnostics_sink);
+        boot_creation_failure_sink_ = std::move(config.boot_creation_failure_sink);
+        const bool booting = boot_request_.has_value();
         if (config.open_browser_sink) {
             open_browser_sink_ = std::move(config.open_browser_sink);
         } else {
@@ -1747,7 +1800,9 @@ public:
         if (config.suspend_process_sink) {
             suspend_process_sink_ = std::move(config.suspend_process_sink);
         }
-        update_model_completion();
+        if (!booting) {
+            update_model_completion();
+        }
         if (auto registered = register_commands(); !registered) {
             return fail_start(registered.error());
         }
@@ -1765,8 +1820,10 @@ public:
         if (auto attached = tui_.add_child(std::move(view)); !attached) {
             return fail_start(attached.error());
         }
-        if (auto subscribed = subscribe_to_session(weak); !subscribed) {
-            return fail_start(subscribed.error());
+        if (!booting) {
+            if (auto subscribed = subscribe_to_session(weak); !subscribed) {
+                return fail_start(subscribed.error());
+            }
         }
 
         tui_.set_render_request_sink([weak] {
@@ -1776,18 +1833,205 @@ public:
         tui_started_ = true;
         running_ = true;
 
-        initialize_view(diagnostics);
-        if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
-        if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
-        if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
-        if (config.initial_prompt) {
-            submit(
-                std::move(*config.initial_prompt),
-                InputSubmission::Ordinary,
-                std::move(config.initial_prompt_options),
-                SubmissionOrigin::InitialPrompt);
+        if (!booting) {
+            initialize_view(diagnostics);
+            if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
+            if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
+            if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
+            if (config.initial_prompt) {
+                submit(
+                    std::move(*config.initial_prompt),
+                    InputSubmission::Ordinary,
+                    std::move(config.initial_prompt_options),
+                    SubmissionOrigin::InitialPrompt);
+            }
+        } else {
+            // pi main.ts: the boot trust prompt resolves as an overlay on the
+            // main TUI before session bind (G2 record); `boot_session`
+            // creates the boot session and then binds the view. The startup
+            // diagnostics render after bind, alongside the created session's
+            // snapshot.
+            startup_diagnostics_ = std::move(diagnostics);
+            if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
+            if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
+            if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
+            initial_prompt_ = std::move(config.initial_prompt);
+            initial_prompt_options_ = config.initial_prompt_options;
         }
         return {};
+    }
+
+    /// pi main.ts `createAgentSessionRuntime` + `resolveProjectTrusted`:
+    /// the deferred boot of the interactive host. Resolves boot trust
+    /// (prompt overlay when a trust-requiring resource exists and no
+    /// override is set), creates the boot session through the config's
+    /// `boot_request`/`session_factory` with the decided trust, then binds
+    /// it (subscribe, initialize view, render, initial prompt).
+    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> boot_session() {
+        // 1. Resolve boot trust (pi resolveProjectTrusted): override → no
+        //    trust-requiring resources → saved decision → default
+        //    always/never → ask prompt (the generic string-list selector
+        //    overlay; G2 record).
+        auto decision = co_await resolve_boot_trust();
+        // pi `projectTrustByCwd`: remember the boot decision for the boot
+        // workspace so in-session session creations in the same workspace
+        // reuse it instead of re-resolving (ask-without-UI would silently
+        // drop a session-only trust).
+        resolved_boot_trust_.emplace(boot_request_->workspace, decision);
+        // 2. Create the boot session with the decided trust so SessionFactory
+        //    resolves deterministically (pi `projectTrustByCwd` cache).
+        auto request = std::move(*boot_request_);
+        request.project_trust_override = decision;
+        auto created = session_factory_(std::move(request));
+        if (!created) {
+            if (boot_creation_failure_sink_) {
+                boot_creation_failure_sink_(created.error());
+            }
+            // Stop the TUI so the terminal is restored before the host
+            // reports the error; the session never bound.
+            running_ = false;
+            if (tui_started_) {
+                (void)tui_.stop();
+                tui_started_ = false;
+            }
+            co_return std::unexpected(created.error());
+        }
+        if (boot_diagnostics_sink_) {
+            boot_diagnostics_sink_(created->diagnostics);
+        }
+        model_fallback_message_ = std::move(created->model_fallback_message);
+        // 3. Bind: the boot-created session replaces the borrowed null
+        //    session and the presentation renders its snapshot like pi's
+        //    `renderInitialMessages`.
+        owned_session_ = std::move(created->session);
+        session_ = owned_session_.get();
+        update_model_completion();
+        rebuild_autocomplete_provider();
+        const auto weak = weak_from_this();
+        if (auto subscribed = subscribe_to_session(weak); !subscribed) {
+            co_return std::unexpected(subscribed.error());
+        }
+        initialize_view(startup_diagnostics_);
+        if (auto rendered = tui_.render(); !rendered) {
+            co_return std::unexpected(rendered.error());
+        }
+        if (auto focused = tui_.set_focus(view_); !focused) {
+            co_return std::unexpected(focused.error());
+        }
+        if (auto rendered = tui_.render(); !rendered) {
+            co_return std::unexpected(rendered.error());
+        }
+        if (initial_prompt_) {
+            submit(
+                std::move(*initial_prompt_),
+                InputSubmission::Ordinary,
+                std::move(initial_prompt_options_),
+                SubmissionOrigin::InitialPrompt);
+        }
+        co_return util::ExpectedVoid{};
+    }
+
+    /// pi `resolveProjectTrusted` + `selectProjectTrustOption` for the boot:
+    /// override → no trust-requiring resources → saved store entry → default
+    /// always/never → ask prompt (the generic string-list selector overlay on
+    /// the main TUI, G2 record). Returns the decided trust for the boot
+    /// session.
+    [[nodiscard]] boost::asio::awaitable<bool> resolve_boot_trust() {
+        // pi `resolveProjectTrusted`: an override decides first, before any
+        // resource detection or store walk.
+        if (boot_request_->project_trust_override.has_value()) {
+            co_return *boot_request_->project_trust_override;
+        }
+        const auto workspace = boot_request_->workspace;
+        auto fs = harness::WorkspaceFileSystem::create(workspace);
+        ProjectResourceDetectionResult detection;
+        if (fs) {
+            detection = detect_project_resources(
+                *fs, coding_agent::home_directory() / ".agents" / "skills");
+        }
+        const bool trust_needed = needs_project_trust_resolution(detection);
+        ProjectTrustStore store{coding_agent::trust_store_file_path()};
+        const auto default_trust = settings_manager_
+            ? settings_manager_->default_project_trust().value_or(DefaultProjectTrust::Ask)
+            : DefaultProjectTrust::Ask;
+        auto resolved = resolve_project_trust(
+            workspace,
+            trust_needed,
+            store,
+            default_trust,
+            boot_request_->project_trust_override);
+        // Surface the boot resolution's diagnostics (e.g. an unreadable
+        // trust store) like pi's `reportDiagnostics`; SessionFactory skips
+        // re-resolution because the boot passes the decided override.
+        if (boot_diagnostics_sink_ && !resolved.diagnostics.empty()) {
+            boot_diagnostics_sink_(convert_trust_diagnostics(resolved.diagnostics));
+        }
+        if (resolved.source != ProjectTrustSource::DefaultAskNoUi) {
+            co_return resolved.decision == ProjectTrustDecision::Trusted;
+        }
+        // ask + UI: the generic string-list selector overlay (pi
+        // `selectProjectTrustOption`; `includeSessionOnly: true`).
+        auto option = co_await show_boot_trust_prompt(workspace);
+        if (!option) {
+            co_return false;
+        }
+        if (!option->updates.empty()) {
+            if (auto saved = store.setMany(option->updates); !saved) {
+                show_error(combined_error_text(saved.error()));
+            }
+        }
+        co_return option->trusted;
+    }
+
+    /// pi `selectProjectTrustOption`: the boot trust prompt as the generic
+    /// string-list selector in the editor slot (the main-TUI overlay, G2
+    /// record). Returns the chosen option, or nullopt on cancel (untrusted);
+    /// the caller persists the option's updates.
+    [[nodiscard]] boost::asio::awaitable<std::optional<ProjectTrustOption>>
+    show_boot_trust_prompt(const std::filesystem::path& workspace) {
+        auto options = get_project_trust_options(
+            workspace, /*include_session_only*/ true);
+        auto slot = std::make_shared<AuthPromptSlot>(executor_);
+        std::vector<std::string> labels;
+        labels.reserve(options.size());
+        for (const auto& option : options) {
+            labels.push_back(option.label);
+        }
+        const auto weak = weak_from_this();
+        auto selector = std::make_shared<StringListSelector>(
+            theme_controller_->live_theme(),
+            keybindings_,
+            format_project_trust_prompt(workspace),
+            std::move(labels),
+            [weak, slot](std::string label) {
+                if (const auto self = weak.lock()) {
+                    self->post_from_view(
+                        [slot, label = std::move(label)](InteractiveState& self) mutable {
+                            self.restore_editor_slot();
+                            slot->resolve(std::move(label));
+                        });
+                }
+            },
+            [weak, slot] {
+                if (const auto self = weak.lock()) {
+                    self->post_from_view([slot](InteractiveState& self) {
+                        self.restore_editor_slot();
+                        slot->resolve(std::unexpected(prompt_cancelled_error()));
+                    });
+                }
+            });
+        place_editor_replacement(std::move(selector));
+        auto selected = co_await slot->channel.async_receive(
+            boost::asio::use_awaitable);
+        if (!selected) {
+            co_return std::nullopt;
+        }
+        for (auto& option : options) {
+            if (option.label == *selected) {
+                co_return option;
+            }
+        }
+        co_return std::nullopt;
     }
 
     [[nodiscard]] boost::asio::steady_timer& exit_wait() {
@@ -1797,7 +2041,9 @@ public:
     [[nodiscard]] util::ExpectedVoid finish() {
         running_ = false;
         subscription_.reset();
-        session_->close();
+        if (session_ != nullptr) {
+            session_->close();
+        }
         const auto stopped = tui_.stop();
         tui_started_ = false;
         if (!completion_result_) completion_result_.emplace();
@@ -2035,7 +2281,7 @@ private:
             },
             hide_thinking_block_,
             output_pad_,
-            detail::AgentSessionInteractiveAccess::has_user_shell(*session_),
+            view_user_shell_available(),
             build_autocomplete_provider(),
             std::make_unique<AsioAutocompleteDebounceTimer>(executor_),
             [weak] {
@@ -2045,22 +2291,41 @@ private:
             theme_controller_->live_theme());
     }
 
+    /// The view's user-shell hint: the interactive host always provides a
+    /// User Shell to the boot session (`provide_user_shell`), so the boot
+    /// path reports it before the session exists.
+    [[nodiscard]] bool view_user_shell_available() const {
+        if (session_ != nullptr) {
+            return detail::AgentSessionInteractiveAccess::has_user_shell(*session_);
+        }
+        return boot_request_ && boot_request_->provide_user_shell;
+    }
+
     /// pi `createBaseAutocompleteProvider`: the combined provider over the
     /// effective commands, prompt templates, and (while the
     /// `enableSkillCommands` setting is enabled) `skill:` commands. Rebuilt
     /// after a setting change exactly like pi's `setupAutocompleteProvider`.
+    /// The boot path builds with the boot workspace and no discovered
+    /// resources until the session binds (`boot_session` rebuilds it).
     [[nodiscard]] std::unique_ptr<cch::tui::AutocompleteProvider>
     build_autocomplete_provider() {
         const bool include_skill_commands =
             settings_manager_ && settings_manager_->get_enable_skill_commands();
+        static const std::vector<PromptTemplate> kEmptyTemplates;
+        static const std::vector<Skill> kEmptySkills;
+        const auto& templates = session_ != nullptr ? session_->templates() : kEmptyTemplates;
+        const auto& skills = session_ != nullptr ? session_->skills() : kEmptySkills;
+        const auto workspace = session_ != nullptr
+            ? session_->workspace()
+            : (boot_request_ ? boot_request_->workspace : std::filesystem::path{});
         return std::make_unique<cch::tui::CombinedAutocompleteProvider>(
             command_autocomplete_commands(
                 commands_,
-                session_->templates(),
-                session_->skills(),
+                templates,
+                skills,
                 model_completion_,
                 include_skill_commands),
-            session_->workspace(),
+            workspace,
             find_executable_on_path("fd"));
     }
 
@@ -2118,11 +2383,36 @@ private:
         for (const auto& diagnostic : diagnostics.themes) {
             view_->append_diagnostic(diagnostic.message);
         }
+        // pi `renderProjectTrustWarningIfNeeded`: the untrusted-project
+        // warning renders in the chat after the initial messages when the
+        // project is untrusted and a trust-requiring resource exists.
+        if (project_trust_warning_needed()) {
+            view_->append_trust_warning(project_trust_warning_text());
+        }
+    }
+
+    /// pi `renderProjectTrustWarningIfNeeded` condition: the session's
+    /// project scope is untrusted AND a trust-requiring resource exists in
+    /// the session workspace.
+    [[nodiscard]] bool project_trust_warning_needed() {
+        if (session_ == nullptr ||
+            detail::AgentSessionInteractiveAccess::is_project_trusted(*session_)) {
+            return false;
+        }
+        auto fs = harness::WorkspaceFileSystem::create(session_->workspace());
+        if (!fs) {
+            return false;
+        }
+        auto detection = detect_project_resources(
+            *fs, coding_agent::home_directory() / ".agents" / "skills");
+        return needs_project_trust_resolution(detection);
     }
 
     [[nodiscard]] util::ExpectedVoid fail_start(const util::Error& error) {
         running_ = false;
-        session_->close();
+        if (session_ != nullptr) {
+            session_->close();
+        }
         util::ExpectedVoid stopped;
         if (tui_started_) stopped = tui_.stop();
         tui_started_ = false;
@@ -2923,7 +3213,17 @@ private:
         SessionTarget target) const {
         runtime::AgentSessionCreationRequest request;
         request.provide_user_shell = true;
-        request.project_trust_override = session_facts_.project_trust_override;
+        // pi `projectTrustByCwd`: the CLI override wins; otherwise the boot
+        // decision applies to the boot workspace (a session-only trust
+        // choice leaves no store entry and must survive in-session
+        // replacement).
+        request.project_trust_override =
+            session_facts_.project_trust_override.has_value()
+                ? session_facts_.project_trust_override
+                : (resolved_boot_trust_ &&
+                          resolved_boot_trust_->first == workspace
+                      ? std::optional<bool>{resolved_boot_trust_->second}
+                      : std::nullopt);
         request.no_skills = session_facts_.no_skills;
         request.no_prompt_templates = session_facts_.no_prompt_templates;
         request.prompt_template_paths = session_facts_.prompt_template_paths;
@@ -4738,6 +5038,15 @@ private:
     /// thinking level, the subscription marker, and the available-provider
     /// count).
     [[nodiscard]] FooterData compute_footer_data() {
+        if (session_ == nullptr) {
+            // Boot path: the main screen renders while the boot trust prompt
+            // overlay is up, before the session binds; the footer shows the
+            // boot workspace like pi's startup TUI.
+            FooterData data;
+            data.cwd = boot_request_ ? boot_request_->workspace
+                                     : std::filesystem::path{};
+            return data;
+        }
         FooterData data;
         const auto snapshot = session_->snapshot();
         data.cwd = session_->workspace();
@@ -4908,6 +5217,31 @@ private:
     SessionFactorySink session_factory_;
     /// CLI-owned facts reused for in-session session replacement requests.
     InteractiveSessionFacts session_facts_;
+    /// Boot path (pi main.ts `createRuntime` + `resolveProjectTrust`): the
+    /// base creation request the interactive host supplies; the boot creates
+    /// the session after the boot trust prompt resolves. Empty outside the
+    /// boot entry.
+    std::optional<runtime::AgentSessionCreationRequest> boot_request_{std::nullopt};
+    /// pi `projectTrustByCwd`: the boot-resolved trust decision for the boot
+    /// workspace, reused by in-session session creations in the same
+    /// workspace (a session-only choice leaves no store entry).
+    std::optional<std::pair<std::filesystem::path, bool>>
+        resolved_boot_trust_{std::nullopt};
+    /// Session-creation diagnostics printing for the boot path (pi
+    /// `reportDiagnostics`): the host wires this to stderr.
+    std::move_only_function<void(const std::vector<SessionDiagnostic>&)>
+        boot_diagnostics_sink_{nullptr};
+    /// Boot-session creation failure printing (pi `print_creation_failure`):
+    /// the host wires this to stderr.
+    std::move_only_function<void(const util::Error&)> boot_creation_failure_sink_{nullptr};
+    /// Startup diagnostics stashed by the boot `start()` until the boot
+    /// session binds and `initialize_view` renders them (pi
+    /// `renderInitialMessages` after the trust prompt).
+    InteractiveStartupDiagnostics startup_diagnostics_{};
+    /// Initial prompt stashed by the boot `start()` until the boot session
+    /// binds (pi main.ts `initialMessage` submitted after runtime creation).
+    std::optional<std::string> initial_prompt_{std::nullopt};
+    PromptOptions initial_prompt_options_{};
     boost::asio::any_io_executor executor_;
     boost::asio::steady_timer exit_wait_;
     std::optional<EventSubscription> subscription_;
@@ -4957,9 +5291,30 @@ boost::asio::awaitable<util::ExpectedVoid> run_interactive_mode(
     cch::tui::Terminal& terminal,
     InteractiveModeConfig config) {
     const auto executor = co_await boost::asio::this_coro::executor;
-    auto state = std::make_shared<InteractiveState>(session, terminal, executor);
+    auto state = std::make_shared<InteractiveState>(&session, terminal, executor);
     if (auto started = state->start(std::move(config)); !started) {
         co_return std::unexpected(started.error());
+    }
+
+    boost::system::error_code wait_error;
+    co_await state->exit_wait().async_wait(
+        boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
+    co_return state->finish();
+}
+
+boost::asio::awaitable<util::ExpectedVoid> run_interactive_mode_boot(
+    cch::tui::Terminal& terminal,
+    InteractiveModeConfig config) {
+    const auto executor = co_await boost::asio::this_coro::executor;
+    auto state = std::make_shared<InteractiveState>(nullptr, terminal, executor);
+    if (auto started = state->start(std::move(config)); !started) {
+        co_return std::unexpected(started.error());
+    }
+    if (auto booted = co_await state->boot_session(); !booted) {
+        // The boot-created session failed before bind; `boot_session`
+        // already stopped the TUI (the creation-failure sink printed pi's
+        // message).
+        co_return std::unexpected(booted.error());
     }
 
     boost::system::error_code wait_error;

@@ -54,6 +54,17 @@ struct ProjectTrustUpdate {
     ProjectTrustDecision decision{ProjectTrustDecision::Unknown};
 };
 
+/// pi `ProjectTrustOption` (`core/trust-manager.ts`): one `getProjectTrustOptions`
+/// choice presented by the boot trust prompt and the `/trust` selector. The
+/// option's `updates` persist the decision (empty for the session-only
+/// options); `savedPath` marks the store entry the option corresponds to.
+struct ProjectTrustOption {
+    std::string label;
+    bool trusted{false};
+    std::vector<ProjectTrustUpdate> updates;
+    std::optional<std::string> saved_path;
+};
+
 struct ProjectTrustResolution {
     ProjectTrustDecision decision{ProjectTrustDecision::Unknown};
     ProjectTrustSource source{ProjectTrustSource::DefaultAskNoUi};
@@ -81,6 +92,15 @@ private:
 [[nodiscard]] std::string to_string(ProjectTrustSource source);
 
 [[nodiscard]] std::optional<DefaultProjectTrust> parse_default_project_trust(const std::string& value);
+
+/// pi `getProjectTrustOptions` (`core/trust-manager.ts`): the choices shown
+/// by the boot trust prompt and the `/trust` selector — "Trust", "Trust
+/// parent folder (<parent>)" (when a parent exists), and "Do not trust",
+/// plus the session-only variants when `include_session_only` is set (the
+/// boot prompt passes it; the `/trust` selector does not).
+[[nodiscard]] std::vector<ProjectTrustOption> get_project_trust_options(
+    const std::filesystem::path& cwd,
+    bool include_session_only = false);
 
 [[nodiscard]] ProjectTrustResolution resolve_project_trust(
     const std::filesystem::path& cwd,

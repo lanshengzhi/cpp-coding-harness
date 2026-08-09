@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -264,6 +265,58 @@ std::optional<DefaultProjectTrust> parse_default_project_trust(const std::string
         return DefaultProjectTrust::Never;
     }
     return std::nullopt;
+}
+
+std::vector<ProjectTrustOption> get_project_trust_options(
+    const std::filesystem::path& cwd,
+    bool include_session_only) {
+    const auto trust_path = canonicalize(cwd).string();
+    std::vector<ProjectTrustOption> options;
+    options.push_back(ProjectTrustOption{
+        .label = "Trust",
+        .trusted = true,
+        .updates = {{.path = trust_path, .decision = ProjectTrustDecision::Trusted}},
+        .saved_path = trust_path,
+    });
+
+    // pi `getProjectTrustParentPath`: the parent directory, absent at the
+    // filesystem root.
+    const auto parent = std::filesystem::path{trust_path}.parent_path();
+    if (!parent.empty() && parent != std::filesystem::path{trust_path}) {
+        const auto parent_string = parent.string();
+        options.push_back(ProjectTrustOption{
+            .label = std::format("Trust parent folder ({})", parent_string),
+            .trusted = true,
+            .updates = {
+                {.path = parent_string, .decision = ProjectTrustDecision::Trusted},
+                {.path = trust_path, .decision = ProjectTrustDecision::Unknown},
+            },
+            .saved_path = parent_string,
+        });
+    }
+    if (include_session_only) {
+        options.push_back(ProjectTrustOption{
+            .label = "Trust (this session only)",
+            .trusted = true,
+            .updates = {},
+            .saved_path = std::nullopt,
+        });
+    }
+    options.push_back(ProjectTrustOption{
+        .label = "Do not trust",
+        .trusted = false,
+        .updates = {{.path = trust_path, .decision = ProjectTrustDecision::Untrusted}},
+        .saved_path = trust_path,
+    });
+    if (include_session_only) {
+        options.push_back(ProjectTrustOption{
+            .label = "Do not trust (this session only)",
+            .trusted = false,
+            .updates = {},
+            .saved_path = std::nullopt,
+        });
+    }
+    return options;
 }
 
 ProjectTrustResolution resolve_project_trust(

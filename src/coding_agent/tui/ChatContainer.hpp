@@ -48,6 +48,9 @@ public:
     /// Append one pi-shaped boot warning (`Warning: <text>`, warning token) —
     /// the `modelFallbackMessage` presentation of interactive boot.
     void append_warning(std::string text);
+    /// Append pi's untrusted-project boot warning (`renderProjectTrustWarningIfNeeded`):
+    /// a Spacer row above a plain warning-token line (no `Warning:` prefix).
+    void append_trust_warning(std::string text);
     /// Append or replace one pi `showStatus` dim status line: the status is
     /// replaced while it is still the newest chat item, matching pi's live
     /// tail-status behavior.

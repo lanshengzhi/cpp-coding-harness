@@ -242,6 +242,12 @@ bool detail::AgentSessionInteractiveAccess::has_user_shell(
         session.impl_->runtime->has_user_shell();
 }
 
+bool detail::AgentSessionInteractiveAccess::is_project_trusted(
+    const AgentSession& session) {
+    return session.impl_ && session.impl_->runtime &&
+        session.impl_->runtime->is_project_trusted();
+}
+
 boost::asio::awaitable<util::Expected<runtime::UserBashCompletion>>
 detail::AgentSessionInteractiveAccess::run_user_bash(
     AgentSession& session,

@@ -147,3 +147,54 @@ TEST_CASE("resolve_project_trust fails closed on malformed store unless overridd
     CHECK(resolved.decision == coding_agent::ProjectTrustDecision::Untrusted);
     CHECK(resolved.source == coding_agent::ProjectTrustSource::CliOverride);
 }
+
+TEST_CASE("get_project_trust_options mirrors pi choices with session-only variants", "[coding_agent][project-trust]") {
+    tests::TempWorkspace workspace;
+    auto repo = workspace.path() / "repo";
+    std::filesystem::create_directories(repo);
+
+    auto options = coding_agent::get_project_trust_options(repo, /*include_session_only*/ false);
+    REQUIRE(options.size() == 3);
+    CHECK(options[0].label == "Trust");
+    CHECK(options[0].trusted);
+    REQUIRE(options[0].updates.size() == 1);
+    CHECK(options[0].updates[0].path == std::filesystem::weakly_canonical(repo).string());
+    CHECK(options[0].updates[0].decision == coding_agent::ProjectTrustDecision::Trusted);
+    CHECK(options[0].saved_path == std::filesystem::weakly_canonical(repo).string());
+
+    const auto workspace_canonical =
+        std::filesystem::weakly_canonical(workspace.path()).string();
+    CHECK(options[1].label == "Trust parent folder (" + workspace_canonical + ")");
+    CHECK(options[1].trusted);
+    REQUIRE(options[1].updates.size() == 2);
+    CHECK(options[1].updates[1].decision == coding_agent::ProjectTrustDecision::Unknown);
+
+    CHECK(options[2].label == "Do not trust");
+    CHECK_FALSE(options[2].trusted);
+    REQUIRE(options[2].updates.size() == 1);
+    CHECK(options[2].updates[0].decision == coding_agent::ProjectTrustDecision::Untrusted);
+}
+
+TEST_CASE("get_project_trust_options includes session-only variants on request", "[coding_agent][project-trust]") {
+    tests::TempWorkspace workspace;
+    auto options = coding_agent::get_project_trust_options(workspace.path(), /*include_session_only*/ true);
+    REQUIRE(options.size() == 5);
+    CHECK(options[0].label == "Trust");
+    const auto parent_canonical =
+        std::filesystem::weakly_canonical(workspace.path()).parent_path().string();
+    CHECK(options[1].label == "Trust parent folder (" + parent_canonical + ")");
+    CHECK(options[2].label == "Trust (this session only)");
+    CHECK(options[2].trusted);
+    CHECK(options[2].updates.empty());
+    CHECK(options[3].label == "Do not trust");
+    CHECK(options[4].label == "Do not trust (this session only)");
+    CHECK_FALSE(options[4].trusted);
+    CHECK(options[4].updates.empty());
+}
+
+TEST_CASE("get_project_trust_options at the filesystem root has no parent option", "[coding_agent][project-trust]") {
+    auto options = coding_agent::get_project_trust_options("/", /*include_session_only*/ false);
+    REQUIRE(options.size() == 2);
+    CHECK(options[0].label == "Trust");
+    CHECK(options[1].label == "Do not trust");
+}

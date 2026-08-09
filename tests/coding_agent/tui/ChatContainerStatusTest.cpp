@@ -108,3 +108,39 @@ TEST_CASE(
         CHECK(screen.find("Error: something failed") != std::string::npos);
     }
 }
+
+TEST_CASE(
+    "ChatContainer trust warning renders pi's untrusted-project line",
+    "[coding_agent][tui][issue413]") {
+    auto theme = test_theme();
+    coding_agent::tui::ChatContainer chat(theme, *test_keybindings());
+
+    // The warning alone: no leading spacer (pi adds Spacer only when the
+    // chat already has children).
+    chat.append_trust_warning(
+        "This project is not trusted. Project .pi resources are ignored.");
+    {
+        const auto screen = screen_of(chat);
+        CHECK(screen.find(
+                  "This project is not trusted. Project .pi resources are ignored.") !=
+            std::string::npos);
+        // Plain warning text, no `Warning:` prefix.
+        CHECK(screen.find("Warning: This project") == std::string::npos);
+        CHECK(screen.find("Error:") == std::string::npos);
+    }
+
+    // After a message: a spacer row separates it from the warning.
+    chat.clear();
+    chat.append_frontend_message("hello");
+    chat.append_trust_warning("This project is not trusted.");
+    {
+        const auto screen = screen_of(chat);
+        CHECK(screen.find("hello") != std::string::npos);
+        CHECK(screen.find("This project is not trusted.") != std::string::npos);
+        // The blank spacer row renders between the two lines.
+        const auto first = screen.find("hello");
+        const auto second = screen.find("This project is not trusted.");
+        CHECK(first != std::string::npos);
+        CHECK(second > first);
+    }
+}

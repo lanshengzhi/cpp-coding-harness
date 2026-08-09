@@ -112,17 +112,14 @@ void print_session_diagnostics(
     return settings.settings().session_dir;
 }
 
-[[nodiscard]] int run_native_tui(
-    coding_agent::AgentSession& session,
+[[nodiscard]] int run_native_tui_boot(
     InitialMessageResult initial,
-    std::optional<std::string> model_fallback_message,
     const CliConfig& config,
-    std::shared_ptr<ai::Models> models) {
+    std::shared_ptr<ai::Models> models,
+    CliStreams streams,
+    coding_agent::runtime::AgentSessionCreationRequest request) {
     cch::tui::ProcessTerminal terminal;
     boost::asio::io_context io;
-    // pi `createAgentSessionRuntime`: the in-session session flows reuse the
-    // CLI-owned facts (model selection, resource flags) and the test seam's
-    // deterministic catalog when injected.
     // pi `createAgentSessionRuntime`: the in-session session flows reuse the
     // CLI-owned facts (model selection, resource flags); the factory applies
     // them to each replacement request, and the state keeps the same facts
@@ -155,10 +152,17 @@ void print_session_diagnostics(
                       std::move(request), models)
                 : coding_agent::create_agent_session(std::move(request));
         };
+    const bool is_resume_target =
+        std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(
+            request.session_target);
+    // The boot reports session-creation failures through the sink (pi
+    // print_creation_failure); the host must not double-print "Native TUI
+    // failed" for those. The flag is written on the io thread before the
+    // future completes and read after io.run(), so the future synchronizes.
+    bool creation_failure_reported = false;
     auto future = boost::asio::co_spawn(
         io,
-        coding_agent::tui::run_interactive_mode(
-            session,
+        coding_agent::tui::run_interactive_mode_boot(
             terminal,
             coding_agent::tui::InteractiveModeConfig{
                 .agent_config_directory = coding_agent::agent_config_dir(),
@@ -169,21 +173,32 @@ void print_session_diagnostics(
                     .expand_prompt_templates = true,
                     .images = std::move(initial.initial_images),
                 },
-                .model_fallback_message = std::move(model_fallback_message),
                 .session_factory = std::move(session_factory),
                 .session_facts = std::move(facts),
+                .boot_request = std::move(request),
+                .boot_diagnostics_sink =
+                    [&streams](const std::vector<coding_agent::SessionDiagnostic>& diagnostics) {
+                        print_session_diagnostics(streams.error, diagnostics);
+                    },
+                .boot_creation_failure_sink =
+                    [&streams, is_resume_target, &creation_failure_reported](const util::Error& error) {
+                        print_creation_error(is_resume_target, streams.error, error);
+                        creation_failure_reported = true;
+                    },
             }),
         boost::asio::use_future);
     io.run();
 
     try {
         if (auto result = future.get(); !result) {
-            std::cerr << "Native TUI failed: " << result.error().message;
-            if (!result.error().detail.empty() &&
-                result.error().detail != result.error().message) {
-                std::cerr << ": " << result.error().detail;
+            if (!creation_failure_reported) {
+                std::cerr << "Native TUI failed: " << result.error().message;
+                if (!result.error().detail.empty() &&
+                    result.error().detail != result.error().message) {
+                    std::cerr << ": " << result.error().detail;
+                }
+                std::cerr << '\n';
             }
-            std::cerr << '\n';
             return 1;
         }
     } catch (const std::exception& error) {
@@ -327,13 +342,6 @@ void print_session_diagnostics(
         return 1;
     }
 
-    auto created = create_session();
-    if (!created) {
-        return print_creation_failure(created.error());
-    }
-    print_session_diagnostics(streams.error, created->diagnostics);
-
-    auto& session = *created->session;
     if (frontend == Frontend::Interactive) {
         // The interactive spine takes one initial prompt; the remaining
         // positionals join the space-separated initial prompt exactly like
@@ -345,16 +353,25 @@ void print_session_diagnostics(
         }
         initial->initial_message = std::move(interactive_text);
         initial->remaining_messages.clear();
-        return run_native_tui(
-            session,
+        // pi main.ts: the interactive boot defers session creation until
+        // after the boot trust prompt; the CLI passes the session factory
+        // and the base request to the boot.
+        return run_native_tui_boot(
             std::move(*initial),
-            std::move(created->model_fallback_message),
             config,
-            models);
+            models,
+            streams,
+            std::move(request));
     }
 
+    auto created = create_session();
+    if (!created) {
+        return print_creation_failure(created.error());
+    }
+    print_session_diagnostics(streams.error, created->diagnostics);
+
     return run_print_mode(
-        session,
+        *created->session,
         PrintModeConfig{
             .output = streams.output,
             .error = streams.error,

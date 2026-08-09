@@ -424,6 +424,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/tui/ThemeCatalogTest.cpp
         tests/coding_agent/tui/UserBashInteractiveModeTest.cpp
         tests/coding_agent/tui/InteractiveBootE2ETest.cpp
+        tests/coding_agent/tui/BootTrustInteractiveTest.cpp
         tests/coding_agent/AgentSessionCompactionTest.cpp
         tests/coding_agent/ReAuthGuidanceTest.cpp
         tests/coding_agent/TurnAutoRetryTest.cpp

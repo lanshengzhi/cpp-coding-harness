@@ -320,6 +320,12 @@ struct ChatContainer::Impl {
         std::string text;
     };
 
+    /// pi's untrusted-project boot warning (`renderProjectTrustWarningIfNeeded`):
+    /// a Spacer row above a plain warning-token text (no `Warning:` prefix).
+    struct TrustWarningItem {
+        std::string text;
+    };
+
     struct DiagnosticItem {
         std::string text;
         bool raw{false};
@@ -334,7 +340,12 @@ struct ChatContainer::Impl {
         std::string text;
     };
 
-    using ItemVariant = std::variant<MessageItem, FrontendItem, DiagnosticItem, StatusItem>;
+    using ItemVariant = std::variant<
+        MessageItem,
+        FrontendItem,
+        TrustWarningItem,
+        DiagnosticItem,
+        StatusItem>;
 
     Impl(
         const LiveTheme& theme,
@@ -633,6 +644,19 @@ struct ChatContainer::Impl {
         if (const auto* frontend = std::get_if<FrontendItem>(&item)) {
             return render_plain(theme, frontend->text, width, ThemeToken::Text);
         }
+        if (const auto* trust_warning = std::get_if<TrustWarningItem>(&item)) {
+            // pi `renderProjectTrustWarningIfNeeded`: Spacer(1) above the
+            // warning-token text, only when the chat already has children.
+            cch::tui::RenderResult result;
+            if (item_index > 0) {
+                result.lines.emplace_back();
+            }
+            auto rendered = render_plain(
+                theme, trust_warning->text, width, ThemeToken::Warning);
+            if (!rendered) return std::unexpected(rendered.error());
+            for (auto& line : rendered->lines) result.lines.push_back(std::move(line));
+            return result;
+        }
         if (const auto* status = std::get_if<StatusItem>(&item)) {
             // pi showStatus: a Spacer row above the dim status text.
             cch::tui::RenderResult result;
@@ -779,6 +803,12 @@ void ChatContainer::append_warning(std::string text) {
         .text = safe_text(std::move(text)),
         .raw = false,
         .warning = true,
+    });
+}
+
+void ChatContainer::append_trust_warning(std::string text) {
+    impl_->items.emplace_back(Impl::TrustWarningItem{
+        .text = safe_text(std::move(text)),
     });
 }
 

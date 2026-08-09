@@ -95,6 +95,13 @@ public:
     /// may overlap an active Agent run; a result completed mid-run stays
     /// pending and commits exactly once after the whole run settles.
     [[nodiscard]] bool has_user_shell() const { return services_.user_shell != nullptr; }
+    /// Whether the session's project scope is trusted (pi
+    /// `settingsManager.isProjectTrusted()`): false when assembly had no
+    /// settings surface.
+    [[nodiscard]] bool is_project_trusted() const {
+        return services_.settings_manager &&
+            services_.settings_manager->is_project_trusted();
+    }
     [[nodiscard]] boost::asio::awaitable<util::Expected<UserBashCompletion>> run_user_bash(
         std::string command,
         bool exclude_from_context,

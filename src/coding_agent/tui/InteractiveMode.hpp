@@ -77,6 +77,21 @@ struct InteractiveModeConfig {
     SessionFactorySink session_factory{nullptr};
     /// CLI-owned facts reused for in-session session replacement requests.
     InteractiveSessionFacts session_facts{};
+    /// Boot path (pi main.ts `createRuntime` + `resolveProjectTrust`): when
+    /// set, the state creates the boot session itself after the boot trust
+    /// prompt resolves (the main-TUI overlay, G2), instead of binding a
+    /// pre-created session. The CLI interactive host sets this; focused
+    /// tests bind pre-created sessions.
+    std::optional<runtime::AgentSessionCreationRequest> boot_request{std::nullopt};
+    /// Session-creation diagnostics printing for the boot path (pi
+    /// `reportDiagnostics`): the host wires this to stderr.
+    std::move_only_function<void(const std::vector<SessionDiagnostic>&)>
+        boot_diagnostics_sink{nullptr};
+    /// Boot-session creation failure printing (pi `print_creation_failure`):
+    /// the host wires this to stderr; the boot reports the error through it
+    /// before exiting.
+    std::move_only_function<void(const util::Error&)>
+        boot_creation_failure_sink{nullptr};
 };
 
 /// Run the private Native TUI composition until its exit binding is received.
@@ -85,5 +100,16 @@ struct InteractiveModeConfig {
     AgentSession& session,
     cch::tui::Terminal& terminal,
     InteractiveModeConfig config = {});
+
+/// Boot the private Native TUI composition with session creation deferred to
+/// the boot (pi main.ts `createAgentSessionRuntime`): the TUI starts first,
+/// the boot trust prompt resolves as an overlay when a trust-requiring
+/// resource exists and no override is set (G2 record), then the session is
+/// created through the config's `boot_request`/`session_factory` with the
+/// decided trust, bound, and the initial prompt submitted. The Terminal must
+/// outlive the returned coroutine.
+[[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> run_interactive_mode_boot(
+    cch::tui::Terminal& terminal,
+    InteractiveModeConfig config);
 
 } // namespace cch::coding_agent::tui
