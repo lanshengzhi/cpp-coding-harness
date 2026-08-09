@@ -23,8 +23,8 @@ struct CliStreams {
 
 /// Runtime options for the CLI entry chain. The environment observes the
 /// process streams (TTY detection); the models seam is test-only and injects
-/// the deterministic fake provider catalog (the surface the `--fake` flag
-/// used to drive).
+/// the deterministic fake provider catalog (the surface the deleted
+/// fake-provider CLI flag used to drive).
 struct CliRuntimeOptions {
     FrontendEnvironment environment{};
     bool environment_explicit{false};

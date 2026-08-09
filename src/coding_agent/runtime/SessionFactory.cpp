@@ -115,7 +115,8 @@ struct AssemblyPlan {
     std::optional<ai::Model> requested_model;
     /// CLI-path fake-provider seam: the test-suite injected `ai::Models`
     /// carries the scripted fake provider, and the request model is fabricated
-    /// from it (the request surface the `--fake` flag used to drive).
+    /// from it (the request surface the deleted fake-provider CLI flag used to
+    /// drive).
     bool cli_fake{false};
     /// pi CLI model selection (`--provider`, `--model`, `--models`, `--api-key`).
     struct CliModelSelection {
@@ -1617,7 +1618,8 @@ util::Expected<CreateAgentSessionResult> SessionFactory::create(
     // A host-injected runtime (the private E2E seam) wins; otherwise the
     // injected Models is the runtime's catalog: its scripted fake provider
     // serves streams, and the request model is fabricated from it (the
-    // deterministic provider surface the `--fake` flag used to drive).
+    // deterministic provider surface the deleted fake-provider CLI flag used
+    // to drive).
     if (plan->model_runtime) {
         plan->model_runtime_owned = false;
     } else {

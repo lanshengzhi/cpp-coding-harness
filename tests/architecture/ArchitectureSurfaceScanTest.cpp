@@ -447,6 +447,26 @@ TEST_CASE("concrete prompt processors stay out of the public contract surface", 
         source_root / "src" / "coding_agent" / "prompt" / "PromptProcessor.hpp"));
     CHECK_FALSE(std::filesystem::exists(
         source_root / "src" / "coding_agent" / "prompt" / "PromptProcessor.cpp"));
+
+    // The deleted PromptProcessor's own value type leaves no definition and no
+    // usage in the active tree; the expansion composition is now the free
+    // pi-aligned `expand_prompt_input` helper (pi `agent-session.ts`
+    // `prompt()`), and the System Prompt builder stays private.
+    const auto files = files_under({"include", "src", "tests"});
+    REQUIRE_FALSE(files.empty());
+    for (const auto& file : files) {
+        if (file.filename() == "ArchitectureSurfaceScanTest.cpp") {
+            continue;
+        }
+        CHECK(read_text(file).find("struct AgentPrompt") == std::string::npos);
+    }
+    CHECK(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "prompt" / "SystemPromptBuilder.hpp"));
+    CHECK(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "prompt" / "PromptExpansion.hpp"));
+    const auto expansion_header = read_text(
+        source_root / "src" / "coding_agent" / "prompt" / "PromptExpansion.hpp");
+    CHECK(expansion_header.find("expand_prompt_input") != std::string::npos);
 }
 
 TEST_CASE("RuntimeServices remains internal to the coding_agent runtime package", "[architecture][session]") {
@@ -1309,4 +1329,121 @@ TEST_CASE(
     CHECK(project_resources_header.find("loser_path") != std::string::npos);
     CHECK(loader_header.find("ProjectResourceLoadingDiagnostic") == std::string::npos);
     CHECK(loader_header.find("project_resource_loading_diagnostic_code") == std::string::npos);
+}
+
+TEST_CASE(
+    "the deleted C++-only CLI flags and their plumbing stay out of the active source tree",
+    "[architecture][cli][coding_agent][issue397]") {
+    // ADR 0036 G1 / #397: the C++-only flags `--fake`, `--enable-bash`,
+    // `--max-turns`, and `--workspace` are deleted with their plumbing. Their
+    // exact spellings never appear in the production tree (tests may name them
+    // only to assert the unknown-option rejection). The workspace containment
+    // seam (`workspace := cwd`) and the host-set max_turns extension survive as
+    // fields, never as flags.
+    const std::vector<std::string> deleted_flags{
+        "--fake",
+        "--enable-bash",
+        "--max-turns",
+        "--workspace",
+    };
+    for (const auto& file : files_under({"include", "src"})) {
+        const auto text = read_text(file);
+        for (const auto& flag : deleted_flags) {
+            CHECK(text.find(flag) == std::string::npos);
+        }
+    }
+
+    // The frontend set is exactly pi's {Print, Interactive}; the removed JSON
+    // and RPC frontends leave no enumerator and no dispatch in the CLI surface.
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto frontend_header = read_text(
+        source_root / "src" / "cli" / "FrontendSelection.hpp");
+    CHECK(frontend_header.find("enum class Frontend") != std::string::npos);
+    CHECK(frontend_header.find("Print,") != std::string::npos);
+    CHECK(frontend_header.find("Interactive,") != std::string::npos);
+    for (const auto& file : files_under({"include/cch/cli", "src/cli"})) {
+        const auto text = read_text(file);
+        CHECK(text.find("Frontend::Json") == std::string::npos);
+        CHECK(text.find("Frontend::Rpc") == std::string::npos);
+    }
+
+    // `--mode json`/`--mode rpc` are hard-rejected, never accepted-but-ignored:
+    // the removed values die with the removed surface (no fallback read).
+    const auto cli_parse = read_text(source_root / "src" / "cli" / "CliParse.cpp");
+    CHECK(cli_parse.find("was removed; only --mode text is supported") != std::string::npos);
+}
+
+TEST_CASE(
+    "the own command registry family, slash parser, and own slash set stay deleted",
+    "[architecture][coding_agent][issue419]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+    const auto files = files_under({"include", "src", "tests"});
+    REQUIRE_FALSE(files.empty());
+
+    // ADR 0036 G4 / #419: the own slash machinery is deleted with no shim —
+    // CommandRegistry/CommandEffect/CommandContext, the own SlashCommandParser,
+    // and its parse entry point leave no type and no file in the active tree.
+    const std::vector<std::string> deleted_machinery{
+        "CommandRegistry",
+        "CommandEffect",
+        "CommandContext",
+        "SlashCommandParser",
+        "try_parse_slash_command",
+    };
+    for (const auto& file : files) {
+        if (file.filename() == "ArchitectureSurfaceScanTest.cpp") {
+            continue;
+        }
+        const auto text = read_text(file);
+        for (const auto& needle : deleted_machinery) {
+            CHECK(text.find(needle) == std::string::npos);
+        }
+    }
+
+    // The deleted own slash commands (/help /commands /clear /exit) are never
+    // registered in production: dispatch is pi's if-chain over the 17 Supported
+    // builtins, and the deleted names are absent from the builtin catalog.
+    const auto builtin_slashes = read_text(
+        source_root / "src" / "coding_agent" / "prompt" / "BuiltinSlashCommands.cpp");
+    for (const auto& deleted_slash : {
+             "\"/help\"",
+             "\"/commands\"",
+             "\"/clear\"",
+             "\"/exit\"",
+         }) {
+        CHECK(builtin_slashes.find(deleted_slash) == std::string::npos);
+    }
+}
+
+TEST_CASE(
+    "the own theme catalog and settings surfaces stay deleted with the pi asset layer retained",
+    "[architecture][coding_agent][tui][issue415]") {
+    const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
+
+    // ADR 0036 G5 / #415: ThemeCatalog and ThemeSettings are deleted with no
+    // shim — no header, no implementation, no type anywhere in the active tree.
+    const std::vector<std::string> deleted_surfaces{"ThemeCatalog", "ThemeSettings"};
+    for (const auto& file : files_under({"include", "src", "tests"})) {
+        if (file.filename() == "ArchitectureSurfaceScanTest.cpp") {
+            continue;
+        }
+        const auto text = read_text(file);
+        for (const auto& needle : deleted_surfaces) {
+            CHECK(text.find(needle) == std::string::npos);
+        }
+    }
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "tui" / "ThemeCatalog.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "tui" / "ThemeCatalog.cpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "tui" / "ThemeSettings.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "tui" / "ThemeSettings.cpp"));
+
+    // The pi-shaped asset layer survives: the theme value, its token table, and
+    // the builtin dark/light themes stay (retained, re-expressed per G5).
+    for (const auto& name : {"Theme.hpp", "ThemeTokens.inc", "BuiltinThemes.hpp"}) {
+        CHECK(std::filesystem::exists(source_root / "src" / "coding_agent" / "tui" / name));
+    }
 }

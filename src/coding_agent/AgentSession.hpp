@@ -586,7 +586,8 @@ private:
     runtime::AgentSessionCreationRequest request);
 
 /// Private test-support wrapper around SessionFactory's Models assembly seam
-/// (the deterministic provider surface the `--fake` flag used to drive).
+/// (the deterministic provider surface the deleted fake-provider CLI flag
+/// used to drive).
 [[nodiscard]] util::Expected<CreateAgentSessionResult> create_agent_session_for_testing(
     runtime::AgentSessionCreationRequest request,
     std::shared_ptr<ai::Models> models);

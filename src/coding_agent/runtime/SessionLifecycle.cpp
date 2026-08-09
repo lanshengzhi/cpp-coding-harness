@@ -424,11 +424,14 @@ util::Expected<PreparedResumeTarget> prepare_resume_target(
         // cwd.
         workspace = *cwd_override;
     } else if (!resumed->metadata.workspace.empty()) {
+        // The workspace is always the launch directory (pi `workspace := cwd`;
+        // the deleted workspace flag never returns, ADR 0036 G1), so the
+        // guidance names the recorded directory instead of a removed flag.
         if (workspace_explicit && !same_workspace(workspace, resumed->metadata.workspace)) {
             return std::unexpected(util::make_error(
                 util::ErrorCode::Session,
                 "resume workspace does not match session metadata",
-                "omit --workspace to use " + resumed->metadata.workspace.string() +
+                "resume from " + resumed->metadata.workspace.string() +
                     " or start a new session"));
         }
         if (!workspace_explicit) {
