@@ -6,7 +6,7 @@
 
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
-#include "coding_agent/tui/KeybindingCatalog.hpp"
+#include "coding_agent/tui/KeybindingsManager.hpp"
 #include "coding_agent/tui/Theme.hpp"
 #include "coding_agent/tui/TreeSelector.hpp"
 
@@ -38,7 +38,7 @@ namespace {
         "app.tree.filter.cycleBackward",
         "app.message.copy",
     };
-    auto app_definitions = coding_agent::tui::baseline_application_keybindings(
+    auto app_definitions = coding_agent::tui::app_keybinding_definitions(
         actions, tui::native_keybinding_platform());
     REQUIRE(app_definitions);
     definitions.insert(

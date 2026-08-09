@@ -540,11 +540,11 @@ TEST_CASE("removed event and command contracts stay out of session ownership", "
     CHECK(runtime_header.find(registry_name) == std::string::npos);
     CHECK(factory_header.find(registry_name) == std::string::npos);
     CHECK(factory_source.find(registry_name) == std::string::npos);
-    // One-shot slash dispatch is deleted: print mode never carries the own
-    // slash registry; it lives only behind the interactive mode (pi: slash
-    // dispatch is interactive-only).
+    // The own slash registry is deleted with no shim (ADR 0036 G4): print
+    // mode never carried it, and the interactive mode now dispatches pi's
+    // if-chain over the 17 Supported builtins instead.
     CHECK(cli_source.find(registry_name) == std::string::npos);
-    CHECK(interactive_source.find(registry_name) != std::string::npos);
+    CHECK(interactive_source.find(registry_name) == std::string::npos);
 
     // The event-stream text renderer is gone with the one-shot presentation
     // seam (pi print mode prints only the final assistant text): the renderer
@@ -631,12 +631,27 @@ TEST_CASE(
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
     const auto event_header = read_text(
         source_root / "include" / "cch" / "agent" / "AgentEvent.hpp");
-    const auto keybinding_catalog = read_text(
-        source_root / "src" / "coding_agent" / "tui" / "KeybindingCatalog.cpp") +
+    // The own slash-command registry and keybinding-catalog seams are
+    // deleted (ADR 0036 G4); the User Bash surface lives in the interactive
+    // mode's pi if-chain and the KeybindingsManager.
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "CommandRegistry.cpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "CommandRegistry.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "tui" / "KeybindingCatalog.cpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "tui" / "KeybindingCatalog.hpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "tui" / "KeybindingHelp.cpp"));
+    CHECK_FALSE(std::filesystem::exists(
+        source_root / "src" / "coding_agent" / "tui" / "KeybindingHelp.hpp"));
+    const auto keybindings_manager = read_text(
+        source_root / "src" / "coding_agent" / "tui" / "KeybindingsManager.cpp") +
         read_text(
-            source_root / "src" / "coding_agent" / "tui" / "KeybindingCatalog.hpp");
-    const auto command_registry_source = read_text(
-        source_root / "src" / "coding_agent" / "CommandRegistry.cpp");
+            source_root / "src" / "coding_agent" / "tui" / "KeybindingsManager.hpp");
+    const auto interactive_source = read_text(
+        source_root / "src" / "coding_agent" / "tui" / "InteractiveMode.cpp");
     const auto factory_source = read_text(
         source_root / "src" / "coding_agent" / "runtime" / "SessionFactory.cpp");
     const auto cli_runtime_source = read_text(
@@ -670,10 +685,12 @@ TEST_CASE(
     CHECK(event_header.find("UserBash") == std::string::npos);
     CHECK(event_header.find("Bash") == std::string::npos);
 
-    // No hotkey action and no slash-command registration for the prefixes.
-    CHECK(keybinding_catalog.find("bash") == std::string::npos);
-    CHECK(keybinding_catalog.find("Bash") == std::string::npos);
-    CHECK(command_registry_source.find("register_command(\"!") ==
+    // No hotkey action and no slash-command registration for the prefixes:
+    // the User Bash `!`/`!!` syntax is never a keybinding or a registered
+    // slash command.
+    CHECK(keybindings_manager.find("bash") == std::string::npos);
+    CHECK(keybindings_manager.find("Bash") == std::string::npos);
+    CHECK(interactive_source.find("register_command(\"!") ==
           std::string::npos);
 
     // Production assembly: only the interactive CLI frontend gains the

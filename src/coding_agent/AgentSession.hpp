@@ -19,6 +19,7 @@
 #include <cch/util/JsonValue.hpp>
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 #include "coding_agent/runtime/SessionFork.hpp"
+#include "coding_agent/runtime/SessionStats.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
@@ -446,6 +447,25 @@ public:
     /// Last assistant text from live history, absent if no assistant message
     /// has completed.
     [[nodiscard]] std::optional<std::string> last_assistant_text() const;
+
+    /// pi `sessionManager.getSessionName()`: the trimmed name of the latest
+    /// `session_info` entry for the current session. Persisted sessions read
+    /// the file; in-memory sessions have no `session_info` surface and
+    /// report none.
+    [[nodiscard]] std::optional<std::string> session_name() const;
+
+    /// pi `AgentSession.setSessionName`: sanitize the name (CR/LF runs become
+    /// one space, then trimmed) and append a `session_info` entry under the
+    /// current leaf. In-memory sessions keep no entry surface and the change
+    /// is dropped like every in-memory store write. Returns the stored
+    /// (sanitized) name.
+    [[nodiscard]] util::Expected<std::optional<std::string>> set_session_name(
+        std::string name);
+
+    /// pi `getSessionStats` subset: per-role message counts and usage/token
+    /// totals for the `/session` command (persisted sessions aggregate over
+    /// the file's entries so compacted-away history still counts, like pi).
+    [[nodiscard]] runtime::SessionStats session_stats() const;
 
     /// Session identifier.
     [[nodiscard]] const std::string& session_id() const;

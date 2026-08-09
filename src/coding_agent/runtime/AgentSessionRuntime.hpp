@@ -11,6 +11,7 @@
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionEventCommitment.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
+#include "coding_agent/runtime/SessionStats.hpp"
 #include "coding_agent/runtime/UserBash.hpp"
 #include "harness/compaction/Compaction.hpp"
 
@@ -322,6 +323,24 @@ public:
         const std::optional<std::filesystem::path>& session_path) const;
     [[nodiscard]] std::size_t message_count() const;
     [[nodiscard]] std::optional<std::string> last_assistant_text() const;
+
+    /// pi `sessionManager.getSessionName()`: the trimmed name of the latest
+    /// `session_info` entry for the current session. Persisted sessions read
+    /// the file; in-memory sessions have no `session_info` surface and
+    /// report none.
+    [[nodiscard]] std::optional<std::string> session_name() const;
+
+    /// pi `AgentSession.setSessionName`: sanitize the name (CR/LF runs become
+    /// one space, then trimmed) and append a `session_info` entry under the
+    /// current leaf. In-memory sessions keep no entry surface and the change
+    /// is dropped like every in-memory store write. Returns the stored
+    /// (sanitized) name.
+    [[nodiscard]] util::Expected<std::optional<std::string>> set_session_name(
+        std::string name);
+
+    /// pi `getSessionStats` subset: per-role message counts and usage/token
+    /// totals for the `/session` command.
+    [[nodiscard]] SessionStats session_stats() const;
     [[nodiscard]] const std::string& session_id() const { return session_.metadata.session_id; }
     [[nodiscard]] std::optional<std::filesystem::path> session_path() const {
         return session_.store ? session_.store->path() : std::nullopt;
@@ -394,6 +413,14 @@ public:
             user_bash_active_ || compaction_active_;
     }
     void close() noexcept;
+
+    /// The current session's tree, or an empty optional when the session has
+    /// no persisted entry surface (in-memory sessions keep no entries); a
+    /// persisted file that cannot be opened is an error. Reused by
+    /// `session_name`, `set_session_name`, and `session_stats`.
+    [[nodiscard]] util::Expected<
+        std::optional<harness::session::SessionTree>>
+    open_session_tree() const;
 
 private:
     /// Session lifecycle, tracked independently from the active-work facts so

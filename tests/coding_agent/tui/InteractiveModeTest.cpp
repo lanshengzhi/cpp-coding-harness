@@ -1806,13 +1806,13 @@ TEST_CASE(
 
     REQUIRE(terminal.inject_input("/"));
     drain_ready(io);
-    CHECK(visible_screen(terminal).find("/clear") != std::string::npos);
+    CHECK(visible_screen(terminal).find("/compact") != std::string::npos);
     REQUIRE(terminal.inject_input("\x1b"));
     REQUIRE(terminal.flush_input());
     drain_ready(io);
     CHECK(created->session->is_busy());
     CHECK(client_pointer->stop_callback_count == 0);
-    CHECK(visible_screen(terminal).find("/clear") == std::string::npos);
+    CHECK(visible_screen(terminal).find("/compact") == std::string::npos);
 
     REQUIRE(terminal.inject_input("\x1b"));
     REQUIRE(terminal.flush_input());
@@ -1940,7 +1940,7 @@ TEST_CASE(
 
     REQUIRE(terminal.inject_input("/"));
     drain_ready(io);
-    CHECK(visible_screen(terminal).find("/clear") != std::string::npos);
+    CHECK(visible_screen(terminal).find("/compact") != std::string::npos);
     REQUIRE(terminal.inject_input("\x1b[18~\x1b[18~"));
     drain_ready(io);
     CHECK(created->session->is_busy());
@@ -3057,8 +3057,8 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Native TUI dispatches its effective commands without changing Agent Session history",
-    "[coding_agent][tui][commands][issue60]") {
+    "Native TUI dispatches pi's if-chain over the 17 Supported builtins without changing Agent Session history",
+    "[coding_agent][tui][commands][issue60][issue419]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto created = coding_agent::create_agent_session(session_options(
@@ -3081,46 +3081,69 @@ TEST_CASE(
         });
     drain_ready(io);
 
-    REQUIRE(terminal.inject_input("/help\r"));
-    drain_ready(io);
-    auto screen = visible_screen(terminal);
-    CHECK(screen.find("Available commands:") != std::string::npos);
-    CHECK(screen.find("/settings") != std::string::npos);
-    CHECK(screen.find("/hotkeys") != std::string::npos);
-    CHECK(screen.find("/new") == std::string::npos);
-    CHECK(screen.find("/resume") == std::string::npos);
-    CHECK(screen.find("User Bash") == std::string::npos);
-    CHECK(created->session->message_count() == 0);
-
+    // `/session` binds to the session-info presentation without touching
+    // Agent Session history (pi `handleSessionCommand`).
     REQUIRE(terminal.inject_input("/session\r"));
     drain_ready(io);
-    screen = visible_screen(terminal);
-    CHECK(screen.find("Session: " + created->session->session_id()) != std::string::npos);
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("Session Info") != std::string::npos);
+    CHECK(screen.find("ID: " + created->session->session_id()) != std::string::npos);
     CHECK(screen.find("File: In-memory") != std::string::npos);
+    CHECK(screen.find("Messages") != std::string::npos);
     CHECK(created->session->message_count() == 0);
+
+    // `/name` binds to the session-name flow (bare command shows the usage
+    // warning; pi `handleNameCommand`).
+    REQUIRE(terminal.inject_input("/name\r"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("Usage: /name <name>") != std::string::npos);
+    CHECK(created->session->message_count() == 0);
+
+    REQUIRE(terminal.inject_input("/name hello\r"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("Session name set: hello") != std::string::npos);
+    CHECK(created->session->message_count() == 0);
+
+    // `/hotkeys` opens the assembled-subset overlay without history change.
+    REQUIRE(terminal.inject_input("/hotkeys\r"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("Hotkeys") != std::string::npos);
+    CHECK(created->session->message_count() == 0);
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+
+    // The Deleted slashes (`/help` `/commands` `/clear` `/exit`) and unknown
+    // slash text pass through as an ordinary Agent Prompt (ADR 0036 G4).
+    REQUIRE(terminal.inject_input("/help\r"));
+    drain_ready(io);
+    CHECK(created->session->message_count() == 2);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("fake: /help") != std::string::npos);
+    CHECK(screen.find("Available commands:") == std::string::npos);
 
     REQUIRE(terminal.inject_input("/commands session\r"));
     drain_ready(io);
-    CHECK(visible_screen(terminal).find("Command: /session") != std::string::npos);
-    CHECK(created->session->message_count() == 0);
+    CHECK(created->session->message_count() == 4);
+    CHECK(visible_screen(terminal).find("Command: /session") == std::string::npos);
 
     (void)terminal.check_clear_screen_called();
     REQUIRE(terminal.inject_input("/clear\r"));
     drain_ready(io);
-    CHECK(terminal.check_clear_screen_called());
-    CHECK(created->session->message_count() == 0);
-    screen = visible_screen(terminal);
-    CHECK(screen.find("Available commands:") == std::string::npos);
-    CHECK(screen.find("Session: " + created->session->session_id()) == std::string::npos);
+    CHECK_FALSE(terminal.check_clear_screen_called());
+    CHECK(created->session->message_count() == 6);
 
     REQUIRE(terminal.inject_input("/missing\r"));
     drain_ready(io);
-    CHECK(created->session->message_count() == 2);
+    CHECK(created->session->message_count() == 8);
     screen = visible_screen(terminal);
     CHECK(screen.find("fake: /missing") != std::string::npos);
-    CHECK(screen.find("Available commands:") == std::string::npos);
+    CHECK(screen.find("Session Info") == std::string::npos);
 
-    REQUIRE(terminal.inject_input("/exit\r"));
+    REQUIRE(terminal.inject_input("/quit\r"));
     drain_ready(io);
     REQUIRE(run_result);
     CHECK(*run_result);
@@ -3171,7 +3194,7 @@ TEST_CASE(
 
     REQUIRE(terminal.inject_input("/"));
     drain_ready(io);
-    for (std::size_t index = 0; index < 13; ++index) {
+    for (std::size_t index = 0; index < 15; ++index) {
         REQUIRE(terminal.inject_input("\x1b[B"));
         drain_ready(io);
     }
@@ -3260,7 +3283,7 @@ TEST_CASE(
     }
     auto screen = visible_screen(terminal);
     CHECK(screen.find("skill:project-skill") == std::string::npos);
-    CHECK(screen.find("/settings") != std::string::npos);
+    CHECK(screen.find("/scoped-models") != std::string::npos);
 
     // Toggle the setting on through /settings (first item, confirm), close
     // the selector, and reopen autocomplete: `skill:` entries register (pi
@@ -3275,7 +3298,7 @@ TEST_CASE(
     drain_ready(io);
     REQUIRE(terminal.inject_input("\x03/"));
     drain_ready(io);
-    for (std::size_t index = 0; index < 13; ++index) {
+    for (std::size_t index = 0; index < 16; ++index) {
         REQUIRE(terminal.inject_input("\x1b[B"));
         drain_ready(io);
     }
@@ -3787,4 +3810,119 @@ TEST_CASE(
     drain_ready(reboot_io);
     REQUIRE(reboot_result);
     CHECK(*reboot_result);
+}
+
+TEST_CASE(
+    "Native TUI /compact and /trust bind to their runtime flows without changing Agent Session history",
+    "[coding_agent][tui][commands][issue419]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto created = coding_agent::create_agent_session(session_options(
+        workspace,
+        ai::providers::make_scripted_fake_provider()));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    // `/compact` dispatches through the runtime compact flow; failures are
+    // ignored (pi `handleCompactCommand`) and history is untouched.
+    REQUIRE(terminal.inject_input("/compact\r"));
+    drain_ready(io);
+    CHECK(created->session->message_count() == 0);
+
+    REQUIRE(terminal.inject_input("/compact summarize everything\r"));
+    drain_ready(io);
+    CHECK(created->session->message_count() == 0);
+
+    // `/trust` opens the trust selector over getProjectTrustOptions; the
+    // prompt renders the workspace and the pi status persists on selection.
+    REQUIRE(terminal.inject_input("/trust\r"));
+    drain_ready(io);
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("Trust project folder?") != std::string::npos);
+    CHECK(created->session->message_count() == 0);
+
+    // Choose "Do not trust" (the last option) and confirm.
+    REQUIRE(terminal.inject_input("\x1b[B\x1b[B\r"));
+    drain_ready(io);
+    screen = visible_screen(terminal);
+    CHECK(screen.find("Saved trust decision: untrusted. Restart cch for this to take effect.") !=
+        std::string::npos);
+    CHECK(created->session->message_count() == 0);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE(
+    "Native TUI autocomplete prefixes discovered templates and skills with their scope tags",
+    "[coding_agent][tui][autocomplete][issue419]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    workspace.write(
+        ".pi/prompts/project-prompt.md",
+        "---\n"
+        "description: Project prompt completion.\n"
+        "---\n"
+        "Expanded project prompt: $ARGUMENTS\n");
+    auto options = session_options(
+        workspace,
+        ai::providers::make_scripted_fake_provider());
+    options.project_trust_override = true;
+    auto created = coding_agent::create_agent_session(std::move(options));
+    REQUIRE(created);
+
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
+    boost::asio::io_context io;
+    std::optional<util::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+        io,
+        coding_agent::tui::run_interactive_mode(
+            *created->session,
+            terminal,
+            {.agent_config_directory = config.path()}),
+        [&](std::exception_ptr exception, util::ExpectedVoid result) {
+            CHECK(exception == nullptr);
+            run_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+
+    // The project-scoped template carries the `[p]` scope tag (pi
+    // `prefixAutocompleteDescription`, source-info.ts).
+    REQUIRE(terminal.inject_input("/project"));
+    drain_ready(io);
+    auto screen = visible_screen(terminal);
+    CHECK(screen.find("[p]") != std::string::npos);
+    CHECK(screen.find("project-prompt") != std::string::npos);
+    CHECK(screen.find("Project prompt completion.") != std::string::npos);
+
+    // Deferred slashes never autocomplete (pi's 22-command catalog subset):
+    // `/export` and `/help` open no suggestion window (the editor line still
+    // shows the typed text, so the check is the absence of suggestion rows).
+    REQUIRE(terminal.inject_input("\x03/export"));
+    drain_ready(io);
+    CHECK(count_text(visible_screen(terminal), "> /") == 0);
+    REQUIRE(terminal.inject_input("\x03/help"));
+    drain_ready(io);
+    CHECK(count_text(visible_screen(terminal), "> /") == 0);
+
+    REQUIRE(terminal.inject_input("\x03\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
 }

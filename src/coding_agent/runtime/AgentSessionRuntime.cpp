@@ -5,6 +5,7 @@
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/harness/session/JsonlSessionStore.hpp>
+#include <cch/harness/session/SessionTree.hpp>
 #include "harness/WorkspaceFileSystem.hpp"
 
 #include "agent/AgentMessageAccess.hpp"
@@ -2332,6 +2333,102 @@ std::size_t AgentSessionRuntime::message_count() const {
 
 std::optional<std::string> AgentSessionRuntime::last_assistant_text() const {
     return agent_ ? last_assistant_text_from(agent_->state().messages) : std::nullopt;
+}
+
+util::Expected<std::optional<harness::session::SessionTree>>
+AgentSessionRuntime::open_session_tree() const {
+    auto* jsonl_store =
+        dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get());
+    if (jsonl_store == nullptr || !jsonl_store->path()) {
+        // In-memory sessions keep no entry surface.
+        return std::optional<harness::session::SessionTree>{};
+    }
+    auto tree = harness::session::JsonlSessionStore::open_as_tree(
+        *jsonl_store->path());
+    if (!tree) {
+        return std::unexpected(tree.error());
+    }
+    return std::optional<harness::session::SessionTree>{std::move(*tree)};
+}
+
+std::optional<std::string> AgentSessionRuntime::session_name() const {
+    auto tree = open_session_tree();
+    if (!tree || !*tree) {
+        // In-memory sessions have no `session_info` surface (pi
+        // `getSessionName` walks the entries; the in-memory store keeps
+        // none); an unreadable persisted file also reports none.
+        return std::nullopt;
+    }
+    return (*tree)->get_session_name();
+}
+
+util::Expected<std::optional<std::string>>
+AgentSessionRuntime::set_session_name(std::string name) {
+    // pi `appendSessionInfo` sanitization: CR/LF runs become one space,
+    // then the result is trimmed.
+    auto sanitized = runtime::sanitize_session_name(name);
+    auto tree = open_session_tree();
+    if (!tree) {
+        return std::unexpected(tree.error());
+    }
+    if (!*tree) {
+        // In-memory sessions keep no `session_info` entry surface; the
+        // change is dropped like every in-memory store write.
+        return std::nullopt;
+    }
+    auto* jsonl_store =
+        dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get());
+    std::optional<std::string> parent_id;
+    if (!(*tree)->leaf_id().empty()) {
+        parent_id = (*tree)->leaf_id();
+    }
+    if (auto appended = jsonl_store->append_session_info(
+            std::move(parent_id), sanitized);
+        !appended) {
+        return std::unexpected(appended.error());
+    }
+    return sanitized;
+}
+
+SessionStats AgentSessionRuntime::session_stats() const {
+    SessionStats stats;
+    // Persisted sessions aggregate over the file's entries (pi
+    // `getEntries()`, so compacted-away history still counts); in-memory
+    // sessions derive from the live context.
+    std::vector<ai::MessageVariant> messages;
+    auto tree = open_session_tree();
+    if (tree && *tree) {
+        for (const auto& entry : (*tree)->entries()) {
+            if (entry.kind != harness::session::SessionEntryKind::Message ||
+                !entry.message) {
+                continue;
+            }
+            messages.push_back(*entry.message);
+        }
+    } else if (agent_) {
+        messages = agent_->state().messages;
+    }
+    for (const auto& message : messages) {
+        ++stats.total_messages;
+        if (std::holds_alternative<ai::UserMessage>(message)) {
+            ++stats.user_messages;
+        } else if (const auto* assistant =
+                       std::get_if<ai::AssistantMessage>(&message)) {
+            ++stats.assistant_messages;
+            for (const auto& content : assistant->content) {
+                if (std::holds_alternative<ai::ToolCallContent>(content)) {
+                    ++stats.tool_calls;
+                }
+            }
+            stats.input_tokens += assistant->usage.input;
+            stats.output_tokens += assistant->usage.output;
+            stats.cache_read += assistant->usage.cache_read;
+            stats.cache_write += assistant->usage.cache_write;
+        } else if (std::holds_alternative<ai::ToolResultMessage>(message)) {
+            ++stats.tool_results;
+        }
+    }
+    return stats;
 }
 
 const std::vector<Skill>& AgentSessionRuntime::skills() const {

@@ -75,8 +75,7 @@ TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issu
     CHECK(block_mentions(tui_sources, "src/tui/VirtualTerminal.cpp"));
     CHECK(block_mentions(cmake, "add_library(cch_coding_agent_tui"));
     const auto coding_agent_tui_sources = cmake_command_block(cmake, "add_library(cch_coding_agent_tui");
-    CHECK(block_mentions(coding_agent_tui_sources, "src/coding_agent/tui/KeybindingCatalog.cpp"));
-    CHECK(block_mentions(coding_agent_tui_sources, "src/coding_agent/tui/KeybindingHelp.cpp"));
+    CHECK(block_mentions(coding_agent_tui_sources, "src/coding_agent/tui/KeybindingsManager.cpp"));
     CHECK(block_mentions(coding_agent_tui_sources, "src/coding_agent/tui/Theme.cpp"));
     CHECK(block_mentions(coding_agent_tui_sources, "src/coding_agent/tui/ThemeController.cpp"));
     CHECK(block_mentions(cmake, "add_library(cch_coding_agent_interactive"));

@@ -1011,11 +1011,11 @@ TEST_CASE(
     // Autocomplete cancellation precedes both active operations.
     REQUIRE(terminal.inject_input("/"));
     drain_ready(io);
-    CHECK(visible_screen(terminal).find("/clear") != std::string::npos);
+    CHECK(visible_screen(terminal).find("/compact") != std::string::npos);
     REQUIRE(terminal.inject_input("\x1b"));
     REQUIRE(terminal.flush_input());
     drain_ready(io);
-    CHECK(visible_screen(terminal).find("/clear") == std::string::npos);
+    CHECK(visible_screen(terminal).find("/compact") == std::string::npos);
     CHECK(client_pointer->stop_callback_count == 0);
     CHECK(shell_pointer->cancellation_request_count == 0);
     REQUIRE(terminal.inject_input("\x03"));
@@ -1303,7 +1303,7 @@ TEST_CASE(
 
     // Close requests both cancellations and waits for quiescence: the run
     // cannot finish while the tool callback is still gated.
-    REQUIRE(terminal.inject_input("/exit\r"));
+    REQUIRE(terminal.inject_input("/quit\r"));
     drain_ready(io);
     CHECK(tool_pointer->stop_callback_count == 1);
     CHECK(shell_pointer->cancellation_request_count == 1);
@@ -2134,8 +2134,8 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "/help documents User Bash input prefixes without a pseudo-command or hotkey action",
-    "[coding_agent][tui][issue89]") {
+    "User Bash input prefixes render in the header hints without a pseudo-command or hotkey action",
+    "[coding_agent][tui][issue89][issue419]") {
     tests::TempWorkspace workspace;
     auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
@@ -2163,19 +2163,20 @@ TEST_CASE(
         });
     drain_ready(io);
 
-    // A separate input-prefix section documents ! and !!.
-    REQUIRE(terminal.inject_input("/help\r"));
-    drain_ready(io);
+    // The header hints document ! and !! as raw input prefixes (pi
+    // `keybinding-hints.ts` rawKeyHint); `/help` no longer exists (ADR 0036
+    // G4 deleted the own slash-command set), so no separate input-prefix
+    // section renders.
     auto screen = visible_screen(terminal);
-    CHECK(screen.find("Available commands:") != std::string::npos);
-    CHECK(screen.find("Input prefixes:") != std::string::npos);
-    CHECK(screen.find("! <command>") != std::string::npos);
-    CHECK(screen.find("!! <command>") != std::string::npos);
+    CHECK(screen.find("! bash") != std::string::npos);
+    CHECK(screen.find("Input prefixes:") == std::string::npos);
 
-    // The prefixes are not slash commands.
+    // The Deleted `/help` passes through as an ordinary Agent Prompt; the
+    // prefixes are not slash commands (`/help !` is an unknown-slashes
+    // pass-through too).
     REQUIRE(terminal.inject_input("/help !\r"));
     drain_ready(io);
-    CHECK(visible_screen(terminal).find("Unknown command: /!") != std::string::npos);
+    CHECK(visible_screen(terminal).find("Unknown command: /!") == std::string::npos);
 
     // Typing a prefix opens no slash autocomplete.
     REQUIRE(terminal.inject_input("!"));

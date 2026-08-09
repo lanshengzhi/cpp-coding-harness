@@ -60,6 +60,11 @@ struct InMemoryPublication {
     std::optional<std::string> session_id;
 };
 
+/// pi `appendSessionInfo` name sanitization (session-manager.ts): CR/LF runs
+/// become one space, then the result is trimmed. Shared by the CLI `--name`
+/// publication and the in-session `/name` flow.
+[[nodiscard]] std::string sanitize_session_name(const std::string& name);
+
 /// Passive target intent for publishing one newly created Agent Session.
 using NewSessionPublication = std::variant<
     ExplicitNewPublication,

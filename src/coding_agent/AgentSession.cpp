@@ -614,6 +614,25 @@ std::optional<std::string> AgentSession::last_assistant_text() const {
     return impl_ && impl_->runtime ? impl_->runtime->last_assistant_text() : std::nullopt;
 }
 
+std::optional<std::string> AgentSession::session_name() const {
+    return impl_ && impl_->runtime ? impl_->runtime->session_name() : std::nullopt;
+}
+
+util::Expected<std::optional<std::string>> AgentSession::set_session_name(
+    std::string name) {
+    if (!impl_ || !impl_->runtime) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "session is not initialized"));
+    }
+    return impl_->runtime->set_session_name(std::move(name));
+}
+
+runtime::SessionStats AgentSession::session_stats() const {
+    return impl_ && impl_->runtime ? impl_->runtime->session_stats()
+                                   : runtime::SessionStats{};
+}
+
 const std::string& AgentSession::session_id() const {
     static const std::string empty;
     return impl_ && impl_->runtime ? impl_->runtime->session_id() : empty;

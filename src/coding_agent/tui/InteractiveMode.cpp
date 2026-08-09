@@ -23,12 +23,11 @@
 #include <cch/tui/Tui.hpp>
 
 #include "coding_agent/BoundedText.hpp"
-#include "coding_agent/CommandRegistry.hpp"
 #include "coding_agent/ImageInput.hpp"
 #include "coding_agent/SessionCwd.hpp"
 #include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
-#include "coding_agent/prompt/SlashCommandParser.hpp"
+#include "coding_agent/prompt/BuiltinSlashCommands.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/runtime/AgentSessionRuntime.hpp"
 #include "coding_agent/tui/BashExecutionComponent.hpp"
@@ -37,8 +36,7 @@
 #include "coding_agent/tui/ExternalEditor.hpp"
 #include "coding_agent/tui/Footer.hpp"
 #include "coding_agent/tui/FooterDataProvider.hpp"
-#include "coding_agent/tui/KeybindingCatalog.hpp"
-#include "coding_agent/tui/KeybindingHelp.hpp"
+#include "coding_agent/tui/KeybindingsManager.hpp"
 #include "coding_agent/tui/StatusIndicator.hpp"
 #include "coding_agent/tui/KeybindingHints.hpp"
 #include "coding_agent/tui/LoadedResources.hpp"
@@ -143,6 +141,32 @@ struct UserBashInvocation {
     }).base();
     if (first >= last) return {};
     return {first, last};
+}
+
+/// The argument after an exact slash prefix (pi `text.slice(N).trim()` for
+/// the space-delimited `startsWith("/x ")` branch): `"/name  foo"` with
+/// `"/name "` yields `"foo"`.
+[[nodiscard]] std::string slash_argument(std::string_view text, std::string_view prefix) {
+    return trim_editor_submission(std::string{text.substr(prefix.size())});
+}
+
+/// `JSON.stringify`-shaped quoting for the `/name` normalization warning
+/// (pi `JSON.stringify(name)`): a double-quoted literal with the JSON
+/// escapes pi would emit.
+[[nodiscard]] std::string json_quote_string(std::string_view value) {
+    std::string result = "\"";
+    for (const char character : value) {
+        switch (character) {
+        case '\\': result += "\\\\"; break;
+        case '"': result += "\\\""; break;
+        case '\n': result += "\\n"; break;
+        case '\r': result += "\\r"; break;
+        case '\t': result += "\\t"; break;
+        default: result.push_back(character); break;
+        }
+    }
+    result.push_back('"');
+    return result;
 }
 
 /// Parses one trimmed submission as User Bash. `!` runs with later model
@@ -535,25 +559,40 @@ struct ModelCompletionItem {
 };
 using ModelCompletionSnapshot = std::vector<ModelCompletionItem>;
 
-/// Build the editor autocomplete command list: the registered slash commands
-/// as plain items, prompt templates, and skills — plus the `model` command as
-/// a `SlashCommand` whose argument completion resolves pi's `model-search`
-/// text over the current candidate snapshot (scoped models when the session
-/// carries a scope, else the availability snapshot).
+/// pi `prefixAutocompleteDescription` subset (`core/source-info.ts` + the
+/// interactive-mode `getAutocompleteSourceTag`): the scope-prefixed
+/// description for discovered prompt templates and skills. The loader subset
+/// produces only `source` "auto"/"cli" (no npm/git sources), so the tag is
+/// the scope letter `[u]`/`[p]`/`[t]` alone.
+[[nodiscard]] std::string prefix_autocomplete_description(
+    const std::string& description,
+    SourceScope scope) {
+    const char tag = scope == SourceScope::User ? 'u' : scope == SourceScope::Project ? 'p' : 't';
+    return std::format("[{}]{}", tag, description.empty() ? "" : " " + description);
+}
+
+/// Build the editor autocomplete command list: the 17 Supported built-in
+/// slash commands (pi `BUILTIN_SLASH_COMMANDS` subset) as plain items, the
+/// loaded prompt templates (scope-prefixed descriptions), and `/skill:`
+/// commands while the `enableSkillCommands` setting is enabled — plus the
+/// `model` command as a `SlashCommand` whose argument completion resolves
+/// pi's `model-search` text over the current candidate snapshot (scoped
+/// models when the session carries a scope, else the availability snapshot).
+/// The Deferred slashes (`/export` `/import` `/share` `/changelog`
+/// `/clone`), `/debug`, and the easter eggs are absent.
 [[nodiscard]] std::vector<std::variant<cch::tui::SlashCommand, cch::tui::AutocompleteItem>>
 command_autocomplete_commands(
-    const CommandRegistry& commands,
     std::span<const PromptTemplate> prompt_templates,
     std::span<const Skill> skills,
     std::shared_ptr<const ModelCompletionSnapshot> model_completion,
     bool include_skill_commands) {
     std::vector<std::variant<cch::tui::SlashCommand, cch::tui::AutocompleteItem>> items;
     std::set<std::string, std::less<>> names;
-    for (const auto& command : commands.list_commands()) {
-        std::string description = command.description;
+    for (const auto& command : prompt::builtin_slash_commands()) {
+        std::string description = std::string{command.description};
         if (!command.argument_hint.empty()) {
             description = description.empty()
-                ? command.argument_hint
+                ? std::string{command.argument_hint}
                 : std::format("{} — {}", command.argument_hint, description);
         }
         if (command.name == "model") {
@@ -562,9 +601,9 @@ command_autocomplete_commands(
             // label `id`, description `provider`. The description stays
             // plain: the combined provider prepends the argument hint.
             cch::tui::SlashCommand slash;
-            slash.name = command.name;
-            slash.description = command.description;
-            slash.argument_hint = command.argument_hint;
+            slash.name = std::string{command.name};
+            slash.description = std::string{command.description};
+            slash.argument_hint = std::string{command.argument_hint};
             slash.get_argument_completions =
                 [model_completion](std::string_view prefix)
                 -> std::optional<std::vector<cch::tui::AutocompleteItem>> {
@@ -597,12 +636,12 @@ command_autocomplete_commands(
             items.push_back(std::move(slash));
         } else {
             items.push_back(cch::tui::AutocompleteItem{
-                .value = command.name,
-                .label = command.name,
+                .value = std::string{command.name},
+                .label = std::string{command.name},
                 .description = std::move(description),
             });
         }
-        names.insert(command.name);
+        names.insert(std::string{command.name});
     }
     for (const auto& prompt_template : prompt_templates) {
         if (!names.insert(prompt_template.name).second) continue;
@@ -615,7 +654,8 @@ command_autocomplete_commands(
         items.push_back(cch::tui::AutocompleteItem{
             .value = prompt_template.name,
             .label = prompt_template.name,
-            .description = std::move(description),
+            .description =
+                prefix_autocomplete_description(description, prompt_template.sourceInfo.scope),
         });
     }
     // pi `createBaseAutocompleteProvider`: skill commands register only
@@ -627,7 +667,8 @@ command_autocomplete_commands(
             items.push_back(cch::tui::AutocompleteItem{
                 .value = name,
                 .label = name,
-                .description = skill.description,
+                .description =
+                    prefix_autocomplete_description(skill.description, skill.sourceInfo.scope),
             });
         }
     }
@@ -1853,9 +1894,6 @@ public:
         if (!booting) {
             update_model_completion();
         }
-        if (auto registered = register_commands(); !registered) {
-            return fail_start(registered.error());
-        }
 
         InteractiveStartupDiagnostics diagnostics;
         if (auto loaded = load_startup_resources(config); !loaded) {
@@ -2143,13 +2181,6 @@ public:
     }
 
 private:
-    [[nodiscard]] util::ExpectedVoid register_commands() {
-        if (auto registered = register_builtin_commands(commands_); !registered) {
-            return std::unexpected(registered.error());
-        }
-        return register_native_tui_commands(commands_);
-    }
-
     /// The assembled main-editor keybinding action-id list (pi's shared
     /// `KeybindingsManager` catalog surface), shared by the startup catalog
     /// and the `/reload` re-catalog (#418).
@@ -2218,7 +2249,7 @@ private:
     }
 
     /// `/reload` keybinding re-catalog (pi `KeybindingsManager.reload()`):
-    /// re-run `load_keybinding_catalog` with the same assembled action list
+    /// re-run `load_keybindings_manager` with the same assembled action list
     /// and swap the shared slot + editor (ADR 0035). Diagnostics render like
     /// startup.
     [[nodiscard]] util::ExpectedVoid re_catalog_keybindings() {
@@ -2228,20 +2259,20 @@ private:
         for (const auto& action : actions) {
             action_views.push_back(action);
         }
-        if (auto definitions = baseline_application_keybindings(action_views, keybinding_platform_);
+        if (auto definitions = app_keybinding_definitions(action_views, keybinding_platform_);
             !definitions) {
             return std::unexpected(definitions.error());
         } else {
-            KeybindingCatalogRequest request;
+            KeybindingsManagerRequest request;
             request.agent_config_directory = agent_config_directory_;
             request.application_definitions = std::move(*definitions);
             request.platform = keybinding_platform_;
-            if (auto catalog = load_keybinding_catalog(std::move(request)); !catalog) {
-                return std::unexpected(catalog.error());
+            if (auto manager = load_keybindings_manager(std::move(request)); !manager) {
+                return std::unexpected(manager.error());
             } else {
                 if (view_ != nullptr) {
-                    view_->set_keybindings(catalog->registry);
-                    for (const auto& diagnostic : catalog->diagnostics) {
+                    view_->set_keybindings(manager->registry);
+                    for (const auto& diagnostic : manager->diagnostics) {
                         view_->append_diagnostic(diagnostic.message);
                     }
                     tui_.invalidate();
@@ -2262,15 +2293,15 @@ private:
         for (const auto& action : actions) {
             action_views.push_back(action);
         }
-        if (auto definitions = baseline_application_keybindings(action_views, config.platform); !definitions) {
+        if (auto definitions = app_keybinding_definitions(action_views, config.platform); !definitions) {
             return std::unexpected(definitions.error());
         } else {
-            KeybindingCatalogRequest request;
+            KeybindingsManagerRequest request;
             request.agent_config_directory = config.agent_config_directory;
             request.application_definitions = std::move(*definitions);
             request.platform = config.platform;
-            if (auto catalog = load_keybinding_catalog(std::move(request)); !catalog) {
-                return std::unexpected(catalog.error());
+            if (auto manager = load_keybindings_manager(std::move(request)); !manager) {
+                return std::unexpected(manager.error());
             } else {
                 // The shared slot exists before the view is composed; the
                 // `/reload` re-catalog replaces through the same slot (ADR
@@ -2278,8 +2309,8 @@ private:
                 if (!keybindings_) {
                     keybindings_ = std::make_shared<SharedKeybindings>();
                 }
-                keybindings_->replace(catalog->registry);
-                diagnostics.keybindings = std::move(catalog->diagnostics);
+                keybindings_->replace(manager->registry);
+                diagnostics.keybindings = std::move(manager->diagnostics);
             }
         }
 
@@ -2469,7 +2500,6 @@ private:
             : (boot_request_ ? boot_request_->workspace : std::filesystem::path{});
         return std::make_unique<cch::tui::CombinedAutocompleteProvider>(
             command_autocomplete_commands(
-                commands_,
                 templates,
                 skills,
                 model_completion_,
@@ -2792,23 +2822,7 @@ private:
         });
     }
 
-    [[nodiscard]] CommandContext command_context() const {
-        const auto& path = session_->session_path();
-        return CommandContext{
-            .session_id = session_->session_id(),
-            .session_path = path
-                ? std::optional<std::string>{path->string()}
-                : std::nullopt,
-            .workspace_path = session_->workspace().string(),
-            .provider = session_->provider(),
-            .model = session_->model(),
-            .message_count = session_->message_count(),
-            .available_commands = commands_.list_commands(),
-            .user_bash_available =
-                detail::AgentSessionInteractiveAccess::has_user_shell(*session_),
-        };
-    }
-
+    /// Append one bounded presentation error to the chat diagnostic area.
     void append_command_error(const util::Error& error) {
         if (view_ == nullptr) return;
         view_->append_diagnostic(combined_error_text(error));
@@ -3428,6 +3442,196 @@ private:
             return;
         }
         show_status("Copied last agent message to clipboard");
+    }
+
+    /// pi `handleNameCommand`: `/name <name>` sanitizes and persists the
+    /// `session_info` entry and reports pi's statuses; a bare `/name` shows
+    /// the current name or the usage warning.
+    void handle_name_command(std::string_view text) {
+        // pi `text.replace(/^\/name\s*/, "").trim()`.
+        const auto name = text.starts_with("/name ")
+            ? slash_argument(text, "/name ")
+            : std::string{};
+        if (name.empty()) {
+            const auto current = session_->session_name();
+            if (current && !current->empty()) {
+                view_->append_frontend_message(
+                    std::format("Session name: {}", *current));
+            } else {
+                view_->append_warning("Usage: /name <name>");
+            }
+            tui_.invalidate();
+            return;
+        }
+        auto stored = session_->set_session_name(name);
+        if (!stored) {
+            append_command_error(stored.error());
+            return;
+        }
+        if (stored->has_value() && *stored != name) {
+            // pi `showWarning("Session name was normalized from
+            // ${JSON.stringify(name)} to ${JSON.stringify(sessionName)}")`.
+            view_->append_warning(std::format(
+                "Session name was normalized from {} to {}",
+                json_quote_string(name),
+                json_quote_string(**stored)));
+        }
+        view_->append_frontend_message(
+            std::format("Session name set: {}", stored->value_or(name)));
+        tui_.invalidate();
+    }
+
+    /// pi `handleSessionCommand`: the Session Info chat block over the
+    /// session name, file, id, message counts, and token totals (pi
+    /// `getSessionStats` shape; the C++ subset renders the data the session
+    /// exposes).
+    void handle_session_command() {
+        // pi `handleSessionCommand` shape: Name (when set), File, ID, the
+        // Messages breakdown, and the Tokens totals. Workspace/provider/model
+        // are not pi fields and are intentionally absent (strict subset).
+        const auto name = session_->session_name();
+        const auto path = session_->session_path();
+        const auto stats = session_->session_stats();
+        std::string info = "Session Info\n\n";
+        if (name && !name->empty()) {
+            info += std::format("Name: {}\n", *name);
+        }
+        info += std::format("File: {}\n", path ? path->string() : std::string{"In-memory"});
+        info += std::format("ID: {}\n\n", session_->session_id());
+        info += "Messages\n";
+        info += std::format("Total: {}\n", stats.total_messages);
+        info += std::format("User: {}\n", stats.user_messages);
+        info += std::format("Assistant: {}\n", stats.assistant_messages);
+        info += std::format("Tools: {} calls, {} results\n", stats.tool_calls, stats.tool_results);
+        info += "\nTokens\n";
+        // pi: "Input" is the full prompt volume (input + cached + written);
+        // the C++ subset renders the provider-independent split.
+        const auto prompt_tokens = stats.input_tokens + stats.cache_read + stats.cache_write;
+        info += std::format("Input: {}\n", prompt_tokens);
+        if (prompt_tokens > 0 && (stats.cache_read > 0 || stats.cache_write > 0)) {
+            info += std::format("Cached: {}\n", stats.cache_read);
+            info += std::format("Uncached: {}\n", stats.input_tokens + stats.cache_write);
+        }
+        info += std::format("Output: {}\n", stats.output_tokens);
+        info += std::format("Total: {}\n", prompt_tokens + stats.output_tokens);
+        view_->append_frontend_message(std::move(info));
+        tui_.invalidate();
+    }
+
+    /// pi `handleCompactCommand`: clear the status indicator, run the
+    /// session compaction with the optional custom instructions, and ignore
+    /// failures (they surface through the session events, pi's "Ignore, will
+    /// be emitted as an event").
+    void post_compact(std::string custom_instructions) {
+        const auto weak = weak_from_this();
+        boost::asio::post(executor_, [weak, custom_instructions = std::move(custom_instructions)]() mutable {
+            if (const auto self = weak.lock(); self && self->running_) {
+                self->spawn_flow(
+                    [self, custom_instructions = std::move(custom_instructions)]() mutable
+                    -> boost::asio::awaitable<void> {
+                        co_await self->handle_compact_command(std::move(custom_instructions));
+                    },
+                    "Native TUI compact flow failed");
+            }
+        });
+    }
+
+    /// pi `handleCompactCommand`: clear the status indicator, then compact;
+    /// errors are ignored (they surface through the compaction session
+    /// events).
+    [[nodiscard]] boost::asio::awaitable<void> handle_compact_command(
+        std::string custom_instructions) {
+        // pi `handleCompactCommand`: clearStatusIndicator() first.
+        if (view_ != nullptr) {
+            view_->clear_status_indicator();
+            tui_.invalidate();
+        }
+        // pi: failures are ignored — they surface through the compaction
+        // session events (`compaction_end`), so no error is reported here.
+        static_cast<void>(
+            co_await session_->compact(std::move(custom_instructions)));
+    }
+
+    /// pi `showTrustSelector`: spawn the `/trust` flow (the generic
+    /// string-list selector over `getProjectTrustOptions` with no
+    /// session-only variants, matching the boot trust prompt pattern).
+    void show_trust_selector() {
+        if (!running_ || view_ == nullptr || !session_->is_open() || !theme_controller_) {
+            return;
+        }
+        const auto self = shared_from_this();
+        spawn_flow(
+            [self]() -> boost::asio::awaitable<void> {
+                co_await self->run_trust_selector();
+            },
+            "Native TUI trust flow failed");
+    }
+
+    /// The `/trust` selector body: `getProjectTrustOptions` (no session-only
+    /// variants), the pi status after persisting, and the selector's
+    /// cancel/session-only paths.
+    [[nodiscard]] boost::asio::awaitable<void> run_trust_selector() {
+        if (!running_ || view_ == nullptr || !session_->is_open() || !theme_controller_) {
+            co_return;
+        }
+        const auto cwd = session_->workspace();
+        auto options = get_project_trust_options(cwd, /*include_session_only*/ false);
+        auto slot = std::make_shared<AuthPromptSlot>(executor_);
+        std::vector<std::string> labels;
+        labels.reserve(options.size());
+        for (const auto& option : options) {
+            labels.push_back(option.label);
+        }
+        const auto weak = weak_from_this();
+        auto selector = std::make_shared<StringListSelector>(
+            theme_controller_->live_theme(),
+            keybindings_->get(),
+            format_project_trust_prompt(cwd),
+            std::move(labels),
+            [weak, slot](std::string label) {
+                if (const auto self = weak.lock()) {
+                    self->post_from_view(
+                        [slot, label = std::move(label)](InteractiveState& self) mutable {
+                            self.restore_editor_slot();
+                            slot->resolve(std::move(label));
+                        });
+                }
+            },
+            [weak, slot] {
+                if (const auto self = weak.lock()) {
+                    self->post_from_view([slot](InteractiveState& self) {
+                        self.restore_editor_slot();
+                        slot->resolve(std::unexpected(prompt_cancelled_error()));
+                    });
+                }
+            });
+        place_editor_replacement(std::move(selector));
+
+        boost::system::error_code error;
+        auto selected = co_await slot->channel.async_receive(
+            boost::asio::redirect_error(boost::asio::use_awaitable, error));
+        if (error) {
+            co_return;
+        }
+        restore_editor_slot();
+        if (!selected) {
+            co_return;
+        }
+        for (auto& option : options) {
+            if (option.label != *selected) continue;
+            if (!option.updates.empty()) {
+                ProjectTrustStore store{coding_agent::trust_store_file_path()};
+                if (auto saved = store.setMany(option.updates); !saved) {
+                    append_command_error(saved.error());
+                }
+            }
+            // pi: `Saved trust decision: trusted|untrusted. Restart pi for
+            // this to take effect.` with the C++ identity.
+            show_status(std::format(
+                "Saved trust decision: {}. Restart cch for this to take effect.",
+                option.trusted ? "trusted" : "untrusted"));
+            break;
+        }
     }
 
     /// The configured clipboard writer (pi `copyToClipboard` platform-tools
@@ -4771,57 +4975,6 @@ private:
         show_status(logout_success_message(option.auth_type, option.name));
     }
 
-    void apply_command_result(CommandResult result) {
-        if (view_ != nullptr) view_->append_frontend_message(std::move(result.display_text));
-        switch (result.effect) {
-        case CommandEffect::None:
-            tui_.invalidate();
-            return;
-        case CommandEffect::ClearScreen:
-            if (auto cleared = tui_.clear_screen(); !cleared) {
-                append_command_error(cleared.error());
-            } else {
-                if (view_ != nullptr) view_->clear_transcript();
-                tui_.invalidate();
-            }
-            return;
-        case CommandEffect::OpenSettings:
-            show_settings_selector();
-            return;
-        case CommandEffect::OpenHotkeys:
-            open_hotkeys();
-            return;
-        case CommandEffect::OpenLogin:
-            open_login(std::move(result.effect_argument));
-            return;
-        case CommandEffect::OpenLogout:
-            open_logout();
-            return;
-        case CommandEffect::OpenModelSelector:
-            post_open_model_selector(std::move(result.effect_argument));
-            return;
-        case CommandEffect::OpenScopedModelsSelector:
-            post_open_scoped_models_selector();
-            return;
-        case CommandEffect::Reload: {
-            const auto shared = shared_from_this();
-            spawn_flow(
-                [shared]() -> boost::asio::awaitable<void> {
-                    co_await shared->handle_reload();
-                },
-                "Native TUI reload flow failed");
-            return;
-        }
-        case CommandEffect::Shutdown:
-            if (view_ != nullptr) {
-                tui_.invalidate();
-                render();
-            }
-            request_exit();
-            return;
-        }
-    }
-
     /// pi `maybeSaveImplicitProjectTrustAfterReload`: when the boot armed
     /// `autoTrustOnReloadCwd` and the session is trusted but the reloaded
     /// workspace NOW has trust-requiring resources with no saved decision,
@@ -4982,32 +5135,102 @@ private:
         dismiss();
     }
 
+    /// pi `setupEditorSubmitHandler` slash dispatch: the if-chain over the
+    /// 17 Supported builtins (ADR 0036 G4), each binding to its component or
+    /// runtime capability with pi's verbatim strings. `/export` `/import`
+    /// `/share` `/changelog` `/clone`, `/debug`, the easter eggs, and any
+    /// other unrecognized slash text return false and pass through as an
+    /// ordinary Agent Prompt (pi has no general slash parser). The editor has
+    /// already cleared on submit, so no branch clears it (pi's
+    /// `editor.setText("")` is the editor's own submit behavior).
     [[nodiscard]] bool dispatch_command(std::string_view text) {
-        const auto parsed = prompt::try_parse_slash_command(text);
-        if (!parsed) return false;
-        try {
-            if (auto result = commands_.dispatch(
-                    parsed->first,
-                    command_context(),
-                    parsed->second);
-                !result) {
-                return false;
-            } else {
-                apply_command_result(std::move(*result));
-            }
-            return true;
-        } catch (const std::exception& error) {
-            append_command_error(util::make_error(
-                util::ErrorCode::Unknown,
-                "Command handler failed",
-                error.what()));
-            return true;
-        } catch (...) {
-            append_command_error(util::make_error(
-                util::ErrorCode::Unknown,
-                "Command handler failed"));
+        if (!running_ || view_ == nullptr) return false;
+        if (text == "/settings") {
+            show_settings_selector();
             return true;
         }
+        if (text == "/scoped-models") {
+            post_open_scoped_models_selector();
+            return true;
+        }
+        if (text == "/model" || text.starts_with("/model ")) {
+            const auto search_term =
+                text.starts_with("/model ") ? slash_argument(text, "/model ") : std::string{};
+            post_open_model_selector(std::move(search_term));
+            return true;
+        }
+        if (text == "/copy") {
+            post_copy_last_message();
+            return true;
+        }
+        if (text == "/name" || text.starts_with("/name ")) {
+            handle_name_command(text);
+            return true;
+        }
+        if (text == "/session") {
+            handle_session_command();
+            return true;
+        }
+        if (text == "/hotkeys") {
+            open_hotkeys();
+            return true;
+        }
+        if (text == "/fork") {
+            post_fork_session();
+            return true;
+        }
+        if (text == "/tree") {
+            post_open_tree_selector();
+            return true;
+        }
+        if (text == "/trust") {
+            show_trust_selector();
+            return true;
+        }
+        if (text == "/login" || text.starts_with("/login ")) {
+            const auto provider_ref =
+                text.starts_with("/login ") ? slash_argument(text, "/login ") : std::string{};
+            open_login(std::move(provider_ref));
+            return true;
+        }
+        if (text == "/logout") {
+            open_logout();
+            return true;
+        }
+        if (text == "/new") {
+            post_new_session();
+            return true;
+        }
+        if (text == "/compact" || text.starts_with("/compact ")) {
+            const auto custom_instructions =
+                text.starts_with("/compact ")
+                ? slash_argument(text, "/compact ")
+                : std::string{};
+            post_compact(std::move(custom_instructions));
+            return true;
+        }
+        if (text == "/resume") {
+            post_resume_session();
+            return true;
+        }
+        if (text == "/reload") {
+            const auto shared = shared_from_this();
+            spawn_flow(
+                [shared]() -> boost::asio::awaitable<void> {
+                    co_await shared->handle_reload();
+                },
+                "Native TUI reload flow failed");
+            return true;
+        }
+        if (text == "/quit") {
+            if (view_ != nullptr) {
+                tui_.invalidate();
+                render();
+            }
+            request_exit();
+            return true;
+        }
+        return false;
     }
 
     // ── Interrupt admission (pi onEscape precedence, folded from the
@@ -5602,7 +5825,6 @@ private:
     std::unique_ptr<AgentSession> owned_session_;
     cch::tui::Terminal& terminal_; // must outlive this interactive run.
     cch::tui::Tui tui_;
-    CommandRegistry commands_;
     /// pi's mutable shared KeybindingsManager consumption shape (ADR 0035,
     /// #418): every durable view component observes this slot; `/reload`
     /// replaces the current registry so all consumers see the new bindings

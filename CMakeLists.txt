@@ -98,8 +98,7 @@ target_link_libraries(cch_tui
 )
 
 add_library(cch_coding_agent_tui
-    src/coding_agent/tui/KeybindingCatalog.cpp
-    src/coding_agent/tui/KeybindingHelp.cpp
+    src/coding_agent/tui/KeybindingsManager.cpp
     src/coding_agent/tui/Theme.cpp
     src/coding_agent/tui/ThemeController.cpp
 )
@@ -225,7 +224,6 @@ target_link_libraries(cch_tools
 add_library(cch_coding_agent_runtime
     src/coding_agent/ImageInput.cpp
     src/cli/InitialPrompt.cpp
-    src/coding_agent/CommandRegistry.cpp
     src/coding_agent/SessionDiscovery.cpp
     src/coding_agent/SessionPathPolicy.cpp
     src/coding_agent/SettingsManager.cpp
@@ -235,7 +233,7 @@ add_library(cch_coding_agent_runtime
     src/coding_agent/prompt/SystemPromptBuilder.cpp
     src/coding_agent/prompt/PromptExpansion.cpp
     src/coding_agent/prompt/PromptTemplateExpander.cpp
-    src/coding_agent/prompt/SlashCommandParser.cpp
+    src/coding_agent/prompt/BuiltinSlashCommands.cpp
     src/coding_agent/AgentSession.cpp
     src/coding_agent/SkillFrontmatterParser.cpp
     src/coding_agent/SkillLoader.cpp
@@ -386,8 +384,7 @@ if(CCH_BUILD_TESTS)
         tests/cli/SessionFamilyCliTest.cpp
         tests/cli/StartupTuiTest.cpp
         tests/coding_agent/SessionDiscoveryTest.cpp
-        tests/coding_agent/BuiltinCommandsTest.cpp
-        tests/coding_agent/CommandRegistryTest.cpp
+        tests/coding_agent/BuiltinSlashCommandsTest.cpp
         tests/coding_agent/ImageInputTest.cpp
         tests/coding_agent/PromptExpansionTest.cpp
         tests/coding_agent/PromptTemplateProcessingTest.cpp
@@ -414,7 +411,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/SkillLoaderTest.cpp
         tests/coding_agent/PromptTemplateLoaderTest.cpp
         tests/coding_agent/tui/InteractiveModeTest.cpp
-        tests/coding_agent/tui/KeybindingCatalogTest.cpp
+        tests/coding_agent/tui/KeybindingsManagerTest.cpp
         tests/coding_agent/tui/FooterTest.cpp
         tests/coding_agent/tui/FooterStatusInteractiveTest.cpp
         tests/coding_agent/tui/ChatContainerStatusTest.cpp

@@ -1,7 +1,7 @@
 #include "cli/StartupTui.hpp"
 
 #include "coding_agent/SessionCwd.hpp"
-#include "coding_agent/tui/KeybindingCatalog.hpp"
+#include "coding_agent/tui/KeybindingsManager.hpp"
 #include "coding_agent/tui/SessionSelector.hpp"
 #include "coding_agent/tui/StringListSelector.hpp"
 #include "coding_agent/tui/Theme.hpp"
@@ -71,20 +71,20 @@ struct StartupSlot : std::enable_shared_from_this<StartupSlot<T>> {
 startup_keybindings(
     const StartupTuiOptions& options,
     std::span<const std::string_view> application_actions) {
-    auto definitions = coding_agent::tui::baseline_application_keybindings(
+    auto definitions = coding_agent::tui::app_keybinding_definitions(
         application_actions, options.platform);
     if (!definitions) {
         return std::unexpected(definitions.error());
     }
-    auto catalog = coding_agent::tui::load_keybinding_catalog({
+    auto manager = coding_agent::tui::load_keybindings_manager({
         .agent_config_directory = options.agent_config_directory,
         .application_definitions = std::move(*definitions),
         .platform = options.platform,
     });
-    if (!catalog) {
-        return std::unexpected(catalog.error());
+    if (!manager) {
+        return std::unexpected(manager.error());
     }
-    return std::move(catalog->registry);
+    return std::move(manager->registry);
 }
 
 /// pi `createStartupTui` theme init (G5 controller default): the

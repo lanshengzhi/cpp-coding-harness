@@ -11,6 +11,7 @@
 #include "harness/session/InMemorySessionStore.hpp"
 
 #include <cerrno>
+#include <algorithm>
 #include <cstring>
 #include <iterator>
 #include <memory>
@@ -295,6 +296,29 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
 }
 
 } // namespace
+
+std::string sanitize_session_name(const std::string& name) {
+    std::string result;
+    result.reserve(name.size());
+    bool pending_space = false;
+    for (const char character : name) {
+        if (character == '\r' || character == '\n') {
+            pending_space = true;
+            continue;
+        }
+        if (pending_space) {
+            result.push_back(' ');
+            pending_space = false;
+        }
+        result.push_back(character);
+    }
+    const auto not_space = [](unsigned char character) {
+        return character != ' ' && character != '\t';
+    };
+    result.erase(result.begin(), std::find_if(result.begin(), result.end(), not_space));
+    result.erase(std::find_if(result.rbegin(), result.rend(), not_space).base(), result.end());
+    return result;
+}
 
 util::Expected<OpenSession> publish_session(
     NewSessionPublication target,

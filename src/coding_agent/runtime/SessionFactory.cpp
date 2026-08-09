@@ -390,31 +390,6 @@ void cleanup_factory_env(harness::AsyncExecutionEnv* env) {
     return value;
 }
 
-/// pi appendSessionInfo name sanitization: CR/LF runs become one space,
-/// then the result is trimmed.
-[[nodiscard]] std::string sanitize_session_name(const std::string& name) {
-    std::string result;
-    result.reserve(name.size());
-    bool pending_space = false;
-    for (const char character : name) {
-        if (character == '\r' || character == '\n') {
-            pending_space = true;
-            continue;
-        }
-        if (pending_space) {
-            result.push_back(' ');
-            pending_space = false;
-        }
-        result.push_back(character);
-    }
-    const auto not_space = [](unsigned char character) {
-        return character != ' ' && character != '\t';
-    };
-    result.erase(result.begin(), std::find_if(result.begin(), result.end(), not_space));
-    result.erase(std::find_if(result.rbegin(), result.rend(), not_space).base(), result.end());
-    return result;
-}
-
 /// Resolve a CLI `--model` pattern (with optional `--provider`) against the
 /// live runtime catalog using all models (not only pre-configured ones), so
 /// `--api-key` can enable first-time setup (pi `resolveCliModel` subset).
