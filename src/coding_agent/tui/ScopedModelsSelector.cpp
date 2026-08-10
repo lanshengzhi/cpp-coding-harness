@@ -8,9 +8,11 @@
 #include <cch/ai/Model.hpp>
 #include <cch/tui/Fuzzy.hpp>
 #include <cch/tui/Text.hpp>
+#include <cch/tui/Utils.hpp>
 
 #include <algorithm>
 #include <exception>
+#include <iterator>
 #include <utility>
 
 namespace cch::coding_agent::tui {
@@ -235,10 +237,29 @@ std::string ScopedModelsSelectorComponent::footer_text() const {
         : theme_.foreground(ThemeToken::Dim, std::move(text));
 }
 
-void ScopedModelsSelectorComponent::update_list(std::vector<std::string>& out_lines) const {
+util::ExpectedVoid ScopedModelsSelectorComponent::update_list(std::vector<std::string>& out_lines, std::size_t width) const {
+    // Every emitted line is bounded to the render width (the SessionSelector
+    // pattern): the render path asserts each line's visible width <= the
+    // bound, so a single untruncated line would abort the TUI. ANSI styling
+    // is preserved because truncate_text operates over terminal tokens; a
+    // truncation failure is propagated rather than falling back to the
+    // (potentially over-wide) line.
+    std::vector<std::string> lines;
+    const auto emit = [&lines, width](std::string line) -> util::ExpectedVoid {
+        auto truncated = cch::tui::truncate_text(line, width, "");
+        if (!truncated) return std::unexpected(truncated.error());
+        lines.push_back(std::move(*truncated));
+        return {};
+    };
+
     if (filtered_items_.empty()) {
-        out_lines.emplace_back(theme_.foreground(ThemeToken::Muted, "  No matching models"));
-        return;
+        if (auto pushed = emit(theme_.foreground(ThemeToken::Muted, "  No matching models"));
+            !pushed) return std::unexpected(pushed.error());
+        out_lines.insert(
+            out_lines.end(),
+            std::make_move_iterator(lines.begin()),
+            std::make_move_iterator(lines.end()));
+        return {};
     }
 
     const std::size_t count = filtered_items_.size();
@@ -273,24 +294,31 @@ void ScopedModelsSelectorComponent::update_list(std::vector<std::string>& out_li
         } else {
             line += theme_.foreground(ThemeToken::Dim, " ✗");
         }
-        out_lines.emplace_back(std::move(line));
+        if (auto pushed = emit(std::move(line)); !pushed) return std::unexpected(pushed.error());
     }
 
     if (start > 0 || end < count) {
-        out_lines.emplace_back(theme_.foreground(
-            ThemeToken::Muted,
-            "  (" + std::to_string(selected_index_ + 1) + "/" + std::to_string(count) + ")"));
+        if (auto pushed = emit(theme_.foreground(
+                ThemeToken::Muted,
+                "  (" + std::to_string(selected_index_ + 1) + "/" + std::to_string(count) + ")"));
+            !pushed) return std::unexpected(pushed.error());
     }
 
     if (!filtered_items_.empty()) {
         const auto& selected = filtered_items_[selected_index_];
-        out_lines.emplace_back("");
-        out_lines.emplace_back(theme_.foreground(
-            ThemeToken::Muted,
-            selected.model
-                ? "  Model Name: " + selected.model->name
-                : "  Model unavailable"));
+        if (auto pushed = emit(""); !pushed) return std::unexpected(pushed.error());
+        if (auto pushed = emit(theme_.foreground(
+                ThemeToken::Muted,
+                selected.model
+                    ? "  Model Name: " + selected.model->name
+                    : "  Model unavailable"));
+            !pushed) return std::unexpected(pushed.error());
     }
+    out_lines.insert(
+        out_lines.end(),
+        std::make_move_iterator(lines.begin()),
+        std::make_move_iterator(lines.end()));
+    return {};
 }
 
 util::Expected<cch::tui::RenderResult> ScopedModelsSelectorComponent::render(std::size_t width) {
@@ -336,7 +364,7 @@ util::Expected<cch::tui::RenderResult> ScopedModelsSelectorComponent::render(std
     }
     {
         std::vector<std::string> lines;
-        update_list(lines);
+        if (auto updated = update_list(lines, width); !updated) return std::unexpected(updated.error());
         for (auto& line : lines) result.lines.push_back(std::move(line));
     }
     {

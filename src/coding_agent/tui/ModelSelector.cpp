@@ -7,6 +7,7 @@
 
 #include <cch/tui/Fuzzy.hpp>
 #include <cch/tui/Text.hpp>
+#include <cch/tui/Utils.hpp>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -14,6 +15,7 @@
 
 #include <algorithm>
 #include <exception>
+#include <iterator>
 #include <utility>
 
 namespace cch::coding_agent::tui {
@@ -225,8 +227,21 @@ std::string ModelSelectorComponent::scope_hint_text() const {
         theme_.foreground(ThemeToken::Muted, " (all/scoped)");
 }
 
-void ModelSelectorComponent::update_list(std::vector<std::string>& out_lines) const {
-    // pi `updateList`: the visible slice centers the selection.
+util::ExpectedVoid ModelSelectorComponent::update_list(std::vector<std::string>& out_lines, std::size_t width) const {
+    // pi `updateList`: the visible slice centers the selection. Every emitted
+    // line is bounded to the render width (the SessionSelector pattern): the
+    // render path asserts each line's visible width <= the bound, so a single
+    // untruncated line would abort the TUI. ANSI styling is preserved because
+    // truncate_text operates over terminal tokens; a truncation failure is
+    // propagated rather than falling back to the (potentially over-wide) line.
+    std::vector<std::string> lines;
+    const auto emit = [&lines, width](std::string line) -> util::ExpectedVoid {
+        auto truncated = cch::tui::truncate_text(line, width, "");
+        if (!truncated) return std::unexpected(truncated.error());
+        lines.push_back(std::move(*truncated));
+        return {};
+    };
+
     const std::size_t count = filtered_models_.size();
     const std::size_t start = count <= kMaxVisible
         ? 0
@@ -248,13 +263,14 @@ void ModelSelectorComponent::update_list(std::vector<std::string>& out_lines) co
         if (current) {
             line += theme_.foreground(ThemeToken::Success, " ✓");
         }
-        out_lines.emplace_back(std::move(line));
+        if (auto pushed = emit(std::move(line)); !pushed) return std::unexpected(pushed.error());
     }
 
     if (start > 0 || end < count) {
-        out_lines.emplace_back(theme_.foreground(
-            ThemeToken::Muted,
-            "  (" + std::to_string(selected_index_ + 1) + "/" + std::to_string(count) + ")"));
+        if (auto pushed = emit(theme_.foreground(
+                ThemeToken::Muted,
+                "  (" + std::to_string(selected_index_ + 1) + "/" + std::to_string(count) + ")"));
+            !pushed) return std::unexpected(pushed.error());
     }
 
     if (error_message_) {
@@ -263,27 +279,36 @@ void ModelSelectorComponent::update_list(std::vector<std::string>& out_lines) co
         while (begin < error_message_->size()) {
             const auto newline = error_message_->find('\n', begin);
             const auto line_end = newline == std::string::npos ? error_message_->size() : newline;
-            out_lines.emplace_back(theme_.foreground(
-                ThemeToken::Error,
-                error_message_->substr(begin, line_end - begin)));
+            if (auto pushed = emit(theme_.foreground(
+                    ThemeToken::Error,
+                    error_message_->substr(begin, line_end - begin)));
+                !pushed) return std::unexpected(pushed.error());
             if (newline == std::string::npos) break;
             begin = newline + 1;
         }
     } else if (count == 0) {
-        out_lines.emplace_back(theme_.foreground(ThemeToken::Muted, "  No matching models"));
+        if (auto pushed = emit(theme_.foreground(ThemeToken::Muted, "  No matching models"));
+            !pushed) return std::unexpected(pushed.error());
     } else {
         const auto& selected = filtered_models_[selected_index_];
-        out_lines.emplace_back("");
-        out_lines.emplace_back(theme_.foreground(
-            ThemeToken::Muted,
-            "  Model Name: " + selected.model.name));
+        if (auto pushed = emit(""); !pushed) return std::unexpected(pushed.error());
+        if (auto pushed = emit(theme_.foreground(
+                ThemeToken::Muted,
+                "  Model Name: " + selected.model.name));
+            !pushed) return std::unexpected(pushed.error());
     }
     if (!refresh_status_message_.empty()) {
-        out_lines.emplace_back("");
-        out_lines.emplace_back(theme_.foreground(
-            refresh_status_success_ ? ThemeToken::Success : ThemeToken::Muted,
-            "  " + refresh_status_message_));
+        if (auto pushed = emit(""); !pushed) return std::unexpected(pushed.error());
+        if (auto pushed = emit(theme_.foreground(
+                refresh_status_success_ ? ThemeToken::Success : ThemeToken::Muted,
+                "  " + refresh_status_message_));
+            !pushed) return std::unexpected(pushed.error());
     }
+    out_lines.insert(
+        out_lines.end(),
+        std::make_move_iterator(lines.begin()),
+        std::make_move_iterator(lines.end()));
+    return {};
 }
 
 util::Expected<cch::tui::RenderResult> ModelSelectorComponent::render(std::size_t width) {
@@ -335,7 +360,7 @@ util::Expected<cch::tui::RenderResult> ModelSelectorComponent::render(std::size_
         cch::tui::Text spacer("", 1, 0);
         if (auto appended = append(spacer); !appended) return std::unexpected(appended.error());
     }
-    update_list(result.lines);
+    if (auto updated = update_list(result.lines, width); !updated) return std::unexpected(updated.error());
     {
         cch::tui::Text spacer("", 1, 0);
         if (auto appended = append(spacer); !appended) return std::unexpected(appended.error());

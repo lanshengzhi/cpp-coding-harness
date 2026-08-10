@@ -11,6 +11,7 @@
 
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/tui/Keybindings.hpp>
+#include <cch/tui/Utils.hpp>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
@@ -326,5 +327,53 @@ TEST_CASE(
         const auto rendered = selector->render(70);
         REQUIRE(rendered);
         CHECK(join_lines(rendered->lines).find("beta-1") == std::string::npos);
+    }
+}
+
+/// Every emitted line must fit the render width bound exactly: the TUI render
+/// path asserts each line's visible width <= the bound and aborts the whole
+/// app on a single over-wide line (issue #426). The model selectors used to
+/// emit raw, untruncated lines — this pins the width-boundary behavior.
+static void check_all_lines_bounded(const tui::RenderResult& rendered, std::size_t width) {
+    REQUIRE_FALSE(rendered.lines.empty());
+    for (const auto& line : rendered.lines) {
+        const auto visible = cch::tui::visible_width(strip_ansi(line));
+        CHECK(visible <= width);
+    }
+}
+
+TEST_CASE(
+    "ModelSelector never emits a line wider than the render width",
+    "[coding_agent][tui][model-selector][issue426]") {
+    RuntimeFixture fixture;
+    boost::asio::io_context io;
+    fixture.prime(io);
+
+    auto theme = test_theme();
+    auto selector = std::make_shared<coding_agent::tui::ModelSelectorComponent>(
+        theme,
+        test_keybindings(),
+        nullptr,
+        fixture.runtime,
+        io.get_executor(),
+        std::vector<cch::coding_agent::ScopedModel>{},
+        [](ai::Model) {},
+        [] {},
+        [&io] { (void)io; });
+
+    // A narrow width that any raw (untruncated) model line would exceed; the
+    // reported defect reproduced at widths 20-80.
+    for (const std::size_t width : {10ul, 20ul, 30ul}) {
+        const auto rendered = selector->render(width);
+        REQUIRE(rendered);
+        check_all_lines_bounded(*rendered, width);
+    }
+
+    // Also verify the longest raw line is bounded: probe at a width where the
+    // alpha-1/alpha-2 model lines would naturally run long.
+    {
+        const auto rendered = selector->render(6);
+        REQUIRE(rendered);
+        check_all_lines_bounded(*rendered, 6);
     }
 }

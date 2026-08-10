@@ -81,7 +81,7 @@ private:
     void notify_change();
     [[nodiscard]] std::vector<ModelItem> build_items() const;
     [[nodiscard]] std::string footer_text() const;
-    void update_list(std::vector<std::string>& out_lines) const;
+    [[nodiscard]] util::ExpectedVoid update_list(std::vector<std::string>& out_lines, std::size_t width) const;
 
     const LiveTheme& theme_; // must outlive this component.
     std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings_;

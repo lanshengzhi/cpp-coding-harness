@@ -89,7 +89,7 @@ private:
     void close();
     void set_scope(bool scoped);
     void filter_models(std::string query);
-    void update_list(std::vector<std::string>& out_lines) const;
+    [[nodiscard]] util::ExpectedVoid update_list(std::vector<std::string>& out_lines, std::size_t width) const;
     [[nodiscard]] bool is_current(const ai::Model& model) const;
     [[nodiscard]] std::string scope_text() const;
     [[nodiscard]] std::string scope_hint_text() const;

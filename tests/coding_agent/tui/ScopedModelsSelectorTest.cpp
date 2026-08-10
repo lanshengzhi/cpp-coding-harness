@@ -9,6 +9,7 @@
 #include "coding_agent/tui/Theme.hpp"
 
 #include <cch/tui/Keybindings.hpp>
+#include <cch/tui/Utils.hpp>
 
 #include "../../../third_party/catch2/catch_test_macros.hpp"
 
@@ -297,4 +298,33 @@ TEST_CASE(
     // Ctrl+C with an empty search cancels.
     selector.handle_input(tui::KeyEvent{.key = "c", .ctrl = true});
     CHECK(recorder.cancellations == 2);
+}
+
+/// Every emitted line must fit the render width bound exactly: the TUI render
+/// path asserts each line's visible width <= the bound and aborts the whole
+/// app on a single over-wide line (issue #426). The scoped-models selector
+/// used to emit raw, untruncated lines — this pins the width-boundary
+/// behavior.
+static void check_all_lines_bounded(const tui::RenderResult& rendered, std::size_t width) {
+    REQUIRE_FALSE(rendered.lines.empty());
+    for (const auto& line : rendered.lines) {
+        const auto visible = cch::tui::visible_width(strip_ansi(line));
+        CHECK(visible <= width);
+    }
+}
+
+TEST_CASE(
+    "ScopedModelsSelector never emits a line wider than the render width",
+    "[coding_agent][tui][scoped-models][issue426]") {
+    auto theme = test_theme();
+    Recorder recorder;
+    auto selector = make_selector(theme, recorder);
+
+    // Narrow widths any raw (untruncated) model line would exceed; the
+    // reported defect reproduced at width 10 with 41-char lines.
+    for (const std::size_t width : {8ul, 10ul, 16ul}) {
+        const auto rendered = selector.render(width);
+        REQUIRE(rendered);
+        check_all_lines_bounded(*rendered, width);
+    }
 }
