@@ -1,6 +1,7 @@
 #include <cch/tui/SelectList.hpp>
 #include <cch/tui/SettingsList.hpp>
 #include <cch/tui/Tui.hpp>
+#include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "../../third_party/catch2/catch_test_macros.hpp"
@@ -298,7 +299,7 @@ TEST_CASE("SettingsList search line renders and locates the cursor through Input
     REQUIRE(rendered);
     CHECK(rendered->lines.size() >= 2);
     CHECK(rendered->lines[0].starts_with("> tool"));
-    CHECK(rendered->lines[0].size() == 50);
+    CHECK(cch::tui::visible_width(rendered->lines[0]) == 50);
     CHECK(rendered->lines[1].empty());
 
     const auto cursor = list.cursor_location();

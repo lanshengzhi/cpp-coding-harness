@@ -332,6 +332,8 @@ struct Input::Impl {
     struct VisibleWindow {
         std::string text;
         std::size_t before_width{0};
+        /// Byte offset of the cursor within `text` (pi's `cursorDisplay`).
+        std::size_t cursor_offset{0};
     };
 
     /// The value window shown at `width` and the visible width of the text
@@ -342,7 +344,11 @@ struct Input::Impl {
         const auto text = value();
         const auto total = visible_width(text);
         if (total < available) {
-            return VisibleWindow{.text = text, .before_width = visible_width(prefix())};
+            return VisibleWindow{
+                .text = text,
+                .before_width = visible_width(prefix()),
+                .cursor_offset = prefix().size(),
+            };
         }
         // Reserve one column for the cursor when it sits at the end.
         const auto scroll_width = cursor == graphemes.size() ? (available > 0 ? available - 1 : 0) : available;
@@ -365,7 +371,11 @@ struct Input::Impl {
             cursor_col > start_col ? cursor_col - start_col : 0,
             true);
         if (!before) return std::unexpected(before.error());
-        return VisibleWindow{.text = std::move(*visible), .before_width = visible_width(*before)};
+        return VisibleWindow{
+            .text = std::move(*visible),
+            .before_width = visible_width(*before),
+            .cursor_offset = before->size(),
+        };
     }
 };
 
@@ -405,8 +415,24 @@ util::Expected<RenderResult> Input::render(std::size_t width) {
     }
     auto window = impl_->visible_window(width);
     if (!window) return std::unexpected(window.error());
-    std::string line = std::string(kPrompt) + window->text;
-    const auto line_width = 2 + visible_width(window->text);
+
+    // Fake cursor (pi input.ts render): reverse video on the grapheme at the
+    // cursor, or a highlighted space at end of line. ESC[27m (reverse off)
+    // restores normal rendering for the rest of the line without resetting any
+    // caller-applied style.
+    const auto before = window->text.substr(0, window->cursor_offset);
+    const auto after = window->text.substr(window->cursor_offset);
+    std::string body;
+    if (after.empty()) {
+        body = before + "\x1b[7m \x1b[27m";
+    } else {
+        const auto graphemes = detail::split_graphemes(after);
+        const auto& at_cursor = graphemes.front();
+        body = before + "\x1b[7m" + at_cursor + "\x1b[27m" + after.substr(at_cursor.size());
+    }
+
+    std::string line = std::string(kPrompt) + body;
+    const auto line_width = 2 + visible_width(body);
     if (line_width < width) line.append(width - line_width, ' ');
     return RenderResult{.lines = {std::move(line)}};
 }

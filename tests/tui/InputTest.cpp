@@ -1,5 +1,6 @@
 #include <cch/tui/Input.hpp>
 #include <cch/tui/Tui.hpp>
+#include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "../../third_party/catch2/catch_test_macros.hpp"
@@ -204,33 +205,61 @@ TEST_CASE("Input renders with horizontal scrolling around the cursor", "[tui][in
     auto rendered = input.render(10);
     REQUIRE(rendered);
     REQUIRE(rendered->lines.size() == 1);
-    CHECK(rendered->lines[0] == "> jklmnop ");
+    CHECK(rendered->lines[0] == "> jklmnop\x1b[7m \x1b[27m");
 
     // Cursor in the middle: the window centers on the cursor.
     for (int index = 0; index < 8; ++index) key(input, "left");
     rendered = input.render(10);
     REQUIRE(rendered);
-    CHECK(rendered->lines[0] == "> efghijkl");
+    CHECK(rendered->lines[0] == "> efgh\x1b[7mi\x1b[27mjkl");
 
     // Cursor near the start: the window shows the head.
     key(input, "home");
     rendered = input.render(10);
     REQUIRE(rendered);
-    CHECK(rendered->lines[0] == "> abcdefgh");
+    CHECK(rendered->lines[0] == "> \x1b[7ma\x1b[27mbcdefgh");
 
     // A short value fits with the cursor at the end.
     cch::tui::Input short_input;
     type(short_input, "abc");
     rendered = short_input.render(10);
     REQUIRE(rendered);
-    CHECK(rendered->lines[0] == "> abc     ");
+    CHECK(rendered->lines[0] == "> abc\x1b[7m \x1b[27m    ");
 
     // A value exactly filling the width scrolls one column for the cursor.
     cch::tui::Input exact;
     type(exact, "abcdefgh");
     rendered = exact.render(10);
     REQUIRE(rendered);
-    CHECK(rendered->lines[0] == "> bcdefgh ");
+    CHECK(rendered->lines[0] == "> bcdefgh\x1b[7m \x1b[27m");
+}
+
+TEST_CASE("Input renders a reverse-video fake cursor at the cursor position", "[tui][input][cursor]") {
+    // pi's input.ts renders the cursor as reverse video on the grapheme at the
+    // cursor (or a highlighted space at end of line); the C++ port must match.
+    cch::tui::Input input;
+    type(input, "hi");
+
+    // Cursor at end of line: a highlighted space occupies the cell after it.
+    auto rendered = input.render(10);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 1);
+    CHECK(rendered->lines[0] == "> hi\x1b[7m \x1b[27m     ");
+
+    key(input, "home");
+    rendered = input.render(10);
+    REQUIRE(rendered);
+    CHECK(rendered->lines[0] == "> \x1b[7mh\x1b[27mi      ");
+
+    key(input, "right");
+    rendered = input.render(10);
+    REQUIRE(rendered);
+    CHECK(rendered->lines[0] == "> h\x1b[7mi\x1b[27m      ");
+
+    // The rendered line never exceeds the component width.
+    for (const auto& line : rendered->lines) {
+        CHECK(cch::tui::visible_width(line) <= 10);
+    }
 }
 
 TEST_CASE("Input cursor location follows the focus lifecycle and windowing", "[tui][input][issue380]") {

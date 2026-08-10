@@ -1191,6 +1191,33 @@ struct Editor::Impl {
         return result;
     }
 
+    /// Render pi's fake cursor (editor.ts render): reverse video on the grapheme
+    /// at the cursor position, or a highlighted space at end of line. The render
+    /// pads the line to `width` afterward, so the end-of-line cursor consumes one
+    /// padding cell and the rendered line stays within the width bound; when the
+    /// visual line is already full width (cursor at a wrap boundary), there is no
+    /// room for an extra cell and no cursor is drawn there. `\x1b[27m` (reverse
+    /// off) preserves any caller-applied foreground style for the rest of the
+    /// line.
+    void insert_fake_cursor(const VisualLine& visual_line, std::size_t width, std::string& line) const {
+        const auto cursor_segment = cursor.column;
+        if (cursor_segment < visual_line.end) {
+            std::size_t byte_offset = 0;
+            for (std::size_t index = visual_line.start; index < cursor_segment; ++index) {
+                byte_offset += document[visual_line.logical_line][index].text.size();
+            }
+            const auto& segment_text = document[visual_line.logical_line][cursor_segment].text;
+            const auto graphemes = detail::split_graphemes(segment_text);
+            const auto& at_cursor = graphemes.front();
+            line.insert(byte_offset, "\x1b[7m");
+            line.insert(byte_offset + 4 + at_cursor.size(), "\x1b[27m");
+            return;
+        }
+        if (visible_width(line) < width) {
+            line += "\x1b[7m \x1b[27m";
+        }
+    }
+
     void move_vertical(int direction) {
         const auto visual = visual_lines(layout_width);
         std::size_t current = 0;
@@ -1390,6 +1417,9 @@ util::Expected<RenderResult> Editor::render(std::size_t width) {
     const auto end = std::min(visual.size(), impl_->scroll_offset + visible_count);
     for (std::size_t index = impl_->scroll_offset; index < end; ++index) {
         auto line = visual[index].text;
+        if (index == cursor_line) {
+            impl_->insert_fake_cursor(visual[index], width, line);
+        }
         const auto line_width = visible_width(line);
         if (line_width < width) line.append(width - line_width, ' ');
         auto styled = detail::apply_text_style(impl_->theme.text, std::move(line), "Editor text");

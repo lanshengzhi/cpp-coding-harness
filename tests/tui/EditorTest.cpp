@@ -1,5 +1,6 @@
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Tui.hpp>
+#include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "../../third_party/catch2/catch_test_macros.hpp"
@@ -960,7 +961,7 @@ TEST_CASE("Editor renders pi's top and bottom borders when a border hook is set"
     REQUIRE(rendered->lines.size() == 3);
     const auto rule = std::string{"\x1b[35m"} + "────────" + "\x1b[39m";
     CHECK(rendered->lines[0] == rule);
-    CHECK(rendered->lines[1] == "hello   ");
+    CHECK(rendered->lines[1] == "hello\x1b[7m \x1b[27m  ");
     CHECK(rendered->lines[2] == rule);
 }
 
@@ -992,5 +993,34 @@ TEST_CASE("Editor border does not render without a border hook", "[tui][editor][
     const auto rendered = editor.render(8);
     REQUIRE(rendered);
     REQUIRE(rendered->lines.size() == 1);
-    CHECK(rendered->lines[0] == "hello   ");
+    CHECK(rendered->lines[0] == "hello\x1b[7m \x1b[27m  ");
+}
+
+TEST_CASE("Editor renders a reverse-video fake cursor at the cursor position", "[tui][editor][cursor]") {
+    // pi's editor.ts renders the cursor as reverse video on the grapheme at the
+    // cursor (or a highlighted space at end of line); the C++ port must match.
+    cch::tui::Editor editor;
+    editor.set_text("hello");
+
+    // Cursor at end of line: a highlighted space occupies the cell after it
+    // (replacing one padding cell so the line stays within the width bound).
+    auto rendered = editor.render(8);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 1);
+    CHECK(rendered->lines[0] == "hello\x1b[7m \x1b[27m  ");
+
+    // Cursor on a character: that grapheme is wrapped in reverse video.
+    editor.set_text("hello");
+    key(editor, "home");
+    key(editor, "right");
+    key(editor, "right");  // cursor on the first 'l'
+    rendered = editor.render(8);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 1);
+    CHECK(rendered->lines[0] == "he\x1b[7ml\x1b[27mlo   ");
+
+    // The rendered line never exceeds the component width.
+    for (const auto& line : rendered->lines) {
+        CHECK(cch::tui::visible_width(line) <= 8);
+    }
 }
