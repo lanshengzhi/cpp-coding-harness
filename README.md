@@ -60,6 +60,30 @@ cmake --build --preset vcpkg
 ctest --preset vcpkg
 ```
 
+### Fast development preset (Ninja + ccache)
+
+For the fastest edit-build-test loop, use the checked-in `dev-fast` preset family. It configures with the Ninja generator, enables and *requires* ccache (configure fails with a clear message when ccache is not installed), and defaults to four parallel jobs. It keeps its own build tree under `build/dev-fast` and leaves the baseline presets above unchanged. This is the project's explicit fast-development path (see `docs/build-performance-plan.md`, Stage 2); on this host a warm ccache clean rebuild is about two orders of magnitude faster than a cold build.
+
+```bash
+cmake --preset dev-fast
+cmake --build --preset dev-fast
+ctest --preset dev-fast
+```
+
+A Release form is available as `dev-fast-release` (build tree `build/dev-fast-release`):
+
+```bash
+cmake --preset dev-fast-release
+cmake --build --preset dev-fast-release
+ctest --preset dev-fast-release
+```
+
+Both presets default to four build jobs, matching the measured host. On a high-memory host, override the job count explicitly on the command line without touching the preset:
+
+```bash
+cmake --build --preset dev-fast --parallel 8
+```
+
 ### Using system packages
 
 If you prefer system-installed dependencies, install Boost, OpenSSL, Glaze, MD4C, libwebp, CLI11, and utf8proc yourself, then use the system preset:

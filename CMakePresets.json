@@ -26,6 +26,29 @@
       "displayName": "System packages",
       "description": "Build using system-installed dependencies (no vcpkg)",
       "binaryDir": "${sourceDir}/build"
+    },
+    {
+      "name": "dev-fast",
+      "displayName": "Fast development (Ninja + ccache, Debug)",
+      "description": "Debug fast-development preset: Ninja generator with ccache required and enabled. Fails at configure time when ccache is unavailable. See docs/build-performance-plan.md Stage 2.",
+      "inherits": "vcpkg",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/dev-fast",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_PROJECT_INCLUDE": "${sourceDir}/cmake/require-ccache.cmake"
+      }
+    },
+    {
+      "name": "dev-fast-release",
+      "displayName": "Fast development release (Ninja + ccache, Release)",
+      "description": "Release form of the fast-development preset: Ninja generator with ccache required and enabled.",
+      "inherits": "dev-fast",
+      "binaryDir": "${sourceDir}/build/dev-fast-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
     }
   ],
   "buildPresets": [
@@ -46,6 +69,18 @@
       "configurePreset": "system",
       "configuration": "Debug",
       "jobs": 4
+    },
+    {
+      "name": "dev-fast",
+      "configurePreset": "dev-fast",
+      "configuration": "Debug",
+      "jobs": 4
+    },
+    {
+      "name": "dev-fast-release",
+      "configurePreset": "dev-fast-release",
+      "configuration": "Release",
+      "jobs": 4
     }
   ],
   "testPresets": [
@@ -65,6 +100,18 @@
       "name": "system",
       "configurePreset": "system",
       "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "dev-fast",
+      "configurePreset": "dev-fast",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "dev-fast-release",
+      "configurePreset": "dev-fast-release",
+      "configuration": "Release",
       "output": { "outputOnFailure": true }
     }
   ]
