@@ -287,3 +287,7 @@ _Avoid_: Standalone theme overlay, theme picker dialog
 **Terminal-Owned Image Placement**:
 The TUI Toolkit's inline-image model in which components emit protocol-neutral image regions alongside their rendered lines and the Terminal owns physical placement and removal in absolute cell regions, including protocol selection (Kitty/iTerm2), cell-size math, animation-id reuse, and fallback text. An Intentional Divergence from pi's escape-sequences-in-lines with identical placement, sizing, and fallback outcomes.
 _Avoid_: Escape sequences in render lines, component-owned protocol bytes
+
+**Main-Screen Scrollback Flow**:
+The TUI Toolkit's main-screen rendering model (pi `TuiMainScreen` parity) in which the renderer writes the full composed buffer to the terminal's main screen, lets overflow advance into the terminal's native scrollback, and tracks a viewport top over the buffer instead of clipping to the visible height; the terminal's own scrollback is the history surface, and a resize full-redraw clears screen and scrollback together. Startup content stays visible until the buffer grows past one screen, then scrolls away with it.
+_Avoid_: Viewport-clip redraw, in-place line rewrite, alt-screen scrolling
