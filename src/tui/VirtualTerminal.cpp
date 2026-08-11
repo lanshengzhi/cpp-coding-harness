@@ -21,7 +21,16 @@ struct VirtualTerminal::Impl {
     TerminalResizeSink resize_sink;
     std::vector<std::string> output;
     std::vector<std::string> screen;
+    /// Lines that scrolled out of the visible viewport (oldest first). Under
+    /// the main-screen scrollback flow (pi `TuiMainScreen`) these are the
+    /// terminal's native scrollback: the conversation history surface.
+    std::vector<std::string> scrollback;
     std::vector<std::vector<VirtualTerminalCell>> cells;
+    std::vector<std::vector<VirtualTerminalCell>> scrollback_cells;
+    /// Number of scrolled-out buffer lines (== scrollback_cells.size()): the
+    /// first buffer line visible on screen. The renderer tracks the same
+    /// quantity as its viewport top.
+    std::size_t viewport_top{0};
     std::vector<VirtualTerminalImage> images;
     detail::AnsiStyleState style;
     CursorPosition cursor;
@@ -30,12 +39,17 @@ struct VirtualTerminal::Impl {
     std::string cell_size_pending;
     bool progress_active{false};
     bool clear_screen_called{false};
+    bool clear_scrollback_called{false};
 };
 
 namespace {
 
 constexpr std::string_view kBeginSync = "\x1b[?2026h";
 constexpr std::string_view kEndSync = "\x1b[?2026l";
+// pi's resize full-redraw clears screen, homes, and clears scrollback
+// (packages/tui/src/terminal.ts clearScreen). The double records the emitted
+// sequence in output() so the byte-level `\x1b[3J` is pinned through the seam.
+constexpr std::string_view kClearScreenSequence = "\x1b[2J\x1b[H\x1b[3J";
 
 // Behavioral baseline: pi 83114817 packages/tui/src/terminal.ts
 // (setTitle OSC 0, setProgress OSC 9;4 active/clear sequences) and
@@ -64,22 +78,56 @@ constexpr std::string_view kProgressClearSequence = "\x1b]9;4;0;\x07";
     };
 }
 
+/// Build the visible text of one cell row: the graphemes up to the last
+/// occupied column (wide-grapheme continuations skipped, empty cells as
+/// spaces), trimming trailing blank columns like `screen()` does.
+template <typename T>
+void append_occupied_line(std::vector<std::string>& destination, const T& cells) {
+    std::size_t occupied = 0;
+    for (std::size_t column = 0; column < cells.size(); ++column) {
+        if (!cells[column].grapheme.empty() || cells[column].continuation) occupied = column + 1;
+    }
+    auto& line = destination.emplace_back();
+    for (std::size_t column = 0; column < occupied; ++column) {
+        const auto& cell = cells[column];
+        if (cell.continuation) continue;
+        line += cell.grapheme.empty() ? " " : cell.grapheme;
+    }
+}
+
 template <typename T>
 void refresh_screen(T& impl) {
-    impl.screen.assign(impl.dimensions.rows, {});
-    for (std::size_t row = 0; row < impl.cells.size(); ++row) {
-        const auto& cells = impl.cells[row];
-        std::size_t occupied = 0;
-        for (std::size_t column = 0; column < cells.size(); ++column) {
-            if (!cells[column].grapheme.empty() || cells[column].continuation) occupied = column + 1;
-        }
-        auto& line = impl.screen[row];
-        for (std::size_t column = 0; column < occupied; ++column) {
-            const auto& cell = cells[column];
-            if (cell.continuation) continue;
-            line += cell.grapheme.empty() ? " " : cell.grapheme;
-        }
+    impl.screen.clear();
+    impl.screen.reserve(impl.dimensions.rows);
+    for (const auto& cells : impl.cells) {
+        append_occupied_line(impl.screen, cells);
     }
+    impl.scrollback.clear();
+    impl.scrollback.reserve(impl.scrollback_cells.size());
+    for (const auto& cells : impl.scrollback_cells) {
+        append_occupied_line(impl.scrollback, cells);
+    }
+}
+
+/// Scroll the visible viewport up by `count` lines: the top rows move into
+/// the terminal's scrollback (pi `TuiMainScreen` lets overflow advance into
+/// the terminal's native scrollback) and the bottom rows become blank.
+template <typename T>
+void scroll_up(T& impl, std::size_t count) {
+    if (count == 0) return;
+    const auto keep = impl.dimensions.rows > count ? impl.dimensions.rows - count : 0;
+    for (std::size_t row = 0; row < count && row < impl.dimensions.rows; ++row) {
+        impl.scrollback_cells.push_back(std::move(impl.cells[row]));
+    }
+    for (std::size_t row = 0; row < keep; ++row) {
+        impl.cells[row] = std::move(impl.cells[row + count]);
+    }
+    impl.cells.resize(impl.dimensions.rows);
+    for (std::size_t row = keep; row < impl.dimensions.rows; ++row) {
+        impl.cells[row].assign(impl.dimensions.columns, {});
+    }
+    impl.viewport_top += count;
+    refresh_screen(impl);
 }
 
 template <typename T>
@@ -110,9 +158,13 @@ void resize_cells(T& impl, TerminalDimensions dimensions) {
     }
     impl.dimensions = dimensions;
     impl.cells = std::move(resized);
+    // Image regions are buffer-absolute under the main-screen scrollback
+    // flow, so only a width change can invalidate a placement; rows beyond
+    // the new viewport height are legitimate scrollback placements. The
+    // renderer follows every resize with a clear-screen full redraw that
+    // removes all placements anyway.
     std::erase_if(impl.images, [&](const auto& image) {
-        return image.region.column + image.region.columns > dimensions.columns ||
-            image.region.row + image.region.rows > dimensions.rows;
+        return image.region.column + image.region.columns > dimensions.columns;
     });
     if (dimensions.rows == 0) {
         impl.cursor = {};
@@ -213,9 +265,16 @@ TerminalModeState VirtualTerminal::modes() const {
 util::ExpectedVoid VirtualTerminal::clear_screen() {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
     impl_->clear_screen_called = true;
+    // pi's resize full-redraw emits \x1b[2J\x1b[H\x1b[3J: clear screen, home,
+    // clear scrollback. The terminal's scroll history is cleared together
+    // with the screen so reflow starts clean.
+    impl_->clear_scrollback_called = true;
+    impl_->output.push_back(std::string(kClearScreenSequence));
     impl_->cells.assign(
         impl_->dimensions.rows,
         std::vector<VirtualTerminalCell>(impl_->dimensions.columns));
+    impl_->scrollback_cells.clear();
+    impl_->viewport_top = 0;
     impl_->images.clear();
     impl_->cursor = {};
     refresh_screen(*impl_);
@@ -296,7 +355,9 @@ util::ExpectedVoid VirtualTerminal::write(std::string_view output) {
     if (output_width > 0) {
         const CellRegion written{
             .column = impl_->cursor.column,
-            .row = impl_->cursor.row,
+            // The cursor row is screen-relative; image regions are
+            // buffer-absolute under the main-screen scrollback flow.
+            .row = impl_->cursor.row + impl_->viewport_top,
             .columns = output_width,
             .rows = 1,
         };
@@ -349,12 +410,25 @@ util::ExpectedVoid VirtualTerminal::write(std::string_view output) {
 
 util::ExpectedVoid VirtualTerminal::set_cursor(CursorPosition position) {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
-    if (position.row >= impl_->dimensions.rows || position.column > impl_->dimensions.columns) {
+    if (position.column > impl_->dimensions.columns) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "Virtual Terminal cursor position is outside its dimensions"));
     }
-    impl_->cursor = position;
+    // `row` is a buffer row under the main-screen scrollback flow: rows at or
+    // past the visible viewport bottom advance the terminal's scrollback so
+    // the addressed line becomes the bottom visible line (pi writes the full
+    // buffer with line flow; the absolute-cursor seam scrolls instead).
+    if (position.row >= impl_->viewport_top + impl_->dimensions.rows) {
+        const auto scroll = position.row - (impl_->viewport_top + impl_->dimensions.rows - 1);
+        scroll_up(*impl_, scroll);
+        impl_->cursor.row = impl_->dimensions.rows - 1;
+    } else if (position.row < impl_->viewport_top) {
+        impl_->cursor.row = 0;
+    } else {
+        impl_->cursor.row = position.row - impl_->viewport_top;
+    }
+    impl_->cursor.column = position.column;
     return {};
 }
 
@@ -380,9 +454,7 @@ util::Expected<TerminalImageHandle> VirtualTerminal::place_image(const TerminalI
     }
     if (image.region.columns == 0 || image.region.rows == 0 ||
         image.region.column >= impl_->dimensions.columns ||
-        image.region.row >= impl_->dimensions.rows ||
-        image.region.columns > impl_->dimensions.columns - image.region.column ||
-        image.region.rows > impl_->dimensions.rows - image.region.row) {
+        image.region.columns > impl_->dimensions.columns - image.region.column) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "Inline image region is outside Virtual Terminal dimensions"));
@@ -437,11 +509,22 @@ util::ExpectedVoid VirtualTerminal::remove_image(
     }
     const auto owned_region = found->region;
     impl_->images.erase(found);
-    const auto end_row = std::min(impl_->dimensions.rows, owned_region.row + owned_region.rows);
-    const auto end_column = std::min(impl_->dimensions.columns, owned_region.column + owned_region.columns);
-    for (auto row = owned_region.row; row < end_row; ++row) {
-        for (auto column = owned_region.column; column < end_column; ++column) {
-            clear_grapheme(impl_->cells[row], column);
+    // The region is buffer-absolute: only cells inside the visible viewport
+    // can be cleared (rows scrolled into the terminal's scrollback keep their
+    // content, matching pi's keep-history semantics).
+    const auto viewport_start = impl_->viewport_top;
+    const auto viewport_end = impl_->viewport_top + impl_->dimensions.rows;
+    const auto start_row = std::max(owned_region.row, viewport_start);
+    const auto end_row = std::min(owned_region.row + owned_region.rows, viewport_end);
+    if (start_row < end_row) {
+        const auto end_column = std::min(
+            impl_->dimensions.columns,
+            owned_region.column + owned_region.columns);
+        for (auto row = start_row; row < end_row; ++row) {
+            const auto screen_row = row - viewport_start;
+            for (auto column = owned_region.column; column < end_column; ++column) {
+                clear_grapheme(impl_->cells[screen_row], column);
+            }
         }
     }
     refresh_screen(*impl_);
@@ -527,6 +610,14 @@ const std::vector<std::string>& VirtualTerminal::screen() const {
     return impl_->screen;
 }
 
+const std::vector<std::string>& VirtualTerminal::scrollback() const {
+    return impl_->scrollback;
+}
+
+std::size_t VirtualTerminal::viewport_top() const {
+    return impl_->viewport_top;
+}
+
 const std::vector<std::vector<VirtualTerminalCell>>& VirtualTerminal::cells() const {
     return impl_->cells;
 }
@@ -546,6 +637,12 @@ CursorPosition VirtualTerminal::cursor() const {
 bool VirtualTerminal::check_clear_screen_called() {
     const auto result = impl_->clear_screen_called;
     impl_->clear_screen_called = false;
+    return result;
+}
+
+bool VirtualTerminal::check_clear_scrollback_called() {
+    const auto result = impl_->clear_scrollback_called;
+    impl_->clear_scrollback_called = false;
     return result;
 }
 

@@ -116,16 +116,26 @@ holds for every corpus case.
 
 ### Screen-state goldens (`screen-state.json`) — fork-B evidence
 
-12 `VirtualTerminal` screen-state scenarios with the TS-side pin cited row-by-row: pi's own test
+18 `VirtualTerminal` screen-state scenarios with the TS-side pin cited row-by-row: pi's own test
 expectations (`tui-render.test.ts`, `tui-shrink.test.ts`, `tui-cell-size-input.test.ts`, the
-overlay suite, `input.test.ts`, `select-list.test.ts`) transcribed as small line arrays.
+overlay suite, `input.test.ts`, `select-list.test.ts`) transcribed as small line arrays, plus the
+ADR 0037 main-screen scrollback-flow scenarios (full-buffer write, viewport-top tracking,
+startup-header-scrolls-away, first-render-no-clear, resize clear-screen+scrollback, and
+image-follows-content).
 `ScreenStateGoldenTest` replays each scenario through the `VirtualTerminal` harness and
 byte-compares the screen state (or forwarded-input outcome). The rows cover the renderer
 (first/middle/last-line diff updates, clear on shrink), the cell-size response consumer (bare-ESC
 forwarding, `CSI 16 t` consumption with cell-dimension update), overlay placement (bottom-right
 anchor with an explicit viewport anchor — the C++ overlay anchor is caller-set, matching pi's
-position options — and top-left stacking), the non-capturing overlay input pass-through, and
-component rendering (Input horizontal scroll with CJK, SelectList description normalization).
+position options — and top-left stacking), the non-capturing overlay input pass-through,
+component rendering (Input horizontal scroll with CJK, SelectList description normalization),
+and the scrollback flow: the full composed buffer written with no viewport clipping (overflow
+advances into the terminal's native scrollback), the tracked viewport top advancing as content
+grows, the startup header scrolling away once the buffer grows past one screen, the first render
+keeping pi's assumes-clean-screen semantics (no clear event), the height-change full redraw
+emitting `\x1b[2J\x1b[H\x1b[3J` (clear screen, home, clear scrollback) so reflow starts clean,
+and a Terminal-Owned Image Placement keeping its absolute row identity as its row scrolls into
+scrollback.
 
 ### Capture sidecar (`capture/`)
 
@@ -195,7 +205,7 @@ tickets T2–T9 ([#378]–[#385]); this gate re-checks the coverage rows below.
 | 7 | Fuzzy as a public module: subsequence scoring with consecutive/word-boundary bonuses, matched-index reporting, ranking filter | `packages/tui/src/fuzzy.ts` (pi: 4 consumers) | `Fuzzy.hpp`, `src/tui/Fuzzy.cpp` | `FuzzyTest` (20 rows), `PiTuiDifferentialTest` → `fuzzy.json` |
 | 8 | Single-line `Input` component (pi-canonical header name): horizontal scroll, bracketed paste, kill ring, undo, word navigation, submit/escape sinks, built from the private editor primitives exactly as pi's `components/input.ts` composes its editor | `packages/tui/src/components/input.ts` | `include/cch/tui/Input.hpp`, `src/tui/Input.cpp` | `InputTest` (13 rows), `SettingsListTest` `[issue384]` rows, `ScreenStateGoldenTest` `component-input-cjk` |
 | 9 | `SettingsList` search rebuilt on the `Input`/`fuzzy` seams | `packages/tui/src/components/settings-list.ts` | `SettingsList.hpp`/`.cpp` | `SettingsListTest` (10 rows: search editing/paste through Input, ranking, hints registry) |
-| 10 | TUI core: `Component` (`render → Expected<RenderResult>`), `Container`, `Focusable` with out-of-band `cursor_location()` (recorded divergence from pi's in-text `CURSOR_MARKER`), owned `Overlay` model (nine anchors, percentage sizing, margins/offsets, stacking, eligible/blocked/resume focus-restore), main-screen differential renderer (line-diff updates, hardware cursor, clear-on-shrink, render coalescing at pi's 16 ms minimum, `CSI 16 t` cell-size consumption) | `packages/tui/src/tui.ts`, `tui-main-screen.ts`, the overlay suite | `Tui.hpp`, `Overlay.hpp`/`.cpp`, `Container.hpp`/`.cpp`, `Component.hpp`, `VirtualTerminal.*` | `TuiTest` (29 rows), `OverlayTest` (22 rows), `ContainerTest` (13 rows), `RenderDifferentialTest` (12 rows), `ScreenStateGoldenTest` → `screen-state.json` |
+| 10 | TUI core: `Component` (`render → Expected<RenderResult>`), `Container`, `Focusable` with out-of-band `cursor_location()` (recorded divergence from pi's in-text `CURSOR_MARKER`), owned `Overlay` model (nine anchors, percentage sizing, margins/offsets, stacking, eligible/blocked/resume focus-restore), main-screen differential renderer under the ADR 0037 main-screen scrollback flow (pi `TuiMainScreen` parity: full composed buffer written with no viewport clipping so overflow advances into the terminal's native scrollback, tracked viewport top over the buffer, line-flow + first-diff differential updates, hardware cursor positioned relative to the viewport, width/height-change full redraw emitting `\x1b[2J\x1b[H\x1b[3J`, first render "assumes clean screen", Termux height-change special-case recorded as not applicable, clear-on-shrink, render coalescing at pi's 16 ms minimum, `CSI 16 t` cell-size consumption) | `packages/tui/src/tui.ts`, `tui-main-screen.ts`, the overlay suite | `Tui.hpp`, `Overlay.hpp`/`.cpp`, `Container.hpp`/`.cpp`, `Component.hpp`, `VirtualTerminal.*` | `TuiTest` (29 rows), `OverlayTest` (22 rows), `ContainerTest` (13 rows), `RenderDifferentialTest` (15 rows incl. the scrollback-flow rows), `ScreenStateGoldenTest` → `screen-state.json` (18 scenarios) |
 | 11 | Terminal image (fork B): per-emulator capability detection with the tmux probe, Kitty/iTerm2 encoding behind terminal-owned `place_image`/`remove_image`, PNG/JPEG/GIF/WebP dimension sniffing, cell-size math (9×18 px default, `CSI 16 t` updates), resource-id/revision reuse for animation, public OSC 8 `hyperlink`, pi-exact fallback text (`[Image: path [mime] WxH]`, `~/` shortening, `file://` linking) | `packages/tui/src/terminal-image.ts` | `TerminalImage.hpp`, `src/tui/TerminalImage.cpp`, `Image.hpp`, `src/tui/Image.cpp` | `TerminalImageTest` (21 rows), `ImageTest` (18 rows), `ProcessTerminalTest` `[issue385]` rows, `PiTuiDifferentialTest` → `image-encoder.json` |
 | 12 | Width/truncate/wrap/slice/strip public utility subset | `packages/tui/src/utils.ts` (`visibleWidth`, `truncateToWidth`, `wrapTextWithAnsi`, `sliceByColumn`, `stripTerminalSequences`) | `Utils.hpp`, `src/tui/Utils.cpp` | `UtilsTest` (34 rows), `UnicodeWidthTest` (26 rows), `PiTuiDifferentialTest` → `utils.json` |
 | 13 | Component set: `Box`, `Text`, `Spacer`, `SelectList` (layout options, theme hooks), `Markdown` (tolerant parser retained as recorded divergence; streamed-fence trimming, strict strikethrough, code-block border/indent, capability-aware links are the byte-parity surface), `Image`, `Loader` (injected `AnimationTimer` retained as recorded divergence; 80 ms braille semantics), `CancellableLoader` (Escape via `tui.select.cancel` aborts; explicit state enum, completion/cancellation sinks), `TruncatedText` hard-cut default | `packages/tui/src/components/` (`box.ts`, `text.ts`, `spacer.ts`, `select-list.ts`, `markdown.ts`, `image.ts`, `loader.ts`, `cancellable-loader.ts`, `truncated-text.ts`) | the component headers under `include/cch/tui/` | `SelectListTest`, `MarkdownTest`, `LoaderTest`, `TruncatedTextTest`, `PiTuiDifferentialTest` → `markdown.json` |
@@ -299,7 +309,8 @@ Full test suite: **1695 test(s), 0 failure(s)** at the #386 gate (see the gate r
   `ImageTest` (18).
 - **Utility/fuzzy/markdown surfaces** — `PiTuiDifferentialTest` `utils`/`fuzzy`/`markdown` rows +
   the module test suites.
-- **Renderer (fork B)** — `ScreenStateGoldenTest` (12 scenarios) + `RenderDifferentialTest` +
+- **Renderer (fork B)** — `ScreenStateGoldenTest` (18 scenarios incl. the ADR 0037
+  scrollback-flow rows) + `RenderDifferentialTest` +
   `TuiTest` + `OverlayTest`.
 - **Lifecycle/ordering/cancellation** — the re-check table above (T2–T9 tickets).
 - **Deferred absence** — the architecture scan row.

@@ -31,23 +31,23 @@
       "name": "shrink-to-zero",
       "columns": 6,
       "rows": 3,
-      "pi": "tui-shrink.test.ts \"clears all rendered lines when content shrinks to zero\" — every previously rendered line is cleared (pi asserts no viewport line contains the old text)",
+      "pi": "tui-shrink.test.ts \"clears all rendered lines when content shrinks to zero\" — every previously rendered line is cleared (pi asserts no viewport line contains the old text) (C++ sidecar: shrink-to-zero is reached with line flow, the stale rows are cleared in place to blank cells; ADR 0037 main-screen scrollback flow)",
       "expected": [
-        "",
-        "",
-        ""
+        "      ",
+        "      ",
+        "      "
       ]
     },
     {
       "name": "shrink-to-single-line",
       "columns": 8,
       "rows": 4,
-      "pi": "tui-shrink.test.ts \"handles shrink to single line\" — rows below the shrunken content are cleared",
+      "pi": "tui-shrink.test.ts \"handles shrink to single line\" — rows below the shrunken content are cleared (C++ sidecar: shrink to a single line clears the stale rows in place; ADR 0037 main-screen scrollback flow)",
       "expected": [
         "Only    ",
-        "",
-        "",
-        ""
+        "        ",
+        "        ",
+        "        "
       ]
     },
     {
@@ -135,6 +135,85 @@
         "  A very long primar  second description                ",
         "",
         ""
+      ]
+    },
+    {
+      "name": "scrollback-full-buffer-write",
+      "columns": 10,
+      "rows": 3,
+      "pi": "ADR 0037 main-screen scrollback flow — the renderer writes the full composed buffer (no viewport clipping); overflow advances into the terminal's native scrollback. scrollback() ++ screen() is the full written buffer.",
+      "expected": [
+        "line zero ",
+        "line one  ",
+        "line two  ",
+        "line thr  ",
+        "line four "
+      ]
+    },
+    {
+      "name": "scrollback-viewport-top-tracking",
+      "columns": 10,
+      "rows": 3,
+      "pi": "ADR 0037 — appending content advances the tracked viewport top over the buffer; the first lines scroll into the terminal's scrollback.",
+      "expected": [
+        "one       ",
+        "two       ",
+        "three     ",
+        "four      ",
+        "five      "
+      ]
+    },
+    {
+      "name": "scrollback-startup-header-scrolls-away",
+      "columns": 10,
+      "rows": 3,
+      "pi": "ADR 0037 — first render does not clear (pi assumes clean screen), so the startup header/loaded-resources block stays visible at boot; as the buffer grows past one screen the header scrolls away with the flow.",
+      "expected": [
+        "header... ",
+        "res:one   ",
+        "res:two   ",
+        "user msg  ",
+        "assistant "
+      ]
+    },
+    {
+      "name": "scrollback-first-render-no-clear",
+      "columns": 10,
+      "rows": 3,
+      "pi": "ADR 0037 — first render keeps pi's assumes-clean-screen semantics: no clear-screen and no clear-scrollback event; the full buffer is written and overflow scrolls.",
+      "expected": [
+        "no-clear-screen",
+        "no-clear-scrollback",
+        "line zero ",
+        "line one  ",
+        "line two  ",
+        "line thr  ",
+        "line four "
+      ]
+    },
+    {
+      "name": "scrollback-resize-clears-screen-and-scrollback",
+      "columns": 10,
+      "rows": 3,
+      "pi": "ADR 0037 — a height change triggers a full redraw emitting \\x1b[2J\\x1b[H\\x1b[3J (clear screen, home, clear scrollback); reflow starts clean and the terminal's scroll history is cleared, matching pi.",
+      "expected": [
+        "clear-screen",
+        "clear-scrollback",
+        "line zero ",
+        "line one  ",
+        "line two  ",
+        "line thr  ",
+        "line four "
+      ]
+    },
+    {
+      "name": "scrollback-image-follows-content",
+      "columns": 10,
+      "rows": 4,
+      "pi": "ADR 0037 fork-B interplay — a Terminal-Owned Image Placement keeps its absolute row identity as content grows; the row scrolling into the terminal's scrollback carries its image placement.",
+      "expected": [
+        "image@row=2,rows=1",
+        "viewport-top=4"
       ]
     }
   ]

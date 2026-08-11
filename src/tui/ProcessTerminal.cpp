@@ -44,7 +44,9 @@ constexpr std::string_view kBracketedPasteEnable = "\x1b[?2004h";
 constexpr std::string_view kBracketedPasteDisable = "\x1b[?2004l";
 constexpr std::string_view kCursorShow = "\x1b[?25h";
 constexpr std::string_view kCursorHide = "\x1b[?25l";
-constexpr std::string_view kClearScreen = "\x1b[2J\x1b[H";
+// pi's resize full-redraw clears screen, homes, and clears scrollback
+// (packages/tui/src/terminal.ts clearScreen: `\x1b[2J\x1b[H\x1b[3J`).
+constexpr std::string_view kClearScreen = "\x1b[2J\x1b[H\x1b[3J";
 constexpr std::string_view kBeginSynchronizedUpdate = "\x1b[?2026h";
 constexpr std::string_view kEndSynchronizedUpdate = "\x1b[?2026l";
 constexpr std::string_view kKeyboardProtocolPush = "\x1b[>7u";

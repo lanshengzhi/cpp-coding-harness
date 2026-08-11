@@ -93,6 +93,14 @@ public:
     [[nodiscard]] util::ExpectedVoid inject_resize(TerminalDimensions dimensions);
     [[nodiscard]] const std::vector<std::string>& output() const;
     [[nodiscard]] const std::vector<std::string>& screen() const;
+    /// The full written buffer as the terminal models it under the
+    /// main-screen scrollback flow (pi `TuiMainScreen`): `scrollback()` holds
+    /// the lines that overflowed past the visible viewport (oldest first),
+    /// `screen()` the visible viewport, so `scrollback() ++ screen()` is the
+    /// full composed buffer. `viewport_top()` is the number of scrolled-out
+    /// lines (the first visible buffer line).
+    [[nodiscard]] const std::vector<std::string>& scrollback() const;
+    [[nodiscard]] std::size_t viewport_top() const;
     [[nodiscard]] const std::vector<std::vector<VirtualTerminalCell>>& cells() const;
     [[nodiscard]] const std::vector<VirtualTerminalImage>& images() const;
     [[nodiscard]] VirtualTerminalStyle final_style() const;
@@ -100,6 +108,10 @@ public:
     /// Returns true if clear_screen() was called since the last check.
     /// Resets the flag on read.
     [[nodiscard]] bool check_clear_screen_called();
+    /// Returns true if the clear-scrollback (`\x1b[3J`) was emitted since the
+    /// last check (clear_screen() clears the terminal's scroll history too).
+    /// Resets the flag on read.
+    [[nodiscard]] bool check_clear_scrollback_called();
 
 private:
     struct Impl;

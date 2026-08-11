@@ -113,6 +113,10 @@ private:
     bool first_render_{true};
     bool pending_render_{false};
     std::vector<std::string> previous_lines_;
+    /// Buffer row at the top of the visible viewport under the main-screen
+    /// scrollback flow (pi `TuiMainScreen` `previousViewportTop`): the
+    /// composed buffer's lines below it are the terminal's native scrollback.
+    std::size_t viewport_top_{0};
     std::vector<ActiveImage> active_images_;
     TerminalDimensions previous_dimensions_{};
 };

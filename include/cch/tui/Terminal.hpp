@@ -136,6 +136,9 @@ public:
     [[nodiscard]] virtual TerminalDimensions dimensions() const = 0;
     [[nodiscard]] virtual TerminalCapabilities capabilities() const = 0;
     [[nodiscard]] virtual TerminalModeState modes() const = 0;
+    /// Clear the terminal's main screen, home the cursor, and clear its
+    /// scroll history (`\x1b[2J\x1b[H\x1b[3J`), exactly as pi's resize
+    /// full-redraw does (ADR 0037 main-screen scrollback flow).
     [[nodiscard]] virtual util::ExpectedVoid clear_screen() = 0;
     [[nodiscard]] virtual util::ExpectedVoid write(std::string_view output) = 0;
     [[nodiscard]] virtual util::ExpectedVoid set_cursor(CursorPosition position) = 0;

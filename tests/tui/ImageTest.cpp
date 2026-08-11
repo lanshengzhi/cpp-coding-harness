@@ -395,7 +395,13 @@ TEST_CASE("Image replacement removal resize and stop clear stale regions", "[tui
 
     REQUIRE(terminal.inject_resize({.columns = 8, .rows = 1}));
     REQUIRE(tui.render());
-    CHECK(terminal.images().empty());
+    // The image follows content into the composed buffer (fork-B
+    // image-follows-content under ADR 0037): the resize full-redraw clears
+    // the old placement and re-places it while the image stays in the buffer,
+    // instead of dropping it at the viewport edge. A row leaving the composed
+    // buffer (the component clearing its image) is what removes the placement.
+    REQUIRE(terminal.images().size() == 1);
+    CHECK(terminal.images()[0].region.row == 0);
 
     image_ptr->clear();
     REQUIRE(tui.render());

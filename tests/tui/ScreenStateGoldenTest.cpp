@@ -12,6 +12,7 @@
 // component rendering (Input horizontal scroll, SelectList description
 // normalization).
 
+#include <cch/tui/Image.hpp>
 #include <cch/tui/Input.hpp>
 #include <cch/tui/Overlay.hpp>
 #include <cch/tui/SelectList.hpp>
@@ -116,6 +117,12 @@ public:
 
     std::vector<tui::InputEventVariant> received;
 };
+
+/// A canonical 1x1 transparent PNG for the scrollback image-follows-content
+/// scenario (decoded by the Image component through the stb seam).
+[[nodiscard]] std::string tiny_png_base64() {
+    return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+}
 
 /// Replay one golden scenario and return the observed outcome lines.
 /// Every scenario drives the VirtualTerminal/Tui seams deterministically.
@@ -311,6 +318,140 @@ public:
         REQUIRE(tui.set_focus(pointer));
         REQUIRE(tui.render());
         return terminal.screen();
+    }
+    if (name == "scrollback-full-buffer-write") {
+        tui::VirtualTerminal terminal({.columns = columns, .rows = rows});
+        tui::Tui tui(terminal);
+        REQUIRE(tui.add_child(std::make_unique<LinesComponent>(std::vector<std::string>{
+            "line zero", "line one", "line two", "line thr", "line four"})));
+        REQUIRE(tui.start());
+        REQUIRE(tui.render());
+        // The renderer writes the full composed buffer; overflow advanced into
+        // the terminal's native scrollback (scrollback() ++ screen() == buffer).
+        auto outcome = terminal.scrollback();
+        outcome.insert(outcome.end(), terminal.screen().begin(), terminal.screen().end());
+        return outcome;
+    }
+    if (name == "scrollback-viewport-top-tracking") {
+        tui::VirtualTerminal terminal({.columns = columns, .rows = rows});
+        tui::Tui tui(terminal);
+        auto lines = std::make_unique<LinesComponent>(
+            std::vector<std::string>{"one", "two", "three"});
+        auto* pointer = lines.get();
+        REQUIRE(tui.add_child(std::move(lines)));
+        REQUIRE(tui.start());
+        REQUIRE(tui.render());
+        pointer->set_lines(std::vector<std::string>{"one", "two", "three", "four", "five"});
+        REQUIRE(tui.render());
+        // Appending content advances the viewport top over the buffer: the
+        // first two lines scrolled into the terminal's scrollback.
+        auto outcome = terminal.scrollback();
+        outcome.insert(outcome.end(), terminal.screen().begin(), terminal.screen().end());
+        return outcome;
+    }
+    if (name == "scrollback-startup-header-scrolls-away") {
+        tui::VirtualTerminal terminal({.columns = columns, .rows = rows});
+        tui::Tui tui(terminal);
+        auto lines = std::make_unique<LinesComponent>(std::vector<std::string>{
+            "header...", "res:one", "res:two"});
+        auto* pointer = lines.get();
+        REQUIRE(tui.add_child(std::move(lines)));
+        REQUIRE(tui.start());
+        REQUIRE(tui.render());
+        // The first render shows the startup header and loaded-resources block
+        // (no clear, pi "assumes clean screen"); once the buffer grows past one
+        // screen the header scrolls away with the flow.
+        const auto& first_screen = terminal.screen();
+        REQUIRE(first_screen[0].find("header...") != std::string::npos);
+        pointer->set_lines(std::vector<std::string>{
+            "header...", "res:one", "res:two", "user msg", "assistant"});
+        REQUIRE(tui.render());
+        auto outcome = terminal.scrollback();
+        outcome.insert(outcome.end(), terminal.screen().begin(), terminal.screen().end());
+        return outcome;
+    }
+    if (name == "scrollback-first-render-no-clear") {
+        tui::VirtualTerminal terminal({.columns = columns, .rows = rows});
+        tui::Tui tui(terminal);
+        REQUIRE(tui.add_child(std::make_unique<LinesComponent>(std::vector<std::string>{
+            "line zero", "line one", "line two", "line thr", "line four"})));
+        REQUIRE(tui.start());
+        REQUIRE(tui.render());
+        std::vector<std::string> outcome;
+        outcome.push_back(
+            terminal.check_clear_screen_called() ? "clear-screen" : "no-clear-screen");
+        outcome.push_back(terminal.check_clear_scrollback_called()
+            ? "clear-scrollback"
+            : "no-clear-scrollback");
+        auto full = terminal.scrollback();
+        full.insert(full.end(), terminal.screen().begin(), terminal.screen().end());
+        outcome.insert(outcome.end(), full.begin(), full.end());
+        return outcome;
+    }
+    if (name == "scrollback-resize-clears-screen-and-scrollback") {
+        tui::VirtualTerminal terminal({.columns = columns, .rows = rows});
+        tui::Tui tui(terminal);
+        REQUIRE(tui.add_child(std::make_unique<LinesComponent>(std::vector<std::string>{
+            "line zero", "line one", "line two", "line thr", "line four"})));
+        REQUIRE(tui.start());
+        REQUIRE(tui.render());
+        // A height change reflows from a clean screen: clear screen, home,
+        // clear scrollback (`\x1b[2J\x1b[H\x1b[3J`), so the scroll history is
+        // cleared and the buffer starts clean at the new height.
+        REQUIRE(terminal.inject_resize({.columns = columns, .rows = rows + 2}));
+        REQUIRE(tui.render());
+        std::vector<std::string> outcome;
+        outcome.push_back(
+            terminal.check_clear_screen_called() ? "clear-screen" : "no-clear-screen");
+        outcome.push_back(terminal.check_clear_scrollback_called()
+            ? "clear-scrollback"
+            : "no-clear-scrollback");
+        outcome.insert(outcome.end(), terminal.screen().begin(), terminal.screen().end());
+        return outcome;
+    }
+    if (name == "scrollback-image-follows-content") {
+        tui::VirtualTerminal terminal({
+            .columns = columns,
+            .rows = rows,
+            .capabilities = {
+                .synchronized_output = true,
+                .inline_images = tui::InlineImageProtocol::Kitty,
+                .cell_pixels = tui::CellPixelDimensions{.width = 10, .height = 10},
+            },
+        });
+        tui::Tui tui(terminal);
+        auto top = std::make_unique<LinesComponent>(std::vector<std::string>{"one", "two"});
+        REQUIRE(tui.add_child(std::move(top)));
+        REQUIRE(tui.add_child(std::make_unique<tui::Image>(
+            tui::ImageContent{
+                .encoded_data = tiny_png_base64(),
+                .mime_type = "image/png",
+                .filename = "follow.png",
+            },
+            tui::ImageOptions{
+                .constraints = {.max_width = 1, .max_height = 1},
+            })));
+        auto bottom = std::make_unique<LinesComponent>(
+            std::vector<std::string>{"five", "six", "seven"});
+        auto* bottom_pointer = bottom.get();
+        REQUIRE(tui.add_child(std::move(bottom)));
+        REQUIRE(tui.start());
+        REQUIRE(tui.render());
+        REQUIRE(terminal.images().size() == 1);
+        // Growing the content below the image advances the viewport so the
+        // image's buffer row scrolls into the terminal's scrollback; the
+        // placement keeps its absolute row identity (fork-B image-follows-
+        // content).
+        bottom_pointer->set_lines(
+            std::vector<std::string>{"five", "six", "seven", "eight", "nine"});
+        REQUIRE(tui.render());
+        std::vector<std::string> outcome;
+        for (const auto& image : terminal.images()) {
+            outcome.push_back(std::format(
+                "image@row={},rows={}", image.region.row, image.region.rows));
+        }
+        outcome.push_back(std::format("viewport-top={}", terminal.viewport_top()));
+        return outcome;
     }
     REQUIRE_WITH(false, std::string{"unknown screen-state scenario "} + std::string(name));
     return {};

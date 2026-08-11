@@ -38,6 +38,42 @@ private:
     bool cache_valid_{false};
 };
 
+/// A focusable that reports a fixed buffer-relative cursor row and renders no
+/// lines, for pinning the IME cursor viewport clamp over scrolled content.
+class CursorReportingComponent final
+    : public cch::tui::Component,
+      public cch::tui::Focusable {
+public:
+    explicit CursorReportingComponent(std::size_t cursor_row)
+        : cursor_row_(cursor_row) {}
+
+    void set_row(std::size_t row) {
+        cursor_row_ = row;
+    }
+
+    [[nodiscard]] cch::util::Expected<cch::tui::RenderResult> render(std::size_t) override {
+        return cch::tui::RenderResult{};
+    }
+
+    void invalidate() override {}
+
+    void set_focused(bool focused) override {
+        focused_ = focused;
+    }
+
+    [[nodiscard]] bool focused() const override {
+        return focused_;
+    }
+
+    [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override {
+        return cch::tui::CursorPosition{.column = 0, .row = cursor_row_};
+    }
+
+private:
+    std::size_t cursor_row_;
+    bool focused_{false};
+};
+
 } // namespace
 
 TEST_CASE("First render writes visible content without clearing scrollback", "[tui][render][issue49]") {
@@ -129,13 +165,65 @@ TEST_CASE("Width change triggers full redraw with clear screen", "[tui][render][
     // Render should detect width change and do a full redraw with clear_screen
     REQUIRE(tui.render());
     CHECK(terminal.check_clear_screen_called());
+    CHECK(terminal.check_clear_scrollback_called());
 
     // Content should be re-rendered at the new width
     const std::vector<std::string> expected_screen{"hello     ", "", ""};
     CHECK(terminal.screen() == expected_screen);
 }
 
-TEST_CASE("Changes above tracked viewport trigger safe full redraw", "[tui][render][issue49]") {
+TEST_CASE("Resize full redraw emits the pi-exact clear-screen and scrollback bytes", "[tui][render][issue49][issue435]") {
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 3});
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("top\nmiddle\nbottom", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    // A height change reflows from a clean screen; the clear is emitted inside
+    // the synchronized-update wrapper as pi's fullRender(true) does.
+    REQUIRE(terminal.inject_resize({.columns = 8, .rows = 4}));
+    REQUIRE(tui.render());
+
+    const auto& output = terminal.output();
+    const auto clear = std::find(output.begin(), output.end(), "\x1b[2J\x1b[H\x1b[3J");
+    REQUIRE(clear != output.end());
+    // The clear-scrollback (`\x1b[3J`) is part of the same emitted clear.
+    CHECK(clear->find("\x1b[3J") != std::string::npos);
+    // Synchronized output still wraps the render atomically (pi fullRender
+    // begins `\x1b[?2026h` and ends `\x1b[?2026l`).
+    CHECK(output.front() == "\x1b[?2026h");
+    CHECK(output.back() == "\x1b[?2026l");
+}
+
+TEST_CASE("Tui clamps the IME cursor to the visible viewport over scrolled content", "[tui][render][issue49][issue435]") {
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 3});
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("one\ntwo\nthree\nfour\nfive", 0, 0)));
+    auto cursor = std::make_unique<CursorReportingComponent>(4);
+    auto* cursor_ptr = cursor.get();
+    REQUIRE(tui.add_child(std::move(cursor)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(cursor_ptr));
+    REQUIRE(tui.render());
+
+    // Five content lines on a three-row viewport: the viewport top is at
+    // buffer row 2 (rows 2..4 visible). The cursor at buffer row 4 is inside
+    // the viewport, so it is positioned at screen row 2 (pi
+    // positionHardwareCursor relative to the viewport).
+    REQUIRE(terminal.viewport_top() == 2);
+    const cch::tui::CursorPosition expected_visible{.column = 0, .row = 2};
+    CHECK(terminal.cursor() == expected_visible);
+
+    // A cursor above the viewport is clamped to the viewport top instead of
+    // scrolling the terminal.
+    cursor_ptr->set_row(1);
+    tui.invalidate();
+    REQUIRE(tui.render());
+    const cch::tui::CursorPosition expected_clamped{.column = 0, .row = 0};
+    CHECK(terminal.cursor() == expected_clamped);
+}
+
+TEST_CASE("Changes at the viewport top diff in place without clearing", "[tui][render][issue49][issue435]") {
     cch::tui::VirtualTerminal terminal({.columns = 5, .rows = 3});
     cch::tui::Tui tui(terminal);
 
@@ -152,11 +240,43 @@ TEST_CASE("Changes above tracked viewport trigger safe full redraw", "[tui][rend
     text_ptr->set_text("ccc\nbbb");
     REQUIRE(tui.render());
 
-    // Since first_diff == 0 and previous was not empty, triggers full redraw
-    CHECK(terminal.check_clear_screen_called());
+    // pi: a change at the viewport top (firstChanged == viewportTop) is
+    // reached with line flow — no full redraw.
+    CHECK_FALSE(terminal.check_clear_screen_called());
 
     const std::vector<std::string> expected_screen{"ccc  ", "bbb  ", ""};
     CHECK(terminal.screen() == expected_screen);
+}
+
+TEST_CASE("Changes above the tracked viewport trigger a full redraw", "[tui][render][issue49][issue435]") {
+    cch::tui::VirtualTerminal terminal({.columns = 5, .rows = 3});
+    cch::tui::Tui tui(terminal);
+
+    auto text = std::make_unique<cch::tui::Text>("aaa\nbbb\nccc\nddd\neee", 0, 0);
+    auto* text_ptr = text.get();
+    REQUIRE(tui.add_child(std::move(text)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    // Five lines on a three-row viewport: the top two scrolled into the
+    // terminal's native scrollback and the viewport top is at buffer row 2.
+    const std::vector<std::string> expected_scrollback{"aaa  ", "bbb  "};
+    CHECK(terminal.scrollback() == expected_scrollback);
+    const std::vector<std::string> expected_screen{"ccc  ", "ddd  ", "eee  "};
+    CHECK(terminal.screen() == expected_screen);
+    (void)terminal.check_clear_screen_called();
+
+    // Changing a line above the tracked viewport cannot be reached with line
+    // flow: the renderer reflows from a clean screen, clearing screen and
+    // scrollback together (pi firstChanged < viewportTop).
+    text_ptr->set_text("aaa\nXbb\nccc\nddd\neee");
+    REQUIRE(tui.render());
+    CHECK(terminal.check_clear_screen_called());
+    CHECK(terminal.check_clear_scrollback_called());
+    const std::vector<std::string> reflowed_scrollback{"aaa  ", "Xbb  "};
+    CHECK(terminal.scrollback() == reflowed_scrollback);
+    const std::vector<std::string> reflowed_screen{"ccc  ", "ddd  ", "eee  "};
+    CHECK(terminal.screen() == reflowed_screen);
 }
 
 TEST_CASE("Supported synchronized output wraps a render atomically", "[tui][render][issue49]") {
@@ -240,30 +360,33 @@ TEST_CASE("Shrink to empty content clears stale rows", "[tui][render][issue49]")
     text_ptr->invalidate();
     REQUIRE(tui.render());
 
-    // When content goes to zero and previous had content, clear_screen is called
-    // because the first_diff is 0 and previous_lines_ was not empty.
-    // After clear_screen, no lines are written, screen shows empty cells.
+    // Shrink to zero is reached with line flow (pi): the stale rows are
+    // cleared in place, so the screen holds blank cells instead of the old
+    // content.
     const auto& screen = terminal.screen();
     CHECK(screen.size() == 2);
-    CHECK(screen[0].empty());
-    CHECK(screen[1].empty());
+    CHECK(screen[0] == "    ");
+    CHECK(screen[1] == "    ");
 }
 
-TEST_CASE("Viewport height change does not trigger unnecessary clear", "[tui][render][issue49]") {
+TEST_CASE("Viewport height change triggers a full redraw with clear", "[tui][render][issue49][issue435]") {
     cch::tui::VirtualTerminal terminal({.columns = 6, .rows = 2});
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("line1\nline2", 0, 0)));
     REQUIRE(tui.start());
     REQUIRE(tui.render());
+    (void)terminal.check_clear_screen_called();
 
     // Resize height to 3 (width unchanged)
     REQUIRE(terminal.inject_resize({.columns = 6, .rows = 3}));
 
-    // Height change alone: width is same, so no full-screen clear from the Tui.
+    // pi: a height change reflows from a clean screen — the full redraw
+    // clears the screen and the terminal's scroll history together.
     REQUIRE(tui.render());
+    CHECK(terminal.check_clear_screen_called());
+    CHECK(terminal.check_clear_scrollback_called());
 
     // Screen should show all content in the new height (no wrapping at 6 cols).
-    // The extra row is empty because resize cells initialized it to empty strings.
     const auto& screen = terminal.screen();
     REQUIRE(screen.size() == 3);
     CHECK(screen[0] == "line1 ");

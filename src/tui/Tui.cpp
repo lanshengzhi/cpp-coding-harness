@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstddef>
 #include <format>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -255,6 +256,7 @@ util::ExpectedVoid Tui::start() {
 
     first_render_ = true;
     pending_render_ = false;
+    viewport_top_ = 0;
     previous_lines_.clear();
     previous_dimensions_ = terminal_.dimensions();
     return {};
@@ -304,6 +306,7 @@ util::ExpectedVoid Tui::clear_screen() {
     }
     previous_lines_.clear();
     previous_dimensions_ = {};
+    viewport_top_ = 0;
     first_render_ = true;
     return {};
 }
@@ -326,11 +329,14 @@ util::ExpectedVoid Tui::render() {
     const auto capabilities = terminal_.capabilities();
     auto rendered = render_children(dimensions);
     if (!rendered) return std::unexpected(rendered.error());
+    // Main-screen images are buffer-absolute and follow content into the
+    // terminal's scrollback (fork-B image-follows-content): they are not
+    // bounded by the viewport, only by the composed buffer itself.
     auto materialized = materialize_images(
         std::move(*rendered),
         capabilities,
         dimensions.columns,
-        dimensions.rows);
+        std::numeric_limits<std::size_t>::max());
     if (auto overlay_result = composite_overlays(dimensions, capabilities, materialized);
         !overlay_result) {
         return std::unexpected(overlay_result.error());
@@ -338,8 +344,10 @@ util::ExpectedVoid Tui::render() {
     auto& new_lines = materialized.lines;
     auto desired_images = std::move(materialized.images);
 
-    const auto visible_lines = std::min(new_lines.size(), dimensions.rows);
-    new_lines.resize(visible_lines);
+    // The full composed buffer is written to the terminal's main screen with
+    // no viewport clipping; overflow advances into the terminal's native
+    // scrollback (pi TuiMainScreen). Lines are padded so the first-diff
+    // comparison is byte-stable across renders.
     for (auto& line : new_lines) {
         if (line.size() < dimensions.columns) {
             line.append(dimensions.columns - line.size(), ' ');
@@ -347,6 +355,7 @@ util::ExpectedVoid Tui::render() {
     }
 
     const auto width_changed = dimensions.columns != previous_dimensions_.columns;
+    const auto height_changed = dimensions.rows != previous_dimensions_.rows;
     const auto first_render = first_render_;
 
     const auto supports_sync = capabilities.synchronized_output;
@@ -358,64 +367,82 @@ util::ExpectedVoid Tui::render() {
         }
     }
 
+    // Write the full composed buffer with pi's line-flow ordering (rows at or
+    // past the visible bottom advance the terminal's scrollback through the
+    // absolute-cursor seam).
+    auto write_full_buffer = [&]() -> util::ExpectedVoid {
+        for (std::size_t row = 0; row < new_lines.size(); ++row) {
+            if (auto result = write_line(terminal_, row, new_lines[row]); !result) {
+                return std::unexpected(result.error());
+            }
+        }
+        return {};
+    };
+
+    // pi fullRender(true): drop all image placements, clear screen, home, and
+    // clear scrollback (`\x1b[2J\x1b[H\x1b[3J`), then reflow the full buffer so
+    // the terminal's scroll history starts clean.
+    auto clear_and_rewrite = [&]() -> util::ExpectedVoid {
+        if (auto result = remove_active_images(); !result) {
+            return std::unexpected(result.error());
+        }
+        if (auto result = terminal_.clear_screen(); !result) {
+            return std::unexpected(result.error());
+        }
+        viewport_top_ = 0;
+        return write_full_buffer();
+    };
+
     auto render_result = [&]() -> util::ExpectedVoid {
         if (first_render) {
-            // First render: write full viewport content without clearing scrollback.
-            for (std::size_t row = 0; row < new_lines.size(); ++row) {
-                if (auto result = write_line(terminal_, row, new_lines[row]); !result) {
-                    return std::unexpected(result.error());
-                }
+            // pi fullRender(false): write the full buffer without clearing
+            // ("assumes clean screen"), so startup content stays visible until
+            // the buffer grows past one screen and scrolls away.
+            if (auto result = write_full_buffer(); !result) {
+                return std::unexpected(result.error());
             }
-            // Place cursor at the end of written content so the terminal advances
-            // its scrollback past the rendered content.
-            if (auto result = terminal_.set_cursor(
-                    CursorPosition{.column = 0, .row = new_lines.empty() ? 0U : std::min(new_lines.size(), dimensions.rows) - 1});
+            // Leave the cursor at the end of the written content (column 0) so
+            // the terminal advances its scrollback past the rendered content.
+            if (auto result = terminal_.set_cursor(CursorPosition{
+                    .column = 0,
+                    .row = new_lines.empty() ? 0U : new_lines.size() - 1});
                 !result) {
                 return std::unexpected(result.error());
             }
             return {};
         }
 
-        if (width_changed) {
-            // Width change: full redraw with clear screen to reflow all content.
-            if (auto result = remove_active_images(); !result) {
-                return std::unexpected(result.error());
-            }
-            if (auto result = terminal_.clear_screen(); !result) {
-                return std::unexpected(result.error());
-            }
-            for (std::size_t row = 0; row < new_lines.size(); ++row) {
-                if (auto result = write_line(terminal_, row, new_lines[row]); !result) {
-                    return std::unexpected(result.error());
-                }
-            }
-            return {};
+        // A width or height change reflows from a clean screen — clear screen,
+        // home, clear scrollback — so reflow starts clean and the terminal's
+        // scroll history is cleared, matching pi (the Termux height-change
+        // special-case is not applicable and is not ported).
+        if (width_changed || height_changed) {
+            return clear_and_rewrite();
         }
 
-        // Differential update: find the first changed visible line.
+        // pi differential: first-changed-line tracking over the full buffer.
         const auto min_previous = std::min(previous_lines_.size(), new_lines.size());
         std::size_t first_diff = 0;
         while (first_diff < min_previous && previous_lines_[first_diff] == new_lines[first_diff]) {
             ++first_diff;
         }
+        const auto unchanged =
+            first_diff == min_previous && previous_lines_.size() == new_lines.size();
+        if (unchanged) return {};
 
-        if (first_diff == 0 && !previous_lines_.empty()) {
-            // Changes above the tracked viewport: full redraw.
-            if (auto result = remove_active_images(); !result) {
-                return std::unexpected(result.error());
-            }
-            if (auto result = terminal_.clear_screen(); !result) {
-                return std::unexpected(result.error());
-            }
-            for (std::size_t row = 0; row < new_lines.size(); ++row) {
-                if (auto result = write_line(terminal_, row, new_lines[row]); !result) {
-                    return std::unexpected(result.error());
-                }
-            }
-            return {};
+        // A change above the tracked viewport, or new content that ends above
+        // it, cannot be reached with line flow: reflow from a clean screen
+        // (pi `firstChanged < viewportTop` / `targetRow < viewportTop` full
+        // redraw).
+        const auto target_row = new_lines.empty() ? 0U : new_lines.size() - 1;
+        if (first_diff < viewport_top_ || target_row < viewport_top_) {
+            return clear_and_rewrite();
         }
 
-        // Write changed and new lines starting at first_diff.
+        // Line-flow differential: write changed and appended lines from
+        // first_diff through the end of the buffer. Rows at or past the
+        // visible bottom advance the terminal's scrollback (the absolute-
+        // cursor seam scrolls on addressing a row below the viewport).
         for (std::size_t row = first_diff; row < new_lines.size(); ++row) {
             const CellRegion region{
                 .column = 0,
@@ -431,10 +458,14 @@ util::ExpectedVoid Tui::render() {
             }
         }
 
-        // If content has shrunk, clear stale rows below the new content.
+        // Clear-on-shrink: stale rows below the new content that are still
+        // inside the visible viewport are cleared in place (rows that already
+        // scrolled into the terminal's scrollback keep their history).
         if (new_lines.size() < previous_lines_.size()) {
-            for (std::size_t row = new_lines.size(); row < previous_lines_.size(); ++row) {
-                if (row >= dimensions.rows) break;
+            const auto stale_end = std::min(
+                previous_lines_.size(),
+                viewport_top_ + dimensions.rows);
+            for (std::size_t row = new_lines.size(); row < stale_end; ++row) {
                 const CellRegion region{
                     .column = 0,
                     .row = row,
@@ -464,10 +495,26 @@ util::ExpectedVoid Tui::render() {
         }
     }
 
+    // Track the viewport top over the buffer before positioning the hardware
+    // cursor: after writing the full buffer (or diffing to its end) the
+    // terminal shows the bottom `rows` lines of the composed buffer (pi
+    // `previousViewportTop = max(prev, len - height)`). The stale-row clearing
+    // inside the render body used the pre-write viewport, which is the correct
+    // bound for rows already visible before any scroll.
+    viewport_top_ = std::max(
+        viewport_top_,
+        new_lines.size() > dimensions.rows ? new_lines.size() - dimensions.rows : 0U);
+
     // Position IME cursor based on focused component
     if (render_result) {
         auto cursor_loc = resolve_cursor_location();
         if (cursor_loc) {
+            // Clamp the buffer-relative cursor to the visible viewport so the
+            // hardware cursor stays on screen (pi positionHardwareCursor); the
+            // cursor must not scroll the terminal, only track it.
+            const auto viewport_bottom = viewport_top_ + dimensions.rows - 1;
+            if (cursor_loc->row < viewport_top_) cursor_loc->row = viewport_top_;
+            else if (cursor_loc->row > viewport_bottom) cursor_loc->row = viewport_bottom;
             // Position the hardware cursor at the focused component's cursor location
             // for IME composition without making it visible by default
             // We position but keep invisible so the IME knows where the cursor is
@@ -616,6 +663,14 @@ util::ExpectedVoid Tui::composite_overlays(
         const auto final_row = offset_row + margins.top;
         if (final_col >= dimensions.columns || final_row >= dimensions.rows) continue;
 
+        // The composed buffer may exceed the viewport under the main-screen
+        // scrollback flow; overlays are viewport-positioned, so their rows are
+        // offset by the current viewport start (pi compositeOverlays
+        // `viewportStart = max(0, workingHeight - termHeight)`).
+        const auto viewport_start = output.lines.size() > dimensions.rows
+            ? output.lines.size() - dimensions.rows
+            : 0;
+
         const auto overlay_columns = dimensions.columns - final_col;
         const auto overlay_rows = dimensions.rows - final_row;
         std::erase_if(materialized.images, [&](const auto& image) {
@@ -636,8 +691,8 @@ util::ExpectedVoid Tui::composite_overlays(
         }
         const auto overlay_width = std::min(composited_width, dimensions.columns - final_col);
         for (std::size_t row = 0; row < content_height; ++row) {
-            const auto target_row = final_row + row;
-            if (target_row >= dimensions.rows || overlay_width == 0) break;
+            if (final_row + row >= dimensions.rows || overlay_width == 0) break;
+            const auto target_row = viewport_start + final_row + row;
             if (target_row >= output.lines.size()) output.lines.resize(target_row + 1);
             auto composited = replace_line_region(
                 output.lines[target_row],
@@ -661,11 +716,12 @@ util::ExpectedVoid Tui::composite_overlays(
 
         for (auto& image : materialized.images) {
             image.region.column += final_col;
-            image.region.row += final_row;
+            image.region.row += viewport_start + final_row;
             const auto fits_columns = image.region.column < dimensions.columns &&
                 image.region.columns <= dimensions.columns - image.region.column;
-            const auto fits_rows = image.region.row < dimensions.rows &&
-                image.region.rows <= dimensions.rows - image.region.row;
+            const auto viewport_row = image.region.row - viewport_start;
+            const auto fits_rows = viewport_row < dimensions.rows &&
+                image.region.rows <= dimensions.rows - viewport_row;
             if (fits_columns && fits_rows) output.images.push_back(std::move(image));
         }
     }

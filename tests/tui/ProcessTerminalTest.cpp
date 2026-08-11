@@ -715,6 +715,33 @@ TEST_CASE("Process Terminal writes OSC 0 window titles", "[tui][terminal][issue3
 }
 
 TEST_CASE(
+    "Process Terminal clear screen emits the pi-exact clear-scrollback bytes",
+    "[tui][terminal][issue435]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+
+    const auto before_start = terminal.clear_screen();
+    REQUIRE_FALSE(before_start);
+    CHECK(
+        before_start.error().message ==
+        "Process Terminal must be started before terminal operations");
+
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    (void)cch::tests::read_available(pty->master.get());
+    // ADR 0037: the resize full-redraw path clears screen, homes, and clears
+    // the terminal's scroll history together (`\x1b[2J\x1b[H\x1b[3J`), matching
+    // pi's TuiMainScreen resize redraw.
+    REQUIRE(terminal.clear_screen());
+    CHECK(
+        cch::tests::read_available(pty->master.get()) == "\x1b[2J\x1b[H\x1b[3J");
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE(
     "Process Terminal re-emits active progress on the one-second keepalive",
     "[tui][terminal][issue378]") {
     constexpr std::string_view kProgressActiveSequence = "\x1b]9;4;3\x07";
