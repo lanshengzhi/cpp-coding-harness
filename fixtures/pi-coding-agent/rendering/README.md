@@ -29,6 +29,14 @@ The boot screen itself is pinned by the e2e goldens (`e2e/boot.txt`,
 `cpp-harness-rendering-<name>` temp paths (recreated at boot) so the footer's
 pwd line stays byte-stable.
 
+These goldens were regenerated under the scrollback-flow renderer (ADR 0037,
+#435) and are byte-identical to the pre-regeneration screens: each composed
+buffer fits its viewport (72×52 pipeline, 72×24 / 100×24 key flows), so the
+visible screen is preserved and overflow-into-scrollback is not exercised
+here. Scrollback behavior (full-buffer write, viewport-top tracking, resize
+clear-screen + scrollback, image-follows-content) is pinned at the
+`ScreenStateGoldenTest` seam; #437 re-verified this family byte-identical.
+
 The screens are plain cell text (styles are stripped by the VirtualTerminal).
 Regenerate deterministically from the frozen checkout with the gate capture
 sidecar (`fixtures/pi-coding-agent/capture/capture-gate-snapshots.mts`, which

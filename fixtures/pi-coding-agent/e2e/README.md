@@ -18,6 +18,14 @@ final answer), byte-compared by
 The workspace lives at the deterministic `cpp-harness-e2e-workspace` temp
 path (recreated at boot) so the footer's pwd line stays byte-stable.
 
+These goldens were regenerated under the scrollback-flow renderer (ADR 0037,
+#435) and are byte-identical to the pre-regeneration screens: each composed
+buffer fits its viewport (72x24 boot, 72x25 turn), so the visible screen is
+preserved and overflow-into-scrollback is not exercised here. Scrollback
+behavior (full-buffer write, viewport-top tracking, resize clear-screen +
+scrollback, image-follows-content) is pinned at the `ScreenStateGoldenTest`
+seam; #437 re-verified this family byte-identical.
+
 Regenerate deterministically from the frozen checkout with the gate capture
 sidecar (`fixtures/pi-coding-agent/capture/capture-gate-snapshots.mts`, which
 drives `CCH_CAPTURE_GOLDENS=1 ./build/cch_tests_coding_agent_interactive "[issue399]"` and then
