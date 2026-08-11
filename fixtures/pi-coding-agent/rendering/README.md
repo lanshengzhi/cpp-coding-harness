@@ -44,6 +44,16 @@ tracking, resize clear-screen + scrollback, image-follows-content, CRLF
 native-scrollback flow) is pinned at the `ScreenStateGoldenTest` seam and the
 `ProcessTerminalTest` scroll-flow test (#438).
 
+**Known fork-B boundary (recorded, parity map #2).** On a real terminal,
+images that begin in the terminal's scrollback (a resumed transcript with
+history images, or scrollback-resident rows after a resize clear + reflow)
+are not re-emitted: `ProcessTerminal::place_image` cannot address rows above
+the current viewport top. Images placed while visible do follow their
+content into the native scrollback in the grow case. The VirtualTerminal seam
+pins the image-follows-content behavior (buffer-absolute placements); this
+real-terminal boundary is the recorded fork-B Intentional Divergence and is
+outside the text-only #438 acceptance.
+
 The screens are plain cell text (styles are stripped by the VirtualTerminal).
 Regenerate deterministically from the frozen checkout with the gate capture
 sidecar (`fixtures/pi-coding-agent/capture/capture-gate-snapshots.mts`, which

@@ -882,10 +882,8 @@ public:
         std::unique_ptr<cch::tui::AutocompleteProvider> autocomplete_provider,
         std::unique_ptr<cch::tui::AutocompleteDebounceTimer> autocomplete_debounce_timer,
         cch::tui::EditorRenderRequestSink autocomplete_render_request,
-        cch::tui::TerminalCapabilities terminal_capabilities,
         const LiveTheme& theme)
         : keybindings_(std::move(keybindings)),
-          terminal_capabilities_(std::move(terminal_capabilities)),
           on_invalidate_(std::move(on_invalidate)),
           on_submit_(std::move(on_submit)),
           on_follow_up_(std::move(on_follow_up)),
@@ -1736,7 +1734,6 @@ private:
     /// replaces it under the view mutex so the header/chat/execution
     /// components and the editor all observe the new registry live.
     std::shared_ptr<SharedKeybindings> keybindings_;
-    cch::tui::TerminalCapabilities terminal_capabilities_;
     ActionSink on_invalidate_;
     SubmitSink on_submit_;
     SubmitSink on_follow_up_;
@@ -2412,7 +2409,6 @@ private:
             [weak] {
                 if (const auto self = weak.lock()) self->post_invalidate();
             },
-            terminal_.capabilities(),
             theme_controller_->live_theme());
     }
 

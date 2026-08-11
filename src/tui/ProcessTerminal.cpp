@@ -1323,32 +1323,32 @@ util::ExpectedVoid ProcessTerminal::remove_image(
     // native scrollback are already out of the visible screen, so there is
     // nothing to blank in place; skip them.
     if (region.row >= impl_->viewport_top) {
-    const auto screen_row = region.row - impl_->viewport_top;
-    const auto columns = std::min(region.columns, impl_->dimensions.columns - region.column);
-    if (screen_row >= impl_->dimensions.rows) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Validation,
-            "Inline image removal region is outside terminal dimensions"));
-    }
-    const auto rows = std::min(region.rows, impl_->dimensions.rows - screen_row);
-    auto removal = detail::encode_terminal_image_removal(
-        impl_->capabilities.inline_images,
-        handle);
-    if (!removal) return std::unexpected(removal.error());
-    auto written = write_all(impl_->options.output_fd, *removal);
-    if (!written) return std::unexpected(written.error());
-    // iTerm2 has no addressable deletion: blank the owned cells. Kitty's
-    // delete restores the blanked cells the TUI placed the image over, and
-    // the blanking is idempotent with it (matching the VirtualTerminal
-    // recorded removal semantics).
-    auto cleared = write_all(
-        impl_->options.output_fd,
-        std::format(
-            "\x1b[{};{}H{}",
-            screen_row + 1,
-            region.column + 1,
-            std::string(columns * rows, ' ')));
-    if (!cleared) return std::unexpected(cleared.error());
+        const auto screen_row = region.row - impl_->viewport_top;
+        const auto columns = std::min(region.columns, impl_->dimensions.columns - region.column);
+        if (screen_row >= impl_->dimensions.rows) {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Validation,
+                "Inline image removal region is outside terminal dimensions"));
+        }
+        const auto rows = std::min(region.rows, impl_->dimensions.rows - screen_row);
+        auto removal = detail::encode_terminal_image_removal(
+            impl_->capabilities.inline_images,
+            handle);
+        if (!removal) return std::unexpected(removal.error());
+        auto written = write_all(impl_->options.output_fd, *removal);
+        if (!written) return std::unexpected(written.error());
+        // iTerm2 has no addressable deletion: blank the owned cells. Kitty's
+        // delete restores the blanked cells the TUI placed the image over, and
+        // the blanking is idempotent with it (matching the VirtualTerminal
+        // recorded removal semantics).
+        auto cleared = write_all(
+            impl_->options.output_fd,
+            std::format(
+                "\x1b[{};{}H{}",
+                screen_row + 1,
+                region.column + 1,
+                std::string(columns * rows, ' ')));
+        if (!cleared) return std::unexpected(cleared.error());
     }
     return {};
 #else
