@@ -42,9 +42,10 @@
  *   ../pi/node_modules/.bin/tsx fixtures/pi-coding-agent/capture/capture-gate-snapshots.mts
  * `PI_CHECKOUT` overrides the pi source checkout (default: sibling `../pi`);
  * `CCH_TEST_BINARY` overrides the C++ test binary (default:
- * `<repoRoot>/build/cpp_harness_tests`). The pi checkout MUST sit at the
- * frozen parity baseline commit and declare the pinned artifact version; the
- * script refuses to run otherwise.
+ * `<repoRoot>/build/cch_tests_coding_agent_interactive`, the interactive
+ * shard that owns the `[issue399]`/`[issue422]` goldens). The pi checkout MUST
+ * sit at the frozen parity baseline commit and declare the pinned artifact
+ * version; the script refuses to run otherwise.
  */
 
 import { execFileSync } from "node:child_process";
@@ -191,7 +192,8 @@ export function normalizeMessage(message: Record<string, unknown>): void {
 // the footer's pwd line stays byte-stable under the pinned environment.
 
 const testBinary =
-	process.env.CCH_TEST_BINARY ?? path.join(repoRoot, "build/cpp_harness_tests");
+	process.env.CCH_TEST_BINARY ??
+	path.join(repoRoot, "build/cch_tests_coding_agent_interactive");
 if (!existsSync(testBinary)) {
 	throw new Error(
 		`test binary not found at ${testBinary}; configure the build first ` +

@@ -20,7 +20,7 @@ path (recreated at boot) so the footer's pwd line stays byte-stable.
 
 Regenerate deterministically from the frozen checkout with the gate capture
 sidecar (`fixtures/pi-coding-agent/capture/capture-gate-snapshots.mts`, which
-drives `CCH_CAPTURE_GOLDENS=1 ./build/cpp_harness_tests "[issue399]"` and then
+drives `CCH_CAPTURE_GOLDENS=1 ./build/cch_tests_coding_agent_interactive "[issue399]"` and then
 byte-verifies the result), or directly with the same command. The screens are
 plain cell text (styles are stripped by the VirtualTerminal); the OSC 133
 zones are asserted on the recorded output stream in the test, not in these

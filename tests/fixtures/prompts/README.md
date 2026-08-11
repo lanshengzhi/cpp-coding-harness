@@ -29,4 +29,4 @@ Fixture rules:
   the goldens are deterministic and regenerable.
 
 Regenerate deterministically with
-`CCH_CAPTURE_GOLDENS=1 ./build/cpp_harness_tests "[coding_agent][prompt][system-prompt]"`.
+`CCH_CAPTURE_GOLDENS=1 scripts/run-tests.sh "[coding_agent][prompt][system-prompt]"`.

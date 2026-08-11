@@ -347,131 +347,46 @@ target_compile_options(cpp_harness PRIVATE ${CCH_WARNING_OPTIONS})
 
 if(CCH_BUILD_TESTS)
     include(CTest)
-    add_executable(cpp_harness_tests
+
+    # Package-aligned test shards (build-performance-plan Stage 4). Each shard
+    # is its own executable registered with ctest, so a focused test edit
+    # builds and links only its owning package. `cpp_harness_tests` remains as
+    # the aggregate target that builds every shard. Grouping follows the
+    # package boundaries in CODING_STANDARDS.md section 12 and fixture
+    # ownership, not equal file counts; no test object is compiled twice.
+    set(CCH_TEST_INCLUDE_DIRS
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests
+        third_party
+)
+
+    # util
+    add_executable(cch_tests_util
         tests/TestMain.cpp
-        tests/support/ComplexToolSchemaFixture.hpp
-        tests/support/ImageFixture.hpp
-        tests/support/PseudoTerminal.hpp
-        tests/support/GatedChatProvider.hpp
-        tests/support/FakeModelRuntime.hpp
-        tests/support/StreamAdapterFixture.hpp
-        tests/support/ToolArgumentCompatibilityFixture.hpp
-        tests/architecture/ArchitectureSurfaceScanTest.cpp
-        tests/architecture/CMakeDependencyTest.cpp
-        tests/architecture/MoveOnlyCallbackTest.cpp
-        tests/architecture/PublicHeaderBoundaryTest.cpp
-        tests/agent/AgentTest.cpp
-        tests/agent/AgentCoreEvidenceTest.cpp
-        tests/agent/AsyncAgentLoopTest.cpp
-        tests/agent/ModelRuntimeSeamTest.cpp
-        tests/agent/ToolCallExecutorTest.cpp
-        tests/ai/GlazeRoundTripTest.cpp
-        tests/ai/MessageContractTest.cpp
-        tests/ai/MessageConversionTest.cpp
-        tests/ai/ModelTest.cpp
-        tests/ai/ModelsTest.cpp
-        tests/ai/ProviderPolicyTest.cpp
-        tests/ai/RetryClassifierTest.cpp
-        tests/ai/SimpleOptionsTest.cpp
-        tests/ai/ToolContractTest.cpp
-        tests/ai/UsageTest.cpp
-        tests/ai/auth/OpenAICodexOAuthTest.cpp
-        tests/ai/auth/KimiCodingOAuthTest.cpp
-        tests/ai/providers/BoostBeastStreamTransportTest.cpp
-        tests/ai/providers/FakeProviderTest.cpp
-        tests/ai/api/AnthropicMessagesAdapterTest.cpp
-        tests/ai/api/OpenAICodexResponsesAdapterTest.cpp
-        tests/ai/api/OpenAIResponsesAdapterTest.cpp
-        tests/ai/api/PartialJsonTest.cpp
-        tests/ai/providers/SseParserTest.cpp
-        tests/ai/providers/BoostBeastWebSocketTransportTest.cpp
-        tests/cli/CliSmokeTest.cpp
-        tests/cli/CliParseTest.cpp
-        tests/cli/FrontendSelectionTest.cpp
-        tests/cli/ListModelsTest.cpp
-        tests/cli/PrintModeTest.cpp
-        tests/cli/InitialPromptTest.cpp
-        tests/cli/SessionFamilyCliTest.cpp
-        tests/cli/StartupTuiTest.cpp
-        tests/coding_agent/SessionDiscoveryTest.cpp
-        tests/coding_agent/BuiltinSlashCommandsTest.cpp
-        tests/coding_agent/ImageInputTest.cpp
-        tests/coding_agent/PromptExpansionTest.cpp
-        tests/coding_agent/PromptTemplateProcessingTest.cpp
-        tests/coding_agent/SystemPromptBuilderTest.cpp
-        tests/coding_agent/SystemPromptGoldenTest.cpp
-        tests/coding_agent/SystemPromptFlowTest.cpp
-        tests/coding_agent/AuthStorageTest.cpp
-        tests/coding_agent/KimiOAuthLifecycleTest.cpp
-        tests/coding_agent/AgentConfigDirTest.cpp
-        tests/coding_agent/SessionPathPolicyTest.cpp
-        tests/coding_agent/SettingsManagerTest.cpp
-        tests/coding_agent/ModelConfigTest.cpp
-        tests/coding_agent/ModelCycleTest.cpp
-        tests/coding_agent/ModelResolverTest.cpp
-        tests/coding_agent/ModelResolutionTest.cpp
-        tests/coding_agent/SetModelTest.cpp
-        tests/coding_agent/ModelRuntimeTest.cpp
-        tests/coding_agent/ProviderComposerTest.cpp
-        tests/coding_agent/ProjectResourcesTest.cpp
-        tests/coding_agent/ProjectResourceLoaderTest.cpp
-        tests/coding_agent/ProjectTrustTest.cpp
-        tests/coding_agent/SkillTest.cpp
-        tests/coding_agent/SkillFormattingTest.cpp
-        tests/coding_agent/SkillFrontmatterParserTest.cpp
-        tests/coding_agent/SkillLoaderTest.cpp
-        tests/coding_agent/PromptTemplateLoaderTest.cpp
-        tests/coding_agent/tui/InteractiveModeTest.cpp
-        tests/coding_agent/tui/KeybindingsManagerTest.cpp
-        tests/coding_agent/tui/FooterTest.cpp
-        tests/coding_agent/tui/FooterStatusInteractiveTest.cpp
-        tests/coding_agent/tui/ChatContainerStatusTest.cpp
-        tests/coding_agent/tui/LoginDialogTest.cpp
-        tests/coding_agent/tui/LoginInteractiveModeTest.cpp
-        tests/coding_agent/tui/LoadedResourcesTest.cpp
-        tests/coding_agent/tui/ModelSelectorInteractiveTest.cpp
-        tests/coding_agent/tui/ModelSelectorTest.cpp
-        tests/coding_agent/tui/OAuthSelectorTest.cpp
-        tests/coding_agent/tui/ScopedModelsSelectorTest.cpp
-        tests/coding_agent/tui/SessionSelectorSearchTest.cpp
-        tests/coding_agent/tui/SessionSelectorComponentTest.cpp
-        tests/coding_agent/tui/SessionSelectorInteractiveTest.cpp
-        tests/coding_agent/tui/SettingsSelectorTest.cpp
-        tests/coding_agent/tui/StringListSelectorTest.cpp
-        tests/coding_agent/tui/TreeSelectorComponentTest.cpp
-        tests/coding_agent/tui/TreeSelectorInteractiveTest.cpp
-        tests/coding_agent/tui/ProcessInteractiveModeTest.cpp
-        tests/coding_agent/tui/ThemeTest.cpp
-        tests/coding_agent/tui/ThemeControllerTest.cpp
-        tests/coding_agent/tui/UserBashInteractiveModeTest.cpp
-        tests/coding_agent/tui/InteractiveBootE2ETest.cpp
-        tests/coding_agent/tui/InteractiveRenderingGoldenTest.cpp
-        tests/coding_agent/tui/BootTrustInteractiveTest.cpp
-        tests/coding_agent/AgentSessionCompactionTest.cpp
-        tests/coding_agent/ReAuthGuidanceTest.cpp
-        tests/coding_agent/TurnAutoRetryTest.cpp
-        tests/coding_agent/AgentSessionSnapshotTest.cpp
-        tests/coding_agent/SkillIntegrationTest.cpp
-        tests/coding_agent/runtime/LocalUserShellTest.cpp
-        tests/coding_agent/runtime/SessionFactoryUserShellTest.cpp
-        tests/coding_agent/runtime/SessionEventCommitmentTest.cpp
-        tests/coding_agent/runtime/SessionSuiteGoldenTest.cpp
-        tests/coding_agent/runtime/SessionLifecycleTest.cpp
-        tests/coding_agent/runtime/SessionForkTest.cpp
-        tests/coding_agent/runtime/TreeNavigationTest.cpp
-        tests/coding_agent/runtime/UserBashCancellationTest.cpp
-        tests/coding_agent/runtime/UserBashOutputAccumulatorTest.cpp
-        tests/coding_agent/runtime/ResourceReloadTest.cpp
-        tests/coding_agent/runtime/UserBashOverlapTest.cpp
-        tests/harness/AsyncLocalExecutionEnvTest.cpp
-        tests/harness/compaction/CompactionTest.cpp
-        tests/harness/session/InMemorySessionStoreTest.cpp
-        tests/harness/session/JsonlSessionStoreTest.cpp
-        tests/harness/session/SessionRoundTripGoldenTest.cpp
-        tests/harness/session/SessionTreeTest.cpp
-        tests/tools/AsyncToolsTest.cpp
-        tests/tui/ContainerTest.cpp
+        tests/util/BoundedTextTest.cpp
+        tests/util/ExpectedErrorTest.cpp
+        tests/util/ExpectedMacrosTest.cpp
+        tests/util/JsonValueIoTest.cpp
+        tests/util/OutputLimiterTest.cpp
+        tests/util/RedactorTest.cpp
+)
+    target_include_directories(cch_tests_util PRIVATE ${CCH_TEST_INCLUDE_DIRS})
+    target_link_libraries(cch_tests_util
+        PRIVATE
+            cch_util
+)
+    target_compile_definitions(cch_tests_util PRIVATE
+        CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+    target_compile_options(cch_tests_util PRIVATE ${CCH_WARNING_OPTIONS})
+    add_test(NAME cch_tests_util COMMAND cch_tests_util)
+
+    # TUI
+    add_executable(cch_tests_tui
+        tests/TestMain.cpp
         tests/tui/AutocompleteTest.cpp
+        tests/tui/ContainerTest.cpp
         tests/tui/EditorTest.cpp
         tests/tui/FuzzyTest.cpp
         tests/tui/ImageTest.cpp
@@ -492,35 +407,244 @@ if(CCH_BUILD_TESTS)
         tests/tui/TuiTest.cpp
         tests/tui/UnicodeWidthTest.cpp
         tests/tui/UtilsTest.cpp
+)
+    target_include_directories(cch_tests_tui PRIVATE ${CCH_TEST_INCLUDE_DIRS})
+    target_link_libraries(cch_tests_tui
+        PRIVATE
+            cch_tui
+)
+    target_compile_definitions(cch_tests_tui PRIVATE
+        CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+    target_compile_options(cch_tests_tui PRIVATE ${CCH_WARNING_OPTIONS})
+    add_test(NAME cch_tests_tui COMMAND cch_tests_tui)
+
+    # AI
+    add_executable(cch_tests_ai
+        tests/TestMain.cpp
+        tests/ai/GlazeRoundTripTest.cpp
+        tests/ai/MessageContractTest.cpp
+        tests/ai/MessageConversionTest.cpp
+        tests/ai/ModelTest.cpp
+        tests/ai/ModelsTest.cpp
+        tests/ai/ProviderPolicyTest.cpp
+        tests/ai/RetryClassifierTest.cpp
+        tests/ai/SimpleOptionsTest.cpp
+        tests/ai/ToolContractTest.cpp
+        tests/ai/UsageTest.cpp
+        tests/ai/api/AnthropicMessagesAdapterTest.cpp
+        tests/ai/api/OpenAICodexResponsesAdapterTest.cpp
+        tests/ai/api/OpenAIResponsesAdapterTest.cpp
+        tests/ai/api/PartialJsonTest.cpp
+        tests/ai/auth/KimiCodingOAuthTest.cpp
+        tests/ai/auth/OpenAICodexOAuthTest.cpp
+        tests/ai/providers/BoostBeastStreamTransportTest.cpp
+        tests/ai/providers/BoostBeastWebSocketTransportTest.cpp
+        tests/ai/providers/FakeProviderTest.cpp
+        tests/ai/providers/SseParserTest.cpp
+)
+    target_include_directories(cch_tests_ai PRIVATE ${CCH_TEST_INCLUDE_DIRS})
+    target_link_libraries(cch_tests_ai
+        PRIVATE
+            cch_agent
+            cch_ai
+)
+    target_compile_definitions(cch_tests_ai PRIVATE
+        CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+    target_compile_options(cch_tests_ai PRIVATE ${CCH_WARNING_OPTIONS})
+    add_test(NAME cch_tests_ai COMMAND cch_tests_ai)
+
+    # agent
+    add_executable(cch_tests_agent
+        tests/TestMain.cpp
+        tests/agent/AgentCoreEvidenceTest.cpp
+        tests/agent/AgentTest.cpp
+        tests/agent/AsyncAgentLoopTest.cpp
+        tests/agent/ModelRuntimeSeamTest.cpp
+        tests/agent/ToolCallExecutorTest.cpp
+)
+    target_include_directories(cch_tests_agent PRIVATE ${CCH_TEST_INCLUDE_DIRS})
+    target_link_libraries(cch_tests_agent
+        PRIVATE
+            cch_agent
+)
+    target_compile_definitions(cch_tests_agent PRIVATE
+        CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+    target_compile_options(cch_tests_agent PRIVATE ${CCH_WARNING_OPTIONS})
+    add_test(NAME cch_tests_agent COMMAND cch_tests_agent)
+
+    # harness and tools
+    add_executable(cch_tests_harness_tools
+        tests/TestMain.cpp
+        tests/harness/AsyncLocalExecutionEnvTest.cpp
         tests/harness/WorkspaceFileSystemTest.cpp
-        tests/util/BoundedTextTest.cpp
-        tests/util/ExpectedErrorTest.cpp
-        tests/util/ExpectedMacrosTest.cpp
-        tests/util/JsonValueIoTest.cpp
-        tests/util/OutputLimiterTest.cpp
-        tests/util/RedactorTest.cpp
-    )
-    target_include_directories(cpp_harness_tests PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_CURRENT_SOURCE_DIR}/tests
-        third_party
-    )
-    target_link_libraries(
-        cpp_harness_tests
+        tests/harness/compaction/CompactionTest.cpp
+        tests/harness/session/InMemorySessionStoreTest.cpp
+        tests/harness/session/JsonlSessionStoreTest.cpp
+        tests/harness/session/SessionRoundTripGoldenTest.cpp
+        tests/harness/session/SessionTreeTest.cpp
+        tests/tools/AsyncToolsTest.cpp
+)
+    target_include_directories(cch_tests_harness_tools PRIVATE ${CCH_TEST_INCLUDE_DIRS})
+    target_link_libraries(cch_tests_harness_tools
+        PRIVATE
+            cch_harness
+            cch_tools
+)
+    target_compile_definitions(cch_tests_harness_tools PRIVATE
+        CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+    target_compile_options(cch_tests_harness_tools PRIVATE ${CCH_WARNING_OPTIONS})
+    add_test(NAME cch_tests_harness_tools COMMAND cch_tests_harness_tools)
+
+    # coding-agent core/runtime
+    add_executable(cch_tests_coding_agent
+        tests/TestMain.cpp
+        tests/coding_agent/AgentConfigDirTest.cpp
+        tests/coding_agent/AgentSessionCompactionTest.cpp
+        tests/coding_agent/AgentSessionSnapshotTest.cpp
+        tests/coding_agent/AuthStorageTest.cpp
+        tests/coding_agent/BuiltinSlashCommandsTest.cpp
+        tests/coding_agent/ImageInputTest.cpp
+        tests/coding_agent/KimiOAuthLifecycleTest.cpp
+        tests/coding_agent/ModelConfigTest.cpp
+        tests/coding_agent/ModelCycleTest.cpp
+        tests/coding_agent/ModelResolutionTest.cpp
+        tests/coding_agent/ModelResolverTest.cpp
+        tests/coding_agent/ModelRuntimeTest.cpp
+        tests/coding_agent/ProjectResourceLoaderTest.cpp
+        tests/coding_agent/ProjectResourcesTest.cpp
+        tests/coding_agent/ProjectTrustTest.cpp
+        tests/coding_agent/PromptExpansionTest.cpp
+        tests/coding_agent/PromptTemplateLoaderTest.cpp
+        tests/coding_agent/PromptTemplateProcessingTest.cpp
+        tests/coding_agent/ProviderComposerTest.cpp
+        tests/coding_agent/ReAuthGuidanceTest.cpp
+        tests/coding_agent/SessionDiscoveryTest.cpp
+        tests/coding_agent/SessionPathPolicyTest.cpp
+        tests/coding_agent/SetModelTest.cpp
+        tests/coding_agent/SettingsManagerTest.cpp
+        tests/coding_agent/SkillFormattingTest.cpp
+        tests/coding_agent/SkillFrontmatterParserTest.cpp
+        tests/coding_agent/SkillIntegrationTest.cpp
+        tests/coding_agent/SkillLoaderTest.cpp
+        tests/coding_agent/SkillTest.cpp
+        tests/coding_agent/SystemPromptBuilderTest.cpp
+        tests/coding_agent/SystemPromptFlowTest.cpp
+        tests/coding_agent/SystemPromptGoldenTest.cpp
+        tests/coding_agent/TurnAutoRetryTest.cpp
+        tests/coding_agent/runtime/LocalUserShellTest.cpp
+        tests/coding_agent/runtime/ResourceReloadTest.cpp
+        tests/coding_agent/runtime/SessionEventCommitmentTest.cpp
+        tests/coding_agent/runtime/SessionFactoryUserShellTest.cpp
+        tests/coding_agent/runtime/SessionForkTest.cpp
+        tests/coding_agent/runtime/SessionLifecycleTest.cpp
+        tests/coding_agent/runtime/SessionSuiteGoldenTest.cpp
+        tests/coding_agent/runtime/TreeNavigationTest.cpp
+        tests/coding_agent/runtime/UserBashCancellationTest.cpp
+        tests/coding_agent/runtime/UserBashOutputAccumulatorTest.cpp
+        tests/coding_agent/runtime/UserBashOverlapTest.cpp
+)
+    target_include_directories(cch_tests_coding_agent PRIVATE ${CCH_TEST_INCLUDE_DIRS})
+    target_link_libraries(cch_tests_coding_agent
+        PRIVATE
+            cch_coding_agent_runtime
+)
+    target_compile_definitions(cch_tests_coding_agent PRIVATE
+        CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+    target_compile_options(cch_tests_coding_agent PRIVATE ${CCH_WARNING_OPTIONS})
+    add_test(NAME cch_tests_coding_agent COMMAND cch_tests_coding_agent)
+
+    # coding-agent interactive TUI. Links the authoritative cch_cli owner too:
+    # BootTrustInteractiveTest drives the in-process CLI seam (CliRunFixture).
+    add_executable(cch_tests_coding_agent_interactive
+        tests/TestMain.cpp
+        tests/coding_agent/tui/BootTrustInteractiveTest.cpp
+        tests/coding_agent/tui/ChatContainerStatusTest.cpp
+        tests/coding_agent/tui/FooterStatusInteractiveTest.cpp
+        tests/coding_agent/tui/FooterTest.cpp
+        tests/coding_agent/tui/InteractiveBootE2ETest.cpp
+        tests/coding_agent/tui/InteractiveModeTest.cpp
+        tests/coding_agent/tui/InteractiveRenderingGoldenTest.cpp
+        tests/coding_agent/tui/KeybindingsManagerTest.cpp
+        tests/coding_agent/tui/LoadedResourcesTest.cpp
+        tests/coding_agent/tui/LoginDialogTest.cpp
+        tests/coding_agent/tui/LoginInteractiveModeTest.cpp
+        tests/coding_agent/tui/ModelSelectorInteractiveTest.cpp
+        tests/coding_agent/tui/ModelSelectorTest.cpp
+        tests/coding_agent/tui/OAuthSelectorTest.cpp
+        tests/coding_agent/tui/ProcessInteractiveModeTest.cpp
+        tests/coding_agent/tui/ScopedModelsSelectorTest.cpp
+        tests/coding_agent/tui/SessionSelectorComponentTest.cpp
+        tests/coding_agent/tui/SessionSelectorInteractiveTest.cpp
+        tests/coding_agent/tui/SessionSelectorSearchTest.cpp
+        tests/coding_agent/tui/SettingsSelectorTest.cpp
+        tests/coding_agent/tui/StringListSelectorTest.cpp
+        tests/coding_agent/tui/ThemeControllerTest.cpp
+        tests/coding_agent/tui/ThemeTest.cpp
+        tests/coding_agent/tui/TreeSelectorComponentTest.cpp
+        tests/coding_agent/tui/TreeSelectorInteractiveTest.cpp
+        tests/coding_agent/tui/UserBashInteractiveModeTest.cpp
+)
+    target_include_directories(cch_tests_coding_agent_interactive PRIVATE ${CCH_TEST_INCLUDE_DIRS})
+    target_link_libraries(cch_tests_coding_agent_interactive
+        PRIVATE
+            cch_cli
+            cch_coding_agent_interactive
+)
+    target_compile_definitions(cch_tests_coding_agent_interactive PRIVATE
+        CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+    target_compile_options(cch_tests_coding_agent_interactive PRIVATE ${CCH_WARNING_OPTIONS})
+    add_test(NAME cch_tests_coding_agent_interactive COMMAND cch_tests_coding_agent_interactive)
+
+    # CLI and architecture. The only shard that launches the built binary
+    # (CliSmokeTest), so it carries the CCH_BINARY definition and a build
+    # dependency on cpp_harness.
+    add_executable(cch_tests_cli_arch
+        tests/TestMain.cpp
+        tests/cli/CliParseTest.cpp
+        tests/cli/CliSmokeTest.cpp
+        tests/cli/FrontendSelectionTest.cpp
+        tests/cli/InitialPromptTest.cpp
+        tests/cli/ListModelsTest.cpp
+        tests/cli/PrintModeTest.cpp
+        tests/cli/SessionFamilyCliTest.cpp
+        tests/cli/StartupTuiTest.cpp
+        tests/architecture/ArchitectureSurfaceScanTest.cpp
+        tests/architecture/CMakeDependencyTest.cpp
+        tests/architecture/MoveOnlyCallbackTest.cpp
+        tests/architecture/PublicHeaderBoundaryTest.cpp
+)
+    target_include_directories(cch_tests_cli_arch PRIVATE ${CCH_TEST_INCLUDE_DIRS})
+    target_link_libraries(cch_tests_cli_arch
         PRIVATE
             cpp_harness_lib
             cch_cli
-            cch_coding_agent_interactive
-            cch_coding_agent_tui
-            cch_tui
             CLI11::CLI11
-    )
-    target_compile_definitions(cpp_harness_tests PRIVATE
+)
+    target_compile_definitions(cch_tests_cli_arch PRIVATE
         CCH_BINARY="$<TARGET_FILE:cpp_harness>"
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
-    )
-    target_compile_options(cpp_harness_tests PRIVATE ${CCH_WARNING_OPTIONS})
-    add_dependencies(cpp_harness_tests cpp_harness)
-    add_test(NAME cpp_harness_tests COMMAND cpp_harness_tests)
+)
+    target_compile_options(cch_tests_cli_arch PRIVATE ${CCH_WARNING_OPTIONS})
+    add_dependencies(cch_tests_cli_arch cpp_harness)
+    add_test(NAME cch_tests_cli_arch COMMAND cch_tests_cli_arch)
+
+    # Aggregate target that builds every shard (the Stage 4 entry point that
+    # replaces the old single executable's build target).
+    add_custom_target(cpp_harness_tests
+        DEPENDS
+            cch_tests_util
+            cch_tests_tui
+            cch_tests_ai
+            cch_tests_agent
+            cch_tests_harness_tools
+            cch_tests_coding_agent
+            cch_tests_coding_agent_interactive
+            cch_tests_cli_arch
+)
 endif()

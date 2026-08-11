@@ -50,6 +50,51 @@ std::vector<std::filesystem::path> files_under(const std::filesystem::path& root
     return files;
 }
 
+/// The unique top-level test modules (`tests/<module>/`) named in `block`.
+std::vector<std::string> test_modules_in(const std::string& block) {
+    std::vector<std::string> modules;
+    std::istringstream in(block);
+    std::string line;
+    while (std::getline(in, line)) {
+        const auto pos = line.find("tests/");
+        if (pos == std::string::npos) {
+            continue;
+        }
+        const auto slash = line.find('/', pos + 6);
+        if (slash != std::string::npos) {
+            modules.push_back(line.substr(pos, slash - pos));
+        }
+    }
+    std::sort(modules.begin(), modules.end());
+    modules.erase(std::unique(modules.begin(), modules.end()), modules.end());
+    return modules;
+}
+
+/// The immediate children named after `tests/coding_agent/` in `block`:
+/// root-level stems (`AgentConfigDirTest.cpp`) or subdirectories (`runtime`,
+/// `tui`). Used to split the coding-agent package into core/runtime and
+/// interactive shards that share the top-level module.
+std::vector<std::string> coding_agent_children(const std::string& block) {
+    std::vector<std::string> children;
+    const std::string marker = "tests/coding_agent/";
+    std::istringstream in(block);
+    std::string line;
+    while (std::getline(in, line)) {
+        const auto pos = line.find(marker);
+        if (pos == std::string::npos) {
+            continue;
+        }
+        const auto end = line.find('/', pos + marker.size());
+        const auto child = line.substr(pos + marker.size(), end - pos - marker.size());
+        if (!child.empty()) {
+            children.push_back(child);
+        }
+    }
+    std::sort(children.begin(), children.end());
+    children.erase(std::unique(children.begin(), children.end()), children.end());
+    return children;
+}
+
 } // namespace
 
 TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issue56][issue57][issue58]") {
@@ -198,17 +243,90 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
     CHECK_FALSE(block_mentions(executable_sources, "src/coding_agent/runtime/AsyncCliRuntime.cpp"));
     CHECK(block_mentions(executable_links, "cch_cli"));
 
-    // The tests link the same authoritative owner and do not recompile the
-    // shared CLI/runtime sources.
-    const auto test_links = cmake_command_block(
-        cmake, "target_link_libraries(\n        cpp_harness_tests");
-    const auto test_sources = cmake_command_block(cmake, "target_sources(cpp_harness_tests");
-    CHECK(block_mentions(test_links, "cch_cli"));
-    CHECK_FALSE(block_mentions(test_sources, "src/cli/CliParse.cpp"));
-    CHECK_FALSE(block_mentions(test_sources, "src/cli/FrontendSelection.cpp"));
-    CHECK_FALSE(block_mentions(test_sources, "src/cli/ListModels.cpp"));
-    CHECK_FALSE(block_mentions(test_sources, "src/cli/StartupTui.cpp"));
-    CHECK_FALSE(block_mentions(test_sources, "src/coding_agent/runtime/AsyncCliRuntime.cpp"));
+    // The package-aligned test shards (build-performance-plan Stage 4) split
+    // tests along package boundaries: each shard is its own executable that
+    // registers with ctest, and `cpp_harness_tests` is the aggregate target
+    // that builds every shard. No shard recompiles the shared CLI/runtime
+    // sources; they link the authoritative cch_cli owner instead.
+    const auto aggregate = cmake_command_block(cmake, "add_custom_target(cpp_harness_tests");
+    CHECK(block_mentions(aggregate, "DEPENDS"));
+    CHECK(block_mentions(aggregate, "cch_tests_util"));
+    CHECK(block_mentions(aggregate, "cch_tests_tui"));
+    CHECK(block_mentions(aggregate, "cch_tests_ai"));
+    CHECK(block_mentions(aggregate, "cch_tests_agent"));
+    CHECK(block_mentions(aggregate, "cch_tests_harness_tools"));
+    CHECK(block_mentions(aggregate, "cch_tests_coding_agent"));
+    CHECK(block_mentions(aggregate, "cch_tests_coding_agent_interactive"));
+    CHECK(block_mentions(aggregate, "cch_tests_cli_arch"));
+
+    const std::vector<std::string> shards{
+        "cch_tests_util", "cch_tests_tui", "cch_tests_ai", "cch_tests_agent",
+        "cch_tests_harness_tools", "cch_tests_coding_agent",
+        "cch_tests_coding_agent_interactive", "cch_tests_cli_arch",
+    };
+    for (const auto& shard : shards) {
+        const auto shard_sources = cmake_command_block(
+            cmake, "add_executable(" + shard);
+        CHECK_FALSE(block_mentions(shard_sources, "src/cli/CliParse.cpp"));
+        CHECK_FALSE(block_mentions(shard_sources, "src/cli/FrontendSelection.cpp"));
+        CHECK_FALSE(block_mentions(shard_sources, "src/cli/ListModels.cpp"));
+        CHECK_FALSE(block_mentions(shard_sources, "src/cli/StartupTui.cpp"));
+        CHECK_FALSE(block_mentions(shard_sources, "src/coding_agent/runtime/AsyncCliRuntime.cpp"));
+        CHECK(block_mentions(cmake, "add_test(NAME " + shard));
+    }
+
+    CHECK(test_modules_in(
+              cmake_command_block(cmake, "add_executable(cch_tests_util")) ==
+          std::vector<std::string>{"tests/util"});
+    CHECK(test_modules_in(
+              cmake_command_block(cmake, "add_executable(cch_tests_tui")) ==
+          std::vector<std::string>{"tests/tui"});
+    CHECK(test_modules_in(
+              cmake_command_block(cmake, "add_executable(cch_tests_ai")) ==
+          std::vector<std::string>{"tests/ai"});
+    CHECK(test_modules_in(
+              cmake_command_block(cmake, "add_executable(cch_tests_agent")) ==
+          std::vector<std::string>{"tests/agent"});
+    CHECK(test_modules_in(cmake_command_block(
+              cmake, "add_executable(cch_tests_harness_tools")) ==
+          (std::vector<std::string>{"tests/harness", "tests/tools"}));
+    CHECK(test_modules_in(
+              cmake_command_block(cmake, "add_executable(cch_tests_cli_arch")) ==
+          (std::vector<std::string>{"tests/architecture", "tests/cli"}));
+
+    // The coding-agent package splits on the tui subdirectory: the
+    // core/runtime shard owns tests/coding_agent/ and /runtime/ but never the
+    // interactive tui tests, and the interactive shard owns only /tui/.
+    const auto coding_agent_sources = cmake_command_block(
+        cmake, "add_executable(cch_tests_coding_agent\n");
+    CHECK(test_modules_in(coding_agent_sources) ==
+          std::vector<std::string>{"tests/coding_agent"});
+    const auto coding_agent_children_set = coding_agent_children(coding_agent_sources);
+    CHECK(std::find(coding_agent_children_set.begin(), coding_agent_children_set.end(), "runtime") !=
+          coding_agent_children_set.end());
+    CHECK(std::find(coding_agent_children_set.begin(), coding_agent_children_set.end(), "tui") ==
+          coding_agent_children_set.end());
+    const auto interactive_sources = cmake_command_block(
+        cmake, "add_executable(cch_tests_coding_agent_interactive");
+    CHECK(coding_agent_children(interactive_sources) ==
+          std::vector<std::string>{"tui"});
+
+    // Only the CLI/architecture shard launches the built binary
+    // (CliSmokeTest); it carries the CCH_BINARY definition and a build
+    // dependency on cpp_harness, and the interactive shard drives the
+    // in-process CLI seam (CliRunFixture) so it links cch_cli too.
+    const auto cli_arch_sources = cmake_command_block(
+        cmake, "add_executable(cch_tests_cli_arch");
+    const auto cli_arch_links = cmake_command_block(
+        cmake, "target_link_libraries(cch_tests_cli_arch");
+    CHECK(block_mentions(cli_arch_sources, "tests/cli/CliSmokeTest.cpp"));
+    CHECK(block_mentions(cli_arch_links, "cch_cli"));
+    CHECK(block_mentions(cli_arch_links, "CLI11::CLI11"));
+    CHECK(block_mentions(cmake, "CCH_BINARY="));
+    const auto interactive_shard_links = cmake_command_block(
+        cmake, "target_link_libraries(cch_tests_coding_agent_interactive");
+    CHECK(block_mentions(interactive_shard_links, "cch_cli"));
+    CHECK(block_mentions(interactive_shard_links, "cch_coding_agent_interactive"));
 }
 
 TEST_CASE(

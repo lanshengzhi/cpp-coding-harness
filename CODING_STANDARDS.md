@@ -166,7 +166,9 @@ This section is the checkable form of AGENTS.md guardrail 5.
 
 11.5. Layout mirrors `src/`: `tests/<module>/<Stem>Test.cpp`, including nested directories (`tests/harness/session/`). Shared helpers live in `tests/support/` under `namespace cch::tests`.
 
-11.6. Fake providers and clients by default — scripted fakes over the public interfaces. No live API keys or network access in the default `ctest` suite (AGENTS.md Validation).
+11.6. Tests compile into package-aligned shard executables (`cch_tests_util`, `cch_tests_tui`, `cch_tests_ai`, `cch_tests_agent`, `cch_tests_harness_tools`, `cch_tests_coding_agent`, `cch_tests_coding_agent_interactive`, `cch_tests_cli_arch`), each registered with `ctest`; the `cpp_harness_tests` target is the aggregate that builds every shard, and `scripts/run-tests.sh` is the uniform tag/filter entry point. A shard links only the packages its tests exercise, so a focused test edit builds and links just that shard; the coding-agent package splits on the `tui/` subdirectory (core/runtime vs interactive).
+
+11.7. Fake providers and clients by default — scripted fakes over the public interfaces. No live API keys or network access in the default `ctest` suite (AGENTS.md Validation).
 
 ## 12. CMake
 

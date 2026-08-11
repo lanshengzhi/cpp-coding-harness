@@ -32,5 +32,5 @@ pwd line stays byte-stable.
 The screens are plain cell text (styles are stripped by the VirtualTerminal).
 Regenerate deterministically from the frozen checkout with the gate capture
 sidecar (`fixtures/pi-coding-agent/capture/capture-gate-snapshots.mts`, which
-drives `CCH_CAPTURE_GOLDENS=1 ./build/cpp_harness_tests "[issue422]"` and then
+drives `CCH_CAPTURE_GOLDENS=1 ./build/cch_tests_coding_agent_interactive "[issue422]"` and then
 byte-verifies the result), or directly with the same command.

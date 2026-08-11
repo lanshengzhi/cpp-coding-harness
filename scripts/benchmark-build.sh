@@ -50,6 +50,8 @@ Options:
                        (default: src/coding_agent/SettingsManager.cpp).
   --test-source FILE   Test source for the typical test-source incremental
                        scenario (default: tests/coding_agent/ModelConfigTest.cpp).
+                       The owning package shard (Stage 4) is built, not the
+                       aggregate.
   --hotspot-source FILE
                        Leading-hotspot translation unit
                        (default: src/ai/providers/BoostBeastWebSocketTransport.cpp).
@@ -66,6 +68,24 @@ EOF
 }
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Map a test source path to its owning package shard executable (Stage 4,
+# #433). Unknown paths fall back to the aggregate target so the benchmark
+# still builds a named target.
+test_shard_for() {
+	local file=$1
+	case "$file" in
+		tests/util/*) echo cch_tests_util ;;
+		tests/tui/*) echo cch_tests_tui ;;
+		tests/ai/*) echo cch_tests_ai ;;
+		tests/agent/*) echo cch_tests_agent ;;
+		tests/harness/* | tests/tools/*) echo cch_tests_harness_tools ;;
+		tests/coding_agent/tui/*) echo cch_tests_coding_agent_interactive ;;
+		tests/coding_agent/*) echo cch_tests_coding_agent ;;
+		tests/cli/* | tests/architecture/*) echo cch_tests_cli_arch ;;
+		*) echo cpp_harness_tests ;;
+	esac
+}
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -439,9 +459,11 @@ read -r -a prod_samples <<< "$(sample_scenario "$prod_source" cpp_harness "$samp
 echo "      prod incremental: ${prod_samples[*]}s"
 
 # --- 6. Typical test-source incremental build -------------------------------
-echo "[7/8] test-source incremental ($test_source, $samples samples)"
-read -r -a test_samples <<< "$(sample_scenario "$test_source" cpp_harness_tests "$samples")"
-echo "      test incremental: ${test_samples[*]}s"
+# Stage 4: a focused test edit builds and links only its owning package shard.
+test_target="$(test_shard_for "$test_source")"
+echo "[7/8] test-source incremental ($test_source -> $test_target, $samples samples)"
+read -r -a test_samples <<< "$(sample_scenario "$test_source" "$test_target" "$samples")"
+echo "      test incremental ($test_target): ${test_samples[*]}s"
 
 # --- 7. Leading-hotspot rebuild ---------------------------------------------
 echo "[8/8] hotspot rebuild ($hotspot_source, $samples samples)"
@@ -578,6 +600,8 @@ def classify(output):
         return m.group(1)
     base = os.path.basename(output)
     if base in ("cpp_harness", "cpp_harness_tests"):
+        return base
+    if base.startswith("cch_tests_"):
         return base
     if base.startswith("libcch_") and base.endswith(".a"):
         return base[len("lib"):-len(".a")]

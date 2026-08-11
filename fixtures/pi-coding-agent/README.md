@@ -67,7 +67,7 @@ byte-compared by `tests/coding_agent/tui/InteractiveBootE2ETest.cpp`:
 The screens are plain cell text (styles are stripped by the VirtualTerminal); the OSC 133 A/B/C
 zones are asserted on the recorded output stream in the test, not in these files. Regenerate
 deterministically with the capture sidecar below, or directly with
-`CCH_CAPTURE_GOLDENS=1 ./build/cpp_harness_tests "[issue399]"`.
+`CCH_CAPTURE_GOLDENS=1 ./build/cch_tests_coding_agent_interactive "[issue399]"`.
 
 ### Session and value suites (`sessions/`)
 
@@ -142,7 +142,7 @@ pinned by `e2e/boot.txt`) are the committed byte-level gate:
 
 The workspaces live at the deterministic `cpp-harness-rendering-<name>` temp paths (recreated
 at boot). Regenerate with the capture sidecar below, or directly with
-`CCH_CAPTURE_GOLDENS=1 ./build/cpp_harness_tests "[issue422]"`.
+`CCH_CAPTURE_GOLDENS=1 ./build/cch_tests_coding_agent_interactive "[issue422]"`.
 
 Existing value goldens already live in the test tree and are referenced from the checklist:
 `tests/fixtures/prompts/goldens/` (the cch-identity system-prompt goldens), `tests/fixtures/themes/`
@@ -185,7 +185,7 @@ Regenerate with:
 ```
 
 `PI_CHECKOUT` overrides the default sibling `../pi`; `CCH_TEST_BINARY` overrides the default
-`./build/cpp_harness_tests`. The pi checkout MUST sit at the frozen baseline commit (a frozen
+`./build/cch_tests_coding_agent_interactive`. The pi checkout MUST sit at the frozen baseline commit (a frozen
 worktree is typical; the session capture also needs `node_modules` — the sidecar symlinks the
 sibling checkout's when absent — and the generated `packages/ai/src/providers/data/` model data,
 which it provisions from the sibling checkout or a minimal stub, since the faux scenarios never

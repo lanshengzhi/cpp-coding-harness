@@ -21,7 +21,7 @@
 // The workspace lives at the deterministic `cpp-harness-rendering-<name>`
 // temp path (recreated at boot) so the footer's pwd line stays byte-stable;
 // the environment is pinned by the gate capture sidecar. Regenerate from the
-// frozen checkout with `CCH_CAPTURE_GOLDENS=1 ./build/cpp_harness_tests
+// frozen checkout with `CCH_CAPTURE_GOLDENS=1 ./build/cch_tests_coding_agent_interactive
 // "[issue422]"` (or the gate sidecar, which then byte-verifies).
 
 #include "coding_agent/AgentSession.hpp"

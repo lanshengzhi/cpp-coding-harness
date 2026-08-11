@@ -341,18 +341,22 @@ The workspace guard is not a sandbox. Prompts, file contents, and command output
 
 ## Executable specs
 
+Tests are split into package-aligned executables (`cch_tests_util`, `cch_tests_tui`, `cch_tests_ai`, `cch_tests_agent`, `cch_tests_harness_tools`, `cch_tests_coding_agent`, `cch_tests_coding_agent_interactive`, `cch_tests_cli_arch`), so a focused test edit builds and links only its owning package; the `cpp_harness_tests` CMake target remains as the aggregate that builds every shard. Each shard registers with `ctest`, and `scripts/run-tests.sh` is the uniform tag/filter entry point: a filter skips shards whose registered tests do not match, and with no filter every shard runs in full.
+
 Useful default validation slices:
 
 ```bash
-./build/cpp_harness_tests "[architecture]"
-./build/cpp_harness_tests "[ai][u2]"
-./build/cpp_harness_tests "[ai][provider]"
-./build/cpp_harness_tests "[agent][stateful]"
-./build/cpp_harness_tests "[agent][async]"
-./build/cpp_harness_tests "[tools][async]"
-./build/cpp_harness_tests "[harness][session]"
-./build/cpp_harness_tests "[cli]"
+scripts/run-tests.sh "[architecture]"
+scripts/run-tests.sh "[ai][u2]"
+scripts/run-tests.sh "[ai][provider]"
+scripts/run-tests.sh "[agent][stateful]"
+scripts/run-tests.sh "[agent][async]"
+scripts/run-tests.sh "[tools][async]"
+scripts/run-tests.sh "[harness][session]"
+scripts/run-tests.sh "[cli]"
 ```
+
+Building and running one package's tests alone works without building the rest: `cmake --build --preset vcpkg --target cch_tests_tui` then `./build/cch_tests_tui` (or `scripts/run-tests.sh --build-dir build/dev-fast "[tui]"` for the fast-development tree).
 
 These cover:
 
