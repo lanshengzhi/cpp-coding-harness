@@ -2,6 +2,7 @@
 .qoder/
 build/
 build-validation/
+benchmark-build/
 .deps/
 .cpp-harness/sessions/*.jsonl
 vcpkg_installed/
