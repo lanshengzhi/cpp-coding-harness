@@ -1,5 +1,5 @@
-escape interrupt · ctrl+c/ctrl+d · / commands · ctrl+o more             
-Press ctrl+o to show full startup help and loaded resources.            
+ Resumed reply: the notes file is ready.                                
+                                                                        
  continue the work                                                      
                                                                         
                                                                         

@@ -30,12 +30,19 @@ The boot screen itself is pinned by the e2e goldens (`e2e/boot.txt`,
 pwd line stays byte-stable.
 
 These goldens were regenerated under the scrollback-flow renderer (ADR 0037,
-#435) and are byte-identical to the pre-regeneration screens: each composed
-buffer fits its viewport (72×52 pipeline, 72×24 / 100×24 key flows), so the
-visible screen is preserved and overflow-into-scrollback is not exercised
-here. Scrollback behavior (full-buffer write, viewport-top tracking, resize
-clear-screen + scrollback, image-follows-content) is pinned at the
-`ScreenStateGoldenTest` seam; #437 re-verified this family byte-identical.
+#435) and reflowed by the app-layer full-buffer pass-through (#438): at #435
+every composed buffer fit its viewport (72×52 pipeline, 72×24 / 100×24 key
+flows), so the screens were byte-identical and overflow-into-scrollback was
+not exercised at the composition seam. #438 removed the app-layer chat clip
+(`InteractiveView::render` now passes the full conversation through), so the
+five-message fork session's buffer at 100×24 now exceeds the viewport:
+`fork.txt` re-captures the visible tail (the startup header scrolled into the
+native scrollback and the selector overlay is viewport-positioned over the
+conversation tail); the pipeline/model-switch/interrupt buffers still fit and
+stay byte-identical. Scrollback behavior (full-buffer write, viewport-top
+tracking, resize clear-screen + scrollback, image-follows-content, CRLF
+native-scrollback flow) is pinned at the `ScreenStateGoldenTest` seam and the
+`ProcessTerminalTest` scroll-flow test (#438).
 
 The screens are plain cell text (styles are stripped by the VirtualTerminal).
 Regenerate deterministically from the frozen checkout with the gate capture

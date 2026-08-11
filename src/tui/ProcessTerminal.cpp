@@ -459,6 +459,16 @@ struct ProcessTerminal::Impl {
     std::uint64_t next_image_handle{1};
     bool draining{false};
     std::chrono::steady_clock::time_point drain_last_activity{};
+    CursorPosition cursor{};
+    /// Scrolled-out buffer lines (== the first buffer line visible on screen),
+    /// mirroring VirtualTerminal's scroll emulation: the renderer writes the
+    /// full composed buffer with buffer-relative rows under the main-screen
+    /// scrollback flow, and rows at or past the visible viewport bottom advance
+    /// this viewport top while `set_cursor` emits pi's CRLF line flow so the
+    /// real terminal's native scrollback receives the overflow. `set_cursor`/
+    /// `place_image` convert buffer rows to screen rows using it before
+    /// emitting ANSI sequences.
+    std::size_t viewport_top{0};
 #if defined(__linux__) || defined(__APPLE__)
     termios original_termios{};
     bool has_original_termios{false};
@@ -1160,6 +1170,9 @@ TerminalModeState ProcessTerminal::modes() const {
 util::ExpectedVoid ProcessTerminal::clear_screen() {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
+    // pi's resize full-redraw clears scrollback too (`\x1b[3J`): the native
+    // scroll history and the mirrored viewport top both reset.
+    impl_->viewport_top = 0;
 #if defined(__linux__) || defined(__APPLE__)
     return write_all(impl_->options.output_fd, kClearScreen);
 #else
@@ -1180,15 +1193,47 @@ util::ExpectedVoid ProcessTerminal::write(std::string_view output) {
 util::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
-    if (position.row >= impl_->dimensions.rows || position.column > impl_->dimensions.columns) {
+    if (position.column > impl_->dimensions.columns) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "Process Terminal cursor position is outside its dimensions"));
     }
+    // `row` is a buffer row under the main-screen scrollback flow: the
+    // renderer writes the full composed buffer in increasing row order, and
+    // rows at or past the visible viewport bottom must advance the terminal's
+    // native scrollback so the addressed line becomes the bottom visible line.
+    // Absolute CUP beyond the bottom clamps without scrolling on real
+    // terminals, so mirror pi's append (`"\r\n".repeat(scroll)`) by moving to
+    // the bottom and emitting CRLF line flow: the real terminal scrolls its
+    // scroll history natively. The emulated viewport top stays in sync with
+    // the renderer's own tracked viewport.
+    std::string sequence;
+    if (position.row >= impl_->viewport_top + impl_->dimensions.rows) {
+        const auto scroll = position.row - (impl_->viewport_top + impl_->dimensions.rows - 1);
+        const auto bottom = impl_->dimensions.rows - 1;
+        if (impl_->cursor.row < bottom) {
+            sequence += std::format("\x1b[{}B", bottom - impl_->cursor.row);
+        }
+        sequence.append(scroll, '\r');
+        sequence.append(scroll, '\n');
+        impl_->viewport_top += scroll;
+        impl_->cursor.row = bottom;
+        impl_->cursor.column = position.column;
 #if defined(__linux__) || defined(__APPLE__)
-    return write_all(
-        impl_->options.output_fd,
-        std::format("\x1b[{};{}H", position.row + 1, position.column + 1));
+        return write_all(impl_->options.output_fd, sequence);
+#else
+        return {};
+#endif
+    }
+    if (position.row < impl_->viewport_top) {
+        impl_->cursor.row = 0;
+    } else {
+        impl_->cursor.row = position.row - impl_->viewport_top;
+    }
+    impl_->cursor.column = position.column;
+    sequence += std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1);
+#if defined(__linux__) || defined(__APPLE__)
+    return write_all(impl_->options.output_fd, sequence);
 #else
     return {};
 #endif
@@ -1223,9 +1268,24 @@ util::Expected<TerminalImageHandle> ProcessTerminal::place_image(const TerminalI
         handle);
     if (!encoded) return std::unexpected(encoded.error());
     if (image.region.column >= impl_->dimensions.columns ||
-        image.region.row >= impl_->dimensions.rows ||
-        image.region.columns > impl_->dimensions.columns - image.region.column ||
-        image.region.rows > impl_->dimensions.rows - image.region.row) {
+        image.region.columns > impl_->dimensions.columns - image.region.column) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "Inline image region is outside terminal dimensions"));
+    }
+    // Image regions are buffer-absolute under the main-screen scrollback flow.
+    // A region whose buffer row has scrolled into the terminal's native
+    // scrollback (row < viewport top) cannot be addressed by the real terminal
+    // and is already held by its scroll history; skip the placement but keep
+    // the handle allocation so the renderer's active-image tracking stays
+    // consistent (fork-B image-follows-content, ADR 0037).
+    if (image.region.row < impl_->viewport_top) {
+        if (!image.preferred_handle) ++impl_->next_image_handle;
+        return handle;
+    }
+    const auto screen_row = image.region.row - impl_->viewport_top;
+    if (screen_row >= impl_->dimensions.rows ||
+        image.region.rows > impl_->dimensions.rows - screen_row) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "Inline image region is outside terminal dimensions"));
@@ -1234,7 +1294,7 @@ util::Expected<TerminalImageHandle> ProcessTerminal::place_image(const TerminalI
     // the cursor at the region origin before emitting the sequence.
     auto positioned = write_all(
         impl_->options.output_fd,
-        std::format("\x1b[{};{}H", image.region.row + 1, image.region.column + 1));
+        std::format("\x1b[{};{}H", screen_row + 1, image.region.column + 1));
     if (!positioned) return std::unexpected(positioned.error());
     auto written = write_all(impl_->options.output_fd, *encoded);
     if (!written) return std::unexpected(written.error());
@@ -1254,13 +1314,23 @@ util::ExpectedVoid ProcessTerminal::remove_image(
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
 #if defined(__linux__) || defined(__APPLE__)
-    if (region.column >= impl_->dimensions.columns || region.row >= impl_->dimensions.rows) {
+    if (region.column >= impl_->dimensions.columns) {
         return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "Inline image removal region is outside terminal dimensions"));
     }
+    // Buffer-absolute removal region (fork-B): regions that scrolled into the
+    // native scrollback are already out of the visible screen, so there is
+    // nothing to blank in place; skip them.
+    if (region.row >= impl_->viewport_top) {
+    const auto screen_row = region.row - impl_->viewport_top;
     const auto columns = std::min(region.columns, impl_->dimensions.columns - region.column);
-    const auto rows = std::min(region.rows, impl_->dimensions.rows - region.row);
+    if (screen_row >= impl_->dimensions.rows) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Validation,
+            "Inline image removal region is outside terminal dimensions"));
+    }
+    const auto rows = std::min(region.rows, impl_->dimensions.rows - screen_row);
     auto removal = detail::encode_terminal_image_removal(
         impl_->capabilities.inline_images,
         handle);
@@ -1275,10 +1345,11 @@ util::ExpectedVoid ProcessTerminal::remove_image(
         impl_->options.output_fd,
         std::format(
             "\x1b[{};{}H{}",
-            region.row + 1,
+            screen_row + 1,
             region.column + 1,
             std::string(columns * rows, ' ')));
     if (!cleared) return std::unexpected(cleared.error());
+    }
     return {};
 #else
     (void)handle;

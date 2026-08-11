@@ -1208,7 +1208,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Native TUI keeps tail image sidecars inside a cropped transcript viewport",
+    "Native TUI keeps tail image sidecars visible while the old transcript scrolled into scrollback",
     "[coding_agent][tui][image][viewport][issue63]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config_directory;
@@ -1269,10 +1269,31 @@ TEST_CASE(
 
     REQUIRE(terminal.images().size() == 1);
     const auto& image = terminal.images()[0];
-    CHECK(image.region.row + image.region.rows < terminal.dimensions().rows);
+    // Under the main-screen scrollback flow the image keeps its absolute
+    // buffer row (image-follows-content). The tail message is the newest
+    // content, so it stays in the visible viewport: the image must land
+    // inside the visible viewport range in buffer coordinates.
+    const auto viewport_bottom = terminal.viewport_top() + terminal.dimensions().rows;
+    CHECK(image.region.row >= terminal.viewport_top());
+    CHECK(image.region.row + image.region.rows <= viewport_bottom);
     const auto screen = visible_screen(terminal);
     CHECK(screen.find("tail before") < screen.find("tail after"));
+    // The startup header and every old transcript line scrolled away into the
+    // terminal's native scrollback instead of being cropped away: they must
+    // not be on the visible screen, but the full conversation must be present
+    // in the scroll history (pi TuiMainScreen).
     CHECK(screen.find("old transcript line 0") == std::string::npos);
+    CHECK(screen.find("escape interrupt") == std::string::npos);
+    std::string scrollback_text;
+    for (const auto& line : terminal.scrollback()) {
+        scrollback_text.append(line);
+        scrollback_text.push_back('\n');
+    }
+    CHECK(scrollback_text.find("escape interrupt") != std::string::npos);
+    CHECK(scrollback_text.find("old transcript line 0") != std::string::npos);
+    CHECK(scrollback_text.find("old transcript line 29") != std::string::npos);
+    // The newest tail message stays visible with the fixed dock.
+    CHECK(screen.find("tail before") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -2992,15 +3013,23 @@ TEST_CASE(
     drain_ready(io);
     REQUIRE(client_pointer->started);
     auto screen = visible_screen(terminal);
+    // The full streaming message is part of the composed buffer and stays
+    // visible while the conversation is short; it only scrolls into the
+    // terminal's native scrollback once the buffer grows past one screen
+    // (ADR 0037 main-screen scrollback flow).
     CHECK(count_text(screen, "TAIL PARTIAL") == 1);
-    CHECK(screen.find("old line 1") == std::string::npos);
+    CHECK(screen.find("old line 1") != std::string::npos);
+    CHECK(screen.find("old line 2") != std::string::npos);
 
     client_pointer->release();
     drain_ready(io);
     screen = visible_screen(terminal);
     CHECK(count_text(screen, "TAIL COMPLETE") == 1);
     CHECK(screen.find("TAIL PARTIAL") == std::string::npos);
-    CHECK(screen.find("new line 1") == std::string::npos);
+    // The completed message replaces the partial entry in place: the new head
+    // is visible and the old streaming text is gone.
+    CHECK(screen.find("new line 1") != std::string::npos);
+    CHECK(screen.find("old line 1") == std::string::npos);
     CHECK(created->session->message_count() == 2);
 
     REQUIRE(terminal.inject_input("\x04"));

@@ -325,6 +325,7 @@ terminal and record the outcome in the gate report at the gate pass ([#424]):
 | 2 | Theme appearance | The applied theme (dark/light/custom) renders in the terminal — colors, editor border color on change, fallback to `dark` on a failing theme | Manual run; `Failed to load theme`/`Fell back to dark theme.` observation |
 | 3 | Login dialogs | The login dialog / OAuth selector for the Codex and Kimi paths (auth URL/device code/manual code/info/waiting views) and the API-key dialog branch for the DeepSeek path render and function | Manual run with a real (or deliberately failing) auth flow; no live credentials are ever committed |
 | 4 | External editor (`app.editor.external`) | `VISUAL`/`EDITOR` launches a temp `prompt.md`, the editor resumes the session on exit, and cleanup is best-effort | Manual run with a real `EDITOR` |
+| 5 | Main-screen scrollback flow (`TuiMainScreen`, ADR 0037) | A grown transcript resumed in a real terminal writes the full composed buffer into the terminal's native scrollback: scroll-up shows the whole conversation, the startup header/loaded-resources block scroll away as the conversation grows past one screen, and resizing reflows cleanly while clearing the scroll history | Real-terminal tmux smoke (#438): 20-turn fixture session resumed at 100x24, 100x60, and 120x40 — native scrollback holds the full conversation (all 20 turns, `history_size` 229 at 24 rows / 193 at 60 rows), the header is present only in the scrollback, and resize reflows cleanly and clears/rebuilds the scroll history (pi parity). See the #438 outcome record |
 
 **Recording.** The checklist above is the committed, bounded manual artifact of this gate; the
 expected outcomes are pinned here. It is a bounded fill-in artifact like the pi-tui real-terminal
@@ -345,6 +346,7 @@ Real-terminal pass — date, emulator, version:
 2. Theme appearance:  PASS/FAIL + fallback observation
 3. Login dialogs:     PASS/FAIL + per-path observation
 4. External editor:   PASS/FAIL + EDITOR used
+5. Scrollback flow:   PASS/FAIL + scroll-up / header scroll-away / resize observations
 ```
 
 ## Final classification

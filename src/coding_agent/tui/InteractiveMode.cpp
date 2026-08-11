@@ -365,49 +365,6 @@ struct InteractiveStartupDiagnostics {
 #endif
 }
 
-[[nodiscard]] bool protocol_supports_image(
-    cch::tui::InlineImageProtocol protocol,
-    std::string_view mime_type) {
-    if (protocol == cch::tui::InlineImageProtocol::Kitty) return mime_type == "image/png";
-    if (protocol == cch::tui::InlineImageProtocol::ITerm2) {
-        return mime_type == "image/png" || mime_type == "image/jpeg" ||
-            mime_type == "image/gif" || mime_type == "image/webp";
-    }
-    return false;
-}
-
-[[nodiscard]] std::size_t estimated_image_rows(
-    const cch::tui::InlineImageRenderRegion& image,
-    const cch::tui::TerminalCapabilities& capabilities,
-    std::size_t width) {
-    if (!capabilities.cell_pixels || capabilities.cell_pixels->width == 0 ||
-        capabilities.cell_pixels->height == 0 ||
-        !protocol_supports_image(capabilities.inline_images, image.mime_type) ||
-        image.pixel_width == 0 || image.pixel_height == 0 || image.region.column >= width) {
-        return 1;
-    }
-    const auto available_width = width - image.region.column;
-    const auto default_width = std::min<std::size_t>(width > 2 ? width - 2 : 1, 60);
-    const auto max_width = std::max<std::size_t>(
-        1,
-        std::min(available_width, image.max_width.value_or(default_width)));
-    const auto& cells = *capabilities.cell_pixels;
-    const auto default_height = std::max<std::size_t>(
-        1,
-        (max_width * cells.width + cells.height - 1) / cells.height);
-    const auto max_height = std::max<std::size_t>(
-        1, image.max_height.value_or(default_height));
-    const auto width_scale =
-        static_cast<long double>(max_width * cells.width) / image.pixel_width;
-    const auto height_scale =
-        static_cast<long double>(max_height * cells.height) / image.pixel_height;
-    const auto scale = std::min(width_scale, height_scale);
-    return std::max<std::size_t>(
-        1,
-        std::min(max_height, static_cast<std::size_t>(std::ceil(
-            static_cast<long double>(image.pixel_height) * scale / cells.height))));
-}
-
 [[nodiscard]] std::optional<std::string> queued_editor_text(
     const ai::MessageVariant& message) {
     const auto* user = std::get_if<ai::UserMessage>(&message);
@@ -1440,50 +1397,18 @@ public:
             }
         }
         }
-        const auto chat_capacity = available_rows_ > fixed_rows + editor_lines.size() + autocomplete_lines.size()
-            ? available_rows_ - fixed_rows - editor_lines.size() - autocomplete_lines.size()
-            : 0;
-
+        // The full conversation passes through to the terminal's native
+        // scrollback (pi TuiMainScreen): only the dock (pending/status/
+        // editor/autocomplete/footer) stays fixed on screen, and earlier chat
+        // lines scroll away into the terminal's scroll history as the
+        // conversation grows past one screen. Inline images keep their
+        // absolute buffer rows so they scroll with the content that produced
+        // them (fork-B image-follows-content).
         cch::tui::RenderResult chat_result;
-        if (chat_capacity > 0) {
-            auto rendered = chat_.render(width);
-            if (!rendered) return std::unexpected(rendered.error());
-
-            std::vector<std::size_t> materialized_rows(rendered->lines.size(), 1);
-            for (const auto& image : rendered->images) {
-                if (image.region.row >= materialized_rows.size()) continue;
-                materialized_rows[image.region.row] +=
-                    estimated_image_rows(image, terminal_capabilities_, width) - 1;
-            }
-
-            auto first_row = rendered->lines.size();
-            std::size_t used_rows = 0;
-            std::optional<std::size_t> fallback_only_row;
-            while (first_row > 0) {
-                const auto candidate_row = first_row - 1;
-                const auto row_cost = materialized_rows[candidate_row];
-                if (row_cost > chat_capacity - used_rows) {
-                    if (used_rows < chat_capacity) {
-                        first_row = candidate_row;
-                        fallback_only_row = candidate_row;
-                    }
-                    break;
-                }
-                first_row = candidate_row;
-                used_rows += row_cost;
-            }
-            chat_result.lines.assign(
-                rendered->lines.begin() + static_cast<std::ptrdiff_t>(first_row),
-                rendered->lines.end());
-            for (auto& image : rendered->images) {
-                const auto image_end = image.region.row + image.region.rows;
-                if (image.region.row < first_row || image_end > rendered->lines.size() ||
-                    (fallback_only_row && image.region.row == *fallback_only_row)) {
-                    continue;
-                }
-                image.region.row -= first_row;
-                chat_result.images.push_back(std::move(image));
-            }
+        if (auto rendered = chat_.render(width); !rendered) {
+            return std::unexpected(rendered.error());
+        } else {
+            chat_result = std::move(*rendered);
         }
 
         cch::tui::RenderResult transcript_result;
@@ -1702,10 +1627,11 @@ public:
             cursor = editor_.cursor_location();
         }
         if (cursor) {
+            // Return the true buffer-relative row; Tui::render() clamps it to
+            // the visible viewport when positioning the hardware cursor (pi
+            // positionHardwareCursor tracks the scroll rather than scrolling
+            // the terminal).
             cursor->row += editor_row_offset_;
-            // The header/chat may overflow tiny terminals; keep the IME
-            // cursor on the last visible row so rendering never fails.
-            cursor->row = std::min(cursor->row, available_rows_ - 1);
         }
         return cursor;
     }

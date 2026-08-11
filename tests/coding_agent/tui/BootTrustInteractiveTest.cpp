@@ -522,17 +522,37 @@ TEST_CASE(
     run.start(fixture, std::move(request), ai::providers::make_scripted_fake_models());
 
     const auto screen = visible_screen(run.terminal);
+    // Under the main-screen scrollback flow (ADR 0037) the startup header and
+    // the loaded-resources block scroll away into the terminal's native
+    // scrollback as the boot diagnostics grow the composed buffer past one
+    // screen; the full composed buffer (scrollback ++ screen) must still carry
+    // them.
+    std::string full_buffer;
+    for (const auto& line : run.terminal.scrollback()) {
+        full_buffer += line;
+        full_buffer.push_back('\n');
+    }
+    for (const auto& line : run.terminal.screen()) {
+        full_buffer += line;
+        full_buffer.push_back('\n');
+    }
     // The invalid document is reported in the loaded-resources block.
-    CHECK(screen.find("[Theme conflicts]") != std::string::npos);
-    CHECK(screen.find("broken-theme.json") != std::string::npos);
+    CHECK(full_buffer.find("[Theme conflicts]") != std::string::npos);
+    CHECK(full_buffer.find("broken-theme.json") != std::string::npos);
+    // The startup content scrolled away: the visible viewport no longer shows
+    // the header/loaded-resources block (pi TuiMainScreen scroll-away).
+    CHECK(screen.find("escape interrupt") == std::string::npos);
+    CHECK(run.terminal.viewport_top() > 0);
     // The controller applied the settings theme, failed, and fell back with
-    // pi's verbatim message (rendered as an Error chat diagnostic).
+    // pi's verbatim message (rendered as an Error chat diagnostic), which
+    // stays visible on screen with the fixed dock.
     CHECK(screen.find("Failed to load theme \"broken\"") != std::string::npos);
     CHECK(screen.find("Fell back to dark theme.") != std::string::npos);
     // The boot completes: the interactive dock (footer status line with the
-    // active model) renders below the bounded loaded-resources block.
+    // active model) renders below the bounded loaded-resources block and stays
+    // fixed on screen (the #425 bound kept the footer/editor on screen).
     CHECK(screen.find("fake-model") != std::string::npos);
-    CHECK(screen.find("Press ctrl+o to show full startup help") != std::string::npos);
+    CHECK(full_buffer.find("Press ctrl+o to show full startup help") != std::string::npos);
 
     run.exit();
 }

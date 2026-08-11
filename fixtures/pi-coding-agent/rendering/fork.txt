@@ -1,22 +1,22 @@
-escape interrupt · ctrl+c/ctrl+d · / commands · ctrl+o more                                         
-Press ctrl+o to show full startup help and loaded resources.                                        
+                                                                                                    
+ user-2                                                                                             
                                                                                                     
                                                                                                     
                                                                                                     
                                                                                                     
 Fork from Message                                                                                   
-Select a user message to copy the active path up to that point into a new session                   
+Select a user message to copy the active path up to that point into a new session   ────────────────
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────
                                                                                                     
   user-0                                                                                            
-  Message 1 of 3                                                                                    
+  Message 1 of 3                                                                    
                                                                                                     
   user-1                                                                                            
-  Message 2 of 3                                                                                    
+  Message 2 of 3                                                                    
                                                                                                     
-› user-2                                                                 ───────────────────────────
-  Message 3 of 3                                                                                    
+› user-2                                                                 
+  Message 3 of 3                                                                    
                                                                                                     
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -13,18 +13,27 @@ final answer), byte-compared by
 - `turn.txt` — the same terminal after a focused-editor submission streams
   the scripted turn: the user message in the pi box shape, the assistant's
   thinking/text, the edit tool-execution block with the diff renderer, the
-  final answer, and the footer's post-turn stats (P15).
+  final answer, and the footer's post-turn stats (P15). At 72x25 the composed
+  buffer now overflows the viewport once the turn streams (the full
+  conversation passes through under ADR 0037), so the startup header has
+  scrolled into the terminal's native scrollback and this golden records the
+  visible tail.
 
 The workspace lives at the deterministic `cpp-harness-e2e-workspace` temp
 path (recreated at boot) so the footer's pwd line stays byte-stable.
 
 These goldens were regenerated under the scrollback-flow renderer (ADR 0037,
-#435) and are byte-identical to the pre-regeneration screens: each composed
-buffer fits its viewport (72x24 boot, 72x25 turn), so the visible screen is
-preserved and overflow-into-scrollback is not exercised here. Scrollback
-behavior (full-buffer write, viewport-top tracking, resize clear-screen +
-scrollback, image-follows-content) is pinned at the `ScreenStateGoldenTest`
-seam; #437 re-verified this family byte-identical.
+#435) and reflowed by the app-layer full-buffer pass-through (#438): at #435
+`boot.txt` and `turn.txt` were byte-identical to the pre-regeneration screens
+because each composed buffer fit its viewport, so overflow-into-scrollback
+was not exercised at the composition seam. #438 removed the app-layer chat
+clip (`InteractiveView::render` now passes the full conversation through), so
+the post-turn buffer at 72x25 exceeds the viewport: `turn.txt` re-captures
+the visible tail (header scrolled away) and `boot.txt` stays byte-identical
+(no conversation yet, buffer fits). Scrollback behavior (full-buffer write,
+viewport-top tracking, resize clear-screen + scrollback, image-follows-
+content, CRLF native-scrollback flow) is pinned at the `ScreenStateGoldenTest`
+seam and the `ProcessTerminalTest` scroll-flow test (#438).
 
 Regenerate deterministically from the frozen checkout with the gate capture
 sidecar (`fixtures/pi-coding-agent/capture/capture-gate-snapshots.mts`, which

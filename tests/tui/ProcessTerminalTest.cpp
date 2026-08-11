@@ -1132,4 +1132,49 @@ TEST_CASE(
     REQUIRE(terminal.stop());
 }
 
+TEST_CASE(
+    "Process Terminal scrolls the native scrollback with CRLF line flow past the viewport",
+    "[tui][terminal][issue435]") {
+    auto pty = cch::tests::open_pseudo_terminal(40, 8);
+    REQUIRE(pty);
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // Buffer row 10 on an 8-row viewport is 3 rows past the bottom: the
+    // terminal moves to the bottom (row 7) then emits CRLF line flow so the
+    // real terminal's native scrollback receives the overflow (pi's append
+    // `"\r\n".repeat(scroll)`; absolute CUP beyond the bottom clamps instead
+    // of scrolling, which is why the emulated scroll is emitted explicitly).
+    // The exact \r/\n mix depends on the PTY's output processing (ONLCR), so
+    // the assertions count line-flow characters rather than pin bytes.
+    REQUIRE(terminal.set_cursor({.column = 0, .row = 10}));
+    auto output = cch::tests::read_available(pty->master.get());
+    CHECK(output.find("\x1b[7B") != std::string::npos);
+    CHECK(output.find("\x1b[11;1H") == std::string::npos);
+    CHECK(std::count(output.begin(), output.end(), '\r') +
+            std::count(output.begin(), output.end(), '\n') >= 3);
+
+    // A subsequent sequential row past the new viewport bottom scrolls one
+    // line: the cursor is already at the bottom, so only line flow is emitted
+    // (no absolute CUP, no move-down).
+    REQUIRE(terminal.set_cursor({.column = 0, .row = 11}));
+    output = cch::tests::read_available(pty->master.get());
+    CHECK(std::count(output.begin(), output.end(), '\r') +
+            std::count(output.begin(), output.end(), '\n') >= 1);
+    CHECK(output.find("\x1b[") == std::string::npos);
+
+    // An in-viewport buffer row converts to a screen-relative CUP row using
+    // the emulated viewport top: after 4 scrolled lines the viewport top is
+    // 4, so buffer row 9 maps to screen row 5.
+    REQUIRE(terminal.set_cursor({.column = 0, .row = 9}));
+    output = cch::tests::read_available(pty->master.get());
+    CHECK(output.find("\x1b[6;1H") != std::string::npos);
+
+    REQUIRE(terminal.stop());
+}
+
 #endif
