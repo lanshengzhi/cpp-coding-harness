@@ -312,27 +312,39 @@ target_link_libraries(cch_coding_agent_interactive
         cch_util
 )
 
-# Transitional aggregate target for the executable/tests while the runtime is being split.
-add_library(cpp_harness_lib INTERFACE)
-target_link_libraries(cpp_harness_lib INTERFACE cch_coding_agent_runtime)
-
-add_executable(cpp_harness
-    src/main.cpp
+# One authoritative CMake owner for the CLI/runtime composition shared by the
+# executable and the tests (build-performance-plan Stage 3, item 2). Sits above
+# the private interactive composition so the non-interactive runtime target
+# keeps no TUI dependency.
+add_library(cch_cli
     src/cli/CliParse.cpp
     src/cli/FrontendSelection.cpp
     src/cli/ListModels.cpp
     src/cli/StartupTui.cpp
     src/coding_agent/runtime/AsyncCliRuntime.cpp
 )
+cch_target_defaults(cch_cli)
+target_compile_definitions(cch_cli PRIVATE CCH_PROJECT_VERSION="${PROJECT_VERSION}")
+target_link_libraries(cch_cli
+    PRIVATE
+        cch_coding_agent_interactive
+        CLI11::CLI11
+)
+
+# Transitional aggregate target for the executable/tests while the runtime is being split.
+add_library(cpp_harness_lib INTERFACE)
+target_link_libraries(cpp_harness_lib INTERFACE cch_coding_agent_runtime)
+
+add_executable(cpp_harness
+    src/main.cpp
+)
 target_link_libraries(
     cpp_harness
     PRIVATE
         cpp_harness_lib
-        cch_coding_agent_interactive
-        CLI11::CLI11
+        cch_cli
 )
 target_include_directories(cpp_harness PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_compile_definitions(cpp_harness PRIVATE CCH_PROJECT_VERSION="${PROJECT_VERSION}")
 target_compile_options(cpp_harness PRIVATE ${CCH_WARNING_OPTIONS})
 
 if(CCH_BUILD_TESTS)
@@ -499,22 +511,15 @@ if(CCH_BUILD_TESTS)
         cpp_harness_tests
         PRIVATE
             cpp_harness_lib
+            cch_cli
             cch_coding_agent_interactive
             cch_coding_agent_tui
             cch_tui
             CLI11::CLI11
     )
-    target_sources(cpp_harness_tests PRIVATE
-        src/cli/CliParse.cpp
-        src/cli/FrontendSelection.cpp
-        src/cli/ListModels.cpp
-        src/cli/StartupTui.cpp
-        src/coding_agent/runtime/AsyncCliRuntime.cpp
-    )
     target_compile_definitions(cpp_harness_tests PRIVATE
         CCH_BINARY="$<TARGET_FILE:cpp_harness>"
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
-        CCH_PROJECT_VERSION="${PROJECT_VERSION}"
     )
     target_compile_options(cpp_harness_tests PRIVATE ${CCH_WARNING_OPTIONS})
     add_dependencies(cpp_harness_tests cpp_harness)

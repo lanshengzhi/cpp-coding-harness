@@ -96,6 +96,13 @@ TEST_CASE("CMake declares pi package-style targets", "[architecture][cmake][issu
     CHECK(block_mentions(core_sources, "src/coding_agent/ModelConfig.cpp"));
     CHECK(block_mentions(core_sources, "src/coding_agent/ProviderComposer.cpp"));
     CHECK(block_mentions(cmake, "add_library(cch_coding_agent_runtime"));
+    CHECK(block_mentions(cmake, "add_library(cch_cli"));
+    const auto cli_sources = cmake_command_block(cmake, "add_library(cch_cli");
+    CHECK(block_mentions(cli_sources, "src/cli/CliParse.cpp"));
+    CHECK(block_mentions(cli_sources, "src/cli/FrontendSelection.cpp"));
+    CHECK(block_mentions(cli_sources, "src/cli/ListModels.cpp"));
+    CHECK(block_mentions(cli_sources, "src/cli/StartupTui.cpp"));
+    CHECK(block_mentions(cli_sources, "src/coding_agent/runtime/AsyncCliRuntime.cpp"));
 
     const auto ai_sources = cmake_command_block(cmake, "add_library(cch_ai");
     CHECK(block_mentions(ai_sources, "src/ai/Models.cpp"));
@@ -173,11 +180,35 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
     CHECK_FALSE(block_mentions(runtime_links, "cch_coding_agent_tui"));
     CHECK_FALSE(block_mentions(runtime_links, "cch_coding_agent_interactive"));
 
+    const auto cli_links = cmake_command_block(cmake, "target_link_libraries(cch_cli");
+    CHECK(block_mentions(cli_links, "cch_coding_agent_interactive"));
+    CHECK(block_mentions(cli_links, "CLI11::CLI11"));
+    CHECK_FALSE(block_mentions(cli_links, "cch_coding_agent_runtime"));
+    CHECK_FALSE(block_mentions(cli_links, "cch_coding_agent_tui"));
+    CHECK_FALSE(block_mentions(cli_links, "cch_tui"));
+
+    // The executable compiles only main.cpp and links the authoritative CLI
+    // owner; the five shared sources have exactly one owner (cch_cli).
     const auto executable_sources = cmake_command_block(cmake, "add_executable(cpp_harness");
     const auto executable_links = cmake_command_block(cmake, "target_link_libraries(\n    cpp_harness");
-    CHECK(block_mentions(executable_sources, "src/cli/FrontendSelection.cpp"));
-    CHECK(block_mentions(executable_sources, "src/coding_agent/runtime/AsyncCliRuntime.cpp"));
-    CHECK(block_mentions(executable_links, "cch_coding_agent_interactive"));
+    CHECK_FALSE(block_mentions(executable_sources, "src/cli/CliParse.cpp"));
+    CHECK_FALSE(block_mentions(executable_sources, "src/cli/FrontendSelection.cpp"));
+    CHECK_FALSE(block_mentions(executable_sources, "src/cli/ListModels.cpp"));
+    CHECK_FALSE(block_mentions(executable_sources, "src/cli/StartupTui.cpp"));
+    CHECK_FALSE(block_mentions(executable_sources, "src/coding_agent/runtime/AsyncCliRuntime.cpp"));
+    CHECK(block_mentions(executable_links, "cch_cli"));
+
+    // The tests link the same authoritative owner and do not recompile the
+    // shared CLI/runtime sources.
+    const auto test_links = cmake_command_block(
+        cmake, "target_link_libraries(\n        cpp_harness_tests");
+    const auto test_sources = cmake_command_block(cmake, "target_sources(cpp_harness_tests");
+    CHECK(block_mentions(test_links, "cch_cli"));
+    CHECK_FALSE(block_mentions(test_sources, "src/cli/CliParse.cpp"));
+    CHECK_FALSE(block_mentions(test_sources, "src/cli/FrontendSelection.cpp"));
+    CHECK_FALSE(block_mentions(test_sources, "src/cli/ListModels.cpp"));
+    CHECK_FALSE(block_mentions(test_sources, "src/cli/StartupTui.cpp"));
+    CHECK_FALSE(block_mentions(test_sources, "src/coding_agent/runtime/AsyncCliRuntime.cpp"));
 }
 
 TEST_CASE(
