@@ -5,7 +5,9 @@
 #include "util/Json.hpp"
 #include <cch/util/Error.hpp>
 
+#include <cstddef>
 #include <string>
+#include <string_view>
 #include <variant>
 
 using namespace cch;
@@ -210,5 +212,53 @@ TEST_CASE("assistant_content_from_dto rejects image content", "[ai][u2][glaze]")
     auto result = ai::glaze::detail::assistant_content_from_dto(dto, "test");
     REQUIRE(!result);
     CHECK(result.error().message.find("image") != std::string::npos);
+}
+
+TEST_CASE("Glaze rejects invalid UTF-8 in message JSON", "[ai][u2][glaze]") {
+    auto json = ai::glaze::write_message_json(
+        ai::MessageVariant{ai::user_text_message("valid text")});
+    REQUIRE(json);
+    const auto text_offset = json->find("valid text");
+    REQUIRE(text_offset != std::string::npos);
+    json->replace(
+        text_offset,
+        std::string_view{"valid text"}.size(),
+        std::string{"\xc0\x80", 2});
+
+    const auto parsed = ai::glaze::read_message_json(*json);
+    REQUIRE_FALSE(parsed);
+    CHECK(parsed.error().code == util::ErrorCode::JsonParse);
+}
+
+TEST_CASE("Glaze rejects out-of-range message integers", "[ai][u2][glaze]") {
+    auto json = ai::glaze::write_message_json(
+        ai::MessageVariant{ai::user_text_message("hello")});
+    REQUIRE(json);
+    const std::string marker = R"("timestamp":)";
+    const auto value_offset = json->find(marker);
+    REQUIRE(value_offset != std::string::npos);
+    const auto number_offset = value_offset + marker.size();
+    const auto number_end = json->find_first_not_of("-0123456789", number_offset);
+    REQUIRE(number_end != std::string::npos);
+    json->replace(number_offset, number_end - number_offset, "9223372036854775808");
+
+    const auto parsed = ai::glaze::read_message_json(*json);
+    REQUIRE_FALSE(parsed);
+    CHECK(parsed.error().code == util::ErrorCode::JsonParse);
+}
+
+TEST_CASE("Glaze accepts its nesting limit and rejects the next level", "[ai][u2][glaze]") {
+    constexpr std::size_t kMaximumDepth = 256;
+    std::string accepted_json(kMaximumDepth, '[');
+    accepted_json += '0';
+    accepted_json.append(kMaximumDepth, ']');
+    REQUIRE(util::read_json<glz::generic>(accepted_json));
+
+    std::string rejected_json(kMaximumDepth + 1, '[');
+    rejected_json += '0';
+    rejected_json.append(kMaximumDepth + 1, ']');
+    const auto parsed = util::read_json<glz::generic>(rejected_json);
+    REQUIRE_FALSE(parsed);
+    CHECK(parsed.error().code == util::ErrorCode::JsonParse);
 }
 
