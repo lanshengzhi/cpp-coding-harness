@@ -129,7 +129,7 @@ namespace {
 [[nodiscard]] util::JsonValue cpp_message_json(const ai::MessageVariant& message) {
     auto serialized = util::write_json(ai::glaze::to_message_dto(message));
     REQUIRE(serialized);
-    auto parsed = util::read_json<util::JsonValue>(*serialized);
+    auto parsed = util::read_json(*serialized);
     REQUIRE(parsed);
     return std::move(*parsed);
 }
@@ -334,7 +334,7 @@ TEST_CASE("pi context projection: compaction retainedTail, custom omitted, custo
     harness::session::SessionTree tree(std::move(*loaded));
     auto context = tree.buildSessionContext();
 
-    const auto expected = util::read_json<util::JsonValue>(
+    const auto expected = util::read_json(
         read_fixture_text("projection-context.json"));
     REQUIRE(expected);
     const auto actual = cpp_messages_canonical(context.messages);
@@ -358,7 +358,7 @@ TEST_CASE("pi context projection: branch_summary, custom omitted, custom_message
     harness::session::SessionTree tree(std::move(*loaded));
     auto context = tree.buildSessionContext();
 
-    const auto expected = util::read_json<util::JsonValue>(
+    const auto expected = util::read_json(
         read_fixture_text("projection-branch-context.json"));
     REQUIRE(expected);
     const auto actual = cpp_messages_canonical(context.messages);
@@ -425,7 +425,7 @@ TEST_CASE("pi projection drives rebuilt context into the Agent at the fake-Model
     // custom_message → CustomMessage, then the prompt.
     std::vector<ai::MessageVariant> session_messages(
         recorded.begin(), recorded.end() - 1);
-    const auto expected = util::read_json<util::JsonValue>(
+    const auto expected = util::read_json(
         read_fixture_text("projection-context.json"));
     REQUIRE(expected);
     auto actual_json = canonical_json(cpp_messages_canonical(session_messages));
@@ -438,7 +438,7 @@ TEST_CASE("pi projection drives rebuilt context into the Agent at the fake-Model
 
     // The model-visible messages (pi convertToLlm semantics, the same
     // conversion the provider adapters run) match pi's captured LLM view.
-    const auto expected_llm = util::read_json<util::JsonValue>(
+    const auto expected_llm = util::read_json(
         read_fixture_text("projection-context-llm.json"));
     REQUIRE(expected_llm);
     const auto llm_messages = to_llm_messages(session_messages);
@@ -476,7 +476,7 @@ TEST_CASE("pi branch projection drives rebuilt context into the Agent",
     std::vector<ai::MessageVariant> session_messages(
         recorded.begin(), recorded.end() - 1);
 
-    const auto expected = util::read_json<util::JsonValue>(
+    const auto expected = util::read_json(
         read_fixture_text("projection-branch-context.json"));
     REQUIRE(expected);
     auto actual_json = canonical_json(cpp_messages_canonical(session_messages));
@@ -487,7 +487,7 @@ TEST_CASE("pi branch projection drives rebuilt context into the Agent",
     }
     CHECK(actual_json == expected_json);
 
-    const auto expected_llm = util::read_json<util::JsonValue>(
+    const auto expected_llm = util::read_json(
         read_fixture_text("projection-branch-context-llm.json"));
     REQUIRE(expected_llm);
     const auto llm_messages = to_llm_messages(session_messages);

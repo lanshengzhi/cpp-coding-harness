@@ -197,7 +197,7 @@ post_kimi_request(
             "Kimi Code token " + std::string{operation} +
                 " response missing fields: " + response.body);
     };
-    auto json = util::read_json<util::JsonValue>(response.body);
+    auto json = util::read_json(response.body);
     const auto* object = json ? json->get_if<util::JsonValue::object_t>() : nullptr;
     const auto* access = object == nullptr
         ? nullptr
@@ -234,7 +234,7 @@ post_kimi_request(
         };
     }
 
-    auto json = util::read_json<util::JsonValue>(response.body);
+    auto json = util::read_json(response.body);
     const auto* object = json ? json->get_if<util::JsonValue::object_t>() : nullptr;
     const auto* access = object == nullptr
         ? nullptr
@@ -344,7 +344,7 @@ start_device_authorization(
                 (response.body.empty() ? "" : ": " + response.body)));
     }
 
-    auto json = util::read_json<util::JsonValue>(response.body);
+    auto json = util::read_json(response.body);
     const auto* object = json ? json->get_if<util::JsonValue::object_t>() : nullptr;
     const auto* device_code = object == nullptr
         ? nullptr
@@ -527,7 +527,7 @@ KimiCodingOAuth::refresh(
             };
         }
 
-        auto json = util::read_json<util::JsonValue>(response->body);
+        auto json = util::read_json(response->body);
         const auto* object = json ? json->get_if<util::JsonValue::object_t>() : nullptr;
         const auto* error = object == nullptr
             ? nullptr

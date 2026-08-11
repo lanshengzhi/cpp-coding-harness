@@ -34,7 +34,7 @@ namespace cch::tests {
 
 [[nodiscard]] inline std::string canonical_signature_string(
     const std::string& signature) {
-    const auto parsed = util::read_json<util::JsonValue>(signature);
+    const auto parsed = util::read_json(signature);
     if (!parsed) {
         return signature;
     }

@@ -71,7 +71,7 @@ constexpr auto kAsyncLockRetryCount = 10;
     if (content.empty()) {
         return JsonObject{};
     }
-    auto parsed = util::read_json<util::JsonValue>(content);
+    auto parsed = util::read_json(content);
     if (!parsed) {
         return std::unexpected(util::make_error(
             util::ErrorCode::JsonParse,

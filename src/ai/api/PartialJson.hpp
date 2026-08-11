@@ -144,7 +144,7 @@ inline void skip_blank(PartialJsonContext& context) {
         const auto end = context.index + 1 - (escape ? 1 : 0);
         context.index += 1;
         const auto substring = context.json.substr(start, end - start);
-        if (auto parsed = util::read_json<util::JsonValue>(substring)) {
+        if (auto parsed = util::read_json(substring)) {
             if (const auto* text = parsed->get_if<std::string>()) {
                 return *text;
             }
@@ -155,7 +155,7 @@ inline void skip_blank(PartialJsonContext& context) {
     // escape it retries from the last backslash.
     const auto end = context.index - (escape ? 1 : 0);
     auto candidate = std::string{context.json.substr(start, end - start)} + '"';
-    if (auto parsed = util::read_json<util::JsonValue>(candidate)) {
+    if (auto parsed = util::read_json(candidate)) {
         if (const auto* text = parsed->get_if<std::string>()) {
             return *text;
         }
@@ -163,7 +163,7 @@ inline void skip_blank(PartialJsonContext& context) {
     const auto last_backslash = candidate.rfind('\\');
     if (last_backslash != std::string::npos) {
         const auto retry = candidate.substr(0, last_backslash) + '"';
-        if (auto parsed = util::read_json<util::JsonValue>(retry)) {
+        if (auto parsed = util::read_json(retry)) {
             if (const auto* text = parsed->get_if<std::string>()) {
                 return *text;
             }
@@ -231,7 +231,7 @@ inline void skip_blank(PartialJsonContext& context) {
 }
 
 [[nodiscard]] inline std::optional<double> parse_number_token(std::string_view token) {
-    if (auto parsed = util::read_json<util::JsonValue>(token)) {
+    if (auto parsed = util::read_json(token)) {
         if (const auto* number = parsed->get_if<double>()) {
             return *number;
         }
@@ -346,11 +346,11 @@ inline void skip_blank(PartialJsonContext& context) {
 /// both the raw and repaired input, falling back to an empty object. This is
 /// the parsing semantics pi applies to streaming tool-call arguments.
 [[nodiscard]] inline util::JsonValue parse_streaming_json(std::string_view raw) {
-    if (auto parsed = util::read_json<util::JsonValue>(raw)) {
+    if (auto parsed = util::read_json(raw)) {
         return std::move(*parsed);
     }
     auto repaired = repair_json_strings(raw);
-    if (auto parsed = util::read_json<util::JsonValue>(repaired)) {
+    if (auto parsed = util::read_json(repaired)) {
         return std::move(*parsed);
     }
     if (auto parsed = parse_partial_json(raw)) {

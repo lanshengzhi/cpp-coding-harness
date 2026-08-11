@@ -246,7 +246,7 @@ ai::ToolCallContent make_call(
     std::string id,
     std::string name,
     std::string raw_arguments = R"({})") {
-    auto arguments = util::read_json<util::JsonValue>(raw_arguments);
+    auto arguments = util::read_json(raw_arguments);
     ai::ToolCallContent call;
     call.id = std::move(id);
     call.name = std::move(name);
@@ -271,7 +271,7 @@ ai::AssistantMessage assistant_with_calls(
 }
 
 util::JsonValue fixture_json(std::string_view json) {
-    auto parsed = util::read_json<util::JsonValue>(json);
+    auto parsed = util::read_json(json);
     REQUIRE(parsed);
     return std::move(*parsed);
 }
@@ -1166,7 +1166,7 @@ TEST_CASE(
 
     auto encoded = util::write_json(util::JsonValue{diagnostic});
     REQUIRE(encoded);
-    auto decoded = util::read_json<util::JsonValue>(*encoded);
+    auto decoded = util::read_json(*encoded);
     REQUIRE(decoded);
     CHECK(decoded->get_string() == diagnostic);
 
@@ -1228,7 +1228,7 @@ TEST_CASE(
     CHECK(diagnostic.find("argument location: root") != std::string::npos);
     auto encoded = util::write_json(util::JsonValue{diagnostic});
     REQUIRE(encoded);
-    auto decoded = util::read_json<util::JsonValue>(*encoded);
+    auto decoded = util::read_json(*encoded);
     REQUIRE(decoded);
     CHECK(decoded->get_string() == diagnostic);
     CHECK(count_events<agent::ToolExecutionEndEvent>(run.events) == 1);

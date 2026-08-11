@@ -76,7 +76,7 @@ std::string header_session_id(const std::filesystem::path& path) {
     const auto content = read_file(path);
     const auto newline = content.find('\n');
     REQUIRE(newline != std::string::npos);
-    auto parsed = cch::util::read_json<cch::util::JsonValue>(content.substr(0, newline));
+    auto parsed = cch::util::read_json(content.substr(0, newline));
     REQUIRE(parsed.has_value());
     const auto& object = parsed->get<cch::util::JsonValue::object_t>();
     return object.at("id").get<std::string>();
@@ -87,7 +87,7 @@ std::optional<std::string> header_parent_session(const std::filesystem::path& pa
     const auto content = read_file(path);
     const auto newline = content.find('\n');
     REQUIRE(newline != std::string::npos);
-    auto parsed = cch::util::read_json<cch::util::JsonValue>(content.substr(0, newline));
+    auto parsed = cch::util::read_json(content.substr(0, newline));
     REQUIRE(parsed.has_value());
     const auto& object = parsed->get<cch::util::JsonValue::object_t>();
     const auto parent = object.find("parentSession");
@@ -106,7 +106,7 @@ std::size_t user_message_count(const std::filesystem::path& path) {
         if (line.empty()) {
             continue;
         }
-        auto parsed = cch::util::read_json<cch::util::JsonValue>(line);
+        auto parsed = cch::util::read_json(line);
         if (!parsed) {
             continue;
         }
@@ -135,7 +135,7 @@ std::vector<std::string> session_info_names(const std::filesystem::path& path) {
         if (line.empty()) {
             continue;
         }
-        auto parsed = cch::util::read_json<cch::util::JsonValue>(line);
+        auto parsed = cch::util::read_json(line);
         if (!parsed) {
             continue;
         }

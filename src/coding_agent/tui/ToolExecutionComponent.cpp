@@ -7,6 +7,7 @@
 #include "coding_agent/tui/DiffRenderer.hpp"
 #include "coding_agent/tui/Theme.hpp"
 #include "util/Json.hpp"
+#include "util/JsonGlaze.hpp"
 
 #include <algorithm>
 #include <cstddef>

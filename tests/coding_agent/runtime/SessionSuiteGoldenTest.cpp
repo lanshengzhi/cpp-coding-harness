@@ -240,7 +240,7 @@ canonical_message(const util::JsonValue &message) {
 canonical_message(const ai::MessageVariant &message) {
   auto serialized = util::write_json(ai::glaze::to_message_dto(message));
   REQUIRE(serialized);
-  auto parsed = util::read_json<util::JsonValue>(*serialized);
+  auto parsed = util::read_json(*serialized);
   REQUIRE(parsed);
   return canonical_message(*parsed);
 }
@@ -302,7 +302,7 @@ project_entries(const harness::session::LoadedSession &loaded) {
     if (entry.kind == harness::session::SessionEntryKind::Header) {
       continue;
     }
-    auto parsed = util::read_json<util::JsonValue>(entry.raw_line);
+    auto parsed = util::read_json(entry.raw_line);
     REQUIRE(parsed);
     const auto *object = parsed->get_if<util::JsonValue::object_t>();
     REQUIRE(object != nullptr);
@@ -370,7 +370,7 @@ read_snapshot(std::string_view name) {
   }
   const std::string json{std::istreambuf_iterator<char>{input},
                          std::istreambuf_iterator<char>{}};
-  return util::read_json<util::JsonValue>(json);
+  return util::read_json(json);
 }
 
 [[nodiscard]] util::Expected<coding_agent::CompactionResult>

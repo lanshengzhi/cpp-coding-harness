@@ -25,7 +25,7 @@ namespace cch::tests {
     const std::string json{
         std::istreambuf_iterator<char>{input},
         std::istreambuf_iterator<char>{}};
-    return util::read_json<util::JsonValue>(json);
+    return util::read_json(json);
 }
 
 [[nodiscard]] inline util::Expected<std::string> read_pi_fixture_text(

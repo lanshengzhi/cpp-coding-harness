@@ -160,7 +160,7 @@ constexpr std::size_t kMaxEntryLineBytes = 4 * 1024 * 1024;
     if (!line || line->empty()) {
         return std::nullopt;
     }
-    auto parsed = util::read_json<util::JsonValue>(*line);
+    auto parsed = util::read_json(*line);
     if (!parsed) {
         return std::nullopt;
     }
@@ -248,7 +248,7 @@ constexpr std::size_t kMaxEntryLineBytes = 4 * 1024 * 1024;
     const auto handle_line = [&](std::string line) {
         if (first_entry) {
             first_entry = false;
-            auto parsed = util::read_json<util::JsonValue>(line);
+            auto parsed = util::read_json(line);
             if (!parsed) {
                 return;
             }
@@ -294,7 +294,7 @@ constexpr std::size_t kMaxEntryLineBytes = 4 * 1024 * 1024;
         if (!info) {
             return;
         }
-        auto parsed = util::read_json<util::JsonValue>(line);
+        auto parsed = util::read_json(line);
         if (!parsed) {
             return;
         }

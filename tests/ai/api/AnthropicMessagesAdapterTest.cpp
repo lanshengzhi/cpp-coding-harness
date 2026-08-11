@@ -379,7 +379,7 @@ TEST_CASE(
         expected_request.pop_back();
     }
     CHECK(request.body == expected_request);
-    const auto body = util::read_json<util::JsonValue>(request.body);
+    const auto body = util::read_json(request.body);
     REQUIRE(body);
     // Under cacheRetention "none" the string alternative goes out as a raw
     // sanitized JSON string, not a block array (pi `anthropic-messages.ts:1131-1160`).
@@ -424,7 +424,7 @@ TEST_CASE(
         expected_request.pop_back();
     }
     CHECK(request.body == expected_request);
-    const auto body = util::read_json<util::JsonValue>(request.body);
+    const auto body = util::read_json(request.body);
     REQUIRE(body);
     // A whitespace-only string is trimmed and dropped (pi `anthropic-messages.ts:1131-1160`).
     CHECK(body->at("messages").get_array().empty());
@@ -464,7 +464,7 @@ TEST_CASE(
         expected_request.pop_back();
     }
     CHECK(request.body == expected_request);
-    const auto body = util::read_json<util::JsonValue>(request.body);
+    const auto body = util::read_json(request.body);
     REQUIRE(body);
     // A trailing string user param is promoted to a one-element cache-marked
     // block array under cache retention (pi `anthropic-messages.ts:1268-1276`;

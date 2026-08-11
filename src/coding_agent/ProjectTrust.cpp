@@ -80,7 +80,7 @@ using TrustMap = std::map<std::string, std::optional<bool>>;
     }
     std::stringstream buffer;
     buffer << input.rdbuf();
-    auto parsed = util::read_json<util::JsonValue>(buffer.str());
+    auto parsed = util::read_json(buffer.str());
     if (!parsed) {
         return std::unexpected(trust_error("failed to parse trust store", parsed.error().detail));
     }

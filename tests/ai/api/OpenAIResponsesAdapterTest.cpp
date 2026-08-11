@@ -262,7 +262,7 @@ TEST_CASE(
         expected_request_bytes.pop_back();
     }
     CHECK(request.body == expected_request_bytes);
-    REQUIRE(util::read_json<util::JsonValue>(request.body));
+    REQUIRE(util::read_json(request.body));
 }
 
 TEST_CASE(
@@ -301,7 +301,7 @@ TEST_CASE(
         expected_request_bytes.pop_back();
     }
     CHECK(request.body == expected_request_bytes);
-    const auto body = util::read_json<util::JsonValue>(request.body);
+    const auto body = util::read_json(request.body);
     REQUIRE(body);
     const auto& input = body->at("input").get_array();
     // The empty block-array message is omitted; the string alternative becomes
@@ -351,7 +351,7 @@ TEST_CASE(
         expected_request_bytes.pop_back();
     }
     CHECK(request.body == expected_request_bytes);
-    const auto body = util::read_json<util::JsonValue>(request.body);
+    const auto body = util::read_json(request.body);
     REQUIRE(body);
     const auto& input = body->at("input").get_array();
     // The empty string is still emitted as exactly one input_text item.

@@ -245,7 +245,7 @@ void apply_usage(
     if (event.event == "error") {
         return std::unexpected(stream::stream_error(event.data));
     }
-    auto parsed = util::read_json<util::JsonValue>(event.data);
+    auto parsed = util::read_json(event.data);
     if (!parsed) {
         if (event.event != "message" && !event.event.starts_with("response.")) {
             return {};

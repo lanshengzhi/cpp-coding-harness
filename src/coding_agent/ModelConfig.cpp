@@ -457,7 +457,7 @@ ModelConfig ModelConfig::load(const std::filesystem::path& path) {
         return ModelConfig({}, "Failed to parse models.json: Unexpected end of JSON input\n\nFile: " + path.string());
     }
 
-    auto parsed = util::read_json<util::JsonValue>(content);
+    auto parsed = util::read_json(content);
     if (!parsed) {
         return ModelConfig(
             {},

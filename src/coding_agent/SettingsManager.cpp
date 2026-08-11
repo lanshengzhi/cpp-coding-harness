@@ -484,7 +484,7 @@ private:
     if (!*content || (*content)->empty()) {
         return UserSettings{};
     }
-    auto parsed = util::read_json<util::JsonValue>(**content);
+    auto parsed = util::read_json(**content);
     if (!parsed) {
         return std::unexpected(settings_file_error(
             "failed to parse settings file",
@@ -515,7 +515,7 @@ private:
     if (!*content || (*content)->empty()) {
         return object;
     }
-    auto parsed = util::read_json<util::JsonValue>(**content);
+    auto parsed = util::read_json(**content);
     if (!parsed) {
         return std::unexpected(settings_file_error(
             "could not update settings file",

@@ -305,7 +305,7 @@ public:
             call.raw_arguments = raw;
             call.arguments_valid = true;
             call.arguments = util::JsonValue{util::JsonValue::object_t{}};
-            if (auto parsed = util::read_json<util::JsonValue>(call.raw_arguments)) {
+            if (auto parsed = util::read_json(call.raw_arguments)) {
                 call.arguments = std::move(*parsed);
             }
             assistant.content.emplace_back(ai::text_content("reading " + prompt.substr(5)));

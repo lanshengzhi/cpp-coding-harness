@@ -307,7 +307,7 @@ std::size_t count_events(const std::vector<agent::AgentLifecycleEvent>& events) 
 }
 
 ai::AssistantMessage tool_call_response(std::string raw_arguments = R"({"path":"README.md"})") {
-    auto args = util::read_json<util::JsonValue>(raw_arguments);
+    auto args = util::read_json(raw_arguments);
     ai::AssistantMessage message;
     message.stop_reason = ai::AssistantStopReason::ToolUse;
     ai::ToolCallContent call;

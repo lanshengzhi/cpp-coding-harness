@@ -11,7 +11,7 @@
 using namespace cch;
 
 TEST_CASE("tool-result message round-trips linkage details and error state", "[ai][u2][glaze]") {
-    auto details = util::read_json<util::JsonValue>(R"({"exitCode":2,"stderr":"denied"})");
+    auto details = util::read_json(R"({"exitCode":2,"stderr":"denied"})");
     REQUIRE(details);
 
     ai::ToolResultMessage result;
@@ -150,7 +150,7 @@ TEST_CASE("assistant message round-trips diagnostics and cacheWrite1h", "[ai][u2
 }
 
 TEST_CASE("context JSON preserves a complete Tool Argument Contract unchanged", "[ai][u2][glaze][issue24]") {
-    auto expected_contract = util::read_json<util::JsonValue>(tests::kComplexToolArgumentContract);
+    auto expected_contract = util::read_json(tests::kComplexToolArgumentContract);
     REQUIRE(expected_contract);
 
     ai::AiContext context;

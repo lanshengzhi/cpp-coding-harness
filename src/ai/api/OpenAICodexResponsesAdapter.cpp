@@ -145,7 +145,7 @@ void erase_header(Headers& headers, std::string_view name) {
     if (!payload) {
         return failure();
     }
-    auto parsed = util::read_json<util::JsonValue>(*payload);
+    auto parsed = util::read_json(*payload);
     if (!parsed) {
         return failure();
     }
@@ -433,7 +433,7 @@ enum class WsFrameAction { Continue, Terminal };
     if (event.event == "error") {
         return std::unexpected(stream::stream_error(event.data));
     }
-    auto parsed = util::read_json<util::JsonValue>(event.data);
+    auto parsed = util::read_json(event.data);
     if (!parsed) {
         if (event.event != "message" && !event.event.starts_with("response.")) {
             return {};
@@ -854,7 +854,7 @@ boost::asio::awaitable<util::Expected<WsAttemptOutcome>> run_ws_attempt(
                     "WebSocket stream closed before response.completed"),
                 CodexFailureKind::Transport);
         }
-        auto parsed = util::read_json<util::JsonValue>(**received);
+        auto parsed = util::read_json(**received);
         if (!parsed) {
             failure = CodexFailure{
                 .kind = CodexFailureKind::Protocol,

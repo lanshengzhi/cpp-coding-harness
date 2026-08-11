@@ -170,7 +170,7 @@ util::Expected<agent::AsyncToolExecutionResult> run_tool(Start start) {
 }
 
 agent::ToolInvocation invocation(std::string name, std::string json) {
-    auto args = util::read_json<util::JsonValue>(json);
+    auto args = util::read_json(json);
     REQUIRE(args);
     return agent::ToolInvocation{"call-1", std::move(name), std::move(*args), std::move(json)};
 }
@@ -439,7 +439,7 @@ TEST_CASE("async tools prefer structured arguments over raw provider text", "[to
     auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
     auto tool = tools::make_async_read_file_tool(env);
 
-    auto structured = util::read_json<util::JsonValue>(R"({"path":"structured.txt"})");
+    auto structured = util::read_json(R"({"path":"structured.txt"})");
     REQUIRE(structured);
     agent::ToolInvocation call{"call-1", "read_file", *structured, R"({"path":"raw.txt"})"};
 

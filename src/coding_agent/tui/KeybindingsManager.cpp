@@ -282,7 +282,7 @@ struct ParsedOverrides {
     }
     std::ostringstream content;
     content << input.rdbuf();
-    if (auto parsed = util::read_json<util::JsonValue>(content.str());
+    if (auto parsed = util::read_json(content.str());
         !parsed || !parsed->holds<util::JsonValue::object_t>()) {
         add_diagnostic(
             diagnostics,

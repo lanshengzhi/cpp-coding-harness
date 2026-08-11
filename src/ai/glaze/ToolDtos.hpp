@@ -1,11 +1,9 @@
 #pragma once
 
 #include "../../../include/cch/ai/Tool.hpp"
-#include "../../util/Json.hpp"
+#include "util/JsonGlaze.hpp"
 
 #include <string>
-
-#include <glaze/glaze.hpp>
 
 namespace cch::ai::glaze {
 

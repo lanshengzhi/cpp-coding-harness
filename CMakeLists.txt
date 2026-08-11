@@ -52,6 +52,7 @@ function(cch_target_defaults target_name)
 endfunction()
 
 add_library(cch_util
+    src/util/Json.cpp
     src/util/Process.cpp
 )
 cch_target_defaults(cch_util)
@@ -59,8 +60,6 @@ target_link_libraries(cch_util
     PUBLIC
         Boost::filesystem
         Threads::Threads
-    PRIVATE
-        glaze::glaze
 )
 
 add_library(cch_tui
@@ -107,7 +106,6 @@ target_link_libraries(cch_coding_agent_tui
     PRIVATE
         cch_tui
         cch_util
-        glaze::glaze
 )
 
 add_library(cch_ai
@@ -498,6 +496,7 @@ if(CCH_BUILD_TESTS)
         tests/util/BoundedTextTest.cpp
         tests/util/ExpectedErrorTest.cpp
         tests/util/ExpectedMacrosTest.cpp
+        tests/util/JsonValueIoTest.cpp
         tests/util/OutputLimiterTest.cpp
         tests/util/RedactorTest.cpp
     )

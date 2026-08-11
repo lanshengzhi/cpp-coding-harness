@@ -212,11 +212,11 @@ template <typename Headers>
 
 [[nodiscard]] util::Expected<util::JsonValue> parse_event_json(
     const providers::SseEvent& event) {
-    if (auto parsed = util::read_json<util::JsonValue>(event.data)) {
+    if (auto parsed = util::read_json(event.data)) {
         return std::move(*parsed);
     }
     const auto repaired = repair_json_strings(event.data);
-    if (auto parsed = util::read_json<util::JsonValue>(repaired)) {
+    if (auto parsed = util::read_json(repaired)) {
         return std::move(*parsed);
     }
     return std::unexpected(stream_error(

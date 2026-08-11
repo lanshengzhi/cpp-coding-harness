@@ -58,7 +58,7 @@ namespace {
     const std::string json{
         std::istreambuf_iterator<char>{input},
         std::istreambuf_iterator<char>{}};
-    return util::read_json<util::JsonValue>(json);
+    return util::read_json(json);
 }
 
 /// A fixed-line component for renderer scenarios (pi's test-local `Lines`).

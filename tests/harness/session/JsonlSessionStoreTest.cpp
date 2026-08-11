@@ -141,7 +141,7 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
     REQUIRE(store->append(ai::MessageVariant{ai::SystemMessage{"system token=abc123", 1}}));
     REQUIRE(store->append(user_message("user api_key=sk-secret12345 KIMI_API_KEY=kimi-user-secret")));
 
-    auto arguments = util::read_json<util::JsonValue>(
+    auto arguments = util::read_json(
         R"({"api_key":"sk-toolsecret123","KIMI_API_KEY":"kimi-secret-value","nested":{"kimi_api_key":"kimi-nested-argument"},"path":"secret.txt"})");
     REQUIRE(arguments);
     ai::AssistantMessage assistant;
@@ -162,7 +162,7 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
     assistant.timestamp = 1718000000123;
     REQUIRE(store->append(ai::MessageVariant{assistant}));
 
-    auto details = util::read_json<util::JsonValue>(
+    auto details = util::read_json(
         R"({"token":"sk-detailsecret123","safe":"kept","nested":{"KIMI_API_KEY":"kimi-detail-secret","array":[{"kimi_api_key":"kimi-array-secret"}]}})");
     REQUIRE(details);
     ai::ToolResultMessage tool;

@@ -4,9 +4,7 @@
 #include "../../../include/cch/ai/Message.hpp"
 #include "../../../include/cch/ai/Usage.hpp"
 #include "ToolDtos.hpp"
-#include "../../util/Json.hpp"
-
-#include <glaze/glaze.hpp>
+#include "util/JsonGlaze.hpp"
 
 #include <cstdint>
 #include <optional>

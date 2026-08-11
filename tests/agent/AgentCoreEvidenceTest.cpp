@@ -393,7 +393,7 @@ private:
 };
 
 [[nodiscard]] ai::AssistantMessage read_tool_call_message() {
-    auto args = util::read_json<util::JsonValue>(R"({"path":"README.md"})");
+    auto args = util::read_json(R"({"path":"README.md"})");
     REQUIRE(args.has_value());
     ai::AssistantMessage message;
     message.stop_reason = ai::AssistantStopReason::ToolUse;
@@ -725,11 +725,11 @@ TEST_CASE(
     agent::ToolCallExecutor executor{tools, agent::ToolCallExecutorOptions{}};
     auto calls = {
         ai::tool_call_content("call-ok", "read", R"({"path":"a.txt"})",
-            *util::read_json<util::JsonValue>(R"({"path":"a.txt"})")),
+            *util::read_json(R"({"path":"a.txt"})")),
         ai::tool_call_content("call-bad", "read", R"({"path":{}})",
-            *util::read_json<util::JsonValue>(R"({"path":{}})")),
+            *util::read_json(R"({"path":{}})")),
         ai::tool_call_content("call-sibling", "write", R"({"path":"b.txt"})",
-            *util::read_json<util::JsonValue>(R"({"path":"b.txt"})")),
+            *util::read_json(R"({"path":"b.txt"})")),
     };
     ai::AssistantMessage assistant;
     assistant.stop_reason = ai::AssistantStopReason::ToolUse;

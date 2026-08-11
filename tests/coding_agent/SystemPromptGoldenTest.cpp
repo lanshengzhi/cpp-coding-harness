@@ -106,7 +106,7 @@ namespace {
     }
     const std::string json{std::istreambuf_iterator<char>{input},
                            std::istreambuf_iterator<char>{}};
-    return util::read_json<util::JsonValue>(json);
+    return util::read_json(json);
 }
 
 /// Navigates `object[key]` and requires a string value.

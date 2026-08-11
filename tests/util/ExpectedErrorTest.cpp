@@ -2,6 +2,7 @@
 
 #include "../../include/cch/util/Error.hpp"
 #include "util/Json.hpp"
+#include "util/JsonGlaze.hpp"
 
 #include <expected>
 #include <string>

@@ -172,7 +172,7 @@ void expect_json_equal(
     for (const auto& message : call.context.messages) {
         auto serialized = util::write_json(ai::glaze::to_message_dto(message));
         REQUIRE(serialized);
-        auto parsed = util::read_json<util::JsonValue>(*serialized);
+        auto parsed = util::read_json(*serialized);
         REQUIRE(parsed);
         messages.get_array().push_back(std::move(*parsed));
     }
@@ -501,7 +501,7 @@ TEST_CASE(
     ai::AssistantMessage tool_message;
     tool_message.content.push_back(ai::tool_call_content(
         "tool-1", "write", R"({"path":"written.ts"})",
-        *util::read_json<util::JsonValue>(R"({"path":"written.ts"})")));
+        *util::read_json(R"({"path":"written.ts"})")));
     tool_message.usage = mock_usage(100, 50);
     a1.message = std::move(tool_message);
     harness::session::SessionEntry c1 = compaction_entry("c1", "First summary", "u1");
@@ -810,7 +810,7 @@ TEST_CASE(
     ai::AssistantMessage tool_message;
     tool_message.content.push_back(ai::tool_call_content(
         "tool-1", "read", R"({"path":"src/index.ts"})",
-        *util::read_json<util::JsonValue>(R"({"path":"src/index.ts"})")));
+        *util::read_json(R"({"path":"src/index.ts"})")));
     tool_message.usage = mock_usage(1000, 200);
     a1.message = std::move(tool_message);
     harness::session::SessionEntry u2 = user_entry("u2", "continue");
@@ -949,7 +949,7 @@ TEST_CASE(
     REQUIRE(loaded->entries.size() == 2);  // header + compaction
     const auto& compaction_entry = loaded->entries[1];
     CHECK(compaction_entry.kind == harness::session::SessionEntryKind::Compaction);
-    auto line_json = util::read_json<util::JsonValue>(compaction_entry.raw_line);
+    auto line_json = util::read_json(compaction_entry.raw_line);
     REQUIRE(line_json.has_value());
     auto& line_object = line_json->get_object();
     line_object.at("id") = util::JsonValue("<compaction-entry-id>");
@@ -967,7 +967,7 @@ TEST_CASE(
     for (const auto& message : context.messages) {
         auto serialized = util::write_json(ai::glaze::to_message_dto(message));
         REQUIRE(serialized);
-        auto parsed = util::read_json<util::JsonValue>(*serialized);
+        auto parsed = util::read_json(*serialized);
         REQUIRE(parsed);
         if (std::holds_alternative<ai::CompactionSummaryMessage>(message)) {
             parsed->get_object().at("timestamp") =

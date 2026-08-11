@@ -162,7 +162,7 @@ struct FakeToolCallSpec {
     if (!raw) {
         return std::unexpected(raw.error());
     }
-    auto args = util::read_json<util::JsonValue>(*raw);
+    auto args = util::read_json(*raw);
     ai::ToolCallContent call;
     call.id = std::move(spec.id);
     call.name = std::move(spec.name);

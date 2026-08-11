@@ -14,7 +14,7 @@ using namespace cch;
 namespace {
 
 util::JsonValue complex_contract() {
-    auto parsed = util::read_json<util::JsonValue>(tests::kComplexToolArgumentContract);
+    auto parsed = util::read_json(tests::kComplexToolArgumentContract);
     REQUIRE(parsed);
     return std::move(*parsed);
 }
@@ -44,7 +44,7 @@ TEST_CASE("function tool serialization preserves arbitrary JSON Schema values", 
 
     auto json = ai::glaze::write_function_tool_json(tool);
     REQUIRE(json);
-    auto parsed = util::read_json<util::JsonValue>(*json);
+    auto parsed = util::read_json(*json);
     REQUIRE(parsed);
 
     CHECK(parsed->at("name").get_string() == "complete_contract");
@@ -57,7 +57,7 @@ TEST_CASE("function tool serialization preserves boolean JSON Schemas", "[ai][u2
 
     auto json = ai::glaze::write_function_tool_json(tool);
     REQUIRE(json);
-    auto parsed = util::read_json<util::JsonValue>(*json);
+    auto parsed = util::read_json(*json);
     REQUIRE(parsed);
 
     REQUIRE(parsed->at("parameters").holds<bool>());

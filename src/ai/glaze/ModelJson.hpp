@@ -3,9 +3,7 @@
 #include <cch/ai/Model.hpp>
 
 #include "ai/ModelThinkingLevel.hpp"
-#include "util/Json.hpp"
-
-#include <glaze/glaze.hpp>
+#include "util/JsonGlaze.hpp"
 
 #include <cstdint>
 #include <map>

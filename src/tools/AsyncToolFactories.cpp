@@ -3,6 +3,7 @@
 #include "tools/EditDiff.hpp"
 #include "util/BoundedText.hpp"
 #include "util/Json.hpp"
+#include "util/JsonGlaze.hpp"
 #include "util/OutputLimiter.hpp"
 #include "util/TerminalText.hpp"
 

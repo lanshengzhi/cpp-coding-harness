@@ -76,7 +76,7 @@ namespace {
         if (first >= last) {
             continue;
         }
-        auto parsed = util::read_json<util::JsonValue>(
+        auto parsed = util::read_json(
             line.substr(
                 static_cast<std::size_t>(first - line.begin()),
                 static_cast<std::size_t>(last - first)));

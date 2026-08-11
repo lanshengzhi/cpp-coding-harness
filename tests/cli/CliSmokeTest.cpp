@@ -106,7 +106,7 @@ std::vector<std::string> non_empty_lines(const std::string& text) {
 }
 
 cch::util::JsonValue parse_json_line(const std::string& line) {
-    auto parsed = cch::util::read_json<cch::util::JsonValue>(line);
+    auto parsed = cch::util::read_json(line);
     REQUIRE(parsed.has_value());
     return *parsed;
 }

@@ -153,7 +153,7 @@ constexpr std::string_view kReasoningAndPlainProviders = R"({
 }
 
 [[nodiscard]] util::JsonValue settings_object(const Fixture& fixture) {
-    const auto parsed = util::read_json<util::JsonValue>(fixture.read_settings());
+    const auto parsed = util::read_json(fixture.read_settings());
     REQUIRE(parsed.has_value());
     return *parsed;
 }

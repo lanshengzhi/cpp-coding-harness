@@ -314,7 +314,7 @@ TEST_CASE(
     const auto& text = std::get<ai::TextContent>(run.result->content[1]);
     CHECK(text.text == "Hello");
     REQUIRE(text.text_signature);
-    const auto signature = util::read_json<util::JsonValue>(*text.text_signature);
+    const auto signature = util::read_json(*text.text_signature);
     REQUIRE(signature);
     CHECK(signature->at("id").get_string() == "msg_1");
     CHECK(signature->at("v").get_number() == 1);
@@ -402,7 +402,7 @@ TEST_CASE(
     const auto& sent = harness.ws->sockets.front()->session()->sent_frames;
     REQUIRE(sent.size() == 1);
     CHECK(sent.front() == expected_request_bytes);
-    const auto body = util::read_json<util::JsonValue>(sent.front());
+    const auto body = util::read_json(sent.front());
     REQUIRE(body);
     const auto& input = body->at("input").get_array();
     // The empty block-array message is omitted; the string alternative becomes
@@ -466,7 +466,7 @@ TEST_CASE(
     const auto& sent = harness.ws->sockets.front()->session()->sent_frames;
     REQUIRE(sent.size() == 1);
     CHECK(sent.front() == expected_request_bytes);
-    const auto body = util::read_json<util::JsonValue>(sent.front());
+    const auto body = util::read_json(sent.front());
     REQUIRE(body);
     const auto& input = body->at("input").get_array();
     // The empty string is still emitted as exactly one input_text item.
@@ -546,7 +546,7 @@ TEST_CASE(
         expected_request_bytes.pop_back();
     }
     CHECK(request.body == expected_request_bytes);
-    REQUIRE(util::read_json<util::JsonValue>(request.body));
+    REQUIRE(util::read_json(request.body));
 }
 
 TEST_CASE(
@@ -688,17 +688,17 @@ TEST_CASE(
     CHECK(harness.ws->requests.size() == 2);
     CHECK(first->sent_frames.size() == 2);
     CHECK(second->sent_frames.size() == 1);
-    const auto first_body = util::read_json<util::JsonValue>(first->sent_frames[0]);
+    const auto first_body = util::read_json(first->sent_frames[0]);
     REQUIRE(first_body);
     CHECK_FALSE(first_body->get_object().contains("previous_response_id"));
-    const auto delta_body = util::read_json<util::JsonValue>(first->sent_frames[1]);
+    const auto delta_body = util::read_json(first->sent_frames[1]);
     REQUIRE(delta_body);
     CHECK(delta_body->at("previous_response_id").get_string() == "resp_terminal");
     CHECK_FALSE(delta_body->at("store").get_boolean());
     const auto& delta_input = delta_body->at("input").get_array();
     REQUIRE(delta_input.size() == 1);
     CHECK(delta_input[0].at("role").get_string() == "user");
-    const auto retry_body = util::read_json<util::JsonValue>(second->sent_frames[0]);
+    const auto retry_body = util::read_json(second->sent_frames[0]);
     REQUIRE(retry_body);
     CHECK_FALSE(retry_body->get_object().contains("previous_response_id"));
     REQUIRE(retry_body->at("input").get_array().size() == 2);
@@ -812,14 +812,14 @@ TEST_CASE(
     CHECK(harness.ws->requests.size() == 1);
     REQUIRE(session->sent_frames.size() == 2);
 
-    const auto first_body = util::read_json<util::JsonValue>(session->sent_frames[0]);
+    const auto first_body = util::read_json(session->sent_frames[0]);
     REQUIRE(first_body);
     CHECK_FALSE(first_body->get_object().contains("previous_response_id"));
     REQUIRE(first_body->at("input").get_array().size() == 1);
     CHECK(first_body->at("prompt_cache_key").get_string() == "session-1");
     CHECK_FALSE(first_body->at("store").get_boolean());
 
-    const auto delta_body = util::read_json<util::JsonValue>(session->sent_frames[1]);
+    const auto delta_body = util::read_json(session->sent_frames[1]);
     REQUIRE(delta_body);
     CHECK(delta_body->at("previous_response_id").get_string() == "resp_terminal");
     CHECK_FALSE(delta_body->at("store").get_boolean());
@@ -915,7 +915,7 @@ TEST_CASE(
     for (const auto& socket : harness.ws->sockets) {
         CHECK(socket->session()->close_count == 1);
         REQUIRE(socket->session()->sent_frames.size() == 1);
-        const auto body = util::read_json<util::JsonValue>(socket->session()->sent_frames[0]);
+        const auto body = util::read_json(socket->session()->sent_frames[0]);
         REQUIRE(body);
         CHECK_FALSE(body->get_object().contains("prompt_cache_key"));
     }

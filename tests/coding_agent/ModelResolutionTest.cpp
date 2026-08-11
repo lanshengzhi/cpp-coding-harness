@@ -169,7 +169,7 @@ constexpr std::string_view kKeyedReasoningProvider = R"({
     const harness::session::SessionEntry& entry) {
     util::JsonValue object{util::JsonValue::object_t{}};
     auto& o = object.get_object();
-    const auto parsed = util::read_json<util::JsonValue>(entry.raw_line);
+    const auto parsed = util::read_json(entry.raw_line);
     REQUIRE(parsed.has_value());
     const auto& parsed_object = parsed->get_object();
     o.emplace("type", parsed_object.at("type"));
@@ -620,7 +620,7 @@ TEST_CASE(
 
     // The global settings file carries the defaultThinkingLevel write.
     const auto settings_text = fixture.read_settings();
-    const auto settings = util::read_json<util::JsonValue>(settings_text);
+    const auto settings = util::read_json(settings_text);
     REQUIRE(settings.has_value());
     const auto& settings_object = settings->get_object();
     const auto found = settings_object.find("defaultThinkingLevel");
@@ -730,7 +730,7 @@ TEST_CASE(
     REQUIRE(loaded.has_value());
     REQUIRE(find_thinking_entry(*loaded) != nullptr);
 
-    const auto settings = util::read_json<util::JsonValue>(fixture.read_settings());
+    const auto settings = util::read_json(fixture.read_settings());
     REQUIRE(settings.has_value());
     const auto& settings_object = settings->get_object();
     const auto found = settings_object.find("defaultThinkingLevel");
@@ -957,7 +957,7 @@ TEST_CASE(
     const auto* entry = find_thinking_entry(*loaded);
     REQUIRE(entry != nullptr);
 
-    const auto settings = util::read_json<util::JsonValue>(fixture.read_settings());
+    const auto settings = util::read_json(fixture.read_settings());
     REQUIRE(settings.has_value());
 
     util::JsonValue golden{util::JsonValue::object_t{}};

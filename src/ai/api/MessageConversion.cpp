@@ -393,7 +393,7 @@ struct ParsedTextSignature {
         return std::nullopt;
     }
     if (signature->starts_with('{')) {
-        const auto parsed = util::read_json<util::JsonValue>(*signature);
+        const auto parsed = util::read_json(*signature);
         if (parsed) {
             const auto* object = parsed->get_if<util::JsonValue::object_t>();
             if (object) {
@@ -571,7 +571,7 @@ struct ParsedTextSignature {
                         if (thinking->thinking_signature->empty()) {
                             continue;
                         }
-                        auto replay = util::read_json<util::JsonValue>(
+                        auto replay = util::read_json(
                             *thinking->thinking_signature);
                         if (!replay) {
                             return std::unexpected(util::make_error(

@@ -106,7 +106,7 @@ TEST_CASE(
             }
             auto serialized = ai::glaze::write_model_json(model);
             REQUIRE(serialized);
-            const auto actual = util::read_json<util::JsonValue>(*serialized);
+            const auto actual = util::read_json(*serialized);
             REQUIRE(actual);
             if (auto mismatch = tests::json_mismatch(expected, *actual); mismatch) {
                 // The vendored fallback test header has no INFO macro; print

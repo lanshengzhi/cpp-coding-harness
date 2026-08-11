@@ -198,7 +198,7 @@ TEST_CASE("user text message serializes through explicit Glaze content tags", "[
 }
 
 TEST_CASE("assistant text and tool-call content round-trip in order with metadata", "[ai][u2][ae2]") {
-    auto arguments = util::read_json<util::JsonValue>(R"({"path":"README.md","limit":20})");
+    auto arguments = util::read_json(R"({"path":"README.md","limit":20})");
     REQUIRE(arguments);
 
     ai::AssistantMessage assistant;

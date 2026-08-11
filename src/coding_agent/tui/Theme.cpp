@@ -477,7 +477,7 @@ namespace {
 } // namespace
 
 util::Expected<ResolvedTheme> parse_theme_json(std::string_view label, std::string_view json) {
-    auto parsed = util::read_json<util::JsonValue>(json);
+    auto parsed = util::read_json(json);
     if (!parsed) {
         const auto& parse_error = parsed.error();
         const auto& detail = parse_error.detail.empty() ? parse_error.message : parse_error.detail;

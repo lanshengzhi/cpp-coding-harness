@@ -2179,7 +2179,7 @@ void validate_value(
             call.argument_error.value_or(std::string{})));
     }
     if (!call.raw_arguments.empty()) {
-        auto parsed = util::read_json<util::JsonValue>(call.raw_arguments);
+        auto parsed = util::read_json(call.raw_arguments);
         if (!parsed) {
             return std::unexpected(malformed_arguments_error(
                 tool.name,
@@ -2190,7 +2190,7 @@ void validate_value(
     if (call.arguments) {
         return *call.arguments;
     }
-    auto parsed = util::read_json<util::JsonValue>("{}");
+    auto parsed = util::read_json("{}");
     if (!parsed) {
         return std::unexpected(parsed.error());
     }

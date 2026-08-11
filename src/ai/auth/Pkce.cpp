@@ -156,7 +156,7 @@ constexpr std::string_view kBase64Alphabet =
     if (auto decoded = base64_decode(payload); !decoded) {
         return std::unexpected(std::move(decoded.error()));
     } else {
-        if (auto json = util::read_json<util::JsonValue>(*decoded); !json) {
+        if (auto json = util::read_json(*decoded); !json) {
             return std::unexpected(std::move(json.error()));
         } else {
             return std::move(*json);

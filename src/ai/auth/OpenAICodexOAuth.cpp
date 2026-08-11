@@ -181,7 +181,7 @@ post_with_login_cancellation(
                 std::to_string(response.status_code) + "): " +
                 (response.body.empty() ? "unknown" : response.body)));
     }
-    if (auto json = util::read_json<util::JsonValue>(response.body); !json) {
+    if (auto json = util::read_json(response.body); !json) {
         return std::unexpected(missing_fields());
     } else {
         const auto* object = json->get_if<util::JsonValue::object_t>();
@@ -239,7 +239,7 @@ post_with_login_cancellation(
                 std::to_string(response.status_code) +
                 (response.body.empty() ? "" : ": " + response.body)));
     }
-    if (auto json = util::read_json<util::JsonValue>(response.body); !json) {
+    if (auto json = util::read_json(response.body); !json) {
         return std::unexpected(util::make_error(
             util::ErrorCode::OAuth,
             "Invalid OpenAI Codex device code response: " + response.body));
@@ -287,7 +287,7 @@ post_with_login_cancellation(
 [[nodiscard]] util::Expected<DevicePollResult<DeviceTokenSuccess>>
 poll_device_token(const OAuthHttpResponse& response) {
     if (response.status_code >= 200 && response.status_code < 300) {
-        if (auto json = util::read_json<util::JsonValue>(response.body); !json) {
+        if (auto json = util::read_json(response.body); !json) {
             return DevicePollResult<DeviceTokenSuccess>{
                 .kind = DevicePollResult<DeviceTokenSuccess>::Failed{
                     .message = "Invalid OpenAI Codex device auth token "
@@ -326,7 +326,7 @@ poll_device_token(const OAuthHttpResponse& response) {
         };
     }
     std::optional<std::string> error_code;
-    if (auto json = util::read_json<util::JsonValue>(response.body); json) {
+    if (auto json = util::read_json(response.body); json) {
         if (const auto* object = json->get_if<util::JsonValue::object_t>()) {
             const auto error_found = object->find("error");
             if (error_found != object->end()) {
