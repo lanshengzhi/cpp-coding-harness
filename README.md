@@ -28,7 +28,7 @@ The project is CMake-based and requires a C++23-capable compiler. CMake 3.25 or 
 - Pinned stb image decode/resize/write headers are vendored under `third_party/stb` and compiled only by the private initial-image processor; their upstream license notices remain in each header. libwebp supplies private WebP validation/decoding for the same processor.
 - Boost.Beast/Asio + OpenSSL provide the HTTPS transport implementation.
 - Boost.Process is used behind the process-execution capability boundary.
-- CLI11 and Catch2 are declared in `vcpkg.json`; this repository also carries a tiny Catch-compatible fallback test header so the default suite can run in minimal environments.
+- CLI11 is declared in `vcpkg.json`; tests use the repository's tiny Catch-compatible test header under `third_party/catch2`, so no external Catch2 dependency is required.
 
 ### Bootstrap with vcpkg (recommended)
 
