@@ -15,7 +15,7 @@ Preserve the existing portable build as the compatibility baseline. Add an expli
 
 ## Scope and constraints
 
-- Keep the existing supported compiler and platform range.
+- Keep the supported platform range; the toolchain floor is GCC 16+ and CMake 4.0+ per ADR 0038, and the `system` dependency preset is removed — vcpkg is the only supported dependency source.
 - Keep GCC as the primary fast-development compiler; evaluate Clang through a separate experimental preset.
 - Keep build parallelism at four jobs on the measured host. Higher-memory environments may override it explicitly.
 - Permit Ninja, ccache, private target-specific precompiled headers, package-aligned test splitting, and private dependency-boundary improvements.
@@ -23,7 +23,7 @@ Preserve the existing portable build as the compatibility baseline. Add an expli
 - Preserve the existing package and capability boundaries. In particular, any later work on the Beast/Asio implementation must remain behind the existing Transport seam.
 - Use fake-provider tests; build-performance validation requires no live provider or network access.
 
-This is build-engineering policy, not product domain language. It does not change `CONTEXT.md`. The proposal is reversible and does not currently justify an ADR.
+This is build-engineering policy, not product domain language. It does not change `CONTEXT.md`. The toolchain floor change (GCC 16+, CMake 4.0, single vcpkg dependency path) is recorded in ADR 0038; the build-performance work itself remains reversible and does not justify its own ADR.
 
 ## Measurement environment
 

@@ -20,7 +20,7 @@ This is a learning and experimentation harness, not a production sandbox.
 
 ## Build
 
-The project is CMake-based and requires a C++23-capable compiler. CMake 3.25 or newer is expected.
+The project is CMake-based and requires a C++23-capable compiler. CMake 4.0+ and GCC 16+ are expected (see `docs/adr/0038-*.md` for the toolchain floor decision).
 
 - Glaze is used only at typed JSON serialization/deserialization boundaries.
 - utf8proc provides versioned Unicode grapheme segmentation and width properties inside the private TUI implementation.
@@ -32,9 +32,9 @@ The project is CMake-based and requires a C++23-capable compiler. CMake 3.25 or 
 
 ### Bootstrap with vcpkg (recommended)
 
-All dependencies are declared in `vcpkg.json`. The bootstrap scripts create a local `.deps/vcpkg` checkout when `VCPKG_ROOT` is not already set, bootstrap vcpkg, and configure CMake in manifest mode so dependencies such as CLI11, Glaze, MD4C, libwebp, Boost, and OpenSSL are installed automatically.
+All dependencies are declared in `vcpkg.json`. The bootstrap scripts create a local `.deps/vcpkg` checkout when `VCPKG_ROOT` is not already set, bootstrap vcpkg, and configure CMake in manifest mode so dependencies such as CLI11, Glaze, MD4C, libwebp, Boost, and OpenSSL are installed automatically. The scripts first run an environment precheck (git, curl, zip, unzip, tar, and a GCC 16+ compiler), print the install command for your distribution when a tool is missing, and then pin the vcpkg checkout to the exact `builtin-baseline` commit recorded in `vcpkg.json` so dependency resolution is reproducible.
 
-Linux/macOS:
+Linux:
 
 ```bash
 scripts/bootstrap.sh --test
@@ -86,13 +86,7 @@ cmake --build --preset dev-fast --parallel 8
 
 ### Using system packages
 
-If you prefer system-installed dependencies, install Boost, OpenSSL, Glaze, MD4C, libwebp, CLI11, and utf8proc yourself, then use the system preset:
-
-```bash
-cmake --preset system
-cmake --build --preset system
-ctest --preset system
-```
+Not supported. The `system` preset was removed with the CMake 4.0 toolchain floor (ADR 0038); the vcpkg path is the only supported dependency source.
 
 Run the binary against a configured provider (deterministic provider behavior is exercised through the test suite). With no session-family flag (`--session`, `--resume`, `--continue`, `--fork`, `--session-id`, `--no-session`), each run persists a new session under the workspace-keyed user-level default (see [Session storage](#session-storage)):
 

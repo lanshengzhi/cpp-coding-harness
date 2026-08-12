@@ -1,10 +1,9 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 4.0)
 project(cpp_coding_harness VERSION 0.1.0 LANGUAGES CXX)
 
 # CMake 3.30+ removed the legacy FindBoost module; use Boost's own config-mode package.
-if(POLICY CMP0167)
-    cmake_policy(SET CMP0167 NEW)
-endif()
+# The minimum is 4.0 (ADR 0038), so CMP0167 is always available; set it unconditionally.
+cmake_policy(SET CMP0167 NEW)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
