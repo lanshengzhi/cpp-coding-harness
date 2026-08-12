@@ -593,6 +593,7 @@ if(CCH_BUILD_TESTS)
         PRIVATE
             cch_cli
             cch_coding_agent_interactive
+            Boost::headers
 )
     target_compile_definitions(cch_tests_coding_agent_interactive PRIVATE
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"

@@ -327,6 +327,9 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
         cmake, "target_link_libraries(cch_tests_coding_agent_interactive");
     CHECK(block_mentions(interactive_shard_links, "cch_cli"));
     CHECK(block_mentions(interactive_shard_links, "cch_coding_agent_interactive"));
+    // This shard includes Asio directly. Keep it on vcpkg's Boost headers so
+    // its co_spawn frames cannot mix with the interactive library's version.
+    CHECK(block_mentions(interactive_shard_links, "Boost::headers"));
 }
 
 TEST_CASE(
