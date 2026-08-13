@@ -391,6 +391,28 @@ if(CCH_BUILD_TESTS)
     cch_add_supported_build_policy_test("reject-vcpkg-host-triplet" FALSE "host triplet")
     cch_add_supported_build_policy_test("reject-vcpkg-overlays" FALSE "overlay ports")
 
+    # Parity Architecture Gate (ADR 0039). The Python validator uses only the
+    # standard library and Python 3.12+; it is a system tool, not a vcpkg
+    # dependency. The unit case exercises the strict manifest and evidence
+    # rules directly; the fixture case configures a minimal legal fixture and
+    # an otherwise-equivalent illegal fixture end to end and asserts the stable
+    # PARITY-2001 rejection.
+    find_package(Python3 3.12 COMPONENTS Interpreter REQUIRED)
+    add_test(
+        NAME cch_parity_gate_unit
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/parity_gate_test.py
+    )
+    set_tests_properties(cch_parity_gate_unit PROPERTIES LABELS "architecture;parity-gate;issue448")
+
+    add_test(
+        NAME cch_parity_gate_fixture
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DCCH_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/ParityGateTest.cmake
+    )
+    set_tests_properties(cch_parity_gate_fixture PROPERTIES LABELS "architecture;parity-gate;issue448")
+
     # Package-aligned test shards (build-performance-plan Stage 4). Each shard
     # is its own executable registered with ctest, so a focused test edit
     # builds and links only its owning package. `cpp_harness_tests` remains as

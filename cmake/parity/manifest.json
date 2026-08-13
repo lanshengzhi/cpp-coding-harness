@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "baseline_commit": "83114817c68f5413e4d7ba6d7003ddc511cd31d2",
+  "owners": {
+    "cch_ai": {
+      "role": "owner",
+      "root": "src/ai",
+      "interface_root": "include/cch/ai",
+      "legal_owner_dependencies": []
+    },
+    "cch_agent_core": {
+      "role": "owner",
+      "root": "src/agent",
+      "interface_root": "include/cch/agent",
+      "legal_owner_dependencies": ["cch_ai"]
+    },
+    "cch_tui": {
+      "role": "owner",
+      "root": "src/tui",
+      "interface_root": "include/cch/tui",
+      "legal_owner_dependencies": []
+    },
+    "cch_coding_agent": {
+      "role": "owner",
+      "root": "src/coding_agent",
+      "interface_root": "include/cch/coding_agent",
+      "legal_owner_dependencies": ["cch_agent_core", "cch_ai", "cch_tui"]
+    },
+    "cch_support": {
+      "role": "support",
+      "root": "src/support",
+      "interface_root": "include/cch/support",
+      "legal_owner_dependencies": []
+    }
+  },
+  "roles": ["owner", "implementation", "support", "composition", "external"],
+  "external_families": {
+    "boost": { "description": "Boost libraries" },
+    "openssl": { "description": "OpenSSL crypto and TLS" },
+    "cli11": { "description": "CLI11 command-line parsing" },
+    "glaze": { "description": "Glaze JSON serialization" },
+    "md4c": { "description": "md4c Markdown parsing" },
+    "webp": { "description": "libwebp image decoding" },
+    "utf8proc": { "description": "utf8proc Unicode processing" },
+    "catch2": { "description": "Catch2 test framework" }
+  },
+  "evidence": [
+    {
+      "id": "ownership-index",
+      "producer": "cch-parity-constructor",
+      "producer_schema_version": 1,
+      "input_identities": ["manifest"]
+    }
+  ]
+}

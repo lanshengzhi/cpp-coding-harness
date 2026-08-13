@@ -7,3 +7,5 @@ benchmark-build/
 .cpp-harness/sessions/*.jsonl
 vcpkg_installed/
 CMakeUserPresets.json
+__pycache__/
+*.pyc
