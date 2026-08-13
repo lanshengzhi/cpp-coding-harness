@@ -1,5 +1,3 @@
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
 #include "../support/EnvVarGuard.hpp"
 #include "../support/TempWorkspace.hpp"
 
@@ -8,6 +6,7 @@
 #include "harness/SyncLocalExecutionEnv.hpp"
 #include "util/Process.hpp"
 
+#include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
@@ -561,7 +560,7 @@ TEST_CASE("pi-shaped public types compile with aggregate construction", "[harnes
 
     // BinaryData
     harness::BinaryData bin{std::byte{0x00}, std::byte{0xFF}, std::byte{0x7F}};
-    CHECK(bin.size() == 3);
+    REQUIRE(bin.size() == 3);
     CHECK(bin[1] == std::byte{0xFF});
 
     // WriteContent variant

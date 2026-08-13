@@ -1,8 +1,8 @@
-#include "../../../third_party/catch2/catch_test_macros.hpp"
-
 #include "../../../include/cch/harness/session/SessionTree.hpp"
 #include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
 #include "../../support/TempWorkspace.hpp"
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <string>
 #include <utility>
@@ -478,7 +478,7 @@ TEST_CASE("buildSessionContext compaction skips pre-kept messages", "[harness][s
     // Expected: CompactionSummaryMessage + msg3 + msg4 (msg1 and msg2 are before the first kept entry)
     REQUIRE(ctx.messages.size() == 3);
     // First message should be compaction summary
-    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(ctx.messages[0]));
+    REQUIRE(std::holds_alternative<ai::CompactionSummaryMessage>(ctx.messages[0]));
     CHECK(std::get<ai::CompactionSummaryMessage>(ctx.messages[0]).summary == "summary of msg1-2");
     CHECK(std::get<ai::CompactionSummaryMessage>(ctx.messages[0]).tokens_before == 1000);
     // Remaining should be msg3 and msg4
@@ -503,7 +503,7 @@ TEST_CASE("buildSessionContext branch summary converted to message", "[harness][
     // First: user message
     CHECK(first_user_text({ctx.messages[0]}) == "root");
     // Second: BranchSummaryMessage
-    CHECK(std::holds_alternative<ai::BranchSummaryMessage>(ctx.messages[1]));
+    REQUIRE(std::holds_alternative<ai::BranchSummaryMessage>(ctx.messages[1]));
     CHECK(std::get<ai::BranchSummaryMessage>(ctx.messages[1]).summary == "explored X");
 }
 
@@ -521,7 +521,7 @@ TEST_CASE("buildSessionContext custom message converted", "[harness][session][tr
 
     auto ctx = tree.buildSessionContext();
     REQUIRE(ctx.messages.size() == 2);
-    CHECK(std::holds_alternative<ai::CustomMessage>(ctx.messages[1]));
+    REQUIRE(std::holds_alternative<ai::CustomMessage>(ctx.messages[1]));
     const auto& cm = std::get<ai::CustomMessage>(ctx.messages[1]);
     CHECK(cm.custom_type == "my-ext");
     REQUIRE_FALSE(cm.content.empty());

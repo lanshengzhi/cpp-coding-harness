@@ -1,6 +1,6 @@
-#include "../../../third_party/catch2/catch_test_macros.hpp"
-
 #include "coding_agent/runtime/SessionEventCommitment.hpp"
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <optional>
 #include <string>

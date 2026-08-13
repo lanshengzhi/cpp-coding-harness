@@ -2,14 +2,14 @@
 // subset) — user-message discovery, branched-file creation with label
 // re-chaining, the verbatim pi error strings, and the in-memory branch seed.
 
-#include "../../../third_party/catch2/catch_test_macros.hpp"
-
 #include "coding_agent/runtime/SessionFork.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/harness/session/JsonlSessionStore.hpp>
 #include <cch/harness/session/SessionResume.hpp>
 #include <cch/harness/session/SessionTree.hpp>
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <set>

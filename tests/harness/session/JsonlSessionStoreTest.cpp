@@ -1,9 +1,9 @@
-#include "../../../third_party/catch2/catch_test_macros.hpp"
-
 #include "../../../include/cch/harness/session/JsonlSessionStore.hpp"
 #include "../../../include/cch/harness/session/SessionResume.hpp"
 #include "util/Json.hpp"
 #include "../../support/TempWorkspace.hpp"
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <fstream>
 #include <sstream>
@@ -444,7 +444,7 @@ TEST_CASE("Glaze JSONL session parses v3 tree metadata entries", "[harness][sess
     auto reloaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(reloaded);
     CHECK(reloaded->entries.size() == 4);  // header + model_change + thinking_level_change + message
-    CHECK(reloaded->messages.size() == 1);
+    REQUIRE(reloaded->messages.size() == 1);
     CHECK(text_from_message(reloaded->messages[0]) == "resumed after tree entries");
 }
 
@@ -613,7 +613,7 @@ TEST_CASE("v3 session header writes and loads correctly", "[harness][session][u9
     REQUIRE(loaded);
     CHECK(loaded->metadata.session_id == "session-test");
     CHECK(loaded->metadata.workspace == workspace.path());
-    CHECK(loaded->entries.size() == 1);
+    REQUIRE(loaded->entries.size() == 1);
     CHECK(loaded->entries[0].kind == harness::session::SessionEntryKind::Header);
 
     // Verify v3 header JSON format
@@ -973,7 +973,7 @@ TEST_CASE("mixed tree entries and messages round-trip in order", "[harness][sess
     CHECK(loaded->entries[2].kind == harness::session::SessionEntryKind::ThinkingLevelChange);
     CHECK(loaded->entries[3].kind == harness::session::SessionEntryKind::Message);
     CHECK(loaded->entries[4].kind == harness::session::SessionEntryKind::Message);
-    CHECK(loaded->messages.size() == 2);
+    REQUIRE(loaded->messages.size() == 2);
     CHECK(text_from_message(loaded->messages[0]) == "hello");
 }
 
@@ -993,7 +993,7 @@ TEST_CASE("open_existing succeeds and allows append on session with tree entries
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
     REQUIRE(loaded->entries.size() == 4);  // header + model_change + 2 messages
-    CHECK(loaded->messages.size() == 2);
+    REQUIRE(loaded->messages.size() == 2);
     CHECK(text_from_message(loaded->messages[0]) == "first message");
     CHECK(text_from_message(loaded->messages[1]) == "second message");
 }

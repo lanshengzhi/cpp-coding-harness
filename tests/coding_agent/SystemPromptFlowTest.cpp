@@ -16,8 +16,7 @@
 #include "support/TempWorkspace.hpp"
 #include "util/ExpectedMacros.hpp"
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
+#include <catch2/catch_test_macros.hpp>
 #include <boost/asio/awaitable.hpp>
 
 #include <filesystem>

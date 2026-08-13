@@ -1,11 +1,11 @@
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 
 #include "../../include/cch/harness/session/JsonlSessionStore.hpp"
 #include "../support/EnvVarGuard.hpp"
 #include "../support/TempWorkspace.hpp"
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <cstdlib>
 #include <filesystem>

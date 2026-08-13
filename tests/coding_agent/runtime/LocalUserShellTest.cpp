@@ -1,10 +1,9 @@
-#include "../../../third_party/catch2/catch_test_macros.hpp"
-
 #include "coding_agent/runtime/LocalUserShell.hpp"
 
 #include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
 
+#include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>

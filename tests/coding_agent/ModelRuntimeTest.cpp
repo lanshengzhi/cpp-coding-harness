@@ -9,8 +9,7 @@
 #include "support/TempWorkspace.hpp"
 #include "util/Json.hpp"
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
+#include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/use_future.hpp>
@@ -180,6 +179,7 @@ private:
 TEST_CASE("ModelRuntime default-created runtime composes the built-in providers", "[coding_agent][model-runtime][issue345]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
 
     auto runtime = coding_agent::ModelRuntime::create({});
@@ -195,6 +195,7 @@ TEST_CASE("ModelRuntime default-created runtime composes the built-in providers"
 TEST_CASE("ModelRuntime invalid models.json becomes empty user config plus diagnostics", "[coding_agent][model-runtime][issue345]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
     home.write(".pi/agent/models.json", "{not valid json");
 
@@ -209,6 +210,7 @@ TEST_CASE("ModelRuntime invalid models.json becomes empty user config plus diagn
 TEST_CASE("ModelRuntime per-provider composition failure falls back to the built-in and records the error", "[coding_agent][model-runtime][issue345]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
     home.write(".pi/agent/models.json", R"({
       "providers": {"kimi-coding": {"name": "Broken Kimi"}}
@@ -226,6 +228,7 @@ TEST_CASE("ModelRuntime per-provider composition failure falls back to the built
 TEST_CASE("ModelRuntime refresh reloads models.json and recomposes providers", "[coding_agent][model-runtime][issue345]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
 
     auto runtime = coding_agent::ModelRuntime::create({});
@@ -260,6 +263,7 @@ TEST_CASE("ModelRuntime config-only provider streams the frozen deepseek wire pa
 
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
     const auto models_json = read_fixture_text("models/models.json");
     REQUIRE_FALSE(models_json.empty());
@@ -322,6 +326,7 @@ TEST_CASE("ModelRuntime config-only provider streams the frozen deepseek wire pa
 TEST_CASE("ModelRuntime login persists the credential and refresh failures never fail the call", "[coding_agent][model-runtime][issue345]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
     // Invalid models.json makes the post-login refresh fail, which must not
     // fail the login call.
@@ -353,6 +358,7 @@ TEST_CASE("ModelRuntime login persists the credential and refresh failures never
 TEST_CASE("ModelRuntime logout removes the credential and recomposes", "[coding_agent][model-runtime][issue345]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
 
     auto store = std::make_shared<MemoryCredentialStore>();
@@ -372,6 +378,7 @@ TEST_CASE("ModelRuntime logout removes the credential and recomposes", "[coding_
 TEST_CASE("ModelRuntime availability reflects configured providers", "[coding_agent][model-runtime][issue345]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
     tests::EnvVarGuard kimi_key{"KIMI_API_KEY"};
     home_guard.set(home.path().string());
     kimi_key.unset();
@@ -391,6 +398,7 @@ TEST_CASE("ModelRuntime availability reflects configured providers", "[coding_ag
 TEST_CASE("ModelRuntime default-model table selects the runtime default", "[coding_agent][model-runtime][issue345]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
     home.write(".pi/agent/models.json", R"({
       "providers": {
@@ -413,6 +421,7 @@ TEST_CASE("ModelRuntime default-model table selects the runtime default", "[codi
 TEST_CASE("ModelRuntime configured apiKey env templates surface for secret filtering", "[coding_agent][model-runtime][issue345]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
     home.write(".pi/agent/models.json", R"({
       "providers": {
@@ -439,6 +448,7 @@ TEST_CASE("ModelRuntime env-template apiKey resolves at request time", "[coding_
     });
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
     tests::EnvVarGuard secret_guard{"DEEPSEEK_SECRET"};
     home_guard.set(home.path().string());
     secret_guard.set("dummy-env-key");
@@ -472,6 +482,7 @@ TEST_CASE("ModelRuntime env-template apiKey resolves at request time", "[coding_
 TEST_CASE("ModelRuntime resolves the pi 4-level auth precedence chain", "[coding_agent][model-runtime][issue346][precedence]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
     tests::EnvVarGuard secret{"DEEPSEEK_SECRET"};
     tests::EnvVarGuard kimi{"KIMI_API_KEY"};
     home_guard.set(home.path().string());
@@ -578,6 +589,7 @@ TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a proces
     });
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
     home.write(".pi/agent/models.json", R"({
       "providers": {
@@ -610,6 +622,7 @@ TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a proces
 TEST_CASE("ModelRuntime auth status reports an unconfigured builtin as not configured", "[coding_agent][model-runtime][issue406]") {
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     kimi_guard.unset();

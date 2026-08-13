@@ -11,13 +11,14 @@
 // check — the only transformations between pi's message and the C++ prompt
 // are exactly the two identity regions. The custom branch carries no identity
 // regions and is pinned byte-identical with an empty delta.
-#include "../../third_party/catch2/catch_test_macros.hpp"
 
 #include "coding_agent/prompt/SystemPromptBuilder.hpp"
 
 #include "util/Json.hpp"
 
 #include <cch/util/JsonValue.hpp>
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
 #include <fstream>

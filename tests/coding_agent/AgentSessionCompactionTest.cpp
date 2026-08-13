@@ -15,8 +15,7 @@
 #include "support/TempWorkspace.hpp"
 #include "util/ExpectedMacros.hpp"
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
+#include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
@@ -281,7 +280,7 @@ TEST_CASE(
     REQUIRE(session->prompt_blocking("after compaction").has_value());
     REQUIRE(client->requests.size() == 5);
     const auto& next_request = client->requests[4];
-    CHECK(next_request.context.messages.size() == 6);
+    REQUIRE(next_request.context.messages.size() == 6);
     CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(
         next_request.context.messages[0]));
     CHECK(std::holds_alternative<ai::AssistantMessage>(

@@ -1,8 +1,8 @@
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
 #include "../../include/cch/coding_agent/ProjectResources.hpp"
 #include "harness/WorkspaceFileSystem.hpp"
 #include "../support/TempWorkspace.hpp"
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
 
@@ -128,9 +128,9 @@ TEST_CASE("project resource detection rejects escaping symlink marker", "[coding
 
     CHECK(detected(result, coding_agent::ProjectResourceKind::ProjectSkills));
     REQUIRE_FALSE(result.diagnostics.empty());
-    CHECK(result.diagnostics[0].message.find("marker symlink") != std::string::npos ||
-          result.diagnostics[0].message.find("path escapes") != std::string::npos ||
-          result.diagnostics[0].message.find("outside") != std::string::npos);
+    CHECK((result.diagnostics[0].message.find("marker symlink") != std::string::npos ||
+           result.diagnostics[0].message.find("path escapes") != std::string::npos ||
+           result.diagnostics[0].message.find("outside") != std::string::npos));
     CHECK_FALSE(result.resources[0].loadable);
 
     std::filesystem::remove_all(outside);

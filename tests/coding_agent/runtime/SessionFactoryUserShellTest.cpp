@@ -1,5 +1,3 @@
-#include "../../../third_party/catch2/catch_test_macros.hpp"
-
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
 #include "coding_agent/AgentSession.hpp"
@@ -10,6 +8,7 @@
 #include "support/TempWorkspace.hpp"
 #include "support/UserBashTestHooks.hpp"
 
+#include <catch2/catch_test_macros.hpp>
 #include <boost/asio/io_context.hpp>
 
 #include <optional>

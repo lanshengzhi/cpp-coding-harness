@@ -2,6 +2,7 @@
 #include <cch/coding_agent/AuthStorage.hpp>
 #include "support/TempWorkspace.hpp"
 
+#include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
@@ -10,7 +11,6 @@
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/system/error_code.hpp>
-#include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
 #include <filesystem>

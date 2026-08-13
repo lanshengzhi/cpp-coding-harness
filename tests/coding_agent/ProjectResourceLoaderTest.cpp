@@ -1,8 +1,8 @@
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include "harness/WorkspaceFileSystem.hpp"
 #include "../support/TempWorkspace.hpp"
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <filesystem>
@@ -581,9 +581,9 @@ TEST_CASE("project resource loader treats explicit prompt template read failure 
 
     REQUIRE(!result.fatal_errors.empty());
     CHECK(result.fatal_errors[0].type == coding_agent::ResourceDiagnosticType::Error);
-    CHECK(result.fatal_errors[0].message.find("could not open file") != std::string::npos ||
-          result.fatal_errors[0].message.find("not found") != std::string::npos ||
-          result.fatal_errors[0].message.find("could not read") != std::string::npos);
+    CHECK((result.fatal_errors[0].message.find("could not open file") != std::string::npos ||
+           result.fatal_errors[0].message.find("not found") != std::string::npos ||
+           result.fatal_errors[0].message.find("could not read") != std::string::npos));
     CHECK(result.resources.prompt_templates.empty());
     CHECK(result.diagnostics.empty());
 }

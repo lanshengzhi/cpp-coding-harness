@@ -6,7 +6,6 @@
 // compaction → compactionSummary + retained tail, label → getLabel,
 // session_info → session name). Projection is driven into the Agent through
 // the fake-ModelRuntime seam so the model sees exactly what pi's model sees.
-#include "../../../third_party/catch2/catch_test_macros.hpp"
 
 #include <cch/agent/Agent.hpp>
 #include <cch/harness/session/JsonlSessionStore.hpp>
@@ -23,6 +22,7 @@
 #include "util/ExpectedMacros.hpp"
 #include "util/Json.hpp"
 
+#include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>

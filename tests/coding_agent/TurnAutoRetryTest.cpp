@@ -22,8 +22,7 @@
 #include "util/ExpectedMacros.hpp"
 #include "util/Json.hpp"
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
+#include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
@@ -37,6 +36,7 @@
 #include <deque>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <string>
@@ -386,7 +386,7 @@ TEST_CASE(
     CHECK(events.starts[0].max_attempts == 3);
     CHECK(events.starts[0].delay_ms == 2000);
     CHECK(events.starts[0].error_message == "overloaded_error");
-    CHECK(events.ends.size() == 1);
+    REQUIRE(events.ends.size() == 1);
     CHECK(events.ends[0].success);
 
     // Exponential backoff pinned deterministically through a second scenario

@@ -528,7 +528,7 @@ if(CCH_BUILD_TESTS)
 
     # harness and tools
     add_executable(cch_tests_harness_tools
-        tests/TestMain.cpp
+        tests/Catch2Main.cpp
         tests/harness/AsyncLocalExecutionEnvTest.cpp
         tests/harness/WorkspaceFileSystemTest.cpp
         tests/harness/compaction/CompactionTest.cpp
@@ -538,21 +538,22 @@ if(CCH_BUILD_TESTS)
         tests/harness/session/SessionTreeTest.cpp
         tests/tools/AsyncToolsTest.cpp
 )
-    target_include_directories(cch_tests_harness_tools PRIVATE ${CCH_TEST_INCLUDE_DIRS})
+    target_include_directories(cch_tests_harness_tools PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_harness_tools
         PRIVATE
             cch_harness
             cch_tools
+            Catch2::Catch2
 )
     target_compile_definitions(cch_tests_harness_tools PRIVATE
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
     target_compile_options(cch_tests_harness_tools PRIVATE ${CCH_WARNING_OPTIONS})
-    add_test(NAME cch_tests_harness_tools COMMAND cch_tests_harness_tools)
+    catch_discover_tests(cch_tests_harness_tools ADD_TAGS_AS_LABELS)
 
     # coding-agent core/runtime
     add_executable(cch_tests_coding_agent
-        tests/TestMain.cpp
+        tests/Catch2Main.cpp
         tests/coding_agent/AgentConfigDirTest.cpp
         tests/coding_agent/AgentSessionCompactionTest.cpp
         tests/coding_agent/AgentSessionSnapshotTest.cpp
@@ -598,16 +599,17 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/runtime/UserBashOutputAccumulatorTest.cpp
         tests/coding_agent/runtime/UserBashOverlapTest.cpp
 )
-    target_include_directories(cch_tests_coding_agent PRIVATE ${CCH_TEST_INCLUDE_DIRS})
+    target_include_directories(cch_tests_coding_agent PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_coding_agent
         PRIVATE
             cch_coding_agent_runtime
+            Catch2::Catch2
 )
     target_compile_definitions(cch_tests_coding_agent PRIVATE
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
     target_compile_options(cch_tests_coding_agent PRIVATE ${CCH_WARNING_OPTIONS})
-    add_test(NAME cch_tests_coding_agent COMMAND cch_tests_coding_agent)
+    catch_discover_tests(cch_tests_coding_agent ADD_TAGS_AS_LABELS)
 
     # coding-agent interactive TUI. Links the authoritative cch_cli owner too:
     # BootTrustInteractiveTest drives the in-process CLI seam (CliRunFixture).

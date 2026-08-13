@@ -17,13 +17,12 @@
 #include <cch/harness/session/JsonlSessionStore.hpp>
 #include <cch/harness/session/SessionTree.hpp>
 
+#include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
-
-#include "../../../third_party/catch2/catch_test_macros.hpp"
 
 #include <deque>
 #include <filesystem>
@@ -430,10 +429,11 @@ TEST_CASE(
     "navigate_tree after branching appends to the new active path",
     "[coding_agent][runtime][tree-navigation][issue410]") {
     Fixture fixture;
-    // Two scripted replies: the first completes the initial turn; the second
-    // answers the post-navigation prompt on the new branch.
+    // Three scripted replies: the first two complete the initial turns; the
+    // third answers the post-navigation prompt on the new branch.
     std::deque<ai::AssistantMessage> replies;
     replies.push_back(scripted_reply("first reply"));
+    replies.push_back(scripted_reply("second reply"));
     replies.push_back(scripted_reply("branch reply"));
     auto scripted = std::make_shared<ReplyProvider>(std::move(replies));
     auto models = tests::models_from_provider(scripted);

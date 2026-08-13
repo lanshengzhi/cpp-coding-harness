@@ -8,7 +8,6 @@
 // the byte comparison below is the alignment evidence for the session
 // surfaces (R2 §6: session lifecycle, resume, compaction, model switching,
 // session-family flows).
-#include "../../../third_party/catch2/catch_test_macros.hpp"
 
 #include <cch/ai/Message.hpp>
 #include <cch/harness/session/JsonlSessionStore.hpp>
@@ -25,6 +24,7 @@
 #include "support/TempWorkspace.hpp"
 #include "util/Json.hpp"
 
+#include <catch2/catch_test_macros.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -35,6 +35,7 @@
 #include <deque>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <iterator>
 #include <map>
 #include <memory>
