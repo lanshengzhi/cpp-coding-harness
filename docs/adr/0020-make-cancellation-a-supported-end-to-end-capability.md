@@ -6,6 +6,8 @@ status: accepted
 
 Cancellation is a Supported Capability propagated from each active prompt through the agent, provider, policy hooks, tools, and process execution. The public C++ contract uses `std::stop_token` or a narrow value that bridges to it and Boost.Asio cancellation; an idempotent abort produces pi's assistant `aborted` terminal message and complete lifecycle rather than a second error channel or abrupt object destruction.
 
+> Cancellation-shape clause superseded by [ADR 0040](0040-own-asynchronous-operations-and-the-serialized-runtime-lifecycle.md): Owner operations receive cancellation explicitly as `std::stop_token`; a separate public narrow cancellation value and exposed Boost.Asio bridge are no longer permitted. Private implementations may adapt that token to private I/O machinery. The one prompt-scoped cancellation source, idempotent Abort/Close requests, safe-point ownership, and normal `aborted` lifecycle remain authoritative.
+
 ## Considered options
 
 - Keep cancellation deferred: rejected because safe session close, awaitable hooks, provider requests, and long-running tools already require one coherent stop contract.

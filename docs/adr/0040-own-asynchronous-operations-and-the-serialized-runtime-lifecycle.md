@@ -121,6 +121,7 @@ Only conflicting operation shape and injection clauses are superseded; establish
 
 - [ADR 0016](0016-require-explicit-cpp-tool-parallel-safety.md): adapter `concurrency()` as the Tool representation (the exclusive-default and scheduling semantics remain passive Tool descriptor state);
 - [ADR 0018](0018-make-agent-policy-hooks-awaitable.md): Boost.Asio awaitable signatures, ready-awaitable adapters, and their shape-specific test obligations as the Owner Interface operation shape; hook ordering, move-only ownership, failure boundaries, and weak-observer separation remain;
+- [ADR 0020](0020-make-cancellation-a-supported-end-to-end-capability.md): the alternative public narrow cancellation value and exposed Boost.Asio bridge (`std::stop_token`, prompt-scoped ownership, and normal aborted-lifecycle semantics remain);
 - [ADR 0021](0021-let-the-agent-module-own-the-stateful-agent.md): obsolete SDK-presentation and external-public-surface terminology (Agent state ownership and the Agent/Session responsibility split remain);
 - [ADR 0023](0023-make-sdk-prompt-asynchronous-by-default.md): the authoritative SDK prompt, `prompt_blocking()`, and SDK-specific test obligations; the SDK was removed by ADR 0036 and the nonblocking/quiescent lifecycle is now owned here;
 - [ADR 0029](0029-align-models-provider-and-authentication-ownership-with-pi.md): SDK-injected/shared virtual Models Runtime and single-threaded-executor topology; Provider, Model, authentication, refresh, and stream outcomes remain; and

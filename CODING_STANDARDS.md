@@ -30,7 +30,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 2.8. Include order, one blank line between groups: (1) corresponding header, (2) project headers, (3) third-party (`boost/`, `glaze/`), (4) standard library.
 
-2.9. Include spelling: public contract headers as `<cch/...>`; private `src/` headers quoted relative to `src/` (`"util/Json.hpp"`); the corresponding header quoted by basename. Never relative climbs (`"../../include/cch/..."`, `"../util/..."`). Legacy relative includes predate this rule — see §15.
+2.9. Include spelling: Owner Interface headers use their one canonical `<cch/...>` angle include. Private headers use the owning target's declared private root and quoted canonical spelling; the corresponding header is quoted by basename. Never use relative climbs, basenames outside the corresponding source/header pair, absolute paths, or macro-generated project includes. Legacy relative includes predate this rule—see §15.
 
 2.10. Close every namespace with a comment: `} // namespace cch::agent`.
 
@@ -42,7 +42,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 3.2. pi-shaped seams keep pi wire vocabulary in `camelCase`: `AsyncExecutionEnv::readTextFile`, `SessionTree::getEntry`, fields like `mtimeMs`, `exitCode`, `filePath`. This is the one sanctioned camelCase region (§15); it does not extend to cch-native code.
 
-3.3. Suffix vocabulary: `*Event` for event structs; `*Result`, `*Options`, `*Config` for passive structs; `*Sink`, `*Hook`, `*Committer` for `move_only_function` aliases; `*Variant` for variant aliases; `*Dto` confined to the Glaze layer. Awaitable capability interfaces carry an `Async` prefix (`AsyncAgentTool`, `AsyncExecutionEnv`); synchronous ones are plain nouns (`SessionStore`).
+3.3. Suffix vocabulary: `*Event` for event structs; `*Result`, `*Options`, `*Config` for passive structs; `*Sink`, `*Hook`, `*Committer` for `move_only_function` aliases; `*Variant` for variant aliases; `*Dto` confined to the Glaze layer. An asynchronous operation is identified by its `AsyncResult` return type rather than a mandatory `Async` prefix. Identity-bearing physical capabilities keep domain names such as `AsyncExecutionEnv` where the frozen Interface already uses them.
 
 3.4. Enums are always `enum class`; enumerators are `PascalCase` unless mirroring wire vocabulary, which keeps its wire spelling.
 
@@ -54,7 +54,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 ## 4. Data contracts (passive values)
 
-4.1. Public contracts are aggregate structs with default member initializers (`bool truncated{false};`) — no user-declared constructors, no behavior beyond trivial helpers (AGENTS.md guardrail 1; ADR 0019; static-asserted for key headers, see §14).
+4.1. Owner Interface value contracts are aggregate structs with default member initializers (`bool truncated{false};`) — no user-declared constructors, no behavior beyond trivial helpers (AGENTS.md guardrail 1; ADR 0019; statically checked for key headers, see §14).
 
 4.2. Sum types are a `std::variant` behind a named `using` alias (`MessageVariant`, `AgentLifecycleEvent`). Dispatch with `std::visit` + `if constexpr`, or `std::get_if`.
 
@@ -62,7 +62,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 4.4. Construct multi-field contracts with designated initializers or named builders (`user_text_message(...)`), not positional brace lists — positional aggregate initialization is how fields get misbound (ADR 0013).
 
-4.5. Unstructured JSON facts use `util::JsonValue`. Raw Glaze generic values and `boost::json` never appear in contracts (ADR 0007).
+4.5. Unstructured cross-Owner JSON facts use `cch::support::JsonValue`. Raw Glaze generic values and `boost::json` never appear in Owner Interfaces (ADR 0007; ADR 0039).
 
 4.6. Parameters: cheap scalars, enums, and non-owning views such as `std::string_view` by value; non-trivial borrowed inputs by `const&`; owned values (strings, vectors, messages, callbacks) by value and moved from. A coroutine input used after suspension is an owning value in the coroutine frame or has a declaration-level lifetime contract per §7.5.
 
@@ -70,29 +70,29 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 ## 5. Error handling
 
-5.1. One error channel: `util::Error` with `util::Expected<T>` / `util::ExpectedVoid` (`include/cch/util/Error.hpp`). Build errors with `util::make_error(...)`; return them as `std::unexpected(...)`.
+5.1. The shared default error channel is `cch::support::Error` with `cch::support::Expected<T>` / `ExpectedVoid`; return errors as `std::unexpected(...)`. An Owner may expose a more specific `std::expected<T, E>` when the domain contract requires it (ADR 0039; ADR 0040).
 
-5.2. Exception to 5.1: the pi-shaped filesystem/shell contracts use `std::expected<T, FileError>` / `std::expected<T, ExecutionError>`; convert with `to_util_error` at the module boundary.
+5.2. The pi-shaped filesystem/shell contracts use `std::expected<T, FileError>` / `std::expected<T, ExecutionError>` and convert to the consuming operation's error type at the Owner boundary.
 
-5.3. Inside coroutines, propagate errors with `CCH_TRY` / `CCH_TRY_VOID` (`src/util/ExpectedMacros.hpp`). The macros `co_return`, so they never appear in public headers.
+5.3. Error-propagation macros are support implementation machinery and never appear in Owner Interfaces. Use the owning operation's return form (`return`, `co_return`, or callback completion) consistently; do not add a second error channel.
 
-5.4. Exceptions are not an error mechanism. Do not throw for control flow; wrap callback invocation in try/catch at the boundary and convert to `util::Error` (ADR 0017 — see `emit_agent_event` in `src/agent/ExecutionShared.hpp`). Exceptions never unwind through a live coroutine.
+5.4. Exceptions are not an error mechanism. Do not throw for control flow; before asynchronous initiation, convert ordinary throwable setup failures to the operation's expected error channel. After initiation, producer initiation and terminal completion are `noexcept`; weak-observer exceptions are caught, boundedly diagnosed, and deactivate the observer (ADR 0017; ADR 0040).
 
 5.5. Filesystem calls use the `std::error_code` overloads, not the throwing overloads.
 
 5.6. The standard error check is if-init: `if (auto result = f(...); !result) { ... }`.
 
-## 6. Async and events
+## 6. Async and connections
 
-6.1. Fallible cch-native async operations return `[[nodiscard]] boost::asio::awaitable<util::Expected<T>>` (or `ExpectedVoid`). The pi-shaped filesystem and shell seams use the typed expected results in §5.2. `awaitable<void>` is limited to best-effort cleanup/finalization and worker coroutines whose failure is captured by an owning expected-returning operation. A public blocking facade such as `prompt_blocking()` drives the public async path; a private adapter may satisfy an awaitable contract with a synchronous primitive when it preserves that contract.
+6.1. Fallible asynchronous Owner operations return `[[nodiscard]] cch::support::AsyncResult<T, E>` (default `E = cch::support::Error`). Ready values complete inline without support allocation or suspension; pending operations own their post-initiation inputs. Boost.Asio awaitables, executors, schedulers, and cancellation types stay private to implementations. Bounded in-memory value work remains synchronous; do not create an asynchronous facade for it (ADR 0040).
 
-6.2. Event sinks, committers, and policy hooks are `std::move_only_function` aliases (`AgentEventSink`, `AgentEventCommitter`) — never `std::function` (AGENTS.md guardrail 3; ADR 0018). §15 lists the one legacy exception.
+6.2. Stored single operations, sinks, committers, and policy operations use `std::move_only_function` — never `std::function` unless independent copying is a documented contract (AGENTS.md guardrail 3; ADR 0040). A stored callback's copyability says nothing about referent lifetime.
 
-6.3. Subscribers are weak observers: invoke every subscriber callback inside try/catch; a failing subscriber becomes a bounded diagnostic and is deactivated — it never vetoes agent progress or persistence (ADR 0017).
+6.3. Connection strength is explicit. Model-stream delivery and Agent-to-Session commitment are named strong, awaited, backpressured connections. Session-to-TUI, status, diagnostic, and ordinary Agent Session subscribers are weak observers that perform only bounded value work or mailbox sends; catch, diagnose, and deactivate a throwing observer without vetoing progress or persistence (ADR 0017; ADR 0040).
 
-6.4. Cancellation flows through `std::stop_token`; `close()` and `abort()` are idempotent (ADR 0020).
+6.4. Cancellation is supplied explicitly as `std::stop_token`; each Capability Owner resolves cancellation/completion races into its honest domain outcome. Session Abort and Session Close are idempotent; Close never cancels an admitted Session Event Commitment or required persistence work (ADR 0020; ADR 0040).
 
-6.5. Sync policy logic adapts into awaitable hooks through ready-awaitable adapters — never a second, sync hook path (ADR 0018).
+6.5. `AsyncResult` is move-only and consumed once by callback start or move-only `co_await`. Duplicate/moved-from/reused consumption, duplicate completion, and controlled completion-callback contract violations terminate in every build mode. The coroutine Owner establishes quiescence before frame destruction; concurrent resume/destroy is forbidden (ADR 0040).
 
 ## 7. Classes and ownership
 
@@ -102,9 +102,9 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 7.3. Value types follow the rule of zero. Owning types declare, in this order: move constructor/assignment (usually `noexcept`), destructor, deleted copy constructor/assignment.
 
-7.4. `std::unique_ptr` is the default owner (capabilities, factory results). `std::shared_ptr` is reserved for genuinely shared services (`AsyncExecutionEnv`, `StreamTransport`, `ModelRuntime` — the session-shared model/authentication runtime injected under ADR 0029).
+7.4. `std::unique_ptr` is the default owner (capabilities, factory results). `std::shared_ptr` is reserved for deliberately shared live state, such as the concrete coding-agent Models Runtime lifetime captured by the AI-owned `ModelStream`; it is not an injection or virtual-for-fake convention (ADR 0040).
 
-7.5. A stored non-owning reference or raw pointer, and any borrowed coroutine input used after suspension, states its lifetime contract in a doc comment at the declaration (`const harness::AsyncExecutionEnv& env_; // must outlive every run coroutine`). Ordinary borrowed call parameters whose use ends with the call need no lifetime comment.
+7.5. A stored non-owning reference or raw pointer, and any borrowed asynchronous input used after initiation returns, states its lifetime contract in a doc comment at the declaration (`const X& value_; // must outlive every operation`). Ordinary borrowed call parameters whose use ends with the call need no lifetime comment. Prefer owning pending-operation inputs (ADR 0040).
 
 7.6. Pimpl uses a nested `struct Impl;` defined in the `.cpp`, held by `unique_ptr` (or `shared_ptr` for shared-live-state owners like `Agent`).
 
@@ -112,13 +112,13 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 7.8. POSIX file descriptors are owned by `UniqueFd` (`src/harness/UniqueFd.hpp`) — never `unique_ptr<int>` guards or manual `::close` cleanup paths.
 
-## 8. Public header surface
+## 8. Owner Interface headers
 
-8.1. `include/cch/` is the only public surface; `src/` is private via CMake `PUBLIC`/`PRIVATE` include paths. `tests/architecture/` enforces exact assertions for selected headers and contracts; reviewers cover the remainder (§14).
+8.1. Owner Interface headers live under Owner-local roots and have one canonical `<cch/...>` angle-include spelling. They are repository-internal and are not installed, exported, or ABI-promised. Private implementation roots are not visible across Owners. The Parity Architecture Gate enforces roots, ownership, visibility, canonical spelling, and legal cross-Owner relationships (ADR 0039).
 
-8.2. Public headers do not include Glaze, `src/` paths, provider DTOs, loaders, or the AgentLoop (AGENTS.md guardrail 4). Boost.Asio headers are allowed — `awaitable` appears in public signatures.
+8.2. Owner Interface headers include only standard-library, `cch_support`, and legal downstream Owner headers. They never include Boost.Asio, Glaze, provider/serialization DTOs, loaders/parsers/visitors, schema conversion, or private implementation paths (AGENTS.md guardrail 4; ADR 0039).
 
-8.3. Prefer forward declarations in narrow headers when only a name, reference, or pointer is needed.
+8.3. Each Owner Interface header compiles independently. Prefer forward declarations when only a name, reference, or pointer is needed; never add umbrella/forwarding headers, compatibility aliases, alternate spellings, or macro-generated project includes.
 
 ## 9. Modern C++ usage
 
@@ -130,7 +130,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 9.4. Template parameters are declared with `typename` (`template <typename T>`, `template <typename... Ts>`) — never `class`.
 
-9.5. Not yet: concepts, modules, `<=>`, `std::print`, deducing this, `std::expected` monadic chains (`and_then`/`transform`/`or_else`). None appear in the codebase; the monadic chains would add a third error-handling idiom alongside if-init (§5.6) and `CCH_TRY` (§5.3). Introduce any of these only with an ADR.
+9.5. Constrained templates are permitted for local, non-escaping operations when they are clearer than a runtime seam (ADR 0040); keep constraints local rather than publishing generic machinery through Owner Interfaces. Not yet: modules, `<=>`, `std::print`, deducing this, and `std::expected` monadic chains (`and_then`/`transform`/`or_else`). Introduce any of those only with an ADR.
 
 9.6. Casts are `static_cast` / `reinterpret_cast`; no C-style casts.
 
@@ -142,11 +142,11 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 This section is the checkable form of AGENTS.md guardrail 5.
 
-10.1. Secret redaction has exactly one implementation: `src/util/Redactor.hpp`. Never hand-roll redaction, and never expose it in public headers.
+10.1. Secret redaction is Owner-private product policy. Route it through the owning package's one approved implementation; never hand-roll redaction or expose redaction machinery through `cch_support` or an Owner Interface (ADR 0039).
 
-10.2. Redact before truncating. Use `bounded_redacted_text` (`src/util/BoundedText.hpp`), which bounds output without splitting the `[REDACTED]` marker.
+10.2. Redact before truncating. Use the owning package's bounded-redacted-text operation, which preserves the complete `[REDACTED]` marker.
 
-10.3. Bounded output goes through the existing budgets: `src/util/OutputLimiter.hpp` (default 50 KiB / 2000 lines) and the presentation budgets in `src/coding_agent/runtime/BoundedText.hpp`. No ad-hoc `substr` truncation of model- or user-visible text.
+10.3. Bounded output goes through the owning package's declared output/presentation budgets. No ad hoc `substr` truncation of model- or user-visible text, and process pipes continue draining after retained output reaches its bound (ADR 0040).
 
 10.4. Workspace containment lives in `src/harness/WorkspaceFileSystem.hpp` and its split implementation units `WorkspaceFileSystem{FdWalk,Legacy,Pi,Temp}.cpp` (absolute-path and `..` rejection, symlink-escape checks, atomic writes). File tools route through it; no parallel path-validation logic.
 
@@ -156,35 +156,37 @@ This section is the checkable form of AGENTS.md guardrail 5.
 
 ## 11. Tests
 
-11.1. Use Catch2 through the vendored fallback header, included by depth-adjusted relative path (`#include "../../third_party/catch2/catch_test_macros.hpp"`).
+11.1. Use formal Catch2 v3 from the pinned dependency graph through its imported target. Include Catch2's public headers directly; the local Catch-compatible imitation and compatibility headers are prohibited.
 
-11.2. Flat `TEST_CASE`s only — no `SECTION`, `GENERATE`, or `SCENARIO`. Names are sentence-style ("CCH_TRY unwraps successful expected and continues").
+11.2. Every test name is unique and sentence-style. Use flat cases by default; shallow `SECTION`, generators, matchers, fixtures, or `SCENARIO` are allowed when they reduce real duplication without creating a combination explosion.
 
-11.3. `CHECK` for assertions; `REQUIRE` / `REQUIRE_FALSE` only for preconditions whose failure voids the rest of the case; `SUCCEED` for platform-conditional skips.
+11.3. `CHECK` reports a failure and continues. Use `REQUIRE` / `REQUIRE_FALSE` only for preconditions whose failure makes later dereference, indexing, or execution unsafe. Use explicit skip reporting for unavailable platform prerequisites.
 
-11.4. Tags are `[module][feature]`, module first, spelled like the test directory: `[ai]`, `[agent]`, `[harness]`, `[tools]`, `[util]`, `[cli]`, `[sdk]`, `[architecture]`, `[coding_agent]`. Add parity tags `[u1]`–`[u9]` and issue-traceability tags `[issueNN]` where they apply. `[coding-agent]` (with a dash) is legacy — see §15.
+11.4. Tags are `[module][feature]`, module first, spelled like the owning test area: `[ai]`, `[agent]`, `[harness]`, `[tools]`, `[support]`, `[tui]`, `[cli]`, `[architecture]`, `[coding_agent]`. Add parity tags `[u1]`–`[u9]` and issue-traceability tags `[issueNN]` where they apply. Tags map to CTest labels.
 
-11.5. Layout mirrors `src/`: `tests/<module>/<Stem>Test.cpp`, including nested directories (`tests/harness/session/`). Shared helpers live in `tests/support/` under `namespace cch::tests`.
+11.5. Layout follows Capability Owner or support ownership: `tests/<owner-or-support>/<Stem>Test.cpp`, with deeper directories for cohesive areas. Shared helpers live in `tests/support/` under `namespace cch::tests` and do not create a cross-Owner production seam.
 
-11.6. Tests compile into package-aligned shard executables (`cch_tests_util`, `cch_tests_tui`, `cch_tests_ai`, `cch_tests_agent`, `cch_tests_harness_tools`, `cch_tests_coding_agent`, `cch_tests_coding_agent_interactive`, `cch_tests_cli_arch`), each registered with `ctest`; the `cpp_harness_tests` target is the aggregate that builds every shard, and `scripts/run-tests.sh` is the uniform tag/filter entry point. A shard links only the packages its tests exercise, so a focused test edit builds and links just that shard; the coding-agent package splits on the `tui/` subdirectory (core/runtime vs interactive).
+11.6. CTest names and labels are the normal selection, scheduling, timeout, and reporting surface. Fast deterministic unit/contract cases are discovered individually. Process, TTY, golden, and complete Agent Session/TUI scenarios are grouped only when measured startup cost or shared setup justifies it. Fatal, cancellation, Close, and hang-prone contracts run in isolated subprocesses with hard timeouts; the old shard runner is not a second scheduling authority.
 
-11.7. Fake providers and clients by default — scripted fakes over the public interfaces. No live API keys or network access in the default `ctest` suite (AGENTS.md Validation).
+11.7. Fake Providers and deterministic local resources are the default. No live API keys or provider network access appears in the default CTest suite (AGENTS.md Validation). Each test owns unique temporary directories, ports, files, and environment state.
 
 ## 12. CMake
 
-12.1. Compiled architecture packages map to `cch_util`, `cch_tui`, `cch_coding_agent_tui`, `cch_coding_agent_interactive`, `cch_ai`, `cch_coding_agent_core`, `cch_agent`, `cch_harness`, `cch_tools`, `cch_coding_agent_runtime`, and `cch_cli`. `cch_coding_agent_tui` owns coding-agent-specific Native TUI presentation such as the baseline theme vocabulary while reusable `cch_tui` stays generic. The private `cch_coding_agent_interactive` composition depends on both TUI packages and the Agent Session runtime; the non-interactive runtime never depends on a TUI target. The runtime target owns the coding-agent implementation and one-shot rendering sources; the `cch_cli` target is the single authoritative owner of the CLI/runtime composition sources (`src/cli/CliParse.cpp`, `src/cli/FrontendSelection.cpp`, `src/cli/ListModels.cpp`, `src/cli/StartupTui.cpp`, `src/coding_agent/runtime/AsyncCliRuntime.cpp`) — compiled once per configuration and linked by both the executable and the tests; the `cpp_harness` executable owns `src/main.cpp` plus final frontend orchestration and links `cch_cli` and the interactive composition without adding a TUI dependency to the runtime target. `cch_coding_agent_core` owns the ModelRuntime closure (ModelRuntime/ModelConfig/ProviderComposer/AgentConfigDir/AuthStorage/RuntimeApiKeyOverlay) below the agent package so the stateful Agent is constructed on the sole injectable `ModelRuntime` seam without a dependency cycle; `ModelRuntime` is non-final with a virtual `stream_simple` and a protected test-fake constructor as a recorded exception to the §7.2 final rule, documented in the header; the E2E fake also overrides the session-seam surfaces the interactive run consumes (`model`/`get_available`/`check_auth`/`has_configured_auth`/`configured_api_key_env_names`, each marked virtual with the same header note) so an impl-less recording fake can serve a full scripted turn. The dependency direction stays `util < {tui, ai}`, `tui < coding-agent-tui < coding-agent-interactive`, `ai < coding-agent-core < {agent, harness}`, and `{agent, harness} < tools < runtime < coding-agent-interactive < cli`; `cch_tui` has no reverse dependency on coding-agent, Agent, provider, tool, session, or CLI implementation modules (enforced by `CMakeDependencyTest`).
+12.1. The authoritative Owner libraries are `cch_ai`, `cch_agent_core`, `cch_tui`, and repository-private `cch_coding_agent`; `cch_support` is the pi-neutral support library. The only direct cross-Owner project edges are `cch_agent_core -> cch_ai` and `cch_coding_agent -> {cch_agent_core, cch_ai, cch_tui}`. `cch_ai` and `cch_tui` have no Owner dependencies. Cross-Owner edges target only authoritative Owner libraries, never same-Owner private implementation targets (ADR 0039).
 
-12.2. Every compiled `cch_*` library target applies `cch_target_defaults()`, which publishes `include/` as `PUBLIC`, keeps `src/` `PRIVATE`, and sets `-Wall -Wextra -Wpedantic`.
+12.2. Use the central CMake constructors for every production target. Each declaration names exactly one role (`owner`, `implementation`, `support`, `composition`, or classified `external`), one Owner where applicable, its explicit source set, unconditional direct dependencies, and defaults. Every production source compiles once; the production graph is acyclic. Do not bypass the constructors with ad hoc target declarations.
 
-12.3. Sources are listed explicitly per target — no `file(GLOB ...)`.
+12.3. Owner Interface roots are target-specific and repository-internal. Publish only the owning target's Interface root to legal repository dependents; keep implementation roots private. Sources are listed explicitly—no `file(GLOB ...)`. Project dependencies use classified targets, not path/linker-name shortcuts.
 
-12.4. The project is C++23 with extensions off, set once at the top level; do not lower the standard per target.
+12.4. The project is C++23 with extensions off, set once at the top level; do not lower the standard per target. Every compiled target enables the project warning defaults.
+
+12.5. Every supported configure, build, test, install, release, and CI path runs or depends on the latest applicable Parity Architecture Gate phase, including tests-disabled configurations. CMake File API data, compile commands, direct-include evidence, and—after build—compiler depfiles are configured evidence; CMake source formatting is not the architecture seam (ADR 0039).
 
 ## 13. Function structure and local state
 
 13.1. Single Level of Abstraction (SLA): A high-level orchestrator expresses sequencing through module interfaces or cohesive private helpers. Flag it when the same function also performs line-by-line formatting, token- or regex-level parsing, or raw byte/buffer manipulation. A formatter or parser whose implementation is itself the function's purpose is not an orchestrator and is not a violation.
 
-13.2. Pure value transformations: A transformation determined solely by its input values stays independent of physical I/O, mutable global state, and mutable object state. It accepts the values it needs explicitly and returns `util::Expected<T>` only when it can fail; an infallible transformation returns `T` directly. Extract an embedded transformation from an orchestrator when it contains branching, iteration, parsing/validation, or multi-field formatting. A direct field projection or other single-expression transformation remains inline.
+13.2. Pure value transformations: A transformation determined solely by its input values stays independent of physical I/O, mutable global state, and mutable object state. It accepts the values it needs explicitly and returns the owning domain's `std::expected`/`cch::support::Expected` only when it can fail; an infallible transformation returns `T` directly. Extract an embedded transformation from an orchestrator when it contains branching, iteration, parsing/validation, or multi-field formatting. A direct field projection or other single-expression transformation remains inline.
 
 13.3. Seam discipline: Physical capability use stays behind interfaces or narrow implementation boundaries established by AGENTS.md guardrail 2 or an accepted ADR. Value transformations move inward into private helpers or implementation modules rather than outward into new capability interfaces. Adding, moving, or removing a capability seam is an architecture decision resolved in `AGENTS.md` or an ADR, not a code-level review inference.
 
@@ -192,7 +194,7 @@ This section is the checkable form of AGENTS.md guardrail 5.
 
 ## 14. Validation-enforced — reviewers skip exact duplicates
 
-- Skip a finding only when a required build or test necessarily fails on that exact violation. Architecture tests reject only their explicit assertions: the two banned private-include spellings scanned across public headers, Glaze tokens in enumerated core headers, named aggregate/abstract/callback traits, declared dependency tokens, and named banned legacy strings. They do not imply broader coverage.
+- Skip a finding only when a required build or test necessarily fails on that exact violation. The Parity Architecture Gate rejects only the configured relationships and stable rule identifiers its manifest/evidence policy defines; its pass does not imply broader §2–§13 conformance (ADR 0039).
 - Compiler diagnostics remain review findings: `-Wall -Wextra -Wpedantic` are enabled without warnings-as-errors.
 - For code changes that compile and pass the required suite, report remaining §2–§13 violations. Documentation-only changes follow the documentation validation in `AGENTS.md` instead.
 
@@ -201,7 +203,7 @@ This section is the checkable form of AGENTS.md guardrail 5.
 Sanctioned deviations are grandfathered only on untouched existing lines. Added or modified lines comply with the current rule unless an exception below explicitly permits the deviation.
 
 - **camelCase pi vocabulary (§3.2):** untouched camelCase declarations and uses are grandfathered. A new or renamed camelCase identifier is allowed only when its issue/spec or an adjacent comment identifies the matching pi identifier; otherwise the declaration uses `snake_case`. This semantic rule covers filesystem/session/trust seams, wire fields, and skill/prompt parity code without a path allowlist.
-- **Include spelling (§2.9):** untouched relative quoted project includes (`"../util/Error.hpp"`, `"../../include/cch/..."`) are grandfathered; added or modified include lines use the current spelling rule.
+- **Include spelling (§2.9):** untouched relative quoted project includes are grandfathered until their owning package contracts into its Owner-local roots; added or modified include lines use the current canonical spelling rule.
 - **Test tag `[coding-agent]`** (35 uses) predates §11.4's `[coding_agent]`; untouched tags are grandfathered, while added or modified tag lists use `[coding_agent]`.
 - **Constant naming (§3.5):** untouched snake_case constexpr locals and `SCREAMING_SNAKE` public constants are grandfathered; added or modified constant declarations use `kCamelCase`.
 - **Variant-alias naming (§3.3):** `Content`, `AssistantContent`, `Credential`, `AuthPromptKind`, and `AuthEventKind` predate the `*Variant` suffix and are intentionally kept to avoid public API churn (debt recorded in #372); added or renamed variant aliases use `*Variant`.
