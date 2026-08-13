@@ -1,150 +1,228 @@
 #pragma once
 
 #include <cch/ai/Content.hpp>
-#include <cch/ai/RequestOptions.hpp>
+#include <cch/ai/Provider.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/util/Error.hpp>
+#include "support/ModelsFixture.hpp"
 #include "util/ExpectedMacros.hpp"
 
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_awaitable.hpp>
+#include <boost/system/error_code.hpp>
 
+#include <chrono>
 #include <cstddef>
 #include <deque>
+#include <limits>
+#include <memory>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
 
 namespace cch::tests {
 
-/// One recorded `streamSimple` call at the Agent seam.
-struct RecordedStreamSimpleCall {
+/// One recorded model-stream request at the provider seam (the post-Models
+/// `ProviderStreamOptions` shape; `stop_token` is preserved for the gating
+/// and cancellation contracts).
+struct RecordedRuntimeCall {
     ai::Model model;
     ai::AiContext context;
-    ai::SimpleStreamOptions options;
+    ai::ProviderStreamOptions options;
 };
 
-/// Scripted, recording fake ModelRuntime — the primary Agent test seam (ADR
-/// 0034 / #349 Testing Decisions: "the fake runtime records every streamSimple
-/// call and scripts terminal/success outcomes through the surface pi-ai
-/// shipped"). Records every `stream_simple` call and returns queued responses;
-/// a configured `failure` completes through the single `util::Expected` error
-/// alternative (infrastructure failure, never a domain terminal). Only the
-/// virtual stream surface is callable; the base runtime holds no impl.
+class FakeModelRuntime;
+
+/// Scripted `ai::Provider` that records each request at the provider seam and
+/// serves FIFO responses, with an optional gate on one call index. It is the
+/// streaming half of the session-seam `FakeModelRuntime` (ADR 0040 / #453: the
+/// Agent streams through `ai_models()`, never through a virtual runtime
+/// surface).
+class ScriptedRuntimeProvider final : public ai::Provider {
+public:
+    explicit ScriptedRuntimeProvider(FakeModelRuntime* owner);
+
+    [[nodiscard]] std::string_view id() const noexcept override { return "fake"; }
+    [[nodiscard]] std::string_view name() const noexcept override { return "Fake"; }
+    [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
+    [[nodiscard]] std::vector<ai::Model> models() const override { return {}; }
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream(
+        const ai::Model& model,
+        const ai::AiContext& context,
+        ai::ProviderStreamOptions options,
+        ai::AssistantEventSink sink) override;
+
+private:
+    ai::ProviderAuth auth_;
+    FakeModelRuntime* owner_; // must outlive the provider; the owner holds the catalog
+};
+
+/// Session-seam recording fake ModelRuntime (ADR 0034 / #349 primary session
+/// seam): serves model resolution, auth preflight, and an AI-owned Models
+/// catalog so a session can run a scripted turn end to end. Streaming flows
+/// through `ai_models()` (the `ModelStream` surface), not a virtual
+/// `stream_simple` override. Optional gating (`gate_at` + `release()`) holds
+/// one call until released or the run's stop token fires.
 class FakeModelRuntime final : public coding_agent::ModelRuntime {
 public:
-    /// Session-seam overrides (the §7.2 recorded exception): the impl-less
-    /// fake serves model resolution and auth preflight so a session can run a
-    /// scripted turn end to end. The served model uses the scripted-fake API
-    /// identity like the Models-seam fake provider.
+    FakeModelRuntime();
+    ~FakeModelRuntime() = default;
+    FakeModelRuntime(const FakeModelRuntime&) = delete;
+    FakeModelRuntime& operator=(const FakeModelRuntime&) = delete;
+
+    // ── Session-seam overrides (model resolution / auth) ──────────────────
+
     [[nodiscard]] std::optional<ai::Model> model(
         std::string_view provider_id,
-        std::string_view model_id) const override {
-        ai::Model model;
-        model.id = std::string{model_id};
-        model.name = model.id;
-        model.api = "scripted-fake";
-        model.provider = std::string{provider_id};
-        model.reasoning = false;
-        model.input = {ai::ModelInput::Text};
-        model.context_window = 128000;
-        model.max_tokens = 16384;
-        return model;
+        std::string_view model_id) const override;
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<std::vector<ai::Model>>> get_available(
+        std::optional<std::string_view> provider_id = std::nullopt) override;
+
+    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>> check_auth(
+        std::string provider_id) override;
+
+    [[nodiscard]] bool has_configured_auth(std::string_view provider_id) const override;
+
+    [[nodiscard]] std::vector<std::string> configured_api_key_env_names() const override;
+
+    // ── AI-owned streaming catalog (ADR 0040 / #453) ──────────────────────
+
+    [[nodiscard]] std::shared_ptr<ai::Models> ai_models() const override {
+        return models_;
     }
 
-    boost::asio::awaitable<util::Expected<std::vector<ai::Model>>> get_available(
-        std::optional<std::string_view> provider_id = std::nullopt) override {
-        std::vector<ai::Model> models;
-        if (auto resolved = model(
-                provider_id.value_or("fake"), "fake-model")) {
-            models.push_back(std::move(*resolved));
-        }
-        co_return models;
-    }
+    // ── Gating / scripting surface ────────────────────────────────────────
 
-    boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>> check_auth(
-        std::string provider_id) override {
-        (void)provider_id;
+    /// Release the gated call, if any. Idempotent.
+    void release();
+
+    /// Call index that gates (blocks until release or stop). Defaults to a
+    /// value larger than any real call, disabling gating.
+    std::size_t gate_at{std::numeric_limits<std::size_t>::max()};
+    /// Emit a "streaming in flight" partial before the gated call blocks
+    /// (the interactive interrupt gating behavior).
+    bool emit_partial_before_gate{false};
+    /// Response served after the gate releases when `responses` is empty.
+    std::string gated_response{"gated done"};
+    /// Recorded per-turn calls in issue order.
+    std::vector<RecordedRuntimeCall> calls;
+    /// Scripted assistant responses consumed in FIFO order.
+    std::deque<ai::AssistantMessage> responses;
+
+private:
+    std::shared_ptr<ai::Models> models_;
+    std::optional<boost::asio::steady_timer> gate_;
+    friend class ScriptedRuntimeProvider;
+};
+
+// ── Inline implementations (header-only test support) ─────────────────────
+
+inline ScriptedRuntimeProvider::ScriptedRuntimeProvider(FakeModelRuntime* owner)
+    : owner_(owner) {
+    ai::ApiKeyAuth api_key;
+    api_key.name = "scripted fake runtime";
+    api_key.check = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
+        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>> {
         co_return ai::AuthCheck{
-            .source = "fake",
+            .source = "scripted fake runtime",
             .type = ai::AuthType::ApiKey,
         };
-    }
+    };
+    api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
+        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> {
+        co_return ai::AuthResult{.source = "scripted fake runtime"};
+    };
+    auth_ = ai::ProviderAuth{.api_key = std::move(api_key)};
+}
 
-    bool has_configured_auth(std::string_view provider_id) const override {
-        (void)provider_id;
-        return true;
-    }
+inline boost::asio::awaitable<util::Expected<ai::AssistantMessage>>
+ScriptedRuntimeProvider::stream(
+    const ai::Model& model,
+    const ai::AiContext& context,
+    ai::ProviderStreamOptions options,
+    ai::AssistantEventSink sink) {
+    const std::size_t call_index = owner_->calls.size();
+    owner_->calls.push_back(RecordedRuntimeCall{model, context, options});
+    const auto& stop_token = owner_->calls.back().options.stop_token;
 
-    std::vector<std::string> configured_api_key_env_names() const override {
-        return {};
-    }
-
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
-        ai::Model model,
-        ai::AiContext context,
-        ai::SimpleStreamOptions options,
-        ai::AssistantEventSink sink) override {
-        calls.push_back(RecordedStreamSimpleCall{
-            std::move(model),
-            std::move(context),
-            std::move(options),
-        });
-        if (failure) {
-            co_return std::unexpected(*failure);
-        }
-
-        // Accepted-call cancellation completes through exactly one aborted
-        // terminal event plus the agreeing final AssistantMessage (ADR 0020).
-        if (calls.back().options.stop_token.stop_requested()) {
-            auto terminal = ai::assistant_text_message("");
-            terminal.stop_reason = ai::AssistantStopReason::Aborted;
-            terminal.error_message = "Request was aborted";
-            ++terminal_events;
-            last_terminal_failure = util::make_error(
-                util::ErrorCode::Cancelled, *terminal.error_message);
-            if (sink) {
-                CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
-                    .reason = terminal.stop_reason,
-                    .error = terminal,
-                    .failure = last_terminal_failure,
-                }));
-            }
-            co_return terminal;
-        }
-
-        if (responses.empty()) {
-            co_return ai::assistant_text_message("default fake response");
-        }
-        auto response = std::move(responses.front());
-        responses.pop_front();
+    if (stop_token.stop_requested()) {
+        auto terminal = ai::assistant_text_message("");
+        terminal.stop_reason = ai::AssistantStopReason::Aborted;
+        terminal.error_message = "Request was aborted";
         if (sink) {
-            if (response.stop_reason == ai::AssistantStopReason::Error ||
-                response.stop_reason == ai::AssistantStopReason::Aborted) {
-                // Exactly one terminal event plus the agreeing final message
-                // (the #326 terminal-error-event contract); no start event is
-                // emitted so the loop's synthesize-start path stays exercised.
-                ++terminal_events;
-                std::optional<util::Error> terminal_failure = std::nullopt;
-                if (response.error_message) {
-                    const auto code =
-                        response.stop_reason == ai::AssistantStopReason::Aborted
-                            ? util::ErrorCode::Cancelled
-                            : terminal_failure_code.value_or(
-                                  util::ErrorCode::Stream);
-                    terminal_failure = util::make_error(
-                        code, *response.error_message);
-                }
-                last_terminal_failure = terminal_failure;
-                CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
-                    .reason = response.stop_reason,
-                    .error = response,
-                    .failure = std::move(terminal_failure),
-                }));
-                co_return response;
-            }
-            CCH_TRY_VOID(sink(ai::AssistantStartEvent{response}));
+            CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
+                .reason = terminal.stop_reason,
+                .error = terminal,
+                .failure = util::make_error(
+                    util::ErrorCode::Cancelled, "Request was aborted"),
+            }));
         }
+        co_return terminal;
+    }
+
+    if (owner_->emit_partial_before_gate && call_index == owner_->gate_at) {
+        auto partial = ai::assistant_text_message("streaming in flight");
+        if (sink) {
+            CCH_TRY_VOID(sink(ai::AssistantStartEvent{partial}));
+            CCH_TRY_VOID(sink(ai::TextDeltaEvent{0, "streaming in flight", partial}));
+        }
+    }
+
+    if (call_index == owner_->gate_at) {
+        // Hold the gated call; release on the run's stop token.
+        auto executor = co_await boost::asio::this_coro::executor;
+        owner_->gate_.emplace(executor);
+        owner_->gate_->expires_at(std::chrono::steady_clock::time_point::max());
+        std::stop_callback release_on_stop{stop_token, [this] { owner_->release(); }};
+        boost::system::error_code error;
+        co_await owner_->gate_->async_wait(
+            boost::asio::redirect_error(boost::asio::use_awaitable, error));
+    }
+
+    if (stop_token.stop_requested()) {
+        auto terminal = ai::assistant_text_message("");
+        terminal.stop_reason = ai::AssistantStopReason::Aborted;
+        terminal.error_message = "Request was aborted";
+        if (sink) {
+            CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
+                .reason = terminal.stop_reason,
+                .error = terminal,
+                .failure = util::make_error(
+                    util::ErrorCode::Cancelled, "Request was aborted"),
+            }));
+        }
+        co_return terminal;
+    }
+
+    if (owner_->responses.empty()) {
+        co_return ai::assistant_text_message(owner_->gated_response);
+    }
+    auto response = std::move(owner_->responses.front());
+    owner_->responses.pop_front();
+    if (sink) {
+        if (response.stop_reason == ai::AssistantStopReason::Error ||
+            response.stop_reason == ai::AssistantStopReason::Aborted) {
+            std::optional<util::Error> terminal_failure = std::nullopt;
+            if (response.error_message) {
+                terminal_failure = util::make_error(
+                    util::ErrorCode::Stream, *response.error_message);
+            }
+            CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
+                .reason = response.stop_reason,
+                .error = response,
+                .failure = std::move(terminal_failure),
+            }));
+            co_return response;
+        }
+        CCH_TRY_VOID(sink(ai::AssistantStartEvent{response}));
         for (std::size_t index = 0; index < response.content.size(); ++index) {
             const auto& block = response.content[index];
             if (const auto* text = std::get_if<ai::TextContent>(&block)) {
@@ -157,26 +235,57 @@ public:
                 CCH_TRY_VOID(sink(ai::ToolCallEndEvent{index, *call, response}));
             }
         }
-        co_return response;
     }
+    co_return response;
+}
 
-    /// Recorded per-turn calls in issue order.
-    std::vector<RecordedStreamSimpleCall> calls;
-    /// Count of terminal (error/aborted) events delivered to the sink.
-    int terminal_events{0};
-    /// Scripted terminal failure category for the #326 six-category channel.
-    /// When set, scripted error-terminal responses carry a failure of this
-    /// category instead of the derived Stream code; aborted terminals keep
-    /// Cancelled.
-    std::optional<util::ErrorCode> terminal_failure_code{std::nullopt};
-    /// The most recent terminal failure emitted on the sink, recorded so tests
-    /// can assert the six-category channel flowing through the single
-    /// `util::Expected` error value.
-    std::optional<util::Error> last_terminal_failure{std::nullopt};
-    /// Scripted assistant responses consumed in FIFO order.
-    std::deque<ai::AssistantMessage> responses;
-    /// Scripted infrastructure failure returned through the Expected channel.
-    std::optional<util::Error> failure{std::nullopt};
-};
+inline FakeModelRuntime::FakeModelRuntime() {
+    models_ = models_from_provider(std::make_shared<ScriptedRuntimeProvider>(this));
+}
+
+inline std::optional<ai::Model> FakeModelRuntime::model(
+    std::string_view provider_id,
+    std::string_view model_id) const {
+    ai::Model model;
+    model.id = std::string{model_id};
+    model.name = model.id;
+    model.api = "scripted-fake";
+    model.provider = std::string{provider_id};
+    model.reasoning = false;
+    model.input = {ai::ModelInput::Text};
+    model.context_window = 128000;
+    model.max_tokens = 16384;
+    return model;
+}
+
+inline boost::asio::awaitable<util::Expected<std::vector<ai::Model>>>
+FakeModelRuntime::get_available(std::optional<std::string_view> provider_id) {
+    std::vector<ai::Model> models;
+    if (auto resolved = model(provider_id.value_or("fake"), "fake-model")) {
+        models.push_back(std::move(*resolved));
+    }
+    co_return models;
+}
+
+inline boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>>
+FakeModelRuntime::check_auth(std::string provider_id) {
+    (void)provider_id;
+    co_return ai::AuthCheck{.source = "fake", .type = ai::AuthType::ApiKey};
+}
+
+inline bool FakeModelRuntime::has_configured_auth(std::string_view provider_id) const {
+    (void)provider_id;
+    return true;
+}
+
+inline std::vector<std::string> FakeModelRuntime::configured_api_key_env_names() const {
+    return {};
+}
+
+inline void FakeModelRuntime::release() {
+    if (gate_) {
+        (void)gate_->cancel();
+    }
+}
 
 } // namespace cch::tests

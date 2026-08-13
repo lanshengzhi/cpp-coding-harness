@@ -2,7 +2,7 @@
 #include <cch/ai/Content.hpp>
 #include "agent/AgentLoop.hpp"
 #include "ai/SimpleOptions.hpp"
-#include "support/FakeModelRuntime.hpp"
+#include "support/FakeModelStream.hpp"
 #include "support/ModelFixture.hpp"
 #include "util/ExpectedMacros.hpp"
 #include "util/Json.hpp"
@@ -89,7 +89,7 @@ std::size_t count_events(const std::vector<agent::AgentLifecycleEvent>& events) 
 TEST_CASE(
     "Agent issues every turn through ModelRuntime::streamSimple with the harness-consumer option set",
     "[agent][streamSimple][issue350]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
 
     agent::AsyncToolRegistry tools;
@@ -97,7 +97,7 @@ TEST_CASE(
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
     options.session_id = "session-1";
-    agent::Agent subject(runtime, std::move(tools), std::move(options));
+    agent::Agent subject(runtime->factory(), std::move(tools), std::move(options));
 
     REQUIRE(run_prompt(subject, "hi"));
 
@@ -129,13 +129,13 @@ TEST_CASE(
 TEST_CASE(
     "Agent loop forwards the exact run stop token through streamSimple",
     "[agent][streamSimple][issue350]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("ok"));
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
     options.session_id = "session-2";
-    agent::AsyncAgentLoop loop(runtime, agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
 
     std::stop_source stop_source;
     auto run = run_loop(loop, "hi", stop_source.get_token());
@@ -149,7 +149,7 @@ TEST_CASE(
 TEST_CASE(
     "Agent forwards the full harness-consumer option set through streamSimple each turn",
     "[agent][streamSimple][issue351]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
 
     agent::AsyncAgentOptions options;
@@ -164,7 +164,7 @@ TEST_CASE(
     options.max_retry_delay_ms = 120000;
     options.headers = {{std::string{"x-golden"}, std::string{"value"}}};
     agent::Agent subject(
-        runtime,
+        runtime->factory(),
         agent::AsyncToolRegistry{},
         std::move(options),
         agent::AgentInitialState{.thinking_level = "high"});
@@ -195,7 +195,7 @@ TEST_CASE(
 TEST_CASE(
     "default turns forward pi's harness-consumer defaults through streamSimple",
     "[agent][streamSimple][issue351]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
 
     agent::AsyncAgentOptions options;
@@ -205,7 +205,7 @@ TEST_CASE(
     // clamped at creation to the non-reasoning model's only supported level
     // ("off", #352); every retry/header/timeout knob stays at its default and
     // only the active prompt signal is forwarded.
-    agent::Agent subject(runtime, agent::AsyncToolRegistry{}, std::move(options));
+    agent::Agent subject(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
 
     REQUIRE(run_prompt(subject, "hi"));
 
@@ -241,7 +241,7 @@ namespace {
 void expect_terminal_matrix_row(
     util::ErrorCode category,
     const std::string& category_name) {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->terminal_failure_code = category;
     runtime->responses.push_back(
         terminal_message("terminal " + category_name));
@@ -249,7 +249,7 @@ void expect_terminal_matrix_row(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(runtime, agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
 
     auto run = run_loop(loop, "hi");
 
@@ -290,13 +290,13 @@ TEST_CASE(
 TEST_CASE(
     "recording fake ModelRuntime drives one successful turn end to end",
     "[agent][streamSimple][issue350]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(runtime, agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
 
     auto run = run_loop(loop, "hi");
 
@@ -314,7 +314,7 @@ TEST_CASE(
 TEST_CASE(
     "terminal-error turn yields exactly one error terminal event and an agreeing final message",
     "[agent][streamSimple][issue350]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     auto terminal = ai::assistant_text_message("");
     terminal.stop_reason = ai::AssistantStopReason::Error;
     terminal.error_message = "provider request failed";
@@ -323,7 +323,7 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(runtime, agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
 
     auto run = run_loop(loop, "hi");
 
@@ -363,13 +363,13 @@ TEST_CASE(
 TEST_CASE(
     "cancellation yields exactly one aborted terminal event end to end",
     "[agent][streamSimple][abort][issue350]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("unused"));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(runtime, agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
 
     std::stop_source stop_source;
     stop_source.request_stop();
@@ -391,13 +391,13 @@ TEST_CASE(
 TEST_CASE(
     "agent_end carries only the current invocation's messages through the fake runtime",
     "[agent][streamSimple][issue350]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("current reply"));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::Agent subject(runtime, agent::AsyncToolRegistry{}, std::move(options));
+    agent::Agent subject(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
 
     REQUIRE(run_prompt(subject, "first"));
     REQUIRE(run_prompt(subject, "second"));
@@ -463,14 +463,14 @@ void expect_creation_clamp(
     const ai::Model& model,
     std::string_view requested,
     std::string_view expected_level) {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("ok"));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = model;
     options.thinking_level = std::string{requested};
-    agent::AsyncAgentLoop loop(runtime, agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
     auto run = run_loop(loop, "hi");
 
     REQUIRE(run.result.has_value());
@@ -513,7 +513,7 @@ TEST_CASE(
 TEST_CASE(
     "model switch re-clamps the thinking level so an unsupported level never reaches the wire",
     "[agent][streamSimple][issue352]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("first"));
     runtime->responses.push_back(ai::assistant_text_message("second"));
 
@@ -540,7 +540,7 @@ TEST_CASE(
                 -> util::ExpectedVoid { return {}; });
 
     agent::Agent subject(
-        runtime,
+        runtime->factory(),
         agent::AsyncToolRegistry{},
         std::move(options),
         // The Agent requests the level from its initial state; "max" clamps
@@ -559,7 +559,7 @@ TEST_CASE(
 TEST_CASE(
     "the Agent holds kDefaultModel with no special-casing until a real model resolves",
     "[agent][streamSimple][issue352]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("ok"));
 
     // No model configured: the loop forwards the concrete unknown kDefaultModel
@@ -567,7 +567,7 @@ TEST_CASE(
     // DEFAULT_THINKING_LEVEL ("medium") which clamps to kDefaultModel's only
     // supported level ("off") — a fresh Agent's first turn carries no
     // reasoning, matching pi's `if (!model) thinkingLevel = "off"`.
-    agent::AsyncAgentLoop loop(runtime, agent::AsyncToolRegistry{}, {});
+    agent::AsyncAgentLoop loop(runtime->factory(), agent::AsyncToolRegistry{}, {});
     auto run = run_loop(loop, "hi");
 
     REQUIRE(run.result.has_value());
@@ -582,7 +582,7 @@ TEST_CASE(
 TEST_CASE(
     "the Agent's live state reflects the clamped thinking level at creation",
     "[agent][streamSimple][issue352]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("ok"));
 
     agent::AsyncAgentOptions options;
@@ -592,7 +592,7 @@ TEST_CASE(
     // ("xhigh") at construction; live state reports the effective level before
     // any turn runs.
     agent::Agent subject(
-        runtime,
+        runtime->factory(),
         agent::AsyncToolRegistry{},
         std::move(options),
         agent::AgentInitialState{.thinking_level = "max"});
@@ -603,7 +603,7 @@ TEST_CASE(
 TEST_CASE(
     "Agent set_thinking_level clamps to the active model and updates live state",
     "[agent][streamSimple][issue353]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("ok"));
 
     // A reasoning model without an xhigh/max mapping supports off..high, so
@@ -613,7 +613,7 @@ TEST_CASE(
     options.model = tests::make_reasoning_model(
         "gpt-partial", partial_thinking_map());
     agent::Agent subject(
-        runtime,
+        runtime->factory(),
         agent::AsyncToolRegistry{},
         std::move(options),
         agent::AgentInitialState{.thinking_level = "medium"});
@@ -632,13 +632,13 @@ TEST_CASE(
 TEST_CASE(
     "Agent set_thinking_level rejects invalid levels and no-ops on unchanged clamped level",
     "[agent][streamSimple][issue353]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("ok"));
 
     agent::AsyncAgentOptions options;
     options.model = tests::make_full_thinking_model("gpt-test");
     agent::Agent subject(
-        runtime,
+        runtime->factory(),
         agent::AsyncToolRegistry{},
         std::move(options),
         agent::AgentInitialState{.thinking_level = "high"});
@@ -661,7 +661,7 @@ TEST_CASE(
     agent::AsyncAgentOptions basic_options;
     basic_options.model = tests::make_model("gpt-basic");
     agent::Agent basic(
-        runtime, agent::AsyncToolRegistry{}, std::move(basic_options));
+        runtime->factory(), agent::AsyncToolRegistry{}, std::move(basic_options));
     auto clamped = basic.set_thinking_level("high");
     REQUIRE(clamped.has_value());
     CHECK(*clamped == "off");

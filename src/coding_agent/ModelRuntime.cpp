@@ -295,6 +295,10 @@ std::shared_ptr<ai::Provider> ModelRuntime::provider(
     return impl_->models->provider(provider_id);
 }
 
+std::shared_ptr<ai::Models> ModelRuntime::ai_models() const {
+    return impl_->models;
+}
+
 std::vector<ai::Model> ModelRuntime::models(
     std::optional<std::string_view> provider_id) const {
     return impl_->models->models(provider_id);
@@ -492,19 +496,6 @@ boost::asio::awaitable<util::ExpectedVoid> ModelRuntime::logout(
     impl_->recompose_provider(provider_id);
     static_cast<void>(refresh());
     co_return util::ExpectedVoid{};
-}
-
-boost::asio::awaitable<util::Expected<ai::AssistantMessage>>
-ModelRuntime::stream_simple(
-    ai::Model model,
-    ai::AiContext context,
-    ai::SimpleStreamOptions options,
-    ai::AssistantEventSink sink) {
-    co_return co_await impl_->models->stream_simple(
-        std::move(model),
-        std::move(context),
-        std::move(options),
-        std::move(sink));
 }
 
 util::ExpectedVoid ModelRuntime::register_native_provider(

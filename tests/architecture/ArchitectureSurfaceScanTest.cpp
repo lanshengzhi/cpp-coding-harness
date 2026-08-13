@@ -168,18 +168,17 @@ TEST_CASE("tool scheduling vocabulary stays in the agent package", "[architectur
 }
 
 TEST_CASE(
-    "stateful Agent depends only on the ModelRuntime seam, not coding-agent product concerns",
+    "stateful Agent depends only on the AI-owned ModelStream seam, not coding-agent product concerns",
     "[architecture][agent][issue35]") {
     const auto source_root = std::filesystem::path(CCH_SOURCE_DIR);
     const auto agent_header = read_text(source_root / "include" / "cch" / "agent" / "Agent.hpp");
     const auto agent_source = read_text(source_root / "src" / "agent" / "Agent.cpp");
     const auto combined = agent_header + agent_source;
 
-    // The Agent is constructed on the sole injectable ModelRuntime seam
-    // (#326/#331). That is the only coding-agent surface it may name.
-    CHECK(combined.find("cch/coding_agent/ModelRuntime.hpp") != std::string::npos);
-    CHECK(combined.find("cch/coding_agent/") == combined.find("cch/coding_agent/ModelRuntime.hpp"));
-    CHECK(combined.rfind("cch/coding_agent/") == combined.find("cch/coding_agent/ModelRuntime.hpp"));
+    // The Agent is constructed on the AI-owned move-only ModelStream seam
+    // (ADR 0040 / #453). It may name no coding-agent surface at all.
+    CHECK(combined.find("cch/ai/Models.hpp") != std::string::npos);
+    CHECK(combined.find("cch/coding_agent/") == std::string::npos);
     CHECK(combined.find("cch/harness") == std::string::npos);
     CHECK(combined.find("AgentSession") == std::string::npos);
     CHECK(combined.find("SessionStore") == std::string::npos);

@@ -3,7 +3,7 @@
 #include <cch/agent/AgentContext.hpp>
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/agent/ToolRegistry.hpp>
-#include <cch/coding_agent/ModelRuntime.hpp>
+#include <cch/ai/Models.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -23,11 +23,11 @@ struct AsyncAgentRunResult {
 };
 
 /// Private execution machinery owned by the stateful Agent. Issues every turn
-/// through the injected `ModelRuntime::streamSimple` surface.
+/// through the AI-owned `ModelStream` seam (ADR 0040 / #453).
 class AsyncAgentLoop {
 public:
     AsyncAgentLoop(
-        std::shared_ptr<coding_agent::ModelRuntime> runtime,
+        ai::ModelStreamFactory stream_factory,
         AsyncToolRegistry registry,
         AsyncAgentOptions options = {});
 
@@ -120,7 +120,7 @@ private:
         return options_.follow_up_mode;
     }
 
-    std::shared_ptr<coding_agent::ModelRuntime> runtime_; // shared; keeps the runtime alive for every run coroutine
+    ai::ModelStreamFactory stream_factory_; // move-only; produces one ModelStream per turn
     AsyncToolRegistry registry_;
     AsyncAgentOptions options_;
 };

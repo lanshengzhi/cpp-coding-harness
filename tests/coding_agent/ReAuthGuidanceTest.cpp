@@ -6,21 +6,22 @@
 // — at both trigger points. Preflight mirrors pi `agent-session.ts`
 // `prompt()`'s `hasConfiguredAuth || checkAuth` check; request time mirrors
 // `_getRequiredRequestAuth` through the session-layer stream decorator
-// (`AuthGuidanceStreamRuntime`) driven by scripted auth terminals on the
-// fake-`ModelRuntime` and scripted-client seams. No live keys or network:
+// (`apply_auth_guidance`) driven by scripted auth terminals on the narrow
+// `ModelStream` fake and scripted-client seams. No live keys or network:
 // every request is served by scripted runtimes. Committed verbatim goldens
 // pin both branches at both trigger points under `fixtures/pi-agent-core/`.
 
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
+#include <cch/ai/Models.hpp>
 #include <cch/coding_agent/AuthGuidance.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include <cch/harness/session/JsonlSessionStore.hpp>
 #include <cch/util/Error.hpp>
-#include "coding_agent/runtime/AuthGuidanceStreamRuntime.hpp"
+#include "coding_agent/runtime/AuthGuidanceStream.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
-#include "support/FakeModelRuntime.hpp"
+#include "support/FakeModelStream.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/TempWorkspace.hpp"
@@ -214,6 +215,51 @@ template <typename T>
     return terminal;
 }
 
+/// Drive one decorated stream end to end: produce the inner ModelStream from
+/// the narrow fake factory, wrap it with `apply_auth_guidance`, and consume it
+/// with `ai::consume`, recording every forwarded event.
+struct GuidedRun {
+    util::Expected<ai::AssistantMessage> result;
+    std::vector<ai::AssistantStreamEvent> events;
+};
+
+[[nodiscard]] GuidedRun run_guided(
+    std::shared_ptr<tests::FakeModelStream> fake,
+    bool is_using_oauth) {
+    // Produce and consume the stream on one executor: the narrow fake's
+    // factory captures the consuming executor, so the ModelStream it returns
+    // must be consumed on that same io_context.
+    boost::asio::io_context io;
+    GuidedRun out;
+    std::exception_ptr exception;
+    boost::asio::co_spawn(
+        io,
+        [&]() -> boost::asio::awaitable<void> {
+            auto factory = fake->factory();
+            auto inner = co_await factory(
+                tests::make_model("gpt-test"),
+                ai::AiContext{},
+                ai::SimpleStreamOptions{});
+            auto decorated = coding_agent::runtime::apply_auth_guidance(
+                std::move(inner),
+                "fake",
+                [is_using_oauth](std::string_view) { return is_using_oauth; });
+            out.result = co_await ai::consume(
+                std::move(decorated),
+                [&out](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+                    out.events.push_back(event);
+                    return {};
+                });
+            co_return;
+        },
+        boost::asio::detached);
+    io.run();
+    if (exception) {
+        std::rethrow_exception(exception);
+    }
+    return out;
+}
+
 } // namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -332,39 +378,28 @@ TEST_CASE(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Request-time decorator through the fake-ModelRuntime seam (scripted auth
-// terminals on the fake's `streamSimple`, the primary Agent test seam)
-// ─────────────────────────────────────────────────────────────────────────────
+// Request-time decorator (pi `_getRequiredRequestAuth`): `apply_auth_guidance`
+// wraps one AI-owned ModelStream produced by the narrow fake factory, rewriting
+// auth/oauth-category terminals. No virtual Models Runtime surface is involved.
 
 TEST_CASE(
-    "request-time decorator maps an auth terminal to the no-key branch through the fake ModelRuntime",
+    "request-time decorator maps an auth terminal to the no-key branch through a ModelStream",
     "[coding_agent][re-auth-guidance][issue360]") {
-    auto fake = std::make_shared<tests::FakeModelRuntime>();
+    auto fake = std::make_shared<tests::FakeModelStream>();
     fake->terminal_failure_code = util::ErrorCode::Auth;
     fake->responses.push_back(
         terminal_message("Provider is not configured: gpt-test"));
 
-    coding_agent::runtime::AuthGuidanceStreamRuntime decorated(
-        fake, [](std::string_view) { return false; });
-    std::vector<ai::AssistantStreamEvent> events;
-    auto result = run_awaitable(decorated.stream_simple(
-        tests::make_model("gpt-test"),
-        ai::AiContext{},
-        ai::SimpleStreamOptions{},
-        [&events](const ai::AssistantStreamEvent& event)
-            -> util::ExpectedVoid {
-            events.push_back(event);
-            return {};
-        }));
+    auto run = run_guided(fake, /*is_using_oauth=*/false);
 
     // Exactly one rewritten error terminal plus the agreeing final message,
     // with the auth category flowing through the single Expected channel.
-    REQUIRE(result.has_value());
-    CHECK(result->stop_reason == ai::AssistantStopReason::Error);
-    REQUIRE(result->error_message.has_value());
-    CHECK(*result->error_message == default_no_key_guidance("fake"));
-    REQUIRE(events.size() == 1);
-    const auto* error = std::get_if<ai::AssistantErrorEvent>(&events[0]);
+    REQUIRE(run.result.has_value());
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(run.result->error_message.has_value());
+    CHECK(*run.result->error_message == default_no_key_guidance("fake"));
+    REQUIRE(run.events.size() == 1);
+    const auto* error = std::get_if<ai::AssistantErrorEvent>(&run.events[0]);
     REQUIRE(error != nullptr);
     REQUIRE(error->failure.has_value());
     CHECK(error->failure->code == util::ErrorCode::Auth);
@@ -376,29 +411,18 @@ TEST_CASE(
 TEST_CASE(
     "request-time decorator maps an auth terminal on an OAuth provider to the re-auth branch",
     "[coding_agent][re-auth-guidance][issue360]") {
-    auto fake = std::make_shared<tests::FakeModelRuntime>();
+    auto fake = std::make_shared<tests::FakeModelStream>();
     fake->terminal_failure_code = util::ErrorCode::Auth;
     fake->responses.push_back(
         terminal_message("Provider is not configured: gpt-test"));
 
-    coding_agent::runtime::AuthGuidanceStreamRuntime decorated(
-        fake, [](std::string_view) { return true; });
-    std::vector<ai::AssistantStreamEvent> events;
-    auto result = run_awaitable(decorated.stream_simple(
-        tests::make_model("gpt-test"),
-        ai::AiContext{},
-        ai::SimpleStreamOptions{},
-        [&events](const ai::AssistantStreamEvent& event)
-            -> util::ExpectedVoid {
-            events.push_back(event);
-            return {};
-        }));
+    auto run = run_guided(fake, /*is_using_oauth=*/true);
 
-    REQUIRE(result.has_value());
-    REQUIRE(result->error_message.has_value());
-    CHECK(*result->error_message == default_oauth_guidance("fake"));
-    REQUIRE(events.size() == 1);
-    const auto* error = std::get_if<ai::AssistantErrorEvent>(&events[0]);
+    REQUIRE(run.result.has_value());
+    REQUIRE(run.result->error_message.has_value());
+    CHECK(*run.result->error_message == default_oauth_guidance("fake"));
+    REQUIRE(run.events.size() == 1);
+    const auto* error = std::get_if<ai::AssistantErrorEvent>(&run.events[0]);
     REQUIRE(error != nullptr);
     REQUIRE(error->failure.has_value());
     CHECK(error->failure->code == util::ErrorCode::Auth);
@@ -409,29 +433,18 @@ TEST_CASE(
 TEST_CASE(
     "request-time decorator maps an oauth terminal (dead credentials) to the re-auth branch",
     "[coding_agent][re-auth-guidance][issue360]") {
-    auto fake = std::make_shared<tests::FakeModelRuntime>();
+    auto fake = std::make_shared<tests::FakeModelStream>();
     fake->terminal_failure_code = util::ErrorCode::OAuth;
     fake->responses.push_back(
         terminal_message("OAuth refresh failed for gpt-test"));
 
-    coding_agent::runtime::AuthGuidanceStreamRuntime decorated(
-        fake, [](std::string_view) { return false; });
-    std::vector<ai::AssistantStreamEvent> events;
-    auto result = run_awaitable(decorated.stream_simple(
-        tests::make_model("gpt-test"),
-        ai::AiContext{},
-        ai::SimpleStreamOptions{},
-        [&events](const ai::AssistantStreamEvent& event)
-            -> util::ExpectedVoid {
-            events.push_back(event);
-            return {};
-        }));
+    auto run = run_guided(fake, /*is_using_oauth=*/false);
 
-    REQUIRE(result.has_value());
-    REQUIRE(result->error_message.has_value());
-    CHECK(*result->error_message == default_oauth_guidance("fake"));
-    REQUIRE(events.size() == 1);
-    const auto* error = std::get_if<ai::AssistantErrorEvent>(&events[0]);
+    REQUIRE(run.result.has_value());
+    REQUIRE(run.result->error_message.has_value());
+    CHECK(*run.result->error_message == default_oauth_guidance("fake"));
+    REQUIRE(run.events.size() == 1);
+    const auto* error = std::get_if<ai::AssistantErrorEvent>(&run.events[0]);
     REQUIRE(error != nullptr);
     REQUIRE(error->failure.has_value());
     CHECK(error->failure->code == util::ErrorCode::OAuth);
@@ -443,37 +456,25 @@ TEST_CASE(
     "request-time decorator passes non-auth terminals and successes through unchanged",
     "[coding_agent][re-auth-guidance][issue360]") {
     {
-        auto fake = std::make_shared<tests::FakeModelRuntime>();
+        auto fake = std::make_shared<tests::FakeModelStream>();
         fake->terminal_failure_code = util::ErrorCode::Stream;
         fake->responses.push_back(terminal_message("provider request failed"));
-        coding_agent::runtime::AuthGuidanceStreamRuntime decorated(
-            fake, [](std::string_view) { return false; });
-        auto result = run_awaitable(decorated.stream_simple(
-            tests::make_model("gpt-test"),
-            ai::AiContext{},
-            ai::SimpleStreamOptions{},
-            {}));
-        REQUIRE(result.has_value());
-        REQUIRE(result->error_message.has_value());
-        CHECK(*result->error_message == "provider request failed");
+        auto run = run_guided(fake, /*is_using_oauth=*/false);
+        REQUIRE(run.result.has_value());
+        REQUIRE(run.result->error_message.has_value());
+        CHECK(*run.result->error_message == "provider request failed");
     }
     {
-        auto fake = std::make_shared<tests::FakeModelRuntime>();
+        auto fake = std::make_shared<tests::FakeModelStream>();
         fake->responses.push_back(ai::assistant_text_message("hello user"));
-        coding_agent::runtime::AuthGuidanceStreamRuntime decorated(
-            fake, [](std::string_view) { return false; });
-        auto result = run_awaitable(decorated.stream_simple(
-            tests::make_model("gpt-test"),
-            ai::AiContext{},
-            ai::SimpleStreamOptions{},
-            {}));
-        REQUIRE(result.has_value());
-        CHECK(ai::text_from_assistant_content(result->content) ==
+        auto run = run_guided(fake, /*is_using_oauth=*/false);
+        REQUIRE(run.result.has_value());
+        CHECK(ai::text_from_assistant_content(run.result->content) ==
               "hello user");
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+
 // Summarization seam (pi `_getSummarizationRequestAuth` → `_getRequiredRequestAuth`)
 // ─────────────────────────────────────────────────────────────────────────────
 

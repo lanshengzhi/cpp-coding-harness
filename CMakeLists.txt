@@ -126,6 +126,7 @@ add_library(cch_ai
     src/ai/ContentUtil.cpp
     src/ai/Model.cpp
     src/ai/Models.cpp
+    src/ai/ModelStream.cpp
     src/ai/SimpleOptions.cpp
     src/ai/Usage.cpp
     src/ai/api/AnthropicMessagesAdapter.cpp
@@ -253,6 +254,7 @@ add_library(cch_coding_agent_runtime
     src/coding_agent/PromptTemplateLoader.cpp
     src/coding_agent/SkillFormatting.cpp
     src/coding_agent/runtime/AgentSessionRuntime.cpp
+    src/coding_agent/runtime/AuthGuidanceStream.cpp
     src/coding_agent/runtime/LocalUserShell.cpp
     src/coding_agent/runtime/SessionEventCommitment.cpp
     src/coding_agent/runtime/UserBashOutputAccumulator.cpp

@@ -289,7 +289,7 @@ TEST_CASE("ModelRuntime config-only provider streams the frozen deepseek wire pa
     options.timeout_ms = 4321;
 
     std::vector<ai::AssistantStreamEvent> events;
-    auto result = run_awaitable((*runtime)->stream_simple(
+    auto result = run_awaitable((*runtime)->ai_models()->stream_simple(
         *model,
         request_context(),
         std::move(options),
@@ -472,7 +472,7 @@ TEST_CASE("ModelRuntime env-template apiKey resolves at request time", "[coding_
 
     ai::SimpleStreamOptions options;
     options.max_tokens = 16;
-    auto result = run_awaitable((*runtime)->stream_simple(
+    auto result = run_awaitable((*runtime)->ai_models()->stream_simple(
         *model, {}, std::move(options), [](const ai::AssistantStreamEvent&) { return util::ExpectedVoid{}; }));
     REQUIRE(result);
     REQUIRE(transport->requests.size() == 1);
@@ -611,7 +611,7 @@ TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a proces
 
     ai::SimpleStreamOptions options;
     options.max_tokens = 16;
-    auto result = run_awaitable((*runtime)->stream_simple(
+    auto result = run_awaitable((*runtime)->ai_models()->stream_simple(
         *model, {}, std::move(options), [](const ai::AssistantStreamEvent&) { return util::ExpectedVoid{}; }));
     REQUIRE(result);
     REQUIRE(transport->requests.size() == 1);

@@ -2,12 +2,15 @@
 
 #include <cch/ai/Auth.hpp>
 #include <cch/ai/CredentialStore.hpp>
+#include <cch/ai/ModelStream.hpp>
 #include <cch/ai/Provider.hpp>
 #include <cch/ai/RequestOptions.hpp>
 #include <cch/util/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
+#include <expected>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -26,7 +29,7 @@ namespace cch::ai {
 /// single-threaded executor or otherwise serialized; do not drive the same
 /// graph from two threads. One runtime is shared across sessions (ADR 0029),
 /// so callers must serialize every session's calls onto one executor.
-class Models final {
+class Models final : public std::enable_shared_from_this<Models> {
 public:
     Models(
         std::shared_ptr<CredentialStore> credentials,
@@ -84,10 +87,35 @@ public:
         SimpleStreamOptions options,
         AssistantEventSink sink);
 
+    /// Produce one AI-owned move-only `ModelStream` for a single turn. The
+    /// returned value is consumed exactly once through `run`/`start`; its
+    /// closure shares this Models Runtime's lifetime (ADR 0040). The sink is
+    /// supplied at consumption, keeping `ModelStream` composable and free of
+    /// third-party execution types.
+    [[nodiscard]] boost::asio::awaitable<ModelStream> stream(
+        Model model,
+        AiContext context,
+        SimpleStreamOptions options);
+
     struct Impl;
 
 private:
     std::unique_ptr<Impl> impl_;
 };
+
+/// Boost.Asio bridge for consuming a `ModelStream` from within an asio
+/// coroutine (the Agent's serialized domain). Events flow through `sink` in
+/// order before exactly one terminal `std::expected<AssistantMessage, Error>`.
+/// The `ModelStream` value itself never names a third-party execution type;
+/// this bridge is the one place the private executor association lives.
+[[nodiscard]] boost::asio::awaitable<std::expected<AssistantMessage, cch::support::Error>>
+consume(ModelStream stream, AssistantEventSink sink);
+
+/// Produces one move-only `ModelStream` per call. The closure deliberately
+/// shares the Models Runtime lifetime (ADR 0040). The awaitable return keeps
+/// the executor capture private to `ai::Models`; the Agent consumes the
+/// resulting `ModelStream` value without naming a third-party execution type.
+using ModelStreamFactory = std::move_only_function<
+    boost::asio::awaitable<ModelStream>(Model, AiContext, SimpleStreamOptions)>;
 
 } // namespace cch::ai

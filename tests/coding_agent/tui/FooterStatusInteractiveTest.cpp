@@ -146,125 +146,6 @@ struct ResumedSessionFixture {
     return summary;
 }
 
-/// A gated recording ModelRuntime for the status tests: scripted responses
-/// are served in FIFO order until the call at index `gate_at`, which blocks
-/// until release() (or the run's stop token fires). Standalone (not derived
-/// from the recording fake, which stays `final` per §7.2) with the same
-/// session-seam overrides.
-class GatedModelRuntime final : public coding_agent::ModelRuntime {
-public:
-    explicit GatedModelRuntime(std::size_t gate_at) : gate_at_(gate_at) {}
-
-    [[nodiscard]] std::optional<ai::Model> model(
-        std::string_view provider_id,
-        std::string_view model_id) const override {
-        ai::Model model;
-        model.id = std::string{model_id};
-        model.name = model.id;
-        model.api = "scripted-fake";
-        model.provider = std::string{provider_id};
-        model.reasoning = false;
-        model.input = {ai::ModelInput::Text};
-        model.context_window = 128000;
-        model.max_tokens = 16384;
-        return model;
-    }
-
-    boost::asio::awaitable<util::Expected<std::vector<ai::Model>>> get_available(
-        std::optional<std::string_view> provider_id = std::nullopt) override {
-        std::vector<ai::Model> models;
-        if (auto resolved = model(provider_id.value_or("fake"), "fake-model")) {
-            models.push_back(std::move(*resolved));
-        }
-        co_return models;
-    }
-
-    boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>> check_auth(
-        std::string provider_id) override {
-        (void)provider_id;
-        co_return ai::AuthCheck{
-            .source = "fake",
-            .type = ai::AuthType::ApiKey,
-        };
-    }
-
-    bool has_configured_auth(std::string_view provider_id) const override {
-        (void)provider_id;
-        return true;
-    }
-
-    std::vector<std::string> configured_api_key_env_names() const override {
-        return {};
-    }
-
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
-        ai::Model model,
-        ai::AiContext context,
-        ai::SimpleStreamOptions options,
-        ai::AssistantEventSink sink) override {
-        const std::size_t call_index = calls.size();
-        calls.push_back(tests::RecordedStreamSimpleCall{
-            std::move(model),
-            std::move(context),
-            std::move(options),
-        });
-        if (call_index == gate_at_) {
-            // Hold the gated call; release on the run's stop token.
-            const auto& stop_token = calls.back().options.stop_token;
-            const auto executor = co_await boost::asio::this_coro::executor;
-            gate_.emplace(executor);
-            gate_->expires_at(std::chrono::steady_clock::time_point::max());
-            std::stop_callback release_on_stop{stop_token, [this] { release(); }};
-            boost::system::error_code error;
-            co_await gate_->async_wait(
-                boost::asio::redirect_error(boost::asio::use_awaitable, error));
-        }
-        if (responses.empty()) {
-            co_return ai::assistant_text_message("default gated response");
-        }
-        auto response = std::move(responses.front());
-        responses.pop_front();
-        if (sink) {
-            if (response.stop_reason == ai::AssistantStopReason::Error ||
-                response.stop_reason == ai::AssistantStopReason::Aborted) {
-                std::optional<util::Error> terminal_failure = std::nullopt;
-                if (response.error_message) {
-                    terminal_failure = util::make_error(
-                        util::ErrorCode::Stream, *response.error_message);
-                }
-                CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
-                    .reason = response.stop_reason,
-                    .error = response,
-                    .failure = std::move(terminal_failure),
-                }));
-                co_return response;
-            }
-            CCH_TRY_VOID(sink(ai::AssistantStartEvent{response}));
-            for (std::size_t index = 0; index < response.content.size(); ++index) {
-                const auto& block = response.content[index];
-                if (const auto* text = std::get_if<ai::TextContent>(&block)) {
-                    CCH_TRY_VOID(sink(ai::TextDeltaEvent{index, text->text, response}));
-                } else if (const auto* thinking = std::get_if<ai::ThinkingContent>(&block)) {
-                    CCH_TRY_VOID(sink(ai::ThinkingDeltaEvent{index, thinking->thinking, response}));
-                }
-            }
-        }
-        co_return response;
-    }
-
-    void release() {
-        if (gate_) (void)gate_->cancel();
-    }
-
-    /// Recorded per-turn calls in issue order.
-    std::vector<tests::RecordedStreamSimpleCall> calls;
-    /// Scripted assistant responses consumed in FIFO order.
-    std::deque<ai::AssistantMessage> responses;
-
-private:
-    std::size_t gate_at_{0};
-    std::optional<boost::asio::steady_timer> gate_;
-};
 
 } // namespace
 
@@ -341,7 +222,8 @@ TEST_CASE(
     "[coding_agent][tui][status][issue411]") {
     ResumedSessionFixture fixture;
     fixture.create();
-    auto gated = std::make_shared<GatedModelRuntime>(0);
+    auto gated = std::make_shared<tests::FakeModelRuntime>();
+    gated->gate_at = 0;
     gated->responses.push_back(ai::assistant_text_message("gated answer"));
     fixture.session->close();
     // Rebuild the fixture session with the gated runtime.
@@ -467,7 +349,8 @@ TEST_CASE(
     fixture.config.write(
         "settings.json",
         R"({"compaction": {"enabled": true, "keepRecentTokens": 1, "reserveTokens": 1}})");
-    auto gated = std::make_shared<GatedModelRuntime>(1);
+    auto gated = std::make_shared<tests::FakeModelRuntime>();
+    gated->gate_at = 1;
     gated->responses.push_back(overflow_terminal());
     gated->responses.push_back(summarization_response());
     gated->responses.push_back(ai::assistant_text_message("Recovered after compaction"));
@@ -546,7 +429,8 @@ TEST_CASE(
     fixture.config.write(
         "settings.json",
         R"({"compaction": {"enabled": true, "keepRecentTokens": 1, "reserveTokens": 1}})");
-    auto gated = std::make_shared<GatedModelRuntime>(1);
+    auto gated = std::make_shared<tests::FakeModelRuntime>();
+    gated->gate_at = 1;
     gated->responses.push_back(overflow_terminal());
     gated->responses.push_back(summarization_response());
     gated->responses.push_back(ai::assistant_text_message("Recovered after compaction"));
@@ -626,7 +510,8 @@ TEST_CASE(
     // The manual compaction's summarization is the first model call; gating
     // it keeps `isCompacting` true while `isStreaming` stays false (the
     // signal pair pi's `handleReloadCommand` checks second).
-    auto gated = std::make_shared<GatedModelRuntime>(0);
+    auto gated = std::make_shared<tests::FakeModelRuntime>();
+    gated->gate_at = 0;
     gated->responses.push_back(summarization_response());
     fixture.session->close();
     coding_agent::runtime::AgentSessionCreationRequest request;

@@ -129,12 +129,12 @@ struct Agent::Impl {
     };
 
     Impl(
-        std::shared_ptr<coding_agent::ModelRuntime> runtime,
+        ai::ModelStreamFactory stream_factory,
         std::vector<ai::Tool> definitions,
         AsyncToolRegistry tools,
         AsyncAgentOptions options,
         AgentInitialState initial_state)
-        : loop(std::move(runtime), std::move(tools), std::move(options)) {
+        : loop(std::move(stream_factory), std::move(tools), std::move(options)) {
         state.messages = std::move(initial_state.messages);
         // The loop clamps the requested level against the active model at
         // construction; live state reflects the effective (clamped) level so
@@ -438,14 +438,14 @@ AgentEventSubscription::operator bool() const {
 }
 
 Agent::Agent(
-    std::shared_ptr<coding_agent::ModelRuntime> runtime,
+    ai::ModelStreamFactory stream_factory,
     AsyncToolRegistry tools,
     AsyncAgentOptions options,
     AgentInitialState initial_state) {
     options.thinking_level = initial_state.thinking_level;
     auto definitions = tools.definitions();
     impl_ = std::make_shared<Impl>(
-        std::move(runtime),
+        std::move(stream_factory),
         std::move(definitions),
         std::move(tools),
         std::move(options),

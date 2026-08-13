@@ -4,6 +4,12 @@
 #include "util/BoundedText.hpp"
 #include "util/ExpectedMacros.hpp"
 
+#include <boost/asio/async_result.hpp>
+#include <boost/asio/bind_executor.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_awaitable.hpp>
+
 #include <algorithm>
 #include <chrono>
 #include <exception>
@@ -1024,6 +1030,65 @@ boost::asio::awaitable<util::Expected<AssistantMessage>> Models::stream_simple(
     }
     CCH_TRY(message, std::move(result));
     co_return message;
+}
+
+boost::asio::awaitable<ModelStream> Models::stream(
+    Model model,
+    AiContext context,
+    SimpleStreamOptions options) {
+    // The executor of the consuming coroutine (the Agent's serialized domain)
+    // drives the lazy stream; it is captured here so the ModelStream value
+    // itself stays free of third-party execution types.
+    auto executor = co_await boost::asio::this_coro::executor;
+    auto self = shared_from_this();
+    co_return ModelStream{ModelStreamProducer{
+        [executor, self, model = std::move(model), context = std::move(context),
+         options = std::move(options)](
+            AssistantEventSink sink,
+            ModelStreamCompletion completion) mutable noexcept {
+            try {
+                boost::asio::co_spawn(
+                    executor,
+                    self->stream_simple(
+                        std::move(model),
+                        std::move(context),
+                        std::move(options),
+                        std::move(sink)),
+                    boost::asio::bind_executor(
+                        executor,
+                        [completion = std::move(completion)](
+                            std::exception_ptr eptr,
+                            util::Expected<AssistantMessage> result) mutable noexcept {
+                            if (eptr) {
+                                completion(std::unexpected(util::make_error(
+                                    util::ErrorCode::Stream,
+                                    "model stream failed")));
+                            } else {
+                                completion(std::move(result));
+                            }
+                        }));
+            } catch (...) {
+                completion(std::unexpected(util::make_error(
+                    util::ErrorCode::Stream,
+                    "model stream initiation failed")));
+            }
+        }}};
+}
+
+boost::asio::awaitable<std::expected<AssistantMessage, cch::support::Error>>
+consume(ModelStream stream, AssistantEventSink sink) {
+    auto initiate = [](auto&& handler, ModelStream stream_value, AssistantEventSink stream_sink) {
+        auto handler_owner =
+            std::make_shared<std::decay_t<decltype(handler)>>(std::forward<decltype(handler)>(handler));
+        std::move(stream_value).start(
+            std::move(stream_sink),
+            [handler_owner](std::expected<AssistantMessage, cch::support::Error> outcome) noexcept {
+                std::move(*handler_owner)(std::move(outcome));
+            });
+    };
+    co_return co_await boost::asio::async_initiate<
+        void(std::expected<AssistantMessage, cch::support::Error>)>(
+        initiate, boost::asio::use_awaitable, std::move(stream), std::move(sink));
 }
 
 } // namespace cch::ai

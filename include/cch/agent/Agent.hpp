@@ -3,7 +3,7 @@
 #include <cch/agent/AgentContext.hpp>
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/agent/ToolRegistry.hpp>
-#include <cch/coding_agent/ModelRuntime.hpp>
+#include <cch/ai/Models.hpp>
 #include <cch/util/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
@@ -55,15 +55,16 @@ private:
 
 /// Stateful owner of live Agent Message history and one active model run.
 ///
-/// The Agent issues every turn through the injected `ModelRuntime::streamSimple`
-/// surface (the sole injectable seam per #326, held as `std::shared_ptr`; the
-/// Agent keeps the runtime alive). Agent operations and state snapshots are
+/// The Agent issues every turn through the AI-owned move-only `ModelStream`
+/// seam (ADR 0040 / #453): the injected `ModelStreamFactory` produces one
+/// `ModelStream` per turn, and the Agent consumes it without naming a
+/// third-party execution type. Agent operations and state snapshots are
 /// executor-confined; concurrent calls from unrelated threads are not
 /// supported.
 class Agent {
 public:
     Agent(
-        std::shared_ptr<coding_agent::ModelRuntime> runtime,
+        ai::ModelStreamFactory stream_factory,
         AsyncToolRegistry tools,
         AsyncAgentOptions options = {},
         AgentInitialState initial_state = {});

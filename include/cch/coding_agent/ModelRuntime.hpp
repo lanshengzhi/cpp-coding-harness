@@ -107,12 +107,17 @@ public:
     [[nodiscard]] std::vector<std::shared_ptr<ai::Provider>> providers() const;
     [[nodiscard]] std::shared_ptr<ai::Provider> provider(
         std::string_view provider_id) const;
+    /// The AI-owned Models catalog this runtime composes and delegates to.
+    /// The Agent's model-streaming seam is built from this catalog's
+    /// `ModelStream` surface (ADR 0040 / #453), not from the runtime itself.
+    /// Virtual for the session-seam recording fake (the §7.2 recorded
+    /// exception: an impl-less fake serves a scripted catalog).
+    [[nodiscard]] virtual std::shared_ptr<ai::Models> ai_models() const;
     [[nodiscard]] std::vector<ai::Model> models(
         std::optional<std::string_view> provider_id = std::nullopt) const;
     /// Virtual for recording test fakes that stand in for the runtime at the
-    /// session seam (the §7.2 recorded exception: only `stream_simple` is
-    /// callable on an impl-less fake, so session model resolution overrides
-    /// it).
+    /// session seam (the §7.2 recorded exception: an impl-less fake serves
+    /// model resolution and auth).
     [[nodiscard]] virtual std::optional<ai::Model> model(
         std::string_view provider_id,
         std::string_view model_id) const;
@@ -181,19 +186,12 @@ public:
     [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> logout(
         std::string provider_id);
 
-    // ── Streaming (delegation) ─────────────────────────────────────────────
+    // ── Streaming ─────────────────────────────────────────────────────────
 
-    /// Stream one assistant response through the frozen `streamSimple` surface
-    /// (pi `Models.streamSimple`). Domain failures complete through exactly one
-    /// terminal event plus an agreeing AssistantMessage value; the Expected
-    /// error alternative is reserved for consumer-sink or other infrastructure
-    /// failure. Virtual so recording test fakes can stand in for the runtime at
-    /// the Agent seam.
-    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
-        ai::Model model,
-        ai::AiContext context,
-        ai::SimpleStreamOptions options,
-        ai::AssistantEventSink sink);
+    // Model streaming is produced through `models()->stream(...)`, the
+    // AI-owned `ModelStream` seam (ADR 0040 / #453). The runtime keeps model
+    // resolution, authentication, and Provider composition; it no longer
+    // exposes a streaming surface of its own.
 
     // ── Provider registration ──────────────────────────────────────────────
 
@@ -217,8 +215,8 @@ public:
 
 protected:
     /// Test-support construction for recording fakes that stand in for the
-    /// runtime at the Agent seam. Leaves the runtime without an impl; only the
-    /// virtual `stream_simple` surface overridden by the fake is callable.
+    /// runtime at the session seam. Leaves the runtime without an impl; only
+    /// the virtual model/auth surfaces overridden by the fake are callable.
     /// Production construction always goes through `create`.
     ModelRuntime() noexcept;
 

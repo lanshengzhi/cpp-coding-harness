@@ -21,7 +21,7 @@
 #include "agent/AgentLoop.hpp"
 #include "agent/ToolCallExecutor.hpp"
 #include "ai/SimpleOptions.hpp"
-#include "support/FakeModelRuntime.hpp"
+#include "support/FakeModelStream.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/ToolArgumentContracts.hpp"
 #include "util/ExpectedMacros.hpp"
@@ -407,7 +407,7 @@ private:
 TEST_CASE(
     "streamSimple option-forwarding golden matches pi's harness consumer (full set)",
     "[agent][fixture][issue351]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
 
     agent::AsyncAgentOptions options;
@@ -425,7 +425,7 @@ TEST_CASE(
         {std::string{"x-golden"}, std::string{"value"}},
     };
     agent::Agent subject(
-        runtime,
+        runtime->factory(),
         agent::AsyncToolRegistry{},
         std::move(options),
         agent::AgentInitialState{.thinking_level = "high"});
@@ -442,7 +442,7 @@ TEST_CASE(
 TEST_CASE(
     "streamSimple option-forwarding golden matches pi's harness consumer (default turn)",
     "[agent][fixture][issue351]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
 
     // Every knob at its default: the unset level requested pi's
@@ -453,7 +453,7 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::Agent subject(runtime, agent::AsyncToolRegistry{}, std::move(options));
+    agent::Agent subject(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
 
     REQUIRE(run_prompt(subject, "hi"));
 
@@ -467,7 +467,7 @@ TEST_CASE(
 TEST_CASE(
     "loop lifecycle ordering golden covers the pi turn lifecycle end to end",
     "[agent][fixture][issue351]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(read_tool_call_message());
     runtime->responses.push_back(ai::assistant_text_message("after tool"));
     runtime->responses.push_back(ai::assistant_text_message("after follow-up"));
@@ -500,7 +500,7 @@ TEST_CASE(
             });
 
     agent::Agent subject(
-        runtime,
+        runtime->factory(),
         std::move(tools),
         std::move(options),
         agent::AgentInitialState{.thinking_level = "medium"});
@@ -540,7 +540,7 @@ TEST_CASE(
 TEST_CASE(
     "loop lifecycle ordering golden covers the error terminal",
     "[agent][fixture][terminal][issue351]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     auto terminal = ai::assistant_text_message("");
     terminal.stop_reason = ai::AssistantStopReason::Error;
     terminal.error_message = "provider request failed";
@@ -549,7 +549,7 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(runtime, agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
 
     auto run = run_loop(loop, "hi");
 
@@ -563,13 +563,13 @@ TEST_CASE(
 TEST_CASE(
     "loop lifecycle ordering golden covers the aborted terminal",
     "[agent][fixture][terminal][abort][issue351]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("unused"));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(runtime, agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
 
     std::stop_source stop_source;
     stop_source.request_stop();
@@ -585,7 +585,7 @@ TEST_CASE(
 TEST_CASE(
     "thinking-level clamp golden covers creation and model-switch clamping",
     "[agent][fixture][issue352]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("first reply"));
     runtime->responses.push_back(ai::assistant_text_message("second reply"));
 
@@ -618,7 +618,7 @@ TEST_CASE(
                 -> util::ExpectedVoid { return {}; });
 
     agent::Agent subject(
-        runtime,
+        runtime->factory(),
         agent::AsyncToolRegistry{},
         std::move(options),
         agent::AgentInitialState{.thinking_level = "max"});
@@ -922,7 +922,7 @@ struct SchedulingSerializer {
 TEST_CASE(
     "tool scheduling golden covers parallel default, sequential override, truncated fail-all, and terminate hint",
     "[agent][fixture][issue355]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(tool_call_message({
         {"call-1", "alpha"},
         {"call-2", "beta"},
@@ -965,7 +965,7 @@ TEST_CASE(
             std::nullopt, std::nullopt, std::nullopt, terminate};
     });
 
-    agent::AsyncAgentLoop loop(runtime, std::move(tools), std::move(options));
+    agent::AsyncAgentLoop loop(runtime->factory(), std::move(tools), std::move(options));
     auto run = run_loop(loop, "schedule tools");
 
     REQUIRE(run.result.has_value());

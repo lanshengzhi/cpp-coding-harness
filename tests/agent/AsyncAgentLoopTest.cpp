@@ -1,7 +1,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/util/Error.hpp>
 #include "agent/AgentLoop.hpp"
-#include "support/FakeModelRuntime.hpp"
+#include "support/FakeModelStream.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/ToolArgumentContracts.hpp"
 #include "util/ExpectedMacros.hpp"
@@ -33,13 +33,23 @@ using namespace cch;
 
 namespace {
 
-class FakeStreamingClient final : public coding_agent::ModelRuntime {
+class FakeStreamingClient final : public std::enable_shared_from_this<FakeStreamingClient> {
 public:
+    [[nodiscard]] ai::ModelStreamFactory factory() {
+        auto self = shared_from_this();
+        return tests::adapt_stream_simple(
+            [self](ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options,
+                   ai::AssistantEventSink sink) {
+                return self->stream_simple(
+                    std::move(model), std::move(context), std::move(options), std::move(sink));
+            });
+    }
+
     boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
         ai::Model model,
         ai::AiContext context,
         ai::SimpleStreamOptions options,
-        ai::AssistantEventSink sink) override {
+        ai::AssistantEventSink sink) {
         requests.push_back(tests::RecordedStreamSimpleCall{
             std::move(model), std::move(context), std::move(options)});
         if (failure) {
@@ -73,13 +83,23 @@ public:
     std::vector<tests::RecordedStreamSimpleCall> requests;
 };
 
-class CancellationAwarePolicyClient final : public coding_agent::ModelRuntime {
+class CancellationAwarePolicyClient final : public std::enable_shared_from_this<CancellationAwarePolicyClient> {
 public:
+    [[nodiscard]] ai::ModelStreamFactory factory() {
+        auto self = shared_from_this();
+        return tests::adapt_stream_simple(
+            [self](ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options,
+                   ai::AssistantEventSink sink) {
+                return self->stream_simple(
+                    std::move(model), std::move(context), std::move(options), std::move(sink));
+            });
+    }
+
     boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
         ai::Model model,
         ai::AiContext context,
         ai::SimpleStreamOptions options,
-        ai::AssistantEventSink sink) override {
+        ai::AssistantEventSink sink) {
         requests.push_back(tests::RecordedStreamSimpleCall{
             std::move(model), std::move(context), std::move(options)});
         if (requests.back().options.stop_token.stop_requested()) {
@@ -131,16 +151,26 @@ public:
     std::vector<tests::RecordedStreamSimpleCall> requests;
 };
 
-class TerminalOutcomeClient final : public coding_agent::ModelRuntime {
+class TerminalOutcomeClient final : public std::enable_shared_from_this<TerminalOutcomeClient> {
 public:
     explicit TerminalOutcomeClient(ai::AssistantMessage terminal)
         : terminal_(std::move(terminal)) {}
+
+    [[nodiscard]] ai::ModelStreamFactory factory() {
+        auto self = shared_from_this();
+        return tests::adapt_stream_simple(
+            [self](ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options,
+                   ai::AssistantEventSink sink) {
+                return self->stream_simple(
+                    std::move(model), std::move(context), std::move(options), std::move(sink));
+            });
+    }
 
     boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
         ai::Model model,
         ai::AiContext context,
         ai::SimpleStreamOptions options,
-        ai::AssistantEventSink sink) override {
+        ai::AssistantEventSink sink) {
         requests.push_back(tests::RecordedStreamSimpleCall{
             std::move(model), std::move(context), std::move(options)});
         CCH_TRY_VOID(sink(ai::AssistantStartEvent{terminal_}));
@@ -156,16 +186,26 @@ public:
 
 /// A malformed host-provided runtime used to prove that the Agent presents one
 /// assistant lifecycle even if a provider repeats its start event.
-class DuplicateStartClient final : public coding_agent::ModelRuntime {
+class DuplicateStartClient final : public std::enable_shared_from_this<DuplicateStartClient> {
 public:
     explicit DuplicateStartClient(ai::AssistantMessage terminal)
         : terminal_(std::move(terminal)) {}
+
+    [[nodiscard]] ai::ModelStreamFactory factory() {
+        auto self = shared_from_this();
+        return tests::adapt_stream_simple(
+            [self](ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options,
+                   ai::AssistantEventSink sink) {
+                return self->stream_simple(
+                    std::move(model), std::move(context), std::move(options), std::move(sink));
+            });
+    }
 
     boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
         ai::Model model,
         ai::AiContext context,
         ai::SimpleStreamOptions options,
-        ai::AssistantEventSink sink) override {
+        ai::AssistantEventSink sink) {
         requests.push_back(tests::RecordedStreamSimpleCall{
             std::move(model), std::move(context), std::move(options)});
         CCH_TRY_VOID(sink(ai::AssistantStartEvent{terminal_}));
@@ -181,16 +221,26 @@ public:
 /// A conforming host-provided runtime whose accepted call reaches a terminal
 /// event before any assistant start event and returns the same final
 /// AssistantMessage through the value alternative.
-class TerminalBeforeStartClient final : public coding_agent::ModelRuntime {
+class TerminalBeforeStartClient final : public std::enable_shared_from_this<TerminalBeforeStartClient> {
 public:
     explicit TerminalBeforeStartClient(ai::AssistantMessage terminal)
         : terminal_(std::move(terminal)) {}
+
+    [[nodiscard]] ai::ModelStreamFactory factory() {
+        auto self = shared_from_this();
+        return tests::adapt_stream_simple(
+            [self](ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options,
+                   ai::AssistantEventSink sink) {
+                return self->stream_simple(
+                    std::move(model), std::move(context), std::move(options), std::move(sink));
+            });
+    }
 
     boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
         ai::Model model,
         ai::AiContext context,
         ai::SimpleStreamOptions options,
-        ai::AssistantEventSink sink) override {
+        ai::AssistantEventSink sink) {
         requests.push_back(tests::RecordedStreamSimpleCall{
             std::move(model), std::move(context), std::move(options)});
         ++terminal_events;
@@ -217,7 +267,7 @@ public:
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
         agent::ToolInvocation invocation,
-        std::stop_token) override {
+        std::stop_token) {
         invocations.push_back(invocation);
         co_return agent::AsyncToolExecutionResult{
             .content = std::vector<ai::Content>{ai::text_content("tool says ok")},
@@ -237,7 +287,7 @@ public:
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
         agent::ToolInvocation invocation,
-        std::stop_token stop_token) override {
+        std::stop_token stop_token) {
         invocations.push_back(std::move(invocation));
         observed_stop_token = stop_token;
         timer.emplace(co_await boost::asio::this_coro::executor);
@@ -356,7 +406,7 @@ TEST_CASE("async agent loop emits deterministic lifecycle events for text", "[ag
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
 
     auto run = run_loop(loop, "hi");
 
@@ -388,7 +438,7 @@ TEST_CASE(
     options.system_prompt =
         "You are an expert coding assistant operating inside cch, a coding "
         "agent harness.\n\nCurrent working directory: /workspace";
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
 
     auto run = run_loop(loop, "hi");
     REQUIRE(run.result);
@@ -421,7 +471,7 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "hello");
 
     REQUIRE(run.result.has_value());
@@ -468,7 +518,7 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "hello");
 
     REQUIRE(run.result.has_value());
@@ -507,7 +557,7 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "hello");
 
     REQUIRE(run.result.has_value());
@@ -537,7 +587,7 @@ TEST_CASE("async agent loop emits user message lifecycle before assistant respon
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
 
     auto run = run_loop(loop, "hi");
 
@@ -611,7 +661,7 @@ TEST_CASE("async agent loop forwards thinking and tool-call stream lifecycle eve
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
 
     auto run = run_loop(loop, "read");
 
@@ -641,7 +691,7 @@ TEST_CASE("async agent loop executes tool calls and continues with tool result c
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
 
     auto run = run_loop(loop, "read");
 
@@ -672,7 +722,7 @@ TEST_CASE("async agent loop turns malformed tool arguments into error tool resul
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
 
     auto run = run_loop(loop, "read");
 
@@ -696,7 +746,7 @@ TEST_CASE("async agent loop default options impose no turn cap", "[agent][async]
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
 
     auto run = run_loop(loop, "read");
 
@@ -714,7 +764,7 @@ TEST_CASE("async agent loop enforces an explicit host-set turn cap", "[agent][as
     agent::AsyncAgentOptions options;
     options.max_turns = 1;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
 
     auto run = run_loop(loop, "read");
 
@@ -765,7 +815,7 @@ TEST_CASE("beforeToolCall hook can block a tool call", "[agent][async][u7]") {
         return agent::BeforeToolCallResult{true, "blocked by policy"};
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
     REQUIRE(run.result);
@@ -813,7 +863,7 @@ TEST_CASE("beforeToolCall hook passes context and skips execution on block", "[a
         return agent::BeforeToolCallResult{false, std::nullopt};
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
     REQUIRE(run.result);
@@ -838,7 +888,7 @@ TEST_CASE("beforeToolCall hook failure finalizes only its call", "[agent][async]
         return std::unexpected(util::make_error(util::ErrorCode::Tool, "policy rejected"));
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
     // pi prepareToolCall catches a failing before hook into that call's error
@@ -872,7 +922,7 @@ TEST_CASE("beforeToolCall hook exception becomes a per-call tool error", "[agent
         throw std::runtime_error("boom");
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
     REQUIRE(run.result);
@@ -905,7 +955,7 @@ TEST_CASE("afterToolCall hook overrides tool result content", "[agent][async][u7
             std::vector<ai::Content>{ai::text_content("overridden")}, std::nullopt, std::nullopt, std::nullopt};
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
     REQUIRE(run.result);
@@ -933,7 +983,7 @@ TEST_CASE("afterToolCall hook overrides error flag", "[agent][async][u7]") {
         return agent::AfterToolCallResult{std::nullopt, std::nullopt, true, std::nullopt};
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
     REQUIRE(run.result);
@@ -963,7 +1013,7 @@ TEST_CASE(
         return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
     REQUIRE(run.result);
@@ -1001,7 +1051,7 @@ public:
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
         agent::ToolInvocation invocation,
-        std::stop_token) override {
+        std::stop_token) {
         invocations.push_back(invocation);
         co_return agent::AsyncToolExecutionResult{
             .content = std::vector<ai::Content>{ai::text_content(result_text_)},
@@ -1031,7 +1081,7 @@ public:
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
         agent::ToolInvocation invocation,
-        std::stop_token) override {
+        std::stop_token) {
         auto timer = boost::asio::steady_timer(co_await boost::asio::this_coro::executor, delay_);
         co_await timer.async_wait(boost::asio::use_awaitable);
         invocations.push_back(invocation);
@@ -1059,7 +1109,7 @@ public:
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
         agent::ToolInvocation invocation,
-        std::stop_token) override {
+        std::stop_token) {
         invocations.push_back(invocation);
         co_return std::unexpected(util::make_error(util::ErrorCode::Tool, "tool failed", "boom"));
     }
@@ -1089,7 +1139,7 @@ public:
 
     boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
         agent::ToolInvocation invocation,
-        std::stop_token) override {
+        std::stop_token) {
         invocations.push_back(invocation);
         const int current = ++probe_.active;
         int observed = probe_.max_active.load();
@@ -1161,7 +1211,7 @@ TEST_CASE("terminate batch continues when one call declines", "[agent][async][u7
         return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, false};
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
     REQUIRE(run.result);
@@ -1197,7 +1247,7 @@ TEST_CASE("blocked call prevents terminate batch", "[agent][async][u7]") {
         return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
     REQUIRE(run.result);
@@ -1226,7 +1276,7 @@ TEST_CASE("an error result with an explicit terminate hint still terminates the 
         return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
     // pi shouldTerminateToolBatch: every finalized result carries
@@ -1257,7 +1307,7 @@ TEST_CASE("Async Agent Loop continues after an afterToolCall hook failure", "[ag
         return std::unexpected(util::make_error(util::ErrorCode::Tool, "post-processor failed"));
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
     // pi finalizeExecutedToolCall catches a failing after hook into that
@@ -1291,7 +1341,7 @@ TEST_CASE("afterToolCall hook exception becomes a per-call tool error", "[agent]
         throw std::runtime_error("after boom");
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
     REQUIRE(run.result);
@@ -1357,7 +1407,7 @@ TEST_CASE(
         co_return messages;
     };
 
-    agent::AsyncAgentLoop loop(client, agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), agent::AsyncToolRegistry{}, std::move(options));
     std::stop_source stop_source;
     std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
     boost::asio::co_spawn(
@@ -1429,7 +1479,7 @@ TEST_CASE(
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{
         "read_file", "Read", test::permissive_object_tool_argument_contract()})));
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     std::stop_source stop_source;
     auto run = run_loop(loop, "read", {}, stop_source.get_token());
 
@@ -1458,7 +1508,7 @@ TEST_CASE(
     auto* tool_ptr = tool.get();
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::move(tool)));
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
 
     std::stop_source stop_source;
     std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
@@ -1514,7 +1564,7 @@ TEST_CASE(
             "unreachable transform result"));
     };
 
-    agent::AsyncAgentLoop loop(client, agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), agent::AsyncToolRegistry{}, std::move(options));
     auto run = run_loop(loop, "cancel transform", {}, stop_source.get_token());
 
     REQUIRE(run.result.has_value());
@@ -1551,7 +1601,7 @@ TEST_CASE(
     auto* tool_ptr = tool.get();
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::move(tool)));
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "cancel before tool", {}, stop_source.get_token());
 
     REQUIRE(run.result.has_value());
@@ -1588,7 +1638,7 @@ TEST_CASE(
     auto* tool_ptr = tool.get();
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::move(tool)));
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "cancel after tool", {}, stop_source.get_token());
 
     REQUIRE(run.result.has_value());
@@ -1617,7 +1667,7 @@ TEST_CASE(
         co_return messages;
     };
 
-    agent::AsyncAgentLoop loop(client, agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), agent::AsyncToolRegistry{}, std::move(options));
     auto run = run_loop(loop, "hello");
 
     REQUIRE_FALSE(run.result);
@@ -1645,7 +1695,7 @@ TEST_CASE("transformContext hook prunes old messages from LLM request", "[agent]
         return std::vector<ai::MessageVariant>{messages.back()};
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "hi");
 
     REQUIRE(run.result);
@@ -1678,7 +1728,7 @@ TEST_CASE("convertToLlm hook filters non-LLM messages", "[agent][async][u8]") {
         return result;
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "hi");
 
     REQUIRE(run.result);
@@ -1699,7 +1749,7 @@ TEST_CASE("convertToLlm returning empty aborts with validation error", "[agent][
             [](const std::vector<ai::MessageVariant>&)
         -> util::Expected<std::vector<ai::MessageVariant>> { return std::vector<ai::MessageVariant>{}; });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "hi");
 
     REQUIRE_FALSE(run.result);
@@ -1723,7 +1773,7 @@ TEST_CASE("transformContext hook error aborts the run", "[agent][async][u8]") {
         return std::unexpected(util::make_error(util::ErrorCode::Tool, "context transform failed"));
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "hi");
 
     REQUIRE_FALSE(run.result);
@@ -1746,7 +1796,7 @@ TEST_CASE("convertToLlm hook error aborts the run", "[agent][async][u8]") {
         return std::unexpected(util::make_error(util::ErrorCode::Tool, "conversion failed"));
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "hi");
 
     REQUIRE_FALSE(run.result);
@@ -1770,7 +1820,7 @@ TEST_CASE("transformContext and convertToLlm exceptions abort cleanly", "[agent]
             throw std::runtime_error("transform boom");
         });
 
-        agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+        agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
         auto run = run_loop(loop, "hi");
 
         REQUIRE_FALSE(run.result);
@@ -1794,7 +1844,7 @@ TEST_CASE("transformContext and convertToLlm exceptions abort cleanly", "[agent]
             throw std::runtime_error("convert boom");
         });
 
-        agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+        agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
         auto run = run_loop(loop, "hi");
 
         REQUIRE_FALSE(run.result);
@@ -1824,7 +1874,7 @@ TEST_CASE("agent_end contains only messages from the current invocation", "[agen
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
     agent::AsyncAgentLoop loop(
-        client,
+        client->factory(),
         std::move(registry),
         std::move(options));
 
@@ -1875,7 +1925,7 @@ TEST_CASE("prepareNextTurn model swap changes next request model", "[agent][asyn
         return std::unexpected(util::make_error(util::ErrorCode::Validation, "unknown model"));
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
     REQUIRE(run.result);
@@ -1901,7 +1951,7 @@ TEST_CASE("prepareNextTurn model update without validator is rejected", "[agent]
         return agent::AgentLoopTurnUpdate{.model = tests::make_model("gpt-swapped")};
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
     REQUIRE_FALSE(run.result);
@@ -1925,7 +1975,7 @@ TEST_CASE("prepareNextTurn thinking level is validated", "[agent][async][u8]") {
         return agent::AgentLoopTurnUpdate{std::nullopt, std::nullopt, std::string{"invalid"}};
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "hi");
 
     REQUIRE_FALSE(run.result);
@@ -1961,7 +2011,7 @@ TEST_CASE("prepareNextTurn rejected update does not persist partial model change
         agent::adapt_sync_validate_turn_update(
             [](const agent::AgentLoopTurnUpdate&) -> util::ExpectedVoid { return {}; });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto first = run_loop(loop, "read");
     REQUIRE_FALSE(first.result);
     CHECK(first.result.error().code == util::ErrorCode::Validation);
@@ -2015,7 +2065,7 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
         return false;
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
     REQUIRE(run.result);
@@ -2064,7 +2114,7 @@ TEST_CASE("prepareNextTurn no update leaves model and thinking level unchanged",
             [](const agent::PrepareNextTurnContext&)
         -> util::Expected<std::optional<agent::AgentLoopTurnUpdate>> { return std::nullopt; });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "hi");
 
     REQUIRE(run.result);
@@ -2093,7 +2143,7 @@ TEST_CASE("prepareNextTurn valid thinking level is preserved in state", "[agent]
         return agent::AgentLoopTurnUpdate{std::nullopt, std::nullopt, std::string{"high"}};
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "hi");
 
     REQUIRE(run.result);
@@ -2126,7 +2176,7 @@ TEST_CASE("prepareNextTurn model validation hook can reject unknown models", "[a
         return {};
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
     REQUIRE_FALSE(run.result);
@@ -2150,7 +2200,7 @@ TEST_CASE("prepareNextTurn and turn-update validation exceptions abort cleanly",
             throw std::runtime_error("prepare boom");
         });
 
-        agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+        agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
         auto run = run_loop(loop, "hi");
 
         REQUIRE_FALSE(run.result);
@@ -2178,7 +2228,7 @@ TEST_CASE("prepareNextTurn and turn-update validation exceptions abort cleanly",
             throw std::runtime_error("validator boom");
         });
 
-        agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+        agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
         auto run = run_loop(loop, "hi");
 
         REQUIRE_FALSE(run.result);
@@ -2214,7 +2264,7 @@ TEST_CASE("an exclusive tool forces a bounded batch to execute sequentially", "[
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{2};
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
     REQUIRE(run.result);
@@ -2246,7 +2296,7 @@ TEST_CASE("bounded parallel execution preserves source order in the transcript",
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{2};
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
     REQUIRE(run.result);
@@ -2327,7 +2377,7 @@ TEST_CASE(
         return agent::BeforeToolCallResult{};
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "run both calls and recover");
 
     REQUIRE(run.result);
@@ -2391,7 +2441,7 @@ TEST_CASE("bounded parallel limit one executes sequentially", "[agent][async][u8
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{1};
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
     REQUIRE(run.result);
@@ -2421,7 +2471,7 @@ TEST_CASE("Async Agent Loop treats bounded parallel zero as no explicit cap", "[
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{0};
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
     REQUIRE(run.result);
@@ -2463,7 +2513,7 @@ TEST_CASE("bounded parallel execution keeps blocked calls out of tool adapters",
         return agent::BeforeToolCallResult{};
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
     REQUIRE(run.result);
@@ -2511,7 +2561,7 @@ TEST_CASE("bounded parallel before-hook failure finalizes every call without sta
 
     // pi prepareToolCall: every failing before hook finalizes its own call's
     // error result; no worker ever starts and the run continues (ADR 0008).
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
     REQUIRE(run.result);
@@ -2550,7 +2600,7 @@ TEST_CASE("bounded parallel execution preserves peer success after a tool error"
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{2};
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
     REQUIRE(run.result);
@@ -2585,7 +2635,7 @@ TEST_CASE("bounded parallel event-sink failure drains workers and emits one agen
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{2};
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
 
     boost::asio::thread_pool pool{4};
     std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
@@ -2652,7 +2702,7 @@ TEST_CASE("bounded parallel after-hook failure finalizes only its call", "[agent
         return agent::AfterToolCallResult{};
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
     REQUIRE(run.result);
@@ -2691,7 +2741,7 @@ TEST_CASE("bounded parallel execution emits end events in completion order", "[a
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{2};
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
     REQUIRE(run.result);
@@ -2763,7 +2813,7 @@ TEST_CASE("length-truncated tool calls emit errors without crossing the executor
         return agent::AfterToolCallResult{};
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
     REQUIRE(run.result);
@@ -2822,7 +2872,7 @@ TEST_CASE("default tool execution runs a parallel-safe batch concurrently", "[ag
     options.model = tests::make_model("gpt-test");
     // No explicit tool_execution: the loop default is bounded parallel with
     // no cap, so a parallel-safe batch overlaps (pi's parallel default).
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
     REQUIRE(run.result);
@@ -2860,7 +2910,7 @@ TEST_CASE(
     options.model = tests::make_model("gpt-test");
     options.tool_execution = agent::BoundedParallelToolExecution{2};
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
     REQUIRE(run.result);
@@ -2917,7 +2967,7 @@ TEST_CASE(
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop_on_pool(loop, "read");
 
     REQUIRE(run.result);
@@ -2981,7 +3031,7 @@ TEST_CASE("all-true terminate batch ends the loop after one turn", "[agent][asyn
         return agent::AfterToolCallResult{std::nullopt, std::nullopt, std::nullopt, true};
     });
 
-    agent::AsyncAgentLoop loop(client, std::move(registry), std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "read");
 
     REQUIRE(run.result);

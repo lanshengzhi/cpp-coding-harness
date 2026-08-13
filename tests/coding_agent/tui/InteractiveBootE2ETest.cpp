@@ -94,120 +94,6 @@ void capture_golden(std::string_view name, const std::string& screen) {
     return false;
 }
 
-/// A gated recording ModelRuntime for the interrupt leg: the stream holds
-/// until release() or the run's stop token fires (pi's interruptible backoff
-/// pattern), then completes as an aborted terminal exactly like the
-/// recording fake. Standalone (not derived from the recording fake, which
-/// stays `final` per §7.2) with the same session-seam overrides.
-class GatedModelRuntime final : public coding_agent::ModelRuntime {
-public:
-    GatedModelRuntime() = default;
-
-    [[nodiscard]] std::optional<ai::Model> model(
-        std::string_view provider_id,
-        std::string_view model_id) const override {
-        ai::Model model;
-        model.id = std::string{model_id};
-        model.name = model.id;
-        model.api = "scripted-fake";
-        model.provider = std::string{provider_id};
-        model.reasoning = false;
-        model.input = {ai::ModelInput::Text};
-        model.context_window = 128000;
-        model.max_tokens = 16384;
-        return model;
-    }
-
-    boost::asio::awaitable<util::Expected<std::vector<ai::Model>>> get_available(
-        std::optional<std::string_view> provider_id = std::nullopt) override {
-        std::vector<ai::Model> models;
-        if (auto resolved = model(provider_id.value_or("fake"), "fake-model")) {
-            models.push_back(std::move(*resolved));
-        }
-        co_return models;
-    }
-
-    boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>> check_auth(
-        std::string provider_id) override {
-        (void)provider_id;
-        co_return ai::AuthCheck{
-            .source = "fake",
-            .type = ai::AuthType::ApiKey,
-        };
-    }
-
-    bool has_configured_auth(std::string_view provider_id) const override {
-        (void)provider_id;
-        return true;
-    }
-
-    std::vector<std::string> configured_api_key_env_names() const override {
-        return {};
-    }
-
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
-        ai::Model model,
-        ai::AiContext context,
-        ai::SimpleStreamOptions options,
-        ai::AssistantEventSink sink) override {
-        (void)context;
-        calls.push_back(tests::RecordedStreamSimpleCall{
-            std::move(model),
-            std::move(context),
-            std::move(options),
-        });
-        // options was moved into the recorded call; the live token lives there.
-        const auto& stop_token = calls.back().options.stop_token;
-        if (stop_token.stop_requested()) {
-            co_return aborted_terminal(sink);
-        }
-        auto partial = ai::assistant_text_message("");
-        partial.content.clear();
-        partial.content.emplace_back(ai::text_content("streaming in flight"));
-        if (sink) {
-            CCH_TRY_VOID(sink(ai::AssistantStartEvent{partial}));
-            CCH_TRY_VOID(sink(ai::TextDeltaEvent{0, "streaming in flight", partial}));
-        }
-        started = true;
-        const auto executor = co_await boost::asio::this_coro::executor;
-        gate_.emplace(executor);
-        gate_->expires_at(std::chrono::steady_clock::time_point::max());
-        std::stop_callback release_on_stop{stop_token, [this] { release(); }};
-        boost::system::error_code error;
-        co_await gate_->async_wait(
-            boost::asio::redirect_error(boost::asio::use_awaitable, error));
-        if (stop_token.stop_requested()) {
-            co_return aborted_terminal(sink);
-        }
-        co_return ai::assistant_text_message("gated done");
-    }
-
-    void release() {
-        if (gate_) (void)gate_->cancel();
-    }
-
-    std::vector<tests::RecordedStreamSimpleCall> calls;
-    bool started{false};
-
-private:
-    [[nodiscard]] static ai::AssistantMessage aborted_terminal(
-        ai::AssistantEventSink& sink) {
-        auto terminal = ai::assistant_text_message("");
-        terminal.stop_reason = ai::AssistantStopReason::Aborted;
-        terminal.error_message = "Request was aborted";
-        if (sink) {
-            (void)sink(ai::AssistantErrorEvent{
-                .reason = terminal.stop_reason,
-                .error = terminal,
-                .failure = util::make_error(
-                    util::ErrorCode::Cancelled, "Request was aborted"),
-            });
-        }
-        return terminal;
-    }
-
-    std::optional<boost::asio::steady_timer> gate_;
-};
 
 /// One resumed session with a fixed workspace file the scripted edit tool
 /// modifies. The session carries the injected fake ModelRuntime. The
@@ -454,7 +340,9 @@ TEST_CASE(
 TEST_CASE(
     "E2E: app.interrupt aborts the active Agent run with the stale-generation guard",
     "[coding_agent][tui][e2e][issue399]") {
-    auto gated = std::make_shared<GatedModelRuntime>();
+    auto gated = std::make_shared<tests::FakeModelRuntime>();
+    gated->gate_at = 0;
+    gated->emit_partial_before_gate = true;
     auto fixture = make_e2e_session(gated);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 24});

@@ -1,7 +1,7 @@
 #include <cch/agent/Agent.hpp>
 #include <cch/ai/Model.hpp>
 #include "ai/glaze/ModelJson.hpp"
-#include "support/FakeModelRuntime.hpp"
+#include "support/FakeModelStream.hpp"
 #include "support/ModelFixture.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -71,8 +71,8 @@ TEST_CASE("complete Model matches the frozen pi shape golden", "[ai][model][issu
 }
 
 TEST_CASE("Agent starts with the concrete frozen default Model", "[ai][model][issue336]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
-    agent::Agent instance(runtime, agent::AsyncToolRegistry{});
+    auto runtime = std::make_shared<tests::FakeModelStream>();
+    agent::Agent instance(runtime->factory(), agent::AsyncToolRegistry{});
 
     auto serialized = ai::glaze::write_model_json(instance.state().model);
     REQUIRE(serialized);

@@ -19,7 +19,7 @@
 #include "coding_agent/prompt/PromptExpansion.hpp"
 #include "coding_agent/prompt/PromptTemplateExpander.hpp"
 #include "coding_agent/prompt/SystemPromptBuilder.hpp"
-#include "coding_agent/runtime/AuthGuidanceStreamRuntime.hpp"
+#include "coding_agent/runtime/AuthGuidanceStream.hpp"
 #include "coding_agent/runtime/UserBashOutputAccumulator.hpp"
 #include "harness/compaction/Compaction.hpp"
 
@@ -145,6 +145,31 @@ void record_session_observer_diagnostic(
 
 } // namespace
 
+ai::ModelStreamFactory AgentSessionRuntime::make_stream_factory() {
+    auto models = services_.model_runtime->ai_models();
+    auto runtime = services_.model_runtime;
+    return ai::ModelStreamFactory{
+        [models, runtime](
+            ai::Model model,
+            ai::AiContext context,
+            ai::SimpleStreamOptions options)
+            -> boost::asio::awaitable<ai::ModelStream> {
+            // The provider identity must survive the move into the Models
+            // call; the forwarding sink may fire after the model argument is
+            // already moved-from.
+            const std::string provider{model.provider};
+            auto inner = co_await models->stream(
+                std::move(model), std::move(context), std::move(options));
+            co_return apply_auth_guidance(
+                std::move(inner),
+                provider,
+                OAuthProviderPredicate{[runtime](std::string_view provider_id) {
+                    return runtime->is_using_oauth(provider_id);
+                }},
+                std::filesystem::path{kDefaultAuthGuidanceDocsPath});
+        }};
+}
+
 AgentSessionRuntime::AgentSessionRuntime(
     RuntimeServices services,
     OpenSession session,
@@ -225,17 +250,14 @@ AgentSessionRuntime::AgentSessionRuntime(
             config_.default_thinking_level.value_or("medium"));
 
     // Request-time re-auth guidance (pi `_getRequiredRequestAuth`): the
-    // Agent's stream runs through a session-layer decorator that rewrites
-    // auth/oauth-category terminal failures to pi's two verbatim guidance
-    // branches; the same decorator serves the summarization seam below.
-    auth_guided_runtime_ = std::make_shared<AuthGuidanceStreamRuntime>(
-        services_.model_runtime);
+    // Agent's stream and the summarization seam run through a session-layer
+    // ModelStream decorator that rewrites auth/oauth-category terminal
+    // failures to pi's two verbatim guidance branches.
 
-    // Construct Agent last: it holds the factory-owned ModelRuntime (the sole
-    // injectable seam per #326) and takes sole ownership of the move-only tool
-    // registry.
+    // Construct Agent last: it holds the AI-owned ModelStream factory (ADR
+    // 0040 / #453) and takes sole ownership of the move-only tool registry.
     agent_.emplace(
-        auth_guided_runtime_,
+        make_stream_factory(),
         std::move(services_.tools),
         std::move(options),
         std::move(initial_state));
@@ -1944,17 +1966,13 @@ AgentSessionRuntime::execute_compaction(
     const auto model = agent_->state().model;
 
     harness::session::SummarizationStreamFn summarization_stream =
-        [runtime = auth_guided_runtime_, model](
+        [factory = make_stream_factory(), model](
             ai::AiContext context,
-            ai::SimpleStreamOptions options)
+            ai::SimpleStreamOptions options) mutable
             -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
-        if (!runtime) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Validation,
-                "model runtime is unavailable"));
-        }
-        co_return co_await runtime->stream_simple(
-            model, std::move(context), std::move(options), {});
+        auto stream = co_await factory(
+            model, std::move(context), std::move(options));
+        co_return co_await ai::consume(std::move(stream), {});
     };
 
     harness::session::CompactionRunOptions run_options;
@@ -2510,10 +2528,6 @@ AgentSessionRuntime::release_close_resources() noexcept {
         agent_->clear_subscriptions();
     }
     agent_.reset();
-    // Drop the session's request-time decorator handle; the Agent released its
-    // reference above, so the canonical runtime is freed once the owned
-    // reference below is reset (runtimes carry no dispose ceremony).
-    auth_guided_runtime_.reset();
     skills_.clear();
     templates_.clear();
     session_.store.reset();

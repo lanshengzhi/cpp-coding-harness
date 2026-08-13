@@ -16,7 +16,8 @@
 #include <cch/util/Error.hpp>
 #include "ai/glaze/AiJson.hpp"
 #include "harness/compaction/Compaction.hpp"
-#include "support/FakeModelRuntime.hpp"
+#include <cch/ai/Models.hpp>
+#include "support/FakeModelStream.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "util/Json.hpp"
@@ -588,7 +589,7 @@ TEST_CASE(
 TEST_CASE(
     "summarization requests carry cacheRetention none and a fresh session id",
     "[harness][compaction][fixture][issue358]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     auto summary_response = ai::assistant_text_message("## Goal\nTest summary");
     summary_response.usage = mock_usage(1000, 200);
     runtime->responses.push_back(summary_response);
@@ -623,8 +624,8 @@ TEST_CASE(
             ai::AiContext context,
             ai::SimpleStreamOptions options)
             -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
-        co_return co_await runtime->stream_simple(
-            model, std::move(context), std::move(options), noop_sink());
+        auto stream = co_await runtime->factory()(model, std::move(context), std::move(options));
+        co_return co_await ai::consume(std::move(stream), noop_sink());
     };
 
     harness::session::CompactionRunOptions run_options;
@@ -655,7 +656,7 @@ TEST_CASE(
 TEST_CASE(
     "split-turn compaction issues two requests with distinct fresh session ids",
     "[harness][compaction][issue358]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     auto history_response = ai::assistant_text_message("history summary");
     history_response.usage = mock_usage(1000, 200);
     auto prefix_response = ai::assistant_text_message("prefix summary");
@@ -695,8 +696,8 @@ TEST_CASE(
             ai::AiContext context,
             ai::SimpleStreamOptions options)
             -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
-        co_return co_await runtime->stream_simple(
-            model, std::move(context), std::move(options), noop_sink());
+        auto stream = co_await runtime->factory()(model, std::move(context), std::move(options));
+        co_return co_await ai::consume(std::move(stream), noop_sink());
     };
     harness::session::CompactionRunOptions run_options;
     run_options.summarization_stream = std::move(stream_fn);
@@ -735,23 +736,20 @@ TEST_CASE(
     preparation.settings = harness::session::kDefaultCompactionSettings;
     const auto model = tests::make_model("gpt-test");
 
-    auto stream_fn_for = [](std::shared_ptr<tests::FakeModelRuntime> runtime)
+    auto stream_fn_for = [](std::shared_ptr<tests::FakeModelStream> runtime)
         -> harness::session::SummarizationStreamFn {
         return [runtime](
                    ai::AiContext context,
                    ai::SimpleStreamOptions options)
             -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
-            co_return co_await runtime->stream_simple(
-                tests::make_model("gpt-test"),
-                std::move(context),
-                std::move(options),
-                noop_sink());
+            auto stream = co_await runtime->factory()(tests::make_model("gpt-test"), std::move(context), std::move(options));
+            co_return co_await ai::consume(std::move(stream), noop_sink());
         };
     };
 
     // Error terminal → summarization_failed with pi's message.
     {
-        auto runtime = std::make_shared<tests::FakeModelRuntime>();
+        auto runtime = std::make_shared<tests::FakeModelStream>();
         auto terminal = ai::assistant_text_message("");
         terminal.stop_reason = ai::AssistantStopReason::Error;
         terminal.error_message = "boom";
@@ -767,7 +765,7 @@ TEST_CASE(
 
     // Aborted terminal → aborted with pi's message.
     {
-        auto runtime = std::make_shared<tests::FakeModelRuntime>();
+        auto runtime = std::make_shared<tests::FakeModelStream>();
         auto terminal = ai::assistant_text_message("");
         terminal.stop_reason = ai::AssistantStopReason::Aborted;
         terminal.error_message = "stopped";
@@ -787,7 +785,7 @@ TEST_CASE(
         empty_preparation.settings = harness::session::kDefaultCompactionSettings;
         harness::session::CompactionRunOptions options;
         options.summarization_stream = stream_fn_for(
-            std::make_shared<tests::FakeModelRuntime>());
+            std::make_shared<tests::FakeModelStream>());
         auto result = run_awaitable(compact(
             empty_preparation, model, std::move(options)));
         REQUIRE_FALSE(result.has_value());
@@ -800,7 +798,7 @@ TEST_CASE(
 TEST_CASE(
     "compact appends pi's file-operation tags and details to the summary",
     "[harness][compaction][issue358]") {
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("## Goal\nTest summary"));
 
     harness::session::SessionEntry u1 = user_entry("u1", "read a file");
@@ -838,8 +836,8 @@ TEST_CASE(
             ai::AiContext context,
             ai::SimpleStreamOptions options)
             -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
-        co_return co_await runtime->stream_simple(
-            model, std::move(context), std::move(options), noop_sink());
+        auto stream = co_await runtime->factory()(model, std::move(context), std::move(options));
+        co_return co_await ai::consume(std::move(stream), noop_sink());
     };
     harness::session::CompactionRunOptions run_options;
     run_options.summarization_stream = std::move(stream_fn);
@@ -895,7 +893,7 @@ TEST_CASE(
     const auto& prep = **preparation;
     CHECK(prep.first_kept_entry_id == "u2");
 
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     auto summary_response = ai::assistant_text_message("## Goal\nTest summary");
     summary_response.usage = mock_usage(1000, 200);
     runtime->responses.push_back(std::move(summary_response));
@@ -906,8 +904,8 @@ TEST_CASE(
             ai::AiContext context,
             ai::SimpleStreamOptions options)
             -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
-        co_return co_await runtime->stream_simple(
-            model, std::move(context), std::move(options), noop_sink());
+        auto stream = co_await runtime->factory()(model, std::move(context), std::move(options));
+        co_return co_await ai::consume(std::move(stream), noop_sink());
     };
     harness::session::CompactionRunOptions run_options;
     run_options.thinking_level = "medium";

@@ -17,7 +17,7 @@
 #include "agent/AgentLoop.hpp"
 #include "ai/glaze/AiJson.hpp"
 #include "harness/session/EntrySerializer.hpp"
-#include "support/FakeModelRuntime.hpp"
+#include "support/FakeModelStream.hpp"
 #include "support/ModelFixture.hpp"
 #include "util/ExpectedMacros.hpp"
 #include "util/Json.hpp"
@@ -404,14 +404,14 @@ TEST_CASE("pi projection drives rebuilt context into the Agent at the fake-Model
     harness::session::SessionTree tree(std::move(*loaded));
     auto context = tree.buildSessionContext();
 
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
     options.session_id = "session-1";
-    agent::Agent subject(runtime, std::move(tools), std::move(options),
+    agent::Agent subject(runtime->factory(), std::move(tools), std::move(options),
         agent::AgentInitialState{.messages = context.messages});
 
     REQUIRE(run_prompt(subject, "hi"));
@@ -459,13 +459,13 @@ TEST_CASE("pi branch projection drives rebuilt context into the Agent",
     harness::session::SessionTree tree(std::move(*loaded));
     auto context = tree.buildSessionContext();
 
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::Agent subject(runtime, std::move(tools), std::move(options),
+    agent::Agent subject(runtime->factory(), std::move(tools), std::move(options),
         agent::AgentInitialState{.messages = context.messages});
 
     REQUIRE(run_prompt(subject, "hi"));
@@ -651,7 +651,7 @@ TEST_CASE(
     REQUIRE(context.model.has_value());
     REQUIRE(context.thinking_level == "high");
 
-    auto runtime = std::make_shared<tests::FakeModelRuntime>();
+    auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
     agent::AsyncToolRegistry tools;
     agent::AsyncAgentOptions options;
@@ -662,7 +662,7 @@ TEST_CASE(
     resolved_model.provider = *context.provider;
     options.model = std::move(resolved_model);
     options.session_id = "session-derived";
-    agent::Agent subject(runtime, std::move(tools), std::move(options),
+    agent::Agent subject(runtime->factory(), std::move(tools), std::move(options),
         agent::AgentInitialState{
             .messages = context.messages,
             .thinking_level = context.thinking_level,

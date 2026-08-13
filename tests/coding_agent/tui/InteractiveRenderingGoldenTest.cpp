@@ -265,115 +265,6 @@ struct Running {
 
 // ── interrupt: a gated recording runtime for the app.interrupt leg ─────────
 
-/// The stream holds until release() or the run's stop token fires, then
-/// completes as an aborted terminal (pi's interruptible backoff pattern).
-class GatedModelRuntime final : public coding_agent::ModelRuntime {
-public:
-    GatedModelRuntime() = default;
-
-    [[nodiscard]] std::optional<ai::Model> model(
-        std::string_view provider_id,
-        std::string_view model_id) const override {
-        ai::Model model;
-        model.id = std::string{model_id};
-        model.name = model.id;
-        model.api = "scripted-fake";
-        model.provider = std::string{provider_id};
-        model.reasoning = false;
-        model.input = {ai::ModelInput::Text};
-        model.context_window = 128000;
-        model.max_tokens = 16384;
-        return model;
-    }
-
-    boost::asio::awaitable<util::Expected<std::vector<ai::Model>>> get_available(
-        std::optional<std::string_view> provider_id = std::nullopt) override {
-        std::vector<ai::Model> models;
-        if (auto resolved = model(
-                provider_id.value_or("fake"), "fake-model")) {
-            models.push_back(std::move(*resolved));
-        }
-        co_return models;
-    }
-
-    boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>> check_auth(
-        std::string provider_id) override {
-        (void)provider_id;
-        co_return ai::AuthCheck{
-            .source = "fake",
-            .type = ai::AuthType::ApiKey,
-        };
-    }
-
-    bool has_configured_auth(std::string_view provider_id) const override {
-        (void)provider_id;
-        return true;
-    }
-
-    std::vector<std::string> configured_api_key_env_names() const override {
-        return {};
-    }
-
-    boost::asio::awaitable<util::Expected<ai::AssistantMessage>> stream_simple(
-        ai::Model model,
-        ai::AiContext context,
-        ai::SimpleStreamOptions options,
-        ai::AssistantEventSink sink) override {
-        (void)context;
-        calls.push_back(tests::RecordedStreamSimpleCall{
-            std::move(model),
-            std::move(context),
-            std::move(options),
-        });
-        const auto& stop_token = calls.back().options.stop_token;
-        if (stop_token.stop_requested()) {
-            co_return aborted_terminal(sink);
-        }
-        auto partial = ai::assistant_text_message("");
-        partial.content.clear();
-        partial.content.emplace_back(ai::text_content("streaming in flight"));
-        if (sink) {
-            CCH_TRY_VOID(sink(ai::AssistantStartEvent{partial}));
-            CCH_TRY_VOID(sink(ai::TextDeltaEvent{0, "streaming in flight", partial}));
-        }
-        const auto executor = co_await boost::asio::this_coro::executor;
-        gate_.emplace(executor);
-        gate_->expires_at(std::chrono::steady_clock::time_point::max());
-        std::stop_callback release_on_stop{stop_token, [this] { release(); }};
-        boost::system::error_code error;
-        co_await gate_->async_wait(
-            boost::asio::redirect_error(boost::asio::use_awaitable, error));
-        if (stop_token.stop_requested()) {
-            co_return aborted_terminal(sink);
-        }
-        co_return ai::assistant_text_message("gated done");
-    }
-
-    void release() {
-        if (gate_) (void)gate_->cancel();
-    }
-
-    std::vector<tests::RecordedStreamSimpleCall> calls;
-
-private:
-    [[nodiscard]] static ai::AssistantMessage aborted_terminal(
-        ai::AssistantEventSink& sink) {
-        auto terminal = ai::assistant_text_message("");
-        terminal.stop_reason = ai::AssistantStopReason::Aborted;
-        terminal.error_message = "Request was aborted";
-        if (sink) {
-            (void)sink(ai::AssistantErrorEvent{
-                .reason = terminal.stop_reason,
-                .error = terminal,
-                .failure = util::make_error(
-                    util::ErrorCode::Cancelled, "Request was aborted"),
-            });
-        }
-        return terminal;
-    }
-
-    std::optional<boost::asio::steady_timer> gate_;
-};
 
 /// One resumed session (the e2e shape) for the interrupt golden.
 struct InterruptSession {
@@ -664,7 +555,9 @@ TEST_CASE(
     "rendering golden: app.interrupt aborts the active run and renders the "
     "aborted entry",
     "[coding_agent][tui][rendering][issue422]") {
-    auto gated = std::make_shared<GatedModelRuntime>();
+    auto gated = std::make_shared<tests::FakeModelRuntime>();
+    gated->gate_at = 0;
+    gated->emit_partial_before_gate = true;
     auto fixture = make_interrupt_session(gated);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 24});

@@ -130,10 +130,10 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
 } // namespace
 
 AsyncAgentLoop::AsyncAgentLoop(
-    std::shared_ptr<coding_agent::ModelRuntime> runtime,
+    ai::ModelStreamFactory stream_factory,
     AsyncToolRegistry registry,
     AsyncAgentOptions options)
-    : runtime_(std::move(runtime)),
+    : stream_factory_(std::move(stream_factory)),
       registry_(std::move(registry)),
       options_(std::move(options)) {
     // options_.model is concrete (kDefaultModel default); no placeholder
@@ -341,10 +341,12 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
         if (stop_token.stop_requested()) {
             cancellation_completion_attempted = true;
         }
-        auto assistant = co_await runtime_->stream_simple(
+        auto stream = co_await stream_factory_(
             options_.model,
             std::move(request_context),
-            std::move(stream_options),
+            std::move(stream_options));
+        auto assistant = co_await ai::consume(
+            std::move(stream),
             [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
                 if (const auto* start = std::get_if<ai::AssistantStartEvent>(&event)) {
                     if (assistant_start_emitted) {

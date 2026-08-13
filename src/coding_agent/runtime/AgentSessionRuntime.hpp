@@ -529,6 +529,11 @@ private:
     [[nodiscard]] boost::asio::awaitable<void> finalize_close_after_active_work();
     [[nodiscard]] std::shared_ptr<harness::AsyncExecutionEnv> release_close_resources() noexcept;
     void finalize_close() noexcept;
+    /// Build the session's AI-owned `ModelStream` factory: the runtime's
+    /// Models catalog composed with pi's request-time re-auth guidance
+    /// (ADR 0040 / #453). Each call returns an independent, re-invocable
+    /// factory; the Agent and the summarization seam each hold one.
+    [[nodiscard]] ai::ModelStreamFactory make_stream_factory();
 
     RuntimeServices services_;
     OpenSession session_;
@@ -547,12 +552,6 @@ private:
     std::vector<std::string> prompt_tool_guidelines_;
     // Declared after the borrowed client/store owners so it is destroyed first.
     std::optional<agent::Agent> agent_;
-    /// Request-time re-auth guidance decorator (pi `_getRequiredRequestAuth`):
-    /// the Agent's stream and the summarization seam run through a
-    /// session-layer runtime that rewrites auth/oauth-category terminal
-    /// failures to pi's two verbatim guidance branches. Holds the canonical
-    /// runtime alive through the session.
-    std::shared_ptr<ModelRuntime> auth_guided_runtime_;
 
     AgentSessionRuntimeConfig config_;
     Lifecycle lifecycle_{Lifecycle::Open};
