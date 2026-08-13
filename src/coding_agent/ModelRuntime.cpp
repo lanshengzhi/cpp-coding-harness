@@ -3,6 +3,7 @@
 #include <cch/ai/Models.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/AuthStorage.hpp>
+#include "ai/AsyncResultBridge.hpp"
 #include "ModelConfig.hpp"
 #include "ProcessAuthContext.hpp"
 #include "ProviderComposer.hpp"
@@ -339,7 +340,7 @@ ModelRuntime::get_available(std::optional<std::string_view> provider_id) {
             auth.emplace(provider_id, **checked);
         }
     }
-    CCH_TRY(stored, co_await impl_->credentials->list());
+    CCH_TRY(stored, co_await ai::detail::await_async_result(impl_->credentials->list()));
 
     impl_->configured_providers = std::move(configured);
     impl_->auth_snapshot = std::move(auth);
@@ -470,7 +471,7 @@ std::optional<ModelRuntimeAuthStatus> ModelRuntime::get_provider_auth_status(
 
 boost::asio::awaitable<util::Expected<std::vector<ai::CredentialInfo>>>
 ModelRuntime::list_credentials() {
-    co_return co_await impl_->credentials->list();
+    co_return co_await ai::detail::await_async_result(impl_->credentials->list());
 }
 
 boost::asio::awaitable<util::Expected<ai::Credential>> ModelRuntime::login(

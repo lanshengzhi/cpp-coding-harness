@@ -1,5 +1,6 @@
 #include <cch/ai/CredentialStore.hpp>
 #include <cch/coding_agent/AuthStorage.hpp>
+#include "ai/AsyncResultBridge.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -57,7 +58,7 @@ T run_async(Action action) {
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            result.emplace(co_await action());
+            result.emplace(co_await cch::ai::detail::await_async_result(action()));
             co_return;
         },
         boost::asio::detached);
@@ -146,7 +147,7 @@ TEST_CASE("AuthStorage serializes concurrent whole-file modifications", "[coding
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            first_result = co_await first.modify(
+            first_result = co_await cch::ai::detail::await_async_result(first.modify(
                 "anthropic",
                 [](std::optional<cch::ai::Credential>)
                     -> boost::asio::awaitable<cch::util::Expected<std::optional<cch::ai::Credential>>> {
@@ -162,19 +163,19 @@ TEST_CASE("AuthStorage serializes concurrent whole-file modifications", "[coding
                     }
                     co_return std::optional<cch::ai::Credential>{
                         api_key_credential("dummy-anthropic-key")};
-                });
+                }));
             co_return;
         },
         boost::asio::detached);
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            second_result = co_await second.modify(
+            second_result = co_await cch::ai::detail::await_async_result(second.modify(
                 "deepseek",
                 [](std::optional<cch::ai::Credential>)
                     -> boost::asio::awaitable<cch::util::Expected<std::optional<cch::ai::Credential>>> {
                     co_return std::optional<cch::ai::Credential>{api_key_credential("dummy-deepseek-key")};
-                });
+                }));
             co_return;
         },
         boost::asio::detached);

@@ -1,5 +1,6 @@
 #include <cch/ai/Models.hpp>
 
+#include "ai/AsyncResultBridge.hpp"
 #include "SimpleOptions.hpp"
 #include "util/BoundedText.hpp"
 #include "util/ExpectedMacros.hpp"
@@ -463,8 +464,8 @@ struct Models::Impl {
             auto modified = co_await invoke_models_callback(
                 util::ErrorCode::Auth,
                 "Credential store modify callback failed for " + provider_id,
-                [&]() {
-                    return credentials->modify(
+                [&]() -> boost::asio::awaitable<util::Expected<std::optional<Credential>>> {
+                    auto result = credentials->modify(
                         provider_id,
                         [&auth, provider_id](std::optional<Credential> current)
                             -> boost::asio::awaitable<util::Expected<std::optional<Credential>>> {
@@ -488,6 +489,7 @@ struct Models::Impl {
                             }
                             co_return std::optional<Credential>{Credential{std::move(*refreshed)}};
                         });
+                    co_return co_await detail::await_async_result(std::move(result));
                 });
             if (!modified) {
                 if (modified.error().code == util::ErrorCode::OAuth) {
@@ -624,8 +626,8 @@ boost::asio::awaitable<util::Expected<std::optional<AuthCheck>>> Models::check_a
     auto stored = co_await invoke_models_callback(
         util::ErrorCode::Auth,
         "Credential store read callback failed for " + provider_id,
-        [&]() {
-            return impl_->credentials->read(provider_id);
+        [&]() -> boost::asio::awaitable<util::Expected<std::optional<Credential>>> {
+            co_return co_await detail::await_async_result(impl_->credentials->read(provider_id));
         });
     if (!stored) {
         co_return std::unexpected(categorized_error(
@@ -721,8 +723,8 @@ boost::asio::awaitable<util::Expected<std::optional<AuthResult>>> Models::get_au
     auto stored = co_await invoke_models_callback(
         util::ErrorCode::Auth,
         "Credential store read callback failed for " + provider_id,
-        [&]() {
-            return impl_->credentials->read(provider_id);
+        [&]() -> boost::asio::awaitable<util::Expected<std::optional<Credential>>> {
+            co_return co_await detail::await_async_result(impl_->credentials->read(provider_id));
         });
     if (!stored) {
         co_return std::unexpected(categorized_error(
@@ -784,8 +786,8 @@ boost::asio::awaitable<util::ExpectedVoid> Models::logout(
     auto removed = co_await invoke_models_callback(
         util::ErrorCode::Auth,
         "Credential store delete callback failed for " + provider_id,
-        [&]() {
-            return impl_->credentials->remove(provider_id);
+        [&]() -> boost::asio::awaitable<util::ExpectedVoid> {
+            co_return co_await detail::await_async_result(impl_->credentials->remove(provider_id));
         });
     if (!removed) {
         co_return std::unexpected(categorized_error(
@@ -853,13 +855,14 @@ boost::asio::awaitable<util::Expected<Credential>> Models::login(
     auto stored = co_await invoke_models_callback(
         util::ErrorCode::Auth,
         "Credential store modify callback failed for " + provider_id,
-        [&]() {
-            return impl_->credentials->modify(
+        [&]() -> boost::asio::awaitable<util::Expected<std::optional<Credential>>> {
+            auto result = impl_->credentials->modify(
                 provider_id,
                 [credential = login_credential](std::optional<Credential>)
                     -> boost::asio::awaitable<util::Expected<std::optional<Credential>>> {
                     co_return std::optional<Credential>{*credential};
                 });
+            co_return co_await detail::await_async_result(std::move(result));
         });
     if (!stored) {
         co_return std::unexpected(categorized_error(

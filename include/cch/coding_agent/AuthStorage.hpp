@@ -14,6 +14,10 @@ namespace cch::coding_agent {
 /// owner-only permissions, a last-valid in-memory snapshot, and the private
 /// lossless serializer. Agent Config Directory path derivation remains in the
 /// coding-agent layer; callers pass the concrete `<agentDir>/auth.json` path.
+///
+/// Reads serve the last-valid snapshot as ready `AsyncResult` outcomes;
+/// writes complete through `AsyncResult` with owned inputs while the whole-file
+/// mutation lock is held (ADR 0040 / #454).
 class AuthStorage final : public ai::CredentialStore {
 public:
     explicit AuthStorage(std::filesystem::path auth_path);
@@ -25,16 +29,17 @@ public:
     AuthStorage& operator=(const AuthStorage&) = delete;
 
     /// Re-read the file under its whole-file lock. Invalid or unreadable
-    /// content preserves the previous valid snapshot.
+    /// content preserves the previous valid snapshot. This construction-time
+    /// helper is intentionally synchronous and best-effort.
     void reload() noexcept;
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> read(
+    [[nodiscard]] cch::support::AsyncResult<std::optional<ai::Credential>> read(
         std::string provider_id) override;
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::vector<ai::CredentialInfo>>> list() override;
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> modify(
+    [[nodiscard]] cch::support::AsyncResult<std::vector<ai::CredentialInfo>> list() override;
+    [[nodiscard]] cch::support::AsyncResult<std::optional<ai::Credential>> modify(
         std::string provider_id,
         ai::CredentialModifyHook modifier) override;
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> remove(
+    [[nodiscard]] cch::support::AsyncResult<void> remove(
         std::string provider_id) override;
 
 private:

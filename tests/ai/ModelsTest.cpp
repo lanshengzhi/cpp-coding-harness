@@ -3,6 +3,7 @@
 #include <cch/util/Error.hpp>
 #include "ai/providers/EnvApiKeyAuth.hpp"
 #include "support/ModelFixture.hpp"
+#include "support/StreamAdapterFixture.hpp"
 #include "util/ExpectedMacros.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -38,52 +39,66 @@ T run_awaitable(boost::asio::awaitable<T> operation) {
 
 class MemoryCredentialStore final : public ai::CredentialStore {
 public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> read(
+    [[nodiscard]] cch::support::AsyncResult<std::optional<ai::Credential>> read(
         std::string provider_id) override {
         ++read_count;
         if (throw_read) {
             throw std::runtime_error{"credential store callback threw"};
         }
-        const auto found = records.find(provider_id);
-        if (found == records.end()) {
-            co_return std::optional<ai::Credential>{};
+        std::optional<ai::Credential> value;
+        if (const auto found = records.find(provider_id); found != records.end()) {
+            value = found->second;
         }
-        co_return std::optional<ai::Credential>{found->second};
+        return cch::support::AsyncResult<std::optional<ai::Credential>>(
+            std::expected<std::optional<ai::Credential>, cch::support::Error>{std::move(value)});
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::vector<ai::CredentialInfo>>> list() override {
-        co_return std::vector<ai::CredentialInfo>{};
+    [[nodiscard]] cch::support::AsyncResult<std::vector<ai::CredentialInfo>> list() override {
+        return cch::support::AsyncResult<std::vector<ai::CredentialInfo>>(
+            std::expected<std::vector<ai::CredentialInfo>, cch::support::Error>{
+                std::vector<ai::CredentialInfo>{}});
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> modify(
+    [[nodiscard]] cch::support::AsyncResult<std::optional<ai::Credential>> modify(
         std::string provider_id,
         ai::CredentialModifyHook modifier) override {
         ++modify_count;
         if (fail_modify) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Unknown,
-                "store write failed"));
+            return cch::support::AsyncResult<std::optional<ai::Credential>>(
+                std::expected<std::optional<ai::Credential>, cch::support::Error>{
+                    std::unexpect,
+                    util::make_error(util::ErrorCode::Unknown, "store write failed")});
         }
         std::optional<ai::Credential> current;
         if (const auto found = records.find(provider_id); found != records.end()) {
             current = found->second;
         }
-        CCH_TRY(updated, co_await modifier(current));
-        if (updated) {
-            records.insert_or_assign(provider_id, *updated);
+        auto updated = tests::run_hook(modifier(std::move(current)));
+        if (!updated) {
+            return cch::support::AsyncResult<std::optional<ai::Credential>>(
+                std::expected<std::optional<ai::Credential>, cch::support::Error>{
+                    std::unexpect, std::move(updated.error())});
+        }
+        if (*updated) {
+            records.insert_or_assign(provider_id, **updated);
         }
         const auto found = records.find(provider_id);
         if (found == records.end()) {
-            co_return std::optional<ai::Credential>{};
+            return cch::support::AsyncResult<std::optional<ai::Credential>>(
+                std::expected<std::optional<ai::Credential>, cch::support::Error>{
+                    std::optional<ai::Credential>{}});
         }
-        co_return std::optional<ai::Credential>{found->second};
+        return cch::support::AsyncResult<std::optional<ai::Credential>>(
+            std::expected<std::optional<ai::Credential>, cch::support::Error>{
+                found->second});
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> remove(
+    [[nodiscard]] cch::support::AsyncResult<void> remove(
         std::string provider_id) override {
         ++remove_count;
         records.erase(provider_id);
-        co_return util::ExpectedVoid{};
+        return cch::support::AsyncResult<void>(
+            std::expected<void, cch::support::Error>{});
     }
 
     std::map<std::string, ai::Credential, std::less<>> records;

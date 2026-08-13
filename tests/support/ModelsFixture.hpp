@@ -20,23 +20,30 @@ namespace detail {
 
 class FixtureCredentialStore final : public ai::CredentialStore {
 public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> read(
+    [[nodiscard]] cch::support::AsyncResult<std::optional<ai::Credential>> read(
         std::string) override {
-        co_return std::optional<ai::Credential>{};
+        return cch::support::AsyncResult<std::optional<ai::Credential>>(
+            std::expected<std::optional<ai::Credential>, cch::support::Error>{
+                std::optional<ai::Credential>{}});
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::vector<ai::CredentialInfo>>> list() override {
-        co_return std::vector<ai::CredentialInfo>{};
+    [[nodiscard]] cch::support::AsyncResult<std::vector<ai::CredentialInfo>> list() override {
+        return cch::support::AsyncResult<std::vector<ai::CredentialInfo>>(
+            std::expected<std::vector<ai::CredentialInfo>, cch::support::Error>{
+                std::vector<ai::CredentialInfo>{}});
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> modify(
+    [[nodiscard]] cch::support::AsyncResult<std::optional<ai::Credential>> modify(
         std::string,
         ai::CredentialModifyHook) override {
-        co_return std::optional<ai::Credential>{};
+        return cch::support::AsyncResult<std::optional<ai::Credential>>(
+            std::expected<std::optional<ai::Credential>, cch::support::Error>{
+                std::optional<ai::Credential>{}});
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> remove(std::string) override {
-        co_return util::ExpectedVoid{};
+    [[nodiscard]] cch::support::AsyncResult<void> remove(std::string) override {
+        return cch::support::AsyncResult<void>(
+            std::expected<void, cch::support::Error>{});
     }
 };
 

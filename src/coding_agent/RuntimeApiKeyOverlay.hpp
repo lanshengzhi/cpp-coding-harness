@@ -3,8 +3,6 @@
 #include <cch/ai/CredentialStore.hpp>
 #include <cch/util/Error.hpp>
 
-#include <boost/asio/awaitable.hpp>
-
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -31,13 +29,13 @@ public:
 
     // ── CredentialStore ──────────────────────────────────────────────────
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> read(
+    [[nodiscard]] cch::support::AsyncResult<std::optional<ai::Credential>> read(
         std::string provider_id) override;
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::vector<ai::CredentialInfo>>> list() override;
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> modify(
+    [[nodiscard]] cch::support::AsyncResult<std::vector<ai::CredentialInfo>> list() override;
+    [[nodiscard]] cch::support::AsyncResult<std::optional<ai::Credential>> modify(
         std::string provider_id,
         ai::CredentialModifyHook modifier) override;
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> remove(
+    [[nodiscard]] cch::support::AsyncResult<void> remove(
         std::string provider_id) override;
 
 private:

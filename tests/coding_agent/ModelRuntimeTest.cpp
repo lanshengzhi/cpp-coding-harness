@@ -28,6 +28,7 @@ using namespace cch;
 namespace {
 
 using tests::run_awaitable;
+using tests::run_async_result;
 using tests::ScriptedTransport;
 using tests::TransportAttempt;
 
@@ -42,16 +43,17 @@ using tests::TransportAttempt;
 
 class MemoryCredentialStore final : public ai::CredentialStore {
 public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> read(
+    [[nodiscard]] cch::support::AsyncResult<std::optional<ai::Credential>> read(
         std::string provider_id) override {
-        const auto found = records.find(provider_id);
-        if (found == records.end()) {
-            co_return std::optional<ai::Credential>{};
+        std::optional<ai::Credential> value;
+        if (const auto found = records.find(provider_id); found != records.end()) {
+            value = found->second;
         }
-        co_return std::optional<ai::Credential>{found->second};
+        return cch::support::AsyncResult<std::optional<ai::Credential>>(
+            std::expected<std::optional<ai::Credential>, cch::support::Error>{std::move(value)});
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::vector<ai::CredentialInfo>>> list() override {
+    [[nodiscard]] cch::support::AsyncResult<std::vector<ai::CredentialInfo>> list() override {
         std::vector<ai::CredentialInfo> result;
         for (const auto& [id, credential] : records) {
             result.push_back(ai::CredentialInfo{
@@ -59,27 +61,36 @@ public:
                 .type = std::holds_alternative<ai::OAuthCredential>(credential) ? "oauth" : "api_key",
             });
         }
-        co_return result;
+        return cch::support::AsyncResult<std::vector<ai::CredentialInfo>>(
+            std::expected<std::vector<ai::CredentialInfo>, cch::support::Error>{std::move(result)});
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> modify(
+    [[nodiscard]] cch::support::AsyncResult<std::optional<ai::Credential>> modify(
         std::string provider_id,
         ai::CredentialModifyHook modifier) override {
         std::optional<ai::Credential> current;
         if (const auto found = records.find(provider_id); found != records.end()) {
             current = found->second;
         }
-        CCH_TRY(updated, co_await modifier(current));
-        if (updated) {
-            records.insert_or_assign(provider_id, *updated);
+        auto updated = tests::run_hook(modifier(std::move(current)));
+        if (!updated) {
+            return cch::support::AsyncResult<std::optional<ai::Credential>>(
+                std::expected<std::optional<ai::Credential>, cch::support::Error>{
+                    std::unexpect, std::move(updated.error())});
         }
-        co_return current;
+        if (*updated) {
+            records.insert_or_assign(provider_id, **updated);
+        }
+        return cch::support::AsyncResult<std::optional<ai::Credential>>(
+            std::expected<std::optional<ai::Credential>, cch::support::Error>{
+                std::move(current)});
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> remove(
+    [[nodiscard]] cch::support::AsyncResult<void> remove(
         std::string provider_id) override {
         records.erase(provider_id);
-        co_return util::ExpectedVoid{};
+        return cch::support::AsyncResult<void>(
+            std::expected<void, cch::support::Error>{});
     }
 
     std::map<std::string, ai::Credential, std::less<>> records;
@@ -346,7 +357,7 @@ TEST_CASE("ModelRuntime login persists the credential and refresh failures never
     REQUIRE(std::holds_alternative<ai::ApiKeyCredential>(*credential));
     CHECK(std::get<ai::ApiKeyCredential>(*credential).key == "dummy-login-key");
     // The credential was persisted.
-    const auto stored = run_awaitable(store->read("login-provider"));
+    const auto stored = run_async_result(store->read("login-provider"));
     REQUIRE(stored);
     REQUIRE(stored->has_value());
     CHECK(std::get<ai::ApiKeyCredential>(**stored).key == "dummy-login-key");
@@ -370,7 +381,7 @@ TEST_CASE("ModelRuntime logout removes the credential and recomposes", "[coding_
     REQUIRE((*runtime)->register_native_provider(std::make_shared<LoginProvider>()));
 
     REQUIRE(run_awaitable((*runtime)->logout("login-provider")));
-    const auto stored = run_awaitable(store->read("login-provider"));
+    const auto stored = run_async_result(store->read("login-provider"));
     REQUIRE(stored);
     CHECK_FALSE(stored->has_value());
 }
@@ -509,7 +520,7 @@ TEST_CASE("ModelRuntime resolves the pi 4-level auth precedence chain", "[coding
         return std::move(*auth);
     };
     const auto store_key = [&](std::string provider_id, std::string key) {
-        auto stored = run_awaitable(storage->modify(
+        auto stored = run_async_result(storage->modify(
             std::move(provider_id),
             [key = std::move(key)](std::optional<ai::Credential>)
                 -> boost::asio::awaitable<

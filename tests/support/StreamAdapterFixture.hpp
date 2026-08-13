@@ -3,6 +3,7 @@
 #include <cch/ai/Auth.hpp>
 #include <cch/ai/StreamEvent.hpp>
 #include <cch/ai/providers/StreamTransport.hpp>
+#include "ai/AsyncResultBridge.hpp"
 #include "util/ExpectedMacros.hpp"
 
 #include <boost/asio/co_spawn.hpp>
@@ -47,25 +48,65 @@ template <typename T>
     return result.get();
 }
 
+template <typename T, typename E>
+[[nodiscard]] std::expected<T, E> run_async_result(cch::support::AsyncResult<T, E> result) {
+    boost::asio::io_context io;
+    auto future = boost::asio::co_spawn(
+        io,
+        [](cch::support::AsyncResult<T, E> op) -> boost::asio::awaitable<std::expected<T, E>> {
+            co_return co_await cch::ai::detail::await_async_result(std::move(op));
+        }(std::move(result)),
+        boost::asio::use_future);
+    io.run();
+    return future.get();
+}
+
+/// Run a `CredentialModifyHook` to completion on a throwaway io_context. Test
+/// fakes use this to consume an asio-awaitable modifier inside a plain
+/// `AsyncResult`-returning method; real hooks used by fakes are deterministic
+/// and never perform blocking I/O.
+template <typename T>
+[[nodiscard]] util::Expected<T> run_hook(boost::asio::awaitable<util::Expected<T>> hook) {
+    boost::asio::io_context io;
+    auto future = boost::asio::co_spawn(io, std::move(hook), boost::asio::use_future);
+    io.run();
+    try {
+        return future.get();
+    } catch (const std::exception&) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Unknown, "modifier hook failed"));
+    } catch (...) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Unknown, "modifier hook failed"));
+    }
+}
+
 class EmptyCredentialStore final : public ai::CredentialStore {
 public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> read(
+    [[nodiscard]] cch::support::AsyncResult<std::optional<ai::Credential>> read(
         std::string) override {
-        co_return std::optional<ai::Credential>{};
+        return cch::support::AsyncResult<std::optional<ai::Credential>>(
+            std::expected<std::optional<ai::Credential>, cch::support::Error>{
+                std::optional<ai::Credential>{}});
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::vector<ai::CredentialInfo>>> list() override {
-        co_return std::vector<ai::CredentialInfo>{};
+    [[nodiscard]] cch::support::AsyncResult<std::vector<ai::CredentialInfo>> list() override {
+        return cch::support::AsyncResult<std::vector<ai::CredentialInfo>>(
+            std::expected<std::vector<ai::CredentialInfo>, cch::support::Error>{
+                std::vector<ai::CredentialInfo>{}});
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> modify(
+    [[nodiscard]] cch::support::AsyncResult<std::optional<ai::Credential>> modify(
         std::string,
         ai::CredentialModifyHook) override {
-        co_return std::optional<ai::Credential>{};
+        return cch::support::AsyncResult<std::optional<ai::Credential>>(
+            std::expected<std::optional<ai::Credential>, cch::support::Error>{
+                std::optional<ai::Credential>{}});
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> remove(std::string) override {
-        co_return util::ExpectedVoid{};
+    [[nodiscard]] cch::support::AsyncResult<void> remove(std::string) override {
+        return cch::support::AsyncResult<void>(
+            std::expected<void, cch::support::Error>{});
     }
 };
 

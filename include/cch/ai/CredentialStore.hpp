@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cch/support/AsyncResult.hpp>
 #include <cch/util/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
@@ -50,34 +51,42 @@ struct CredentialInfo {
 };
 
 /// A serialized credential update. Returning `std::nullopt` leaves the current
-/// entry unchanged; failures propagate without writing the backing store.
+/// entry unchanged; failures propagate without writing the backing store. The
+/// hook owns its inputs and its returned awaitable; the backing store drives
+/// it on its own execution context while the whole-file mutation lock is held.
 using CredentialModifyHook = std::move_only_function<
     boost::asio::awaitable<util::Expected<std::optional<Credential>>>(
         std::optional<Credential>)>;
 
 /// App-owned credential persistence keyed by Provider id. Trusted callers may
 /// receive secrets from `read`/`modify`; `list` is deliberately metadata-only.
+///
+/// Read and modification operations complete through typed `AsyncResult`
+/// outcomes with owned inputs (ADR 0040 / #454). Ready reads serve an
+/// in-memory snapshot inline; a write's blocking filesystem work stays off
+/// the caller's execution by completing through the operation's own
+/// `AsyncResult` while the OAuth refresh remains an asynchronous hook.
 class CredentialStore {
 public:
     virtual ~CredentialStore() = default;
 
     /// Read the stored credential, possibly expired. Missing or unsupported
     /// records resolve to `std::nullopt`.
-    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<std::optional<Credential>>> read(
+    [[nodiscard]] virtual cch::support::AsyncResult<std::optional<Credential>> read(
         std::string provider_id) = 0;
 
     /// Enumerate provider id and type only. Implementations must not resolve or
     /// execute configured key values while listing.
-    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<std::vector<CredentialInfo>>> list() = 0;
+    [[nodiscard]] virtual cch::support::AsyncResult<std::vector<CredentialInfo>> list() = 0;
 
     /// The only write path. The callback runs while the backing store's
     /// provider mutation is serialized and sees the latest persisted value.
-    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<std::optional<Credential>>> modify(
+    [[nodiscard]] virtual cch::support::AsyncResult<std::optional<Credential>> modify(
         std::string provider_id,
         CredentialModifyHook modifier) = 0;
 
     /// Remove one provider credential, serialized against `modify`.
-    [[nodiscard]] virtual boost::asio::awaitable<util::ExpectedVoid> remove(
+    [[nodiscard]] virtual cch::support::AsyncResult<void> remove(
         std::string provider_id) = 0;
 };
 

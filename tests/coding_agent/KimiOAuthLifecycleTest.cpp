@@ -5,6 +5,7 @@
 #include <cch/coding_agent/AuthStorage.hpp>
 #include "ai/auth/KimiCodingOAuth.hpp"
 #include "ai/auth/OAuthHttpClient.hpp"
+#include "ai/AsyncResultBridge.hpp"
 #include "ai/providers/KimiProvider.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -35,6 +36,19 @@ T run_awaitable(boost::asio::awaitable<T> operation) {
     auto result = boost::asio::co_spawn(io, std::move(operation), boost::asio::use_future);
     io.run();
     return result.get();
+}
+
+template <typename T, typename E>
+std::expected<T, E> run_async_result(cch::support::AsyncResult<T, E> result) {
+    boost::asio::io_context io;
+    auto future = boost::asio::co_spawn(
+        io,
+        [](cch::support::AsyncResult<T, E> op) -> boost::asio::awaitable<std::expected<T, E>> {
+            co_return co_await cch::ai::detail::await_async_result(std::move(op));
+        }(std::move(result)),
+        boost::asio::use_future);
+    io.run();
+    return future.get();
 }
 
 [[nodiscard]] std::string read_text(const std::filesystem::path& path) {
@@ -184,7 +198,7 @@ struct LoginHarness {
         std::string access,
         std::string refresh,
         std::int64_t expires) {
-        auto modified = run_awaitable(storage->modify(
+        auto modified = run_async_result(storage->modify(
             "kimi-coding",
             [access = std::move(access), refresh = std::move(refresh), expires](
                 std::optional<ai::Credential>)
@@ -202,7 +216,7 @@ struct LoginHarness {
     /// Mark the stored credential as expiring within 5 minutes so the next
     /// request-time resolution refreshes under the store lock.
     void expire_stored_credential() {
-        auto modified = run_awaitable(storage->modify(
+        auto modified = run_async_result(storage->modify(
             "kimi-coding",
             [](std::optional<ai::Credential> current)
                 -> boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> {
@@ -251,7 +265,7 @@ TEST_CASE("Kimi OAuth lifecycle persists login, refresh rotation, then logout", 
           read_fixture("kimi-oauth-after-refresh.json"));
 
     // The logout list is CredentialStore::list() metadata ({provider, type}).
-    auto before_logout = run_awaitable(harness.storage->list());
+    auto before_logout = run_async_result(harness.storage->list());
     REQUIRE(before_logout);
     const std::vector<ai::CredentialInfo> expected_metadata{
         {.provider_id = "kimi-coding", .type = "oauth"},
@@ -262,7 +276,7 @@ TEST_CASE("Kimi OAuth lifecycle persists login, refresh rotation, then logout", 
     // config-based auth is never stored, so it is untouched by this removal.
     auto removed = run_awaitable(harness.models->logout("kimi-coding"));
     REQUIRE(removed);
-    auto listed = run_awaitable(harness.storage->list());
+    auto listed = run_async_result(harness.storage->list());
     REQUIRE(listed);
     CHECK(listed->empty());
     CHECK(read_text(harness.auth_path) == "{}");
@@ -300,7 +314,7 @@ TEST_CASE("Kimi dead credentials stay in auth.json", "[coding_agent][auth][issue
     auto persisted = read_text(harness.auth_path);
     CHECK(persisted.find("dummy-refresh-token") != std::string::npos);
     CHECK(persisted.find("dummy-access-token") != std::string::npos);
-    auto stored = run_awaitable(harness.storage->read("kimi-coding"));
+    auto stored = run_async_result(harness.storage->read("kimi-coding"));
     REQUIRE(stored);
     REQUIRE(stored->has_value());
     const auto& oauth = std::get<ai::OAuthCredential>(**stored);

@@ -4,7 +4,9 @@
 #include "util/ExpectedMacros.hpp"
 #include "util/Json.hpp"
 
+#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/error.hpp>
+#include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
@@ -587,7 +589,19 @@ private:
 } // namespace
 
 struct AuthStorage::Impl {
-    explicit Impl(std::filesystem::path auth_path) : auth_path_(std::move(auth_path)) {}
+    explicit Impl(std::filesystem::path auth_path)
+        : auth_path_(std::move(auth_path)),
+          work_(boost::asio::make_work_guard(io_)),
+          thread_([this] { io_.run(); }) {}
+
+    ~Impl() {
+        // Reset the work guard so `io_.run()` drains and returns, then join
+        // the worker before the io_context and snapshot members destruct.
+        work_.reset();
+        if (thread_.joinable()) {
+            thread_.join();
+        }
+    }
 
     void reload() noexcept {
         try {
@@ -629,7 +643,7 @@ struct AuthStorage::Impl {
         return entries;
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> modify(
+    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> modify_awaitable(
         std::string provider_id,
         ai::CredentialModifyHook modifier) {
         CCH_TRY_VOID(ensure_storage_path(auth_path_));
@@ -682,7 +696,7 @@ struct AuthStorage::Impl {
         co_return std::move(next);
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> remove(std::string provider_id) {
+    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> remove_awaitable(std::string provider_id) {
         CCH_TRY_VOID(ensure_storage_path(auth_path_));
         CCH_TRY(lease, co_await acquire_lock_async(auth_path_));
         CCH_TRY(current_data, read_current_data(auth_path_));
@@ -700,6 +714,11 @@ struct AuthStorage::Impl {
         co_return util::ExpectedVoid{};
     }
 
+    // Execution context for blocking file I/O and the modify hook's OAuth
+    // refresh; keeps filesystem work off the caller's Runtime loop. Public so
+    // the AsyncResult producers on `AuthStorage` can co_spawn onto it.
+    boost::asio::io_context io_;
+
 private:
     void set_snapshot(JsonObject snapshot) {
         std::scoped_lock lock(snapshot_mutex_);
@@ -709,6 +728,8 @@ private:
     std::filesystem::path auth_path_;
     mutable std::mutex snapshot_mutex_;
     JsonObject snapshot_;
+    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_;
+    std::jthread thread_;
 };
 
 AuthStorage::AuthStorage(std::filesystem::path auth_path)
@@ -722,23 +743,65 @@ void AuthStorage::reload() noexcept {
     impl_->reload();
 }
 
-boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> AuthStorage::read(
+cch::support::AsyncResult<std::optional<ai::Credential>> AuthStorage::read(
     std::string provider_id) {
-    co_return impl_->read(provider_id);
+    return cch::support::AsyncResult<std::optional<ai::Credential>>(
+        std::expected<std::optional<ai::Credential>, cch::support::Error>{
+            impl_->read(std::move(provider_id))});
 }
 
-boost::asio::awaitable<util::Expected<std::vector<ai::CredentialInfo>>> AuthStorage::list() {
-    co_return impl_->list();
+cch::support::AsyncResult<std::vector<ai::CredentialInfo>> AuthStorage::list() {
+    return cch::support::AsyncResult<std::vector<ai::CredentialInfo>>(
+        std::expected<std::vector<ai::CredentialInfo>, cch::support::Error>{
+            impl_->list()});
 }
 
-boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> AuthStorage::modify(
+cch::support::AsyncResult<std::optional<ai::Credential>> AuthStorage::modify(
     std::string provider_id,
     ai::CredentialModifyHook modifier) {
-    co_return co_await impl_->modify(std::move(provider_id), std::move(modifier));
+    // The producer captures the impl by raw pointer; the backing store is
+    // `shared_ptr`-held by Models and outlives every in-flight operation.
+    Impl* impl = impl_.get();
+    return cch::support::AsyncResult<std::optional<ai::Credential>>(
+        [impl, provider_id = std::move(provider_id), modifier = std::move(modifier)](
+            cch::support::AsyncCompletion<std::optional<ai::Credential>, cch::support::Error> completion) mutable noexcept {
+            boost::asio::co_spawn(
+                impl->io_,
+                impl->modify_awaitable(std::move(provider_id), std::move(modifier)),
+                [completion = std::move(completion)](
+                    std::exception_ptr eptr,
+                    util::Expected<std::optional<ai::Credential>> result) mutable noexcept {
+                    if (eptr) {
+                        completion(std::unexpected(util::make_error(
+                            util::ErrorCode::Unknown,
+                            "credential modification failed")));
+                    } else {
+                        completion(std::move(result));
+                    }
+                });
+        });
 }
 
-boost::asio::awaitable<util::ExpectedVoid> AuthStorage::remove(std::string provider_id) {
-    co_return co_await impl_->remove(std::move(provider_id));
+cch::support::AsyncResult<void> AuthStorage::remove(std::string provider_id) {
+    Impl* impl = impl_.get();
+    return cch::support::AsyncResult<void>(
+        [impl, provider_id = std::move(provider_id)](
+            cch::support::AsyncCompletion<void, cch::support::Error> completion) mutable noexcept {
+            boost::asio::co_spawn(
+                impl->io_,
+                impl->remove_awaitable(std::move(provider_id)),
+                [completion = std::move(completion)](
+                    std::exception_ptr eptr,
+                    util::ExpectedVoid result) mutable noexcept {
+                    if (eptr) {
+                        completion(std::unexpected(util::make_error(
+                            util::ErrorCode::Unknown,
+                            "credential removal failed")));
+                    } else {
+                        completion(std::move(result));
+                    }
+                });
+        });
 }
 
 } // namespace cch::coding_agent

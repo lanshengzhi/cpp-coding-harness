@@ -1,6 +1,7 @@
 #include "RuntimeApiKeyOverlay.hpp"
 
 #include <algorithm>
+#include <expected>
 #include <utility>
 
 namespace cch::coding_agent {
@@ -35,56 +36,77 @@ std::vector<std::string> RuntimeApiKeyOverlay::runtime_api_key_providers() const
     return providers;
 }
 
-boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>>
+cch::support::AsyncResult<std::optional<ai::Credential>>
 RuntimeApiKeyOverlay::read(std::string provider_id) {
     {
         std::scoped_lock lock(mutex_);
         if (const auto found = overrides_.find(provider_id);
             found != overrides_.end()) {
             ai::ApiKeyCredential credential{.key = found->second};
-            co_return std::optional<ai::Credential>{std::move(credential)};
+            return cch::support::AsyncResult<std::optional<ai::Credential>>(
+                std::expected<std::optional<ai::Credential>, cch::support::Error>{
+                    std::optional<ai::Credential>{std::move(credential)}});
         }
     }
-    co_return co_await base_->read(std::move(provider_id));
+    return base_->read(std::move(provider_id));
 }
 
-boost::asio::awaitable<util::Expected<std::vector<ai::CredentialInfo>>>
+cch::support::AsyncResult<std::vector<ai::CredentialInfo>>
 RuntimeApiKeyOverlay::list() {
-    auto entries = co_await base_->list();
-    if (!entries) {
-        co_return entries;
-    }
-    std::vector<std::string> runtime_providers = runtime_api_key_providers();
-    for (const auto& provider_id : runtime_providers) {
-        const auto existing = std::find_if(
-            entries->begin(),
-            entries->end(),
-            [&provider_id](const ai::CredentialInfo& entry) {
-                return entry.provider_id == provider_id;
-            });
-        if (existing != entries->end()) {
-            existing->type = "api_key";
-        } else {
-            entries->push_back(ai::CredentialInfo{
-                .provider_id = provider_id,
-                .type = "api_key",
-            });
-        }
-    }
-    co_return entries;
+    std::vector<std::string> runtime = runtime_api_key_providers();
+    // Weak capture: the producer must not hold the last strong reference to
+    // the backing store, which could otherwise be destroyed on the store's own
+    // worker thread and self-join during teardown (ADR 0040 / #454).
+    std::weak_ptr<ai::CredentialStore> base = base_;
+    return cch::support::AsyncResult<std::vector<ai::CredentialInfo>>(
+        [base = std::move(base), runtime = std::move(runtime)](
+            cch::support::AsyncCompletion<std::vector<ai::CredentialInfo>, cch::support::Error> completion) mutable noexcept {
+            auto locked = base.lock();
+            if (!locked) {
+                completion(std::unexpected(util::make_error(
+                    util::ErrorCode::Unknown,
+                    "credential store is unavailable")));
+                return;
+            }
+            locked->list().start(
+                [completion = std::move(completion), runtime = std::move(runtime)](
+                    std::expected<std::vector<ai::CredentialInfo>, cch::support::Error> entries) mutable noexcept {
+                    if (!entries) {
+                        completion(std::move(entries));
+                        return;
+                    }
+                    for (const auto& provider_id : runtime) {
+                        const auto existing = std::find_if(
+                            entries->begin(),
+                            entries->end(),
+                            [&provider_id](const ai::CredentialInfo& entry) {
+                                return entry.provider_id == provider_id;
+                            });
+                        if (existing != entries->end()) {
+                            existing->type = "api_key";
+                        } else {
+                            entries->push_back(ai::CredentialInfo{
+                                .provider_id = provider_id,
+                                .type = "api_key",
+                            });
+                        }
+                    }
+                    completion(std::move(entries));
+                });
+        });
 }
 
-boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>>
+cch::support::AsyncResult<std::optional<ai::Credential>>
 RuntimeApiKeyOverlay::modify(
     std::string provider_id,
     ai::CredentialModifyHook modifier) {
-    co_return co_await base_->modify(std::move(provider_id), std::move(modifier));
+    return base_->modify(std::move(provider_id), std::move(modifier));
 }
 
-boost::asio::awaitable<util::ExpectedVoid> RuntimeApiKeyOverlay::remove(
+cch::support::AsyncResult<void> RuntimeApiKeyOverlay::remove(
     std::string provider_id) {
     remove_runtime_api_key(provider_id);
-    co_return co_await base_->remove(std::move(provider_id));
+    return base_->remove(std::move(provider_id));
 }
 
 } // namespace cch::coding_agent

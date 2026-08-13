@@ -25,6 +25,7 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -32,6 +33,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -41,6 +43,13 @@ namespace {
 
 void drain_ready(boost::asio::io_context& io) {
     if (io.stopped()) io.restart();
+    while (io.poll() != 0) {
+    }
+    // The credential store persists on its own worker thread (AuthStorage,
+    // ADR 0040 / #454); yield and re-poll so a completion posted from that
+    // thread is processed before the caller's next assertion observes the
+    // screen.
+    std::this_thread::sleep_for(std::chrono::milliseconds{2});
     while (io.poll() != 0) {
     }
 }
@@ -241,6 +250,14 @@ struct InteractiveRun {
 
     void exit() {
         type("\x04");
+        // The credential store persists on its own worker thread (AuthStorage,
+        // ADR 0040 / #454); poll the io_context and yield until the interactive
+        // mode reaches its terminal outcome so a background completion can be
+        // posted back and processed deterministically.
+        for (int attempt = 0; attempt < 2000 && !run_result; ++attempt) {
+            drain_ready(io);
+            std::this_thread::sleep_for(std::chrono::milliseconds{1});
+        }
         REQUIRE(run_result);
         CHECK(*run_result);
     }
