@@ -12,9 +12,9 @@
 
 ## Guardrails
 
-1. **Data is passive value state.** Public contracts use aggregate-friendly `struct`, `std::variant`, `std::expected`, and project `util::JsonValue` values.
+1. **Data is passive value state.** Owner Interfaces use aggregate-friendly `struct`, `std::variant`, `std::expected`, and `cch::support::JsonValue` values.
 2. **Capabilities cross physical seams.** Chat clients, stream transports, execution environments, session stores, and tools are exposed through interfaces or dependency-heavy implementations hidden behind narrow headers.
-3. **Events are weak connections.** Agent/provider event sinks use `std::move_only_function`; do not regress to copyability requirements such as `std::function`.
+3. **Connection strength is explicit.** Ordinary Agent Session, TUI, status, and diagnostic observers are weak; model-stream delivery and Agent-to-Session commitment are separately named strong, awaited, backpressured connections. Both use move-only callables where stored—never regress to copyability requirements such as `std::function`. See ADR 0040.
 4. **Generic and serialization machinery stays local.** Glaze DTOs, schema conversion, visitors, parsing helpers, and similar machinery stay in serialization or implementation layers.
 5. **Security and containment remain explicit.** Shell, file, environment-variable, provider, and session changes must preserve workspace containment, secret redaction, output truncation, and the documented “not a sandbox” boundary.
 

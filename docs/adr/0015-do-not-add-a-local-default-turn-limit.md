@@ -6,6 +6,8 @@ status: accepted
 
 The agent loop follows pi's stopping policy without a C++-specific default turn cap. The current implicit eight-turn limit and its provider-error outcome are removed: a run stops through pi-equivalent terminal conditions, stop-after-turn policy, termination decisions, or cancellation, and any future product limit is added only when pi exposes the corresponding policy or as a separately approved explicit extension.
 
+> Package terminology refined by [ADR 0039](0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md): the `cch_agent` name below now denotes Agent behavior owned by `cch_agent_core`; it is not a separate Capability Owner Package. The no-default-turn-limit decision remains authoritative.
+
 ## Considered options
 
 - Keep eight turns as a coding-agent safety default: rejected because the decision is to follow pi strictly rather than introduce a local product policy.

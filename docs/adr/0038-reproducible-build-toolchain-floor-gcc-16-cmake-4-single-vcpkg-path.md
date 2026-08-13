@@ -6,6 +6,8 @@ status: accepted
 
 The harness pins its dependencies to the `builtin-baseline` commit in `vcpkg.json`, but the host toolchain was only documented as "a C++23-capable compiler" with `cmake_minimum_required(VERSION 3.25)`. A fresh checkout could fail at any of several implicit host dependencies: a system CMake older than the preset floor, a compiler that does not satisfy the C++23 requirements, a vcpkg clone older than the baseline commit (manifest resolution breaks with `git show <baseline>:versions/baseline.json`), or the unmaintained `system` dependency preset. This ADR makes the toolchain floor explicit and reproducible.
 
+> Toolchain and platform clauses superseded by [ADR 0039](0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md): the CMake 4.0 floor becomes 4.4 or newer; release/CI pin exact GCC 16.x, CMake, and Ninja versions; Ninja 1.11 or newer is required; GCC is the sole build/release compiler; Clang 22.x is a blocking Linux conformance verifier; and native Linux x86-64 with glibc replaces the earlier Linux-primary, macOS/Windows-best-effort range. Unsupported platforms, cross-compilation, Unix Makefiles, and Unity Build fail at configure time. The single pinned vcpkg path and reproducible-host-toolchain rationale remain authoritative.
+
 ## Considered options
 
 - Keep CMake 3.25 and a loose compiler floor, fixing only the vcpkg baseline pin: rejected because the C++23 codebase already requires 2023-era compilers in practice, the 3.25 floor only preserved compatibility with toolchains that cannot build the project, and the CMP0167 policy guard existed solely for that compatibility.

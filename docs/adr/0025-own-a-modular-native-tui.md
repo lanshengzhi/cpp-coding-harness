@@ -8,6 +8,8 @@ A Native TUI belongs in this product's boundary rather than being left to JSON/R
 
 > Refined by [ADR 0035](0035-own-the-scoped-pi-tui-toolkit-capabilities-for-the-three-provider-paths.md): the toolkit's Supported renderer is pi's default regular main-screen mode at parity baseline `83114817`; the opt-in fullscreen alt-screen/viewport half (layout engine, scroll/mouse/selection, OSC 133 navigation) is Deferred with no placeholder surface. The toolkit keeps the decoded input-event model and terminal-owned image placement as recorded Intentional Divergences under the Semantic Parity definition below, and the reusable module surface is re-pinned from `864b35c` to `83114817` (app-layer pins advance with the pi-coding-agent phase audit).
 
+> Platform, release, and frontend clauses superseded by [ADR 0036](0036-own-the-scoped-pi-coding-agent-application-layer-capabilities-for-the-three-provider-paths.md) and [ADR 0039](0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md): `cch_tui` is a repository-internal Capability Owner Package, not an installed public SDK; JSON/RPC/SDK paths do not remain; and Linux/macOS plus best-effort non-TUI platform support is replaced by native Linux x86-64 with glibc only. The modular split between reusable TUI Toolkit behavior and coding-agent application composition, the Semantic Parity definition, terminal RAII, and deterministic terminal seam remain authoritative.
+
 ## Considered options
 
 - Keep the product boundary at the line-oriented CLI, JSON/RPC, and SDK: rejected because the intended product is an idiomatic C++ counterpart to pi's complete interactive terminal experience, not only an integration backend.

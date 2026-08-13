@@ -8,6 +8,8 @@ The AI module owns the shared `cch::ai::MessageVariant` value used across provid
 
 This is a physical C++ module boundary, not a claim that every `cch::ai::MessageVariant` alternative is itself a Provider Message. It preserves the implemented shared value flow without allowing unrelated runtime or session-entry vocabulary to accumulate in the AI public surface.
 
+> Physical package-name clauses superseded by [ADR 0039](0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md): `cch_agent` and `cch_harness` are consolidated into the authoritative `cch_agent_core` Owner, while `cch_coding_agent_runtime` composition belongs to repository-private `cch_coding_agent`. AI ownership of the bounded shared message variant, provider conversion, Session Entry ownership outside `cch_ai`, and the exclusion of unrelated product/session vocabulary remain authoritative.
+
 ## Considered options
 
 - Move the four extended runtime forms into a second agent- or coding-agent-owned variant: rejected because the current agent history, provider conversion, and Session Store contract share one closed value across their physical seams.

@@ -6,6 +6,8 @@ status: accepted
 
 The Native TUI will promote pi-baseline User Bash as a direct-user capability independently of the model-requested Bash Tool. Interactive `!` and `!!` execution will not require `--enable-bash`; that flag will continue to authorize only registration of the Bash Tool for model calls. This distinction is hard to reverse once the input syntax and Session history become supported behavior, and it preserves the different trust boundaries between an explicit user command and a model-selected tool call.
 
+> Surface and platform clauses superseded by [ADR 0036](0036-own-the-scoped-pi-coding-agent-application-layer-capabilities-for-the-three-provider-paths.md) and [ADR 0039](0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md): `--enable-bash`, JSON, RPC, and SDK product surfaces are removed; the fixed model Bash Tool remains available under the pi-aligned application surface; and User Bash is supported only on native Linux x86-64 with glibc, not Linux/macOS. The separate direct-user authorization boundary, `!`/`!!` context semantics, containment, output draining/bounding, and quiescent Close obligations remain authoritative.
+
 ## Considered options
 
 - Keep User Bash deferred: rejected because its message, persistence, provider-context, Shell, and transcript foundations already exist, making it the narrowest high-value Native TUI parity gap.

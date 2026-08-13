@@ -6,6 +6,8 @@ status: accepted
 
 Tool scheduling follows pi's parallel default at the loop level (`BoundedParallelToolExecution` with no explicit cap is the default run policy, #355 / ADR 0034), but the C++-specific safety mechanism of this ADR remains: tool adapters declare their per-tool execution mode through `concurrency()`, defaulting to `Exclusive` (pi `executionMode: "sequential"`), and a batch containing a call to such a tool runs through the sequential path. C++ custom tools can share mutable state whose unsynchronized concurrent access is undefined behavior, so compile-time/adapter-level opt-in provides a caller-safety benefit that outweighs identical default scheduling.
 
+> Tool representation refined by [ADR 0040](0040-own-asynchronous-operations-and-the-serialized-runtime-lifecycle.md): concurrency is passive Tool descriptor state and execution is one move-only `AsyncResult` operation, not a required adapter `concurrency()` method. The exclusive default, explicit parallel-safe opt-in, mixed-batch scheduling, finite configured bounds, and result/event ordering semantics remain authoritative.
+
 ## Considered options
 
 - Run every batch in parallel like pi: rejected because a generic C++ capability interface cannot infer thread safety and would make ordinary custom tools unsafe by default.
