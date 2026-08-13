@@ -56,9 +56,9 @@ ctest --preset vcpkg
 
 Release uses validated IPO/LTO. `cmake --install` is Runtime-only: a staged prefix contains `cpp_harness`, required runtime resources, and required licenses/notices—never Owner Interface headers, project libraries, an SDK, CMake package/config, exported targets, components, or compatibility files. Release validation runs from a clean staging prefix.
 
-### Fast development preset (Ninja + ccache)
+### Optional local ccache preset
 
-For the fastest edit-build-test loop, use the checked-in `dev-fast` preset family. It configures with the Ninja generator, enables and *requires* ccache (configure fails with a clear message when ccache is not installed), and defaults to four parallel jobs. It keeps its own build tree under `build/dev-fast` and leaves the baseline presets above unchanged. This is the project's explicit fast-development path (see `docs/build-performance-plan.md`, Stage 2); on this host a warm ccache clean rebuild is about two orders of magnitude faster than a cold build.
+The checked-in `dev-fast` preset family is a local convenience for Ninja builds on the Supported Platform. It requires ccache, fails clearly when ccache is unavailable, and keeps a separate build tree under `build/dev-fast`. It does not define a second supported toolchain or build policy: ADR 0039 controls that boundary, while `docs/build-performance-plan.md` preserves only historical measurements. Its four-job default reflects the measured host rather than a universal performance threshold.
 
 ```bash
 cmake --preset dev-fast
@@ -74,7 +74,7 @@ cmake --build --preset dev-fast-release
 ctest --preset dev-fast-release
 ```
 
-Both presets default to four build jobs, matching the measured host. On a high-memory host, override the job count explicitly on the command line without touching the preset:
+For local experimentation on a higher-memory host, the job count can be overridden without changing the preset:
 
 ```bash
 cmake --build --preset dev-fast --parallel 8
