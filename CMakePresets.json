@@ -24,7 +24,7 @@
     {
       "name": "dev-fast",
       "displayName": "Fast development (Ninja + ccache, Debug)",
-      "description": "Debug fast-development preset: Ninja generator with ccache required and enabled. Fails at configure time when ccache is unavailable. See docs/build-performance-plan.md Stage 2.",
+      "description": "Optional local Debug preset: Ninja with ccache required. ADR 0039 defines supported build policy; docs/build-performance-plan.md preserves historical measurements only.",
       "inherits": "vcpkg",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/dev-fast",

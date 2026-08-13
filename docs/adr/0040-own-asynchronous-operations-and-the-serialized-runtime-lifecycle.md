@@ -124,7 +124,9 @@ Only conflicting operation shape and injection clauses are superseded; establish
 - [ADR 0020](0020-make-cancellation-a-supported-end-to-end-capability.md): the alternative public narrow cancellation value and exposed Boost.Asio bridge (`std::stop_token`, prompt-scoped ownership, and normal aborted-lifecycle semantics remain);
 - [ADR 0021](0021-let-the-agent-module-own-the-stateful-agent.md): obsolete SDK-presentation and external-public-surface terminology (Agent state ownership and the Agent/Session responsibility split remain);
 - [ADR 0023](0023-make-sdk-prompt-asynchronous-by-default.md): the authoritative SDK prompt, `prompt_blocking()`, and SDK-specific test obligations; the SDK was removed by ADR 0036 and the nonblocking/quiescent lifecycle is now owned here;
-- [ADR 0029](0029-align-models-provider-and-authentication-ownership-with-pi.md): SDK-injected/shared virtual Models Runtime and single-threaded-executor topology; Provider, Model, authentication, refresh, and stream outcomes remain; and
+- [ADR 0029](0029-align-models-provider-and-authentication-ownership-with-pi.md): SDK-injected/shared virtual Models Runtime and single-threaded-executor topology; Provider, Model, authentication, refresh, and stream outcomes remain;
+- [ADR 0030](0030-share-pi-agent-config-directory-and-credential-store.md): SDK `agentDir` override and injected Models Runtime precedence/assembly; shared-file and live-auth semantics remain;
+- [ADR 0032](0032-own-oauth-lifecycle-and-frontend-interaction-division-with-pi.md): SessionFactory/SDK Models Runtime injection and the sole public virtual seam; auth lifecycle and presentation ownership remain; and
 - [ADR 0034](0034-own-the-scoped-pi-agent-core-agent-and-agent-turn-capabilities.md): direct Agent dependency on `ModelRuntime::streamSimple`; the AI-owned `ModelStream` preserves its option, event, retry, cancellation, and terminal semantics.
 
 ## References

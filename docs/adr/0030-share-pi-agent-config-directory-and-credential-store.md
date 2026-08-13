@@ -6,6 +6,8 @@ status: accepted
 
 The Agent Config Directory is no longer a harness-private root: it is pi's own directory, read and written interoperably so that a C++ session and a real pi installation share one `auth.json` and one `models.json`. The default is `~/.pi/agent`, overridden by `PI_CODING_AGENT_DIR` or an SDK `agentDir`; `CCH_CODING_AGENT_DIR` and the `~/.cpp-harness/agent` default are removed without fallback or migration. This supersedes the directory-root consequence of [ADR 0002](0002-root-user-state-in-agent-config-directory.md) (its single-path-module and `settings.json` vocabulary decisions still stand) and implements part of parity-map ticket [#326](https://github.com/lanshengzhi/cpp-coding-harness/issues/326).
 
+> SDK, public-surface, and Models Runtime injection clauses are superseded by [ADR 0036](0036-own-the-scoped-pi-coding-agent-application-layer-capabilities-for-the-three-provider-paths.md), [ADR 0039](0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md), and [ADR 0040](0040-own-asynchronous-operations-and-the-serialized-runtime-lifecycle.md): the SDK and its `agentDir` override are removed; the path contract is repository-internal; and coding-agent Models Runtime is concrete composition rather than an injected public seam. The shared Agent Config Directory, `PI_CODING_AGENT_DIR` precedence, `auth.json`/`models.json` interoperability, permissions, lossless credential storage, and live-auth semantics remain authoritative.
+
 ## Considered options
 
 - Keep an independent harness directory and import pi files once: rejected because import-once snapshots drift immediately, and the parity destination requires live credential interoperability (login in either product is visible in the other).
