@@ -83,7 +83,7 @@ Most listed breaks do not apply (BEVE data at rest, REPE handlers, streaming vie
 - **`std::monostate` in an internally-tagged variant** writes `{"tag":"ID"}` instead of `null` — only under internal tagging; this repo's variants are untagged, so no wire change [20].
 - **Compile surface:** v8's stricter `static_assert`s and the 7.8.x include-surface split mean a clean rebuild may surface new compile errors if any DTO shape was relying on now-deprecated spellings; "several of these breaks announce themselves as `static_assert`s naming the offending type, so a clean rebuild will find most of what applies" [20].
 
-**Expected migration steps:** update `builtin-baseline` in `vcpkg.json` [6]; `cmake --preset vcpkg` (or bootstrap) to rebuild the manifest; run the full suite via `scripts/run-tests.sh` — especially `[ai]` (`GlazeRoundTripTest`, adapter tests, `SseParserTest`), `[harness][session]` (golden JSONL byte-identity), and `[cli]` shards. Golden-session tests are the early-warning system for any wire-format drift.
+**Expected migration steps:** update `builtin-baseline` in `vcpkg.json` [6]; `cmake --preset vcpkg` (or bootstrap) to rebuild the manifest; run the full suite via `ctest --preset vcpkg` — especially the `ai` (`GlazeRoundTripTest`, adapter tests, `SseParserTest`) and `harness` (golden JSONL byte-identity) labels, and the `cli` cases. Golden-session tests are the early-warning system for any wire-format drift.
 
 ---
 

@@ -360,7 +360,7 @@ TEST_CASE("AsyncResult exposes no executor, event bus, polymorphic box, or Boost
 }
 
 #if defined(__unix__) || defined(__APPLE__)
-TEST_CASE("starting an AsyncResult twice terminates the process", "[support][issue451]") {
+TEST_CASE("starting an AsyncResult twice terminates the process", "[support][fatal][issue451]") {
     const bool aborted = dies_from_abort([] {
         AsyncResult<int> result(std::expected<int, Error>{1});
         result.start([](std::expected<int, Error>) noexcept {});
@@ -369,7 +369,7 @@ TEST_CASE("starting an AsyncResult twice terminates the process", "[support][iss
     CHECK(aborted);
 }
 
-TEST_CASE("starting a moved-from AsyncResult terminates the process", "[support][issue451]") {
+TEST_CASE("starting a moved-from AsyncResult terminates the process", "[support][fatal][issue451]") {
     const bool aborted = dies_from_abort([] {
         AsyncResult<int> source(std::expected<int, Error>{1});
         AsyncResult<int> moved(std::move(source));
@@ -378,7 +378,7 @@ TEST_CASE("starting a moved-from AsyncResult terminates the process", "[support]
     CHECK(aborted);
 }
 
-TEST_CASE("a producer that completes twice terminates the process", "[support][issue451]") {
+TEST_CASE("a producer that completes twice terminates the process", "[support][fatal][issue451]") {
     const bool aborted = dies_from_abort([] {
         AsyncResult<int> result([&](AsyncCompletion<int, Error> done) noexcept {
             done(std::expected<int, Error>{1});
@@ -389,7 +389,7 @@ TEST_CASE("a producer that completes twice terminates the process", "[support][i
     CHECK(aborted);
 }
 
-TEST_CASE("an empty producer terminates the process", "[support][issue451]") {
+TEST_CASE("an empty producer terminates the process", "[support][fatal][issue451]") {
     const bool aborted = dies_from_abort([] {
         AsyncResult<int> result(AsyncProducer<int, Error>{});
         result.start([](std::expected<int, Error>) noexcept {});

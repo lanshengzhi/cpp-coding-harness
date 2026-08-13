@@ -29,4 +29,5 @@ Fixture rules:
   the goldens are deterministic and regenerable.
 
 Regenerate deterministically with
-`CCH_CAPTURE_GOLDENS=1 scripts/run-tests.sh "[coding_agent][prompt][system-prompt]"`.
+`CCH_CAPTURE_GOLDENS=1 ctest --test-dir build -L system-prompt` (the `system-prompt` label
+selects every `[system-prompt]` case; only the golden cases write under the capture flag).

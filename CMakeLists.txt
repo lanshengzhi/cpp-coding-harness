@@ -360,6 +360,12 @@ target_include_directories(cpp_harness PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_options(cpp_harness PRIVATE ${CCH_WARNING_OPTIONS})
 
 if(CCH_BUILD_TESTS)
+    # Suite-wide default hard timeout (ADR 0039; issue #447). CTest kills any
+    # test that exceeds it, so a hang in a cancellation, Close, deadlock, or
+    # fatal-contract case cannot stall the suite. The [fatal]-selected shard
+    # discovery below tightens this further for the fatal probes.
+    set(DART_TESTING_TIMEOUT 300 CACHE STRING
+        "Default hard timeout (seconds) for every CTest test")
     include(CTest)
 
     find_package(Catch2 3 CONFIG REQUIRED)
@@ -473,7 +479,11 @@ if(CCH_BUILD_TESTS)
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
     target_compile_options(cch_tests_support PRIVATE ${CCH_WARNING_OPTIONS})
-    catch_discover_tests(cch_tests_support ADD_TAGS_AS_LABELS)
+    # Fatal-contract probes (tagged [fatal]) fork a child that must die from
+    # SIGABRT. A hang means the probe broke, so they get a tightened hard
+    # timeout instead of waiting out the suite-wide default (ADR 0039; #447).
+    catch_discover_tests(cch_tests_support TEST_SPEC "~[fatal]" ADD_TAGS_AS_LABELS)
+    catch_discover_tests(cch_tests_support TEST_SPEC "[fatal]" PROPERTIES TIMEOUT 60 ADD_TAGS_AS_LABELS)
 
     # TUI
     add_executable(cch_tests_tui

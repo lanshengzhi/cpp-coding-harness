@@ -16,5 +16,7 @@ derived from the TypeBox `theme-schema.json` runtime validation in `theme.ts` at
 - `circular-variable-reference.txt` — the recursive `vars` resolution cycle error.
 - `name-slash-rejection.txt` — the `/` reserved-name rejection.
 
-Regenerate deterministically with `CCH_CAPTURE_GOLDENS=1 scripts/run-tests.sh "[coding_agent][theme]"`.
+Regenerate deterministically with `CCH_CAPTURE_GOLDENS=1 ctest --test-dir build -L theme`
+(the `theme` label selects every `[theme]` case; only the diagnostic goldens write under the
+capture flag).
 The fixture dark/light JSONs regenerate from `pi:packages/coding-agent/src/modes/interactive/theme/`.

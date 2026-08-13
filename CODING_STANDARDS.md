@@ -162,7 +162,7 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 11.3. `CHECK` reports a failure and continues. Use `REQUIRE` / `REQUIRE_FALSE` only for preconditions whose failure makes later dereference, indexing, or execution unsafe. Use explicit skip reporting for unavailable platform prerequisites.
 
-11.4. Tags are `[module][feature]`, module first, spelled like the owning test area: `[ai]`, `[agent]`, `[harness]`, `[tools]`, `[support]`, `[tui]`, `[cli]`, `[architecture]`, `[coding_agent]`. Add parity tags `[u1]`–`[u9]` and issue-traceability tags `[issueNN]` where they apply. Tags map to CTest labels.
+11.4. Tags are `[module][feature]`, module first, spelled like the owning test area: `[ai]`, `[agent]`, `[harness]`, `[tools]`, `[support]`, `[tui]`, `[cli]`, `[architecture]`, `[coding_agent]`. Add parity tags `[u1]`–`[u9]` and issue-traceability tags `[issueNN]` where they apply. Fatal-contract probes carry a `[fatal]` tag; the owning shard's `catch_discover_tests` selects `[fatal]` with a tightened CTest timeout. Tags map to CTest labels.
 
 11.5. Layout follows Capability Owner or support ownership: `tests/<owner-or-support>/<Stem>Test.cpp`, with deeper directories for cohesive areas. Shared helpers live in `tests/support/` under `namespace cch::tests` and do not create a cross-Owner production seam.
 
