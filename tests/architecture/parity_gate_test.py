@@ -16,6 +16,7 @@ import contextlib
 import hashlib
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -73,7 +74,25 @@ VALID_MANIFEST = {
             "producer": "cch-parity-constructor",
             "producer_schema_version": 1,
             "input_identities": ["manifest"],
-        }
+        },
+        {
+            "id": "direct-includes",
+            "producer": "cch-parity-lexer",
+            "producer_schema_version": 1,
+            "input_identities": ["manifest", "ownership-index"],
+        },
+        {
+            "id": "compile-commands",
+            "producer": "cmake-file-api",
+            "producer_schema_version": 1,
+            "input_identities": ["manifest", "ownership-index"],
+        },
+        {
+            "id": "depfiles",
+            "producer": "cch-compiler-depfile",
+            "producer_schema_version": 1,
+            "input_identities": ["manifest", "ownership-index", "compile-commands"],
+        },
     ],
 }
 
@@ -449,6 +468,568 @@ class CliTest(unittest.TestCase):
             payload = json.loads(failed.stdout)
             self.assertIn(pg.RULE_STALE_MANIFEST_DIGEST,
                           [item["rule_id"] for item in payload["diagnostics"]])
+
+
+# ---------------------------------------------------------------------------
+# Direct-include lexer, canonical resolution, compile context, and depfiles
+# ---------------------------------------------------------------------------
+
+INTERFACE_HEADERS = {
+    "cch_ai": "include/cch/ai/Model.hpp",
+    "cch_agent_core": "include/cch/agent/Agent.hpp",
+    "cch_tui": "include/cch/tui/Render.hpp",
+    "cch_support": "include/cch/support/Value.hpp",
+    "cch_coding_agent": "include/cch/coding_agent/Compose.hpp",
+}
+
+
+def sha256_file(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def include_doc(path, spelling="angle", line=1, macro=False):
+    return {"path": path, "spelling": spelling, "line": line, "macro": macro}
+
+
+def make_index(targets):
+    return pg.parse_index(
+        {
+            "producer": "cch-parity-constructor",
+            "schema_version": 1,
+            "manifest_digest": "d" * 64,
+            "targets": targets,
+        }
+    )
+
+
+def make_direct_includes(sources):
+    return pg.parse_direct_includes(
+        {"producer": "cch-parity-lexer", "schema_version": 1, "sources": sources}
+    )
+
+
+def make_compile_commands(entries):
+    return pg.parse_compile_commands(entries)
+
+
+def make_depfiles(config_digest, entries):
+    return pg.parse_depfile_evidence(
+        {
+            "producer": "cch-compiler-depfile",
+            "schema_version": 1,
+            "config_digest": config_digest,
+            "entries": entries,
+        }
+    )
+
+
+def make_project_tree(root):
+    root = Path(root)
+    for rel in INTERFACE_HEADERS.values():
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("#pragma once\n")
+    return root
+
+
+def run_include_case(root, from_owner, source_name, include_path, spelling="angle", macro=False):
+    project_root = make_project_tree(root)
+    source = project_root / "src" / source_name
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text("// fixture source\n")
+    role = "support" if from_owner == "cch_support" else "owner"
+    index = make_index(
+        [
+            {
+                "name": from_owner,
+                "role": role,
+                "owner": from_owner,
+                "sources": [str(source)],
+                "dependencies": [],
+            }
+        ]
+    )
+    direct = make_direct_includes(
+        [
+            {
+                "path": str(source),
+                "digest": sha256_file(source),
+                "includes": [include_doc(include_path, spelling=spelling, macro=macro)],
+            }
+        ]
+    )
+    manifest = valid_manifest()
+    return pg.check(
+        manifest,
+        index,
+        "d" * 64,
+        direct_includes=direct,
+        project_root=str(project_root),
+    )
+
+
+class LexerTest(unittest.TestCase):
+    def test_scans_disabled_preprocessor_branches(self):
+        text = "#if 0\n#include <cch/ai/Model.hpp>\n#endif\n"
+        includes = pg.lex_includes(text, "x.cpp")
+        self.assertEqual(len(includes), 1)
+        self.assertEqual(includes[0].path, "cch/ai/Model.hpp")
+        self.assertEqual(includes[0].spelling, "angle")
+
+    def test_records_angle_quote_and_macro_spellings(self):
+        text = '#include <cch/ai/Model.hpp>\n#include "cch/ai/Model.hpp"\n#include HDR\n'
+        includes = pg.lex_includes(text, "x.cpp")
+        self.assertEqual([inc.spelling for inc in includes], ["angle", "quote", "macro"])
+        self.assertTrue(includes[2].macro)
+
+    def test_ignores_non_include_directives(self):
+        text = "#define X 1\n#ifdef Y\n#endif\n#include_next <foo>\n#pragma once\n"
+        self.assertEqual(pg.lex_includes(text, "x.cpp"), ())
+
+
+class IncludeResolutionTest(unittest.TestCase):
+    def test_quote_spelling_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(
+                tmp, "cch_ai", "model.cpp", "cch/ai/Model.hpp", spelling="quote"
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_INCLUDE_QUOTE_SPELLING])
+
+    def test_unclassified_root_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(tmp, "cch_ai", "model.cpp", "cch/util/Error.hpp")
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_INCLUDE_UNCLASSIFIED_ROOT])
+
+    def test_path_escape_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(tmp, "cch_ai", "model.cpp", "../cch/ai/Model.hpp")
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_INCLUDE_PATH_ESCAPE])
+
+    def test_absolute_path_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(
+                tmp, "cch_ai", "model.cpp", os.path.join(tmp, "include/cch/ai/Model.hpp")
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_INCLUDE_PATH_ESCAPE])
+
+    def test_case_conflicting_root_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(tmp, "cch_ai", "model.cpp", "cch/AI/Model.hpp")
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_INCLUDE_CASE_CONFLICT])
+
+    def test_macro_generated_include_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(
+                tmp, "cch_ai", "model.cpp", "HDR", spelling="macro", macro=True
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_INCLUDE_MACRO_GENERATED])
+
+    def test_illegal_direct_include_edge_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(tmp, "cch_ai", "model.cpp", "cch/tui/Render.hpp")
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_ILLEGAL_DIRECT_INCLUDE])
+        self.assertEqual(diagnostics[0].target, "cch_ai")
+        self.assertEqual(diagnostics[0].dependency, "cch_tui")
+
+    def test_support_include_owner_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(tmp, "cch_support", "value.cpp", "cch/ai/Model.hpp")
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_ILLEGAL_DIRECT_INCLUDE])
+
+    def test_unresolved_project_include_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(tmp, "cch_ai", "model.cpp", "cch/ai/Missing.hpp")
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_UNRESOLVED_PROJECT_INCLUDE])
+
+    def test_symlink_escape_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = make_project_tree(tmp)
+            outside = project_root / "outside.hpp"
+            outside.write_text("#pragma once\n")
+            header = project_root / "include/cch/ai/Model.hpp"
+            header.unlink()
+            try:
+                os.symlink(outside, header)
+            except OSError:
+                self.skipTest("symlinks are not supported on this filesystem")
+            source = project_root / "src/model.cpp"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text("// fixture\n")
+            index = make_index(
+                [
+                    {
+                        "name": "cch_ai",
+                        "role": "owner",
+                        "owner": "cch_ai",
+                        "sources": [str(source)],
+                        "dependencies": [],
+                    }
+                ]
+            )
+            direct = make_direct_includes(
+                [
+                    {
+                        "path": str(source),
+                        "digest": sha256_file(source),
+                        "includes": [include_doc("cch/ai/Model.hpp")],
+                    }
+                ]
+            )
+            diagnostics = pg.check(
+                valid_manifest(), index, "d" * 64, direct_includes=direct, project_root=str(project_root)
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_INCLUDE_PATH_ESCAPE])
+
+    def test_ambiguous_include_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = make_project_tree(tmp)
+            # The same relative header exists under a second interface root.
+            duplicate = project_root / "include/cch/tui/Model.hpp"
+            duplicate.write_text("#pragma once\n")
+            source = project_root / "src/model.cpp"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text("// fixture\n")
+            index = make_index(
+                [
+                    {
+                        "name": "cch_ai",
+                        "role": "owner",
+                        "owner": "cch_ai",
+                        "sources": [str(source)],
+                        "dependencies": [],
+                    }
+                ]
+            )
+            direct = make_direct_includes(
+                [
+                    {
+                        "path": str(source),
+                        "digest": sha256_file(source),
+                        "includes": [include_doc("cch/ai/Model.hpp")],
+                    }
+                ]
+            )
+            diagnostics = pg.check(
+                valid_manifest(),
+                index,
+                "d" * 64,
+                direct_includes=direct,
+                project_root=str(project_root),
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_INCLUDE_AMBIGUOUS])
+
+    def test_missing_include_evidence_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = make_project_tree(tmp)
+            source = project_root / "src/model.cpp"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text("// fixture\n")
+            index = make_index(
+                [
+                    {
+                        "name": "cch_ai",
+                        "role": "owner",
+                        "owner": "cch_ai",
+                        "sources": [str(source)],
+                        "dependencies": [],
+                    }
+                ]
+            )
+            direct = make_direct_includes([])
+            diagnostics = pg.check(
+                valid_manifest(), index, "d" * 64, direct_includes=direct, project_root=str(project_root)
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_MISSING_INCLUDE_EVIDENCE])
+
+    def test_unclassified_evidence_source_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = make_project_tree(tmp)
+            ghost = project_root / "src/ghost.cpp"
+            ghost.parent.mkdir(parents=True, exist_ok=True)
+            ghost.write_text("// not declared by any target\n")
+            index = make_index([])
+            direct = make_direct_includes(
+                [{"path": str(ghost), "digest": sha256_file(ghost), "includes": []}]
+            )
+            diagnostics = pg.check(
+                valid_manifest(), index, "d" * 64, direct_includes=direct, project_root=str(project_root)
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_UNCLASSIFIED_EVIDENCE_SOURCE])
+
+    def test_stale_include_evidence_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = make_project_tree(tmp)
+            source = project_root / "src/model.cpp"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text("// fixture\n")
+            index = make_index(
+                [
+                    {
+                        "name": "cch_ai",
+                        "role": "owner",
+                        "owner": "cch_ai",
+                        "sources": [str(source)],
+                        "dependencies": [],
+                    }
+                ]
+            )
+            direct = make_direct_includes(
+                [
+                    {
+                        "path": str(source),
+                        "digest": "e" * 64,  # does not match the on-disk bytes
+                        "includes": [],
+                    }
+                ]
+            )
+            diagnostics = pg.check(
+                valid_manifest(), index, "d" * 64, direct_includes=direct, project_root=str(project_root)
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_STALE_INCLUDE_EVIDENCE])
+
+
+class CompileContextTest(unittest.TestCase):
+    def _single_source_index(self, source_path, **target_extra):
+        target = {
+            "name": "cch_ai",
+            "role": "owner",
+            "owner": "cch_ai",
+            "sources": [source_path],
+            "dependencies": [],
+        }
+        target.update(target_extra)
+        return make_index([target])
+
+    def test_duplicate_source_compilation_is_rejected(self):
+        index = self._single_source_index("/tmp/fake/model.cpp")
+        commands = make_compile_commands(
+            [
+                {"file": "/tmp/fake/model.cpp", "directory": "/tmp/fake", "command": "g++ -c /tmp/fake/model.cpp"},
+                {"file": "/tmp/fake/model.cpp", "directory": "/tmp/fake", "command": "g++ -c /tmp/fake/model.cpp"},
+            ]
+        )
+        diagnostics = pg.check(valid_manifest(), index, "d" * 64, compile_commands=commands)
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_DUPLICATE_SOURCE_COMPILATION])
+
+    def test_missing_compile_command_is_rejected(self):
+        index = self._single_source_index("/tmp/fake/model.cpp")
+        diagnostics = pg.check(
+            valid_manifest(), index, "d" * 64, compile_commands=make_compile_commands([])
+        )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_MISSING_COMPILE_COMMAND])
+
+    def test_unsupported_compile_flag_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            index = self._single_source_index(os.path.join(tmp, "model.cpp"))
+            commands = make_compile_commands(
+                [
+                    {
+                        "file": os.path.join(tmp, "model.cpp"),
+                        "directory": tmp,
+                        "command": f"g++ -isystem {os.path.join(tmp, 'include')} -c {os.path.join(tmp, 'model.cpp')}",
+                    }
+                ]
+            )
+            diagnostics = pg.check(
+                valid_manifest(), index, "d" * 64, compile_commands=commands, project_root=tmp
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_UNSUPPORTED_COMPILE_FLAG])
+
+    def test_undeclared_forced_include_is_rejected(self):
+        index = self._single_source_index("/tmp/fake/model.cpp")
+        commands = make_compile_commands(
+            [
+                {
+                    "file": "/tmp/fake/model.cpp",
+                    "directory": "/tmp/fake",
+                    "command": "g++ -include /tmp/fake/undeclared.hpp -c /tmp/fake/model.cpp",
+                }
+            ]
+        )
+        diagnostics = pg.check(valid_manifest(), index, "d" * 64, compile_commands=commands)
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_UNDECLARED_FORCED_INCLUDE])
+
+    def test_opaque_pch_artifact_is_rejected(self):
+        index = self._single_source_index("/tmp/fake/model.cpp")
+        commands = make_compile_commands(
+            [
+                {
+                    "file": "/tmp/fake/model.cpp",
+                    "directory": "/tmp/fake",
+                    "command": "g++ -include /tmp/fake/pch.hpp.gch -c /tmp/fake/model.cpp",
+                }
+            ]
+        )
+        diagnostics = pg.check(valid_manifest(), index, "d" * 64, compile_commands=commands)
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_OPAQUE_PCH_FORBIDDEN])
+
+    def test_unscanned_forced_include_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = make_project_tree(tmp)
+            source = project_root / "src/model.cpp"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text("// fixture\n")
+            forced = project_root / "include/cch/ai/force.hpp"
+            forced.write_text("#pragma once\n")
+            index = make_index(
+                [
+                    {
+                        "name": "cch_ai",
+                        "role": "owner",
+                        "owner": "cch_ai",
+                        "sources": [str(source)],
+                        "dependencies": [],
+                        "forced_includes": [str(forced)],
+                    }
+                ]
+            )
+            direct = make_direct_includes(
+                [{"path": str(source), "digest": sha256_file(source), "includes": []}]
+            )
+            diagnostics = pg.check(
+                valid_manifest(), index, "d" * 64, direct_includes=direct, project_root=str(project_root)
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_UNSCANNED_FORCED_INCLUDE])
+
+    def test_unknown_compiler_is_rejected(self):
+        index = self._single_source_index("/tmp/fake/model.cpp")
+        commands = make_compile_commands(
+            [
+                {
+                    "file": "/tmp/fake/model.cpp",
+                    "directory": "/tmp/fake",
+                    "command": "/usr/bin/python3 -c /tmp/fake/model.cpp",
+                }
+            ]
+        )
+        diagnostics = pg.check(valid_manifest(), index, "d" * 64, compile_commands=commands)
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_UNKNOWN_COMPILER])
+
+    def test_project_target_masquerading_as_external_is_rejected(self):
+        index = make_index(
+            [
+                {
+                    "name": "cch_ai",
+                    "role": "owner",
+                    "owner": "cch_ai",
+                    "sources": [],
+                    "dependencies": [{"name": "cch_tui", "family": "boost"}],
+                },
+                {
+                    "name": "cch_tui",
+                    "role": "owner",
+                    "owner": "cch_tui",
+                    "sources": [],
+                    "dependencies": [],
+                },
+            ]
+        )
+        diagnostics = pg.check(valid_manifest(), index, "d" * 64)
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_PROJECT_TARGET_MASQUERADING_AS_EXTERNAL])
+
+
+class DepfileEvidenceTest(unittest.TestCase):
+    def _compiled_index(self, source_path):
+        return make_index(
+            [
+                {
+                    "name": "cch_ai",
+                    "role": "owner",
+                    "owner": "cch_ai",
+                    "sources": [source_path],
+                    "dependencies": [],
+                }
+            ]
+        )
+
+    def test_missing_depfile_evidence_fails_closed_at_build_phase(self):
+        index = self._compiled_index("/tmp/fake/model.cpp")
+        diagnostics = pg.check(valid_manifest(), index, "d" * 64, phase="build")
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_MISSING_DEPFILE_EVIDENCE])
+
+    def test_depfile_evidence_not_required_at_configure_phase(self):
+        index = self._compiled_index("/tmp/fake/model.cpp")
+        self.assertEqual(pg.check(valid_manifest(), index, "d" * 64, phase="configure"), [])
+
+    def test_stale_config_digest_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "model.cpp"
+            depfile = Path(tmp) / "model.d"
+            depfile.write_text("model.o: model.cpp\n")
+            index = self._compiled_index(str(source))
+            depfiles = make_depfiles(
+                "a" * 64,
+                [{"source": str(source), "depfile": str(depfile), "digest": sha256_file(depfile)}],
+            )
+            diagnostics = pg.check(
+                valid_manifest(), index, "d" * 64, depfiles=depfiles, config_digest="b" * 64
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_STALE_DEPFILE_EVIDENCE])
+
+    def test_missing_depfile_file_is_rejected(self):
+        index = self._compiled_index("/tmp/fake/model.cpp")
+        depfiles = make_depfiles(
+            "a" * 64,
+            [{"source": "/tmp/fake/model.cpp", "depfile": "/tmp/fake/missing.d", "digest": "c" * 64}],
+        )
+        diagnostics = pg.check(
+            valid_manifest(), index, "d" * 64, depfiles=depfiles, config_digest="a" * 64
+        )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_STALE_DEPFILE_EVIDENCE])
+
+    def test_changed_depfile_digest_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            depfile = Path(tmp) / "model.d"
+            depfile.write_text("model.o: model.cpp\n")
+            index = self._compiled_index(str(Path(tmp) / "model.cpp"))
+            depfiles = make_depfiles(
+                "a" * 64,
+                [{"source": str(Path(tmp) / "model.cpp"), "depfile": str(depfile), "digest": "c" * 64}],
+            )
+            diagnostics = pg.check(
+                valid_manifest(), index, "d" * 64, depfiles=depfiles, config_digest="a" * 64
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_STALE_DEPFILE_EVIDENCE])
+
+    def test_missing_depfile_entry_is_contradictory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            depfile = Path(tmp) / "model.d"
+            depfile.write_text("model.o: model.cpp\n")
+            index = self._compiled_index(str(Path(tmp) / "model.cpp"))
+            depfiles = make_depfiles(
+                "a" * 64,
+                [{"source": str(Path(tmp) / "model.cpp"), "depfile": str(depfile), "digest": sha256_file(depfile)}],
+            )
+            # A second compiled source has no depfile entry.
+            index = make_index(
+                [
+                    {
+                        "name": "cch_ai",
+                        "role": "owner",
+                        "owner": "cch_ai",
+                        "sources": [str(Path(tmp) / "model.cpp"), str(Path(tmp) / "other.cpp")],
+                        "dependencies": [],
+                    }
+                ]
+            )
+            diagnostics = pg.check(
+                valid_manifest(), index, "d" * 64, depfiles=depfiles, config_digest="a" * 64
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_CONTRADICTORY_DEPFILE_EVIDENCE])
+
+    def test_checked_in_manifest_declares_all_evidence_producers(self):
+        manifest = pg.parse_manifest(
+            json.loads((REPO_ROOT / "cmake" / "parity" / "manifest.json").read_text())
+        )
+        self.assertEqual(
+            {entry["producer"] for entry in manifest.evidence},
+            {
+                pg.PRODUCER_OWNERSHIP_INDEX,
+                pg.PRODUCER_DIRECT_INCLUDES,
+                pg.PRODUCER_COMPILE_COMMANDS,
+                pg.PRODUCER_DEPFILES,
+            },
+        )
 
 
 if __name__ == "__main__":

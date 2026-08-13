@@ -43,16 +43,21 @@ endfunction()
 #     OWNER <package-name>            # required for every role except `external`
 #     SOURCES <path> [<path> ...]
 #     DEPENDS <target>|<name@family> [...]
+#     FORCED_INCLUDES <path> [<path> ...]   # declared, scanned forced includes
+#     PCH_INPUT <path>                       # declared, scanned PCH input source
 # )
 #
 # Declares one production target, records its role/Owner/sources/dependencies
-# for the ownership index, and creates the authoritative compiled static
-# library. A dependency token of the form `name@family` names a classified
-# external imported target; a bare token names a project target.
+# and declared compile context for the ownership index, and creates the
+# authoritative compiled static library. A dependency token of the form
+# `name@family` names a classified external imported target; a bare token
+# names a project target. Forced includes and the PCH input are declared and
+# scanned by the direct-include lexer; opaque `.gch`/`.pch` artifacts are
+# never declared here.
 function(cch_parity_declare_target)
     set(options "")
-    set(one_value_keywords TARGET ROLE OWNER)
-    set(multi_value_keywords SOURCES DEPENDS)
+    set(one_value_keywords TARGET ROLE OWNER PCH_INPUT)
+    set(multi_value_keywords SOURCES DEPENDS FORCED_INCLUDES)
     cmake_parse_arguments(arg "${options}" "${one_value_keywords}" "${multi_value_keywords}" ${ARGN})
 
     if(arg_UNPARSED_ARGUMENTS)
@@ -130,16 +135,52 @@ function(cch_parity_declare_target)
         set(first FALSE)
         list(APPEND link_dependencies "${dependency_name}")
     endforeach()
-    string(APPEND json "]}")
+    # Declared compile context: forced includes and the PCH input source are
+    # recorded in the index so the Gate can validate that every forced include
+    # and PCH input is declared and scanned, and that no opaque `.gch`/`.pch`
+    # artifact sneaks into a compile command.
+    string(APPEND json "]")
+    string(APPEND json ",\"forced_includes\":[")
+    set(first TRUE)
+    foreach(forced IN LISTS arg_FORCED_INCLUDES)
+        _cch_parity_json_escape("${forced}" escaped_forced)
+        if(NOT first)
+            string(APPEND json ",")
+        endif()
+        string(APPEND json "\"${escaped_forced}\"")
+        set(first FALSE)
+    endforeach()
+    string(APPEND json "]")
+    if(DEFINED arg_PCH_INPUT AND NOT "${arg_PCH_INPUT}" STREQUAL "")
+        _cch_parity_json_escape("${arg_PCH_INPUT}" escaped_pch)
+        string(APPEND json ",\"pch_input\":\"${escaped_pch}\"")
+    else()
+        string(APPEND json ",\"pch_input\":null")
+    endif()
+
+    string(APPEND json "}")
     set_property(GLOBAL APPEND PROPERTY CCH_PARITY_DECLARATIONS "${json}")
     set_property(GLOBAL APPEND PROPERTY CCH_PARITY_DECLARED_TARGETS "${arg_TARGET}")
+    set_property(GLOBAL APPEND PROPERTY CCH_PARITY_SOURCES ${arg_SOURCES})
+    set_property(GLOBAL APPEND PROPERTY CCH_PARITY_FORCED_INCLUDES ${arg_FORCED_INCLUDES})
+    if(DEFINED arg_PCH_INPUT AND NOT "${arg_PCH_INPUT}" STREQUAL "")
+        set_property(GLOBAL APPEND PROPERTY CCH_PARITY_PCH_INPUTS "${arg_PCH_INPUT}")
+    endif()
 
     # The declaration is real configured evidence: the authoritative compiled
     # static library carries the project warning defaults and the declared
     # unconditional direct dependencies become actual link edges, so the Gate
-    # validates the configured graph rather than source formatting.
+    # validates the configured graph rather than source formatting. Forced
+    # includes and the PCH input become real compile context so the generated
+    # compile commands carry the same declared context the Gate validates.
     add_library(${arg_TARGET} STATIC ${arg_SOURCES})
     target_compile_options(${arg_TARGET} PRIVATE ${CCH_PARITY_WARNING_OPTIONS})
+    foreach(forced IN LISTS arg_FORCED_INCLUDES)
+        target_compile_options(${arg_TARGET} PRIVATE -include "${forced}")
+    endforeach()
+    if(DEFINED arg_PCH_INPUT AND NOT "${arg_PCH_INPUT}" STREQUAL "")
+        target_compile_options(${arg_TARGET} PRIVATE -include "${arg_PCH_INPUT}")
+    endif()
     if(link_dependencies)
         target_link_libraries(${arg_TARGET} PRIVATE ${link_dependencies})
     endif()
@@ -183,10 +224,21 @@ function(cch_parity_set_manifest manifest_path)
         "SHA-256 digest of the strict Parity Architecture Manifest")
 endfunction()
 
-# Runs the fail-closed Gate. Emits the fresh ownership index next to the build
-# tree, then invokes the Python validator against the manifest and index; a
+# Runs the fail-closed Gate at configure time. Emits the fresh ownership index
+# and the direct-include lexer output next to the build tree, then invokes the
+# Python validator against the manifest, index, and direct-include evidence; a
 # Gate failure fails configuration with the validator's deterministic report.
+# PROJECT_ROOT is the directory against which manifest interface roots resolve.
+#
+# Compile commands and depfiles are produced after generation/build, so the
+# build-phase Gate is driven by the same Python validator from the test harness
+# (see tests/architecture/ParityGateTest.cmake).
 function(cch_parity_run_gate manifest_path)
+    set(options "")
+    set(one_value_keywords PROJECT_ROOT)
+    set(multi_value_keywords "")
+    cmake_parse_arguments(gate "${options}" "${one_value_keywords}" "${multi_value_keywords}" ${ARGN})
+
     if(NOT EXISTS "${CCH_PARITY_GATE_SCRIPT}")
         message(FATAL_ERROR "Parity Architecture Gate validator not found: '${CCH_PARITY_GATE_SCRIPT}'")
     endif()
@@ -196,12 +248,38 @@ function(cch_parity_run_gate manifest_path)
 
     find_package(Python3 3.12 COMPONENTS Interpreter REQUIRED)
 
+    # Scan every declared source, forced include, and PCH input in all source
+    # text branches, producing the direct-include evidence the Gate resolves.
+    get_property(scan_sources GLOBAL PROPERTY CCH_PARITY_SOURCES)
+    get_property(scan_forced GLOBAL PROPERTY CCH_PARITY_FORCED_INCLUDES)
+    get_property(scan_pch GLOBAL PROPERTY CCH_PARITY_PCH_INPUTS)
+    set(direct_includes_path "${CMAKE_BINARY_DIR}/parity-direct-includes.json")
     execute_process(
         COMMAND
             "${Python3_EXECUTABLE}" "${CCH_PARITY_GATE_SCRIPT}"
-            --manifest "${manifest_path}"
-            --index "${index_path}"
-            --format human
+            --out "${direct_includes_path}"
+            --sources ${scan_sources} ${scan_forced} ${scan_pch}
+        RESULT_VARIABLE scan_result
+        OUTPUT_VARIABLE scan_output
+        ERROR_VARIABLE scan_error
+    )
+    if(NOT scan_result EQUAL 0)
+        message(FATAL_ERROR
+            "Parity Architecture Gate could not scan direct includes:\n${scan_output}${scan_error}")
+    endif()
+
+    set(gate_command
+        "${Python3_EXECUTABLE}" "${CCH_PARITY_GATE_SCRIPT}"
+        --manifest "${manifest_path}"
+        --index "${index_path}"
+        --direct-includes "${direct_includes_path}"
+        --format human
+    )
+    if(DEFINED gate_PROJECT_ROOT AND NOT "${gate_PROJECT_ROOT}" STREQUAL "")
+        list(APPEND gate_command --project-root "${gate_PROJECT_ROOT}")
+    endif()
+    execute_process(
+        COMMAND ${gate_command}
         RESULT_VARIABLE gate_result
         OUTPUT_VARIABLE gate_output
         ERROR_VARIABLE gate_error

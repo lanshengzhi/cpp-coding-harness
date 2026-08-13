@@ -50,6 +50,24 @@
       "producer": "cch-parity-constructor",
       "producer_schema_version": 1,
       "input_identities": ["manifest"]
+    },
+    {
+      "id": "direct-includes",
+      "producer": "cch-parity-lexer",
+      "producer_schema_version": 1,
+      "input_identities": ["manifest", "ownership-index"]
+    },
+    {
+      "id": "compile-commands",
+      "producer": "cmake-file-api",
+      "producer_schema_version": 1,
+      "input_identities": ["manifest", "ownership-index"]
+    },
+    {
+      "id": "depfiles",
+      "producer": "cch-compiler-depfile",
+      "producer_schema_version": 1,
+      "input_identities": ["manifest", "ownership-index", "compile-commands"]
     }
   ]
 }
