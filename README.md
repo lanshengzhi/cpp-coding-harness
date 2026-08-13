@@ -1,11 +1,11 @@
 # C++ Coding Harness
 
-A small experimental C++23 coding-agent harness built around anti-fragile architecture rules:
+A small experimental C++23 coding-agent Runtime built around anti-fragile architecture rules:
 
-1. **Data is passive value state**: public contracts are aggregate-friendly structs, `std::variant` alternatives, `std::expected` failures, and a project `JsonValue` for unstructured JSON facts.
-2. **Capabilities cross physical seams**: chat clients, stream transports, execution environments, session stores, and tools are replaceable interfaces or dependency-heavy concrete implementations hidden behind headers.
-3. **Events are weak connections**: agent/provider event sinks use move-only callback semantics so subscribers can own unique state without forcing `std::shared_ptr` or copyability.
-4. **Generic machinery stays local**: Glaze DTOs, schema conversion, visitors, parsing helpers, and future reflection-friendly machinery live in serialization/implementation layers rather than domain-facing APIs.
+1. **Data is passive value state**: Owner Interfaces use aggregate-friendly structs, `std::variant` alternatives, `std::expected` failures, and `cch::support::JsonValue` for unstructured cross-Owner JSON facts.
+2. **Capabilities cross physical seams**: identity-bearing physical capabilities use narrow private interfaces; dependency-heavy implementations remain behind Owner Interfaces.
+3. **Connection strength is explicit**: model-stream delivery and Agent-to-Session commitment are strong, awaited, backpressured connections; TUI/status/diagnostic subscribers are weak observers. Stored callables remain move-only.
+4. **Generic machinery stays local**: Glaze DTOs, schema conversion, visitors, parsers, and similar machinery live in serialization/implementation layers rather than Owner Interfaces.
 
 The harness loop mirrors the core pi-style flow:
 
@@ -20,37 +20,31 @@ This is a learning and experimentation harness, not a production sandbox.
 
 ## Build
 
-The project is CMake-based and requires a C++23-capable compiler. CMake 4.0+ and GCC 16+ are expected (see `docs/adr/0038-*.md` for the toolchain floor decision).
+The Supported Platform is native Linux x86-64 with glibc. Ubuntu 24.04 is the reproducible baseline and blocking release environment; a digest-pinned Arch snapshot is supported for native development, current Arch latest is advisory drift, and WSL2 is development-only. GCC 16.x is the sole build/release compiler; Clang 22.x is a blocking Linux conformance verifier. CMake 4.4+, Ninja 1.11+, and the pinned vcpkg path are required. CI/releases pin exact GCC, CMake, and Ninja versions (ADR 0039).
 
 - Glaze is used only at typed JSON serialization/deserialization boundaries.
 - utf8proc provides versioned Unicode grapheme segmentation and width properties inside the private TUI implementation.
-- MD4C provides tolerant Markdown parsing behind the public TUI component boundary.
+- MD4C provides tolerant Markdown parsing behind the repository-internal `cch_tui` Owner Interface boundary.
 - Pinned stb image decode/resize/write headers are vendored under `third_party/stb` and compiled only by the private initial-image processor; their upstream license notices remain in each header. libwebp supplies private WebP validation/decoding for the same processor.
 - Boost.Beast/Asio + OpenSSL provide the HTTPS transport implementation.
 - Boost.Process is used behind the process-execution capability boundary.
-- CLI11 is declared in `vcpkg.json`; tests use the repository's tiny Catch-compatible test header under `third_party/catch2`, so no external Catch2 dependency is required.
+- CLI11 and formal Catch2 v3 are pinned through `vcpkg.json`; tests link Catch2's imported target. The former local Catch-compatible imitation is not a supported test surface.
 
 ### Bootstrap with vcpkg (recommended)
 
-All dependencies are declared in `vcpkg.json`. The bootstrap scripts create a local `.deps/vcpkg` checkout when `VCPKG_ROOT` is not already set, bootstrap vcpkg, and configure CMake in manifest mode so dependencies such as CLI11, Glaze, MD4C, libwebp, Boost, and OpenSSL are installed automatically. The scripts first run an environment precheck (git, curl, zip, unzip, tar, and a GCC 16+ compiler), print the install command for your distribution when a tool is missing, and then pin the vcpkg checkout to the exact `builtin-baseline` commit recorded in `vcpkg.json` so dependency resolution is reproducible.
-
-Linux:
+All dependencies are declared in `vcpkg.json`. The bootstrap scripts create a local `.deps/vcpkg` checkout when `VCPKG_ROOT` is not already set, bootstrap vcpkg, and configure CMake in manifest mode so dependencies such as CLI11, Glaze, MD4C, libwebp, Boost, and OpenSSL are installed automatically. The scripts first run an environment precheck (git, curl, zip, unzip, tar, and a GCC 16.x compiler), print the install command for your distribution when a tool is missing, and then pin the vcpkg checkout to the exact `builtin-baseline` commit recorded in `vcpkg.json` so dependency resolution is reproducible.
 
 ```bash
 scripts/bootstrap.sh --test
 ```
 
-Windows PowerShell:
-
-```powershell
-.\scripts\bootstrap.ps1 -Test
-```
-
 Useful options:
 
-- `--no-build` / `-NoBuild` configures dependencies and CMake without compiling.
-- `--release` / `-Release` uses the release preset.
-- `--vcpkg-root DIR` / `-VcpkgRoot DIR` uses an explicit vcpkg checkout instead of `$VCPKG_ROOT` or `.deps/vcpkg`.
+- `--no-build` configures dependencies and CMake without compiling.
+- `--release` uses the release preset.
+- `--vcpkg-root DIR` uses an explicit pinned vcpkg checkout instead of `$VCPKG_ROOT` or `.deps/vcpkg`.
+
+Other operating systems, architectures, C libraries, and cross-compilation are unsupported and fail at configure time. Unix Makefiles and Unity Build are not supported entry points.
 
 Manual vcpkg usage is also supported when `VCPKG_ROOT` is already set:
 
@@ -59,6 +53,8 @@ cmake --preset vcpkg
 cmake --build --preset vcpkg
 ctest --preset vcpkg
 ```
+
+Release uses validated IPO/LTO. `cmake --install` is Runtime-only: a staged prefix contains `cpp_harness`, required runtime resources, and required licenses/notices—never Owner Interface headers, project libraries, an SDK, CMake package/config, exported targets, components, or compatibility files. Release validation runs from a clean staging prefix.
 
 ### Fast development preset (Ninja + ccache)
 
@@ -86,7 +82,7 @@ cmake --build --preset dev-fast --parallel 8
 
 ### Using system packages
 
-Not supported. The `system` preset was removed with the CMake 4.0 toolchain floor (ADR 0038); the vcpkg path is the only supported dependency source.
+Not supported. The `system` preset was removed; the pinned vcpkg path is the only supported dependency source (ADR 0039).
 
 Run the binary against a configured provider (deterministic provider behavior is exercised through the test suite). With no session-family flag (`--session`, `--resume`, `--continue`, `--fork`, `--session-id`, `--no-session`), each run persists a new session under the workspace-keyed user-level default (see [Session storage](#session-storage)):
 
@@ -204,34 +200,31 @@ The smoke script requires explicit opt-in, uses a throwaway workspace/session, d
 
 ## Architecture boundaries
 
-The code is split into value contracts, capability seams, implementation adapters, and package-style CMake targets:
+Four Capability Owner Packages and one C++ Support Package define the repository-internal graph (ADR 0039):
 
-- **`include/cch/`** — passive domain contracts and abstract capability seams. Public headers do not include Glaze, wire transport, or disk loader/formatting details.
-- **`src/`** — implementation adapters kept private via CMake `PRIVATE` include paths: Glaze JSON/DTO serialization (`src/util/Json.hpp`, `src/ai/glaze/`), provider wire transport (`BoostBeastStreamTransport`, `SseParser`), and coding-agent loaders/formatters (`SkillLoader`, `PromptTemplateLoader`, `SkillFormatting`).
+| Package | Owns | Legal direct Owner dependencies |
+| --- | --- | --- |
+| `cch_ai` | Model, Provider, authentication, and model streaming | none |
+| `cch_agent_core` | Agent, harness, Tool, filesystem/Shell, and Session Entry behavior | `cch_ai` |
+| `cch_tui` | reusable terminal, input, rendering, and TUI Toolkit behavior | none |
+| `cch_coding_agent` | repository-private Models Runtime, Agent Session, Native TUI application, CLI, and Runtime composition | `cch_agent_core`, `cch_ai`, `cch_tui` |
+| `cch_support` | pi-neutral `Error`/`Expected`, passive `JsonValue`, `AsyncResult`, and necessary move-only completion/Runtime mechanics | no Capability Owner Package |
 
-Package targets and responsibilities:
+Every unlisted cross-Owner edge is forbidden. Each Owner has one authoritative compiled static library; private same-Owner implementation libraries never become cross-Owner shortcuts. Every production target declares one role, every production source compiles once, and the graph is acyclic. `cch_util` and the legacy split target graph are removed without aliases.
 
-- `cch_util` (`include/cch/util`, `src/util`): project error/expected contracts, move-only callback vocabulary, passive `JsonValue`, the Glaze-backed JSON adapter in `src/util/Json.hpp`, and async process execution.
-- `cch_tui` (`include/cch/tui`, `src/tui`): reusable source-level terminal UI contracts, a width-bounded structured Component seam, TUI root, semantic key and bracketed-paste input, a Unicode Editor with caller-supplied autocomplete and generic injected styling, Text, injected-style Markdown with optional syntax highlighting, filterable Select List and Settings List interactions, Loader and exactly-once Cancellable Loader lifecycles, structured inline Image placement with bounded fallback and private Kitty/iTerm2 protocol fixtures, a deterministic Virtual Terminal, and the transactional Linux/macOS Process Terminal used by the production Native TUI. The package depends only on project utility contracts, exposes no third-party types, has no coding-agent dependency, and makes no ABI-stability promise.
-- `cch_coding_agent_tui` (`src/coding_agent/tui`): the physically separate coding-agent Native TUI presentation layer, re-composed as the pi interactive-mode subset (ADR 0036): the message/execution pipeline, selectors, login/trust dialogs, footer/status, and editor chrome assembled over the `cch_tui` toolkit, with pi's 42-action `app.*` catalog and pi-format themes. Known application actions are registered only when a frontend concretely assembles them, so deferred actions never become no-op bindings. Discovery is a one-shot startup operation with no generalized hot reload. This target remains independent of the Agent Session runtime.
-- `cch_coding_agent_interactive` (`src/coding_agent/tui/InteractiveMode.*`): the private Native TUI composition that connects a real Agent Session to the reusable TUI, Editor, themes, and effective keybindings. It renders the initial Agent Session snapshot before focusing input; streams the pi message/execution pipeline (assistant and user messages with OSC 133 zones, tool and bash execution, summary messages); presents selectors and the login/trust dialogs as overlays; shows the footer/status surface; dispatches pi's slash chain before prompt interpretation with autocomplete from the same catalog; submits unmatched idle input asynchronously; routes active-run Enter and Alt+Enter directly to Agent Session steering and follow-up admission; visibly presents Agent-owned pending queues and restores them to the editor through the baseline dequeue action; routes the effective interrupt binding through pi's app.interrupt precedence (active Agent run, then running User Bash, then key-time pending User Bash submission); waits for abort quiescence before accepting another prompt or restoring the terminal; and restores Virtual or Process Terminals on exit. When an asynchronous clipboard reader is injected, its paste action writes sniffed PNG/JPEG/GIF/WebP bytes to a unique `pi-clipboard-<UUID>.<ext>` file under the OS temporary directory and inserts only that path at the editor cursor, falling back silently to clipboard text. The paste handler intentionally does not delete successful files or create attachment preview/removal state. The executable selects this composition for supported interactive terminals and keeps the runtime library and print-mode paths independent of TUI dependencies.
-- `cch_ai` (`include/cch/ai`, `src/ai`): the complete credential-free Model value (including null-aware thinking mappings and the two-field Anthropic Messages compat), passive message/content/tool/context contracts, provider-neutral stream events, the Models/Provider runtime with request-time authentication, scripted fake Provider, and prompt cancellation propagation through Provider transport; SSE and Glaze provider mapping live under `src/ai/`.
-- `cch_coding_agent_core` (`include/cch/coding_agent`, `src/coding_agent`): the ModelRuntime closure below the agent package — Agent Config Directory path resolution (`AgentConfigDir`), shared-file auth storage (`AuthStorage`) and the runtime API key overlay, `models.json` config (`ModelConfig`), built-in/config provider composition (`ProviderComposer`), and the sole public model/auth runtime seam (`ModelRuntime`, held as `std::shared_ptr` and injected into the stateful Agent and `CreateAgentSessionOptions`).
-- `cch_agent` (`include/cch/agent`, `src/agent`): public stateful `Agent` ownership of live message history, model/thinking/tool state, weak move-only subscriptions with bounded diagnostics, passive state snapshots, one active run, and the strong per-run commitment seam used by Agent Session persistence. The Agent issues every turn through the injected `ModelRuntime::streamSimple` surface (the sole injectable seam per parity record #326), forwarding the session id, the default `"short"` cache retention, and the prompt cancellation signal per turn. The package also owns async tool registration, private Tool Argument Contract preparation, expected-style tool execution, pi-ordered prepare/stop/steering/follow-up policy seams, and sequential/bounded-parallel tool execution policy.
-- `cch_harness` (`include/cch/harness`, `src/harness`): pi-shaped filesystem and shell execution capability contracts (`FileSystem`/`Shell`), local implementation with workspace containment, symlink safety, atomic writes, split-stream process execution, secret environment filtering, and JSONL/in-memory Session Store implementations.
-- `cch_tools` (`include/cch/tools`, `src/tools`): built-in read/write/edit/bash tool factories bridging agent tool contracts to harness capabilities.
-- `cch_coding_agent_runtime` (`src/coding_agent/runtime/`, `include/cch/coding_agent/`, `src/coding_agent/`, and private print-mode adapters in `src/cli/`): SessionFactory-authoritative session assembly (including the two-scope `settings.json` contract), the two-scope user settings manager (`SettingsManager`), session lifecycle, composition of the stateful Agent with persistence and resources, print-mode output (final assistant text only), pi `buildSystemPrompt` construction with the cch identity, strong incremental message persistence after Agent state and weak observers advance, project trust/resource controls (`ProjectTrust`, the pi `DefaultResourceLoader` subset over `.pi/` project markers), skill/template discovery and formatting, `/skill:name` expansion reading the file at invocation time, and prompt-template file loading with `--prompt-template`/`--no-prompt-templates` CLI flags.
-- `cch_cli` (`src/cli`, `src/coding_agent/runtime/AsyncCliRuntime.*`): the single authoritative CMake owner of the CLI/runtime composition — CLI parsing, TTY-based frontend selection, list-models, the startup TUI, and the async CLI runtime — compiled once per configuration and linked into both the executable and the tests. It composes the private interactive Native TUI and CLI11 without adding a TUI dependency to the non-interactive runtime target. The `cpp_harness` executable owns only `src/main.cpp` and the final composition that may depend on both runtime and Native TUI targets.
+Owner Interfaces live under Owner-local roots with one canonical `<cch/...>` angle-include spelling and compile independently. They contain only standard-library, support, and legal downstream Owner types. Boost.Asio, Glaze, protocol DTOs, schema conversion, visitors, parsers, and other generic machinery remain private. Owner Interfaces are repository-internal: no project header/library, SDK, CMake package, or exported target is installed.
 
-The build publishes `include` as the public surface and keeps `src` private. Legacy synchronous tools, Boost.JSON contracts, `util::Result`, and duplicate `src` contract headers have been removed.
+One strict, versioned Parity Architecture Manifest records the frozen baseline, legal Owner DAG, roots/roles, imported-target families, and capability-evidence references. Central CMake constructors emit configured ownership evidence. The fail-closed Parity Architecture Gate checks the CMake File API, compile commands, direct includes in every preprocessor branch, and build-time compiler depfiles; it runs on every supported configure, build, test, install, release, and CI path even when tests are disabled. Diagnostics use stable rule IDs and deterministic human/JSON forms. Parity Drift is advisory only after a complete valid audit.
+
+One concrete repository-private Runtime root owns one event loop, one bounded worker pool, and the bounded FIFO mailboxes needed by real state-owning objects (ADR 0040). Agent, Models Runtime, and Agent Session mutate state only in their owning serialized domains; blocking/heavy work returns values through the target mailbox. Fallible asynchronous Owner operations use single-consumption `cch::support::AsyncResult`, not exposed Boost.Asio machinery. Session Close and application Close release resources only after admitted work quiesces.
 
 ### pi parity direction
 
-The harness aims for idiomatic C++ parity with pi's module and contract semantics rather than mechanical TypeScript translation. The pi-ai surface (Model/Models/ModelRuntime, authentication, and the three adapters), the pi-tui toolkit surface, and the pi-coding-agent application layer are pinned to pi baseline `83114817c68f5413e4d7ba6d7003ddc511cd31d2` (ADR 0029–0036). The current implemented boundary is described by this README, the public headers, and tests; where the README describes the pi-aligned surface decided by the pi-coding-agent phase, ADR 0036 is the authority and the code lands through `/to-spec` → `/to-tickets` → `/implement`. Open product and scope decisions are indexed in the [pi C++ parity map](https://github.com/lanshengzhi/cpp-coding-harness/issues/2); approved work leaves that map and follows `/to-spec` → `/to-tickets` → `/implement`.
+The harness aims for idiomatic C++ Semantic Parity rather than mechanical TypeScript translation. The selected behavior remains pinned to pi baseline `83114817c68f5413e4d7ba6d7003ddc511cd31d2`; ADR 0029–0036 and behavior spec #396 remain authoritative for that capability subset. ADR 0039–0040 and architecture spec #439 define the physical package/Runtime destination without advancing the baseline or adding a capability. Open product and scope decisions are indexed in the [pi C++ parity map](https://github.com/lanshengzhi/cpp-coding-harness/issues/2); approved work leaves that map and follows `/to-spec` → `/to-tickets` → `/implement`.
 
 ## CLI states
 
-One-shot text output follows pi's print mode (ADR 0036): it subscribes to nothing and prints only the final assistant message's `text` content blocks to stdout. A terminal `error` or `aborted` outcome prints the `errorMessage` (or `Request <stopReason>`) to stderr and exits 1 (pi `print-mode.ts`); success exits 0. Piped stdin, `@file` text, and the first positional merge into the initial prompt in pi's order with no separator; remaining positionals prompt sequentially and the output is the last response. Running with no prompt prints nothing and exits 0. Prompt rejections before acceptance are reported on stderr as `loop failed: <message>` with a non-zero exit status. SIGTERM/SIGHUP dispose the session and exit 143/129 (SIGHUP only outside Windows).
+One-shot text output follows pi's print mode (ADR 0036): it subscribes to nothing and prints only the final assistant message's `text` content blocks to stdout. A terminal `error` or `aborted` outcome prints the `errorMessage` (or `Request <stopReason>`) to stderr and exits 1 (pi `print-mode.ts`); success exits 0. Piped stdin, `@file` text, and the first positional merge into the initial prompt in pi's order with no separator; remaining positionals prompt sequentially and the output is the last response. Running with no prompt prints nothing and exits 0. Prompt rejections before acceptance are reported on stderr as `loop failed: <message>` with a non-zero exit status. SIGTERM/SIGHUP dispose the session and exit 143/129.
 
 `--mode text` is the pi-default spelling and leaves TTY-based frontend selection unchanged; `--mode json` and `--mode rpc` are rejected with an explicit error — the JSON event stream and the JSONL RPC loop are removed with no placeholder surface (charted ruling, ADR 0036).
 
@@ -263,7 +256,7 @@ The Native TUI dispatches pi's slash chain before prompt interpretation (ADR 003
 
 ### Input prefixes (User Bash)
 
-In the Native TUI on supported Linux/macOS, a direct focused-editor submission whose trimmed text begins with `!` is User Bash: the remainder runs as one shell command in the Session workspace and streams into a single `$ command` transcript block (ADR 0026). A `!` result is committed to Session history as a pi v3 `bashExecution` message and may enter later model context; a `!!` result is committed the same way but is excluded entirely from model conversion. User Bash is always available in the Native TUI, as is the model-requested `bash` tool under the fixed #331 tool set; the C++-only `--enable-bash` gate was deleted under ADR 0036.
+In the Native TUI on the Supported Platform, a direct focused-editor submission whose trimmed text begins with `!` is User Bash: the remainder runs as one shell command in the Session workspace and streams into a single `$ command` transcript block (ADR 0026). A `!` result is committed to Session history as a pi v3 `bashExecution` message and may enter later model context; a `!!` result is committed the same way but is excluded entirely from model conversion. User Bash is always available in the Native TUI, as is the model-requested `bash` tool under the fixed #331 tool set; the C++-only `--enable-bash` gate was deleted under ADR 0036.
 
 The parsed command is trimmed and may span multiple lines; a bare `!` or `!!` falls through to an ordinary Agent Prompt, and `!!!foo` is excluded User Bash running `!foo`. Only direct focused-editor submissions interpret the prefix: positional initial input, one-shot print, and Skill or Prompt Template expansions beginning with `!` remain ordinary prompt text, and the prefixes are never slash commands, autocomplete items, or hotkey actions. At most one User Bash runs at a time; it may overlap an Agent run, with completion committed after the whole run settles, and the effective interrupt binding cancels an active Agent run before an active User Bash. Execution uses the same effective `shellPath`/`shellCommandPrefix` configuration, filtered environment, and `/bin/bash` → PATH `bash` → `sh` (`-c`) resolution as the model tool, has no default timeout, starts every command from the canonical Session workspace, and cancels through process-tree termination. Output is ANSI-stripped per pi's `sanitizeBinaryOutput` with carriage returns removed, is **not** secret-redacted (ADR 0028's raw pipeline), and is bounded to a 2,000-line/50 KiB tail, with truncated full output spilled to a unique owner-only temporary file.
 
@@ -275,7 +268,7 @@ The embeddable C++ SDK (`Sdk.hpp`), the JSONL RPC mode, and the JSON CLI mode ar
 
 ### Frontend selection
 
-Frontend selection follows pi at `83114817` after argument parsing and before Agent Session creation (ADR 0036). `--mode text` is the pi-default spelling and leaves TTY-based selection unchanged; `--mode json` and `--mode rpc` are rejected with an explicit error. Otherwise `-p` / `--print` or either non-TTY stream selects one-shot print output. On supported Linux/macOS, interactive stdin/stdout selects the Native TUI, and a positional prompt becomes its initial message; other interactive platforms fail clearly. Loaded skills are explicitly invocable with `/skill:<name> [additional instructions]`; that input expands to a regular user prompt containing the skill instructions. Project resources can be trusted for one run with `--approve` / `-a` and denied with `--no-approve` / `-na`; `--no-skills` drops user and project skill discovery (explicit `--skill` paths stay). `--session <path-or-id>` opens or creates a session at the target, `--resume` opens the session picker, `--continue` resumes the most recent session, `--fork` forks from a target id, `--no-session` runs in memory, `--name` names the session, and `--session-dir` redirects automatic storage. `--theme` (repeatable) and `--no-themes` follow pi's theme semantics, and `--list-models [search]` prints pi's six-column model table.
+Frontend selection follows pi at `83114817` after argument parsing and before Agent Session creation (ADR 0036). `--mode text` is the pi-default spelling and leaves TTY-based selection unchanged; `--mode json` and `--mode rpc` are rejected with an explicit error. Otherwise `-p` / `--print` or either non-TTY stream selects one-shot print output. On the Supported Platform, interactive stdin/stdout selects the Native TUI, and a positional prompt becomes its initial message. Loaded skills are explicitly invocable with `/skill:<name> [additional instructions]`; that input expands to a regular user prompt containing the skill instructions. Project resources can be trusted for one run with `--approve` / `-a` and denied with `--no-approve` / `-na`; `--no-skills` drops user and project skill discovery (explicit `--skill` paths stay). `--session <path-or-id>` opens or creates a session at the target, `--resume` opens the session picker, `--continue` resumes the most recent session, `--fork` forks from a target id, `--no-session` runs in memory, `--name` names the session, and `--session-dir` redirects automatic storage. `--theme` (repeatable) and `--no-themes` follow pi's theme semantics, and `--list-models [search]` prints pi's six-column model table.
 
 ## Skills
 
@@ -295,7 +288,7 @@ Discovery sources: the custom themes directory `<agent config directory>/themes`
 
 One startup pass reads `keybindings.json` only from this product's Agent Config Directory. The baseline-compatible format accepts one key string, multiple alternatives, or an empty array per namespaced action. Valid user entries replace only that action's defaults; context-local default reuse remains intact, while user/user conflicts are diagnosed and resolved by contextual candidate order. Invalid keys, unknown IDs, and known but unassembled application IDs are skipped with bounded, redacted diagnostics and never create inert bindings.
 
-The exact immutable effective registry drives component dispatch, hotkey help, and rendered key hints. The app layer adopts pi's full 42-action `app.*` catalog (`core/keybindings.ts` at `83114817`); the main editor assembles pi's default bound set — `app.interrupt`, `app.clear`, `app.exit`, `app.suspend`, `app.thinking.cycle`, `app.model.cycleForward`/`cycleBackward`/`select`, `app.tools.expand`, `app.thinking.toggle`, `app.editor.external`, `app.message.copy`/`followUp`/`dequeue`, `app.clipboard.pasteImage` — while `app.session.*` stays recognized-but-unbound in the main editor (pi ships `defaultKeys: []`) and the session and tree selectors bind their scoped actions; `/hotkeys` and the header hints render the assembled subset only. Idle Enter or Alt+Enter starts an ordinary prompt; Enter during active work admits steering input, while Alt+Enter admits follow-up input. `shift+enter` and `ctrl+j` remain multiline editor actions. Accepted input leaves the editor and appears in the pending queue display; rejected input is restored unchanged with a bounded, redacted diagnostic. Dequeue restores steering messages, then follow-up messages, then existing editor text, separated by blank lines. Interrupt restores pending text before requesting abort. Linux/macOS job-control defaults and native Windows unavailability are explicit when an application action is concretely registered. See [Native TUI keybindings](docs/keybindings.md) for the grammar, implemented IDs, precedence, diagnostics, platform behavior, and pi baseline sources. There is no explicit TUI mode and no hot reload.
+The exact immutable effective registry drives component dispatch, hotkey help, and rendered key hints. The app layer adopts pi's full 42-action `app.*` catalog (`core/keybindings.ts` at `83114817`); the main editor assembles pi's default bound set — `app.interrupt`, `app.clear`, `app.exit`, `app.suspend`, `app.thinking.cycle`, `app.model.cycleForward`/`cycleBackward`/`select`, `app.tools.expand`, `app.thinking.toggle`, `app.editor.external`, `app.message.copy`/`followUp`/`dequeue`, `app.clipboard.pasteImage` — while `app.session.*` stays recognized-but-unbound in the main editor (pi ships `defaultKeys: []`) and the session and tree selectors bind their scoped actions; `/hotkeys` and the header hints render the assembled subset only. Idle Enter or Alt+Enter starts an ordinary prompt; Enter during active work admits steering input, while Alt+Enter admits follow-up input. `shift+enter` and `ctrl+j` remain multiline editor actions. Accepted input leaves the editor and appears in the pending queue display; rejected input is restored unchanged with a bounded, redacted diagnostic. Dequeue restores steering messages, then follow-up messages, then existing editor text, separated by blank lines. Interrupt restores pending text before requesting abort. Linux job-control defaults are explicit when an application action is concretely registered. See [Native TUI keybindings](docs/keybindings.md) for the grammar, implemented IDs, precedence, diagnostics, platform behavior, and pi baseline sources. There is no explicit TUI mode and no hot reload.
 
 ## Project trust and resource controls
 
@@ -312,13 +305,13 @@ The built-in tools are pi's default set with pi names (`read`/`bash`/`edit`/`wri
 - `read`: read a text file inside the workspace, with optional line offset/limit. Appends a continuation hint when output is truncated.
 - `write`: create or overwrite a file inside the workspace; creates parent directories implicitly.
 - `edit`: perform one or more exact replacements via an `edits[]` array of `{oldText, newText}` pairs using pi's edit-diff semantics (edit-diff.ts): every edit is matched against the original file (not incrementally), exact match first then fuzzy-normalized matching (NFKC, per-line trailing whitespace stripped, smart quotes/dashes/spaces normalized), the dominant line ending (CRLF vs LF) and a UTF-8 BOM are preserved, zero/multiple matches per edit are rejected with pi's messages, overlapping edits are rejected, and an unchanged result is an error. The result carries `Successfully replaced N block(s) in <path>.` plus details with the display diff, a unified patch, and the first changed new-file line number.
-- `bash`: run a shell command inside the workspace. The tool is always available under the fixed #331 tool set (`--enable-bash` was deleted under ADR 0036). Accepts a timeout in seconds and strips ANSI escape sequences from output. On supported Unix platforms, local execution resolves an expanded configured `shellPath`, otherwise `/bin/bash`, PATH `bash`, then PATH `sh`, and invokes it with `-c` rather than as a login shell. A stale configured path fails only the attempted execution; it does not prevent Session startup.
+- `bash`: run a shell command inside the workspace. The tool is always available under the fixed #331 tool set (`--enable-bash` was deleted under ADR 0036). Accepts a timeout in seconds and strips ANSI escape sequences from output. On the Supported Platform, local execution resolves an expanded configured `shellPath`, otherwise `/bin/bash`, PATH `bash`, then PATH `sh`, and invokes it with `-c` rather than as a login shell. A stale configured path fails only the attempted execution; it does not prevent Session startup.
 
 The registry owns tool capabilities directly. Tool calls in one assistant message execute in parallel by default (pi's `toolExecution` default `"parallel"`, expressed as `BoundedParallelToolExecution` with no explicit cap); a batch containing a call to a tool whose adapter declares `Exclusive` (pi `executionMode: "sequential"`) runs through the sequential path with full per-call lifecycle in source order, and an explicit `SequentialToolExecution` or a cap of one does the same. Every call starts its Tool Execution lifecycle before the executor parses and clones the raw arguments, applies the recorded pi-baseline recursive coercion profile, and validates the tool's JSON Schema before policy hooks or capability invocation. The executable profile covers primitive and union types, nested objects and arrays (including tuple items and dynamic properties), value and collection constraints, composition, and baseline-recognized formats. Unknown formats and members remain annotations unless a required vocabulary makes support mandatory. Malformed JSON, unknown tools, invalid or unsupported dialects and vocabularies, unresolved references, unsupported executable constructs, and schema-invalid values become bounded error Tool Call Outcomes for only their calls; annotations and extension members do not disable recognized assertions. Parser excerpts in malformed-argument diagnostics are secret-redacted before UTF-8-safe truncation, so the same safe diagnostic flows through tool lifecycle events, model context, and Session persistence.
 
-Tool adapters declare their concurrency through `concurrency()`: the default is `Exclusive` (pi `executionMode: "sequential"`); parallel-safe adapters explicitly return `ParallelSafe`. The built-in tools remain `Exclusive` because their shared execution environment has no public concurrent-use contract. A tool may override `execute_with_updates()` to publish cumulative partial tool execution results through the move-only update sink; those updates retain the Tool Call ID through Agent lifecycle and Native TUI presentation, late updates after execution settlement are ignored, and ordinary tools continue to implement `execute()`. The active prompt's `std::stop_token` is mandatory at the tool and filesystem capability seams. Sequential execution observes cancellation before starting each call and after the current hook/tool outcome is finalized. Bounded-parallel workers observe it before claiming and before invoking queued capabilities; already-running calls quiesce, while claimed-but-unstarted calls receive balanced `Operation aborted` outcomes without capability invocation.
+A Tool is a passive descriptor carrying prompt metadata and concurrency policy plus one move-only execute operation returning `AsyncResult`; the default concurrency policy is `Exclusive` (pi `executionMode: "sequential"`), while parallel-safe Tools opt in explicitly. An optional move-only Tool Update sink publishes cumulative partial results with the Tool Call ID; late updates after operation settlement are ignored. The active prompt's `std::stop_token` is mandatory at Tool and filesystem operation seams. Sequential execution observes cancellation before starting each call and after the current hook/Tool outcome is finalized. Bounded-parallel workers observe it before claiming and before invoking queued capabilities; already-running calls quiesce, while claimed-but-unstarted calls receive balanced `Operation aborted` outcomes without capability invocation.
 
-File tools deliberately share one execution environment capability, which owns workspace containment, path validation, atomic writes, process execution, timeout handling, and output limiting. Awaitable filesystem operations observe cancellation immediately before and after their synchronous local filesystem boundary; a completed mutation is not rolled back when cancellation wins the post-operation check. Best-effort `cleanup()` is deliberately the sole no-token operation. Shell execution carries the same token through `ExecOptions` and `ProcessRequest`; on supported platforms cancellation terminates the active process group and reaps the shell before returning `Aborted`. File tools reject workspace escapes, symlink escapes, directory/file mismatches, and missing parents unless creation is explicitly requested. `bash` receives a sanitized environment that omits API-key, token, secret, password, and OpenAI-looking variables.
+File tools deliberately share one execution environment capability, which owns workspace containment, path validation, atomic writes, process execution, timeout handling, and output limiting. Filesystem `AsyncResult` operations observe cancellation before and after a short local syscall and between chunks of larger work; a completed mutation is not rolled back when cancellation wins afterward, and partial side effects are reported honestly. Cleanup is asynchronous where it can block. Shell execution carries the same token through `ExecOptions` and `ProcessRequest`; on the Supported Platform cancellation terminates the active process group and reaps the shell before returning `Aborted`. File tools reject workspace escapes, symlink escapes, directory/file mismatches, and missing parents unless creation is explicitly requested. `bash` receives a sanitized environment that omits API-key, token, secret, password, and OpenAI-looking variables.
 
 ## Sessions and safety
 
@@ -329,42 +322,40 @@ Sessions are JSONL:
 3. write support for v3 tree metadata entries (`model_change`, `thinking_level_change`, `active_tools_change`, `custom`, `custom_message`, `label`, `compaction`, `branch_summary`, `session_info`) and extended runtime messages (`BashExecutionMessage`, `CustomMessage`, `BranchSummaryMessage`, `CompactionSummaryMessage`),
 4. safely ignored unknown future entry types.
 
-Each completed user, assistant, or tool-result message enters the stateful Agent's live history before weak subscribers run and is appended after observer delivery. Subscriber failures or exceptions become bounded Agent diagnostics and deactivate the faulty observer; they do not stop later observers, veto Agent progress, or prevent persistence. A persistence failure remains a strong commitment failure: it stops the current run without rolling back live history or closing the session. Later in-process prompts use retained live state, while reopening reconstructs only entries that reached durable storage. Current resume uses the v3 session tree to rebuild the active path, including persisted leaf selection and compaction summaries, through the session resume module. Exact unredacted replay is intentionally out of scope. The session-family CLI follows pi (ADR 0036): `--session <path-or-id>` opens or creates at the target, `--resume` opens the session picker, `--continue` resumes the most recent session, `--fork` forks from a target id, `--session-id` validates/conflicts against the target, `--name` names the session, `--no-session` runs in memory without persisting, and `--list-models [search]` prints pi's six-column model table (`provider model context max-out thinking images`) with fuzzy search. Session files are still sensitive: they can contain source text, command output, workspace paths, and provider/model metadata.
+Each admitted Agent lifecycle event follows one strong Session Event Commitment: advance Live Session State, notify weak observers from that committed state, encode/write off the event-loop thread, return the result to the Agent Session's serialized mailbox, and complete in FIFO order. Subscriber failures become bounded diagnostics and deactivate the faulty observer; they never veto progress or persistence. A persistence failure preserves the newer Live Session State but records a stable error and rejects new prompts. Session Close drains every admitted commitment before releasing resources. Reopening reconstructs only entries that reached durable storage; resume uses the v3 session tree to rebuild the active path, including persisted leaf selection and compaction summaries. Exact unredacted replay is intentionally out of scope. The session-family CLI follows pi (ADR 0036): `--session <path-or-id>` opens or creates at the target, `--resume` opens the session picker, `--continue` resumes the most recent session, `--fork` forks from a target id, `--session-id` validates/conflicts against the target, `--name` names the session, `--no-session` runs in memory without persisting, and `--list-models [search]` prints pi's six-column model table (`provider model context max-out thinking images`) with fuzzy search. Session files are still sensitive: they can contain source text, command output, workspace paths, and provider/model metadata.
 
 The workspace guard is not a sandbox. Prompts, file contents, and command outputs can be sent to the configured provider. Run this harness inside a VM/container if you need a real containment boundary.
 
 ## Executable specs
 
-Tests are split into package-aligned executables (`cch_tests_util`, `cch_tests_tui`, `cch_tests_ai`, `cch_tests_agent`, `cch_tests_harness_tools`, `cch_tests_coding_agent`, `cch_tests_coding_agent_interactive`, `cch_tests_cli_arch`), so a focused test edit builds and links only its owning package; the `cpp_harness_tests` CMake target remains as the aggregate that builds every shard. Each shard registers with `ctest`, and `scripts/run-tests.sh` is the uniform tag/filter entry point: a filter skips shards whose registered tests do not match, and with no filter every shard runs in full.
+Tests use formal Catch2 v3 from the pinned dependency graph. CTest names and labels are the normal selection, scheduling, timeout, and reporting surface: fast deterministic unit/contract cases are discovered individually; process, TTY, golden, and complete Agent Session/TUI scenarios are grouped only when measured startup/shared setup justifies it; fatal, cancellation, Close, and hang-prone contracts run in isolated subprocesses with hard timeouts. Every test has a unique name and unique temporary resources. The old shard runner is not a second scheduler.
 
-Useful default validation slices:
+Useful validation slices after configuration:
 
 ```bash
-scripts/run-tests.sh "[architecture]"
-scripts/run-tests.sh "[ai][u2]"
-scripts/run-tests.sh "[ai][provider]"
-scripts/run-tests.sh "[agent][stateful]"
-scripts/run-tests.sh "[agent][async]"
-scripts/run-tests.sh "[tools][async]"
-scripts/run-tests.sh "[harness][session]"
-scripts/run-tests.sh "[cli]"
+ctest --preset vcpkg -L architecture
+ctest --preset vcpkg -L ai
+ctest --preset vcpkg -L agent
+ctest --preset vcpkg -L tui
+ctest --preset vcpkg -L cli
+ctest --preset vcpkg
 ```
-
-Building and running one package's tests alone works without building the rest: `cmake --build --preset vcpkg --target cch_tests_tui` then `./build/cch_tests_tui` (or `scripts/run-tests.sh --build-dir build/dev-fast "[tui]"` for the fast-development tree).
 
 These cover:
 
-- public headers compile from the include contract surface without `src`, legacy sync contracts, Boost.JSON, or raw Glaze generic values in domain contracts;
-- stateful Agent prompts retain live history, expose passive snapshots, reject overlapping runs, and notify weak move-only observers in lifecycle order;
-- fake model/tool loops route through provider-neutral value contracts and owned tool capabilities (the scripted fake Provider lives in the test suite);
-- move-only event sinks can capture unique state and propagate errors;
-- provider-specific OpenAI/SSE/Glaze wire mapping stays isolated from the agent loop;
-- JSONL resume reconstructs typed message ordering for the next request;
-- AgentSession tests protect live-state-before-subscriber-before-persistence ordering, passive fresh/in-memory/active/resumed snapshots, and failure recovery;
-- CLI slices exercise the pi-aligned frontend/session surface without compatibility-only flags.
+- each repository-internal Owner Interface header compiling independently and legal/illegal configured Owner relationships through stable Parity Architecture Gate rule IDs;
+- ready and pending `AsyncResult` completion, cancellation races, abandonment, fatal misuse, and quiescent coroutine destruction;
+- Runtime admission bounds, typed `Busy`, reserved control progress, FIFO mailbox state changes, fairness, and final Close;
+- fake Provider/`ModelStream` Agent turns, Tool ordering/updates, and provider-specific wire mapping without live credentials;
+- Session Event Commitment ordering, persistence failure, stable weak-observer snapshots, and drain on Close;
+- process output draining through truncation/callback failure and filesystem/Shell cancellation with honest partial outcomes;
+- JSONL resume and pi-aligned CLI/Native TUI scenarios; and
+- clean Runtime-only install smoke with development artifacts absent.
 
 ## Deferred
 
-Not included: Native Windows TUI support; extensions; packages; live skill reload; MCP integration; permission prompts; native Windows shell process-tree termination semantics; subagents; HTML session export and `/export` `/import` `/share`; branch summarization generation; C++26 reflection-generated schema; `std::execution` senders/receivers; ABI-stable binary distribution; or OS-level sandboxing. OAuth login (Codex PKCE callback server, Kimi RFC 8628 device flow) is a Supported Capability of the pi-ai module (see [fixtures/pi-ai/README.md](fixtures/pi-ai/README.md)); its interactive presentation (login dialog, OAuth selector, API-key branch) is Supported in the Native TUI per ADR 0036.
+Deferred capabilities: extensions; packages; live skill reload; MCP integration; permission prompts; subagents; HTML session export and `/export` `/import` `/share`; branch summarization generation; C++26 reflection-generated schema; `std::execution` senders/receivers; ABI-stable binary distribution; and OS-level sandboxing. OAuth login (Codex PKCE callback server, Kimi RFC 8628 device flow) is a Supported Capability of `cch_ai` (see [fixtures/pi-ai/README.md](fixtures/pi-ai/README.md)); its interactive presentation is Supported in the Native TUI per ADR 0036.
+
+Windows, macOS, ARM64, musl/Alpine, cross-compilation, and other non-Linux-x86-64/glibc environments are unsupported—not Deferred Capabilities or best-effort product surfaces.
 
 The embeddable C++ SDK, the JSONL RPC mode, and the JSON CLI mode are removed with no placeholder surface under ADR 0036.

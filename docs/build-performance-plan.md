@@ -1,29 +1,45 @@
 # Build Performance Plan
 
-Status: Proposed. This document records measured evidence and a staged decision package. It does not authorize implementation.
+Status: Historical measurement record. The proposed policy and staged recommendation are superseded by architecture spec [#439](https://github.com/lanshengzhi/cpp-coding-harness/issues/439) and accepted [ADR 0039](adr/0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md)/[ADR 0040](adr/0040-own-asynchronous-operations-and-the-serialized-runtime-lifecycle.md). This document preserves benchmark evidence; it does not authorize implementation or define a supported build path.
 
-## Objective
+## Current architecture-policy supersession
 
-Shorten the highest-frequency developer feedback paths in this order:
+The measurements below remain historical evidence. Conflicting policy and recommendations are replaced as follows:
+
+| Historical proposal | Current authority |
+| --- | --- |
+| Preserve a portable or best-effort platform range. | The Supported Platform is native Linux x86-64 with glibc only. Unsupported platforms and cross-compilation fail at configure time. |
+| Use a CMake 4.0+ floor, loose GCC 16+ selection, and optional experimental Clang. | Require CMake 4.4+, Ninja 1.11+, GCC 16.x for builds/releases, and Clang 22.x as a blocking Linux conformance verifier. CI and releases pin exact versions without this document inventing them. |
+| Retain the legacy package graph, including `cch_util` and `cch_coding_agent_runtime`. | Use the four-Owner graph (`cch_ai`, `cch_agent_core`, `cch_tui`, `cch_coding_agent`) plus pi-neutral `cch_support`; `cch::support::JsonValue` replaces `util::JsonValue`. |
+| Remove Catch2 and retain the local Catch-compatible imitation. | Use formal Catch2 v3 from the pinned dependency graph and delete the imitation without a compatibility header. |
+| Split and schedule tests through package shards and `scripts/run-tests.sh`. | Discover fast tests as individual CTest cases; use CTest names and labels as the normal selection and scheduling authority, with measured grouping only for scenarios that justify it. |
+| Reconsider optional Unity Build. | Unity Build and Unix Makefiles are unsupported. |
+| Treat the numeric targets and stages below as the recommended implementation tranche. | Structural bounds, unique compilation, legal fan-out, and dependency classification block immediately. Numeric gates require controlled repeated measurements with baseline, variance, selection rule, and update procedure. All stages and the old recommendation below are superseded. |
+
+## Historical objective
+
+The proposal sought to shorten these developer feedback paths:
 
 1. rebuild after changing one production `.cpp` file;
 2. build and run the relevant tests;
 3. rebuild after changing a shared project header;
 4. clean Debug and Release builds, including bootstrap workflows.
 
-Preserve the existing portable build as the compatibility baseline. Add an explicit fast-development path first; consider making it the default only after it is stable and measured.
+Its portable compatibility-baseline assumption is superseded by the Supported Platform in ADR 0039. The explicit fast-development path remains useful only where it conforms to that supported boundary.
 
-## Scope and constraints
+## Superseded scope and constraints
 
-- Keep the supported platform range; the toolchain floor is GCC 16+ and CMake 4.0+ per ADR 0038, and the `system` dependency preset is removed — vcpkg is the only supported dependency source.
-- Keep GCC as the primary fast-development compiler; evaluate Clang through a separate experimental preset.
+The following bullets record the proposal's assumptions at measurement time; they are not current build policy:
+
+- Keep the then-supported platform range and GCC 16+/CMake 4.0+ floor from ADR 0038, with vcpkg as the only dependency source.
+- Keep GCC as the primary fast-development compiler and evaluate Clang through a separate experimental preset.
 - Keep build parallelism at four jobs on the measured host. Higher-memory environments may override it explicitly.
 - Permit Ninja, ccache, private target-specific precompiled headers, package-aligned test splitting, and private dependency-boundary improvements.
-- Do not use a global PCH or enable Unity Build in the initial work.
-- Preserve the existing package and capability boundaries. In particular, any later work on the Beast/Asio implementation must remain behind the existing Transport seam.
+- Avoid global PCH and initial Unity Build use.
+- Preserve the then-existing package boundaries and keep Beast/Asio behind the Transport seam.
 - Use fake-provider tests; build-performance validation requires no live provider or network access.
 
-This is build-engineering policy, not product domain language. It does not change `CONTEXT.md`. The toolchain floor change (GCC 16+, CMake 4.0, single vcpkg dependency path) is recorded in ADR 0038; the build-performance work itself remains reversible and does not justify its own ADR.
+These were build-engineering proposals, not product domain language. They do not change `CONTEXT.md`. ADR 0039 supersedes ADR 0038's CMake 4.0 floor, loose GCC 16+ rule, and best-effort platform range; ADR 0039/0040 also replace the proposal's package, test, and Runtime assumptions.
 
 ## Measurement environment
 
@@ -122,9 +138,11 @@ Beast/Asio transport implementations, interactive-mode sources, serialization, a
 
 The Ninja no-op build took 0.04 seconds. CMake/Ninja dependency-graph scanning is not a meaningful bottleneck.
 
-## Target outcomes
+## Historical target outcomes (not current gates)
 
-### Debug
+These one-host numeric goals belong to the superseded proposal. They are not blocking thresholds; current numeric policy requires the controlled repeated evidence defined by ADR 0039.
+
+### Historical Debug goals
 
 - cold clean build: at most 420 seconds;
 - warm-ccache clean rebuild: at most 60 seconds;
@@ -134,7 +152,7 @@ The Ninja no-op build took 0.04 seconds. CMake/Ninja dependency-graph scanning i
 - shared-header rebuild fan-out or aggregate time: at least 40% lower;
 - no-op build: remain below one second.
 
-### Release
+### Historical Release goals
 
 - cold clean build: at most 720 seconds;
 - warm-ccache clean rebuild: at most 30 seconds;
@@ -143,9 +161,11 @@ The Ninja no-op build took 0.04 seconds. CMake/Ninja dependency-graph scanning i
 
 Absolute cold-build targets should be compared on a similarly loaded host. Each implementation ticket should also report relative change against a same-session control run.
 
-## Proposed stages
+## Superseded proposed stages
 
-Each stage has an independent Go/No-Go measurement. Do not batch stages before measuring: otherwise a regression or win cannot be attributed.
+The stages below are retained to explain the measurement record. They are not a current sequence or authorization; where they conflict with the supersession table above, ADR 0039/0040 and #439 control.
+
+The proposal gave each stage an independent Go/No-Go measurement and avoided batching stages before measurement so a regression or win could be attributed.
 
 ### Stage 1: establish the benchmark contract
 
@@ -186,7 +206,11 @@ Add a checked-in `dev-fast` family that:
 
 ### Stage 3: remove known build waste
 
-1. Remove the unused Catch2 dependency from `vcpkg.json`; tests currently use the repository's lightweight Catch-compatible header and do not link Catch2.
+**Superseded test-framework clause:** Catch2 removal is rejected. The current destination uses formal Catch2 v3 and deletes the local imitation. Source ownership must follow the four authoritative Owner libraries and central CMake declarations rather than the legacy target graph.
+
+The historical proposal was:
+
+1. Remove the then-unused Catch2 dependency from `vcpkg.json` and retain the repository's lightweight Catch-compatible header.
 2. Give the five duplicated production sources one authoritative CMake owner, then link that owner into the executable and relevant tests.
 
 The ownership change must preserve the dependency directions in `CODING_STANDARDS.md` section 12 and the architecture tests.
@@ -197,7 +221,9 @@ The ownership change must preserve the dependency directions in `CODING_STANDARD
 
 ### Stage 4: split tests by package boundary
 
-Replace the single test executable with package-aligned executables, initially considering:
+**Superseded scheduling clause:** package shards, the `cpp_harness_tests` aggregate, and `scripts/run-tests.sh` do not define the destination. Formal Catch2 v3 case discovery and CTest names/labels are the normal scheduling surface; scenarios are grouped only when measured startup or shared setup justifies it.
+
+The historical proposal would have replaced the single test executable with package-aligned executables, initially considering:
 
 - util;
 - TUI;
@@ -225,9 +251,9 @@ The proposal intentionally does not preserve `cpp_harness_tests` as one executab
 
 ### Stage 5: localize Glaze
 
-Remove Glaze-dependent machinery from `src/util/Json.hpp`. Move conversions and serialization helpers into existing private serialization/Glaze implementation areas, and remove dead helpers after verifying that they have no callers.
+**Terminology and ownership supersession:** Glaze DTOs and serialization machinery remain Owner-private, but `cch_util`, `src/util/Json.hpp`, and public `util::JsonValue` are not destination contracts. Cross-Owner unstructured JSON uses passive `cch::support::JsonValue` through repository-internal Owner Interfaces.
 
-Do not change the passive public `util::JsonValue` contract.
+The historical proposal would have removed Glaze-dependent machinery from `src/util/Json.hpp`, moved conversions and serialization helpers into private implementation areas, and removed dead helpers after verifying that they had no callers.
 
 **Go:** approximately 50 non-serialization translation units no longer parse Glaze, architecture tests pass, and shared-header rebuild cost decreases.
 
@@ -250,7 +276,7 @@ Rules:
 
 ### Stage 7: evaluate Clang separately
 
-Add or locally exercise an experimental Clang fast preset and measure the complete Debug and Release builds. Keep GCC as the primary recommendation until the full matrix, diagnostics, tests, and ccache behavior are verified.
+**Superseded compiler clause:** Clang 22.x is a blocking Linux conformance verifier, not an optional developer-only experiment or release-artifact compiler. GCC 16.x remains the sole build/release compiler.
 
 **Go:** the full edit-build-test loop improves materially without compatibility loss.
 
@@ -273,19 +299,17 @@ Preserve the public Transport capability seam and observable provider behavior. 
 
 ### Stage 9: reconsider Unity Build only if necessary
 
-Unity Build is not part of the initial recommendation. Reconsider targeted, opt-in use only if the prior stages leave cold-build targets unmet.
+**Superseded:** Unity Build is unsupported by ADR 0039 and is not a conditional optimization path.
 
-Any experiment must compare memory, diagnostics, include correctness, and incremental behavior—not only clean-build wall time. Global Unity Build remains disallowed without a separate decision.
+## Superseded recommended decision
 
-## Recommended decision
+Do not approve or implement the old staged tranche from this document. #439 and ADR 0039/0040 replace its package, test, platform, compiler, Unity, and Runtime assumptions; approved work follows `/to-spec` → `/to-tickets` → `/implement` from those authorities.
 
-Approve stages 1 through 5 as the low-risk implementation tranche after they pass the project's issue/spec/ticket process. Treat stage 6 as a measured experiment, stage 7 as an optional developer-path comparison, and stages 8 and 9 as conditional work triggered only by unmet targets.
+The measured Release rebuild improvement from 967.2 seconds cold to 4.2 seconds warm remains evidence for Ninja/ccache on that host. The former package-sharding recommendation is superseded by Catch2 v3 case discovery and CTest scheduling. The measured-host warning against increasing parallelism remains evidence, not a universal policy.
 
-The highest-confidence immediate win is the formal Ninja-and-ccache path: an isolated Release rebuild improved from 967.2 seconds cold to 4.2 seconds warm. The highest-confidence structural win for focused work is package-aligned test splitting. Increasing parallelism is specifically not recommended on the measured host.
+## Historical validation and rollout
 
-## Validation and rollout
-
-For each accepted stage:
+The proposal required the following for each then-accepted stage:
 
 1. record control measurements with compiler, configuration, cache state, and system load;
 2. implement only that stage;
@@ -299,4 +323,4 @@ Documentation-only changes to this proposal require heading, link, tracker-refer
 
 ## Decision boundaries
 
-This proposal does not authorize code changes, issue creation, branch changes, commits, or CI policy changes. Approved implementation should leave this document through the repository's `/to-spec` → `/to-tickets` → `/implement` workflow.
+This historical record does not authorize code changes, issue creation, branch changes, commits, or CI policy changes. New work must derive from #439, ADR 0039/0040, the parity map, and the repository's `/to-spec` → `/to-tickets` → `/implement` workflow.
