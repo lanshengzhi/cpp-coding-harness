@@ -44,7 +44,7 @@ struct RuntimeServices {
     /// the model and thinking level change; null only when the model Bash
     /// Tool is absent or env-exposure-disabled.
     std::shared_ptr<tools::BashSessionEnvironment> bash_session_environment;
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
 };
 
 } // namespace cch::coding_agent::runtime

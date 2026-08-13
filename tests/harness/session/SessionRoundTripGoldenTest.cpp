@@ -406,7 +406,7 @@ TEST_CASE("pi projection drives rebuilt context into the Agent at the fake-Model
 
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
@@ -461,7 +461,7 @@ TEST_CASE("pi branch projection drives rebuilt context into the Agent",
 
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
@@ -653,7 +653,7 @@ TEST_CASE(
 
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     // The re-resolved model identity (the derived provider/model with a full

@@ -31,13 +31,13 @@ struct BashSessionEnvironment {
     std::optional<std::string> reasoning_level{};
 };
 
-[[nodiscard]] std::unique_ptr<agent::AsyncAgentTool> make_async_read_file_tool(std::shared_ptr<harness::AsyncExecutionEnv> env);
-[[nodiscard]] std::unique_ptr<agent::AsyncAgentTool> make_async_write_file_tool(std::shared_ptr<harness::AsyncExecutionEnv> env);
-[[nodiscard]] std::unique_ptr<agent::AsyncAgentTool> make_async_edit_tool(std::shared_ptr<harness::AsyncExecutionEnv> env);
+[[nodiscard]] agent::Tool make_async_read_file_tool(std::shared_ptr<harness::AsyncExecutionEnv> env);
+[[nodiscard]] agent::Tool make_async_write_file_tool(std::shared_ptr<harness::AsyncExecutionEnv> env);
+[[nodiscard]] agent::Tool make_async_edit_tool(std::shared_ptr<harness::AsyncExecutionEnv> env);
 /// The model-facing Bash Tool. `session_environment` (when provided) exposes
 /// the live `PI_*` session facts on every executed command; without it the
 /// tool injects no environment (pi `exposeSessionEnvironment: false`).
-[[nodiscard]] std::unique_ptr<agent::AsyncAgentTool> make_async_bash_tool(
+[[nodiscard]] agent::Tool make_async_bash_tool(
     std::shared_ptr<harness::AsyncExecutionEnv> env,
     std::shared_ptr<BashSessionEnvironment> session_environment = {});
 

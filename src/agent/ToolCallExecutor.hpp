@@ -36,7 +36,7 @@ struct ToolCallBatchResult {
 
 class ToolCallExecutor {
 public:
-    ToolCallExecutor(const AsyncToolRegistry& registry, ToolCallExecutorOptions options);
+    ToolCallExecutor(ToolRegistry& registry, ToolCallExecutorOptions options);
     ToolCallExecutor(ToolCallExecutor&&) noexcept = default;
     ToolCallExecutor& operator=(ToolCallExecutor&&) = delete;
     ~ToolCallExecutor() = default;
@@ -59,7 +59,7 @@ private:
         std::size_t max_in_flight,
         AgentEventSink& sink);
 
-    const AsyncToolRegistry& registry_; // must outlive every execute coroutine
+    ToolRegistry& registry_; // must outlive every execute coroutine
     ToolCallExecutorOptions options_;
 };
 

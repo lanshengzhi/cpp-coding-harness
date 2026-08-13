@@ -3,6 +3,7 @@
 #include <cch/harness/LocalExecutionEnv.hpp>
 #include <cch/tools/ToolFactories.hpp>
 #include "agent/ToolArgumentPreparation.hpp"
+#include "ai/AsyncResultBridge.hpp"
 #include "util/Json.hpp"
 #include "util/OutputLimiter.hpp"
 
@@ -159,7 +160,7 @@ util::Expected<agent::AsyncToolExecutionResult> run_tool(Start start) {
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            result = co_await start();
+            result = co_await ai::detail::await_async_result(start());
             co_return;
         },
         boost::asio::detached);
@@ -185,10 +186,10 @@ TEST_CASE("built-in tools default to exclusive execution", "[tools][async]") {
     auto edit = tools::make_async_edit_tool(env);
     auto bash = tools::make_async_bash_tool(env);
 
-    CHECK(read->concurrency() == agent::ToolConcurrency::Exclusive);
-    CHECK(write->concurrency() == agent::ToolConcurrency::Exclusive);
-    CHECK(edit->concurrency() == agent::ToolConcurrency::Exclusive);
-    CHECK(bash->concurrency() == agent::ToolConcurrency::Exclusive);
+    CHECK(read.concurrency == agent::ToolConcurrency::Exclusive);
+    CHECK(write.concurrency == agent::ToolConcurrency::Exclusive);
+    CHECK(edit.concurrency == agent::ToolConcurrency::Exclusive);
+    CHECK(bash.concurrency == agent::ToolConcurrency::Exclusive);
 }
 
 TEST_CASE("async read_file tool uses Glaze typed args and workspace guard", "[tools][async][u6]") {
@@ -198,9 +199,9 @@ TEST_CASE("async read_file tool uses Glaze typed args and workspace guard", "[to
     auto tool = tools::make_async_read_file_tool(env);
 
     auto result = run_tool([&]() {
-        return tool->execute(
+        return tool.execute(
             invocation("read_file", R"({"path":"note.txt","offset":2,"limit":1})"),
-            std::stop_token{});
+            std::stop_token{}, agent::ToolUpdateSink{});
     });
 
     REQUIRE(result);
@@ -215,11 +216,11 @@ TEST_CASE("async edit tool applies disjoint edits and returns pi-shaped diff det
     auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
-        return tool->execute(
+        return tool.execute(
             invocation("edit",
                 R"({"path":"edit.txt","edits":[{"oldText":"alpha\n","newText":"ALPHA\n"},)"
                 R"({"oldText":"gamma\n","newText":"GAMMA\n"}]})"),
-            std::stop_token{});
+            std::stop_token{}, agent::ToolUpdateSink{});
     });
 
     REQUIRE(result);
@@ -262,11 +263,11 @@ TEST_CASE("async edit tool matches every edit against the original and rejects o
     auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
-        return tool->execute(
+        return tool.execute(
             invocation("edit",
                 R"({"path":"edit.txt","edits":[{"oldText":"one\ntwo\n","newText":"ONE\nTWO\n"},)"
                 R"({"oldText":"two\nthree\n","newText":"TWO\nTHREE\n"}]})"),
-            std::stop_token{});
+            std::stop_token{}, agent::ToolUpdateSink{});
     });
 
     REQUIRE(result);
@@ -283,8 +284,8 @@ TEST_CASE("async edit tool rejects missing and duplicate target text with pi mes
     auto tool = tools::make_async_edit_tool(env);
 
     auto missing = run_tool([&]() {
-        return tool->execute(invocation("edit",
-            R"({"path":"edit.txt","edits":[{"oldText":"bar","newText":"baz"}]})"), std::stop_token{});
+        return tool.execute(invocation("edit",
+            R"({"path":"edit.txt","edits":[{"oldText":"bar","newText":"baz"}]})"), std::stop_token{}, agent::ToolUpdateSink{});
     });
     REQUIRE(missing);
     CHECK(missing->is_error);
@@ -292,8 +293,8 @@ TEST_CASE("async edit tool rejects missing and duplicate target text with pi mes
         "Could not find the exact text in edit.txt.") != std::string::npos);
 
     auto duplicate = run_tool([&]() {
-        return tool->execute(invocation("edit",
-            R"({"path":"edit.txt","edits":[{"oldText":"foo","newText":"bar"}]})"), std::stop_token{});
+        return tool.execute(invocation("edit",
+            R"({"path":"edit.txt","edits":[{"oldText":"foo","newText":"bar"}]})"), std::stop_token{}, agent::ToolUpdateSink{});
     });
     REQUIRE(duplicate);
     CHECK(duplicate->is_error);
@@ -309,8 +310,8 @@ TEST_CASE("async edit tool preserves BOM and CRLF line endings", "[tools][async]
     auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
-        return tool->execute(invocation("edit",
-            R"({"path":"edit.txt","edits":[{"oldText":"two","newText":"TWO"}]})"), std::stop_token{});
+        return tool.execute(invocation("edit",
+            R"({"path":"edit.txt","edits":[{"oldText":"two","newText":"TWO"}]})"), std::stop_token{}, agent::ToolUpdateSink{});
     });
 
     REQUIRE(result);
@@ -328,9 +329,9 @@ TEST_CASE("async edit tool fuzzy-matches smart-quote and dash variants", "[tools
     auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
-        return tool->execute(invocation("edit",
+        return tool.execute(invocation("edit",
             R"({"path":"note.txt","edits":[{"oldText":"say \"hello\" world-today","newText":"fixed"}]})"),
-            std::stop_token{});
+            std::stop_token{}, agent::ToolUpdateSink{});
     });
 
     REQUIRE(result);
@@ -347,8 +348,8 @@ TEST_CASE("async edit tool rejects empty oldText with pi's message", "[tools][as
     auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
-        return tool->execute(invocation("edit",
-            R"({"path":"note.txt","edits":[{"oldText":"","newText":"x"}]})"), std::stop_token{});
+        return tool.execute(invocation("edit",
+            R"({"path":"note.txt","edits":[{"oldText":"","newText":"x"}]})"), std::stop_token{}, agent::ToolUpdateSink{});
     });
 
     REQUIRE(result);
@@ -365,8 +366,8 @@ TEST_CASE("async edit tool rejects no-change edits with pi's message", "[tools][
     auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
-        return tool->execute(invocation("edit",
-            R"({"path":"note.txt","edits":[{"oldText":"same","newText":"same"}]})"), std::stop_token{});
+        return tool.execute(invocation("edit",
+            R"({"path":"note.txt","edits":[{"oldText":"same","newText":"same"}]})"), std::stop_token{}, agent::ToolUpdateSink{});
     });
 
     REQUIRE(result);
@@ -393,11 +394,11 @@ TEST_CASE("edit declared contract validation and execution acceptance agree", "[
             .thought_signature = std::nullopt,
             .argument_error = std::nullopt,
         };
-        return agent::prepare_tool_arguments(tool->definition(), call).has_value();
+        return agent::prepare_tool_arguments(tool.definition, call).has_value();
     };
     auto execution_accepts = [&](const std::string& json) {
         auto result = run_tool([&]() {
-            return tool->execute(invocation("edit", json), std::stop_token{});
+            return tool.execute(invocation("edit", json), std::stop_token{}, agent::ToolUpdateSink{});
         });
         REQUIRE(result);
         return !result->is_error;
@@ -443,7 +444,7 @@ TEST_CASE("async tools prefer structured arguments over raw provider text", "[to
     agent::ToolInvocation call{"call-1", "read_file", *structured, R"({"path":"raw.txt"})"};
 
     auto result = run_tool([&]() {
-        return tool->execute(std::move(call), std::stop_token{});
+        return tool.execute(std::move(call), std::stop_token{}, agent::ToolUpdateSink{});
     });
 
     REQUIRE(result);
@@ -460,9 +461,9 @@ TEST_CASE(
     std::stop_source stop_source;
 
     auto result = run_tool([&]() {
-        return tool->execute(
+        return tool.execute(
             invocation("bash", R"({"command":"echo hi","timeout":5})"),
-            stop_source.get_token());
+            stop_source.get_token(), agent::ToolUpdateSink{});
     });
 
     REQUIRE(result);
@@ -487,9 +488,9 @@ TEST_CASE(
     auto tool = tools::make_async_bash_tool(env, session_environment);
 
     auto result = run_tool([&]() {
-        return tool->execute(
+        return tool.execute(
             invocation("bash", R"({"command":"env | grep PI_"})"),
-            std::stop_token{});
+            std::stop_token{}, agent::ToolUpdateSink{});
     });
 
     REQUIRE(result);
@@ -513,9 +514,9 @@ TEST_CASE(
     auto tool = tools::make_async_bash_tool(env, session_environment);
 
     auto result = run_tool([&]() {
-        return tool->execute(
+        return tool.execute(
             invocation("bash", R"({"command":"echo hi"})"),
-            std::stop_token{});
+            std::stop_token{}, agent::ToolUpdateSink{});
     });
 
     REQUIRE(result);
@@ -530,9 +531,9 @@ TEST_CASE(
     // (pi `exposeSessionEnvironment: false`).
     auto plain_tool = tools::make_async_bash_tool(env);
     auto plain_result = run_tool([&]() {
-        return plain_tool->execute(
+        return plain_tool.execute(
             invocation("bash", R"({"command":"echo hi"})"),
-            std::stop_token{});
+            std::stop_token{}, agent::ToolUpdateSink{});
     });
     REQUIRE(plain_result);
     CHECK_FALSE(env->last_env.has_value());
@@ -548,9 +549,9 @@ TEST_CASE("async bash tool spill file contains complete output beyond the visibl
     auto tool = tools::make_async_bash_tool(env);
 
     auto result = run_tool([&]() {
-        return tool->execute(
+        return tool.execute(
             invocation("bash", R"({"command":"emit-large-output"})"),
-            std::stop_token{});
+            std::stop_token{}, agent::ToolUpdateSink{});
     });
 
     REQUIRE(result);
@@ -578,9 +579,9 @@ TEST_CASE("async bash tool without streamed output reports capping at the execut
     auto tool = tools::make_async_bash_tool(env);
 
     auto result = run_tool([&]() {
-        return tool->execute(
+        return tool.execute(
             invocation("bash", R"({"command":"emit-large-output"})"),
-            std::stop_token{});
+            std::stop_token{}, agent::ToolUpdateSink{});
     });
 
     REQUIRE(result);
@@ -605,9 +606,9 @@ TEST_CASE("async bash tool strips ANSI escape sequences", "[tools][async]") {
     auto tool = tools::make_async_bash_tool(env);
 
     auto result = run_tool([&]() {
-        return tool->execute(
+        return tool.execute(
             invocation("bash", R"({"command":"echo hi"})"),
-            std::stop_token{});
+            std::stop_token{}, agent::ToolUpdateSink{});
     });
 
     REQUIRE(result);
@@ -623,9 +624,9 @@ TEST_CASE("async bash tool is disabled unless env explicitly enables it", "[tool
     auto tool = tools::make_async_bash_tool(env);
 
     auto result = run_tool([&]() {
-        return tool->execute(
+        return tool.execute(
             invocation("bash", R"({"command":"echo blocked"})"),
-            std::stop_token{});
+            std::stop_token{}, agent::ToolUpdateSink{});
     });
 
     REQUIRE(result);

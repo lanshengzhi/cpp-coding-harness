@@ -72,7 +72,7 @@ TEST_CASE("complete Model matches the frozen pi shape golden", "[ai][model][issu
 
 TEST_CASE("Agent starts with the concrete frozen default Model", "[ai][model][issue336]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
-    agent::Agent instance(runtime->factory(), agent::AsyncToolRegistry{});
+    agent::Agent instance(runtime->factory(), agent::ToolRegistry{});
 
     auto serialized = ai::glaze::write_model_json(instance.state().model);
     REQUIRE(serialized);

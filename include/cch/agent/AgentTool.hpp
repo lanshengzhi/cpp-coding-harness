@@ -4,6 +4,7 @@
 #include <cch/ai/Context.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/ai/Tool.hpp>
+#include <cch/support/AsyncResult.hpp>
 #include <cch/util/Error.hpp>
 #include <cch/util/JsonValue.hpp>
 
@@ -108,46 +109,38 @@ enum class ToolConcurrency {
     ParallelSafe,
 };
 
-class AsyncAgentTool {
-public:
-    virtual ~AsyncAgentTool() = default;
+/// Terminal result of one Agent Tool execute operation, delivered through a
+/// typed `AsyncResult` (ADR 0040 §Agent Tool).
+using ToolExecuteResult = cch::support::AsyncResult<AsyncToolExecutionResult>;
 
-    [[nodiscard]] virtual const ai::Tool& definition() const = 0;
-
-    /// pi `ToolDefinition.promptSnippet` (`core/tools/*.ts`): the one-line
-    /// model-visible summary rendered into the System Prompt's `Available
-    /// tools` list (`core/system-prompt.ts` `buildSystemPrompt`).
-    /// `std::nullopt` keeps the tool out of the list.
-    [[nodiscard]] virtual std::optional<std::string> prompt_snippet() const {
-        return std::nullopt;
-    }
-
-    /// pi `ToolDefinition.promptGuidelines`: guideline bullets appended to
-    /// the System Prompt's Guidelines section, in declaration order.
-    [[nodiscard]] virtual std::vector<std::string> prompt_guidelines() const {
-        return {};
-    }
-    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<AsyncToolExecutionResult>> execute(
-        ToolInvocation invocation,
-        std::stop_token stop_token) = 0;
-
-    /// Execute with cumulative partial-result observation. Ordinary tools may
-    /// keep implementing execute(); streaming tools override this method and
-    /// propagate update-sink failures through the normal expected channel.
-    /// Updates published after the returned awaitable completes are ignored.
-    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<AsyncToolExecutionResult>>
-    execute_with_updates(
+/// One move-only execute operation: accepts an invocation, the active run's
+/// stop token, and an optional cumulative Tool Update sink, and returns a
+/// typed `AsyncResult` consumed exactly once. Ordinary tools ignore the sink;
+/// streaming tools publish cumulative partial results through it before they
+/// complete the terminal outcome. Updates published after the terminal
+/// completion are ignored by the executor.
+using ToolExecute = std::move_only_function<
+    ToolExecuteResult(
         ToolInvocation invocation,
         std::stop_token stop_token,
-        ToolUpdateSink update_sink) {
-        (void)update_sink;
-        co_return co_await execute(std::move(invocation), stop_token);
-    }
+        ToolUpdateSink update_sink)>;
 
-    /** Ordinary tools are exclusive until their adapter proves concurrent execution is safe. */
-    [[nodiscard]] virtual ToolConcurrency concurrency() const noexcept {
-        return ToolConcurrency::Exclusive;
-    }
+/// Passive Agent Tool (ADR 0040 §Agent Tool): the model-facing descriptor
+/// (`ai::Tool`), prompt metadata (pi `ToolDefinition.promptSnippet` /
+/// `promptGuidelines`), the concurrency policy, and one move-only execute
+/// operation. Tools are aggregate-friendly values owned by the registry;
+/// the move-only execute operation makes the Tool itself move-only.
+struct Tool {
+    ai::Tool definition{};
+    /// pi `ToolDefinition.promptSnippet` (`core/tools/*.ts`): the one-line
+    /// model-visible summary rendered into the System Prompt's `Available
+    /// tools` list. `std::nullopt` keeps the tool out of the list.
+    std::optional<std::string> prompt_snippet{};
+    /// pi `ToolDefinition.promptGuidelines`: guideline bullets appended to
+    /// the System Prompt's Guidelines section, in declaration order.
+    std::vector<std::string> prompt_guidelines{};
+    ToolConcurrency concurrency{ToolConcurrency::Exclusive};
+    ToolExecute execute;
 };
 
 } // namespace cch::agent

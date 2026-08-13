@@ -125,7 +125,7 @@ struct AgentSessionCreationRequest {
     /// Private test seam: custom tools registered alongside the fixed built-in
     /// tool set. Production callers never set it (the fixed #331 tool set is
     /// always available); retry-continuation tests inject recording tools.
-    std::vector<std::unique_ptr<agent::AsyncAgentTool>> custom_tools;
+    std::vector<agent::Tool> custom_tools;
     /// Private test seam: the shared live PI_* facts holder wired into the
     /// model Bash Tool. Production callers never set it (SessionFactory
     /// creates and wires the holder); focused tests capture it to assert the

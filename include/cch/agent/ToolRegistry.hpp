@@ -4,10 +4,10 @@
 
 #include <algorithm>
 #include <cctype>
-#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace cch::agent {
@@ -24,25 +24,36 @@ struct ToolPromptMetadata {
     std::vector<std::string> guidelines{};
 };
 
-class AsyncToolRegistry {
+/// Move-only registry of passive Agent Tools keyed by tool name.
+class ToolRegistry {
 public:
-    AsyncToolRegistry() = default;
-    AsyncToolRegistry(AsyncToolRegistry&&) noexcept = default;
-    AsyncToolRegistry& operator=(AsyncToolRegistry&&) noexcept = default;
-    AsyncToolRegistry(const AsyncToolRegistry&) = delete;
-    AsyncToolRegistry& operator=(const AsyncToolRegistry&) = delete;
+    ToolRegistry() = default;
+    ToolRegistry(ToolRegistry&&) noexcept = default;
+    ToolRegistry& operator=(ToolRegistry&&) noexcept = default;
+    ToolRegistry(const ToolRegistry&) = delete;
+    ToolRegistry& operator=(const ToolRegistry&) = delete;
 
-    [[nodiscard]] util::ExpectedVoid add(std::unique_ptr<AsyncAgentTool> tool) {
-        if (!tool) {
-            return std::unexpected(util::make_error(util::ErrorCode::Validation, "cannot add null tool to registry"));
+    [[nodiscard]] util::ExpectedVoid add(Tool tool) {
+        if (!tool.execute) {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Validation, "cannot add a tool without an execute operation"));
         }
-        tools_[tool->definition().name] = std::move(tool);
+        if (tool.definition.name.empty()) {
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Validation, "cannot add a tool without a name"));
+        }
+        tools_[tool.definition.name] = std::move(tool);
         return {};
     }
 
-    [[nodiscard]] AsyncAgentTool* find(const std::string& name) const {
+    [[nodiscard]] Tool* find(const std::string& name) {
         auto it = tools_.find(name);
-        return it == tools_.end() ? nullptr : it->second.get();
+        return it == tools_.end() ? nullptr : &it->second;
+    }
+
+    [[nodiscard]] const Tool* find(const std::string& name) const {
+        auto it = tools_.find(name);
+        return it == tools_.end() ? nullptr : &it->second;
     }
 
     /// Prompt metadata for one registered tool, normalized like pi
@@ -57,13 +68,13 @@ public:
         }
         ToolPromptMetadata metadata;
         metadata.name = name;
-        if (auto snippet = tool->prompt_snippet()) {
+        if (tool->prompt_snippet) {
             // pi `_normalizePromptSnippet`: line runs and whitespace runs
             // become one space, then trim.
             std::string one_line;
-            one_line.reserve(snippet->size());
+            one_line.reserve(tool->prompt_snippet->size());
             bool pending_space = false;
-            for (const char ch : *snippet) {
+            for (const char ch : *tool->prompt_snippet) {
                 if (std::isspace(static_cast<unsigned char>(ch))) {
                     pending_space = true;
                 } else {
@@ -80,7 +91,7 @@ public:
         }
         // pi `_normalizePromptGuidelines`: trim each bullet, drop empties,
         // dedupe preserving first-occurrence order.
-        for (const auto& guideline : tool->prompt_guidelines()) {
+        for (const auto& guideline : tool->prompt_guidelines) {
             auto begin = guideline.begin();
             while (begin != guideline.end() &&
                    std::isspace(static_cast<unsigned char>(*begin))) {
@@ -111,7 +122,7 @@ public:
         std::vector<ai::Tool> result;
         result.reserve(tools_.size());
         for (const auto& [_, tool] : tools_) {
-            result.push_back(tool->definition());
+            result.push_back(tool.definition);
         }
         std::sort(result.begin(), result.end(), [](const ai::Tool& left, const ai::Tool& right) {
             return left.name < right.name;
@@ -120,7 +131,7 @@ public:
     }
 
 private:
-    std::unordered_map<std::string, std::unique_ptr<AsyncAgentTool>> tools_;
+    std::unordered_map<std::string, Tool> tools_;
 };
 
 } // namespace cch::agent

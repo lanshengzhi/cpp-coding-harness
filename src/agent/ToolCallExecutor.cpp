@@ -2,6 +2,7 @@
 
 #include "ExecutionShared.hpp"
 #include "ToolArgumentPreparation.hpp"
+#include "ai/AsyncResultBridge.hpp"
 #include "util/ExpectedMacros.hpp"
 #include <cch/ai/Content.hpp>
 #include <cch/util/Error.hpp>
@@ -41,16 +42,14 @@ void close_tool_updates(const std::shared_ptr<ToolUpdateGate>& gate) {
 
 [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncToolExecutionResult>>
 execute_with_update_lifetime(
-    AsyncAgentTool& tool,
+    Tool& tool,
     const ToolInvocation& invocation,
     std::stop_token stop_token,
     ToolUpdateSink update_sink,
     const std::shared_ptr<ToolUpdateGate>& gate) {
     try {
-        auto result = co_await tool.execute_with_updates(
-            invocation,
-            stop_token,
-            std::move(update_sink));
+        auto result = co_await ai::detail::await_async_result(
+            tool.execute(invocation, stop_token, std::move(update_sink)));
         close_tool_updates(gate);
         co_return result;
     } catch (...) {
@@ -136,7 +135,7 @@ void apply_after_result(
 } // namespace
 
 ToolCallExecutor::ToolCallExecutor(
-    const AsyncToolRegistry& registry,
+    ToolRegistry& registry,
     ToolCallExecutorOptions options)
     : registry_(registry), options_(std::move(options)) {}
 
@@ -158,7 +157,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
     const bool any_sequential_tool = std::any_of(
         calls.begin(), calls.end(), [&](const ai::ToolCallContent& call) {
             const auto* tool = registry_.find(call.name);
-            return tool != nullptr && tool->concurrency() == ToolConcurrency::Exclusive;
+            return tool != nullptr && tool->concurrency == ToolConcurrency::Exclusive;
         });
     if (parallel == nullptr || any_sequential_tool || parallel->max_in_flight == 1) {
         co_return co_await execute_sequential(request, calls, sink);
@@ -191,7 +190,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
                     bounded_tool_argument_component(call.name, 512) +
                     " (argument location: root)"));
         } else {
-            auto arguments = prepare_tool_arguments(tool->definition(), call);
+            auto arguments = prepare_tool_arguments(tool->definition, call);
             if (!arguments) {
                 tool_result = error_tool_result(call, arguments.error().detail);
             } else {
@@ -340,7 +339,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
     struct PreparedToolCall {
         std::size_t source_index{};
         ai::ToolCallContent tool_call;
-        AsyncAgentTool* tool{};
+        Tool* tool{};
         util::JsonValue arguments;
     };
 
@@ -384,7 +383,7 @@ boost::asio::awaitable<util::Expected<ToolCallBatchResult>> ToolCallExecutor::ex
             continue;
         }
 
-        auto arguments = prepare_tool_arguments(tool->definition(), call);
+        auto arguments = prepare_tool_arguments(tool->definition, call);
         if (!arguments) {
             CCH_TRY_VOID(complete_immediate(
                 source_index,

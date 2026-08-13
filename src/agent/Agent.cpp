@@ -131,7 +131,7 @@ struct Agent::Impl {
     Impl(
         ai::ModelStreamFactory stream_factory,
         std::vector<ai::Tool> definitions,
-        AsyncToolRegistry tools,
+        ToolRegistry tools,
         AsyncAgentOptions options,
         AgentInitialState initial_state)
         : loop(std::move(stream_factory), std::move(tools), std::move(options)) {
@@ -439,7 +439,7 @@ AgentEventSubscription::operator bool() const {
 
 Agent::Agent(
     ai::ModelStreamFactory stream_factory,
-    AsyncToolRegistry tools,
+    ToolRegistry tools,
     AsyncAgentOptions options,
     AgentInitialState initial_state) {
     options.thinking_level = initial_state.thinking_level;

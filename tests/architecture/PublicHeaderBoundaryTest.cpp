@@ -118,14 +118,18 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     using ReadTextFileMethod = boost::asio::awaitable<std::expected<std::string, harness::FileError>>
         (harness::AsyncExecutionEnv::*)(std::string, std::stop_token);
     using CleanupMethod = boost::asio::awaitable<void> (harness::AsyncExecutionEnv::*)();
-    using ToolExecuteMethod = boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>>
-        (agent::AsyncAgentTool::*)(agent::ToolInvocation, std::stop_token);
     static_assert(std::is_same_v<
                   decltype(&harness::AsyncExecutionEnv::readTextFile),
                   ReadTextFileMethod>);
     static_assert(std::is_same_v<decltype(&harness::AsyncExecutionEnv::cleanup), CleanupMethod>);
-    static_assert(std::is_same_v<decltype(&agent::AsyncAgentTool::execute), ToolExecuteMethod>);
-    static_assert(std::is_abstract_v<agent::AsyncAgentTool>);
+    // ADR 0040 §Agent Tool: a passive aggregate value with one move-only
+    // execute operation returning a typed AsyncResult (no inheritance).
+    static_assert(std::is_aggregate_v<agent::Tool>);
+    static_assert(std::is_move_constructible_v<agent::Tool>);
+    static_assert(!std::is_copy_constructible_v<agent::Tool>);
+    static_assert(std::is_same_v<
+                  agent::ToolExecuteResult,
+                  cch::support::AsyncResult<agent::AsyncToolExecutionResult>>);
     static_assert(std::is_abstract_v<harness::session::SessionStore>);
     static_assert(std::is_abstract_v<tui::Component>);
     static_assert(std::is_aggregate_v<tui::RenderResult>);

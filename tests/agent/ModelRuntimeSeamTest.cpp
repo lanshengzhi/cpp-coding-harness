@@ -92,7 +92,7 @@ TEST_CASE(
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
 
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
@@ -135,7 +135,7 @@ TEST_CASE(
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
     options.session_id = "session-2";
-    agent::AsyncAgentLoop loop(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(runtime->factory(), agent::ToolRegistry{}, std::move(options));
 
     std::stop_source stop_source;
     auto run = run_loop(loop, "hi", stop_source.get_token());
@@ -165,7 +165,7 @@ TEST_CASE(
     options.headers = {{std::string{"x-golden"}, std::string{"value"}}};
     agent::Agent subject(
         runtime->factory(),
-        agent::AsyncToolRegistry{},
+        agent::ToolRegistry{},
         std::move(options),
         agent::AgentInitialState{.thinking_level = "high"});
 
@@ -205,7 +205,7 @@ TEST_CASE(
     // clamped at creation to the non-reasoning model's only supported level
     // ("off", #352); every retry/header/timeout knob stays at its default and
     // only the active prompt signal is forwarded.
-    agent::Agent subject(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::Agent subject(runtime->factory(), agent::ToolRegistry{}, std::move(options));
 
     REQUIRE(run_prompt(subject, "hi"));
 
@@ -249,7 +249,7 @@ void expect_terminal_matrix_row(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(runtime->factory(), agent::ToolRegistry{}, std::move(options));
 
     auto run = run_loop(loop, "hi");
 
@@ -296,7 +296,7 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(runtime->factory(), agent::ToolRegistry{}, std::move(options));
 
     auto run = run_loop(loop, "hi");
 
@@ -323,7 +323,7 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(runtime->factory(), agent::ToolRegistry{}, std::move(options));
 
     auto run = run_loop(loop, "hi");
 
@@ -369,7 +369,7 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(runtime->factory(), agent::ToolRegistry{}, std::move(options));
 
     std::stop_source stop_source;
     stop_source.request_stop();
@@ -397,7 +397,7 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::Agent subject(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::Agent subject(runtime->factory(), agent::ToolRegistry{}, std::move(options));
 
     REQUIRE(run_prompt(subject, "first"));
     REQUIRE(run_prompt(subject, "second"));
@@ -470,7 +470,7 @@ void expect_creation_clamp(
     options.max_turns = 3;
     options.model = model;
     options.thinking_level = std::string{requested};
-    agent::AsyncAgentLoop loop(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(runtime->factory(), agent::ToolRegistry{}, std::move(options));
     auto run = run_loop(loop, "hi");
 
     REQUIRE(run.result.has_value());
@@ -541,7 +541,7 @@ TEST_CASE(
 
     agent::Agent subject(
         runtime->factory(),
-        agent::AsyncToolRegistry{},
+        agent::ToolRegistry{},
         std::move(options),
         // The Agent requests the level from its initial state; "max" clamps
         // to the partial model's top supported level at creation.
@@ -567,7 +567,7 @@ TEST_CASE(
     // DEFAULT_THINKING_LEVEL ("medium") which clamps to kDefaultModel's only
     // supported level ("off") — a fresh Agent's first turn carries no
     // reasoning, matching pi's `if (!model) thinkingLevel = "off"`.
-    agent::AsyncAgentLoop loop(runtime->factory(), agent::AsyncToolRegistry{}, {});
+    agent::AsyncAgentLoop loop(runtime->factory(), agent::ToolRegistry{}, {});
     auto run = run_loop(loop, "hi");
 
     REQUIRE(run.result.has_value());
@@ -593,7 +593,7 @@ TEST_CASE(
     // any turn runs.
     agent::Agent subject(
         runtime->factory(),
-        agent::AsyncToolRegistry{},
+        agent::ToolRegistry{},
         std::move(options),
         agent::AgentInitialState{.thinking_level = "max"});
 
@@ -614,7 +614,7 @@ TEST_CASE(
         "gpt-partial", partial_thinking_map());
     agent::Agent subject(
         runtime->factory(),
-        agent::AsyncToolRegistry{},
+        agent::ToolRegistry{},
         std::move(options),
         agent::AgentInitialState{.thinking_level = "medium"});
 
@@ -639,7 +639,7 @@ TEST_CASE(
     options.model = tests::make_full_thinking_model("gpt-test");
     agent::Agent subject(
         runtime->factory(),
-        agent::AsyncToolRegistry{},
+        agent::ToolRegistry{},
         std::move(options),
         agent::AgentInitialState{.thinking_level = "high"});
 
@@ -661,7 +661,7 @@ TEST_CASE(
     agent::AsyncAgentOptions basic_options;
     basic_options.model = tests::make_model("gpt-basic");
     agent::Agent basic(
-        runtime->factory(), agent::AsyncToolRegistry{}, std::move(basic_options));
+        runtime->factory(), agent::ToolRegistry{}, std::move(basic_options));
     auto clamped = basic.set_thinking_level("high");
     REQUIRE(clamped.has_value());
     CHECK(*clamped == "off");

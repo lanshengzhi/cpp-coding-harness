@@ -17,6 +17,7 @@
 #include <cch/util/Error.hpp>
 #include <cch/util/JsonValue.hpp>
 #include "support/EnvVarGuard.hpp"
+#include "support/FakeTool.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "util/ExpectedMacros.hpp"
@@ -171,36 +172,28 @@ public:
         "Your input exceeds the context window of this model");
 }
 
-/// A minimal fake tool for retry-continuation tool-loop evidence (same shape
 /// A recording tool for retry-continuation evidence.
-class FakeEchoTool final : public agent::AsyncAgentTool {
-public:
-    explicit FakeEchoTool(std::shared_ptr<std::size_t> execution_count)
-        : execution_count_(std::move(execution_count)) {
-        def_.name = "echo";
-        def_.description = "Echo back the input";
-        def_.parameters = util::JsonValue::object_t{
-            {"type", "object"},
-            {"additionalProperties", false}};
-    }
-
-    [[nodiscard]] const ai::Tool& definition() const override { return def_; }
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation /*invocation*/,
-        std::stop_token) override {
-        if (execution_count_) {
-            ++*execution_count_;
-        }
-        agent::AsyncToolExecutionResult result;
-        result.content.push_back(ai::text_content("echo: ok"));
-        co_return result;
-    }
-
-private:
-    ai::Tool def_;
-    std::shared_ptr<std::size_t> execution_count_;
-};
+[[nodiscard]] agent::Tool make_fake_echo_tool(std::shared_ptr<std::size_t> execution_count) {
+    ai::Tool definition;
+    definition.name = "echo";
+    definition.description = "Echo back the input";
+    definition.parameters = util::JsonValue::object_t{
+        {"type", "object"},
+        {"additionalProperties", false}};
+    return tests::make_fake_tool(
+        std::move(definition),
+        agent::ToolConcurrency::Exclusive,
+        [execution_count = std::move(execution_count)](
+            agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+            -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+            if (execution_count) {
+                ++*execution_count;
+            }
+            agent::AsyncToolExecutionResult result;
+            result.content.push_back(ai::text_content("echo: ok"));
+            co_return result;
+        });
+}
 
 struct RetrySessionUnderTest {
     std::unique_ptr<coding_agent::AgentSession> session;
@@ -211,7 +204,7 @@ struct RetrySessionUnderTest {
     const TestPaths& paths,
     std::deque<ai::AssistantMessage> responses,
     std::string settings_json = {},
-    std::vector<std::unique_ptr<agent::AsyncAgentTool>> custom_tools = {}) {
+    std::vector<agent::Tool> custom_tools = {}) {
     // Every retry test isolates its settings scope under a fresh agent
     // directory: an empty dir keeps pi's defaults, a test-provided
     // settings.json drives the knobs. The guard lives through session
@@ -908,8 +901,8 @@ TEST_CASE(
         .arguments_valid = true,
         .argument_error = std::nullopt,
     });
-    std::vector<std::unique_ptr<agent::AsyncAgentTool>> tools;
-    tools.push_back(std::make_unique<FakeEchoTool>(tool_execution_count));
+    std::vector<agent::Tool> tools;
+    tools.push_back(make_fake_echo_tool(tool_execution_count));
     auto under_test = make_retry_session(
         paths,
         {

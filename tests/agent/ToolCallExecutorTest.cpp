@@ -1,5 +1,6 @@
 #include "agent/ToolCallExecutor.hpp"
 
+#include "support/FakeTool.hpp"
 #include "support/ToolArgumentCompatibilityFixture.hpp"
 #include "support/ToolArgumentContracts.hpp"
 #include "util/Json.hpp"
@@ -44,65 +45,20 @@ struct ConcurrencyProbe {
     std::atomic<int> max_active{0};
 };
 
-class RecordingTool final : public agent::AsyncAgentTool {
-public:
-    RecordingTool(
-        ai::Tool definition,
-        agent::ToolConcurrency concurrency = agent::ToolConcurrency::Exclusive,
-        std::string result_text = "tool says ok",
-        std::chrono::milliseconds delay = {},
-        ConcurrencyProbe* probe = nullptr)
-        : definition_(std::move(definition)),
-          concurrency_(concurrency),
-          result_text_(std::move(result_text)),
-          delay_(delay),
-          probe_(probe) {}
-
-    const ai::Tool& definition() const override { return definition_; }
-
-    agent::ToolConcurrency concurrency() const noexcept override {
-        return concurrency_;
-    }
-
-    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation,
-        std::stop_token) override {
-        {
-            std::lock_guard lock(invocations_mutex_);
-            invocations_.push_back(std::move(invocation));
-        }
-
-        if (probe_ != nullptr) {
-            const int current = ++probe_->active;
-            int observed = probe_->max_active.load();
-            while (current > observed &&
-                   !probe_->max_active.compare_exchange_weak(observed, current)) {}
-        }
-
-        if (delay_.count() > 0) {
-            auto timer = boost::asio::steady_timer(
-                co_await boost::asio::this_coro::executor,
-                delay_);
-            co_await timer.async_wait(boost::asio::use_awaitable);
-        }
-
-        if (probe_ != nullptr) {
-            --probe_->active;
-        }
-
-        co_return agent::AsyncToolExecutionResult{
-            .content = std::vector<ai::Content>{ai::text_content(result_text_)},
-            .details = std::nullopt,
-            .is_error = false};
-    }
+struct RecordingToolState {
+    std::string result_text{"tool says ok"};
+    std::chrono::milliseconds delay{};
+    ConcurrencyProbe* probe{};
+    mutable std::mutex invocations_mutex;
+    std::vector<agent::ToolInvocation> invocations_;
 
     [[nodiscard]] std::size_t invocation_count() const {
-        std::lock_guard lock(invocations_mutex_);
+        std::lock_guard lock(invocations_mutex);
         return invocations_.size();
     }
 
     [[nodiscard]] std::optional<agent::ToolInvocation> first_invocation() const {
-        std::lock_guard lock(invocations_mutex_);
+        std::lock_guard lock(invocations_mutex);
         if (invocations_.empty()) {
             return std::nullopt;
         }
@@ -110,85 +66,127 @@ public:
     }
 
     [[nodiscard]] std::vector<agent::ToolInvocation> invocations() const {
-        std::lock_guard lock(invocations_mutex_);
+        std::lock_guard lock(invocations_mutex);
         return invocations_;
     }
-
-private:
-    ai::Tool definition_;
-    agent::ToolConcurrency concurrency_;
-    std::string result_text_;
-    std::chrono::milliseconds delay_;
-    ConcurrencyProbe* probe_{};
-    mutable std::mutex invocations_mutex_;
-    std::vector<agent::ToolInvocation> invocations_;
 };
 
-class FailingTool final : public agent::AsyncAgentTool {
-public:
-    explicit FailingTool(ai::Tool definition) : definition_(std::move(definition)) {}
-
-    const ai::Tool& definition() const override { return definition_; }
-
-    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation,
-        std::stop_token) override {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Tool,
-            "tool failed",
-            "boom"));
-    }
-
-private:
-    ai::Tool definition_;
+struct RecordingToolHandle {
+    agent::Tool tool;
+    std::shared_ptr<RecordingToolState> state;
 };
 
-class CancellingParallelTool final : public agent::AsyncAgentTool {
-public:
-    CancellingParallelTool(ai::Tool definition, std::stop_source& stop_source)
-        : definition_(std::move(definition)), stop_source_(stop_source) {}
+[[nodiscard]] RecordingToolHandle make_recording_tool(
+    ai::Tool definition,
+    agent::ToolConcurrency concurrency = agent::ToolConcurrency::Exclusive,
+    std::string result_text = "tool says ok",
+    std::chrono::milliseconds delay = {},
+    ConcurrencyProbe* probe = nullptr) {
+    auto state = std::make_shared<RecordingToolState>();
+    state->result_text = std::move(result_text);
+    state->delay = delay;
+    state->probe = probe;
+    return RecordingToolHandle{
+        tests::make_fake_tool(
+            std::move(definition),
+            concurrency,
+            [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
+                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                {
+                    std::lock_guard lock(state->invocations_mutex);
+                    state->invocations_.push_back(std::move(invocation));
+                }
 
-    const ai::Tool& definition() const override { return definition_; }
+                if (state->probe != nullptr) {
+                    const int current = ++state->probe->active;
+                    int observed = state->probe->max_active.load();
+                    while (current > observed &&
+                           !state->probe->max_active.compare_exchange_weak(observed, current)) {}
+                }
 
-    agent::ToolConcurrency concurrency() const noexcept override {
-        return agent::ToolConcurrency::ParallelSafe;
-    }
+                if (state->delay.count() > 0) {
+                    auto timer = boost::asio::steady_timer(
+                        co_await boost::asio::this_coro::executor,
+                        state->delay);
+                    co_await timer.async_wait(boost::asio::use_awaitable);
+                }
 
-    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation,
-        std::stop_token stop_token) override {
-        {
-            std::lock_guard lock(invocations_mutex_);
-            invocations_.push_back(std::move(invocation));
-        }
-        const auto started = ++started_;
-        if (started == 2) {
-            (void)stop_source_.request_stop();
-        }
-        boost::asio::steady_timer timer(
-            co_await boost::asio::this_coro::executor,
-            std::chrono::milliseconds{30});
-        co_await timer.async_wait(boost::asio::use_awaitable);
-        if (stop_token.stop_requested()) {
+                if (state->probe != nullptr) {
+                    --state->probe->active;
+                }
+
+                co_return agent::AsyncToolExecutionResult{
+                    .content = std::vector<ai::Content>{ai::text_content(state->result_text)},
+                    .details = std::nullopt,
+                    .is_error = false};
+            }),
+        state,
+    };
+}
+
+[[nodiscard]] agent::Tool make_failing_tool(ai::Tool definition) {
+    return tests::make_fake_tool(
+        std::move(definition),
+        agent::ToolConcurrency::Exclusive,
+        [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+            -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
             co_return std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
-                "Operation aborted"));
-        }
-        co_return agent::AsyncToolExecutionResult{};
-    }
+                util::ErrorCode::Tool,
+                "tool failed",
+                "boom"));
+        });
+}
+
+struct CancellingParallelToolState {
+    std::stop_source* stop_source{};
+    std::atomic<std::size_t> started{0};
+    mutable std::mutex invocations_mutex;
+    std::vector<agent::ToolInvocation> invocations;
 
     [[nodiscard]] std::size_t invocation_count() const {
-        std::lock_guard lock(invocations_mutex_);
-        return invocations_.size();
+        std::lock_guard lock(invocations_mutex);
+        return invocations.size();
     }
-
-private:
-    ai::Tool definition_;
-    std::stop_source& stop_source_; // must outlive every execute coroutine
-    std::atomic<std::size_t> started_{0};
-    mutable std::mutex invocations_mutex_;
-    std::vector<agent::ToolInvocation> invocations_;
 };
+
+struct CancellingParallelToolHandle {
+    agent::Tool tool;
+    std::shared_ptr<CancellingParallelToolState> state;
+};
+
+[[nodiscard]] CancellingParallelToolHandle make_cancelling_parallel_tool(
+    ai::Tool definition,
+    std::stop_source& stop_source) {
+    auto state = std::make_shared<CancellingParallelToolState>();
+    state->stop_source = &stop_source;
+    return CancellingParallelToolHandle{
+        tests::make_fake_tool(
+            std::move(definition),
+            agent::ToolConcurrency::ParallelSafe,
+            [state](agent::ToolInvocation invocation, std::stop_token stop_token, agent::ToolUpdateSink)
+                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                {
+                    std::lock_guard lock(state->invocations_mutex);
+                    state->invocations.push_back(std::move(invocation));
+                }
+                const auto started = ++state->started;
+                if (started == 2) {
+                    (void)state->stop_source->request_stop();
+                }
+                boost::asio::steady_timer timer(
+                    co_await boost::asio::this_coro::executor,
+                    std::chrono::milliseconds{30});
+                co_await timer.async_wait(boost::asio::use_awaitable);
+                if (stop_token.stop_requested()) {
+                    co_return std::unexpected(util::make_error(
+                        util::ErrorCode::Cancelled,
+                        "Operation aborted"));
+                }
+                co_return agent::AsyncToolExecutionResult{};
+            }),
+        state,
+    };
+}
 
 struct ExecuteResult {
     util::Expected<agent::ToolCallBatchResult> result;
@@ -280,16 +278,16 @@ void check_format_fixture(
     std::string_view format,
     std::optional<std::string_view> valid,
     std::string_view invalid) {
-    agent::AsyncToolRegistry registry;
-    auto tool = std::make_unique<RecordingTool>(ai::Tool{
+    agent::ToolRegistry registry;
+    auto tool = make_recording_tool(ai::Tool{
         "format-fixture",
         "Format fixture",
         util::JsonValue::object_t{
             {"type", "string"},
             {"format", std::string(format)},
         }});
-    auto* tool_ptr = tool.get();
-    REQUIRE(registry.add(std::move(tool)));
+    auto* tool_ptr = tool.state.get();
+    REQUIRE(registry.add(std::move(tool.tool)));
 
     std::vector<ai::ToolCallContent> calls;
     if (valid) {
@@ -313,16 +311,16 @@ void check_format_fixture(
 }
 
 void check_json_format_fixture(const tests::JsonFormatFixture& fixture) {
-    agent::AsyncToolRegistry registry;
-    auto tool = std::make_unique<RecordingTool>(ai::Tool{
+    agent::ToolRegistry registry;
+    auto tool = make_recording_tool(ai::Tool{
         "json-format-fixture",
         "JSON format fixture",
         util::JsonValue::object_t{
             {"type", "string"},
             {"format", std::string(fixture.format)},
         }});
-    auto* tool_ptr = tool.get();
-    REQUIRE(registry.add(std::move(tool)));
+    auto* tool_ptr = tool.state.get();
+    REQUIRE(registry.add(std::move(tool.tool)));
 
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({make_call(
@@ -353,11 +351,11 @@ TEST_CASE("ToolCallExecutor default policy is bounded parallel with no explicit 
 TEST_CASE(
     "ToolCallExecutor executes a single exclusive call through the sequential path",
     "[agent][tool-executor]") {
-    agent::AsyncToolRegistry registry;
-    auto tool = std::make_unique<RecordingTool>(
+    agent::ToolRegistry registry;
+    auto tool = make_recording_tool(
         ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()});
-    auto* tool_ptr = tool.get();
-    REQUIRE(registry.add(std::move(tool)));
+    auto* tool_ptr = tool.state.get();
+    REQUIRE(registry.add(std::move(tool.tool)));
 
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
@@ -428,10 +426,10 @@ TEST_CASE(
         {"additionalProperties", util::JsonValue::object_t{{"type", "integer"}}},
     };
 
-    agent::AsyncToolRegistry registry;
-    auto tool = std::make_unique<RecordingTool>(ai::Tool{"configure", "Configure", contract});
-    auto* tool_ptr = tool.get();
-    REQUIRE(registry.add(std::move(tool)));
+    agent::ToolRegistry registry;
+    auto tool = make_recording_tool(ai::Tool{"configure", "Configure", contract});
+    auto* tool_ptr = tool.state.get();
+    REQUIRE(registry.add(std::move(tool.tool)));
 
     std::optional<util::JsonValue> hook_arguments;
     std::optional<std::string> hook_raw_arguments;
@@ -485,10 +483,10 @@ TEST_CASE(
         {"type", "number"},
         {"const", expected},
     };
-    agent::AsyncToolRegistry registry;
-    auto tool = std::make_unique<RecordingTool>(ai::Tool{"radix", "Radix", contract});
-    auto* tool_ptr = tool.get();
-    REQUIRE(registry.add(std::move(tool)));
+    agent::ToolRegistry registry;
+    auto tool = make_recording_tool(ai::Tool{"radix", "Radix", contract});
+    auto* tool_ptr = tool.state.get();
+    REQUIRE(registry.add(std::move(tool.tool)));
 
     std::optional<util::JsonValue> hook_arguments;
     agent::BeforeToolCallHook before_hook =
@@ -521,13 +519,13 @@ TEST_CASE(
 TEST_CASE(
     "sequential execution recursively prepares schema and tuple array items",
     "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
-    agent::AsyncToolRegistry registry;
-    auto tool = std::make_unique<RecordingTool>(ai::Tool{
+    agent::ToolRegistry registry;
+    auto tool = make_recording_tool(ai::Tool{
         "collections",
         "Collections",
         fixture_json(tests::kRecursiveCollectionContract)});
-    auto* tool_ptr = tool.get();
-    REQUIRE(registry.add(std::move(tool)));
+    auto* tool_ptr = tool.state.get();
+    REQUIRE(registry.add(std::move(tool.tool)));
 
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({make_call(
@@ -550,13 +548,13 @@ TEST_CASE(
 TEST_CASE(
     "sequential execution enforces numeric string object and array constraints",
     "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
-    agent::AsyncToolRegistry registry;
-    auto tool = std::make_unique<RecordingTool>(ai::Tool{
+    agent::ToolRegistry registry;
+    auto tool = make_recording_tool(ai::Tool{
         "bounded",
         "Bounded",
         fixture_json(tests::kBoundedContract)});
-    auto* tool_ptr = tool.get();
-    REQUIRE(registry.add(std::move(tool)));
+    auto* tool_ptr = tool.state.get();
+    REQUIRE(registry.add(std::move(tool.tool)));
 
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({
@@ -591,13 +589,13 @@ TEST_CASE(
 TEST_CASE(
     "recorded TypeBox boundary behavior remains executable",
     "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
-    agent::AsyncToolRegistry registry;
-    auto tool = std::make_unique<RecordingTool>(ai::Tool{
+    agent::ToolRegistry registry;
+    auto tool = make_recording_tool(ai::Tool{
         "baseline-boundaries",
         "Baseline boundaries",
         fixture_json(tests::kTypeBoxBoundaryContract)});
-    auto* tool_ptr = tool.get();
-    REQUIRE(registry.add(std::move(tool)));
+    auto* tool_ptr = tool.state.get();
+    REQUIRE(registry.add(std::move(tool.tool)));
 
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({make_call(
@@ -616,19 +614,19 @@ TEST_CASE(
 TEST_CASE(
     "recorded TypeBox Unicode string-bound fast paths remain executable",
     "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
-    agent::AsyncToolRegistry registry;
-    auto max_one_tool = std::make_unique<RecordingTool>(ai::Tool{
+    agent::ToolRegistry registry;
+    auto max_one_tool = make_recording_tool(ai::Tool{
         "max-one",
         "Maximum one TypeBox string unit",
         util::JsonValue::object_t{{"type", "string"}, {"maxLength", 1}}});
-    auto min_two_tool = std::make_unique<RecordingTool>(ai::Tool{
+    auto min_two_tool = make_recording_tool(ai::Tool{
         "min-two",
         "Minimum two TypeBox string units",
         util::JsonValue::object_t{{"type", "string"}, {"minLength", 2}}});
-    auto* max_one_ptr = max_one_tool.get();
-    auto* min_two_ptr = min_two_tool.get();
-    REQUIRE(registry.add(std::move(max_one_tool)));
-    REQUIRE(registry.add(std::move(min_two_tool)));
+    auto* max_one_ptr = max_one_tool.state.get();
+    auto* min_two_ptr = min_two_tool.state.get();
+    REQUIRE(registry.add(std::move(max_one_tool.tool)));
+    REQUIRE(registry.add(std::move(min_two_tool.tool)));
 
     std::vector<ai::ToolCallContent> calls;
     for (std::size_t index = 0; index < tests::kStringBoundFixtures.size(); ++index) {
@@ -667,12 +665,12 @@ TEST_CASE(
 TEST_CASE(
     "array item fixtures enforce boolean schemas additional items and patterns",
     "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
-    agent::AsyncToolRegistry registry;
-    auto denied_items = std::make_unique<RecordingTool>(ai::Tool{
+    agent::ToolRegistry registry;
+    auto denied_items = make_recording_tool(ai::Tool{
         "denied-items",
         "Denied items",
         util::JsonValue::object_t{{"type", "array"}, {"items", false}}});
-    auto tuple_items = std::make_unique<RecordingTool>(ai::Tool{
+    auto tuple_items = make_recording_tool(ai::Tool{
         "tuple-items",
         "Tuple items",
         util::JsonValue::object_t{
@@ -682,28 +680,28 @@ TEST_CASE(
             }},
             {"additionalItems", util::JsonValue::object_t{{"type", "integer"}}},
         }});
-    auto code_point_pattern = std::make_unique<RecordingTool>(ai::Tool{
+    auto code_point_pattern = make_recording_tool(ai::Tool{
         "code-point-pattern",
         "Code point pattern",
         util::JsonValue::object_t{{"type", "string"}, {"pattern", "^.$"}}});
-    auto four_point_pattern = std::make_unique<RecordingTool>(ai::Tool{
+    auto four_point_pattern = make_recording_tool(ai::Tool{
         "four-point-pattern",
         "Four point pattern",
         util::JsonValue::object_t{{"type", "string"}, {"pattern", "^....$"}}});
-    auto unsupported_pattern = std::make_unique<RecordingTool>(ai::Tool{
+    auto unsupported_pattern = make_recording_tool(ai::Tool{
         "unsupported-pattern",
         "Unsupported pattern",
         util::JsonValue::object_t{{"type", "string"}, {"pattern", R"(^\p{Emoji}$)"}}});
-    auto* denied_ptr = denied_items.get();
-    auto* tuple_ptr = tuple_items.get();
-    auto* code_point_ptr = code_point_pattern.get();
-    auto* four_point_ptr = four_point_pattern.get();
-    auto* unsupported_ptr = unsupported_pattern.get();
-    REQUIRE(registry.add(std::move(denied_items)));
-    REQUIRE(registry.add(std::move(tuple_items)));
-    REQUIRE(registry.add(std::move(code_point_pattern)));
-    REQUIRE(registry.add(std::move(four_point_pattern)));
-    REQUIRE(registry.add(std::move(unsupported_pattern)));
+    auto* denied_ptr = denied_items.state.get();
+    auto* tuple_ptr = tuple_items.state.get();
+    auto* code_point_ptr = code_point_pattern.state.get();
+    auto* four_point_ptr = four_point_pattern.state.get();
+    auto* unsupported_ptr = unsupported_pattern.state.get();
+    REQUIRE(registry.add(std::move(denied_items.tool)));
+    REQUIRE(registry.add(std::move(tuple_items.tool)));
+    REQUIRE(registry.add(std::move(code_point_pattern.tool)));
+    REQUIRE(registry.add(std::move(four_point_pattern.tool)));
+    REQUIRE(registry.add(std::move(unsupported_pattern.tool)));
 
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({
@@ -739,31 +737,31 @@ TEST_CASE(
 TEST_CASE(
     "composition coercion selects only satisfying branches and validates the final contract",
     "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
-    agent::AsyncToolRegistry registry;
-    auto composed_tool = std::make_unique<RecordingTool>(ai::Tool{
+    agent::ToolRegistry registry;
+    auto composed_tool = make_recording_tool(ai::Tool{
         "composed",
         "Composed",
         fixture_json(tests::kCompositionContract)});
-    auto branch_tool = std::make_unique<RecordingTool>(ai::Tool{
+    auto branch_tool = make_recording_tool(ai::Tool{
         "branch",
         "Branch",
         util::JsonValue::object_t{{"anyOf", util::JsonValue::array_t{
             util::JsonValue::object_t{{"type", "integer"}, {"minimum", 2}},
             util::JsonValue::object_t{{"type", "string"}, {"const", "fallback"}},
         }}}});
-    auto ambiguous_tool = std::make_unique<RecordingTool>(ai::Tool{
+    auto ambiguous_tool = make_recording_tool(ai::Tool{
         "ambiguous",
         "Ambiguous",
         util::JsonValue::object_t{{"oneOf", util::JsonValue::array_t{
             util::JsonValue::object_t{{"type", "number"}},
             util::JsonValue::object_t{{"type", "integer"}},
         }}}});
-    auto* composed_ptr = composed_tool.get();
-    auto* branch_ptr = branch_tool.get();
-    auto* ambiguous_ptr = ambiguous_tool.get();
-    REQUIRE(registry.add(std::move(composed_tool)));
-    REQUIRE(registry.add(std::move(branch_tool)));
-    REQUIRE(registry.add(std::move(ambiguous_tool)));
+    auto* composed_ptr = composed_tool.state.get();
+    auto* branch_ptr = branch_tool.state.get();
+    auto* ambiguous_ptr = ambiguous_tool.state.get();
+    REQUIRE(registry.add(std::move(composed_tool.tool)));
+    REQUIRE(registry.add(std::move(branch_tool.tool)));
+    REQUIRE(registry.add(std::move(ambiguous_tool.tool)));
 
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({
@@ -798,16 +796,16 @@ TEST_CASE(
         check_format_fixture(fixture.format, std::nullopt, fixture.value);
     }
 
-    agent::AsyncToolRegistry registry;
-    auto annotation_tool = std::make_unique<RecordingTool>(ai::Tool{
+    agent::ToolRegistry registry;
+    auto annotation_tool = make_recording_tool(ai::Tool{
         "annotation-format",
         "Annotation format",
         util::JsonValue::object_t{
             {"type", "string"},
             {"format", "project-local-identifier"},
         }});
-    auto* annotation_ptr = annotation_tool.get();
-    REQUIRE(registry.add(std::move(annotation_tool)));
+    auto* annotation_ptr = annotation_tool.state.get();
+    REQUIRE(registry.add(std::move(annotation_tool.tool)));
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({make_call(
         "call-annotation",
@@ -833,13 +831,13 @@ TEST_CASE(
 TEST_CASE(
     "unsupported dialect vocabulary reference and executable constructs fail closed",
     "[agent][tool-executor][tool-arguments][compatibility-fixture]") {
-    agent::AsyncToolRegistry registry;
-    std::vector<RecordingTool*> rejected_tools;
+    agent::ToolRegistry registry;
+    std::vector<RecordingToolState*> rejected_tools;
     auto add_rejected = [&](std::string name, util::JsonValue contract) {
-        auto tool = std::make_unique<RecordingTool>(
+        auto tool = make_recording_tool(
             ai::Tool{name, "Rejected fixture", std::move(contract)});
-        rejected_tools.push_back(tool.get());
-        REQUIRE(registry.add(std::move(tool)));
+        rejected_tools.push_back(tool.state.get());
+        REQUIRE(registry.add(std::move(tool.tool)));
     };
     add_rejected("dialect", util::JsonValue::object_t{
         {"$schema", "https://example.test/unsupported-schema"},
@@ -867,7 +865,7 @@ TEST_CASE(
         {"format", "project-local-identifier"},
     });
 
-    auto annotation_tool = std::make_unique<RecordingTool>(ai::Tool{
+    auto annotation_tool = make_recording_tool(ai::Tool{
         "annotations",
         "Annotations",
         util::JsonValue::object_t{
@@ -878,8 +876,8 @@ TEST_CASE(
             {"format", "number-format-is-annotation"},
             {"x-contract", util::JsonValue::object_t{{"minimum", 100}}},
         }});
-    auto* annotation_ptr = annotation_tool.get();
-    REQUIRE(registry.add(std::move(annotation_tool)));
+    auto* annotation_ptr = annotation_tool.state.get();
+    REQUIRE(registry.add(std::move(annotation_tool.tool)));
 
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({
@@ -939,10 +937,10 @@ TEST_CASE(
         {"additionalProperties", false},
     };
 
-    agent::AsyncToolRegistry registry;
-    auto tool = std::make_unique<RecordingTool>(ai::Tool{"configure", "Configure", contract});
-    auto* tool_ptr = tool.get();
-    REQUIRE(registry.add(std::move(tool)));
+    agent::ToolRegistry registry;
+    auto tool = make_recording_tool(ai::Tool{"configure", "Configure", contract});
+    auto* tool_ptr = tool.state.get();
+    REQUIRE(registry.add(std::move(tool.tool)));
 
     int before_calls = 0;
     agent::BeforeToolCallHook before_hook =
@@ -998,31 +996,31 @@ TEST_CASE(
         {"properties", false},
     };
 
-    agent::AsyncToolRegistry registry;
-    auto malformed_tool = std::make_unique<RecordingTool>(
+    agent::ToolRegistry registry;
+    auto malformed_tool = make_recording_tool(
         ai::Tool{"malformed", "Malformed", test::empty_object_tool_argument_contract()});
-    auto invalid_tool = std::make_unique<RecordingTool>(
+    auto invalid_tool = make_recording_tool(
         ai::Tool{"invalid", "Invalid", strict_contract});
-    auto denied_tool = std::make_unique<RecordingTool>(
+    auto denied_tool = make_recording_tool(
         ai::Tool{"denied", "Denied", util::JsonValue{false}});
-    auto unsupported_tool = std::make_unique<RecordingTool>(
+    auto unsupported_tool = make_recording_tool(
         ai::Tool{"unsupported", "Unsupported", unsupported_contract});
-    auto compile_invalid_tool = std::make_unique<RecordingTool>(
+    auto compile_invalid_tool = make_recording_tool(
         ai::Tool{"compile-invalid", "Compile invalid", compile_invalid_contract});
-    auto valid_tool = std::make_unique<RecordingTool>(
+    auto valid_tool = make_recording_tool(
         ai::Tool{"valid", "Valid", util::JsonValue{true}});
-    auto* malformed_ptr = malformed_tool.get();
-    auto* invalid_ptr = invalid_tool.get();
-    auto* denied_ptr = denied_tool.get();
-    auto* unsupported_ptr = unsupported_tool.get();
-    auto* compile_invalid_ptr = compile_invalid_tool.get();
-    auto* valid_ptr = valid_tool.get();
-    REQUIRE(registry.add(std::move(malformed_tool)));
-    REQUIRE(registry.add(std::move(invalid_tool)));
-    REQUIRE(registry.add(std::move(denied_tool)));
-    REQUIRE(registry.add(std::move(unsupported_tool)));
-    REQUIRE(registry.add(std::move(compile_invalid_tool)));
-    REQUIRE(registry.add(std::move(valid_tool)));
+    auto* malformed_ptr = malformed_tool.state.get();
+    auto* invalid_ptr = invalid_tool.state.get();
+    auto* denied_ptr = denied_tool.state.get();
+    auto* unsupported_ptr = unsupported_tool.state.get();
+    auto* compile_invalid_ptr = compile_invalid_tool.state.get();
+    auto* valid_ptr = valid_tool.state.get();
+    REQUIRE(registry.add(std::move(malformed_tool.tool)));
+    REQUIRE(registry.add(std::move(invalid_tool.tool)));
+    REQUIRE(registry.add(std::move(denied_tool.tool)));
+    REQUIRE(registry.add(std::move(unsupported_tool.tool)));
+    REQUIRE(registry.add(std::move(compile_invalid_tool.tool)));
+    REQUIRE(registry.add(std::move(valid_tool.tool)));
 
     bool tool_execution_started = false;
     int before_calls = 0;
@@ -1106,15 +1104,15 @@ TEST_CASE(
         std::string(diagnostic_keep - diagnostic_prefix.size() - 5, 'x') +
         secret + " BROKEN\n   ^";
 
-    agent::AsyncToolRegistry registry;
-    auto malformed_tool = std::make_unique<RecordingTool>(
+    agent::ToolRegistry registry;
+    auto malformed_tool = make_recording_tool(
         ai::Tool{"malformed", "Malformed", test::empty_object_tool_argument_contract()});
-    auto valid_tool = std::make_unique<RecordingTool>(
+    auto valid_tool = make_recording_tool(
         ai::Tool{"valid", "Valid", util::JsonValue{true}});
-    auto* malformed_ptr = malformed_tool.get();
-    auto* valid_ptr = valid_tool.get();
-    REQUIRE(registry.add(std::move(malformed_tool)));
-    REQUIRE(registry.add(std::move(valid_tool)));
+    auto* malformed_ptr = malformed_tool.state.get();
+    auto* valid_ptr = valid_tool.state.get();
+    REQUIRE(registry.add(std::move(malformed_tool.tool)));
+    REQUIRE(registry.add(std::move(valid_tool.tool)));
 
     int before_calls = 0;
     bool before_hook_observed_valid_call = false;
@@ -1196,9 +1194,9 @@ TEST_CASE(
         {"additionalProperties", false},
     };
 
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<RecordingTool>(
-        ai::Tool{"configure", "Configure", contract})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_recording_tool(
+        ai::Tool{"configure", "Configure", contract}).tool));
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({
         make_call("call-invalid", "configure", R"({"api_key":{}})"),
@@ -1222,7 +1220,7 @@ TEST_CASE(
         unknown_name += "\xf0\x9f\x98\x80";
     }
 
-    agent::AsyncToolRegistry registry;
+    agent::ToolRegistry registry;
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({make_call("call-1", unknown_name, R"({})")});
 
@@ -1247,19 +1245,19 @@ TEST_CASE(
 
 TEST_CASE("exclusive tools force a bounded batch to execute sequentially", "[agent][tool-executor]") {
     ConcurrencyProbe probe;
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "alpha",
         std::chrono::milliseconds{25},
-        &probe)));
-    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+        &probe).tool));
+    REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::Exclusive,
         "beta",
         std::chrono::milliseconds{25},
-        &probe)));
+        &probe).tool));
 
     agent::ToolCallExecutorOptions options;
     options.execution = agent::BoundedParallelToolExecution{2};
@@ -1279,14 +1277,14 @@ TEST_CASE(
     "sequential cancellation during a hook does not start later calls",
     "[agent][tool-executor][issue40]") {
     std::stop_source stop_source;
-    agent::AsyncToolRegistry registry;
-    auto tool = std::make_unique<RecordingTool>(ai::Tool{
+    agent::ToolRegistry registry;
+    auto tool = make_recording_tool(ai::Tool{
         .name = "work",
         .description = "Work",
         .parameters = test::permissive_object_tool_argument_contract(),
     });
-    auto* tool_ptr = tool.get();
-    REQUIRE(registry.add(std::move(tool)));
+    auto* tool_ptr = tool.state.get();
+    REQUIRE(registry.add(std::move(tool.tool)));
 
     agent::BeforeToolCallHook before_hook = [&stop_source](
         agent::BeforeToolCallContext,
@@ -1323,16 +1321,16 @@ TEST_CASE(
     "bounded parallel cancellation leaves queued tool capabilities unstarted",
     "[agent][tool-executor][issue40]") {
     std::stop_source stop_source;
-    agent::AsyncToolRegistry registry;
-    auto tool = std::make_unique<CancellingParallelTool>(
+    agent::ToolRegistry registry;
+    auto tool = make_cancelling_parallel_tool(
         ai::Tool{
             .name = "work",
             .description = "Work",
             .parameters = test::permissive_object_tool_argument_contract(),
         },
         stop_source);
-    auto* tool_ptr = tool.get();
-    REQUIRE(registry.add(std::move(tool)));
+    auto* tool_ptr = tool.state.get();
+    REQUIRE(registry.add(std::move(tool.tool)));
 
     agent::ToolCallExecutor executor(registry, agent::ToolCallExecutorOptions{
         .stop_token = stop_source.get_token(),
@@ -1361,13 +1359,13 @@ TEST_CASE(
 
 TEST_CASE("bounded parallel execution enforces max_in_flight", "[agent][tool-executor]") {
     ConcurrencyProbe probe;
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"lookup", "Lookup", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "ok",
         std::chrono::milliseconds{30},
-        &probe)));
+        &probe).tool));
 
     agent::ToolCallExecutorOptions options;
     options.execution = agent::BoundedParallelToolExecution{2};
@@ -1414,15 +1412,15 @@ TEST_CASE(
 
     auto execute_policy = [&](agent::ToolExecutionPolicy policy) {
         ConcurrencyProbe probe;
-        agent::AsyncToolRegistry registry;
-        auto tool = std::make_unique<RecordingTool>(
+        agent::ToolRegistry registry;
+        auto tool = make_recording_tool(
             ai::Tool{"work", "Work", strict_contract},
             agent::ToolConcurrency::ParallelSafe,
             "work result",
             std::chrono::milliseconds{30},
             &probe);
-        auto* tool_ptr = tool.get();
-        REQUIRE(registry.add(std::move(tool)));
+        auto* tool_ptr = tool.state.get();
+        REQUIRE(registry.add(std::move(tool.tool)));
 
         ExecutionSnapshot snapshot;
         agent::BeforeToolCallHook before_hook =
@@ -1501,21 +1499,21 @@ TEST_CASE(
     "bounded parallel preparation completes immediate failures before the next source call",
     "[agent][tool-executor][tool-arguments][issue32]") {
     ConcurrencyProbe probe;
-    agent::AsyncToolRegistry registry;
+    agent::ToolRegistry registry;
 
     auto add_tool = [&](std::string name,
                         util::JsonValue contract,
                         agent::ToolConcurrency concurrency = agent::ToolConcurrency::ParallelSafe,
                         std::string result = "ok",
                         std::chrono::milliseconds delay = std::chrono::milliseconds{}) {
-        auto tool = std::make_unique<RecordingTool>(
+        auto tool = make_recording_tool(
             ai::Tool{name, name, std::move(contract)},
             concurrency,
             std::move(result),
             delay,
             &probe);
-        auto* tool_ptr = tool.get();
-        REQUIRE(registry.add(std::move(tool)));
+        auto* tool_ptr = tool.state.get();
+        REQUIRE(registry.add(std::move(tool.tool)));
         return tool_ptr;
     };
 
@@ -1634,13 +1632,13 @@ TEST_CASE(
 
 TEST_CASE("bounded parallel execution accepts a limit of one", "[agent][tool-executor]") {
     ConcurrencyProbe probe;
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"lookup", "Lookup", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "ok",
         std::chrono::milliseconds{20},
-        &probe)));
+        &probe).tool));
 
     agent::ToolCallExecutorOptions options;
     options.execution = agent::BoundedParallelToolExecution{1};
@@ -1658,13 +1656,13 @@ TEST_CASE("bounded parallel execution accepts a limit of one", "[agent][tool-exe
 
 TEST_CASE("Tool Call Executor treats bounded parallel zero as no explicit cap", "[agent][tool-executor]") {
     ConcurrencyProbe probe;
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"lookup", "Lookup", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "ok",
         std::chrono::milliseconds{30},
-        &probe)));
+        &probe).tool));
 
     agent::ToolCallExecutorOptions options;
     options.execution = agent::BoundedParallelToolExecution{0};
@@ -1682,17 +1680,17 @@ TEST_CASE("Tool Call Executor treats bounded parallel zero as no explicit cap", 
 }
 
 TEST_CASE("bounded parallel execution preserves source-order results", "[agent][tool-executor]") {
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "alpha result",
-        std::chrono::milliseconds{80})));
-    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+        std::chrono::milliseconds{80}).tool));
+    REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "beta result",
-        std::chrono::milliseconds{10})));
+        std::chrono::milliseconds{10}).tool));
 
     agent::ToolCallExecutorOptions options;
     options.execution = agent::BoundedParallelToolExecution{2};
@@ -1735,17 +1733,17 @@ TEST_CASE("bounded parallel execution preserves source-order results", "[agent][
 TEST_CASE(
     "bounded parallel execution serializes suspended hooks and lifecycle callbacks",
     "[agent][tool-executor][issue82]") {
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "alpha",
-        std::chrono::milliseconds{10})));
-    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+        std::chrono::milliseconds{10}).tool));
+    REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "beta",
-        std::chrono::milliseconds{10})));
+        std::chrono::milliseconds{10}).tool));
 
     std::atomic<int> active_hooks{0};
     std::atomic<int> max_active_hooks{0};
@@ -1814,9 +1812,9 @@ TEST_CASE(
 }
 
 TEST_CASE("ToolCallExecutor maps lookup and argument failures to results", "[agent][tool-executor]") {
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<RecordingTool>(
-        ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_recording_tool(
+        ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()}).tool));
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({
         make_call("call-1", "missing"),
@@ -1835,11 +1833,11 @@ TEST_CASE("ToolCallExecutor maps lookup and argument failures to results", "[age
 }
 
 TEST_CASE("ToolCallExecutor keeps hook policy behind its interface", "[agent][tool-executor]") {
-    agent::AsyncToolRegistry registry;
-    auto tool = std::make_unique<RecordingTool>(
+    agent::ToolRegistry registry;
+    auto tool = make_recording_tool(
         ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()});
-    auto* tool_ptr = tool.get();
-    REQUIRE(registry.add(std::move(tool)));
+    auto* tool_ptr = tool.state.get();
+    REQUIRE(registry.add(std::move(tool.tool)));
 
     agent::BeforeToolCallHook before_hook =
         agent::adapt_sync_before_tool_call(
@@ -1864,9 +1862,9 @@ TEST_CASE("ToolCallExecutor keeps hook policy behind its interface", "[agent][to
 }
 
 TEST_CASE("ToolCallExecutor applies after-hook overrides and termination", "[agent][tool-executor]") {
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<RecordingTool>(
-        ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_recording_tool(
+        ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()}).tool));
 
     agent::AfterToolCallHook after_hook =
         agent::adapt_sync_after_tool_call(
@@ -1894,8 +1892,8 @@ TEST_CASE("ToolCallExecutor applies after-hook overrides and termination", "[age
 }
 
 TEST_CASE("tool errors prevent batch termination", "[agent][tool-executor]") {
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FailingTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_failing_tool(
         ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()})));
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
@@ -1919,52 +1917,33 @@ namespace {
 /// Deterministic tool outcome for scheduling tests: configurable is_error and
 /// terminate so the executor's finalization rules can be exercised without an
 /// after hook.
-class OutcomeTool final : public agent::AsyncAgentTool {
-public:
-    OutcomeTool(
-        ai::Tool definition,
-        bool is_error = false,
-        bool terminate = false,
-        std::string result_text = "outcome",
-        agent::ToolConcurrency concurrency = agent::ToolConcurrency::ParallelSafe)
-        : definition_(std::move(definition)),
-          is_error_(is_error),
-          terminate_(terminate),
-          result_text_(std::move(result_text)),
-          concurrency_(concurrency) {}
-
-    const ai::Tool& definition() const override { return definition_; }
-
-    agent::ToolConcurrency concurrency() const noexcept override {
-        return concurrency_;
-    }
-
-    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation,
-        std::stop_token) override {
-        ++invocation_count;
-        co_return agent::AsyncToolExecutionResult{
-            .content = std::vector<ai::Content>{ai::text_content(result_text_)},
-            .details = std::nullopt,
-            .is_error = is_error_,
-            .terminate = terminate_};
-    }
-
-    ai::Tool definition_;
-    bool is_error_;
-    bool terminate_;
-    std::string result_text_;
-    agent::ToolConcurrency concurrency_;
-    std::atomic<int> invocation_count{0};
-};
+[[nodiscard]] agent::Tool make_outcome_tool(
+    ai::Tool definition,
+    bool is_error = false,
+    bool terminate = false,
+    std::string result_text = "outcome",
+    agent::ToolConcurrency concurrency = agent::ToolConcurrency::ParallelSafe) {
+    return tests::make_fake_tool(
+        std::move(definition),
+        concurrency,
+        [is_error, terminate, result_text = std::move(result_text)](
+            agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+            -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+            co_return agent::AsyncToolExecutionResult{
+                .content = std::vector<ai::Content>{ai::text_content(result_text)},
+                .details = std::nullopt,
+                .is_error = is_error,
+                .terminate = terminate};
+        });
+}
 
 } // namespace
 
 TEST_CASE(
     "afterToolCall runs for an error execution result (sequential path)",
     "[agent][tool-executor][issue355]") {
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<OutcomeTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_outcome_tool(
         ai::Tool{"work", "Work", test::empty_object_tool_argument_contract()},
         /*is_error=*/true,
         /*terminate=*/false,
@@ -1994,8 +1973,8 @@ TEST_CASE(
 TEST_CASE(
     "afterToolCall runs for an error execution result (bounded parallel path)",
     "[agent][tool-executor][issue355]") {
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<OutcomeTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_outcome_tool(
         ai::Tool{"work", "Work", test::empty_object_tool_argument_contract()},
         /*is_error=*/true,
         /*terminate=*/false,
@@ -2026,8 +2005,8 @@ TEST_CASE(
 TEST_CASE(
     "afterToolCall runs for a throwing tool (isolation handling)",
     "[agent][tool-executor][issue355]") {
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FailingTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_failing_tool(
         ai::Tool{"work", "Work", test::empty_object_tool_argument_contract()})));
 
     int after_calls = 0;
@@ -2054,15 +2033,15 @@ TEST_CASE(
 TEST_CASE(
     "beforeToolCall hook failure finalizes only its call (sequential path)",
     "[agent][tool-executor][issue355]") {
-    agent::AsyncToolRegistry registry;
-    auto alpha = std::make_unique<RecordingTool>(
+    agent::ToolRegistry registry;
+    auto alpha = make_recording_tool(
         ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()});
-    auto beta = std::make_unique<RecordingTool>(
+    auto beta = make_recording_tool(
         ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()});
-    auto* alpha_ptr = alpha.get();
-    auto* beta_ptr = beta.get();
-    REQUIRE(registry.add(std::move(alpha)));
-    REQUIRE(registry.add(std::move(beta)));
+    auto* alpha_ptr = alpha.state.get();
+    auto* beta_ptr = beta.state.get();
+    REQUIRE(registry.add(std::move(alpha.tool)));
+    REQUIRE(registry.add(std::move(beta.tool)));
 
     agent::BeforeToolCallHook before_hook =
         agent::adapt_sync_before_tool_call(
@@ -2096,17 +2075,17 @@ TEST_CASE(
 TEST_CASE(
     "beforeToolCall hook failure finalizes only its call (bounded parallel path)",
     "[agent][tool-executor][issue355]") {
-    agent::AsyncToolRegistry registry;
-    auto alpha = std::make_unique<RecordingTool>(
+    agent::ToolRegistry registry;
+    auto alpha = make_recording_tool(
         ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe);
-    auto beta = std::make_unique<RecordingTool>(
+    auto beta = make_recording_tool(
         ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe);
-    auto* alpha_ptr = alpha.get();
-    auto* beta_ptr = beta.get();
-    REQUIRE(registry.add(std::move(alpha)));
-    REQUIRE(registry.add(std::move(beta)));
+    auto* alpha_ptr = alpha.state.get();
+    auto* beta_ptr = beta.state.get();
+    REQUIRE(registry.add(std::move(alpha.tool)));
+    REQUIRE(registry.add(std::move(beta.tool)));
 
     agent::BeforeToolCallHook before_hook =
         agent::adapt_sync_before_tool_call(
@@ -2141,13 +2120,13 @@ TEST_CASE(
 TEST_CASE(
     "Tool Call Executor confines an afterToolCall hook failure to its call",
     "[agent][tool-executor][issue355]") {
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe)));
-    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+        agent::ToolConcurrency::ParallelSafe).tool));
+    REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
-        agent::ToolConcurrency::ParallelSafe)));
+        agent::ToolConcurrency::ParallelSafe).tool));
 
     agent::AfterToolCallHook after_hook =
         agent::adapt_sync_after_tool_call(
@@ -2182,19 +2161,19 @@ TEST_CASE(
     "an exclusive tool serializes the whole batch with full per-call lifecycle",
     "[agent][tool-executor][issue355]") {
     ConcurrencyProbe probe;
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "alpha",
         std::chrono::milliseconds{20},
-        &probe)));
-    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+        &probe).tool));
+    REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::Exclusive,
         "beta",
         std::chrono::milliseconds{20},
-        &probe)));
+        &probe).tool));
 
     agent::ToolCallExecutorOptions options;
     options.execution = agent::BoundedParallelToolExecution{2};
@@ -2245,19 +2224,19 @@ TEST_CASE(
     "default policy executes parallel-safe calls concurrently",
     "[agent][tool-executor][issue355]") {
     ConcurrencyProbe probe;
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "alpha",
         std::chrono::milliseconds{30},
-        &probe)));
-    REQUIRE(registry.add(std::make_unique<RecordingTool>(
+        &probe).tool));
+    REQUIRE(registry.add(make_recording_tool(
         ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "beta",
         std::chrono::milliseconds{30},
-        &probe)));
+        &probe).tool));
 
     // No explicit policy: the executor default is bounded parallel with no cap.
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
@@ -2276,8 +2255,8 @@ TEST_CASE(
 TEST_CASE(
     "an error result with an explicit terminate hint terminates the batch",
     "[agent][tool-executor][issue355]") {
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<OutcomeTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_outcome_tool(
         ai::Tool{"work", "Work", test::empty_object_tool_argument_contract()},
         /*is_error=*/true,
         /*terminate=*/true,
@@ -2299,13 +2278,13 @@ TEST_CASE(
 TEST_CASE(
     "batch termination requires every call to carry the hint",
     "[agent][tool-executor][issue355]") {
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<OutcomeTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_outcome_tool(
         ai::Tool{"alpha", "Alpha", test::empty_object_tool_argument_contract()},
         /*is_error=*/false,
         /*terminate=*/true,
         "alpha done")));
-    REQUIRE(registry.add(std::make_unique<OutcomeTool>(
+    REQUIRE(registry.add(make_outcome_tool(
         ai::Tool{"beta", "Beta", test::empty_object_tool_argument_contract()},
         /*is_error=*/false,
         /*terminate=*/false,

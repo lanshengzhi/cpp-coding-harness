@@ -10,6 +10,7 @@
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/Theme.hpp"
 #include "support/EnvVarGuard.hpp"
+#include "support/FakeTool.hpp"
 #include "support/FakeUserShell.hpp"
 #include "support/GatedChatProvider.hpp"
 #include "support/TempWorkspace.hpp"
@@ -26,16 +27,19 @@
 #include <set>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <format>
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -244,62 +248,63 @@ public:
 };
 
 /// Gates inside the tool until release() and records stop-token delivery.
-class GatedCloseTool final : public agent::AsyncAgentTool {
-public:
-    GatedCloseTool() {
-        definition_.name = "delayed";
-        definition_.description = "Wait until close cancellation is observable";
-        definition_.parameters = util::JsonValue::object_t{{"type", "object"}};
-    }
-
-    [[nodiscard]] const ai::Tool& definition() const override {
-        return definition_;
-    }
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation,
-        std::stop_token) override {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Tool,
-            "gated tool requires the update path"));
-    }
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>>
-    execute_with_updates(
-        agent::ToolInvocation,
-        std::stop_token stop_token,
-        agent::ToolUpdateSink) override {
-        const auto executor = co_await boost::asio::this_coro::executor;
-        gate_.emplace(executor);
-        gate_->expires_at(std::chrono::steady_clock::time_point::max());
-        started = true;
-        std::stop_callback cancellation{stop_token, [this] {
-            ++stop_callback_count;
-        }};
-        boost::system::error_code error;
-        co_await gate_->async_wait(
-            boost::asio::redirect_error(boost::asio::use_awaitable, error));
-        gate_.reset();
-
-        if (stop_token.stop_requested()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
-                "gated tool aborted by close"));
-        }
-        co_return agent::AsyncToolExecutionResult{};
-    }
+struct GatedCloseToolState {
+    std::mutex mutex;
+    std::optional<boost::asio::steady_timer> gate;
+    std::atomic<bool> started{false};
+    std::atomic<std::size_t> stop_callback_count{0};
 
     void release() {
-        if (gate_) (void)gate_->cancel();
+        std::lock_guard lock(mutex);
+        if (gate) (void)gate->cancel();
     }
-
-    bool started{false};
-    std::size_t stop_callback_count{0};
-
-private:
-    ai::Tool definition_;
-    std::optional<boost::asio::steady_timer> gate_;
 };
+
+struct GatedCloseToolHandle {
+    agent::Tool tool;
+    std::shared_ptr<GatedCloseToolState> state;
+};
+
+[[nodiscard]] GatedCloseToolHandle make_gated_close_tool() {
+    auto state = std::make_shared<GatedCloseToolState>();
+    ai::Tool definition;
+    definition.name = "delayed";
+    definition.description = "Wait until close cancellation is observable";
+    definition.parameters = util::JsonValue::object_t{{"type", "object"}};
+    return GatedCloseToolHandle{
+        tests::make_fake_tool(
+            std::move(definition),
+            agent::ToolConcurrency::Exclusive,
+            [state](agent::ToolInvocation, std::stop_token stop_token, agent::ToolUpdateSink)
+                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                const auto executor = co_await boost::asio::this_coro::executor;
+                {
+                    std::lock_guard lock(state->mutex);
+                    state->gate.emplace(executor);
+                    state->gate->expires_at(std::chrono::steady_clock::time_point::max());
+                }
+                state->started.store(true, std::memory_order_release);
+                std::stop_callback cancellation{stop_token, [state] {
+                    state->stop_callback_count.fetch_add(1, std::memory_order_relaxed);
+                }};
+                boost::system::error_code error;
+                co_await state->gate->async_wait(
+                    boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                {
+                    std::lock_guard lock(state->mutex);
+                    state->gate.reset();
+                }
+
+                if (stop_token.stop_requested()) {
+                    co_return std::unexpected(util::make_error(
+                        util::ErrorCode::Cancelled,
+                        "gated tool aborted by close"));
+                }
+                co_return agent::AsyncToolExecutionResult{};
+            }),
+        state,
+    };
+}
 
 } // namespace
 
@@ -1259,8 +1264,8 @@ TEST_CASE(
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto client = std::make_shared<ToolCallThenAbortChatProvider>();
-    auto tool = std::make_unique<GatedCloseTool>();
-    auto* tool_pointer = tool.get();
+    auto tool = make_gated_close_tool();
+    auto* tool_pointer = tool.state.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
@@ -1274,7 +1279,7 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.custom_tools.push_back(std::move(tool));
+    options.custom_tools.push_back(std::move(tool.tool));
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);
@@ -1334,8 +1339,8 @@ TEST_CASE(
     tests::TempWorkspace config;
     config.write("keybindings.json", R"({"app.exit":"f6"})");
     auto client = std::make_shared<ToolCallThenAbortChatProvider>();
-    auto tool = std::make_unique<GatedCloseTool>();
-    auto* tool_pointer = tool.get();
+    auto tool = make_gated_close_tool();
+    auto* tool_pointer = tool.state.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
@@ -1349,7 +1354,7 @@ TEST_CASE(
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
-    options.custom_tools.push_back(std::move(tool));
+    options.custom_tools.push_back(std::move(tool.tool));
     auto created = coding_agent::create_agent_session(
         std::move(options), std::move(shell));
     REQUIRE(created);

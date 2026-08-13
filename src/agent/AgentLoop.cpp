@@ -131,7 +131,7 @@ void sync_state(AgentState& state, const ai::AiContext& context) {
 
 AsyncAgentLoop::AsyncAgentLoop(
     ai::ModelStreamFactory stream_factory,
-    AsyncToolRegistry registry,
+    ToolRegistry registry,
     AsyncAgentOptions options)
     : stream_factory_(std::move(stream_factory)),
       registry_(std::move(registry)),

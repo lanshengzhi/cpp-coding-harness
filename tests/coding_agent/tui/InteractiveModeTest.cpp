@@ -1,4 +1,5 @@
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "support/FakeTool.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/ImageFixture.hpp"
 #include "support/TempWorkspace.hpp"
@@ -24,17 +25,20 @@
 #include <boost/asio/use_awaitable.hpp>
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <format>
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 using namespace cch;
@@ -578,183 +582,171 @@ public:
     }
 };
 
-class GatedPartialReadTool final : public agent::AsyncAgentTool {
-public:
-    GatedPartialReadTool() {
-        definition_.name = "probe-read";
-        definition_.description = "Stream a deterministic read result";
-        definition_.parameters = util::JsonValue::object_t{{"type", "object"}};
+[[nodiscard]] agent::AsyncToolExecutionResult gated_partial_final_result(
+    const agent::ToolInvocation& invocation) {
+    agent::AsyncToolExecutionResult result;
+    if (invocation.raw_arguments.find("missing.txt") != std::string::npos) {
+        result.content.emplace_back(ai::text_content("final tool failure"));
+        result.is_error = true;
+        return result;
     }
+    result.content.emplace_back(ai::text_content(
+        "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nTOOL OUTPUT END\n"));
+    return result;
+}
 
-    [[nodiscard]] const ai::Tool& definition() const override {
-        return definition_;
-    }
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation,
-        std::stop_token) override {
-        co_return final_result(invocation);
-    }
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>>
-    execute_with_updates(
-        agent::ToolInvocation invocation,
-        std::stop_token,
-        agent::ToolUpdateSink update_sink) override {
-        late_update_sink_.emplace(std::move(update_sink));
-        agent::AsyncToolExecutionResult partial;
-        partial.content.emplace_back(ai::text_content(
-            "partial tool output\nSTALE SNAPSHOT"));
-        if (auto updated = (*late_update_sink_)(partial); !updated) {
-            co_return std::unexpected(updated.error());
-        }
-        partial.content.clear();
-        partial.content.emplace_back(ai::text_content(
-            "partial tool output\nLATEST SNAPSHOT"));
-        if (auto updated = (*late_update_sink_)(partial); !updated) {
-            co_return std::unexpected(updated.error());
-        }
-
-        const auto executor = co_await boost::asio::this_coro::executor;
-        gate_.emplace(executor);
-        gate_->expires_at(std::chrono::steady_clock::time_point::max());
-        started = true;
-        boost::system::error_code error;
-        co_await gate_->async_wait(
-            boost::asio::redirect_error(boost::asio::use_awaitable, error));
-        co_return final_result(invocation);
-    }
+struct GatedPartialReadToolState {
+    std::mutex mutex;
+    std::optional<boost::asio::steady_timer> gate;
+    std::optional<agent::ToolUpdateSink> late_update_sink;
+    std::atomic<bool> started{false};
 
     void release() {
-        if (gate_) (void)gate_->cancel();
+        std::lock_guard lock(mutex);
+        if (gate) (void)gate->cancel();
     }
 
     [[nodiscard]] util::ExpectedVoid emit_late_update() {
-        if (!late_update_sink_) return {};
+        std::lock_guard lock(mutex);
+        if (!late_update_sink) return {};
         agent::AsyncToolExecutionResult late;
         late.content.emplace_back(ai::text_content("LATE TOOL UPDATE"));
-        return (*late_update_sink_)(late);
+        return (*late_update_sink)(late);
     }
-
-    bool started{false};
-
-private:
-    [[nodiscard]] static agent::AsyncToolExecutionResult final_result(
-        const agent::ToolInvocation& invocation) {
-        agent::AsyncToolExecutionResult result;
-        if (invocation.raw_arguments.find("missing.txt") != std::string::npos) {
-            result.content.emplace_back(ai::text_content("final tool failure"));
-            result.is_error = true;
-            return result;
-        }
-        result.content.emplace_back(ai::text_content(
-            "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nTOOL OUTPUT END\n"));
-        return result;
-    }
-
-    ai::Tool definition_;
-    std::optional<boost::asio::steady_timer> gate_;
-    std::optional<agent::ToolUpdateSink> late_update_sink_;
 };
 
-class ImageReadTool final : public agent::AsyncAgentTool {
-public:
-    explicit ImageReadTool(std::string image_data)
-        : image_data_(std::move(image_data)) {
-        definition_.name = "probe-read";
-        definition_.description = "Return deterministic text and image content";
-        definition_.parameters = util::JsonValue::object_t{{"type", "object"}};
-    }
-
-    [[nodiscard]] const ai::Tool& definition() const override {
-        return definition_;
-    }
-
-    [[nodiscard]] boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation,
-        std::stop_token) override {
-        agent::AsyncToolExecutionResult result;
-        result.content = {
-            ai::text_content("live tool before"),
-            ai::image_content(image_data_, "image/png"),
-            ai::text_content("live tool after"),
-        };
-        co_return result;
-    }
-
-private:
-    ai::Tool definition_;
-    std::string image_data_;
+struct GatedPartialReadToolHandle {
+    agent::Tool tool;
+    std::shared_ptr<GatedPartialReadToolState> state;
 };
 
-class DelayedCancellationTool final : public agent::AsyncAgentTool {
-public:
-    DelayedCancellationTool() {
-        definition_.name = "delayed";
-        definition_.description = "Wait until cancellation is allowed to quiesce";
-        definition_.parameters = util::JsonValue::object_t{{"type", "object"}};
-    }
-    DelayedCancellationTool(DelayedCancellationTool&&) = delete;
-    DelayedCancellationTool& operator=(DelayedCancellationTool&&) = delete;
-    ~DelayedCancellationTool() override = default;
-    DelayedCancellationTool(const DelayedCancellationTool&) = delete;
-    DelayedCancellationTool& operator=(const DelayedCancellationTool&) = delete;
+[[nodiscard]] GatedPartialReadToolHandle make_gated_partial_read_tool() {
+    auto state = std::make_shared<GatedPartialReadToolState>();
+    ai::Tool definition;
+    definition.name = "probe-read";
+    definition.description = "Stream a deterministic read result";
+    definition.parameters = util::JsonValue::object_t{{"type", "object"}};
+    return GatedPartialReadToolHandle{
+        tests::make_fake_tool(
+            std::move(definition),
+            agent::ToolConcurrency::Exclusive,
+            [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink update_sink)
+                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                {
+                    std::lock_guard lock(state->mutex);
+                    state->late_update_sink.emplace(std::move(update_sink));
+                }
+                agent::AsyncToolExecutionResult partial;
+                partial.content.emplace_back(ai::text_content(
+                    "partial tool output\nSTALE SNAPSHOT"));
+                if (auto updated = (*state->late_update_sink)(partial); !updated) {
+                    co_return std::unexpected(updated.error());
+                }
+                partial.content.clear();
+                partial.content.emplace_back(ai::text_content(
+                    "partial tool output\nLATEST SNAPSHOT"));
+                if (auto updated = (*state->late_update_sink)(partial); !updated) {
+                    co_return std::unexpected(updated.error());
+                }
 
-    [[nodiscard]] const ai::Tool& definition() const override {
-        return definition_;
-    }
+                const auto executor = co_await boost::asio::this_coro::executor;
+                {
+                    std::lock_guard lock(state->mutex);
+                    state->gate.emplace(executor);
+                    state->gate->expires_at(std::chrono::steady_clock::time_point::max());
+                }
+                state->started.store(true, std::memory_order_release);
+                boost::system::error_code error;
+                co_await state->gate->async_wait(
+                    boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                co_return gated_partial_final_result(invocation);
+            }),
+        state,
+    };
+}
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation,
-        std::stop_token) override {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Tool,
-            "delayed tool requires the update path"));
-    }
+[[nodiscard]] agent::Tool make_image_read_tool(std::string image_data) {
+    ai::Tool definition;
+    definition.name = "probe-read";
+    definition.description = "Return deterministic text and image content";
+    definition.parameters = util::JsonValue::object_t{{"type", "object"}};
+    return tests::make_fake_tool(
+        std::move(definition),
+        agent::ToolConcurrency::Exclusive,
+        [image_data = std::move(image_data)](
+            agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+            -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+            agent::AsyncToolExecutionResult result;
+            result.content = {
+                ai::text_content("live tool before"),
+                ai::image_content(image_data, "image/png"),
+                ai::text_content("live tool after"),
+            };
+            co_return result;
+        });
+}
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>>
-    execute_with_updates(
-        agent::ToolInvocation,
-        std::stop_token stop_token,
-        agent::ToolUpdateSink update_sink) override {
-        observed_stop_token = stop_token;
-        agent::AsyncToolExecutionResult partial;
-        partial.content.emplace_back(ai::text_content("partial tool output before abort"));
-        if (auto updated = update_sink(partial); !updated) {
-            co_return std::unexpected(updated.error());
-        }
-
-        const auto executor = co_await boost::asio::this_coro::executor;
-        gate_.emplace(executor);
-        gate_->expires_at(std::chrono::steady_clock::time_point::max());
-        started = true;
-        std::stop_callback cancellation{stop_token, [this] {
-            ++stop_callback_count;
-        }};
-        boost::system::error_code error;
-        co_await gate_->async_wait(
-            boost::asio::redirect_error(boost::asio::use_awaitable, error));
-
-        if (stop_token.stop_requested()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
-                "delayed tool aborted"));
-        }
-        co_return agent::AsyncToolExecutionResult{};
-    }
-
-    void release() {
-        if (gate_) (void)gate_->cancel();
-    }
-
-    bool started{false};
-    std::size_t stop_callback_count{0};
+struct DelayedCancellationToolState {
+    std::mutex mutex;
+    std::optional<boost::asio::steady_timer> gate;
+    std::atomic<bool> started{false};
+    std::atomic<std::size_t> stop_callback_count{0};
     std::optional<std::stop_token> observed_stop_token;
 
-private:
-    ai::Tool definition_;
-    std::optional<boost::asio::steady_timer> gate_;
+    void release() {
+        std::lock_guard lock(mutex);
+        if (gate) (void)gate->cancel();
+    }
 };
+
+struct DelayedCancellationToolHandle {
+    agent::Tool tool;
+    std::shared_ptr<DelayedCancellationToolState> state;
+};
+
+[[nodiscard]] DelayedCancellationToolHandle make_delayed_cancellation_tool() {
+    auto state = std::make_shared<DelayedCancellationToolState>();
+    ai::Tool definition;
+    definition.name = "delayed";
+    definition.description = "Wait until cancellation is allowed to quiesce";
+    definition.parameters = util::JsonValue::object_t{{"type", "object"}};
+    return DelayedCancellationToolHandle{
+        tests::make_fake_tool(
+            std::move(definition),
+            agent::ToolConcurrency::Exclusive,
+            [state](agent::ToolInvocation, std::stop_token stop_token, agent::ToolUpdateSink update_sink)
+                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                state->observed_stop_token = stop_token;
+                agent::AsyncToolExecutionResult partial;
+                partial.content.emplace_back(ai::text_content("partial tool output before abort"));
+                if (auto updated = update_sink(partial); !updated) {
+                    co_return std::unexpected(updated.error());
+                }
+
+                const auto executor = co_await boost::asio::this_coro::executor;
+                {
+                    std::lock_guard lock(state->mutex);
+                    state->gate.emplace(executor);
+                    state->gate->expires_at(std::chrono::steady_clock::time_point::max());
+                }
+                state->started.store(true, std::memory_order_release);
+                std::stop_callback cancellation{stop_token, [state] {
+                    state->stop_callback_count.fetch_add(1, std::memory_order_relaxed);
+                }};
+                boost::system::error_code error;
+                co_await state->gate->async_wait(
+                    boost::asio::redirect_error(boost::asio::use_awaitable, error));
+
+                if (stop_token.stop_requested()) {
+                    co_return std::unexpected(util::make_error(
+                        util::ErrorCode::Cancelled,
+                        "delayed tool aborted"));
+                }
+                co_return agent::AsyncToolExecutionResult{};
+            }),
+        state,
+    };
+}
 
 class AbortThroughToolChatProvider final : public tests::ScriptedProvider {
 public:
@@ -1154,7 +1146,7 @@ TEST_CASE(
     auto options = session_options(
         workspace,
         std::make_shared<RepeatedReadCallChatProvider>());
-    options.custom_tools.push_back(std::make_unique<ImageReadTool>(
+    options.custom_tools.push_back(make_image_read_tool(
         std::string{tests::kTinyPngBase64}));
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
@@ -1717,9 +1709,9 @@ TEST_CASE(
     auto options = session_options(
         workspace,
         std::make_shared<RepeatedReadCallChatProvider>());
-    auto tool = std::make_unique<GatedPartialReadTool>();
-    auto* tool_pointer = tool.get();
-    options.custom_tools.push_back(std::move(tool));
+    auto tool = make_gated_partial_read_tool();
+    auto* tool_pointer = tool.state.get();
+    options.custom_tools.push_back(std::move(tool.tool));
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
 
@@ -1923,9 +1915,9 @@ TEST_CASE(
     auto client = std::make_shared<AbortThroughToolChatProvider>();
     auto* client_pointer = client.get();
     auto options = session_options(workspace, std::move(client));
-    auto tool = std::make_unique<DelayedCancellationTool>();
-    auto* tool_pointer = tool.get();
-    options.custom_tools.push_back(std::move(tool));
+    auto tool = make_delayed_cancellation_tool();
+    auto* tool_pointer = tool.state.get();
+    options.custom_tools.push_back(std::move(tool.tool));
     auto created = coding_agent::create_agent_session(std::move(options));
     REQUIRE(created);
 

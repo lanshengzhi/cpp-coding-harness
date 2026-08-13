@@ -28,7 +28,7 @@ class AsyncAgentLoop {
 public:
     AsyncAgentLoop(
         ai::ModelStreamFactory stream_factory,
-        AsyncToolRegistry registry,
+        ToolRegistry registry,
         AsyncAgentOptions options = {});
 
     [[nodiscard]] boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> run(
@@ -121,7 +121,7 @@ private:
     }
 
     ai::ModelStreamFactory stream_factory_; // move-only; produces one ModelStream per turn
-    AsyncToolRegistry registry_;
+    ToolRegistry registry_;
     AsyncAgentOptions options_;
 };
 

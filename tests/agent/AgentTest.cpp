@@ -1,6 +1,7 @@
 #include <cch/agent/Agent.hpp>
 #include <cch/ai/Content.hpp>
 #include "support/FakeModelStream.hpp"
+#include "support/FakeTool.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/ToolArgumentContracts.hpp"
 #include "util/Json.hpp"
@@ -91,27 +92,17 @@ util::ExpectedVoid run_prompt(
     return std::move(*result);
 }
 
-class ReadTool final : public agent::AsyncAgentTool {
-public:
-    ReadTool()
-        : definition_(
-              ai::Tool{"read", "Read a file", test::permissive_object_tool_argument_contract()}) {}
-
-    const ai::Tool& definition() const override {
-        return definition_;
-    }
-
-    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation,
-        std::stop_token) {
-        agent::AsyncToolExecutionResult result;
-        result.content.push_back(ai::text_content("file contents"));
-        co_return result;
-    }
-
-private:
-    ai::Tool definition_;
-};
+[[nodiscard]] agent::Tool make_read_tool() {
+    return tests::make_fake_tool(
+        ai::Tool{"read", "Read a file", test::permissive_object_tool_argument_contract()},
+        agent::ToolConcurrency::Exclusive,
+        [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+            -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+            agent::AsyncToolExecutionResult result;
+            result.content.push_back(ai::text_content("file contents"));
+            co_return result;
+        });
+}
 
 class RecordingModelRuntime final : public std::enable_shared_from_this<RecordingModelRuntime> {
 public:
@@ -476,7 +467,7 @@ public:
 
 TEST_CASE("stateful Agent retains a scripted fake-provider prompt in its passive snapshot", "[agent][stateful][issue35]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
@@ -520,7 +511,7 @@ TEST_CASE(
         co_return messages;
     };
 
-    agent::Agent subject(client->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
     REQUIRE(run_prompt(subject, "hello"));
     CHECK(stop_possible);
     CHECK_FALSE(stop_requested);
@@ -541,7 +532,7 @@ TEST_CASE(
         transform_stop_token = stop_token;
         co_return messages;
     };
-    agent::Agent subject(client->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
 
     subject.abort();
     std::optional<util::ExpectedVoid> result;
@@ -580,7 +571,7 @@ TEST_CASE(
 
 TEST_CASE("stateful Agent reduces lifecycle state before ordered move-only observers", "[agent][stateful][issue35]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
@@ -643,7 +634,7 @@ TEST_CASE(
     "stateful Agent commits after live state and weak observers",
     "[agent][stateful][commitment][issue36]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
@@ -683,7 +674,7 @@ TEST_CASE(
     "stateful Agent weak observer failure cannot veto strong commitment",
     "[agent][stateful][commitment][issue36]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
@@ -728,7 +719,7 @@ TEST_CASE(
     "stateful Agent returns strong commitment failure with retained live state and recovers",
     "[agent][stateful][commitment][issue36]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
@@ -758,7 +749,7 @@ TEST_CASE(
 
 TEST_CASE("stateful Agent keeps weak observer failure from vetoing a prompt", "[agent][stateful][issue35]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
@@ -812,7 +803,7 @@ TEST_CASE("stateful Agent keeps weak observer failure from vetoing a prompt", "[
 
 TEST_CASE("stateful Agent bounds accumulated weak-observer diagnostics", "[agent][stateful][issue35]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
@@ -845,7 +836,7 @@ TEST_CASE(
     "stateful Agent suppresses an observer unsubscribed before its turn",
     "[agent][stateful][subscription][issue452]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
@@ -889,7 +880,7 @@ TEST_CASE(
     "stateful Agent begins a reentrant subscription with the next event",
     "[agent][stateful][subscription][issue452]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
@@ -945,7 +936,7 @@ TEST_CASE(
     std::unique_ptr<agent::AgentEventSubscription> handle;
     {
         auto client = std::make_shared<ScriptedFakeRuntime>();
-        agent::AsyncToolRegistry tools;
+        agent::ToolRegistry tools;
         agent::AsyncAgentOptions options;
         options.max_turns = 3;
         options.model = tests::make_model("fake-model");
@@ -970,7 +961,7 @@ TEST_CASE(
 
 TEST_CASE("stateful Agent retains history while agent_end stays invocation-local", "[agent][stateful][issue35]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
@@ -1002,7 +993,7 @@ TEST_CASE("stateful Agent retains history while agent_end stays invocation-local
 TEST_CASE("stateful Agent rejects a second prompt while its active run is suspended", "[agent][stateful][issue35]") {
     boost::asio::io_context io;
     auto client = std::make_shared<GatedModelRuntime>();
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
@@ -1052,7 +1043,7 @@ TEST_CASE("stateful Agent rejects a second prompt while its active run is suspen
 TEST_CASE("stateful Agent keeps a suspended run valid when its handle is moved", "[agent][stateful][issue35]") {
     boost::asio::io_context io;
     auto client = std::make_shared<GatedModelRuntime>();
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
@@ -1082,7 +1073,7 @@ TEST_CASE("stateful Agent keeps a suspended run valid when its handle is moved",
 
 TEST_CASE("stateful Agent releases its active run after an unexpected provider exception", "[agent][stateful][issue35]") {
     auto client = std::make_shared<ThrowingThenRecoveringRuntime>();
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
@@ -1107,8 +1098,8 @@ TEST_CASE("stateful Agent retains applied run-state updates after a later policy
     client->responses.push_back(ai::assistant_text_message("first run reply"));
     client->responses.push_back(ai::assistant_text_message("second run reply"));
 
-    agent::AsyncToolRegistry tools;
-    REQUIRE(tools.add(std::make_unique<ReadTool>()));
+    agent::ToolRegistry tools;
+    REQUIRE(tools.add(make_read_tool()));
     int prepared_turns = 0;
     int stop_decisions = 0;
     agent::AsyncAgentOptions options;
@@ -1164,8 +1155,8 @@ TEST_CASE("stateful Agent retains applied run-state updates after a later policy
 
 TEST_CASE("stateful Agent owns configured tool state through a fake tool run", "[agent][stateful][issue35]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
-    agent::AsyncToolRegistry tools;
-    REQUIRE(tools.add(std::make_unique<ReadTool>()));
+    agent::ToolRegistry tools;
+    REQUIRE(tools.add(make_read_tool()));
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("fake-model");
@@ -1190,7 +1181,7 @@ TEST_CASE("stateful Agent owns configured tool state through a fake tool run", "
 
 TEST_CASE("stateful Agent retains its configured thinking state across a run", "[agent][stateful][issue35]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
     agent::AgentInitialState initial_state;
     initial_state.thinking_level = "high";
     agent::AsyncAgentOptions options;
@@ -1219,7 +1210,7 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("fake-model");
     options.max_queued_messages = 2;
-    agent::Agent subject(client->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
 
     REQUIRE(subject.steer(ai::user_text_message("steer-one")));
     REQUIRE(subject.steer(ai::user_text_message("steer-two")));
@@ -1252,7 +1243,7 @@ TEST_CASE(
     options.model = tests::make_model("fake-model");
     options.max_queued_messages = 1;
     options.max_queued_bytes = 6;
-    agent::Agent subject(client->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
 
     const std::string multibyte = "\xC3\xA9\xC3\xA9\xC3\xA9";
     REQUIRE(multibyte.size() == 6);
@@ -1288,7 +1279,7 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("fake-model");
     options.max_queued_messages = 1;
-    agent::Agent subject(client->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
 
     std::optional<util::ExpectedVoid> prompted;
     boost::asio::co_spawn(
@@ -1330,7 +1321,7 @@ TEST_CASE("stateful Agent all queue modes preserve FIFO order", "[agent][statefu
     client->responses.push_back(ai::assistant_text_message("done"));
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("fake-model");
-    agent::Agent subject(client->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
 
     REQUIRE(subject.set_steering_mode(agent::InputQueueMode::All));
     REQUIRE(subject.set_follow_up_mode(agent::InputQueueMode::All));
@@ -1351,7 +1342,7 @@ TEST_CASE("stateful Agent drains all follow-up messages together in FIFO order",
     client->responses.push_back(ai::assistant_text_message("second"));
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("fake-model");
-    agent::Agent subject(client->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
 
     REQUIRE(subject.set_follow_up_mode(agent::InputQueueMode::All));
     REQUIRE(subject.follow_up(ai::user_text_message("first follow-up")));
@@ -1372,7 +1363,7 @@ TEST_CASE(
     options.max_turns = 1;
     options.model = tests::make_model("fake-model");
     options.system_prompt = "original system prompt";
-    agent::Agent subject(client->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
 
     // The construction-time prompt mirrors into live state (pi
     // `agent.state.systemPrompt`).

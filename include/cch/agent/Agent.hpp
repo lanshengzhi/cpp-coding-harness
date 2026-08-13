@@ -65,7 +65,7 @@ class Agent {
 public:
     Agent(
         ai::ModelStreamFactory stream_factory,
-        AsyncToolRegistry tools,
+        ToolRegistry tools,
         AsyncAgentOptions options = {},
         AgentInitialState initial_state = {});
     Agent(Agent&&) noexcept;

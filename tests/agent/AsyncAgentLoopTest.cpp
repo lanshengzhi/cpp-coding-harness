@@ -2,6 +2,7 @@
 #include <cch/util/Error.hpp>
 #include "agent/AgentLoop.hpp"
 #include "support/FakeModelStream.hpp"
+#include "support/FakeTool.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/ToolArgumentContracts.hpp"
 #include "util/ExpectedMacros.hpp"
@@ -16,14 +17,18 @@
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_awaitable.hpp>
+#include <boost/asio/use_future.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <deque>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <semaphore>
 #include <stop_token>
 #include <string>
+#include <thread>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -259,57 +264,74 @@ public:
 };
 
 
-class FakeTool final : public agent::AsyncAgentTool {
-public:
-    explicit FakeTool(ai::Tool definition) : definition_(std::move(definition)) {}
-
-    const ai::Tool& definition() const override { return definition_; }
-
-    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation,
-        std::stop_token) {
-        invocations.push_back(invocation);
-        co_return agent::AsyncToolExecutionResult{
-            .content = std::vector<ai::Content>{ai::text_content("tool says ok")},
-            .details = std::nullopt,
-            .is_error = false};
-    }
-
-    ai::Tool definition_;
+struct FakeToolState {
     std::vector<agent::ToolInvocation> invocations;
 };
 
-class CancellableFakeTool final : public agent::AsyncAgentTool {
-public:
-    explicit CancellableFakeTool(ai::Tool definition) : definition_(std::move(definition)) {}
+struct FakeToolHandle {
+    agent::Tool tool;
+    std::shared_ptr<FakeToolState> state;
+};
 
-    const ai::Tool& definition() const override { return definition_; }
+[[nodiscard]] FakeToolHandle make_fake_tool(ai::Tool definition) {
+    auto state = std::make_shared<FakeToolState>();
+    return FakeToolHandle{
+        tests::make_fake_tool(
+            std::move(definition),
+            agent::ToolConcurrency::Exclusive,
+            [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
+                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                state->invocations.push_back(invocation);
+                co_return agent::AsyncToolExecutionResult{
+                    .content = std::vector<ai::Content>{ai::text_content("tool says ok")},
+                    .details = std::nullopt,
+                    .is_error = false};
+            }),
+        state,
+    };
+}
 
-    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation,
-        std::stop_token stop_token) {
-        invocations.push_back(std::move(invocation));
-        observed_stop_token = stop_token;
-        timer.emplace(co_await boost::asio::this_coro::executor);
-        timer->expires_at(std::chrono::steady_clock::time_point::max());
-        std::stop_callback cancellation{stop_token, [this] { timer->cancel(); }};
-        boost::system::error_code error;
-        co_await timer->async_wait(boost::asio::redirect_error(
-            boost::asio::use_awaitable,
-            error));
-        if (stop_token.stop_requested()) {
-            co_return std::unexpected(util::make_error(
-                util::ErrorCode::Cancelled,
-                "Operation aborted"));
-        }
-        co_return agent::AsyncToolExecutionResult{};
-    }
-
-    ai::Tool definition_;
+struct CancellableFakeToolState {
     std::vector<agent::ToolInvocation> invocations;
     std::optional<std::stop_token> observed_stop_token;
-    std::optional<boost::asio::steady_timer> timer;
+    std::atomic<bool> suspended{false};
+    std::binary_semaphore suspended_signal{0};
 };
+
+struct CancellableFakeToolHandle {
+    agent::Tool tool;
+    std::shared_ptr<CancellableFakeToolState> state;
+};
+
+[[nodiscard]] CancellableFakeToolHandle make_cancellable_fake_tool(ai::Tool definition) {
+    auto state = std::make_shared<CancellableFakeToolState>();
+    return CancellableFakeToolHandle{
+        tests::make_fake_tool(
+            std::move(definition),
+            agent::ToolConcurrency::Exclusive,
+            [state](agent::ToolInvocation invocation, std::stop_token stop_token, agent::ToolUpdateSink)
+                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                state->invocations.push_back(std::move(invocation));
+                state->observed_stop_token = stop_token;
+                boost::asio::steady_timer timer(co_await boost::asio::this_coro::executor);
+                timer.expires_at(std::chrono::steady_clock::time_point::max());
+                std::stop_callback cancellation{stop_token, [&timer] { timer.cancel(); }};
+                state->suspended.store(true, std::memory_order_release);
+                state->suspended_signal.release();
+                boost::system::error_code error;
+                co_await timer.async_wait(boost::asio::redirect_error(
+                    boost::asio::use_awaitable,
+                    error));
+                if (stop_token.stop_requested()) {
+                    co_return std::unexpected(util::make_error(
+                        util::ErrorCode::Cancelled,
+                        "Operation aborted"));
+                }
+                co_return agent::AsyncToolExecutionResult{};
+            }),
+        state,
+    };
+}
 
 struct RunResult {
     util::Expected<agent::AsyncAgentRunResult> result;
@@ -377,20 +399,17 @@ ai::AssistantMessage tool_call_response(std::string raw_arguments = R"({"path":"
 } // namespace
 
 TEST_CASE("async tool registry owns tools and returns deterministic definitions", "[agent][u6]") {
-    static_assert(!std::is_copy_constructible_v<agent::AsyncToolRegistry>);
-    static_assert(std::is_move_constructible_v<agent::AsyncToolRegistry>);
+    static_assert(!std::is_copy_constructible_v<agent::ToolRegistry>);
+    static_assert(std::is_move_constructible_v<agent::ToolRegistry>);
 
-    auto zed = std::make_unique<FakeTool>(ai::Tool{"zed", "Zed tool", test::permissive_object_tool_argument_contract()});
-    auto alpha = std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha tool", test::permissive_object_tool_argument_contract()});
-    auto* zed_ptr = zed.get();
-    auto* alpha_ptr = alpha.get();
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(
+        ai::Tool{"zed", "Zed tool", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(make_fake_tool(
+        ai::Tool{"alpha", "Alpha tool", test::permissive_object_tool_argument_contract()}).tool));
 
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::move(zed)));
-    REQUIRE(registry.add(std::move(alpha)));
-
-    CHECK(registry.find("zed") == zed_ptr);
-    CHECK(registry.find("alpha") == alpha_ptr);
+    CHECK(registry.find("zed") != nullptr);
+    CHECK(registry.find("alpha") != nullptr);
     CHECK(registry.find("missing") == nullptr);
 
     const auto definitions = registry.definitions();
@@ -402,7 +421,7 @@ TEST_CASE("async tool registry owns tools and returns deterministic definitions"
 TEST_CASE("async agent loop emits deterministic lifecycle events for text", "[agent][async][u5]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(ai::assistant_text_message("hello user"));
-    agent::AsyncToolRegistry registry;
+    agent::ToolRegistry registry;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
@@ -429,7 +448,7 @@ TEST_CASE(
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(ai::assistant_text_message("first"));
     client->responses.push_back(ai::assistant_text_message("second"));
-    agent::AsyncToolRegistry registry;
+    agent::ToolRegistry registry;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
@@ -467,7 +486,7 @@ TEST_CASE(
     terminal.model = "gpt-test";
     auto client = std::make_shared<TerminalBeforeStartClient>(std::move(terminal));
 
-    agent::AsyncToolRegistry registry;
+    agent::ToolRegistry registry;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
@@ -514,7 +533,7 @@ TEST_CASE(
     terminal.error_message = "host transport lost after response start";
     auto client = std::make_shared<TerminalOutcomeClient>(std::move(terminal));
 
-    agent::AsyncToolRegistry registry;
+    agent::ToolRegistry registry;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
@@ -553,7 +572,7 @@ TEST_CASE(
     terminal.error_message = "host transport lost after duplicate starts";
     auto client = std::make_shared<DuplicateStartClient>(std::move(terminal));
 
-    agent::AsyncToolRegistry registry;
+    agent::ToolRegistry registry;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
@@ -583,7 +602,7 @@ TEST_CASE(
 TEST_CASE("async agent loop emits user message lifecycle before assistant response", "[agent][async]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(ai::assistant_text_message("hello user"));
-    agent::AsyncToolRegistry registry;
+    agent::ToolRegistry registry;
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
@@ -652,12 +671,12 @@ TEST_CASE("async agent loop forwards thinking and tool-call stream lifecycle eve
     client->responses.push_back(std::move(message));
     client->responses.push_back(ai::assistant_text_message("done"));
 
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{
         "read_file",
         "Read a workspace file",
         test::path_tool_argument_contract(),
-    })));
+    }).tool));
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
@@ -680,14 +699,14 @@ TEST_CASE("async agent loop executes tool calls and continues with tool result c
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("done"));
 
-    auto tool = std::make_unique<FakeTool>(ai::Tool{
+    auto tool = make_fake_tool(ai::Tool{
         "read_file",
         "Read a workspace file",
         test::path_tool_argument_contract(),
     });
-    auto* tool_ptr = tool.get();
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::move(tool)));
+    auto* tool_ptr = tool.state.get();
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(std::move(tool.tool)));
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
@@ -717,8 +736,8 @@ TEST_CASE("async agent loop turns malformed tool arguments into error tool resul
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response("not-json"));
     client->responses.push_back(ai::assistant_text_message("saw error"));
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
@@ -742,8 +761,8 @@ TEST_CASE("async agent loop default options impose no turn cap", "[agent][async]
         client->responses.push_back(tool_call_response());
     }
     client->responses.push_back(ai::assistant_text_message("done"));
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("gpt-test");
     agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
@@ -759,8 +778,8 @@ TEST_CASE("async agent loop default options impose no turn cap", "[agent][async]
 TEST_CASE("async agent loop enforces an explicit host-set turn cap", "[agent][async][u5][issue68]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response());
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
     agent::AsyncAgentOptions options;
     options.max_turns = 1;
     options.model = tests::make_model("gpt-test");
@@ -801,10 +820,10 @@ TEST_CASE("beforeToolCall hook can block a tool call", "[agent][async][u7]") {
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("done"));
 
-    auto tool = std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()});
-    auto* tool_ptr = tool.get();
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::move(tool)));
+    auto tool = make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()});
+    auto* tool_ptr = tool.state.get();
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(std::move(tool.tool)));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -846,10 +865,10 @@ TEST_CASE("beforeToolCall hook passes context and skips execution on block", "[a
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("done"));
 
-    auto tool = std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()});
-    auto* tool_ptr = tool.get();
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::move(tool)));
+    auto tool = make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()});
+    auto* tool_ptr = tool.state.get();
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(std::move(tool.tool)));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -876,8 +895,8 @@ TEST_CASE("beforeToolCall hook failure finalizes only its call", "[agent][async]
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("recovered"));
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -910,8 +929,8 @@ TEST_CASE("beforeToolCall hook exception becomes a per-call tool error", "[agent
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("recovered"));
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -942,8 +961,8 @@ TEST_CASE("afterToolCall hook overrides tool result content", "[agent][async][u7
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("done"));
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -971,8 +990,8 @@ TEST_CASE("afterToolCall hook overrides error flag", "[agent][async][u7]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("done"));
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -1000,9 +1019,9 @@ TEST_CASE(
     "[agent][async][issue35]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response());
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(
-        ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(
+        ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -1033,131 +1052,146 @@ ai::AssistantMessage two_tool_call_response() {
     return message;
 }
 
-class ConfigurableFakeTool final : public agent::AsyncAgentTool {
-public:
-    ConfigurableFakeTool(
-        ai::Tool definition,
-        agent::ToolConcurrency concurrency,
-        std::string result_text = "tool says ok")
-        : definition_(std::move(definition)),
-          concurrency_(concurrency),
-          result_text_(std::move(result_text)) {}
-
-    const ai::Tool& definition() const override { return definition_; }
-
-    agent::ToolConcurrency concurrency() const noexcept override {
-        return concurrency_;
-    }
-
-    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation,
-        std::stop_token) {
-        invocations.push_back(invocation);
-        co_return agent::AsyncToolExecutionResult{
-            .content = std::vector<ai::Content>{ai::text_content(result_text_)},
-            .details = std::nullopt,
-            .is_error = false};
-    }
-
-    ai::Tool definition_;
-    agent::ToolConcurrency concurrency_;
-    std::string result_text_;
+struct ConfigurableFakeToolState {
+    std::string result_text{"tool says ok"};
     std::vector<agent::ToolInvocation> invocations;
 };
 
-class DelayedFakeTool final : public agent::AsyncAgentTool {
-public:
-    DelayedFakeTool(
-        ai::Tool definition,
-        std::chrono::milliseconds delay,
-        std::string result_text = "tool says ok")
-        : definition_(std::move(definition)), delay_(delay), result_text_(std::move(result_text)) {}
+struct ConfigurableFakeToolHandle {
+    agent::Tool tool;
+    std::shared_ptr<ConfigurableFakeToolState> state;
+};
 
-    const ai::Tool& definition() const override { return definition_; }
+[[nodiscard]] ConfigurableFakeToolHandle make_configurable_fake_tool(
+    ai::Tool definition,
+    agent::ToolConcurrency concurrency,
+    std::string result_text = "tool says ok") {
+    auto state = std::make_shared<ConfigurableFakeToolState>();
+    state->result_text = std::move(result_text);
+    return ConfigurableFakeToolHandle{
+        tests::make_fake_tool(
+            std::move(definition),
+            concurrency,
+            [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
+                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                state->invocations.push_back(invocation);
+                co_return agent::AsyncToolExecutionResult{
+                    .content = std::vector<ai::Content>{ai::text_content(state->result_text)},
+                    .details = std::nullopt,
+                    .is_error = false};
+            }),
+        state,
+    };
+}
 
-    agent::ToolConcurrency concurrency() const noexcept override {
-        return agent::ToolConcurrency::ParallelSafe;
-    }
-
-    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation,
-        std::stop_token) {
-        auto timer = boost::asio::steady_timer(co_await boost::asio::this_coro::executor, delay_);
-        co_await timer.async_wait(boost::asio::use_awaitable);
-        invocations.push_back(invocation);
-        co_return agent::AsyncToolExecutionResult{
-            .content = std::vector<ai::Content>{ai::text_content(result_text_)},
-            .details = std::nullopt,
-            .is_error = false};
-    }
-
-    ai::Tool definition_;
-    std::chrono::milliseconds delay_;
-    std::string result_text_;
+struct DelayedFakeToolState {
+    std::chrono::milliseconds delay;
+    std::string result_text{"tool says ok"};
     std::vector<agent::ToolInvocation> invocations;
 };
 
-class FailingFakeTool final : public agent::AsyncAgentTool {
-public:
-    explicit FailingFakeTool(ai::Tool definition) : definition_(std::move(definition)) {}
+struct DelayedFakeToolHandle {
+    agent::Tool tool;
+    std::shared_ptr<DelayedFakeToolState> state;
+};
 
-    const ai::Tool& definition() const override { return definition_; }
+[[nodiscard]] DelayedFakeToolHandle make_delayed_fake_tool(
+    ai::Tool definition,
+    std::chrono::milliseconds delay,
+    std::string result_text = "tool says ok") {
+    auto state = std::make_shared<DelayedFakeToolState>();
+    state->delay = delay;
+    state->result_text = std::move(result_text);
+    return DelayedFakeToolHandle{
+        tests::make_fake_tool(
+            std::move(definition),
+            agent::ToolConcurrency::ParallelSafe,
+            [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
+                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                auto timer = boost::asio::steady_timer(
+                    co_await boost::asio::this_coro::executor,
+                    state->delay);
+                co_await timer.async_wait(boost::asio::use_awaitable);
+                state->invocations.push_back(invocation);
+                co_return agent::AsyncToolExecutionResult{
+                    .content = std::vector<ai::Content>{ai::text_content(state->result_text)},
+                    .details = std::nullopt,
+                    .is_error = false};
+            }),
+        state,
+    };
+}
 
-    agent::ToolConcurrency concurrency() const noexcept override {
-        return agent::ToolConcurrency::ParallelSafe;
-    }
-
-    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation,
-        std::stop_token) {
-        invocations.push_back(invocation);
-        co_return std::unexpected(util::make_error(util::ErrorCode::Tool, "tool failed", "boom"));
-    }
-
-    ai::Tool definition_;
+struct FailingFakeToolState {
     std::vector<agent::ToolInvocation> invocations;
 };
+
+struct FailingFakeToolHandle {
+    agent::Tool tool;
+    std::shared_ptr<FailingFakeToolState> state;
+};
+
+[[nodiscard]] FailingFakeToolHandle make_failing_fake_tool(ai::Tool definition) {
+    auto state = std::make_shared<FailingFakeToolState>();
+    return FailingFakeToolHandle{
+        tests::make_fake_tool(
+            std::move(definition),
+            agent::ToolConcurrency::ParallelSafe,
+            [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
+                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                state->invocations.push_back(invocation);
+                co_return std::unexpected(util::make_error(util::ErrorCode::Tool, "tool failed", "boom"));
+            }),
+        state,
+    };
+}
 
 struct ConcurrencyProbe {
     std::atomic<int> active{0};
     std::atomic<int> max_active{0};
 };
 
-class ProbedFakeTool final : public agent::AsyncAgentTool {
-public:
-    ProbedFakeTool(
-        ai::Tool definition,
-        agent::ToolConcurrency concurrency,
-        ConcurrencyProbe& probe)
-        : definition_(std::move(definition)), concurrency_(concurrency), probe_(probe) {}
-
-    const ai::Tool& definition() const override { return definition_; }
-
-    agent::ToolConcurrency concurrency() const noexcept override {
-        return concurrency_;
-    }
-
-    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation,
-        std::stop_token) {
-        invocations.push_back(invocation);
-        const int current = ++probe_.active;
-        int observed = probe_.max_active.load();
-        while (current > observed && !probe_.max_active.compare_exchange_weak(observed, current)) {}
-        auto timer = boost::asio::steady_timer(co_await boost::asio::this_coro::executor, std::chrono::milliseconds{30});
-        co_await timer.async_wait(boost::asio::use_awaitable);
-        --probe_.active;
-        co_return agent::AsyncToolExecutionResult{
-            .content = std::vector<ai::Content>{ai::text_content(definition_.name + " result")},
-            .details = std::nullopt,
-            .is_error = false};
-    }
-
-    ai::Tool definition_;
-    agent::ToolConcurrency concurrency_;
-    ConcurrencyProbe& probe_;
+struct ProbedFakeToolState {
+    ConcurrencyProbe* probe{};
+    std::string name;
     std::vector<agent::ToolInvocation> invocations;
 };
+
+struct ProbedFakeToolHandle {
+    agent::Tool tool;
+    std::shared_ptr<ProbedFakeToolState> state;
+};
+
+[[nodiscard]] ProbedFakeToolHandle make_probed_fake_tool(
+    ai::Tool definition,
+    agent::ToolConcurrency concurrency,
+    ConcurrencyProbe& probe) {
+    auto state = std::make_shared<ProbedFakeToolState>();
+    state->probe = &probe;
+    state->name = definition.name;
+    return ProbedFakeToolHandle{
+        tests::make_fake_tool(
+            std::move(definition),
+            concurrency,
+            [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
+                -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+                state->invocations.push_back(invocation);
+                const int current = ++state->probe->active;
+                int observed = state->probe->max_active.load();
+                while (current > observed && !state->probe->max_active.compare_exchange_weak(observed, current)) {}
+                auto timer = boost::asio::steady_timer(
+                    co_await boost::asio::this_coro::executor,
+                    std::chrono::milliseconds{30});
+                co_await timer.async_wait(boost::asio::use_awaitable);
+                --state->probe->active;
+                co_return agent::AsyncToolExecutionResult{
+                    .content = std::vector<ai::Content>{ai::text_content(state->name + " result")},
+                    .details = std::nullopt,
+                    .is_error = false};
+            }),
+        state,
+    };
+}
 
 RunResult run_loop_on_pool(agent::AsyncAgentLoop& loop, std::string prompt) {
     boost::asio::thread_pool pool{4};
@@ -1195,9 +1229,9 @@ TEST_CASE("terminate batch continues when one call declines", "[agent][async][u7
     client->responses.push_back(two_tool_call_response());
     client->responses.push_back(ai::assistant_text_message("done"));
 
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()})));
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -1226,9 +1260,9 @@ TEST_CASE("blocked call prevents terminate batch", "[agent][async][u7]") {
     client->responses.push_back(two_tool_call_response());
     client->responses.push_back(ai::assistant_text_message("done"));
 
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()})));
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -1260,9 +1294,9 @@ TEST_CASE("an error result with an explicit terminate hint still terminates the 
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(two_tool_call_response());
 
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()})));
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -1295,8 +1329,8 @@ TEST_CASE("Async Agent Loop continues after an afterToolCall hook failure", "[ag
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("recovered"));
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -1329,8 +1363,8 @@ TEST_CASE("afterToolCall hook exception becomes a per-call tool error", "[agent]
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("recovered"));
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -1407,7 +1441,7 @@ TEST_CASE(
         co_return messages;
     };
 
-    agent::AsyncAgentLoop loop(client->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), agent::ToolRegistry{}, std::move(options));
     std::stop_source stop_source;
     std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
     boost::asio::co_spawn(
@@ -1476,9 +1510,9 @@ TEST_CASE(
                 return agent::AfterToolCallResult{};
             });
 
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{
-        "read_file", "Read", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{
+        "read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
     agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     std::stop_source stop_source;
     auto run = run_loop(loop, "read", {}, stop_source.get_token());
@@ -1500,23 +1534,22 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("gpt-test");
 
-    auto tool = std::make_unique<CancellableFakeTool>(ai::Tool{
+    auto tool = make_cancellable_fake_tool(ai::Tool{
         .name = "read_file",
         .description = "Read",
         .parameters = test::permissive_object_tool_argument_contract(),
     });
-    auto* tool_ptr = tool.get();
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::move(tool)));
+    auto* tool_ptr = tool.state.get();
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(std::move(tool.tool)));
     agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
 
     std::stop_source stop_source;
-    std::optional<util::Expected<agent::AsyncAgentRunResult>> result;
     std::vector<agent::AgentLifecycleEvent> events;
-    boost::asio::co_spawn(
+    auto future = boost::asio::co_spawn(
         io,
-        [&]() -> boost::asio::awaitable<void> {
-            result = co_await loop.continue_with(
+        [&]() -> boost::asio::awaitable<util::Expected<agent::AsyncAgentRunResult>> {
+            co_return co_await loop.continue_with(
                 {},
                 "cancel active tool",
                 [&](const agent::AgentLifecycleEvent& event) {
@@ -1524,19 +1557,25 @@ TEST_CASE(
                     return util::ExpectedVoid{};
                 },
                 stop_source.get_token());
-            co_return;
         },
-        boost::asio::detached);
+        boost::asio::use_future);
 
-    while (!tool_ptr->timer) {
-        REQUIRE(io.run_one() == 1);
-    }
+    // Run the loop executor on a background thread while the tool suspends on
+    // its private executor; the work guard keeps io.run() alive across the
+    // suspension so it can deliver the tool's terminal outcome.
+    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work{
+        boost::asio::make_work_guard(io)};
+    std::jthread io_thread{[&] { io.run(); }};
+
+    tool.state->suspended_signal.acquire();
     REQUIRE(stop_source.request_stop());
-    io.run();
+
+    auto result = future.get();
+    work.reset();
+    io_thread.join();
 
     REQUIRE(result.has_value());
-    REQUIRE(*result);
-    CHECK((*result)->stop_reason == ai::AssistantStopReason::Aborted);
+    CHECK(result->stop_reason == ai::AssistantStopReason::Aborted);
     REQUIRE(tool_ptr->observed_stop_token.has_value());
     CHECK(*tool_ptr->observed_stop_token == stop_source.get_token());
     CHECK(tool_ptr->observed_stop_token->stop_requested());
@@ -1564,7 +1603,7 @@ TEST_CASE(
             "unreachable transform result"));
     };
 
-    agent::AsyncAgentLoop loop(client->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), agent::ToolRegistry{}, std::move(options));
     auto run = run_loop(loop, "cancel transform", {}, stop_source.get_token());
 
     REQUIRE(run.result.has_value());
@@ -1593,14 +1632,14 @@ TEST_CASE(
             "before-tool policy cancelled"));
     };
 
-    auto tool = std::make_unique<FakeTool>(ai::Tool{
+    auto tool = make_fake_tool(ai::Tool{
         .name = "read_file",
         .description = "Read",
         .parameters = test::permissive_object_tool_argument_contract(),
     });
-    auto* tool_ptr = tool.get();
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::move(tool)));
+    auto* tool_ptr = tool.state.get();
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(std::move(tool.tool)));
     agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "cancel before tool", {}, stop_source.get_token());
 
@@ -1630,14 +1669,14 @@ TEST_CASE(
             "after-tool policy cancelled"));
     };
 
-    auto tool = std::make_unique<FakeTool>(ai::Tool{
+    auto tool = make_fake_tool(ai::Tool{
         .name = "read_file",
         .description = "Read",
         .parameters = test::permissive_object_tool_argument_contract(),
     });
-    auto* tool_ptr = tool.get();
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::move(tool)));
+    auto* tool_ptr = tool.state.get();
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(std::move(tool.tool)));
     agent::AsyncAgentLoop loop(client->factory(), std::move(registry), std::move(options));
     auto run = run_loop(loop, "cancel after tool", {}, stop_source.get_token());
 
@@ -1667,7 +1706,7 @@ TEST_CASE(
         co_return messages;
     };
 
-    agent::AsyncAgentLoop loop(client->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(client->factory(), agent::ToolRegistry{}, std::move(options));
     auto run = run_loop(loop, "hello");
 
     REQUIRE_FALSE(run.result);
@@ -1680,7 +1719,7 @@ TEST_CASE(
 TEST_CASE("transformContext hook prunes old messages from LLM request", "[agent][async][u8]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(ai::assistant_text_message("ok"));
-    agent::AsyncToolRegistry registry;
+    agent::ToolRegistry registry;
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -1708,7 +1747,7 @@ TEST_CASE("transformContext hook prunes old messages from LLM request", "[agent]
 TEST_CASE("convertToLlm hook filters non-LLM messages", "[agent][async][u8]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(ai::assistant_text_message("ok"));
-    agent::AsyncToolRegistry registry;
+    agent::ToolRegistry registry;
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -1739,7 +1778,7 @@ TEST_CASE("convertToLlm hook filters non-LLM messages", "[agent][async][u8]") {
 TEST_CASE("convertToLlm returning empty aborts with validation error", "[agent][async][u8]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(ai::assistant_text_message("ok"));
-    agent::AsyncToolRegistry registry;
+    agent::ToolRegistry registry;
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -1761,7 +1800,7 @@ TEST_CASE("convertToLlm returning empty aborts with validation error", "[agent][
 TEST_CASE("transformContext hook error aborts the run", "[agent][async][u8]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(ai::assistant_text_message("ok"));
-    agent::AsyncToolRegistry registry;
+    agent::ToolRegistry registry;
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -1784,7 +1823,7 @@ TEST_CASE("transformContext hook error aborts the run", "[agent][async][u8]") {
 TEST_CASE("convertToLlm hook error aborts the run", "[agent][async][u8]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(ai::assistant_text_message("ok"));
-    agent::AsyncToolRegistry registry;
+    agent::ToolRegistry registry;
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -1808,7 +1847,7 @@ TEST_CASE("transformContext and convertToLlm exceptions abort cleanly", "[agent]
     {
         auto client = std::make_shared<FakeStreamingClient>();
         client->responses.push_back(ai::assistant_text_message("ok"));
-        agent::AsyncToolRegistry registry;
+        agent::ToolRegistry registry;
 
         agent::AsyncAgentOptions options;
         options.max_turns = 4;
@@ -1832,7 +1871,7 @@ TEST_CASE("transformContext and convertToLlm exceptions abort cleanly", "[agent]
     {
         auto client = std::make_shared<FakeStreamingClient>();
         client->responses.push_back(ai::assistant_text_message("ok"));
-        agent::AsyncToolRegistry registry;
+        agent::ToolRegistry registry;
 
         agent::AsyncAgentOptions options;
         options.max_turns = 4;
@@ -1869,7 +1908,7 @@ TEST_CASE("transformContext and convertToLlm exceptions abort cleanly", "[agent]
 TEST_CASE("agent_end contains only messages from the current invocation", "[agent][async][issue35]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(ai::assistant_text_message("current reply"));
-    agent::AsyncToolRegistry registry;
+    agent::ToolRegistry registry;
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
@@ -1904,8 +1943,8 @@ TEST_CASE("prepareNextTurn model swap changes next request model", "[agent][asyn
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("second"));
 
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -1938,8 +1977,8 @@ TEST_CASE("prepareNextTurn model update without validator is rejected", "[agent]
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response());
 
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -1963,7 +2002,7 @@ TEST_CASE("prepareNextTurn thinking level is validated", "[agent][async][u8]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(ai::assistant_text_message("first"));
 
-    agent::AsyncToolRegistry registry;
+    agent::ToolRegistry registry;
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -1987,8 +2026,8 @@ TEST_CASE("prepareNextTurn rejected update does not persist partial model change
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("second run"));
 
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     int prepare_calls = 0;
     agent::AsyncAgentOptions options;
@@ -2028,9 +2067,9 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("second"));
 
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(
-        ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(
+        ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     bool prepared = false;
     bool stop_observed_replacement = false;
@@ -2104,7 +2143,7 @@ TEST_CASE("prepareNextTurn no update leaves model and thinking level unchanged",
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(ai::assistant_text_message("first"));
 
-    agent::AsyncToolRegistry registry;
+    agent::ToolRegistry registry;
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -2129,7 +2168,7 @@ TEST_CASE("prepareNextTurn valid thinking level is preserved in state", "[agent]
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(ai::assistant_text_message("first"));
 
-    agent::AsyncToolRegistry registry;
+    agent::ToolRegistry registry;
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -2155,8 +2194,8 @@ TEST_CASE("prepareNextTurn model validation hook can reject unknown models", "[a
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("second"));
 
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -2188,7 +2227,7 @@ TEST_CASE("prepareNextTurn and turn-update validation exceptions abort cleanly",
     {
         auto client = std::make_shared<FakeStreamingClient>();
         client->responses.push_back(ai::assistant_text_message("first"));
-        agent::AsyncToolRegistry registry;
+        agent::ToolRegistry registry;
 
         agent::AsyncAgentOptions options;
         options.max_turns = 4;
@@ -2211,7 +2250,7 @@ TEST_CASE("prepareNextTurn and turn-update validation exceptions abort cleanly",
     {
         auto client = std::make_shared<FakeStreamingClient>();
         client->responses.push_back(ai::assistant_text_message("first"));
-        agent::AsyncToolRegistry registry;
+        agent::ToolRegistry registry;
 
         agent::AsyncAgentOptions options;
         options.max_turns = 4;
@@ -2249,15 +2288,15 @@ TEST_CASE("an exclusive tool forces a bounded batch to execute sequentially", "[
     client->responses.push_back(ai::assistant_text_message("done"));
 
     ConcurrencyProbe probe;
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_probed_fake_tool(
         ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
-        probe)));
-    REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
+        probe).tool));
+    REQUIRE(registry.add(make_probed_fake_tool(
         ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::Exclusive,
-        probe)));
+        probe).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -2277,19 +2316,19 @@ TEST_CASE("bounded parallel execution preserves source order in the transcript",
     client->responses.push_back(two_tool_call_response());
     client->responses.push_back(ai::assistant_text_message("done"));
 
-    agent::AsyncToolRegistry registry;
-    auto alpha = std::make_unique<ConfigurableFakeTool>(
+    agent::ToolRegistry registry;
+    auto alpha = make_configurable_fake_tool(
         ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "alpha result");
-    auto beta = std::make_unique<ConfigurableFakeTool>(
+    auto beta = make_configurable_fake_tool(
         ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "beta result");
-    auto* alpha_ptr = alpha.get();
-    auto* beta_ptr = beta.get();
-    REQUIRE(registry.add(std::move(alpha)));
-    REQUIRE(registry.add(std::move(beta)));
+    auto* alpha_ptr = alpha.state.get();
+    auto* beta_ptr = beta.state.get();
+    REQUIRE(registry.add(std::move(alpha.tool)));
+    REQUIRE(registry.add(std::move(beta.tool)));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -2348,19 +2387,19 @@ TEST_CASE(
 
     const auto strict_contract = test::integer_value_tool_argument_contract();
 
-    agent::AsyncToolRegistry registry;
-    auto alpha = std::make_unique<ConfigurableFakeTool>(
+    agent::ToolRegistry registry;
+    auto alpha = make_configurable_fake_tool(
         ai::Tool{"alpha", "Alpha", strict_contract},
         agent::ToolConcurrency::ParallelSafe,
         "alpha result");
-    auto beta = std::make_unique<ConfigurableFakeTool>(
+    auto beta = make_configurable_fake_tool(
         ai::Tool{"beta", "Beta", strict_contract},
         agent::ToolConcurrency::ParallelSafe,
         "beta result");
-    auto* alpha_ptr = alpha.get();
-    auto* beta_ptr = beta.get();
-    REQUIRE(registry.add(std::move(alpha)));
-    REQUIRE(registry.add(std::move(beta)));
+    auto* alpha_ptr = alpha.state.get();
+    auto* beta_ptr = beta.state.get();
+    REQUIRE(registry.add(std::move(alpha.tool)));
+    REQUIRE(registry.add(std::move(beta.tool)));
 
     std::vector<std::string> before_hook_names;
     std::vector<util::JsonValue> before_hook_arguments;
@@ -2426,15 +2465,15 @@ TEST_CASE("bounded parallel limit one executes sequentially", "[agent][async][u8
     client->responses.push_back(ai::assistant_text_message("done"));
 
     ConcurrencyProbe probe;
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_probed_fake_tool(
         ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
-        probe)));
-    REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
+        probe).tool));
+    REQUIRE(registry.add(make_probed_fake_tool(
         ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
-        probe)));
+        probe).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -2456,15 +2495,15 @@ TEST_CASE("Async Agent Loop treats bounded parallel zero as no explicit cap", "[
     client->responses.push_back(ai::assistant_text_message("done"));
 
     ConcurrencyProbe probe;
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_probed_fake_tool(
         ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
-        probe)));
-    REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
+        probe).tool));
+    REQUIRE(registry.add(make_probed_fake_tool(
         ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
-        probe)));
+        probe).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -2485,19 +2524,19 @@ TEST_CASE("bounded parallel execution keeps blocked calls out of tool adapters",
     client->responses.push_back(two_tool_call_response());
     client->responses.push_back(ai::assistant_text_message("done"));
 
-    agent::AsyncToolRegistry registry;
-    auto alpha = std::make_unique<ConfigurableFakeTool>(
+    agent::ToolRegistry registry;
+    auto alpha = make_configurable_fake_tool(
         ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "alpha result");
-    auto beta = std::make_unique<ConfigurableFakeTool>(
+    auto beta = make_configurable_fake_tool(
         ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "beta result");
-    auto* alpha_ptr = alpha.get();
-    auto* beta_ptr = beta.get();
-    REQUIRE(registry.add(std::move(alpha)));
-    REQUIRE(registry.add(std::move(beta)));
+    auto* alpha_ptr = alpha.state.get();
+    auto* beta_ptr = beta.state.get();
+    REQUIRE(registry.add(std::move(alpha.tool)));
+    REQUIRE(registry.add(std::move(beta.tool)));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -2538,15 +2577,15 @@ TEST_CASE("bounded parallel before-hook failure finalizes every call without sta
     client->responses.push_back(two_tool_call_response());
 
     ConcurrencyProbe probe;
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_probed_fake_tool(
         ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
-        probe)));
-    REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
+        probe).tool));
+    REQUIRE(registry.add(make_probed_fake_tool(
         ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
-        probe)));
+        probe).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -2587,13 +2626,13 @@ TEST_CASE("bounded parallel execution preserves peer success after a tool error"
     client->responses.push_back(two_tool_call_response());
     client->responses.push_back(ai::assistant_text_message("done"));
 
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FailingFakeTool>(
-        ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()})));
-    REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_failing_fake_tool(
+        ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(make_configurable_fake_tool(
         ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
-        "beta result")));
+        "beta result").tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -2621,15 +2660,15 @@ TEST_CASE("bounded parallel event-sink failure drains workers and emits one agen
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(two_tool_call_response());
 
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_configurable_fake_tool(
         ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
-        "alpha result")));
-    REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
+        "alpha result").tool));
+    REQUIRE(registry.add(make_configurable_fake_tool(
         ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
-        "beta result")));
+        "beta result").tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -2678,15 +2717,15 @@ TEST_CASE("bounded parallel after-hook failure finalizes only its call", "[agent
     client->responses.push_back(two_tool_call_response());
     client->responses.push_back(ai::assistant_text_message("done"));
 
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_configurable_fake_tool(
         ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
-        "alpha result")));
-    REQUIRE(registry.add(std::make_unique<ConfigurableFakeTool>(
+        "alpha result").tool));
+    REQUIRE(registry.add(make_configurable_fake_tool(
         ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
-        "beta result")));
+        "beta result").tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -2726,15 +2765,15 @@ TEST_CASE("bounded parallel execution emits end events in completion order", "[a
     client->responses.push_back(two_tool_call_response());
     client->responses.push_back(ai::assistant_text_message("done"));
 
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<DelayedFakeTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_delayed_fake_tool(
         ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
         std::chrono::milliseconds{100},
-        "alpha result")));
-    REQUIRE(registry.add(std::make_unique<DelayedFakeTool>(
+        "alpha result").tool));
+    REQUIRE(registry.add(make_delayed_fake_tool(
         ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
         std::chrono::milliseconds{10},
-        "beta result")));
+        "beta result").tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -2778,19 +2817,19 @@ TEST_CASE("length-truncated tool calls emit errors without crossing the executor
     client->responses.push_back(std::move(truncated));
     client->responses.push_back(ai::assistant_text_message("recovered"));
 
-    agent::AsyncToolRegistry registry;
-    auto alpha = std::make_unique<ConfigurableFakeTool>(
+    agent::ToolRegistry registry;
+    auto alpha = make_configurable_fake_tool(
         ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "alpha result");
-    auto beta = std::make_unique<ConfigurableFakeTool>(
+    auto beta = make_configurable_fake_tool(
         ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "beta result");
-    auto* alpha_ptr = alpha.get();
-    auto* beta_ptr = beta.get();
-    REQUIRE(registry.add(std::move(alpha)));
-    REQUIRE(registry.add(std::move(beta)));
+    auto* alpha_ptr = alpha.state.get();
+    auto* beta_ptr = beta.state.get();
+    REQUIRE(registry.add(std::move(alpha.tool)));
+    REQUIRE(registry.add(std::move(beta.tool)));
 
     int before_calls = 0;
     int after_calls = 0;
@@ -2857,15 +2896,15 @@ TEST_CASE("default tool execution runs a parallel-safe batch concurrently", "[ag
     client->responses.push_back(ai::assistant_text_message("done"));
 
     ConcurrencyProbe probe;
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_probed_fake_tool(
         ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
-        probe)));
-    REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
+        probe).tool));
+    REQUIRE(registry.add(make_probed_fake_tool(
         ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
-        probe)));
+        probe).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -2895,15 +2934,15 @@ TEST_CASE(
     client->responses.push_back(ai::assistant_text_message("done"));
 
     ConcurrencyProbe probe;
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_probed_fake_tool(
         ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
-        probe)));
-    REQUIRE(registry.add(std::make_unique<ProbedFakeTool>(
+        probe).tool));
+    REQUIRE(registry.add(make_probed_fake_tool(
         ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::Exclusive,
-        probe)));
+        probe).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -2949,19 +2988,19 @@ TEST_CASE(
     client->responses.push_back(std::move(truncated));
     client->responses.push_back(ai::assistant_text_message("recovered"));
 
-    agent::AsyncToolRegistry registry;
-    auto alpha = std::make_unique<ConfigurableFakeTool>(
+    agent::ToolRegistry registry;
+    auto alpha = make_configurable_fake_tool(
         ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "alpha result");
-    auto beta = std::make_unique<ConfigurableFakeTool>(
+    auto beta = make_configurable_fake_tool(
         ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()},
         agent::ToolConcurrency::ParallelSafe,
         "beta result");
-    auto* alpha_ptr = alpha.get();
-    auto* beta_ptr = beta.get();
-    REQUIRE(registry.add(std::move(alpha)));
-    REQUIRE(registry.add(std::move(beta)));
+    auto* alpha_ptr = alpha.state.get();
+    auto* beta_ptr = beta.state.get();
+    REQUIRE(registry.add(std::move(alpha.tool)));
+    REQUIRE(registry.add(std::move(beta.tool)));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -3018,9 +3057,9 @@ TEST_CASE("all-true terminate batch ends the loop after one turn", "[agent][asyn
     client->responses.push_back(two_tool_call_response());
     client->responses.push_back(ai::assistant_text_message("unused"));
 
-    agent::AsyncToolRegistry registry;
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()})));
-    REQUIRE(registry.add(std::make_unique<FakeTool>(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()})));
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"alpha", "Alpha", test::permissive_object_tool_argument_contract()}).tool));
+    REQUIRE(registry.add(make_fake_tool(ai::Tool{"beta", "Beta", test::permissive_object_tool_argument_contract()}).tool));
 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;

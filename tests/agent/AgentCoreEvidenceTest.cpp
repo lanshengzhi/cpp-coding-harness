@@ -22,6 +22,7 @@
 #include "agent/ToolCallExecutor.hpp"
 #include "ai/SimpleOptions.hpp"
 #include "support/FakeModelStream.hpp"
+#include "support/FakeTool.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/ToolArgumentContracts.hpp"
 #include "util/ExpectedMacros.hpp"
@@ -370,27 +371,17 @@ LoopRun run_loop(
     return array;
 }
 
-class ReadTool final : public agent::AsyncAgentTool {
-public:
-    ReadTool()
-        : definition_(
-              ai::Tool{"read", "Read a file", test::permissive_object_tool_argument_contract()}) {}
-
-    const ai::Tool& definition() const override {
-        return definition_;
-    }
-
-    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation,
-        std::stop_token) override {
-        agent::AsyncToolExecutionResult result;
-        result.content.push_back(ai::text_content("tool says ok"));
-        co_return result;
-    }
-
-private:
-    ai::Tool definition_;
-};
+[[nodiscard]] agent::Tool make_read_tool() {
+    return tests::make_fake_tool(
+        ai::Tool{"read", "Read a file", test::permissive_object_tool_argument_contract()},
+        agent::ToolConcurrency::Exclusive,
+        [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+            -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+            agent::AsyncToolExecutionResult result;
+            result.content.push_back(ai::text_content("tool says ok"));
+            co_return result;
+        });
+}
 
 [[nodiscard]] ai::AssistantMessage read_tool_call_message() {
     auto args = util::read_json(R"({"path":"README.md"})");
@@ -426,7 +417,7 @@ TEST_CASE(
     };
     agent::Agent subject(
         runtime->factory(),
-        agent::AsyncToolRegistry{},
+        agent::ToolRegistry{},
         std::move(options),
         agent::AgentInitialState{.thinking_level = "high"});
 
@@ -453,7 +444,7 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::Agent subject(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::Agent subject(runtime->factory(), agent::ToolRegistry{}, std::move(options));
 
     REQUIRE(run_prompt(subject, "hi"));
 
@@ -472,8 +463,8 @@ TEST_CASE(
     runtime->responses.push_back(ai::assistant_text_message("after tool"));
     runtime->responses.push_back(ai::assistant_text_message("after follow-up"));
 
-    agent::AsyncToolRegistry tools;
-    REQUIRE(tools.add(std::make_unique<ReadTool>()));
+    agent::ToolRegistry tools;
+    REQUIRE(tools.add(make_read_tool()));
 
     int prepare_calls = 0;
     agent::AsyncAgentOptions options;
@@ -549,7 +540,7 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(runtime->factory(), agent::ToolRegistry{}, std::move(options));
 
     auto run = run_loop(loop, "hi");
 
@@ -569,7 +560,7 @@ TEST_CASE(
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::AsyncAgentLoop loop(runtime->factory(), agent::AsyncToolRegistry{}, std::move(options));
+    agent::AsyncAgentLoop loop(runtime->factory(), agent::ToolRegistry{}, std::move(options));
 
     std::stop_source stop_source;
     stop_source.request_stop();
@@ -619,7 +610,7 @@ TEST_CASE(
 
     agent::Agent subject(
         runtime->factory(),
-        agent::AsyncToolRegistry{},
+        agent::ToolRegistry{},
         std::move(options),
         agent::AgentInitialState{.thinking_level = "max"});
 
@@ -640,35 +631,24 @@ namespace {
 
 /// A deterministic fake tool whose result carries content plus optional
 /// details, so the committed tool-result shape golden covers both.
-class DetailsTool final : public agent::AsyncAgentTool {
-public:
-    DetailsTool(
-        std::string name,
-        std::string result_text,
-        util::JsonValue contract)
-        : definition_(ai::Tool{
-              std::move(name),
-              "Fake tool",
-              std::move(contract)}),
-          result_text_(std::move(result_text)) {}
-
-    const ai::Tool& definition() const override { return definition_; }
-
-    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation,
-        std::stop_token) override {
-        agent::AsyncToolExecutionResult result;
-        result.content.push_back(ai::text_content(result_text_));
-        result.details = util::JsonValue::object_t{
-            {"note", "golden-details"},
-        };
-        co_return result;
-    }
-
-private:
-    ai::Tool definition_;
-    std::string result_text_;
-};
+[[nodiscard]] agent::Tool make_details_tool(
+    std::string name,
+    std::string result_text,
+    util::JsonValue contract) {
+    return tests::make_fake_tool(
+        ai::Tool{std::move(name), "Fake tool", std::move(contract)},
+        agent::ToolConcurrency::Exclusive,
+        [result_text = std::move(result_text)](
+            agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+            -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+            agent::AsyncToolExecutionResult result;
+            result.content.push_back(ai::text_content(result_text));
+            result.details = util::JsonValue::object_t{
+                {"note", "golden-details"},
+            };
+            co_return result;
+        });
+}
 
 /// Serialize one tool result into pi's `ToolResultMessage` wire shape:
 /// role, toolCallId, toolName, content, details (omitted when absent),
@@ -716,10 +696,10 @@ TEST_CASE(
         {"additionalProperties", false},
     };
 
-    agent::AsyncToolRegistry tools;
-    REQUIRE(tools.add(std::make_unique<DetailsTool>(
+    agent::ToolRegistry tools;
+    REQUIRE(tools.add(make_details_tool(
         "read", "tool says ok", contract)));
-    REQUIRE(tools.add(std::make_unique<DetailsTool>(
+    REQUIRE(tools.add(make_details_tool(
         "write", "wrote 5 bytes", contract)));
 
     agent::ToolCallExecutor executor{tools, agent::ToolCallExecutorOptions{}};
@@ -775,50 +755,32 @@ namespace {
 
 /// Deterministic scheduled fake tool: declares pi-style concurrency and sleeps
 /// on the loop executor so parallel/sequential interleavings are reproducible.
-class DelayedEvidenceTool final : public agent::AsyncAgentTool {
-public:
-    DelayedEvidenceTool(
-        std::string name,
-        agent::ToolConcurrency concurrency,
-        std::chrono::milliseconds delay = {},
-        std::string result_text = "tool result")
-        : definition_(ai::Tool{
-              std::move(name),
-              "Scheduled fake tool",
-              test::permissive_object_tool_argument_contract()}),
-          concurrency_(concurrency),
-          delay_(delay),
-          result_text_(std::move(result_text)) {}
-
-    const ai::Tool& definition() const override { return definition_; }
-
-    agent::ToolConcurrency concurrency() const noexcept override {
-        return concurrency_;
-    }
-
-    boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> execute(
-        agent::ToolInvocation invocation,
-        std::stop_token) override {
-        (void)invocation;
-        ++invocations;
-        if (delay_.count() > 0) {
-            auto timer = boost::asio::steady_timer(
-                co_await boost::asio::this_coro::executor,
-                delay_);
-            co_await timer.async_wait(boost::asio::use_awaitable);
-        }
-        co_return agent::AsyncToolExecutionResult{
-            .content = std::vector<ai::Content>{ai::text_content(result_text_)},
-            .details = std::nullopt,
-            .is_error = false};
-    }
-
-    ai::Tool definition_;
-    agent::ToolConcurrency concurrency_;
-    std::chrono::milliseconds delay_;
-    std::string result_text_;
-    std::atomic<int> invocations{0};
-};
+[[nodiscard]] agent::Tool make_delayed_evidence_tool(
+    std::string name,
+    agent::ToolConcurrency concurrency,
+    std::chrono::milliseconds delay = {},
+    std::string result_text = "tool result") {
+    return tests::make_fake_tool(
+        ai::Tool{
+            std::move(name),
+            "Scheduled fake tool",
+            test::permissive_object_tool_argument_contract()},
+        concurrency,
+        [delay, result_text = std::move(result_text)](
+            agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+            -> boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> {
+            if (delay.count() > 0) {
+                auto timer = boost::asio::steady_timer(
+                    co_await boost::asio::this_coro::executor,
+                    delay);
+                co_await timer.async_wait(boost::asio::use_awaitable);
+            }
+            co_return agent::AsyncToolExecutionResult{
+                .content = std::vector<ai::Content>{ai::text_content(result_text)},
+                .details = std::nullopt,
+                .is_error = false};
+        });
+}
 
 /// Serializer for the tool-scheduling golden: richer than the lifecycle
 /// serializer because ordering evidence needs per-call ids and argument
@@ -939,14 +901,14 @@ TEST_CASE(
         {"call-6", "delta"},
     }));
 
-    agent::AsyncToolRegistry tools;
-    REQUIRE(tools.add(std::make_unique<DelayedEvidenceTool>(
+    agent::ToolRegistry tools;
+    REQUIRE(tools.add(make_delayed_evidence_tool(
         "alpha", agent::ToolConcurrency::ParallelSafe, std::chrono::milliseconds{20}, "alpha result")));
-    REQUIRE(tools.add(std::make_unique<DelayedEvidenceTool>(
+    REQUIRE(tools.add(make_delayed_evidence_tool(
         "beta", agent::ToolConcurrency::ParallelSafe, std::chrono::milliseconds{5}, "beta result")));
-    REQUIRE(tools.add(std::make_unique<DelayedEvidenceTool>(
+    REQUIRE(tools.add(make_delayed_evidence_tool(
         "gamma", agent::ToolConcurrency::Exclusive, std::chrono::milliseconds{}, "gamma result")));
-    REQUIRE(tools.add(std::make_unique<DelayedEvidenceTool>(
+    REQUIRE(tools.add(make_delayed_evidence_tool(
         "delta", agent::ToolConcurrency::ParallelSafe, std::chrono::milliseconds{}, "delta result")));
 
     // The terminate hint applies only to the gamma/delta batch in turn 3, so

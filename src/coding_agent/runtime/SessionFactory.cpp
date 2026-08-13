@@ -128,7 +128,7 @@ struct AssemblyPlan {
     CliModelSelection cli_selection;
     /// Private test seam: custom tools registered alongside the fixed built-in
     /// tool set (retry-continuation tests).
-    std::vector<std::unique_ptr<agent::AsyncAgentTool>> custom_tools;
+    std::vector<agent::Tool> custom_tools;
     /// Private test seam: the shared live PI_* facts holder wired into the
     /// model Bash Tool (live-refresh tests).
     std::shared_ptr<tools::BashSessionEnvironment> bash_session_environment;
@@ -277,11 +277,11 @@ void add_project_resource_loading_diagnostics(
 }
 
 [[nodiscard]] std::optional<std::string> find_duplicate_tool_name(
-    const std::vector<std::unique_ptr<agent::AsyncAgentTool>>& tools) {
+    const std::vector<agent::Tool>& tools) {
     std::set<std::string, std::less<>> seen;
     for (const auto& t : tools) {
-        if (!t) continue;
-        const auto& name = t->definition().name;
+        if (!t.execute) continue;
+        const auto& name = t.definition.name;
         if (!seen.insert(name).second) {
             return name;
         }
@@ -291,11 +291,11 @@ void add_project_resource_loading_diagnostics(
 
 [[nodiscard]] std::optional<std::string> find_builtin_custom_collision(
     const std::set<std::string>& builtin_names,
-    const std::vector<std::unique_ptr<agent::AsyncAgentTool>>& custom_tools) {
+    const std::vector<agent::Tool>& custom_tools) {
     for (const auto& t : custom_tools) {
-        if (!t) continue;
-        if (builtin_names.contains(t->definition().name)) {
-            return t->definition().name;
+        if (!t.execute) continue;
+        if (builtin_names.contains(t.definition.name)) {
+            return t.definition.name;
         }
     }
     return std::nullopt;
@@ -1328,7 +1328,7 @@ struct SessionTargetNormalizationOptions {
 
     // 8. Build the tool registry: the fixed #331 built-in set (read, write,
     // edit, bash — always available) plus the private test-seam custom tools.
-    agent::AsyncToolRegistry tools;
+    agent::ToolRegistry tools;
     std::set<std::string> builtin_names;
 
     builtin_names.insert("read");
@@ -1377,7 +1377,7 @@ struct SessionTargetNormalizationOptions {
     }
 
     for (auto& tool : plan.custom_tools) {
-        if (tool) {
+        if (tool.execute) {
             if (auto added = tools.add(std::move(tool)); !added) {
                 cleanup_on_failure();
                 return std::unexpected(added.error());
