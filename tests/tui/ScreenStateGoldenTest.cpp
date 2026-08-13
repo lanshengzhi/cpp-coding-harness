@@ -22,7 +22,8 @@
 
 #include "util/Json.hpp"
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_message.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <format>
 #include <filesystem>
@@ -34,17 +35,6 @@
 #include <vector>
 
 using namespace cch;
-
-// CatchLite has no INFO/SECTION; these carry a context string into the
-// failure message so loop iterations are identifiable.
-#define CHECK_WITH(expr, context) \
-    ::CatchLite::check( \
-        static_cast<bool>(expr), \
-        (std::string{#expr} + " [" + (context) + "]").c_str(), __FILE__, __LINE__)
-#define REQUIRE_WITH(expr, context) \
-    ::CatchLite::require( \
-        static_cast<bool>(expr), \
-        (std::string{#expr} + " [" + (context) + "]").c_str(), __FILE__, __LINE__)
 
 namespace {
 
@@ -453,7 +443,8 @@ public:
         outcome.push_back(std::format("viewport-top={}", terminal.viewport_top()));
         return outcome;
     }
-    REQUIRE_WITH(false, std::string{"unknown screen-state scenario "} + std::string(name));
+    INFO(std::string{"unknown screen-state scenario "} + std::string(name));
+    REQUIRE(false);
     return {};
 }
 
@@ -474,10 +465,11 @@ TEST_CASE("VirtualTerminal screen-state goldens match the committed snapshots", 
         const auto& expected = object.at("expected").get<util::JsonValue::array_t>();
 
         const auto context = std::string{"scenario "} + name;
+        INFO(context);
         const auto actual = run_scenario(name, columns, rows);
-        REQUIRE_WITH(actual.size() == expected.size(), context);
+        REQUIRE(actual.size() == expected.size());
         for (std::size_t index = 0; index < expected.size(); ++index) {
-            CHECK_WITH(actual[index] == expected[index].get_string(), context);
+            CHECK(actual[index] == expected[index].get_string());
         }
     }
 }

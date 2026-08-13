@@ -22,10 +22,12 @@
 
 #include "tui/InputDecoder.hpp"
 #include "support/EnvVarGuard.hpp"
+#include "support/ImageCapabilitiesGuard.hpp"
 #include "tui/InteractionUtils.hpp"
 #include "util/Json.hpp"
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_message.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
 #include <filesystem>
@@ -38,17 +40,6 @@
 #include <vector>
 
 using namespace cch;
-
-// CatchLite has no INFO/SECTION; CHECK_WITH/REQUIRE_WITH carry a context
-// string into the failure message so loop iterations are identifiable.
-#define CHECK_WITH(expr, context) \
-    ::CatchLite::check( \
-        static_cast<bool>(expr), \
-        (std::string{#expr} + " [" + (context) + "]").c_str(), __FILE__, __LINE__)
-#define REQUIRE_WITH(expr, context) \
-    ::CatchLite::require( \
-        static_cast<bool>(expr), \
-        (std::string{#expr} + " [" + (context) + "]").c_str(), __FILE__, __LINE__)
 
 namespace {
 
@@ -135,10 +126,11 @@ TEST_CASE("input-decode corpus matches the frozen pi parseKey table", "[tui][dif
         const auto sequence = object.at("sequence").get_string();
         const auto expected = expected_key(entry);
         const auto context = std::string{"sequence "} + sequence;
+        INFO(context);
         const auto key = decode_key(sequence);
-        REQUIRE_WITH(key.has_value(), context);
-        CHECK_WITH(tui::key_id(*key) == expected.id, context);
-        CHECK_WITH(event_type_name(key->type) == expected.event_type, context);
+        REQUIRE(key.has_value());
+        CHECK(tui::key_id(*key) == expected.id);
+        CHECK(event_type_name(key->type) == expected.event_type);
     }
 }
 
@@ -153,14 +145,15 @@ TEST_CASE("mode-dependent legacy sequences decode to pi's legacy column", "[tui]
         const auto& object = entry.get<util::JsonValue::object_t>();
         const auto sequence = object.at("sequence").get_string();
         const auto context = std::string{"sequence "} + sequence;
+        INFO(context);
         const auto& legacy = object.at("legacy").get<util::JsonValue::object_t>();
         // The kitty column documents the mode-dependent re-reading; the C++
         // single-table decoder keeps the legacy reading (fixture README).
-        REQUIRE_WITH(!legacy.at("id").get_string().empty(), context);
+        REQUIRE(!legacy.at("id").get_string().empty());
         const auto key = decode_key(sequence);
-        REQUIRE_WITH(key.has_value(), context);
-        CHECK_WITH(tui::key_id(*key) == legacy.at("id").get_string(), context);
-        CHECK_WITH(event_type_name(key->type) == legacy.at("eventType").get_string(), context);
+        REQUIRE(key.has_value());
+        CHECK(tui::key_id(*key) == legacy.at("id").get_string());
+        CHECK(event_type_name(key->type) == legacy.at("eventType").get_string());
     }
 }
 
@@ -179,8 +172,9 @@ TEST_CASE("recorded decode divergences pin the C++ outcomes", "[tui][differentia
         const auto pi_id =
             pi_id_value.holds<std::string>() ? pi_id_value.get_string() : std::string{};
         const auto context = std::string{"sequence "} + sequence;
+        INFO(context);
         const auto key = decode_key(sequence);
-        REQUIRE_WITH(key.has_value(), context);
+        REQUIRE(key.has_value());
         if (pi_id.size() == 1 && pi_id.front() >= 'A' && pi_id.front() <= 'Z') {
             // Uppercase letters: pi returns the raw text identifier ("A");
             // the C++ decoder canonicalizes to the shift+letter identifier
@@ -188,15 +182,15 @@ TEST_CASE("recorded decode divergences pin the C++ outcomes", "[tui][differentia
             // (detail::printable_text).
             const auto expected =
                 std::string{"shift+"} + static_cast<char>(pi_id.front() - 'A' + 'a');
-            CHECK_WITH(tui::key_id(*key) == expected, context);
-            CHECK_WITH(key->shift, context);
-            CHECK_WITH(tui::detail::printable_text(*key) == pi_id, context);
+            CHECK(tui::key_id(*key) == expected);
+            CHECK(key->shift);
+            CHECK(tui::detail::printable_text(*key) == pi_id);
         } else {
             // Unshifted uppercase codepoints: pi rejects them (null); the
             // C++ decoder still decodes the uppercase character key. No
             // binding or printable path consumes these, so the divergence is
             // observable only at the decode layer itself.
-            CHECK_WITH(!tui::key_id(*key).empty(), context);
+            CHECK(!tui::key_id(*key).empty());
         }
     }
 }
@@ -210,8 +204,9 @@ TEST_CASE("discarded control sequences produce no key events", "[tui][differenti
 
     for (const auto& entry : discarded) {
         const auto sequence = entry.get_string();
+        INFO(std::string{"sequence "} + sequence);
         tui::detail::InputDecoder decoder;
-        CHECK_WITH(decoder.feed(sequence).empty(), std::string{"sequence "} + sequence);
+        CHECK(decoder.feed(sequence).empty());
     }
 }
 
@@ -228,16 +223,17 @@ TEST_CASE("bracketed-paste framing decodes to pi's paste framing", "[tui][differ
         const auto content = object.at("content").get_string();
         const auto lines = static_cast<std::size_t>(object.at("lines").get_number());
         const auto context = std::string{"content "} + content;
+        INFO(context);
 
         tui::detail::InputDecoder decoder;
         const auto events = decoder.feed(framed);
-        REQUIRE_WITH(events.size() == 1, context);
+        REQUIRE(events.size() == 1);
         const auto* paste_event = std::get_if<tui::PasteEvent>(&events.front());
-        REQUIRE_WITH(paste_event != nullptr, context);
-        CHECK_WITH(paste_event->text == content, context);
-        CHECK_WITH(paste_event->lines == lines, context);
-        CHECK_WITH(paste_event->original_bytes == content.size(), context);
-        CHECK_WITH(!paste_event->truncated, context);
+        REQUIRE(paste_event != nullptr);
+        CHECK(paste_event->text == content);
+        CHECK(paste_event->lines == lines);
+        CHECK(paste_event->original_bytes == content.size());
+        CHECK(!paste_event->truncated);
     }
 }
 
@@ -254,6 +250,7 @@ TEST_CASE("chunk-split boundaries reassemble to the full-buffer decode", "[tui][
         const auto chunk_size = static_cast<std::size_t>(object.at("chunkSize").get_number());
         const auto expected = expected_key(entry);
         const auto context = std::string{"sequence "} + sequence;
+        INFO(context);
 
         tui::detail::InputDecoder decoder;
         std::vector<tui::InputEventVariant> events;
@@ -266,15 +263,15 @@ TEST_CASE("chunk-split boundaries reassemble to the full-buffer decode", "[tui][
 
         if (expected.id.empty()) {
             // The paste-framing chunk case: exactly one PasteEvent.
-            REQUIRE_WITH(events.size() == 1, context);
-            CHECK_WITH(std::get_if<tui::PasteEvent>(&events.front()) != nullptr, context);
+            REQUIRE(events.size() == 1);
+            CHECK(std::get_if<tui::PasteEvent>(&events.front()) != nullptr);
             continue;
         }
-        REQUIRE_WITH(events.size() == 1, context);
+        REQUIRE(events.size() == 1);
         const auto* key = std::get_if<tui::KeyEvent>(&events.front());
-        REQUIRE_WITH(key != nullptr, context);
-        CHECK_WITH(tui::key_id(*key) == expected.id, context);
-        CHECK_WITH(event_type_name(key->type) == expected.event_type, context);
+        REQUIRE(key != nullptr);
+        CHECK(tui::key_id(*key) == expected.id);
+        CHECK(event_type_name(key->type) == expected.event_type);
     }
 }
 
@@ -289,6 +286,7 @@ TEST_CASE("assembled keybinding table matches pi's TUI_KEYBINDINGS", "[tui][diff
     for (const auto& entry : entries) {
         const auto& object = entry.get<util::JsonValue::object_t>();
         const auto id = object.at("id").get_string();
+        INFO(id);
         if (tui::is_known_unassembled_tui_keybinding(id)) continue;
         ++assembled;
 
@@ -296,15 +294,15 @@ TEST_CASE("assembled keybinding table matches pi's TUI_KEYBINDINGS", "[tui][diff
             definitions.begin(),
             definitions.end(),
             [&](const auto& candidate) { return candidate.id == id; });
-        REQUIRE_WITH(definition != definitions.end(), id);
-        CHECK_WITH(definition->description == object.at("description").get_string(), id);
+        REQUIRE(definition != definitions.end());
+        CHECK(definition->description == object.at("description").get_string());
 
         const auto& keys = object.at("defaultKeys").get<util::JsonValue::array_t>();
-        REQUIRE_WITH(definition->default_keys.size() == keys.size(), id);
+        REQUIRE(definition->default_keys.size() == keys.size());
         for (std::size_t index = 0; index < keys.size(); ++index) {
-            CHECK_WITH(
-                definition->default_keys[index] == keys[index].get_string(),
-                id + " key " + std::to_string(index));
+            INFO(id + " key " + std::to_string(index));
+            CHECK(
+                definition->default_keys[index] == keys[index].get_string());
         }
     }
     CHECK(assembled == 30);
@@ -326,6 +324,7 @@ TEST_CASE("terminal-image encoder bytes match the frozen pi encoders", "[tui][di
         const auto rows = static_cast<std::size_t>(options.at("rows").get_number());
         const auto image_id = static_cast<std::uint64_t>(options.at("imageId").get_number());
         const auto context = std::string{"kitty case "} + object.at("name").get_string();
+        INFO(context);
 
         const auto encoded = tui::detail::encode_terminal_image(
             tui::InlineImageProtocol::Kitty,
@@ -335,8 +334,8 @@ TEST_CASE("terminal-image encoder bytes match the frozen pi encoders", "[tui][di
                 .region = {.columns = columns, .rows = rows},
             },
             tui::TerminalImageHandle{.value = image_id});
-        REQUIRE_WITH(encoded.has_value(), context);
-        CHECK_WITH(*encoded == output, context);
+        REQUIRE(encoded.has_value());
+        CHECK(*encoded == output);
     }
 
     const auto& iterm2 = root.at("iterm2").get<util::JsonValue::array_t>();
@@ -350,6 +349,7 @@ TEST_CASE("terminal-image encoder bytes match the frozen pi encoders", "[tui][di
         const auto rows = static_cast<std::size_t>(options.at("height").get_number());
         const auto* name = field(options, "name");
         const auto context = std::string{"iterm2 case "} + object.at("name").get_string();
+        INFO(context);
 
         const auto encoded = tui::detail::encode_terminal_image(
             tui::InlineImageProtocol::ITerm2,
@@ -362,8 +362,8 @@ TEST_CASE("terminal-image encoder bytes match the frozen pi encoders", "[tui][di
                 .region = {.columns = columns, .rows = rows},
             },
             tui::TerminalImageHandle{.value = 1});
-        REQUIRE_WITH(encoded.has_value(), context);
-        CHECK_WITH(*encoded == output, context);
+        REQUIRE(encoded.has_value());
+        CHECK(*encoded == output);
     }
 
     const auto& hyperlinks = root.at("hyperlink").get<util::JsonValue::array_t>();
@@ -385,7 +385,8 @@ TEST_CASE("terminal-image encoder bytes match the frozen pi encoders", "[tui][di
         const auto& object = entry.get<util::JsonValue::object_t>();
         const auto hyperlinks_enabled = object.at("hyperlinks").get_boolean();
         const auto context = std::string{"fallback case "} + object.at("name").get_string();
-        tui::set_image_capabilities(tui::DetectedImageCapabilities{
+        INFO(context);
+        tests::ImageCapabilitiesGuard capabilities({
             .images = tui::InlineImageProtocol::Kitty,
             .hyperlinks = hyperlinks_enabled,
         });
@@ -405,8 +406,7 @@ TEST_CASE("terminal-image encoder bytes match the frozen pi encoders", "[tui][di
             filename == nullptr
                 ? std::optional<std::string_view>{}
                 : std::optional<std::string_view>{filename->get_string()});
-        CHECK_WITH(rendered == object.at("output").get_string(), context);
-        tui::reset_image_capabilities_cache();
+        CHECK(rendered == object.at("output").get_string());
     }
 }
 
@@ -419,36 +419,38 @@ TEST_CASE("width truncate wrap slice strip match the frozen pi utils", "[tui][di
     for (const auto& entry : visible) {
         const auto& object = entry.get<util::JsonValue::object_t>();
         const auto context = std::string{"visibleWidth case "} + object.at("name").get_string();
-        CHECK_WITH(
+        INFO(context);
+        CHECK(
             tui::visible_width(object.at("input").get_string()) ==
-                static_cast<std::size_t>(object.at("output").get_number()),
-            context);
+                static_cast<std::size_t>(object.at("output").get_number()));
     }
 
     const auto& truncate = root.at("truncate").get<util::JsonValue::array_t>();
     for (const auto& entry : truncate) {
         const auto& object = entry.get<util::JsonValue::object_t>();
         const auto context = std::string{"truncate case "} + object.at("name").get_string();
+        INFO(context);
         const auto width = static_cast<std::size_t>(object.at("width").get_number());
         const auto ellipsis = object.at("ellipsis").get_string();
         const auto pad = object.at("pad").get_boolean();
         const auto output = tui::truncate_text(object.at("input").get_string(), width, ellipsis, pad);
-        REQUIRE_WITH(output.has_value(), context);
-        CHECK_WITH(*output == object.at("output").get_string(), context);
+        REQUIRE(output.has_value());
+        CHECK(*output == object.at("output").get_string());
     }
 
     const auto& wrap = root.at("wrap").get<util::JsonValue::array_t>();
     for (const auto& entry : wrap) {
         const auto& object = entry.get<util::JsonValue::object_t>();
         const auto context = std::string{"wrap case "} + object.at("name").get_string();
+        INFO(context);
         const auto output = tui::wrap_text(
             object.at("input").get_string(),
             static_cast<std::size_t>(object.at("width").get_number()));
-        REQUIRE_WITH(output.has_value(), context);
+        REQUIRE(output.has_value());
         const auto& expected = object.at("output").get<util::JsonValue::array_t>();
-        REQUIRE_WITH(output->size() == expected.size(), context);
+        REQUIRE(output->size() == expected.size());
         for (std::size_t index = 0; index < expected.size(); ++index) {
-            CHECK_WITH((*output)[index] == expected[index].get_string(), context);
+            CHECK((*output)[index] == expected[index].get_string());
         }
     }
 
@@ -456,23 +458,24 @@ TEST_CASE("width truncate wrap slice strip match the frozen pi utils", "[tui][di
     for (const auto& entry : slice) {
         const auto& object = entry.get<util::JsonValue::object_t>();
         const auto context = std::string{"slice case "} + object.at("name").get_string();
+        INFO(context);
         const auto output = tui::slice_by_column(
             object.at("input").get_string(),
             static_cast<std::size_t>(object.at("start").get_number()),
             static_cast<std::size_t>(object.at("length").get_number()),
             object.at("strict").get_boolean());
-        REQUIRE_WITH(output.has_value(), context);
-        CHECK_WITH(*output == object.at("output").get_string(), context);
+        REQUIRE(output.has_value());
+        CHECK(*output == object.at("output").get_string());
     }
 
     const auto& strip = root.at("strip").get<util::JsonValue::array_t>();
     for (const auto& entry : strip) {
         const auto& object = entry.get<util::JsonValue::object_t>();
         const auto context = std::string{"strip case "} + object.at("name").get_string();
-        CHECK_WITH(
+        INFO(context);
+        CHECK(
             tui::strip_terminal_sequences(object.at("input").get_string()) ==
-                object.at("output").get_string(),
-            context);
+                object.at("output").get_string());
     }
 }
 
@@ -486,17 +489,19 @@ TEST_CASE("fuzzy match and filter match the frozen pi fuzzy outputs", "[tui][dif
         const auto& object = entry.get<util::JsonValue::object_t>();
         const auto context = std::string{"query "} + object.at("query").get_string() +
             " in " + object.at("text").get_string();
+        INFO(context);
         const auto& expected = object.at("output").get<util::JsonValue::object_t>();
         const auto result =
             tui::fuzzy_match(object.at("query").get_string(), object.at("text").get_string());
-        CHECK_WITH(result.matches == expected.at("matches").get_boolean(), context);
-        CHECK_WITH(result.score == expected.at("score").get_number(), context);
+        CHECK(result.matches == expected.at("matches").get_boolean());
+        CHECK(result.score == expected.at("score").get_number());
     }
 
     const auto& filter = root.at("filter").get<util::JsonValue::array_t>();
     for (const auto& entry : filter) {
         const auto& object = entry.get<util::JsonValue::object_t>();
         const auto context = std::string{"fuzzy filter "} + object.at("name").get_string();
+        INFO(context);
         const auto& items = object.at("items").get<util::JsonValue::array_t>();
         std::vector<std::string> items_vector;
         for (const auto& item : items) items_vector.push_back(item.get_string());
@@ -505,9 +510,9 @@ TEST_CASE("fuzzy match and filter match the frozen pi fuzzy outputs", "[tui][dif
             return item;
         });
         const auto& expected = object.at("output").get<util::JsonValue::array_t>();
-        REQUIRE_WITH(ranked.size() == expected.size(), context);
+        REQUIRE(ranked.size() == expected.size());
         for (std::size_t index = 0; index < expected.size(); ++index) {
-            CHECK_WITH(ranked[index] == expected[index].get_string(), context);
+            CHECK(ranked[index] == expected[index].get_string());
         }
     }
 }
@@ -557,7 +562,7 @@ TEST_CASE("markdown rendered output matches the frozen pi component", "[tui][dif
     style.code_block_indent = "  ";
 
     // The capture pinned hyperlinks=true for the link rendering.
-    tui::set_image_capabilities(tui::DetectedImageCapabilities{
+    tests::ImageCapabilitiesGuard capabilities({
         .images = tui::InlineImageProtocol::Kitty,
         .hyperlinks = true,
     });
@@ -568,15 +573,15 @@ TEST_CASE("markdown rendered output matches the frozen pi component", "[tui][dif
         const auto& object = entry.get<util::JsonValue::object_t>();
         const auto width = static_cast<std::size_t>(object.at("width").get_number());
         const auto context = std::string{"markdown case "} + object.at("name").get_string();
+        INFO(context);
 
         markdown.set_text(object.at("markdown").get_string());
         const auto rendered = markdown.render(width);
-        REQUIRE_WITH(rendered.has_value(), context);
+        REQUIRE(rendered.has_value());
         const auto& expected = object.at("lines").get<util::JsonValue::array_t>();
-        REQUIRE_WITH(rendered->lines.size() == expected.size(), context);
+        REQUIRE(rendered->lines.size() == expected.size());
         for (std::size_t index = 0; index < expected.size(); ++index) {
-            CHECK_WITH(rendered->lines[index] == expected[index].get_string(), context);
+            CHECK(rendered->lines[index] == expected[index].get_string());
         }
     }
-    tui::reset_image_capabilities_cache();
 }

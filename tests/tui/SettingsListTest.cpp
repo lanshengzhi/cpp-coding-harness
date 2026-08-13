@@ -4,7 +4,7 @@
 #include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <memory>
@@ -297,7 +297,7 @@ TEST_CASE("SettingsList search line renders and locates the cursor through Input
     list.set_focused(true);
     const auto rendered = list.render(50);
     REQUIRE(rendered);
-    CHECK(rendered->lines.size() >= 2);
+    REQUIRE(rendered->lines.size() >= 2);
     CHECK(rendered->lines[0].starts_with("> tool"));
     CHECK(cch::tui::visible_width(rendered->lines[0]) == 50);
     CHECK(rendered->lines[1].empty());

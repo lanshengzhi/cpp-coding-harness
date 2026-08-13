@@ -1,6 +1,6 @@
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
 #include <cch/tui/Fuzzy.hpp>
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <string>
 #include <vector>

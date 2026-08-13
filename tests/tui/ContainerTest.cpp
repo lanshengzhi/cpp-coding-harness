@@ -1,7 +1,7 @@
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
 #include <cch/tui/Container.hpp>
 #include <cch/tui/Text.hpp>
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <memory>
 #include <stdexcept>

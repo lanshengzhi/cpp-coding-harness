@@ -3,9 +3,10 @@
 #include <cch/tui/Utils.hpp>
 
 #include "support/EnvVarGuard.hpp"
+#include "support/ImageCapabilitiesGuard.hpp"
 #include "support/ImageEnvironmentGuard.hpp"
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <optional>
 #include <string>
@@ -20,19 +21,7 @@
 
 namespace {
 
-class ImageCapabilitiesGuard final {
-public:
-    explicit ImageCapabilitiesGuard(cch::tui::DetectedImageCapabilities capabilities) {
-        cch::tui::set_image_capabilities(capabilities);
-    }
-    ~ImageCapabilitiesGuard() {
-        cch::tui::reset_image_capabilities_cache();
-    }
-
-    ImageCapabilitiesGuard(const ImageCapabilitiesGuard&) = delete;
-    ImageCapabilitiesGuard& operator=(const ImageCapabilitiesGuard&) = delete;
-};
-
+using cch::tests::ImageCapabilitiesGuard;
 using cch::tests::ImageEnvironmentGuard;
 
 } // namespace

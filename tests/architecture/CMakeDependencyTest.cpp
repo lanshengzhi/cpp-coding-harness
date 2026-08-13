@@ -272,7 +272,7 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
         CHECK_FALSE(block_mentions(shard_sources, "src/cli/ListModels.cpp"));
         CHECK_FALSE(block_mentions(shard_sources, "src/cli/StartupTui.cpp"));
         CHECK_FALSE(block_mentions(shard_sources, "src/coding_agent/runtime/AsyncCliRuntime.cpp"));
-        if (shard == "cch_tests_util") {
+        if (shard == "cch_tests_util" || shard == "cch_tests_tui") {
             CHECK(block_mentions(cmake, "catch_discover_tests(" + shard));
         } else {
             CHECK(block_mentions(cmake, "add_test(NAME " + shard));

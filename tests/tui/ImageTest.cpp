@@ -6,7 +6,7 @@
 #include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <cstdint>

@@ -3,7 +3,7 @@
 #include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <format>
 #include <memory>
@@ -224,7 +224,7 @@ TEST_CASE("Editor keeps its active cursor in a narrow virtual terminal viewport"
     auto lines = editor.render(4);
     REQUIRE(lines);
     CHECK(lines->lines.size() <= 3);
-    CHECK_FALSE(lines->lines.empty());
+    REQUIRE_FALSE(lines->lines.empty());
     CHECK(lines->lines.back().find("yz") != std::string::npos);
 
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 3});

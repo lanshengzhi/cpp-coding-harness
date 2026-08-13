@@ -432,7 +432,7 @@ if(CCH_BUILD_TESTS)
 
     # TUI
     add_executable(cch_tests_tui
-        tests/TestMain.cpp
+        tests/Catch2Main.cpp
         tests/tui/AutocompleteTest.cpp
         tests/tui/ContainerTest.cpp
         tests/tui/EditorTest.cpp
@@ -456,16 +456,17 @@ if(CCH_BUILD_TESTS)
         tests/tui/UnicodeWidthTest.cpp
         tests/tui/UtilsTest.cpp
 )
-    target_include_directories(cch_tests_tui PRIVATE ${CCH_TEST_INCLUDE_DIRS})
+    target_include_directories(cch_tests_tui PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_tui
         PRIVATE
             cch_tui
+            Catch2::Catch2
 )
     target_compile_definitions(cch_tests_tui PRIVATE
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
     target_compile_options(cch_tests_tui PRIVATE ${CCH_WARNING_OPTIONS})
-    add_test(NAME cch_tests_tui COMMAND cch_tests_tui)
+    catch_discover_tests(cch_tests_tui ADD_TAGS_AS_LABELS)
 
     # AI
     add_executable(cch_tests_ai

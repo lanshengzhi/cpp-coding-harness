@@ -2,7 +2,7 @@
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <memory>
 #include <string>
@@ -340,7 +340,7 @@ TEST_CASE("Empty content renders zero lines correctly", "[tui][render][issue49]"
 
     // Screen should be empty
     const auto& screen = terminal.screen();
-    CHECK(screen.size() == 2);
+    REQUIRE(screen.size() == 2);
     CHECK(screen[0].empty());
     CHECK(screen[1].empty());
 }
@@ -364,7 +364,7 @@ TEST_CASE("Shrink to empty content clears stale rows", "[tui][render][issue49]")
     // cleared in place, so the screen holds blank cells instead of the old
     // content.
     const auto& screen = terminal.screen();
-    CHECK(screen.size() == 2);
+    REQUIRE(screen.size() == 2);
     CHECK(screen[0] == "    ");
     CHECK(screen[1] == "    ");
 }
