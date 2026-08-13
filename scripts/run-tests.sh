@@ -2,7 +2,7 @@
 # Package-aligned test entry point — build-performance-plan Stage 4 (#433).
 #
 # Runs every package test shard. This is the uniform tag/filter entry point:
-# an optional Catch-lite filter argument (a test name or tag substring such as
+# an optional Catch2 filter argument (a test name or tag substring such as
 # "[architecture]") is passed to each shard, and shards whose registered tests
 # do not match are skipped so a focused run does not pay for the other
 # packages. With no filter, every shard runs in full.
@@ -59,7 +59,7 @@ shards=(
 	cch_tests_cli_arch
 )
 
-# Catch-lite keeps the last non-option argument as its single filter.
+# Catch2 accepts the last non-option argument as a single filter.
 filter=""
 for arg in "${args[@]}"; do
 	if [[ "$arg" != -* ]]; then

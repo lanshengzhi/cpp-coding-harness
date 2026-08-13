@@ -16,10 +16,11 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 
-#include "../../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <iterator>
 #include <optional>
 #include <string>
@@ -326,7 +327,7 @@ TEST_CASE(
         std::cerr << "SCOPED SAVE SCREEN:\n" << screen << "\nEND\n";
     }
     CHECK(screen.find("Model selection saved to settings") != std::string::npos);
-    CHECK(session->scoped_models().size() == 1);
+    REQUIRE(session->scoped_models().size() == 1);
     CHECK(session->scoped_models()[0].model.id == "alpha-1");
 
     const auto settings_text = fixture.read_settings();

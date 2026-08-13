@@ -375,8 +375,8 @@ TEST_CASE("terminal-image encoder bytes match the frozen pi encoders", "[tui][di
     }
 
     // Fallback text with a deterministic HOME and capability cache, exactly
-    // as the capture script pinned them (the suite-wide TestMain isolation
-    // points HOME elsewhere).
+    // as the capture script pinned them (the suite-wide Catch2 runner
+    // isolation points HOME elsewhere).
     tests::EnvVarGuard home_guard{"HOME"};
     home_guard.set("/home/tester");
     const auto& fallback = root.at("fallback").get<util::JsonValue::array_t>();

@@ -2,7 +2,7 @@
 // rendering with parent/child prefixes, the scope/sort/filter cycle, the
 // delete confirmation flow, and the rename inline input.
 
-#include "../../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include "coding_agent/tui/KeybindingsManager.hpp"
 #include "coding_agent/tui/SessionSelector.hpp"

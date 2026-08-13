@@ -1,6 +1,6 @@
 #include <cch/tui/Keybindings.hpp>
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include "support/TextHelpers.hpp"
 

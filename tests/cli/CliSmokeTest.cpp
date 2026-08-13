@@ -1,4 +1,4 @@
-#include "../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include "support/CliRunFixture.hpp"
 #include "support/ImageFixture.hpp"
@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <regex>
 #include <sstream>
 #include <string>
@@ -540,7 +541,7 @@ TEST_CASE(
     // Seed a session whose header cwd (`original`) then vanishes while the
     // file survives (pi `getMissingSessionCwdIssue`).
     auto seeded = run_command_split(
-        "cd " + shell_quote(original.path()) + " && HOME=" + shell_quote(home.path()) + " " + bin() +
+        "cd " + shell_quote(original.path()) + " && HOME=" + shell_quote(home.path()) + " env -u PI_CODING_AGENT_DIR " + bin() +
         " --session " + shell_quote(session) +
         " --model deepseek-v4-flash");
     REQUIRE(seeded.exit_code == 0);
@@ -626,7 +627,7 @@ TEST_CASE(
     // print run still creates the session (pi). The picker's current-folder
     // scope lists it.
     auto seeded = run_command_split(
-        "cd " + shell_quote(workspace.path()) + " && HOME=" + shell_quote(home.path()) + " " + bin() +
+        "cd " + shell_quote(workspace.path()) + " && HOME=" + shell_quote(home.path()) + " env -u PI_CODING_AGENT_DIR " + bin() +
         " --model deepseek-v4-flash");
     REQUIRE(seeded.exit_code == 0);
 
@@ -852,7 +853,8 @@ TEST_CASE("CLI project-controlled default trust store cannot authorize project s
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
         .args = {"--session", session.string(), "/skill:demo"},
         .cwd = workspace.path(),
-        .env = {{"HOME", workspace.path().string()}},
+        .env = {{"HOME", workspace.path().string()},
+                {"PI_CODING_AGENT_DIR", std::nullopt}},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1121,7 +1123,8 @@ TEST_CASE("CLI applies settings.json model when CLI omits --model", "[cli][setti
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
         .args = {"--session", session.string(), "hello"},
         .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
+        .env = {{"HOME", home.path().string()},
+                {"PI_CODING_AGENT_DIR", std::nullopt}},
     });
 
     REQUIRE(result.exit_code == 0);
@@ -1144,8 +1147,8 @@ TEST_CASE("CLI invalid explicit prompt template fails before session creation", 
 
     REQUIRE(result.exit_code != 0);
     CHECK(result.stdout_text.empty());
-    CHECK(result.stderr_text.find("template") != std::string::npos ||
-          result.stderr_text.find("explicit") != std::string::npos);
+    CHECK((result.stderr_text.find("template") != std::string::npos ||
+          result.stderr_text.find("explicit") != std::string::npos));
     CHECK_FALSE(std::filesystem::exists(session));
 }
 
@@ -1252,7 +1255,7 @@ TEST_CASE("CLI resume falls back with a diagnostic when the stored model no long
     // Create a session that records deepseek/deepseek-v4-flash without
     // streaming: a no-prompt print run still creates the session (pi).
     auto first = run_command_split(
-        "cd " + shell_quote(workspace.path()) + " && HOME=" + shell_quote(home.path()) + " " + bin() +
+        "cd " + shell_quote(workspace.path()) + " && HOME=" + shell_quote(home.path()) + " env -u PI_CODING_AGENT_DIR " + bin() +
         " --session " + shell_quote(session) +
         " --model deepseek-v4-flash");
     REQUIRE(first.exit_code == 0);
@@ -1263,7 +1266,7 @@ TEST_CASE("CLI resume falls back with a diagnostic when the stored model no long
     // `modelFallbackMessage`); print mode drops it entirely.
     std::filesystem::remove(models_path);
     auto second = run_command_split(
-        "cd " + shell_quote(workspace.path()) + " && HOME=" + shell_quote(home.path()) + " " + bin() +
+        "cd " + shell_quote(workspace.path()) + " && HOME=" + shell_quote(home.path()) + " env -u PI_CODING_AGENT_DIR " + bin() +
         " --session " + shell_quote(session));
 
     REQUIRE(second.exit_code == 0);
@@ -1530,8 +1533,8 @@ TEST_CASE("CLI failed assembly publishes no default session file", "[cli][defaul
 
     REQUIRE(result.exit_code != 0);
     CHECK(result.stdout_text.empty());
-    CHECK(result.stderr_text.find("template") != std::string::npos ||
-          result.stderr_text.find("explicit") != std::string::npos);
+    CHECK((result.stderr_text.find("template") != std::string::npos ||
+          result.stderr_text.find("explicit") != std::string::npos));
     CHECK(jsonl_files_under(agent_dir / "sessions").empty());
     CHECK_FALSE(std::filesystem::exists(workspace.path() / ".cpp-harness" / "sessions"));
 }
@@ -2036,7 +2039,8 @@ TEST_CASE("CLI loads user skills from ~/.pi/agent/skills with root-level .md inc
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
         .args = {"--session", session.string(), "/skill:user-skill"},
         .cwd = workspace.path(),
-        .env = {{"HOME", home.path().string()}},
+        .env = {{"HOME", home.path().string()},
+                {"PI_CODING_AGENT_DIR", std::nullopt}},
     });
 
     REQUIRE(result.exit_code == 0);

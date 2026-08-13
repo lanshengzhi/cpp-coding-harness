@@ -18,7 +18,7 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "ai/providers/FakeProvider.hpp"
 
-#include "../../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
@@ -182,8 +182,8 @@ TEST_CASE(
     std::string trust_json{
         std::istreambuf_iterator<char>(trust_file),
         std::istreambuf_iterator<char>()};
-    CHECK(trust_json.find("\"trusted\"") != std::string::npos ||
-        trust_json.find("true") != std::string::npos);
+    CHECK((trust_json.find("\"trusted\"") != std::string::npos ||
+        trust_json.find("true") != std::string::npos));
 
     // The session bound without the untrusted-project chat warning.
     CHECK(screen.find("This project is not trusted.") == std::string::npos);
@@ -216,7 +216,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "--approve overrides the boot trust prompt for the run",
+    "approve flag overrides the boot trust prompt for the run",
     "[coding_agent][tui][boot-trust][issue413]") {
     tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
@@ -238,7 +238,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "--no-approve overrides the boot trust prompt to untrusted",
+    "no-approve flag overrides the boot trust prompt to untrusted",
     "[coding_agent][tui][boot-trust][issue413]") {
     tests::EnvVarGuard agent_dir("PI_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
@@ -475,8 +475,8 @@ TEST_CASE(
     const std::string settings_json{
         std::istreambuf_iterator<char>(settings_file),
         std::istreambuf_iterator<char>()};
-    CHECK(settings_json.find("\"theme\":\"solarized\"") != std::string::npos ||
-        settings_json.find("\"theme\": \"solarized\"") != std::string::npos);
+    CHECK((settings_json.find("\"theme\":\"solarized\"") != std::string::npos ||
+        settings_json.find("\"theme\": \"solarized\"") != std::string::npos));
 
     // Esc closes the settings selector; Ctrl+C then Ctrl+D exits (the exit
     // binding needs the empty editor).
@@ -592,8 +592,8 @@ TEST_CASE(
     std::string trust_json{
         std::istreambuf_iterator<char>(trust_file),
         std::istreambuf_iterator<char>()};
-    CHECK(trust_json.find("\"trusted\"") != std::string::npos ||
-        trust_json.find("true") != std::string::npos);
+    CHECK((trust_json.find("\"trusted\"") != std::string::npos ||
+        trust_json.find("true") != std::string::npos));
 
     run.exit();
 }

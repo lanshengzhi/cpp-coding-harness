@@ -14,11 +14,12 @@
 #include <cch/ai/Model.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -189,6 +190,7 @@ TEST_CASE(
     // built-in providers still compose structurally, so the table prints too.
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
+    tests::EnvVarGuard agent_dir_guard{"PI_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
     home.write(".pi/agent/models.json", "{not valid json");
 

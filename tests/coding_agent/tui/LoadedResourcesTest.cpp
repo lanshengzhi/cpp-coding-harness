@@ -12,7 +12,7 @@
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/tui/Keybindings.hpp>
 
-#include "../../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <string>
 #include <string_view>

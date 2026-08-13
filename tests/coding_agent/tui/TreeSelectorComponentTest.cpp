@@ -4,7 +4,7 @@
 // fold/unfold branch navigation, the label edit flow with the inline Input,
 // the label timestamp toggle, the entry copy, and the select/cancel sinks.
 
-#include "../../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include "coding_agent/tui/KeybindingsManager.hpp"
 #include "coding_agent/tui/Theme.hpp"

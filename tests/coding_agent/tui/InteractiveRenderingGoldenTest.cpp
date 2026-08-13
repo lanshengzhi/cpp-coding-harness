@@ -37,7 +37,7 @@
 #include "ai/providers/FakeProvider.hpp"
 #include "util/ExpectedMacros.hpp"
 
-#include "../../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
@@ -99,8 +99,9 @@ void capture_golden(std::string_view name, const std::string& screen) {
 [[nodiscard]] std::filesystem::path rendering_workspace_path(
     std::string_view name) {
     std::error_code error;
-    const auto base = std::filesystem::temp_directory_path(error);
-    REQUIRE(!error);
+    // Fixed base: the committed goldens render the footer's pwd line, so a
+    // TMPDIR-isolated temp path would make them byte-unstable.
+    const auto base = std::filesystem::path{"/tmp"};
     const auto path = base / ("cpp-harness-rendering-" + std::string{name});
     std::filesystem::remove_all(path, error);
     error.clear();

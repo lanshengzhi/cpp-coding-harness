@@ -4,7 +4,7 @@
 
 #include <cch/tui/Keys.hpp>
 
-#include "../../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <array>
@@ -259,7 +259,7 @@ TEST_CASE(
     const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
 
     REQUIRE(manager);
-    CHECK(manager->diagnostics.size() == 64);
+    REQUIRE(manager->diagnostics.size() == 64);
     CHECK(manager->diagnostics.back().code == "diagnostics_truncated");
     for (const auto& diagnostic : manager->diagnostics) {
         CHECK(diagnostic.message.size() <= 1024);

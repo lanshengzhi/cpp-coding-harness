@@ -13,7 +13,7 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "harness/session/SessionJournalTestHooks.hpp"
 
-#include "../../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>

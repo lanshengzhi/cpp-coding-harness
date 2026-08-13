@@ -2,7 +2,7 @@
 // mirror): regex / quoted-phrase / fuzzy matching, sort modes, and the named
 // filter over `SessionInfo` values.
 
-#include "../../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include "coding_agent/tui/SessionSelectorSearch.hpp"
 

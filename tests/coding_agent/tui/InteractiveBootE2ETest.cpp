@@ -29,7 +29,7 @@
 
 #include "ai/providers/FakeProvider.hpp"
 
-#include "../../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
@@ -226,8 +226,9 @@ struct E2eSession {
 /// boot, so a crashed prior run cannot leak stale state.
 [[nodiscard]] std::filesystem::path e2e_workspace_path() {
     std::error_code error;
-    const auto base = std::filesystem::temp_directory_path(error);
-    REQUIRE(!error);
+    // Fixed base: the committed goldens render the footer's pwd line, so a
+    // TMPDIR-isolated temp path would make them byte-unstable.
+    const auto base = std::filesystem::path{"/tmp"};
     const auto path = base / "cpp-harness-e2e-workspace";
     std::filesystem::remove_all(path, error);
     error.clear();
@@ -436,9 +437,9 @@ TEST_CASE(
         return line.find("Done: the notes file now says beta.") != std::string::npos;
     });
     REQUIRE(first_final_line != output.end());
-    CHECK(first_final_line->find("\x1b]133;A\x07") != std::string::npos ||
+    CHECK((first_final_line->find("\x1b]133;A\x07") != std::string::npos ||
         (first_final_line != output.begin() &&
-         (first_final_line - 1)->find("\x1b]133;A\x07") != std::string::npos));
+         (first_final_line - 1)->find("\x1b]133;A\x07") != std::string::npos)));
     CHECK(any_output_line_has(terminal, "\x1b]133;B\x07\x1b]133;C\x07"));
 
     // The edit tool applied the replacement in the workspace.

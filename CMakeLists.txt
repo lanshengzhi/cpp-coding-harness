@@ -402,10 +402,6 @@ if(CCH_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
-    set(CCH_TEST_INCLUDE_DIRS
-        ${CCH_FORMAL_TEST_INCLUDE_DIRS}
-        third_party
-)
 
     # util
     add_executable(cch_tests_util
@@ -614,7 +610,7 @@ if(CCH_BUILD_TESTS)
     # coding-agent interactive TUI. Links the authoritative cch_cli owner too:
     # BootTrustInteractiveTest drives the in-process CLI seam (CliRunFixture).
     add_executable(cch_tests_coding_agent_interactive
-        tests/TestMain.cpp
+        tests/Catch2Main.cpp
         tests/coding_agent/tui/BootTrustInteractiveTest.cpp
         tests/coding_agent/tui/ChatContainerStatusTest.cpp
         tests/coding_agent/tui/FooterStatusInteractiveTest.cpp
@@ -642,24 +638,25 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/tui/TreeSelectorInteractiveTest.cpp
         tests/coding_agent/tui/UserBashInteractiveModeTest.cpp
 )
-    target_include_directories(cch_tests_coding_agent_interactive PRIVATE ${CCH_TEST_INCLUDE_DIRS})
+    target_include_directories(cch_tests_coding_agent_interactive PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_coding_agent_interactive
         PRIVATE
             cch_cli
             cch_coding_agent_interactive
             Boost::headers
+            Catch2::Catch2
 )
     target_compile_definitions(cch_tests_coding_agent_interactive PRIVATE
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
     target_compile_options(cch_tests_coding_agent_interactive PRIVATE ${CCH_WARNING_OPTIONS})
-    add_test(NAME cch_tests_coding_agent_interactive COMMAND cch_tests_coding_agent_interactive)
+    catch_discover_tests(cch_tests_coding_agent_interactive ADD_TAGS_AS_LABELS)
 
     # CLI and architecture. The only shard that launches the built binary
     # (CliSmokeTest), so it carries the CCH_BINARY definition and a build
     # dependency on cpp_harness.
     add_executable(cch_tests_cli_arch
-        tests/TestMain.cpp
+        tests/Catch2Main.cpp
         tests/cli/CliParseTest.cpp
         tests/cli/CliSmokeTest.cpp
         tests/cli/FrontendSelectionTest.cpp
@@ -673,12 +670,13 @@ if(CCH_BUILD_TESTS)
         tests/architecture/MoveOnlyCallbackTest.cpp
         tests/architecture/PublicHeaderBoundaryTest.cpp
 )
-    target_include_directories(cch_tests_cli_arch PRIVATE ${CCH_TEST_INCLUDE_DIRS})
+    target_include_directories(cch_tests_cli_arch PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_cli_arch
         PRIVATE
             cpp_harness_lib
             cch_cli
             CLI11::CLI11
+            Catch2::Catch2
 )
     target_compile_definitions(cch_tests_cli_arch PRIVATE
         CCH_BINARY="$<TARGET_FILE:cpp_harness>"
@@ -686,7 +684,7 @@ if(CCH_BUILD_TESTS)
 )
     target_compile_options(cch_tests_cli_arch PRIVATE ${CCH_WARNING_OPTIONS})
     add_dependencies(cch_tests_cli_arch cpp_harness)
-    add_test(NAME cch_tests_cli_arch COMMAND cch_tests_cli_arch)
+    catch_discover_tests(cch_tests_cli_arch ADD_TAGS_AS_LABELS)
 
     # Aggregate target that builds every shard (the Stage 4 entry point that
     # replaces the old single executable's build target).

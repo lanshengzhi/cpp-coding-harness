@@ -5,7 +5,7 @@
 // env default; theme registration skipped). No live credentials, no network
 // validation.
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include "cli/StartupTui.hpp"
 
@@ -228,7 +228,9 @@ TEST_CASE(
     drain_ready(running.io);
     const auto all_screen = visible_screen(running.terminal);
     CHECK(all_screen.find("Resume Session (All)") != std::string::npos);
-    CHECK(all_screen.find("Remote first message") != std::string::npos);
+    // The All scope renders each session's cwd, so the long isolated temp
+    // path can truncate the message column; assert on the stable prefix.
+    CHECK(all_screen.find("Remote fi") != std::string::npos);
 
     // Escape cancels the picker (pi tui.select.cancel → selectSession null).
     REQUIRE(running.terminal.inject_input("\x1b"));
