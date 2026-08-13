@@ -50,6 +50,7 @@ done
 
 shards=(
 	cch_tests_util
+	cch_tests_support
 	cch_tests_tui
 	cch_tests_ai
 	cch_tests_agent

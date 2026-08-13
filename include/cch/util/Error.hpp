@@ -1,96 +1,19 @@
 #pragma once
 
-#include <expected>
-#include <optional>
-#include <string>
-#include <utility>
+// TEMPORARY LEGACY SUPPORT ALIAS — do not add new uses.
+//
+// `Error`/`Expected` moved to the pi-neutral `cch_support` package
+// (include/cch/support/Error.hpp, ADR 0039). This forwarding header keeps the
+// historical `cch::util` spelling compiling during the package migration. It
+// is scheduled for deletion by the support contraction ticket #469; until then
+// the two spellings name the same types.
+#include <cch/support/Error.hpp>
 
 namespace cch::util {
-
-enum class ErrorCode {
-    Unknown,
-    JsonParse,
-    JsonSerialize,
-    Network,
-    Timeout,
-    Cancelled,
-    ModelSource,
-    ModelValidation,
-    Provider,
-    Stream,
-    Auth,
-    OAuth,
-    Tool,
-    Session,
-    Validation,
-    Workspace,
-    Process,
-    /// pi `MissingSessionCwdError`: the resumed session's stored header cwd
-    /// no longer exists (session-cwd.ts). The CLI prints the error's message
-    /// verbatim (no "could not resume session:" prefix) and exits 1.
-    MissingSessionCwd,
-};
-
-struct Error {
-    ErrorCode code{ErrorCode::Unknown};
-    std::string message;
-    std::string detail;
-    std::optional<std::string> context;
-};
-
-template <typename T>
-using Expected = std::expected<T, Error>;
-
-using ExpectedVoid = std::expected<void, Error>;
-
-[[nodiscard]] inline std::string to_string(ErrorCode code) {
-    switch (code) {
-    case ErrorCode::Unknown:
-        return "unknown";
-    case ErrorCode::JsonParse:
-        return "json_parse";
-    case ErrorCode::JsonSerialize:
-        return "json_serialize";
-    case ErrorCode::Network:
-        return "network";
-    case ErrorCode::Timeout:
-        return "timeout";
-    case ErrorCode::Cancelled:
-        return "cancelled";
-    case ErrorCode::ModelSource:
-        return "model_source";
-    case ErrorCode::ModelValidation:
-        return "model_validation";
-    case ErrorCode::Provider:
-        return "provider";
-    case ErrorCode::Stream:
-        return "stream";
-    case ErrorCode::Auth:
-        return "auth";
-    case ErrorCode::OAuth:
-        return "oauth";
-    case ErrorCode::Tool:
-        return "tool";
-    case ErrorCode::Session:
-        return "session";
-    case ErrorCode::Validation:
-        return "validation";
-    case ErrorCode::Workspace:
-        return "workspace";
-    case ErrorCode::Process:
-        return "process";
-    case ErrorCode::MissingSessionCwd:
-        return "missing_session_cwd";
-    }
-    return "unknown";
-}
-
-[[nodiscard]] inline Error make_error(
-    ErrorCode code,
-    std::string message,
-    std::string detail = {},
-    std::optional<std::string> context = std::nullopt) {
-    return Error{code, std::move(message), std::move(detail), std::move(context)};
-}
-
+using cch::support::Error;
+using cch::support::ErrorCode;
+using cch::support::Expected;
+using cch::support::ExpectedVoid;
+using cch::support::make_error;
+using cch::support::to_string;
 } // namespace cch::util

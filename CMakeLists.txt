@@ -56,6 +56,14 @@ function(cch_target_defaults target_name)
     target_compile_options(${target_name} PRIVATE ${CCH_WARNING_OPTIONS})
 endfunction()
 
+# Pi-neutral C++ Support Package (ADR 0039). Owns passive Error/Expected,
+# JsonValue, and AsyncResult mechanics shared across Owners; header-only, so it
+# has no compiled source of its own. The historical cch_util target below links
+# it and remains the temporary legacy alias until the support contraction
+# ticket #469 deletes it.
+add_library(cch_support INTERFACE)
+target_include_directories(cch_support INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 add_library(cch_util
     src/util/Json.cpp
     src/util/Process.cpp
@@ -63,6 +71,7 @@ add_library(cch_util
 cch_target_defaults(cch_util)
 target_link_libraries(cch_util
     PUBLIC
+        cch_support
         Boost::filesystem
         Threads::Threads
 )
@@ -448,6 +457,24 @@ if(CCH_BUILD_TESTS)
     target_compile_options(cch_tests_util PRIVATE ${CCH_WARNING_OPTIONS})
     catch_discover_tests(cch_tests_util ADD_TAGS_AS_LABELS)
 
+    # support
+    add_executable(cch_tests_support
+        tests/Catch2Main.cpp
+        tests/support/AllocationCounter.cpp
+        tests/support/AsyncResultTest.cpp
+)
+    target_include_directories(cch_tests_support PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
+    target_link_libraries(cch_tests_support
+        PRIVATE
+            cch_support
+            Catch2::Catch2
+)
+    target_compile_definitions(cch_tests_support PRIVATE
+        CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+    target_compile_options(cch_tests_support PRIVATE ${CCH_WARNING_OPTIONS})
+    catch_discover_tests(cch_tests_support ADD_TAGS_AS_LABELS)
+
     # TUI
     add_executable(cch_tests_tui
         tests/Catch2Main.cpp
@@ -713,6 +740,7 @@ if(CCH_BUILD_TESTS)
     add_custom_target(cpp_harness_tests
         DEPENDS
             cch_tests_util
+            cch_tests_support
             cch_tests_tui
             cch_tests_ai
             cch_tests_agent
