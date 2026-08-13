@@ -2,8 +2,8 @@
 # Verify that a closed issue is actually done — closed state, ticked acceptance
 # criteria, no in-flight state labels.
 #
-# Close procedure (AGENTS.md, Validation): tick every met acceptance criterion
-# in the issue body, remove the in-flight state labels (needs-*, ready-for-*),
+# Completion procedure (docs/agents/validation.md): confirm and tick every
+# acceptance criterion, remove the in-flight state labels (needs-*, ready-for-*),
 # then close. This script is the completion check: it exits 0 only when the
 # issue's state, body, and labels all agree the work is done, and names the
 # failing check otherwise. `wontfix` is not flagged — on a wontfix close it is

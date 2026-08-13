@@ -77,7 +77,7 @@ using AssistantContent = std::variant<TextContent, ThinkingContent, ToolCallCont
 /// Presentation/read-only extraction of the concatenated text across a block
 /// list. The generic block-walking machinery is implemented in
 /// `src/ai/ContentUtil.cpp` so it stays out of the public surface
-/// (AGENTS.md guardrail 4).
+/// (`docs/agents/architecture.md` §Local generic machinery).
 [[nodiscard]] std::string text_from_content(const std::vector<Content>& content);
 
 [[nodiscard]] std::string text_from_assistant_content(

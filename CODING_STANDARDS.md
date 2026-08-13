@@ -6,7 +6,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 1.1. This file is the single source of truth for code-level conventions: mechanical style, naming, error handling, async, ownership, function structure and local state, tests, CMake.
 
-1.2. Architecture guardrails live in `AGENTS.md`, domain language in `CONTEXT.md`, and decision rationale in `docs/adr/`. This file records their checkable code-level consequences and cites the authoritative layer without duplicating its rationale or definitions. Each layer wins within its own scope; this file wins on code-level questions.
+1.2. Architecture guardrails live in `docs/agents/architecture.md`, domain language in `CONTEXT.md`, and decision rationale in `docs/adr/`. This file records their checkable code-level consequences and cites the authoritative layer without duplicating its rationale or definitions. Each layer wins within its own scope; this file wins on code-level questions.
 
 1.3. In review, a documented rule here overrides generic style baselines (such as the Fowler smell baseline used by `/skill:code-review`): where this file endorses something a baseline would flag, the baseline yields.
 
@@ -54,7 +54,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 ## 4. Data contracts (passive values)
 
-4.1. Owner Interface value contracts are aggregate structs with default member initializers (`bool truncated{false};`) — no user-declared constructors, no behavior beyond trivial helpers (AGENTS.md guardrail 1; ADR 0019; statically checked for key headers, see §14).
+4.1. Owner Interface value contracts are aggregate structs with default member initializers (`bool truncated{false};`) — no user-declared constructors, no behavior beyond trivial helpers (`docs/agents/architecture.md` §Passive value contracts; ADR 0019; statically checked for key headers, see §14).
 
 4.2. Sum types are a `std::variant` behind a named `using` alias (`MessageVariant`, `AgentLifecycleEvent`). Dispatch with `std::visit` + `if constexpr`, or `std::get_if`.
 
@@ -86,7 +86,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 6.1. Fallible asynchronous Owner operations return `[[nodiscard]] cch::support::AsyncResult<T, E>` (default `E = cch::support::Error`). Ready values complete inline without support allocation or suspension; pending operations own their post-initiation inputs. Boost.Asio awaitables, executors, schedulers, and cancellation types stay private to implementations. Bounded in-memory value work remains synchronous; do not create an asynchronous facade for it (ADR 0040).
 
-6.2. Stored single operations, sinks, committers, and policy operations use `std::move_only_function` — never `std::function` unless independent copying is a documented contract (AGENTS.md guardrail 3; ADR 0040). A stored callback's copyability says nothing about referent lifetime.
+6.2. Stored single operations, sinks, committers, and policy operations use `std::move_only_function` — never `std::function` unless independent copying is a documented contract (`docs/agents/architecture.md` §Connection strength; ADR 0040). A stored callback's copyability says nothing about referent lifetime.
 
 6.3. Connection strength is explicit. Model-stream delivery and Agent-to-Session commitment are named strong, awaited, backpressured connections. Session-to-TUI, status, diagnostic, and ordinary Agent Session subscribers are weak observers that perform only bounded value work or mailbox sends; catch, diagnose, and deactivate a throwing observer without vetoing progress or persistence (ADR 0017; ADR 0040).
 
@@ -116,7 +116,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 8.1. Owner Interface headers live under Owner-local roots and have one canonical `<cch/...>` angle-include spelling. They are repository-internal and are not installed, exported, or ABI-promised. Private implementation roots are not visible across Owners. The Parity Architecture Gate enforces roots, ownership, visibility, canonical spelling, and legal cross-Owner relationships (ADR 0039).
 
-8.2. Owner Interface headers include only standard-library, `cch_support`, and legal downstream Owner headers. They never include Boost.Asio, Glaze, provider/serialization DTOs, loaders/parsers/visitors, schema conversion, or private implementation paths (AGENTS.md guardrail 4; ADR 0039).
+8.2. Owner Interface headers include only standard-library, `cch_support`, and legal downstream Owner headers. They never include Boost.Asio, Glaze, provider/serialization DTOs, loaders/parsers/visitors, schema conversion, or private implementation paths (`docs/agents/architecture.md` §Local generic machinery; ADR 0039).
 
 8.3. Each Owner Interface header compiles independently. Prefer forward declarations when only a name, reference, or pointer is needed; never add umbrella/forwarding headers, compatibility aliases, alternate spellings, or macro-generated project includes.
 
@@ -140,7 +140,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 ## 10. Security invariants
 
-This section is the checkable form of AGENTS.md guardrail 5.
+This section is the checkable form of `docs/agents/architecture.md` §Security and containment.
 
 10.1. Secret redaction is Owner-private product policy. Route it through the owning package's one approved implementation; never hand-roll redaction or expose redaction machinery through `cch_support` or an Owner Interface (ADR 0039).
 
@@ -168,7 +168,7 @@ This section is the checkable form of AGENTS.md guardrail 5.
 
 11.6. CTest names and labels are the normal selection, scheduling, timeout, and reporting surface. Fast deterministic unit/contract cases are discovered individually. Process, TTY, golden, and complete Agent Session/TUI scenarios are grouped only when measured startup cost or shared setup justifies it. Fatal, cancellation, Close, and hang-prone contracts run in isolated subprocesses with hard timeouts; the old shard runner is not a second scheduling authority.
 
-11.7. Fake Providers and deterministic local resources are the default. No live API keys or provider network access appears in the default CTest suite (AGENTS.md Validation). Each test owns unique temporary directories, ports, files, and environment state.
+11.7. Fake Providers and deterministic local resources are the default. No live API keys or provider network access appears in the default CTest suite (`docs/agents/validation.md` §Provider tests). Each test owns unique temporary directories, ports, files, and environment state.
 
 ## 12. CMake
 
@@ -188,7 +188,7 @@ This section is the checkable form of AGENTS.md guardrail 5.
 
 13.2. Pure value transformations: A transformation determined solely by its input values stays independent of physical I/O, mutable global state, and mutable object state. It accepts the values it needs explicitly and returns the owning domain's `std::expected`/`cch::support::Expected` only when it can fail; an infallible transformation returns `T` directly. Extract an embedded transformation from an orchestrator when it contains branching, iteration, parsing/validation, or multi-field formatting. A direct field projection or other single-expression transformation remains inline.
 
-13.3. Seam discipline: Physical capability use stays behind interfaces or narrow implementation boundaries established by AGENTS.md guardrail 2 or an accepted ADR. Value transformations move inward into private helpers or implementation modules rather than outward into new capability interfaces. Adding, moving, or removing a capability seam is an architecture decision resolved in `AGENTS.md` or an ADR, not a code-level review inference.
+13.3. Seam discipline: Physical capability use stays behind interfaces or narrow implementation boundaries established by `docs/agents/architecture.md` §Capability seams or an accepted ADR. Value transformations move inward into private helpers or implementation modules rather than outward into new capability interfaces. Adding, moving, or removing a capability seam is an architecture decision resolved in `docs/agents/architecture.md` or an ADR, not a code-level review inference.
 
 13.4. Locality of mutable state: Declare a mutable local in the narrowest existing lexical block containing all its uses. Flag it when the declaration can move into an existing nested block without changing behavior, or when the same variable is reused for a different meaning in a later processing phase. Accumulators, parser state, and explicit lifecycle state that intentionally span phases are not violations.
 
@@ -196,7 +196,7 @@ This section is the checkable form of AGENTS.md guardrail 5.
 
 - Skip a finding only when a required build or test necessarily fails on that exact violation. The Parity Architecture Gate rejects only the configured relationships and stable rule identifiers its manifest/evidence policy defines; its pass does not imply broader §2–§13 conformance (ADR 0039).
 - Compiler diagnostics remain review findings: `-Wall -Wextra -Wpedantic` are enabled without warnings-as-errors.
-- For code changes that compile and pass the required suite, report remaining §2–§13 violations. Documentation-only changes follow the documentation validation in `AGENTS.md` instead.
+- For code changes that compile and pass the required suite, report remaining §2–§13 violations. Documentation-only changes follow `docs/agents/validation.md` §Documentation-only changes instead.
 
 ## 15. Known exceptions and migrations
 

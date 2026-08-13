@@ -1,45 +1,23 @@
-# AGENTS.md
+# C++ Coding Harness
 
-## Start Gate
+This is an experimental C++23 coding-agent Runtime that preserves selected pi semantics behind strict Owner-package and safety boundaries.
 
-1. Inspect the working tree with `git status --short`.
-2. Treat every pre-existing modified or untracked file as user-owned unless the task explicitly targets it. Do not overwrite, reformat, delete, or clean unrelated changes.
-3. Read only the context needed for the task:
-   - Fetch the referenced GitHub issue or PRD through `gh`.
-   - Read `CONTEXT.md` and relevant accepted ADRs when domain language or architecture is involved.
-   - Read `README.md`, `CMakeLists.txt`, and the related code and tests for implementation work.
-4. Stop exploring once you can name the behavior, the authoritative seam, the constraints, and the validation path.
+## Start gate
 
-## Guardrails
+1. Inspect `git status --short`. Treat every pre-existing modified or untracked file as user-owned; preserve unrelated work.
+2. Fetch any named GitHub issue or PRD, then read only the task-specific context linked below.
+3. Stop exploring once you can name the behavior, authoritative seam, constraints, and validation path.
 
-1. **Data is passive value state.** Owner Interfaces use aggregate-friendly `struct`, `std::variant`, `std::expected`, and `cch::support::JsonValue` values.
-2. **Capabilities cross physical seams.** Chat clients, stream transports, execution environments, session stores, and tools are exposed through interfaces or dependency-heavy implementations hidden behind narrow headers.
-3. **Connection strength is explicit.** Ordinary Agent Session, TUI, status, and diagnostic observers are weak; model-stream delivery and Agent-to-Session commitment are separately named strong, awaited, backpressured connections. Both use move-only callables where stored—never regress to copyability requirements such as `std::function`. See ADR 0040.
-4. **Generic and serialization machinery stays local.** Glaze DTOs, schema conversion, visitors, parsing helpers, and similar machinery stay in serialization or implementation layers.
-5. **Security and containment remain explicit.** Shell, file, environment-variable, provider, and session changes must preserve workspace containment, secret redaction, output truncation, and the documented “not a sandbox” boundary.
+## Build entry point
 
-Do not reintroduce the legacy synchronous tool surface, `util::Result`, Boost.JSON domain contracts, `src` as a public include surface, or compatibility-only empty flags.
+Dependencies use the pinned vcpkg manifest; system packages are unsupported. Use `scripts/bootstrap.sh --test` for a fresh full Debug validation. Read [README.md](README.md) for Release and manual preset commands.
 
-Code-level conventions (style, naming, error handling, async, tests, CMake) live in `CODING_STANDARDS.md`; the guardrails above stay architecture-level.
+## Task-specific context
 
-## pi C++ Parity
-
-- The [pi C++ parity map](https://github.com/lanshengzhi/cpp-coding-harness/issues/2) is the current planning authority for open parity decisions.
-- The local pi source checkout is `../pi`; a `pi:` reference resolves from that root.
-- Inspect the relevant current pi source or documentation before making parity decisions or changes. Matching supported pi semantics is the default; record intentional divergences in the map or an accepted ADR.
-- Preserve this repository's C++ idioms and guardrails rather than mechanically translating TypeScript.
-- Approved work leaves the map and follows `/to-spec` → `/to-tickets` → `/implement`.
-- Prefer the clean pi-aligned end state over migrations, fallback reads, deprecation shims, or compatibility-only flags unless a current contract explicitly requires them.
-
-## Validation
-
-- Use the build and test commands in `README.md`.
-- During implementation, run the smallest focused test that can fail; run the full test suite once at the end as required by `/implement`.
-- Run architecture tests when public headers, include surfaces, dependency directions, provider/tool/session contracts, or CMake public/private boundaries change.
-- For documentation-only changes, check headings, links, tracker references, and clear agent-facing English; no C++ build is required.
-- Use fake-provider tests by default. Do not use live API keys or network validation unless the user explicitly requests it.
-- `/implement` includes review and a task-scoped commit on the current branch. Do not push, merge, switch branches, create worktrees, or delete branches unless the user explicitly asks.
-- Closing an issue: tick its met acceptance criteria and remove in-flight state labels (`needs-*`, `ready-for-*`), then run `scripts/verify-closed-issue.sh <n>`. The close is done when the script exits 0.
+- **Implementation or review:** read [CODING_STANDARDS.md](CODING_STANDARDS.md) and [validation](docs/agents/validation.md).
+- **Architecture, public headers, dependency direction, capability seams, or security boundaries:** read [architecture](docs/agents/architecture.md) and the relevant accepted ADRs.
+- **pi parity:** read [pi parity](docs/agents/pi-parity.md), then inspect the relevant current pi source or documentation.
+- **Domain language:** read [domain docs](docs/agents/domain.md), `CONTEXT.md`, and relevant accepted ADRs.
 
 ## Agent skills
 
@@ -53,4 +31,4 @@ The tracker uses the canonical triage labels. See `docs/agents/triage-labels.md`
 
 ### Domain docs
 
-See `docs/agents/domain.md`: how to consume `CONTEXT.md` and `docs/adr/` in this single-context repo.
+This is a single-context repository. See `docs/agents/domain.md` for how to consume `CONTEXT.md` and `docs/adr/`.
