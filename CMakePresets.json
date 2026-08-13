@@ -1,24 +1,43 @@
 {
   "version": 6,
-  "cmakeMinimumRequired": { "major": 4, "minor": 0, "patch": 0 },
+  "cmakeMinimumRequired": { "major": 4, "minor": 4, "patch": 0 },
   "configurePresets": [
     {
       "name": "vcpkg",
       "displayName": "Default (vcpkg)",
-      "description": "Build with vcpkg manifest mode for self-contained dependency resolution",
+      "description": "Supported GCC 16.x Debug build with pinned vcpkg dependencies",
+      "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CCH_TOOLCHAIN_ROLE": "build",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+        "VCPKG_HOST_TRIPLET": "x64-linux",
+        "VCPKG_MANIFEST_INSTALL": true,
+        "VCPKG_MANIFEST_MODE": true,
+        "VCPKG_TARGET_TRIPLET": "x64-linux"
       }
     },
     {
       "name": "vcpkg-release",
       "displayName": "Release (vcpkg)",
-      "description": "Release build with vcpkg",
+      "description": "Supported GCC 16.x Release build with pinned vcpkg dependencies",
       "inherits": "vcpkg",
+      "binaryDir": "${sourceDir}/build/release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "clang-conformance",
+      "displayName": "Clang 22.x conformance (vcpkg)",
+      "description": "Blocking Clang 22.x Debug conformance build; never a release-artifact build",
+      "inherits": "vcpkg",
+      "binaryDir": "${sourceDir}/build/clang-conformance",
+      "cacheVariables": {
+        "CCH_TOOLCHAIN_ROLE": "conformance",
+        "CMAKE_CXX_COMPILER": "clang++-22"
       }
     },
     {
@@ -26,7 +45,6 @@
       "displayName": "Fast development (Ninja + ccache, Debug)",
       "description": "Optional local Debug preset: Ninja with ccache required. ADR 0039 defines supported build policy; docs/build-performance-plan.md preserves historical measurements only.",
       "inherits": "vcpkg",
-      "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/dev-fast",
       "cacheVariables": {
         "CMAKE_C_COMPILER_LAUNCHER": "ccache",
@@ -59,6 +77,12 @@
       "jobs": 4
     },
     {
+      "name": "clang-conformance",
+      "configurePreset": "clang-conformance",
+      "configuration": "Debug",
+      "jobs": 4
+    },
+    {
       "name": "dev-fast",
       "configurePreset": "dev-fast",
       "configuration": "Debug",
@@ -82,6 +106,12 @@
       "name": "vcpkg-release",
       "configurePreset": "vcpkg-release",
       "configuration": "Release",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "clang-conformance",
+      "configurePreset": "clang-conformance",
+      "configuration": "Debug",
       "output": { "outputOnFailure": true }
     },
     {

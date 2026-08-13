@@ -32,7 +32,7 @@ The Supported Platform is native Linux x86-64 with glibc. Ubuntu 24.04 is the re
 
 ### Bootstrap with vcpkg (recommended)
 
-All dependencies are declared in `vcpkg.json`. The bootstrap scripts create a local `.deps/vcpkg` checkout when `VCPKG_ROOT` is not already set, bootstrap vcpkg, and configure CMake in manifest mode so dependencies such as CLI11, Glaze, MD4C, libwebp, Boost, and OpenSSL are installed automatically. The scripts first run an environment precheck (git, curl, zip, unzip, tar, and a GCC 16.x compiler), print the install command for your distribution when a tool is missing, and then pin the vcpkg checkout to the exact `builtin-baseline` commit recorded in `vcpkg.json` so dependency resolution is reproducible.
+All dependencies are declared in `vcpkg.json`. `scripts/bootstrap.sh` creates a local `.deps/vcpkg` checkout when `VCPKG_ROOT` is not already set, bootstraps vcpkg, and configures CMake in manifest mode so dependencies such as CLI11, Glaze, MD4C, libwebp, Boost, and OpenSSL are installed automatically. It first checks the native Linux x86-64/glibc boundary plus git, curl, zip, unzip, tar, CMake 4.4+, Ninja 1.11+, and GCC 16.x, then pins the vcpkg checkout to the exact `builtin-baseline` commit recorded in `vcpkg.json`. CMake independently revalidates the platform, compiler role, generator, vcpkg revision, manifest triplet, and resolved dependency paths on every configuration.
 
 ```bash
 scripts/bootstrap.sh --test
@@ -46,13 +46,23 @@ Useful options:
 
 Other operating systems, architectures, C libraries, and cross-compilation are unsupported and fail at configure time. Unix Makefiles and Unity Build are not supported entry points.
 
-Manual vcpkg usage is also supported when `VCPKG_ROOT` is already set:
+Manual vcpkg usage is also supported when `VCPKG_ROOT` names a bootstrapped checkout at the exact `builtin-baseline` revision and GCC 16.x is the active compiler:
 
 ```bash
 cmake --preset vcpkg
 cmake --build --preset vcpkg
 ctest --preset vcpkg
 ```
+
+Clang 22.x is accepted only in the conformance role and has its own non-release preset:
+
+```bash
+CC=clang-22 CXX=clang++-22 cmake --preset clang-conformance
+cmake --build --preset clang-conformance
+ctest --preset clang-conformance
+```
+
+The blocking Ubuntu 24.04 workflow runs GCC Debug, GCC Release, and Clang conformance builds against fake-provider/offline tests. `.github/workflows/linux-toolchain.yml` pins its exact compiler packages, CMake, Ninja, and vcpkg revision; it performs no live-provider validation.
 
 Release uses validated IPO/LTO. `cmake --install` is Runtime-only: a staged prefix contains `cpp_harness`, required runtime resources, and required licenses/notices—never Owner Interface headers, project libraries, an SDK, CMake package/config, exported targets, components, or compatibility files. Release validation runs from a clean staging prefix.
 

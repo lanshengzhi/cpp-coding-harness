@@ -1,8 +1,15 @@
-cmake_minimum_required(VERSION 4.0)
+cmake_minimum_required(VERSION 4.4)
+
+set(CCH_TOOLCHAIN_ROLE "build" CACHE STRING "Supported compiler role: build or conformance")
+set_property(CACHE CCH_TOOLCHAIN_ROLE PROPERTY STRINGS build conformance)
+
+include(cmake/SupportedBuild.cmake)
+cch_validate_supported_build_before_project()
+
 project(cpp_coding_harness VERSION 0.1.0 LANGUAGES CXX)
+cch_validate_supported_build_after_project()
 
 # CMake 3.30+ removed the legacy FindBoost module; use Boost's own config-mode package.
-# The minimum is 4.0 (ADR 0038), so CMP0167 is always available; set it unconditionally.
 cmake_policy(SET CMP0167 NEW)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -11,31 +18,30 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(CCH_BUILD_TESTS "Build tests" ON)
 
-find_package(Boost REQUIRED COMPONENTS filesystem)
+find_package(Boost CONFIG REQUIRED COMPONENTS filesystem)
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(CLI11 CONFIG REQUIRED)
 find_package(glaze CONFIG REQUIRED)
 find_package(md4c CONFIG REQUIRED)
-find_package(WebP CONFIG QUIET)
+find_package(WebP CONFIG REQUIRED)
+find_package(utf8proc CONFIG REQUIRED)
+
+cch_require_vcpkg_dependency("Boost" "${Boost_DIR}")
+cch_require_vcpkg_dependency("OpenSSL headers" "${OPENSSL_INCLUDE_DIR}")
+cch_require_vcpkg_dependency("OpenSSL SSL library" "${OPENSSL_SSL_LIBRARY}")
+cch_require_vcpkg_dependency("OpenSSL crypto library" "${OPENSSL_CRYPTO_LIBRARY}")
+cch_require_vcpkg_dependency("CLI11" "${CLI11_DIR}")
+cch_require_vcpkg_dependency("glaze" "${glaze_DIR}")
+cch_require_vcpkg_dependency("md4c" "${md4c_DIR}")
+cch_require_vcpkg_dependency("WebP" "${WebP_DIR}")
+cch_require_vcpkg_dependency("utf8proc" "${utf8proc_DIR}")
+
 if(NOT TARGET WebP::webpdecoder)
-    find_path(WEBP_INCLUDE_DIR NAMES webp/decode.h REQUIRED)
-    find_library(WEBP_DECODER_LIBRARY NAMES webpdecoder webp REQUIRED)
-    add_library(WebP::webpdecoder UNKNOWN IMPORTED)
-    set_target_properties(WebP::webpdecoder PROPERTIES
-        IMPORTED_LOCATION "${WEBP_DECODER_LIBRARY}"
-        INTERFACE_INCLUDE_DIRECTORIES "${WEBP_INCLUDE_DIR}"
-    )
+    message(FATAL_ERROR "Pinned vcpkg WebP package does not provide WebP::webpdecoder")
 endif()
-find_package(utf8proc CONFIG QUIET)
 if(NOT TARGET utf8proc::utf8proc)
-    find_path(UTF8PROC_INCLUDE_DIR NAMES utf8proc.h REQUIRED)
-    find_library(UTF8PROC_LIBRARY NAMES utf8proc REQUIRED)
-    add_library(utf8proc::utf8proc UNKNOWN IMPORTED)
-    set_target_properties(utf8proc::utf8proc PROPERTIES
-        IMPORTED_LOCATION "${UTF8PROC_LIBRARY}"
-        INTERFACE_INCLUDE_DIRECTORIES "${UTF8PROC_INCLUDE_DIR}"
-    )
+    message(FATAL_ERROR "Pinned vcpkg utf8proc package does not provide utf8proc::utf8proc")
 endif()
 
 set(CCH_WARNING_OPTIONS -Wall -Wextra -Wpedantic)
@@ -346,6 +352,40 @@ target_compile_options(cpp_harness PRIVATE ${CCH_WARNING_OPTIONS})
 
 if(CCH_BUILD_TESTS)
     include(CTest)
+
+    function(cch_add_supported_build_policy_test case_name should_pass diagnostic_pattern)
+        set(test_name "cch_supported_build_policy_${case_name}")
+        add_test(
+            NAME ${test_name}
+            COMMAND
+                ${CMAKE_COMMAND}
+                -DCCH_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+                -DCCH_TEST_CASE=${case_name}
+                -DCCH_CASE_SHOULD_PASS=${should_pass}
+                "-DCCH_DIAGNOSTIC_PATTERN=${diagnostic_pattern}"
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/SupportedBuildPolicyTest.cmake
+        )
+        set_tests_properties(${test_name} PROPERTIES LABELS "architecture;build;issue441")
+    endfunction()
+
+    cch_add_supported_build_policy_test("accept-gcc" TRUE "")
+    cch_add_supported_build_policy_test("accept-clang" TRUE "")
+    cch_add_supported_build_policy_test("reject-cross-build" FALSE "Cross-compilation is unsupported")
+    cch_add_supported_build_policy_test("reject-operating-system" FALSE "native Linux")
+    cch_add_supported_build_policy_test("reject-architecture" FALSE "x86-64")
+    cch_add_supported_build_policy_test("reject-libc" FALSE "glibc")
+    cch_add_supported_build_policy_test("reject-generator" FALSE "Ninja generator")
+    cch_add_supported_build_policy_test("reject-ninja-version" FALSE "Ninja 1.11 or newer")
+    cch_add_supported_build_policy_test("reject-unity" FALSE "Unity Build")
+    cch_add_supported_build_policy_test("reject-gcc-version" FALSE "GCC 16.x")
+    cch_add_supported_build_policy_test("reject-clang-version" FALSE "Clang 22.x")
+    cch_add_supported_build_policy_test("reject-clang-build-role" FALSE "build role requires GCC 16.x")
+    cch_add_supported_build_policy_test("reject-clang-release" FALSE "requires a Debug configuration")
+    cch_add_supported_build_policy_test("reject-dependency-fallback" FALSE "outside the pinned vcpkg prefix")
+    cch_add_supported_build_policy_test("reject-missing-vcpkg-toolchain" FALSE "pinned vcpkg toolchain")
+    cch_add_supported_build_policy_test("reject-vcpkg-manifest-install" FALSE "manifest installation is required")
+    cch_add_supported_build_policy_test("reject-vcpkg-host-triplet" FALSE "host triplet")
+    cch_add_supported_build_policy_test("reject-vcpkg-overlays" FALSE "overlay ports")
 
     # Package-aligned test shards (build-performance-plan Stage 4). Each shard
     # is its own executable registered with ctest, so a focused test edit

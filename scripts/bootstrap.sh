@@ -7,10 +7,11 @@ Usage: scripts/bootstrap.sh [options]
 
 Bootstraps vcpkg, configures CMake with the vcpkg preset, and optionally builds/tests.
 
-Environment precheck: git, curl, zip, unzip, tar, and a GCC 16+ compiler are
-required. When a tool is missing or too old, the script prints the install
-command for the detected distribution and exits before touching anything.
-vcpkg is pinned to the builtin-baseline commit recorded in vcpkg.json.
+Environment precheck: native Linux x86-64 with glibc, git, curl, zip, unzip,
+tar, CMake 4.4+, Ninja 1.11+, and a GCC 16.x compiler are required. When a
+tool is missing or unsupported, the script prints an actionable diagnostic and
+exits before touching anything. vcpkg is pinned to the builtin-baseline commit
+recorded in vcpkg.json.
 
 Options:
   --no-build       Configure dependencies/project only; do not build.
@@ -93,17 +94,26 @@ detect_distro() {
 	fi
 }
 
-require_tool() {
-	local tool="$1"
-	if ! command -v "$tool" >/dev/null 2>&1; then
-		precheck_fail "required command '$tool' was not found on PATH"
-	fi
+version_at_least() {
+	local actual="$1"
+	local minimum="$2"
+	[[ "$(printf '%s\n%s\n' "$minimum" "$actual" | sort -V | head -1)" == "$minimum" ]]
 }
 
 distro="$(detect_distro)"
-missing=0
 
-for tool in git curl zip unzip tar; do
+if [[ "$(uname -s)" != "Linux" ]]; then
+	precheck_fail "unsupported operating system '$(uname -s)'; native Linux x86-64 with glibc is required"
+fi
+if [[ "$(uname -m)" != "x86_64" ]]; then
+	precheck_fail "unsupported architecture '$(uname -m)'; native Linux x86-64 is required"
+fi
+if ! getconf GNU_LIBC_VERSION >/dev/null 2>&1; then
+	precheck_fail "unsupported C library; glibc is required (musl and other C libraries are unsupported)"
+fi
+
+missing=0
+for tool in git curl zip unzip tar cmake ninja; do
 	if ! command -v "$tool" >/dev/null 2>&1; then
 		echo "error: required command '$tool' was not found on PATH" >&2
 		missing=1
@@ -114,11 +124,12 @@ if [[ "$missing" -eq 1 ]]; then
 	case "$distro" in
 	ubuntu)
 		echo "Install the missing tools, for example:" >&2
-		echo "  sudo apt install curl zip unzip tar" >&2
+		echo "  sudo apt install curl zip unzip tar ninja-build" >&2
+		echo "Install CMake 4.4+ from an official Kitware release." >&2
 		;;
 	arch)
 		echo "Install the missing tools, for example:" >&2
-		echo "  sudo pacman -Syu curl zip unzip tar" >&2
+		echo "  sudo pacman -Syu curl zip unzip tar cmake ninja" >&2
 		;;
 	*)
 		echo "Install the missing tools using your distribution's package manager." >&2
@@ -127,13 +138,23 @@ if [[ "$missing" -eq 1 ]]; then
 	exit 1
 fi
 
-# GCC 16+ (major version >= 16) is the toolchain floor (ADR 0038). Use g++ so
-# the compiler actually used for linking is the one checked.
-if ! command -v g++ >/dev/null 2>&1; then
-	echo "error: a C++ compiler (g++) was not found on PATH" >&2
+cmake_version="$(cmake --version | awk 'NR == 1 { print $3 }')"
+if ! version_at_least "$cmake_version" "4.4"; then
+	precheck_fail "CMake 4.4 or newer is required (found $cmake_version)"
+fi
+
+ninja_version="$(ninja --version)"
+if ! version_at_least "$ninja_version" "1.11"; then
+	precheck_fail "Ninja 1.11 or newer is required (found $ninja_version)"
+fi
+
+# GCC 16.x is the sole supported build/release compiler (ADR 0039). Check and
+# then export the exact gcc/g++ paths used by CMake and vcpkg.
+if ! command -v gcc >/dev/null 2>&1 || ! command -v g++ >/dev/null 2>&1; then
+	echo "error: GCC build compilers (gcc and g++) were not found on PATH" >&2
 	case "$distro" in
 	ubuntu)
-		echo "Install GCC 16+, for example:" >&2
+		echo "Install GCC 16.x, for example:" >&2
 		echo "  sudo add-apt-repository ppa:ubuntu-toolchain-r/test" >&2
 		echo "  sudo apt install gcc-16 g++-16" >&2
 		echo "  sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-16 100" >&2
@@ -144,15 +165,16 @@ if ! command -v g++ >/dev/null 2>&1; then
 		echo "  sudo pacman -Syu gcc" >&2
 		;;
 	*)
-		echo "Install a GCC 16+ toolchain using your distribution's package manager." >&2
+		echo "Install a GCC 16.x toolchain using your distribution's package manager." >&2
 		;;
 	esac
 	exit 1
 fi
 
-gcc_major="$(g++ -dumpversion | cut -d. -f1)"
-if [[ "$gcc_major" -lt 16 ]]; then
-	echo "error: GCC 16+ is required (found g++ $gcc_major.x)" >&2
+gcc_major="$(gcc -dumpversion | cut -d. -f1)"
+gxx_major="$(g++ -dumpversion | cut -d. -f1)"
+if [[ "$gcc_major" != "16" || "$gxx_major" != "16" ]]; then
+	echo "error: GCC 16.x is required (found gcc $gcc_major.x and g++ $gxx_major.x)" >&2
 	case "$distro" in
 	ubuntu)
 		echo "Install GCC 16, for example:" >&2
@@ -166,13 +188,15 @@ if [[ "$gcc_major" -lt 16 ]]; then
 		echo "  sudo pacman -Syu gcc" >&2
 		;;
 	*)
-		echo "Install a GCC 16+ toolchain using your distribution's package manager." >&2
+		echo "Install a GCC 16.x toolchain using your distribution's package manager." >&2
 		;;
 	esac
 	exit 1
 fi
 
-echo "Environment precheck passed: g++ $gcc_major.x, tools OK"
+gcc_bin="$(command -v gcc)"
+gxx_bin="$(command -v g++)"
+echo "Environment precheck passed: native Linux x86-64 glibc, CMake $cmake_version, Ninja $ninja_version, GCC $gcc_major.x"
 
 # --- vcpkg acquisition and pinning ----------------------------------------
 
@@ -214,6 +238,13 @@ if [[ "$current_head" != "$baseline" ]]; then
 		precheck_fail "could not check out vcpkg baseline $baseline"
 fi
 
+tracked_changes="$(git -C "$vcpkg_root" status --porcelain --untracked-files=no)"
+if [[ -n "$tracked_changes" ]]; then
+	echo "error: the pinned vcpkg checkout has tracked modifications:" >&2
+	echo "$tracked_changes" >&2
+	precheck_fail "use a clean vcpkg checkout at $baseline"
+fi
+
 # The vcpkg binary version follows scripts/vcpkg-tool-metadata.txt, which
 # changes with the checkout. bootstrap-vcpkg.sh always downloads (or builds)
 # the binary matching that metadata and overwrites vcpkg_root/vcpkg, so run it
@@ -229,24 +260,10 @@ if [[ "$release" -eq 1 ]]; then
 	preset="vcpkg-release"
 fi
 
-# If a prior system-package configure left a cache in build/, CMake will keep
-# ignoring the vcpkg toolchain. Remove only the cache metadata, not build outputs.
-cache_file="$repo_root/build/CMakeCache.txt"
-if [[ -f "$cache_file" ]] && ! grep -Fq "scripts/buildsystems/vcpkg.cmake" "$cache_file"; then
-	echo "Removing stale non-vcpkg CMake cache from build/"
-	rm -f "$cache_file"
-	rm -rf "$repo_root/build/CMakeFiles"
-fi
-
-# Prefer the CMake vcpkg cached into downloads/tools (fixed by the vcpkg
-# version) over any system CMake; fall back to the system one when absent.
-vcpkg_cmake="$(find "$vcpkg_root/downloads/tools" -maxdepth 4 -type f -name cmake -perm -u+x 2>/dev/null | sort -V | tail -1 || true)"
-if [[ -n "$vcpkg_cmake" ]]; then
-	cmake_bin="$vcpkg_cmake"
-	echo "Using vcpkg-cached CMake: $cmake_bin"
-else
-	cmake_bin="cmake"
-	echo "Using system CMake (vcpkg-cached CMake not found)"
+cmake_bin="$(command -v cmake)"
+ctest_bin="$(dirname "$cmake_bin")/ctest"
+if [[ ! -x "$ctest_bin" ]]; then
+	ctest_bin="$(command -v ctest)"
 fi
 
 # CMake presets resolve CMakePresets.json relative to the current working
@@ -254,8 +271,11 @@ fi
 (
 	cd "$repo_root" || exit 1
 
+	export CC="$gcc_bin"
+	export CXX="$gxx_bin"
+
 	echo "Configuring with CMake preset '$preset'"
-	"$cmake_bin" --preset "$preset"
+	"$cmake_bin" --preset "$preset" --fresh
 
 	if [[ "$build" -eq 1 ]]; then
 		echo "Building with CMake preset '$preset'"
@@ -264,7 +284,7 @@ fi
 
 	if [[ "$run_tests" -eq 1 ]]; then
 		echo "Running tests with CTest preset '$preset'"
-		ctest --preset "$preset"
+		"$ctest_bin" --preset "$preset"
 	fi
 )
 

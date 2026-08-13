@@ -1,0 +1,103 @@
+name: Supported Linux toolchain
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: GCC 16 Debug
+            preset: vcpkg
+            cc: gcc-16
+            cxx: g++-16
+            compiler: gcc
+          - name: GCC 16 Release
+            preset: vcpkg-release
+            cc: gcc-16
+            cxx: g++-16
+            compiler: gcc
+          - name: Clang 22 conformance
+            preset: clang-conformance
+            cc: clang-22
+            cxx: clang++-22
+            compiler: clang
+    env:
+      CCH_LIVE_KIMI: "0"
+      VCPKG_FORCE_SYSTEM_BINARIES: "1"
+      VCPKG_ROOT: ${{ github.workspace }}/.deps/vcpkg
+
+    steps:
+      - name: Check out harness
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Check out pinned vcpkg
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: microsoft/vcpkg
+          ref: 2f1d605400c8727cc00c15797aba796c88ccd523
+          path: .deps/vcpkg
+
+      - name: Install pinned CMake and Ninja
+        run: scripts/ci/install-build-tools.sh "$RUNNER_TEMP/cch-build-tools"
+
+      - name: Install pinned GCC and libstdc++
+        env:
+          GCC_PACKAGE_VERSION: 16-20260315-1ubuntu1~24~ppa1
+        run: |
+          sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
+          sudo apt-get update
+          sudo apt-get install --yes \
+            "gcc-16=$GCC_PACKAGE_VERSION" \
+            "g++-16=$GCC_PACKAGE_VERSION"
+          test "$(dpkg-query --show --showformat='${Version}' gcc-16)" = "$GCC_PACKAGE_VERSION"
+          test "$(dpkg-query --show --showformat='${Version}' g++-16)" = "$GCC_PACKAGE_VERSION"
+          test "$(g++-16 -dumpfullversion)" = "16.0.1"
+
+      - name: Install pinned Clang
+        if: matrix.compiler == 'clang'
+        env:
+          CLANG_PACKAGE_VERSION: "1:22.1.8~++20260714014902+ca7933e47d3a-1~exp1~20260714135019.80"
+        run: |
+          curl --fail --location --silent --show-error \
+            https://apt.llvm.org/llvm-snapshot.gpg.key \
+            | sudo gpg --dearmor --yes --output /usr/share/keyrings/apt.llvm.org.gpg
+          echo "deb [signed-by=/usr/share/keyrings/apt.llvm.org.gpg] https://apt.llvm.org/noble/ llvm-toolchain-noble-22 main" \
+            | sudo tee /etc/apt/sources.list.d/llvm-22.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install --yes "clang-22=$CLANG_PACKAGE_VERSION"
+          test "$(dpkg-query --show --showformat='${Version}' clang-22)" = "$CLANG_PACKAGE_VERSION"
+          test "$(clang++-22 --version | awk 'NR == 1 { print $4 }')" = "22.1.8"
+          clang++-22 -print-file-name=libstdc++.so | grep -F '/16/'
+
+      - name: Bootstrap pinned vcpkg
+        run: |
+          test "$(git -C "$VCPKG_ROOT" rev-parse HEAD)" = "2f1d605400c8727cc00c15797aba796c88ccd523"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+
+      - name: Configure
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: cmake --preset "${{ matrix.preset }}"
+
+      - name: Build
+        run: cmake --build --preset "${{ matrix.preset }}"
+
+      - name: Run offline tests
+        env:
+          KIMI_API_KEY: ""
+          OPENAI_API_KEY: ""
+          ANTHROPIC_API_KEY: ""
+        run: ctest --preset "${{ matrix.preset }}" --no-tests=error
