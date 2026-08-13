@@ -16,6 +16,10 @@ _Avoid_: Missing contract, unsupported stub
 The harness-owned interactive terminal product surface, combining reusable terminal UI capabilities with coding-agent-specific interaction. A non-interactive programmatic frontend is not the Native TUI.
 _Avoid_: Text REPL, RPC frontend
 
+**Supported Platform**:
+Linux on x86-64 with glibc, the only platform on which this harness accepts build, runtime, and Semantic Parity obligations for Supported Capabilities. Ubuntu 24.04 is the reproducible baseline and blocking CI environment; Arch Linux is a formally supported development environment validated from a pinned snapshot. Windows, macOS, Linux on other architectures, and musl-based systems carry no best-effort or placeholder product surface.
+_Avoid_: Development host, portable source, rolling latest, best-effort platform
+
 **Semantic Parity**:
 For a Supported Capability, preservation of pi's externally observable meanings and state transitions while allowing an idiomatic C++ API shape.
 _Avoid_: API-shape parity, mechanical translation
@@ -23,6 +27,38 @@ _Avoid_: API-shape parity, mechanical translation
 **Parity Baseline**:
 The recorded pi revision against which Supported Capabilities, intentional differences, fixtures, and drift are evaluated until an explicit baseline advance.
 _Avoid_: Latest pi, upstream HEAD
+
+**Parity Ownership Map**:
+The recorded mapping from C++ packages to the pi capability owners they represent at the Parity Baseline, preserving pi ownership and dependency direction without requiring package-shape identity.
+_Avoid_: Package isomorphism, live upstream graph
+
+**Parity Package Graph**:
+The directed dependency graph among the pi package owners of Supported Capabilities at the Parity Baseline. C++ targets may split within an owner but never introduce a reverse owner dependency.
+_Avoid_: Current CMake graph, package-shape parity
+
+**Configured Package Graph**:
+The per-configuration direct target dependencies, interface visibility, project-header inclusion, and source ownership produced by CMake and classified by owner and role. It is checked against the Parity Package Graph rather than inferred from CMake source formatting or a transitive build graph.
+_Avoid_: CMakeLists layout, build-order graph
+
+**Capability Owner Package**:
+The authoritative C++ package presenting the supported interface for one pi package owner; private implementation targets and headers may deepen it without becoming cross-owner dependencies.
+_Avoid_: Facade target, named module, source directory
+
+**C++ Support Package**:
+The pi-neutral package for shared C++ mechanics that owns no Supported Capability and depends on no Capability Owner Package. Its existence never adds another product owner.
+_Avoid_: Product package, capability owner, general-purpose runtime
+
+**Parity Architecture Manifest**:
+The baseline-pinned machine-readable authority for the Parity Package Graph, Capability Owner Packages, role classification rules, and capability-evidence references. It defines the policy grammar rather than duplicating the configured target inventory; build validation and Parity Drift analysis consume this one policy source.
+_Avoid_: CMake comment, target allowlist, duplicated policy
+
+**Parity Architecture Gate**:
+The required fail-closed validation that every configured production target, source, dependency, interface exposure, and project-header inclusion conforms to the Parity Architecture Manifest in every supported configuration on the Supported Platform. It remains mandatory independently of optional test builds.
+_Avoid_: Advisory architecture test, source-format style check, optional CI job
+
+**Parity Drift**:
+An observed difference between the Parity Baseline and another pi revision; it is advisory until an explicit baseline advance accepts or classifies it.
+_Avoid_: Contract failure, latest-pi obligation
 
 **Intentional Divergence**:
 A documented departure from Semantic Parity that demonstrably improves the C++ caller contract and cannot be hidden behind a private adapter without losing that benefit.
