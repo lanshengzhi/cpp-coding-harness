@@ -147,7 +147,7 @@ public:
     [[nodiscard]] util::Expected<AgentEventSubscription> subscribe(
         AgentEventSink sink);
 
-    /// Deactivate all weak observers. Idempotent. A run-start observer
+    /// Deactivate all weak observers. Idempotent. The current delivery
     /// snapshot remains alive for callback-stack safety but receives no later
     /// events after this call.
     void clear_subscriptions();

@@ -6,6 +6,7 @@
 
 #include <filesystem>
 #include <optional>
+#include <vector>
 
 namespace cch::coding_agent {
 
@@ -20,6 +21,10 @@ struct AgentSessionSnapshot {
     harness::session::SessionMetadata metadata{};
     harness::session::SessionTopology topology{harness::session::SessionTopology::Linear};
     std::optional<std::filesystem::path> session_path{std::nullopt};
+    /// Bounded, redacted diagnostics for session-event observer failures
+    /// (ADR 0017), mirroring `agent_state.diagnostics` for the session
+    /// assembly's own weak-observer registry.
+    std::vector<util::Error> session_event_diagnostics{};
 };
 
 } // namespace cch::coding_agent

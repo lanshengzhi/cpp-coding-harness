@@ -119,6 +119,30 @@ inline constexpr std::string_view kOverflowRecoveryFailedMessage =
     return message;
 }
 
+/// Bounded, redacted session-event observer diagnostic (ADR 0017): the
+/// session-assembly mirror of the Agent's weak-observer diagnostics channel.
+constexpr std::size_t kMaxSessionObserverDiagnostics = 16;
+constexpr std::size_t kMaxSessionObserverDetailBytes = 1024;
+
+void record_session_observer_diagnostic(
+    std::vector<util::Error>& diagnostics,
+    const util::Error& failure) {
+    std::string detail = failure.message;
+    if (!failure.detail.empty()) {
+        detail += ": ";
+        detail += failure.detail;
+    }
+    detail = util::bounded_redacted_text(
+        std::move(detail), kMaxSessionObserverDetailBytes, "...");
+    if (diagnostics.size() == kMaxSessionObserverDiagnostics) {
+        diagnostics.erase(diagnostics.begin());
+    }
+    diagnostics.push_back(util::make_error(
+        failure.code,
+        "session event observer failed",
+        std::move(detail)));
+}
+
 } // namespace
 
 AgentSessionRuntime::AgentSessionRuntime(
@@ -990,23 +1014,36 @@ void AgentSessionRuntime::emit_session_event(const AgentSessionEvent& event) {
     if (session_event_observers_.empty()) {
         return;
     }
-    for (const auto& subscriber : session_event_observers_) {
+    // Stable per-event snapshot: reentrant subscribe/unsubscribe mutate the
+    // live registry without invalidating this delivery pass. Each shared
+    // entry's active flags are re-checked immediately before invocation, so
+    // an unsubscribe earlier in the pass suppresses a later subscriber's turn
+    // and a new subscription begins with the next event.
+    const auto snapshot = session_event_observers_;
+    for (const auto& subscriber : snapshot) {
         if (!subscriber->delivery_enabled || !subscriber->sink) {
             continue;
         }
         try {
             if (auto observed = subscriber->sink(event); !observed) {
                 // A failing observer is deactivated and never vetoes retry
-                // progress or persistence (ADR 0017). The runtime has no
-                // diagnostics surface for session events yet; the Agent's
-                // observer diagnostics channel covers lifecycle observers.
+                // progress or persistence (ADR 0017); its failure is recorded
+                // in the session's bounded, redacted diagnostics channel.
+                record_session_observer_diagnostic(
+                    session_event_diagnostics_, observed.error());
                 subscriber->registered = false;
                 subscriber->delivery_enabled = false;
             }
-        } catch (const std::exception&) {
+        } catch (const std::exception& exception) {
+            record_session_observer_diagnostic(
+                session_event_diagnostics_,
+                util::make_error(util::ErrorCode::Unknown, exception.what()));
             subscriber->registered = false;
             subscriber->delivery_enabled = false;
         } catch (...) {
+            record_session_observer_diagnostic(
+                session_event_diagnostics_,
+                util::make_error(util::ErrorCode::Unknown, "unknown exception"));
             subscriber->registered = false;
             subscriber->delivery_enabled = false;
         }
@@ -2324,6 +2361,7 @@ AgentSessionSnapshot AgentSessionRuntime::snapshot(
         .metadata = session_.metadata,
         .topology = session_.topology,
         .session_path = session_path,
+        .session_event_diagnostics = session_event_diagnostics_,
     };
 }
 

@@ -801,6 +801,133 @@ TEST_CASE("stateful Agent bounds accumulated weak-observer diagnostics", "[agent
     }
 }
 
+TEST_CASE(
+    "stateful Agent suppresses an observer unsubscribed before its turn",
+    "[agent][stateful][subscription][issue452]") {
+    auto client = std::make_shared<ScriptedFakeRuntime>();
+    agent::AsyncToolRegistry tools;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 3;
+    options.model = tests::make_model("fake-model");
+    agent::Agent subject(client, std::move(tools), std::move(options));
+
+    int first_events = 0;
+    int second_events = 0;
+    std::optional<agent::AgentEventSubscription> second;
+    // The first observer runs first and unsubscribes the second observer on
+    // the very first event, before the second observer's turn for that event.
+    auto first_result = subject.subscribe(
+        [&](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+            ++first_events;
+            if (second && *second) {
+                second->unsubscribe();
+            }
+            return {};
+        });
+    REQUIRE(first_result);
+    auto first = std::move(*first_result);
+
+    auto second_result = subject.subscribe(
+        [&](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+            ++second_events;
+            return {};
+        });
+    REQUIRE(second_result);
+    second.emplace(std::move(*second_result));
+
+    REQUIRE(run_prompt(subject, "hello"));
+
+    // The unsubscribed observer never ran: its turn for the current event was
+    // suppressed and it received no later events in the run.
+    CHECK(first_events == 11);
+    CHECK(second_events == 0);
+    CHECK(first);
+    CHECK_FALSE(*second);
+}
+
+TEST_CASE(
+    "stateful Agent begins a reentrant subscription with the next event",
+    "[agent][stateful][subscription][issue452]") {
+    auto client = std::make_shared<ScriptedFakeRuntime>();
+    agent::AsyncToolRegistry tools;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 3;
+    options.model = tests::make_model("fake-model");
+    agent::Agent subject(client, std::move(tools), std::move(options));
+
+    std::vector<std::string> late_events;
+    bool subscribed_late = false;
+    std::optional<agent::AgentEventSubscription> late;
+    auto first_result = subject.subscribe(
+        [&](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+            if (!subscribed_late &&
+                std::holds_alternative<agent::AgentStartEvent>(event)) {
+                subscribed_late = true;
+                auto result = subject.subscribe(
+                    [&late_events](const agent::AgentLifecycleEvent& later)
+                        -> util::ExpectedVoid {
+                        late_events.push_back(event_label(later));
+                        return {};
+                    });
+                REQUIRE(result);
+                late.emplace(std::move(*result));
+            }
+            return {};
+        });
+    REQUIRE(first_result);
+    auto first = std::move(*first_result);
+
+    REQUIRE(run_prompt(subject, "hello"));
+
+    // The late subscriber missed the in-flight agent_start and began with the
+    // next event in the same run.
+    const std::vector<std::string> expected{
+        "turn_start",
+        "message_start:user",
+        "message_end:user",
+        "message_start:assistant",
+        "message_update",
+        "message_update",
+        "message_update",
+        "message_end:assistant",
+        "turn_end",
+        "agent_end",
+    };
+    CHECK(late_events == expected);
+    CHECK(subscribed_late);
+    CHECK(first);
+    CHECK(*late);
+}
+
+TEST_CASE(
+    "stateful Agent subscription handle outlives its owner as a benign drop",
+    "[agent][stateful][subscription][issue452]") {
+    std::unique_ptr<agent::AgentEventSubscription> handle;
+    {
+        auto client = std::make_shared<ScriptedFakeRuntime>();
+        agent::AsyncToolRegistry tools;
+        agent::AsyncAgentOptions options;
+        options.max_turns = 3;
+        options.model = tests::make_model("fake-model");
+        agent::Agent subject(client, std::move(tools), std::move(options));
+
+        auto subscribed = subject.subscribe(
+            [](const agent::AgentLifecycleEvent&) -> util::ExpectedVoid {
+                return {};
+            });
+        REQUIRE(subscribed);
+        handle = std::make_unique<agent::AgentEventSubscription>(
+            std::move(*subscribed));
+        CHECK(*handle);
+    }  // The owning Agent is destroyed here; the handle outlives it.
+
+    // Unsubscribing or destroying the handle after its owner is gone is a
+    // benign drop, never a use-after-free.
+    CHECK_FALSE(*handle);
+    handle->unsubscribe();
+    handle.reset();
+}
+
 TEST_CASE("stateful Agent retains history while agent_end stays invocation-local", "[agent][stateful][issue35]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::AsyncToolRegistry tools;

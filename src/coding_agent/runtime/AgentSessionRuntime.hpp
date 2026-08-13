@@ -592,6 +592,10 @@ private:
     std::vector<std::shared_ptr<SessionSubscriber>> session_event_observers_;
     /// Next session-event subscriber id.
     std::size_t next_session_subscriber_id_{1};
+    /// Bounded, redacted diagnostics for session-event observer failures (the
+    /// session-assembly mirror of the Agent's weak-observer diagnostics,
+    /// ADR 0017). Exposed through `AgentSessionSnapshot::session_event_diagnostics`.
+    std::vector<util::Error> session_event_diagnostics_;
     std::vector<std::shared_ptr<PendingUserBashCommit>> pending_user_bash_;
     std::optional<std::stop_source> active_stop_source_;
     std::optional<std::stop_source> active_user_bash_stop_source_;

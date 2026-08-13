@@ -154,7 +154,6 @@ struct Agent::Impl {
 
     [[nodiscard]] util::ExpectedVoid process_event(
         const AgentLifecycleEvent& event,
-        const std::vector<std::shared_ptr<Subscriber>>& run_subscribers,
         AgentEventCommitter& commitment,
         std::optional<util::Error>& commitment_failure) {
         reduce_state(event);
@@ -172,7 +171,11 @@ struct Agent::Impl {
 
         // Weak observers cannot veto progress. The separately named strong
         // commitment runs only after state and every observer saw the event.
-        (void)notify(*delivered_event, run_subscribers);
+        // Each delivery turn snapshots the live registry so a reentrant
+        // subscribe/unsubscribe cannot invalidate this pass; a subscriber
+        // added now first runs on the next event.
+        const auto delivery_snapshot = subscribers;
+        (void)notify(*delivered_event, delivery_snapshot);
         if (!commitment) {
             return {};
         }
@@ -244,8 +247,8 @@ struct Agent::Impl {
 
     [[nodiscard]] util::ExpectedVoid notify(
         const AgentLifecycleEvent& event,
-        const std::vector<std::shared_ptr<Subscriber>>& run_subscribers) {
-        for (const auto& subscriber : run_subscribers) {
+        const std::vector<std::shared_ptr<Subscriber>>& delivery_snapshot) {
+        for (const auto& subscriber : delivery_snapshot) {
             if (!subscriber->delivery_enabled || !subscriber->sink) {
                 continue;
             }
@@ -286,14 +289,18 @@ struct Agent::Impl {
     void unsubscribe(std::size_t id) {
         for (const auto& subscriber : subscribers) {
             if (subscriber->id == id) {
-                // Run-start snapshots retain this observer through the current
-                // run. Removing registration affects the next run.
+                // Deactivate immediately: a delivery snapshot shares this
+                // entry, and clearing delivery_enabled suppresses the
+                // subscriber's turn for the current event and every later
+                // event in the run.
                 subscriber->registered = false;
+                subscriber->delivery_enabled = false;
                 break;
             }
         }
-        // Keep unregistered entries reachable while a run snapshot may still
-        // own them so a reentrant close can disable later delivery.
+        // Keep deactivated entries reachable while a delivery snapshot may
+        // still own them so a reentrant unsubscribe cannot invalidate
+        // iteration.
         if (!active_run) {
             remove_unregistered_subscribers();
         }
@@ -332,9 +339,6 @@ struct Agent::Impl {
         impl->state.streaming_message.reset();
         impl->state.pending_tool_call_ids.clear();
         impl->invocation_message_offset = impl->state.messages.size();
-        // Subscription changes made from callbacks take effect on the next run.
-        // Shared entries keep this run's move-only sinks alive without copying.
-        const auto run_subscribers = impl->subscribers;
 
         const auto finish_run = [impl] {
             impl->state.model = impl->loop.current_model();
@@ -352,10 +356,10 @@ struct Agent::Impl {
         std::optional<util::Expected<AsyncAgentRunResult>> result;
         try {
             result = co_await run_loop_call(
-                [impl, run_subscribers, &commitment, &commitment_failure](
+                [impl, &commitment, &commitment_failure](
                     const AgentLifecycleEvent& event) {
                     return impl->process_event(
-                        event, run_subscribers, commitment, commitment_failure);
+                        event, commitment, commitment_failure);
                 },
                 impl->active_stop_source->get_token());
         } catch (const std::exception& exception) {

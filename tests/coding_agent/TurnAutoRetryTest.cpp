@@ -320,6 +320,134 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "session-event observers grow reentrantly without invalidating delivery",
+    "[coding_agent][retry][subscription][issue452]") {
+    TestPaths paths;
+    auto under_test = make_retry_session(
+        paths,
+        {
+            error_terminal("overloaded_error"),
+            success_message("Success after retry"),
+        },
+        R"({"retry": {"enabled": true, "maxRetries": 3, "baseDelayMs": 1}})");
+    auto* session = under_test.session.get();
+
+    int first_events = 0;
+    std::vector<int> late_counts(3, 0);
+    std::vector<coding_agent::SessionEventSubscription> late_subscriptions;
+    // The first observer reentrantly subscribes three more observers during
+    // the first delivery pass, growing the live registry (and forcing a
+    // reallocation) without invalidating that pass's stable snapshot.
+    auto first = session->subscribe_session(
+        [&](const coding_agent::AgentSessionEvent&) -> util::ExpectedVoid {
+            ++first_events;
+            if (late_subscriptions.empty()) {
+                for (std::size_t index = 0; index < late_counts.size(); ++index) {
+                    auto subscribed = session->subscribe_session(
+                        [&, index](const coding_agent::AgentSessionEvent&)
+                            -> util::ExpectedVoid {
+                            ++late_counts[index];
+                            return {};
+                        });
+                    REQUIRE(subscribed.has_value());
+                    late_subscriptions.push_back(std::move(*subscribed));
+                }
+            }
+            return {};
+        });
+    REQUIRE(first.has_value());
+
+    REQUIRE(session->prompt_blocking("Test").has_value());
+
+    // Two session events (auto_retry_start, auto_retry_end). The first
+    // observer saw both; each late observer began with the next event, so
+    // each saw exactly one (the end).
+    CHECK(first_events == 2);
+    CHECK(late_counts == (std::vector<int>{1, 1, 1}));
+
+    session->close();
+}
+
+TEST_CASE(
+    "session-event observer failures deactivate and bound diagnostics",
+    "[coding_agent][retry][subscription][issue452]") {
+    TestPaths paths;
+    auto under_test = make_retry_session(
+        paths,
+        {
+            error_terminal("overloaded_error"),
+            success_message("Success after retry"),
+        },
+        R"({"retry": {"enabled": true, "maxRetries": 3, "baseDelayMs": 1}})");
+    auto* session = under_test.session.get();
+
+    int failing_calls = 0;
+    auto failing = session->subscribe_session(
+        [&](const coding_agent::AgentSessionEvent&) -> util::ExpectedVoid {
+            ++failing_calls;
+            return std::unexpected(util::make_error(
+                util::ErrorCode::Unknown,
+                "session observer failed",
+                "api_key=sk-secret-123456"));
+        });
+    REQUIRE(failing.has_value());
+
+    int healthy_calls = 0;
+    auto healthy = session->subscribe_session(
+        [&](const coding_agent::AgentSessionEvent&) -> util::ExpectedVoid {
+            ++healthy_calls;
+            return {};
+        });
+    REQUIRE(healthy.has_value());
+
+    REQUIRE(session->prompt_blocking("Test").has_value());
+
+    // The failing observer is deactivated after its first event and never
+    // vetoes retry progress; the healthy observer saw every event.
+    CHECK(failing_calls == 1);
+    CHECK(healthy_calls == 2);
+    CHECK_FALSE(*failing);
+    CHECK(*healthy);
+
+    const auto snapshot = session->snapshot();
+    REQUIRE(snapshot.session_event_diagnostics.size() == 1);
+    CHECK(snapshot.session_event_diagnostics[0].message ==
+          "session event observer failed");
+    CHECK(snapshot.session_event_diagnostics[0].detail.find("sk-secret-123456") ==
+          std::string::npos);
+    CHECK(snapshot.session_event_diagnostics[0].detail.find("[REDACTED]") !=
+          std::string::npos);
+
+    session->close();
+}
+
+TEST_CASE(
+    "session-event subscription handle outlives its session as a benign drop",
+    "[coding_agent][retry][subscription][issue452]") {
+    std::unique_ptr<coding_agent::SessionEventSubscription> handle;
+    {
+        TestPaths paths;
+        auto under_test = make_retry_session(paths, {});
+        auto* session = under_test.session.get();
+        auto subscribed = session->subscribe_session(
+            [](const coding_agent::AgentSessionEvent&) -> util::ExpectedVoid {
+                return {};
+            });
+        REQUIRE(subscribed.has_value());
+        handle = std::make_unique<coding_agent::SessionEventSubscription>(
+            std::move(*subscribed));
+        CHECK(*handle);
+        session->close();
+    }  // The owning session (and its runtime) is destroyed here.
+
+    // Unsubscribing or destroying the handle after its runtime is gone is a
+    // benign drop, never a use-after-free.
+    CHECK_FALSE(*handle);
+    handle->unsubscribe();
+    handle.reset();
+}
+
+TEST_CASE(
     "turn auto-retry exhausts max retries and emits the final failure event",
     "[coding_agent][retry][issue361]") {
     TestPaths paths;
