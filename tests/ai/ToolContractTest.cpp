@@ -1,10 +1,10 @@
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
 #include "ai/glaze/ToolDtos.hpp"
 #include "support/ComplexToolSchemaFixture.hpp"
 #include "util/Json.hpp"
 #include <cch/ai/Tool.hpp>
 #include <cch/util/JsonValue.hpp>
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <string>
 #include <type_traits>

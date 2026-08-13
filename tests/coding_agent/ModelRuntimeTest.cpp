@@ -298,9 +298,9 @@ TEST_CASE("ModelRuntime config-only provider streams the frozen deepseek wire pa
     CHECK(result->stop_reason == ai::AssistantStopReason::ToolUse);
     CHECK(result->response_id == "resp_deepseek");
 
-    tests::check_pi_event_snapshot(
+    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
         events,
-        "wire/openai-responses-deepseek-ts-events.json");
+        "wire/openai-responses-deepseek-ts-events.json"));
 
     REQUIRE(transport->requests.size() == 1);
     const auto& request = transport->requests.front();

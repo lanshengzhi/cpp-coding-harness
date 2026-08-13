@@ -7,9 +7,7 @@
 #include <cch/ai/StreamEvent.hpp>
 #include <cch/ai/Usage.hpp>
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
-#include <iostream>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -288,19 +286,15 @@ template <typename Event>
 
 /// Compares the C++ stream events against a frozen full-payload TS event
 /// snapshot (fixtures/pi-ai, issue #370) through the canonical projection.
-inline void check_pi_event_snapshot(
+/// The caller reports the optional mismatch through its owning test framework.
+[[nodiscard]] inline std::optional<std::string> pi_event_snapshot_mismatch(
     const std::vector<ai::AssistantStreamEvent>& events,
     std::string_view fixture_relative_path) {
     const auto expected = read_pi_fixture(fixture_relative_path);
-    REQUIRE(expected);
-    const auto actual = project_snapshot_events(events);
-    if (auto mismatch = json_mismatch(*expected, actual); mismatch) {
-        // The vendored fallback test header has no INFO macro; print the diff
-        // to stderr so it appears in the failure output.
-        std::cerr << "PI EVENT SNAPSHOT MISMATCH (" << fixture_relative_path
-                  << "):\n" << *mismatch << "\n";
-        CHECK(false);
+    if (!expected) {
+        return "could not read pi event fixture " + std::string{fixture_relative_path};
     }
+    return json_mismatch(*expected, project_snapshot_events(events));
 }
 
 } // namespace cch::tests

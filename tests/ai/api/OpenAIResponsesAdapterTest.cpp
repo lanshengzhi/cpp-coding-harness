@@ -8,7 +8,7 @@
 #include "support/StreamAdapterFixture.hpp"
 #include "util/Json.hpp"
 
-#include "../../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
 #include <fstream>
@@ -240,9 +240,9 @@ TEST_CASE(
     CHECK(tool.arguments_valid);
     REQUIRE(tool.arguments);
     CHECK(tool.arguments->at("q").get_string() == "x");
-    tests::check_pi_event_snapshot(
+    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
         run.events,
-        "wire/openai-responses-deepseek-ts-events.json");
+        "wire/openai-responses-deepseek-ts-events.json"));
 
     REQUIRE(transport->requests.size() == 1);
     const auto& request = transport->requests.front();
@@ -288,9 +288,9 @@ TEST_CASE(
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
-    tests::check_pi_event_snapshot(
+    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
         run.events,
-        "wire/openai-responses-deepseek-ts-events.json");
+        "wire/openai-responses-deepseek-ts-events.json"));
 
     REQUIRE(transport->requests.size() == 1);
     const auto& request = transport->requests.front();
@@ -338,9 +338,9 @@ TEST_CASE(
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
-    tests::check_pi_event_snapshot(
+    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
         run.events,
-        "wire/openai-responses-deepseek-ts-events.json");
+        "wire/openai-responses-deepseek-ts-events.json"));
 
     REQUIRE(transport->requests.size() == 1);
     const auto& request = transport->requests.front();
@@ -501,9 +501,9 @@ TEST_CASE(
     CHECK(terminal.error.stop_reason == ai::AssistantStopReason::Error);
     REQUIRE(terminal.error.error_message);
     CHECK(*terminal.error.error_message == *run.result->error_message);
-    tests::check_pi_event_snapshot(
+    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
         run.events,
-        "wire/openai-responses-deepseek-no-terminal-ts-events.json");
+        "wire/openai-responses-deepseek-no-terminal-ts-events.json"));
 
     REQUIRE(transport->requests.size() == 1);
     auto expected_request_bytes = read_fixture_text(

@@ -9,7 +9,7 @@
 #include "support/StreamAdapterFixture.hpp"
 #include "util/Json.hpp"
 
-#include "../../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
 #include <cmath>
@@ -325,9 +325,9 @@ TEST_CASE(
     REQUIRE(tool.arguments);
     CHECK(tool.arguments->at("q").get_string() == "x");
 
-    tests::check_pi_event_snapshot(
+    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
         run.events,
-        "wire/openai-codex-responses-ws-ts-events.json");
+        "wire/openai-codex-responses-ws-ts-events.json"));
 
     REQUIRE(harness.ws->requests.size() == 1);
     const auto& connect = harness.ws->requests.front();
@@ -394,9 +394,9 @@ TEST_CASE(
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
-    tests::check_pi_event_snapshot(
+    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
         run.events,
-        "wire/openai-codex-responses-ws-ts-events.json");
+        "wire/openai-codex-responses-ws-ts-events.json"));
 
     REQUIRE(harness.ws->sockets.size() == 1);
     const auto& sent = harness.ws->sockets.front()->session()->sent_frames;
@@ -458,9 +458,9 @@ TEST_CASE(
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
-    tests::check_pi_event_snapshot(
+    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
         run.events,
-        "wire/openai-codex-responses-ws-ts-events.json");
+        "wire/openai-codex-responses-ws-ts-events.json"));
 
     REQUIRE(harness.ws->sockets.size() == 1);
     const auto& sent = harness.ws->sockets.front()->session()->sent_frames;
@@ -508,9 +508,9 @@ TEST_CASE(
     CHECK(run.result->usage.cache_write == 10);
     REQUIRE(run.result->content.size() == 3);
     CHECK(std::get<ai::TextContent>(run.result->content[1]).text == "Hello");
-    tests::check_pi_event_snapshot(
+    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
         run.events,
-        "wire/openai-codex-responses-ts-events.json");
+        "wire/openai-codex-responses-ts-events.json"));
 
     REQUIRE(run.result->diagnostics);
     REQUIRE(run.result->diagnostics->size() == 1);
@@ -685,9 +685,9 @@ TEST_CASE(
     CHECK(second_run.result->stop_reason == ai::AssistantStopReason::Stop);
     REQUIRE(second_run.result->content.size() == 1);
     CHECK(std::get<ai::TextContent>(second_run.result->content[0]).text == "Recovered");
-    CHECK(harness.ws->requests.size() == 2);
-    CHECK(first->sent_frames.size() == 2);
-    CHECK(second->sent_frames.size() == 1);
+    REQUIRE(harness.ws->requests.size() == 2);
+    REQUIRE(first->sent_frames.size() == 2);
+    REQUIRE(second->sent_frames.size() == 1);
     const auto first_body = util::read_json(first->sent_frames[0]);
     REQUIRE(first_body);
     CHECK_FALSE(first_body->get_object().contains("previous_response_id"));
@@ -1135,7 +1135,7 @@ TEST_CASE(
         REQUIRE(run.result);
         CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
     }
-    CHECK(harness.ws->requests.size() == 2);
+    REQUIRE(harness.ws->requests.size() == 2);
     REQUIRE(harness.ws->sockets.size() == 2);
     CHECK(harness.ws->requests[0].headers.at("chatgpt-account-id") == "acc_a");
     CHECK(harness.ws->requests[1].headers.at("chatgpt-account-id") == "acc_b");

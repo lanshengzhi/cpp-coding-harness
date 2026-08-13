@@ -3,7 +3,7 @@
 #include "support/ModelFixture.hpp"
 #include "support/PiFixture.hpp"
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
 #include <cstdint>

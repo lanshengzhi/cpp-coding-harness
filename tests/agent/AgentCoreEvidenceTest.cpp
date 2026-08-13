@@ -27,7 +27,7 @@
 #include "util/ExpectedMacros.hpp"
 #include "util/Json.hpp"
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -971,7 +971,7 @@ TEST_CASE(
     REQUIRE(run.result.has_value());
     CHECK(run.result->turns == 3);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
-    CHECK(runtime->calls.size() == 3);
+    REQUIRE(runtime->calls.size() == 3);
 
     expect_json_equal(
         scheduling_events_to_json(run.events),
@@ -982,8 +982,10 @@ TEST_CASE(
     // only turn 1's four messages; the two truncated error results appear in
     // turn 3's request at indexes 5/6.
     CHECK(runtime->calls[1].context.messages.size() == 4);
-    CHECK(runtime->calls[2].context.messages.size() == 7);
+    REQUIRE(runtime->calls[2].context.messages.size() == 7);
     const auto& third_turn_messages = runtime->calls[2].context.messages;
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(third_turn_messages[5]));
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(third_turn_messages[6]));
     CHECK(std::get<ai::ToolResultMessage>(third_turn_messages[5]).is_error);
     CHECK(std::get<ai::ToolResultMessage>(third_turn_messages[6]).is_error);
     CHECK(run.result->state.pending_tool_call_ids.empty());

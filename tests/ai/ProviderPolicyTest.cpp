@@ -3,7 +3,7 @@
 #include "ai/providers/RetryPolicy.hpp"
 #include "support/PiFixture.hpp"
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <array>
 #include <optional>

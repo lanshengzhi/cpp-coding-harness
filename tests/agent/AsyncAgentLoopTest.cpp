@@ -7,7 +7,7 @@
 #include "util/ExpectedMacros.hpp"
 #include "util/Json.hpp"
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -2026,12 +2026,15 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
     REQUIRE(client->requests[1].context.system_prompt.has_value());
     CHECK(*client->requests[1].context.system_prompt == "replacement prompt");
     REQUIRE(client->requests[1].context.messages.size() == 1);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(client->requests[1].context.messages[0]));
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(client->requests[1].context.messages[0])) ==
           "replacement history");
     REQUIRE(client->requests[1].context.tools.size() == 1);
     CHECK(client->requests[1].context.tools[0].name == "read_file");
 
     REQUIRE(run.result->context.messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(run.result->context.messages[0]));
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(run.result->context.messages[1]));
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(run.result->context.messages[0])) ==
           "replacement history");
     CHECK(ai::text_from_assistant_content(
@@ -2042,6 +2045,7 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
     const auto* ended = std::get_if<agent::AgentEndEvent>(&run.events.back());
     REQUIRE(ended != nullptr);
     REQUIRE(ended->messages.size() == 4);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(ended->messages[0]));
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(ended->messages[0])) ==
           "read");
 }
@@ -2466,8 +2470,12 @@ TEST_CASE("bounded parallel execution keeps blocked calls out of tool adapters",
     CHECK(alpha_ptr->invocations.empty());
     CHECK(beta_ptr->invocations.size() == 1);
     REQUIRE(client->requests.size() == 2);
-    const auto& alpha_result = std::get<ai::ToolResultMessage>(client->requests[1].context.messages[2]);
-    const auto& beta_result = std::get<ai::ToolResultMessage>(client->requests[1].context.messages[3]);
+    const auto& messages = client->requests[1].context.messages;
+    REQUIRE(messages.size() == 4);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[2]));
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[3]));
+    const auto& alpha_result = std::get<ai::ToolResultMessage>(messages[2]);
+    const auto& beta_result = std::get<ai::ToolResultMessage>(messages[3]);
     CHECK(alpha_result.is_error);
     CHECK(ai::text_from_content(alpha_result.content) == "blocked alpha");
     CHECK_FALSE(beta_result.is_error);
@@ -2512,6 +2520,8 @@ TEST_CASE("bounded parallel before-hook failure finalizes every call without sta
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
     REQUIRE(messages.size() == 4);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[2]));
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[3]));
     const auto& alpha_result = std::get<ai::ToolResultMessage>(messages[2]);
     const auto& beta_result = std::get<ai::ToolResultMessage>(messages[3]);
     CHECK(alpha_result.is_error);
@@ -2545,8 +2555,12 @@ TEST_CASE("bounded parallel execution preserves peer success after a tool error"
 
     REQUIRE(run.result);
     REQUIRE(client->requests.size() == 2);
-    const auto& alpha_result = std::get<ai::ToolResultMessage>(client->requests[1].context.messages[2]);
-    const auto& beta_result = std::get<ai::ToolResultMessage>(client->requests[1].context.messages[3]);
+    const auto& messages = client->requests[1].context.messages;
+    REQUIRE(messages.size() == 4);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[2]));
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[3]));
+    const auto& alpha_result = std::get<ai::ToolResultMessage>(messages[2]);
+    const auto& beta_result = std::get<ai::ToolResultMessage>(messages[3]);
     CHECK(alpha_result.is_error);
     CHECK_FALSE(beta_result.is_error);
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
@@ -2646,6 +2660,8 @@ TEST_CASE("bounded parallel after-hook failure finalizes only its call", "[agent
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
     REQUIRE(messages.size() == 4);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[2]));
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[3]));
     const auto& alpha_result = std::get<ai::ToolResultMessage>(messages[2]);
     const auto& beta_result = std::get<ai::ToolResultMessage>(messages[3]);
     CHECK(alpha_result.is_error);
@@ -2764,6 +2780,8 @@ TEST_CASE("length-truncated tool calls emit errors without crossing the executor
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
     REQUIRE(messages.size() == 4);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[2]));
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[3]));
     const auto& alpha_result = std::get<ai::ToolResultMessage>(messages[2]);
     const auto& beta_result = std::get<ai::ToolResultMessage>(messages[3]);
     CHECK(alpha_result.is_error);
@@ -2813,6 +2831,8 @@ TEST_CASE("default tool execution runs a parallel-safe batch concurrently", "[ag
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
     REQUIRE(messages.size() == 4);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[2]));
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[3]));
     CHECK(std::get<ai::ToolResultMessage>(messages[2]).tool_name == "alpha");
     CHECK(std::get<ai::ToolResultMessage>(messages[3]).tool_name == "beta");
 }
@@ -2937,6 +2957,8 @@ TEST_CASE(
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
     REQUIRE(messages.size() == 4);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[2]));
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[3]));
     CHECK(std::get<ai::ToolResultMessage>(messages[2]).is_error);
     CHECK(std::get<ai::ToolResultMessage>(messages[3]).is_error);
 }

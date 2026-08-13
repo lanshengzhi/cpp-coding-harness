@@ -470,7 +470,7 @@ if(CCH_BUILD_TESTS)
 
     # AI
     add_executable(cch_tests_ai
-        tests/TestMain.cpp
+        tests/Catch2Main.cpp
         tests/ai/GlazeRoundTripTest.cpp
         tests/ai/MessageContractTest.cpp
         tests/ai/MessageConversionTest.cpp
@@ -492,37 +492,39 @@ if(CCH_BUILD_TESTS)
         tests/ai/providers/FakeProviderTest.cpp
         tests/ai/providers/SseParserTest.cpp
 )
-    target_include_directories(cch_tests_ai PRIVATE ${CCH_TEST_INCLUDE_DIRS})
+    target_include_directories(cch_tests_ai PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_ai
         PRIVATE
             cch_agent
             cch_ai
+            Catch2::Catch2
 )
     target_compile_definitions(cch_tests_ai PRIVATE
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
     target_compile_options(cch_tests_ai PRIVATE ${CCH_WARNING_OPTIONS})
-    add_test(NAME cch_tests_ai COMMAND cch_tests_ai)
+    catch_discover_tests(cch_tests_ai ADD_TAGS_AS_LABELS)
 
     # agent
     add_executable(cch_tests_agent
-        tests/TestMain.cpp
+        tests/Catch2Main.cpp
         tests/agent/AgentCoreEvidenceTest.cpp
         tests/agent/AgentTest.cpp
         tests/agent/AsyncAgentLoopTest.cpp
         tests/agent/ModelRuntimeSeamTest.cpp
         tests/agent/ToolCallExecutorTest.cpp
 )
-    target_include_directories(cch_tests_agent PRIVATE ${CCH_TEST_INCLUDE_DIRS})
+    target_include_directories(cch_tests_agent PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_agent
         PRIVATE
             cch_agent
+            Catch2::Catch2
 )
     target_compile_definitions(cch_tests_agent PRIVATE
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
     target_compile_options(cch_tests_agent PRIVATE ${CCH_WARNING_OPTIONS})
-    add_test(NAME cch_tests_agent COMMAND cch_tests_agent)
+    catch_discover_tests(cch_tests_agent ADD_TAGS_AS_LABELS)
 
     # harness and tools
     add_executable(cch_tests_harness_tools

@@ -1,7 +1,8 @@
 #pragma once
 
-#include "../../include/cch/ai/Usage.hpp"
-#include "../../third_party/catch2/catch_test_macros.hpp"
+#include <cch/ai/Usage.hpp>
+
+#include <catch2/catch_test_macros.hpp>
 
 namespace cch::tests {
 

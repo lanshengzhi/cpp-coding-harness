@@ -1,9 +1,9 @@
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
 #include "ai/glaze/AiJson.hpp"
 #include "support/ComplexToolSchemaFixture.hpp"
 #include "util/Json.hpp"
 #include <cch/util/Error.hpp>
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
 #include <string>

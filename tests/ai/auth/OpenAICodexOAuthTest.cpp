@@ -8,7 +8,7 @@
 #include "support/PiFixture.hpp"
 #include "util/ExpectedMacros.hpp"
 
-#include "../../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -440,7 +440,7 @@ TEST_CASE("browser login succeeds through the callback server and cancels the pr
     const auto* select = std::get_if<ai::AuthPromptSelect>(&harness.prompts[0].kind);
     REQUIRE(select != nullptr);
     CHECK(select->message == "Select OpenAI Codex login method:");
-    CHECK(select->options.size() == 2);
+    REQUIRE(select->options.size() == 2);
     CHECK(select->options[0].id == "browser");
     CHECK(select->options[0].label == "Browser login (default)");
     CHECK(select->options[1].id == "device_code");

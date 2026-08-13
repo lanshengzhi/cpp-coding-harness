@@ -7,7 +7,7 @@
 #include "util/ExpectedMacros.hpp"
 #include "util/Json.hpp"
 
-#include "../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -305,7 +305,8 @@ TEST_CASE(
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
     REQUIRE(run.result->context.messages.size() == 2);
     REQUIRE(runtime->calls.size() == 1);
-    CHECK(runtime->calls[0].context.messages.size() == 1);
+    REQUIRE(runtime->calls[0].context.messages.size() == 1);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(runtime->calls[0].context.messages[0]));
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(
               runtime->calls[0].context.messages[0])) == "hi");
 }
@@ -403,6 +404,8 @@ TEST_CASE(
 
     const auto state = subject.state();
     REQUIRE(state.messages.size() == 4);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(state.messages[0]));
+    REQUIRE(std::holds_alternative<ai::UserMessage>(state.messages[2]));
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[0])) == "first");
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[2])) == "second");
     REQUIRE(runtime->calls.size() == 2);

@@ -9,7 +9,7 @@
 #include "support/StreamAdapterFixture.hpp"
 #include "util/Json.hpp"
 
-#include "../../../third_party/catch2/catch_test_macros.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
 #include <cmath>
@@ -321,9 +321,9 @@ TEST_CASE(
     CHECK(tool.arguments->at("path").get_string() == "A\\H");
     CHECK(tool.arguments->at("text").get_string() == "col1\tcol2");
 
-    tests::check_pi_event_snapshot(
+    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
         run.events,
-        "wire/anthropic-messages-kimi-ts-events.json");
+        "wire/anthropic-messages-kimi-ts-events.json"));
 
     REQUIRE(transport->requests.size() == 1);
     const auto& request = transport->requests.front();
@@ -366,9 +366,9 @@ TEST_CASE(
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
-    tests::check_pi_event_snapshot(
+    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
         run.events,
-        "wire/anthropic-messages-kimi-ts-events.json");
+        "wire/anthropic-messages-kimi-ts-events.json"));
 
     REQUIRE(transport->requests.size() == 1);
     const auto& request = transport->requests.front();
@@ -411,9 +411,9 @@ TEST_CASE(
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
-    tests::check_pi_event_snapshot(
+    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
         run.events,
-        "wire/anthropic-messages-kimi-ts-events.json");
+        "wire/anthropic-messages-kimi-ts-events.json"));
 
     REQUIRE(transport->requests.size() == 1);
     const auto& request = transport->requests.front();
@@ -451,9 +451,9 @@ TEST_CASE(
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
-    tests::check_pi_event_snapshot(
+    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
         run.events,
-        "wire/anthropic-messages-kimi-ts-events.json");
+        "wire/anthropic-messages-kimi-ts-events.json"));
 
     REQUIRE(transport->requests.size() == 1);
     const auto& request = transport->requests.front();
@@ -510,9 +510,9 @@ TEST_CASE(
     REQUIRE(run.result->raw_stop_reason);
     CHECK(*run.result->raw_stop_reason == "refusal");
     CHECK(run.result->response_id == "msg_refusal");
-    tests::check_pi_event_snapshot(
+    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
         run.events,
-        "wire/anthropic-messages-kimi-refusal-ts-events.json");
+        "wire/anthropic-messages-kimi-refusal-ts-events.json"));
 
     REQUIRE(transport->requests.size() == 1);
     auto expected_request =

@@ -1,5 +1,3 @@
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
 #include "agent/ToolCallExecutor.hpp"
 
 #include "support/ToolArgumentCompatibilityFixture.hpp"
@@ -13,6 +11,7 @@
 #include <cch/ai/Tool.hpp>
 #include <cch/util/Error.hpp>
 
+#include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -23,6 +22,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <expected>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -453,6 +453,7 @@ TEST_CASE(
     auto run = run_executor(executor, assistant);
 
     REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
     REQUIRE_FALSE(run.result->results[0].is_error);
     REQUIRE(hook_arguments);
     REQUIRE(hook_raw_arguments);
@@ -508,6 +509,7 @@ TEST_CASE(
     auto run = run_executor(executor, assistant);
 
     REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
     CHECK_FALSE(run.result->results[0].is_error);
     REQUIRE(hook_arguments);
     CHECK(hook_arguments->get_number() == expected);
@@ -536,6 +538,7 @@ TEST_CASE(
     auto run = run_executor(executor, assistant);
 
     REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
     REQUIRE_FALSE(run.result->results[0].is_error);
     const auto invocation = tool_ptr->first_invocation();
     REQUIRE(invocation);
@@ -605,6 +608,7 @@ TEST_CASE(
     auto run = run_executor(executor, assistant);
 
     REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
     CHECK_FALSE(run.result->results[0].is_error);
     CHECK(tool_ptr->invocation_count() == 1);
 }
@@ -813,6 +817,7 @@ TEST_CASE(
     auto run = run_executor(executor, assistant);
 
     REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
     CHECK_FALSE(run.result->results[0].is_error);
     CHECK(annotation_ptr->invocation_count() == 1);
 }
@@ -1021,14 +1026,15 @@ TEST_CASE(
 
     bool tool_execution_started = false;
     int before_calls = 0;
+    bool before_hook_observed_expected_call = false;
     agent::BeforeToolCallHook before_hook =
         agent::adapt_sync_before_tool_call(
             [&](const agent::BeforeToolCallContext& context)
         -> util::Expected<agent::BeforeToolCallResult> {
-        CHECK(tool_execution_started);
-        CHECK(context.tool_call.name == "valid");
-        CHECK(context.args.holds<bool>());
-        CHECK_FALSE(context.args.get_boolean());
+        const bool arguments_are_boolean = context.args.holds<bool>();
+        before_hook_observed_expected_call =
+            tool_execution_started && context.tool_call.name == "valid" &&
+            arguments_are_boolean && !context.args.get_boolean();
         ++before_calls;
         return agent::BeforeToolCallResult{};
     });
@@ -1061,6 +1067,7 @@ TEST_CASE(
     CHECK(ai::text_from_content(run.result->results[4].content).find("contains") != std::string::npos);
     CHECK(ai::text_from_content(run.result->results[5].content).find("properties") != std::string::npos);
     CHECK(before_calls == 1);
+    CHECK(before_hook_observed_expected_call);
     CHECK(malformed_ptr->invocation_count() == 0);
     CHECK(invalid_ptr->invocation_count() == 0);
     CHECK(denied_ptr->invocation_count() == 0);
@@ -1110,12 +1117,13 @@ TEST_CASE(
     REQUIRE(registry.add(std::move(valid_tool)));
 
     int before_calls = 0;
+    bool before_hook_observed_valid_call = false;
     agent::BeforeToolCallHook before_hook =
         agent::adapt_sync_before_tool_call(
             [&](const agent::BeforeToolCallContext& context)
         -> util::Expected<agent::BeforeToolCallResult> {
         ++before_calls;
-        CHECK(context.tool_call.name == "valid");
+        before_hook_observed_valid_call = context.tool_call.name == "valid";
         return agent::BeforeToolCallResult{};
     });
     agent::ToolCallExecutorOptions options;
@@ -1143,6 +1151,7 @@ TEST_CASE(
     CHECK(diagnostic.find("\xef\xbf\xbd") != std::string::npos);
     CHECK(diagnostic.find(secret) == std::string::npos);
     CHECK(diagnostic.find("sk-") == std::string::npos);
+    CHECK(before_hook_observed_valid_call);
 
     std::optional<std::string> end_diagnostic;
     std::optional<std::string> message_diagnostic;
@@ -1400,6 +1409,7 @@ TEST_CASE(
         std::size_t message_starts{};
         std::size_t message_ends{};
         int max_active{};
+        bool before_hook_arguments_encoded{true};
     };
 
     auto execute_policy = [&](agent::ToolExecutionPolicy policy) {
@@ -1421,7 +1431,10 @@ TEST_CASE(
             -> util::Expected<agent::BeforeToolCallResult> {
             snapshot.before_hook_ids.push_back(context.tool_call.id);
             auto encoded = util::write_json(context.args);
-            REQUIRE(encoded);
+            if (!encoded) {
+                snapshot.before_hook_arguments_encoded = false;
+                return std::unexpected(std::move(encoded.error()));
+            }
             snapshot.before_hook_arguments.push_back(std::move(*encoded));
             return agent::BeforeToolCallResult{};
         });
@@ -1432,6 +1445,7 @@ TEST_CASE(
         auto run = run_executor(executor, assistant);
 
         REQUIRE(run.result);
+        REQUIRE(snapshot.before_hook_arguments_encoded);
         for (const auto& result : run.result->results) {
             snapshot.result_errors.push_back(result.is_error);
             snapshot.result_text.push_back(ai::text_from_content(result.content));
