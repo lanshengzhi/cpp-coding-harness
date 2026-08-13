@@ -1,8 +1,8 @@
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
-#include "../../include/cch/util/Error.hpp"
+#include <cch/util/Error.hpp>
 #include "util/Json.hpp"
 #include "util/JsonGlaze.hpp"
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <expected>
 #include <string>

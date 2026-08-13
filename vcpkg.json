@@ -10,6 +10,7 @@
     "boost-asio",
     "openssl",
     "cli11",
+    "catch2",
     "utf8proc",
     {
       "name": "libwebp",

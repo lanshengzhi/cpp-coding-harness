@@ -353,6 +353,10 @@ target_compile_options(cpp_harness PRIVATE ${CCH_WARNING_OPTIONS})
 if(CCH_BUILD_TESTS)
     include(CTest)
 
+    find_package(Catch2 3 CONFIG REQUIRED)
+    cch_require_vcpkg_dependency("Catch2" "${Catch2_DIR}")
+    include(Catch)
+
     function(cch_add_supported_build_policy_test case_name should_pass diagnostic_pattern)
         set(test_name "cch_supported_build_policy_${case_name}")
         add_test(
@@ -393,33 +397,38 @@ if(CCH_BUILD_TESTS)
     # the aggregate target that builds every shard. Grouping follows the
     # package boundaries in CODING_STANDARDS.md section 12 and fixture
     # ownership, not equal file counts; no test object is compiled twice.
-    set(CCH_TEST_INCLUDE_DIRS
+    set(CCH_FORMAL_TEST_INCLUDE_DIRS
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/tests
+)
+    set(CCH_TEST_INCLUDE_DIRS
+        ${CCH_FORMAL_TEST_INCLUDE_DIRS}
         third_party
 )
 
     # util
     add_executable(cch_tests_util
-        tests/TestMain.cpp
+        tests/Catch2Main.cpp
         tests/util/BoundedTextTest.cpp
         tests/util/ExpectedErrorTest.cpp
         tests/util/ExpectedMacrosTest.cpp
         tests/util/JsonValueIoTest.cpp
         tests/util/OutputLimiterTest.cpp
         tests/util/RedactorTest.cpp
+        tests/util/TestRunnerIsolationTest.cpp
 )
-    target_include_directories(cch_tests_util PRIVATE ${CCH_TEST_INCLUDE_DIRS})
+    target_include_directories(cch_tests_util PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_util
         PRIVATE
             cch_util
+            Catch2::Catch2
 )
     target_compile_definitions(cch_tests_util PRIVATE
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
     target_compile_options(cch_tests_util PRIVATE ${CCH_WARNING_OPTIONS})
-    add_test(NAME cch_tests_util COMMAND cch_tests_util)
+    catch_discover_tests(cch_tests_util ADD_TAGS_AS_LABELS)
 
     # TUI
     add_executable(cch_tests_tui

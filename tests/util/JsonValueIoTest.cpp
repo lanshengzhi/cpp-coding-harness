@@ -6,9 +6,9 @@
 // string escaping), strict JSON grammar with Glaze's tolerance choices
 // (trailing content ignored, last duplicate key wins, whitespace-only
 // containers accepted), and the `\u` escape / surrogate rules.
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
 #include "util/Json.hpp"
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <string>
 
@@ -44,14 +44,22 @@ TEST_CASE("JsonValue serializes numbers byte-identically to the Glaze path", "[u
 }
 
 TEST_CASE("JsonValue serializes only the Glaze escape set, raw otherwise", "[util][json][t6]") {
-    CHECK(*util::write_json(util::JsonValue{std::string{"a\"b\\c\n\r\t\b\f"}}) ==
-          R"("a\"b\\c\n\r\t\b\f")");
+    const auto escaped = util::write_json(util::JsonValue{std::string{"a\"b\\c\n\r\t\b\f"}});
+    REQUIRE(escaped);
+    CHECK(*escaped == R"("a\"b\\c\n\r\t\b\f")");
+
     // Control bytes and UTF-8 pass through raw, matching Glaze's writer.
-    CHECK(*util::write_json(util::JsonValue{std::string{"a\x01\x1f\x7f", 4}}) ==
-          std::string{"\"a\x01\x1f\x7f\""});
-    CHECK(*util::write_json(util::JsonValue{std::string{"caf\xc3\xa9 \xf0\x9f\x98\x80"}}) ==
-          std::string{"\"caf\xc3\xa9 \xf0\x9f\x98\x80\""});
-    CHECK(*util::write_json(util::JsonValue{"/"}) == "\"/\"");
+    const auto controls = util::write_json(util::JsonValue{std::string{"a\x01\x1f\x7f", 4}});
+    REQUIRE(controls);
+    CHECK(*controls == std::string{"\"a\x01\x1f\x7f\""});
+
+    const auto utf8 = util::write_json(util::JsonValue{std::string{"caf\xc3\xa9 \xf0\x9f\x98\x80"}});
+    REQUIRE(utf8);
+    CHECK(*utf8 == std::string{"\"caf\xc3\xa9 \xf0\x9f\x98\x80\""});
+
+    const auto slash = util::write_json(util::JsonValue{"/"});
+    REQUIRE(slash);
+    CHECK(*slash == "\"/\"");
 }
 
 TEST_CASE("JsonValue serializer emits sorted keys and compact structure", "[util][json][t6]") {
@@ -89,7 +97,9 @@ TEST_CASE("JsonValue parser accepts trailing content like Glaze", "[util][json][
     }
     const auto parsed = util::read_json("{\"a\":1} {\"b\":2}");
     REQUIRE(parsed);
-    CHECK(*util::write_json(*parsed) == R"({"a":1})");
+    const auto serialized = util::write_json(*parsed);
+    REQUIRE(serialized);
+    CHECK(*serialized == R"({"a":1})");
 }
 
 TEST_CASE("JsonValue parser applies strict JSON grammar and Glaze tolerances", "[util][json][t6]") {
@@ -103,13 +113,17 @@ TEST_CASE("JsonValue parser applies strict JSON grammar and Glaze tolerances", "
     CHECK_FALSE(util::read_json("1e-999"));
     const auto duplicates = util::read_json(R"({"a":1,"a":2})");
     REQUIRE(duplicates);
-    CHECK(*util::write_json(*duplicates) == R"({"a":2})");
+    const auto serialized = util::write_json(*duplicates);
+    REQUIRE(serialized);
+    CHECK(*serialized == R"({"a":2})");
 }
 
 TEST_CASE("JsonValue parser decodes Unicode escapes with surrogate pairs", "[util][json][t6]") {
     const auto escaped = util::read_json(R"("\u00e9\uD83D\uDE00\u001b")");
     REQUIRE(escaped);
-    CHECK(*util::write_json(*escaped) == std::string{"\"\xc3\xa9\xf0\x9f\x98\x80\x1b\""});
+    const auto serialized = util::write_json(*escaped);
+    REQUIRE(serialized);
+    CHECK(*serialized == std::string{"\"\xc3\xa9\xf0\x9f\x98\x80\x1b\""});
     // Lone surrogates are rejected, matching Glaze.
     CHECK_FALSE(util::read_json(R"("\uD800")"));
     CHECK_FALSE(util::read_json(R"("\uDC00")"));
@@ -133,5 +147,7 @@ TEST_CASE("JsonValue round-trips nested structures byte-identically", "[util][js
         R"({"arr":[1,2.5,"x",null],"flag":false,"n":0.1,"neg":-42.5,"obj":{"k":"v"},"text":"hello\nworld"})";
     const auto parsed = util::read_json(input);
     REQUIRE(parsed);
-    CHECK(*util::write_json(*parsed) == input);
+    const auto serialized = util::write_json(*parsed);
+    REQUIRE(serialized);
+    CHECK(*serialized == input);
 }

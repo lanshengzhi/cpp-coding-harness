@@ -1642,7 +1642,7 @@ TEST_CASE("bounded parallel execution accepts a limit of one", "[agent][tool-exe
     CHECK(probe.max_active.load() == 1);
 }
 
-TEST_CASE("bounded parallel zero means no explicit concurrency cap", "[agent][tool-executor]") {
+TEST_CASE("Tool Call Executor treats bounded parallel zero as no explicit cap", "[agent][tool-executor]") {
     ConcurrencyProbe probe;
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<RecordingTool>(
@@ -2125,7 +2125,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "afterToolCall hook failure finalizes only its call",
+    "Tool Call Executor confines an afterToolCall hook failure to its call",
     "[agent][tool-executor][issue355]") {
     agent::AsyncToolRegistry registry;
     REQUIRE(registry.add(std::make_unique<RecordingTool>(

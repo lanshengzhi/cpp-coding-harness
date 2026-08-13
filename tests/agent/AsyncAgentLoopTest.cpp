@@ -1241,7 +1241,7 @@ TEST_CASE("an error result with an explicit terminate hint still terminates the 
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
 }
 
-TEST_CASE("afterToolCall hook failure finalizes only its call", "[agent][async][u7]") {
+TEST_CASE("Async Agent Loop continues after an afterToolCall hook failure", "[agent][async][u7]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(tool_call_response());
     client->responses.push_back(ai::assistant_text_message("recovered"));
@@ -2396,7 +2396,7 @@ TEST_CASE("bounded parallel limit one executes sequentially", "[agent][async][u8
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 }
 
-TEST_CASE("bounded parallel zero means no explicit concurrency cap", "[agent][async][u8]") {
+TEST_CASE("Async Agent Loop treats bounded parallel zero as no explicit cap", "[agent][async][u8]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(two_tool_call_response());
     client->responses.push_back(ai::assistant_text_message("done"));

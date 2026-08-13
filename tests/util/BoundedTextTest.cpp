@@ -1,6 +1,6 @@
-#include "../../third_party/catch2/catch_test_macros.hpp"
-
 #include "util/BoundedText.hpp"
+
+#include <catch2/catch_test_macros.hpp>
 
 #include <string>
 #include <string_view>
