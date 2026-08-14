@@ -19,6 +19,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <format>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -280,6 +281,42 @@ TEST_CASE("Process Terminal delivers pseudo-terminal input and resize", "[tui][t
     }
     const cch::tui::TerminalDimensions expected_dimensions{.columns = 100, .rows = 30};
     CHECK(terminal.dimensions() == expected_dimensions);
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE(
+    "Process Terminal detects a resize with no input activity",
+    "[tui][terminal][issue462]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    std::vector<cch::tui::TerminalDimensions> resizes;
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    REQUIRE(terminal.start(
+        [](std::string) {},
+        [&](cch::tui::TerminalDimensions dimensions) {
+            resizes.push_back(dimensions);
+        }));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // No input is sent: the readiness-driven worker is parked and only the
+    // low-rate resize watchdog is armed. The TIOCGWINSZ change must still be
+    // detected (within the watchdog window) so resize handling stays correct
+    // without any input activity (issue #462).
+    winsize resized{
+        .ws_row = 31,
+        .ws_col = 101,
+        .ws_xpixel = 0,
+        .ws_ypixel = 0,
+    };
+    REQUIRE(::ioctl(pty->master.get(), TIOCSWINSZ, &resized) == 0);
+    REQUIRE(cch::tests::wait_until(
+        [&] { return !resizes.empty(); },
+        std::chrono::seconds(2)));
+    CHECK(resizes.back() == (cch::tui::TerminalDimensions{.columns = 101, .rows = 31}));
+    CHECK(terminal.dimensions() == (cch::tui::TerminalDimensions{.columns = 101, .rows = 31}));
     REQUIRE(terminal.stop());
 }
 
@@ -1175,6 +1212,199 @@ TEST_CASE(
     CHECK(output.find("\x1b[6;1H") != std::string::npos);
 
     REQUIRE(terminal.stop());
+}
+
+TEST_CASE(
+    "Process Terminal waits on readiness and wakes promptly for stop",
+    "[tui][terminal][issue462]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // Idle: the delivery worker parks in a blocking readiness wait (the only
+    // armed timer is the 500 ms resize watchdog). stop() wakes it through the
+    // wakeup pipe instead of waiting for a poll interval, so cancellation is
+    // prompt even with no input activity (issue #462).
+    const auto started = std::chrono::steady_clock::now();
+    REQUIRE(terminal.stop());
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+    CHECK(elapsed < std::chrono::milliseconds(400));
+    CHECK(terminal.modes() == cch::tui::TerminalModeState{});
+}
+
+TEST_CASE(
+    "Process Terminal stops promptly while input is streaming",
+    "[tui][terminal][issue462]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    std::atomic<bool> delivering{false};
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    REQUIRE(terminal.start(
+        [&](std::string) { delivering = true; },
+        [](cch::tui::TerminalDimensions) {}));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // Stream input continuously so the worker is busy reading and delivering;
+    // stop() must still interrupt the wait promptly (issue #462).
+    std::jthread writer([&] {
+        const std::string burst(256, 'x');
+        while (!terminal.modes().started) std::this_thread::yield();
+        while (terminal.modes().started) {
+            if (::write(pty->master.get(), burst.data(), burst.size()) !=
+                static_cast<ssize_t>(burst.size())) {
+                return;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    REQUIRE(cch::tests::wait_until([&] { return delivering.load(); }));
+
+    const auto started = std::chrono::steady_clock::now();
+    REQUIRE(terminal.stop());
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+    CHECK(elapsed < std::chrono::milliseconds(400));
+    writer.join();
+    CHECK(terminal.modes() == cch::tui::TerminalModeState{});
+}
+
+TEST_CASE(
+    "Process Terminal backpressures bounded output in write order",
+    "[tui][terminal][issue462]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // With the master never read, the PTY output buffer fills and writes back
+    // up: the terminal falls back to its bounded ordered queue and reports
+    // explicit backpressure (`Busy`) instead of blocking the caller. Each
+    // chunk is unique so the final concatenation proves write order.
+    std::string expected;
+    bool saw_busy = false;
+    for (std::size_t i = 0; i < 2000; ++i) {
+        const auto chunk = std::format(
+            "chunk-{:06d}-{};", i, std::string(4000, 'x'));
+        auto result = terminal.write(chunk);
+        if (!result) {
+            CHECK(result.error().code == cch::util::ErrorCode::Busy);
+            saw_busy = true;
+            break;
+        }
+        expected += chunk;
+    }
+    REQUIRE(saw_busy);
+    REQUIRE_FALSE(expected.empty());
+
+    // Once the master drains, every admitted byte arrives in write order.
+    std::string received;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (received.size() < expected.size() &&
+        std::chrono::steady_clock::now() < deadline) {
+        received += cch::tests::read_available(
+            pty->master.get(), std::chrono::milliseconds(50));
+    }
+    REQUIRE(received.size() == expected.size());
+    CHECK(received == expected);
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE(
+    "Process Terminal admits a large single write on a draining terminal",
+    "[tui][terminal][issue462]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // A single write larger than the queue bound (e.g. a large inline image)
+    // is admitted when nothing is queued: the fast path writes the writable
+    // prefix and the delivery worker drains the remainder in order on the
+    // healthy, draining terminal. The bound only caps accumulated backlog.
+    const std::string large(1024 * 1024, 'L'); // 1 MiB > the 256 KiB bound
+    REQUIRE(terminal.write(large));
+    std::string received;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (received.size() < large.size() &&
+        std::chrono::steady_clock::now() < deadline) {
+        received += cch::tests::read_available(
+            pty->master.get(), std::chrono::milliseconds(50));
+    }
+    REQUIRE(received.size() == large.size());
+    CHECK(received == large);
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE(
+    "Process Terminal restores output descriptor flags on every exit",
+    "[tui][terminal][issue462]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    const int original_flags = ::fcntl(pty->slave.get(), F_GETFL);
+    REQUIRE(original_flags >= 0);
+
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    const int started_flags = ::fcntl(pty->slave.get(), F_GETFL);
+    REQUIRE(started_flags >= 0);
+    CHECK((started_flags & O_NONBLOCK) != 0);
+
+    REQUIRE(terminal.stop());
+    const int restored_flags = ::fcntl(pty->slave.get(), F_GETFL);
+    REQUIRE(restored_flags >= 0);
+    CHECK((restored_flags & O_NONBLOCK) == 0);
+    CHECK((restored_flags & ~O_NONBLOCK) == (original_flags & ~O_NONBLOCK));
+}
+
+TEST_CASE(
+    "Process Terminal stops promptly after input EOF without hanging",
+    "[tui][terminal][issue462]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tui::ProcessTerminal terminal({
+        .input_fd = pty->slave.get(),
+        .output_fd = pty->slave.get(),
+    });
+    REQUIRE(terminal.start([](std::string) {}, [](cch::tui::TerminalDimensions) {}));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // Closing the master makes the slave read return EOF (POLLIN|POLLHUP):
+    // the delivery worker stops reading input instead of spinning. stop()
+    // still returns promptly; restoration writes fail with EIO on the dead
+    // terminal, so stop() may report that Process error — the contract under
+    // test is prompt, hang-free shutdown.
+    REQUIRE(pty->master.close() == 0);
+    const auto started = std::chrono::steady_clock::now();
+    const auto stopped = terminal.stop();
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+    CHECK(elapsed < std::chrono::milliseconds(400));
+    if (!stopped) {
+        CHECK(stopped.error().code == cch::util::ErrorCode::Process);
+    }
+
+    // Idempotent and equally prompt.
+    const auto second_started = std::chrono::steady_clock::now();
+    (void)terminal.stop();
+    const auto second_elapsed = std::chrono::steady_clock::now() - second_started;
+    CHECK(second_elapsed < std::chrono::milliseconds(400));
 }
 
 #endif

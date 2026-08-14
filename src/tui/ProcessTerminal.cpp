@@ -3,6 +3,7 @@
 #include <cch/tui/TerminalImage.hpp>
 
 #include "KeyboardProtocol.hpp"
+#include "util/UniqueFd.hpp"
 
 #include <array>
 #include <cerrno>
@@ -11,6 +12,7 @@
 #include <cmath>
 #include <condition_variable>
 #include <cctype>
+#include <deque>
 #include <cstdlib>
 #include <exception>
 #include <format>
@@ -24,6 +26,7 @@
 #include <utility>
 
 #if defined(__linux__) || defined(__APPLE__)
+#include <fcntl.h>
 #include <poll.h>
 #include <sys/ioctl.h>
 #include <termios.h>
@@ -59,6 +62,22 @@ constexpr std::string_view kModifyOtherKeysDisable = "\x1b[>4;0m";
 constexpr std::string_view kProgressActiveSequence = "\x1b]9;4;3\x07";
 constexpr std::string_view kProgressClearSequence = "\x1b]9;4;0;\x07";
 constexpr auto kProgressKeepalive = std::chrono::milliseconds(1000);
+/// Escape-sequence and negotiation idle flush window: after input leaves a
+/// partial protocol/appearance response (or a decoder flush) pending, the
+/// delivery worker flushes it once this window passes (was 15 polls at 10 ms
+/// in the periodic-polling design; issue #462).
+constexpr auto kNegotiationTimeout = std::chrono::milliseconds(150);
+/// The delivery worker re-reads TIOCGWINSZ at least this often so resizes are
+/// detected even without SIGWINCH delivery (it also checks on every wakeup).
+/// This is a low-rate watchdog timer, not input polling.
+constexpr auto kResizeWatchdogInterval = std::chrono::milliseconds(500);
+/// Ordered output queue bound: beyond this many queued bytes the terminal
+/// reports explicit backpressure (`Busy`) instead of buffering without limit.
+constexpr std::size_t kOutputQueueMaxBytes = 256 * 1024;
+/// While stop() is pending, the delivery worker bounds how long it waits for
+/// a backed-up output descriptor to drain, so cancellation never hangs on a
+/// stuck terminal (undrained queued output is dropped on exit).
+constexpr auto kStopDrainTimeout = std::chrono::milliseconds(250);
 
 [[nodiscard]] util::Error process_error(std::string message, std::string_view operation, int error_number) {
     return util::make_error(
@@ -472,6 +491,27 @@ struct ProcessTerminal::Impl {
 #if defined(__linux__) || defined(__APPLE__)
     termios original_termios{};
     bool has_original_termios{false};
+    /// Wakeup pipe polled by the delivery worker alongside the input
+    /// descriptor: stop() and output enqueue write one byte so the worker's
+    /// blocking readiness wait returns immediately (issue #462) instead of
+    /// periodic polling.
+    cch::util::UniqueFd wakeup_read;
+    cch::util::UniqueFd wakeup_write;
+    /// Original descriptor flags (O_NONBLOCK is added to the output
+    /// descriptor at start and restored on every exit path).
+    int original_fd_flags{-1};
+    bool output_nonblock{false};
+    /// Ordered bounded output queue drained by the delivery worker when the
+    /// output descriptor is writable. The queue gives explicit backpressure
+    /// (`Busy`) instead of blocking the caller indefinitely on a backed-up
+    /// terminal.
+    std::deque<std::string> output_queue;
+    std::size_t output_queued_bytes{0};
+    bool output_draining{false};
+    /// Resize watchdog deadline base, owned by the worker thread: the worker
+    /// wakes at least this often to re-read TIOCGWINSZ, so resizes are
+    /// detected even without SIGWINCH delivery.
+    std::chrono::steady_clock::time_point last_resize_check{};
 #endif
 };
 
@@ -581,6 +621,9 @@ void invoke_input(T& impl, std::string input) {
 
 template <typename T>
 void deliver_resize_if_changed(T& impl) {
+    // The watchdog base advances on every check so the poll timeout stays in
+    // the future and the worker never spins on an immediate resize deadline.
+    impl.last_resize_check = std::chrono::steady_clock::now();
     winsize size{};
     if (::ioctl(impl.options.output_fd, TIOCGWINSZ, &size) != 0 ||
         size.ws_col == 0 || size.ws_row == 0) {
@@ -655,12 +698,127 @@ void emit_progress_keepalive(T& impl) {
     if (!impl.progress_active) return;
     const auto now = std::chrono::steady_clock::now();
     if (now < impl.progress_next_keepalive) return;
-    auto emitted = write_all(impl.options.output_fd, kProgressActiveSequence);
-    if (!emitted) {
-        if (!impl.worker_error) impl.worker_error = emitted.error();
+    // While the ordered queue is non-empty the output is backed up; a direct
+    // keepalive write could interleave ahead of queued render bytes and
+    // truncate the escape sequence. Skip this beat and retry on the next
+    // deadline (the indicator is best-effort and re-emitted).
+    if (!impl.output_queue.empty() || impl.output_draining) {
+        impl.progress_next_keepalive = now + kProgressKeepalive;
         return;
     }
+    // Non-blocking best-effort write: on any non-delivery outcome, re-arm the
+    // keepalive so the next deadline (and poll timeout) stays in the future
+    // and the worker never spins on an immediate deadline.
+    const auto written = ::write(
+        impl.options.output_fd,
+        kProgressActiveSequence.data(),
+        kProgressActiveSequence.size());
+    if (written == static_cast<ssize_t>(kProgressActiveSequence.size())) {
+        impl.progress_next_keepalive = now + kProgressKeepalive;
+        return;
+    }
+    if (written < 0 && errno != EINTR && !impl.worker_error) {
+        impl.worker_error = process_error(
+            "Process Terminal could not write terminal output",
+            "write",
+            errno);
+    }
     impl.progress_next_keepalive = now + kProgressKeepalive;
+}
+
+/// Wake the delivery worker's blocking readiness wait (stop, output enqueue,
+/// or another worker-relevant state change). Best-effort; a full pipe is
+/// drained on the next wakeup and cannot wedge the wait.
+template <typename T>
+void wake_worker(T& impl) {
+    constexpr char kWakeByte = 1;
+    (void)::write(impl.wakeup_write.get(), &kWakeByte, 1);
+}
+
+/// Whether ordered output is still pending (queued or being drained).
+template <typename T>
+bool output_pending(const T& impl) {
+    std::lock_guard lock(impl.mutex);
+    return !impl.output_queue.empty() || impl.output_draining;
+}
+
+/// Submit one ordered output chunk through the bounded queue. Caller holds
+/// `impl.mutex`. The common fast path writes the whole chunk inline when the
+/// queue is empty and the descriptor accepts it; partial writes and
+/// backpressure fall into the bounded FIFO the delivery worker drains in
+/// order. The bound caps the accumulated backlog: once the queue is non-empty
+/// (the terminal is behind), writes that would push it past `kOutputQueueMaxBytes`
+/// are rejected with explicit backpressure (`Busy`) instead of blocking the
+/// caller. A single in-flight write is always admitted when the queue is
+/// empty, so a large one-shot render (e.g. an inline image) is never rejected
+/// on a healthy, draining terminal (issue #462).
+template <typename T>
+[[nodiscard]] util::ExpectedVoid enqueue_output(T& impl, std::string_view bytes) {
+    if (bytes.empty()) return {};
+    if (impl.output_queue.empty() && !impl.output_draining) {
+        const auto written = ::write(impl.options.output_fd, bytes.data(), bytes.size());
+        if (written > 0 && static_cast<std::size_t>(written) == bytes.size()) return {};
+        if (written > 0) {
+            bytes.remove_prefix(static_cast<std::size_t>(written));
+        } else if (written < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+            return std::unexpected(process_error(
+                "Process Terminal could not write terminal output",
+                "write",
+                errno));
+        }
+        // EINTR with no bytes, or a partial write: the remainder is queued.
+    }
+    if (!impl.output_queue.empty() &&
+        impl.output_queued_bytes + bytes.size() > kOutputQueueMaxBytes) {
+        return std::unexpected(util::make_error(
+            util::ErrorCode::Busy,
+            "Process Terminal output is backed up",
+            std::format(
+                "the bounded output queue ({} bytes) cannot admit more output",
+                kOutputQueueMaxBytes)));
+    }
+    impl.output_queue.push_back(std::string(bytes));
+    impl.output_queued_bytes += bytes.size();
+    wake_worker(impl);
+    return {};
+}
+
+/// Drain the ordered output queue into the output descriptor while it is
+/// writable. Non-blocking writes run under `impl.mutex`, so ordering with
+/// enqueue_output is exact; a real write failure records the worker error and
+/// drops the undeliverable queued bytes.
+template <typename T>
+void drain_output(T& impl, bool writable) {
+    std::lock_guard lock(impl.mutex);
+    if (impl.output_queue.empty() || !writable) return;
+    impl.output_draining = true;
+    while (!impl.output_queue.empty()) {
+        auto& front = impl.output_queue.front();
+        const auto written = ::write(impl.options.output_fd, front.data(), front.size());
+        if (written > 0) {
+            impl.output_queued_bytes -= static_cast<std::size_t>(written);
+            if (static_cast<std::size_t>(written) == front.size()) {
+                impl.output_queue.pop_front();
+                continue;
+            }
+            front.erase(0, static_cast<std::size_t>(written));
+            break;
+        }
+        if (written < 0 && errno == EINTR) continue;
+        if (written < 0 && errno == EAGAIN) break;
+        if (written < 0) {
+            if (!impl.worker_error) {
+                impl.worker_error = process_error(
+                    "Process Terminal could not write terminal output",
+                    "write",
+                    errno);
+            }
+            impl.output_queued_bytes = 0;
+            impl.output_queue.clear();
+        }
+        break;
+    }
+    impl.output_draining = false;
 }
 
 enum class WorkerEventKind {
@@ -676,71 +834,131 @@ struct WorkerEvent {
     std::optional<util::Error> error{std::nullopt};
 };
 
-[[nodiscard]] WorkerEvent wait_for_terminal_input(int descriptor) {
-    constexpr int kPollMilliseconds = 10;
-    pollfd item{.fd = descriptor, .events = POLLIN, .revents = 0};
-    const auto ready = ::poll(&item, 1, kPollMilliseconds);
-    if (ready < 0) {
-        if (errno == EINTR) {
-            return WorkerEvent{
-                .kind = WorkerEventKind::Timeout,
-                .input = {},
-                .error = std::nullopt,
-            };
-        }
-        return WorkerEvent{
-            .kind = WorkerEventKind::Error,
-            .input = {},
-            .error = process_error("Process Terminal input polling failed", "poll", errno),
-        };
-    }
-    if (ready == 0) {
-        return WorkerEvent{
-            .kind = WorkerEventKind::Timeout,
-            .input = {},
-            .error = std::nullopt,
-        };
-    }
-    if ((item.revents & POLLIN) != 0) {
-        std::array<char, 4096> buffer{};
-        const auto count = ::read(descriptor, buffer.data(), buffer.size());
-        if (count > 0) {
-            return WorkerEvent{
-                .kind = WorkerEventKind::Input,
-                .input = std::string(buffer.data(), static_cast<std::size_t>(count)),
-                .error = std::nullopt,
-            };
-        }
-        if (count < 0 && errno == EINTR) {
-            return WorkerEvent{
-                .kind = WorkerEventKind::Timeout,
-                .input = {},
-                .error = std::nullopt,
-            };
-        }
-        if (count < 0) {
-            return WorkerEvent{
-                .kind = WorkerEventKind::Error,
-                .input = {},
-                .error = process_error("Process Terminal input read failed", "read", errno),
-            };
-        }
-    }
-    return WorkerEvent{
-        .kind = WorkerEventKind::Closed,
-        .input = {},
-        .error = std::nullopt,
-    };
-}
+/// What one blocking readiness wait observed. The worker drains the wakeup
+/// pipe itself, so callers never observe wakeup bytes directly.
+struct WorkerWake {
+    /// poll() returned 0: at least one armed deadline (escape-sequence idle
+    /// flush, progress keepalive, or the resize watchdog) passed.
+    bool timed_out{false};
+    /// The output descriptor was reported writable, so queued output can be
+    /// drained in order.
+    bool output_writable{false};
+    /// EOF on the input descriptor (the terminal side closed).
+    bool input_closed{false};
+    /// Bytes read from the input descriptor (empty when none were available).
+    std::string input;
+    std::optional<util::Error> error{std::nullopt};
+};
 
 struct WorkerInputState {
     AppearanceInputState appearance;
     std::string keyboard_pending;
     std::string cell_size_pending;
     bool needs_input_flush{false};
-    int appearance_idle_polls{0};
-    int negotiation_idle_polls{0};
+    /// Readiness-driven deadlines: armed (now + kNegotiationTimeout) whenever
+    /// input leaves partial protocol/appearance bytes or a decoder flush
+    /// pending, firing once. They replace the old 10 ms poll counters.
+    std::chrono::steady_clock::time_point appearance_deadline{
+        std::chrono::steady_clock::time_point::max()};
+    std::chrono::steady_clock::time_point negotiation_deadline{
+        std::chrono::steady_clock::time_point::max()};
 };
+
+[[nodiscard]] bool deadline_fired(std::chrono::steady_clock::time_point deadline) {
+    return deadline != std::chrono::steady_clock::time_point::max() &&
+        std::chrono::steady_clock::now() >= deadline;
+}
+
+/// Readiness-driven wait (issue #462): block on the input descriptor, the
+/// wakeup pipe, and (while output is pending) the output descriptor, with a
+/// timeout only when a timer deadline (escape idle flush, keepalive, resize
+/// watchdog) is armed. Periodic input polling is replaced by this blocking
+/// wait; stop() and output enqueue write the wakeup pipe so the wait returns
+/// immediately. While stopping, the wait is capped so a backed-up output
+/// descriptor cannot hang the worker join.
+template <typename T>
+[[nodiscard]] WorkerWake wait_for_worker_events(
+    T& impl,
+    const WorkerInputState& state,
+    bool stopping) {
+    WorkerWake wake;
+    bool output_pending = false;
+    std::optional<std::chrono::steady_clock::time_point> earliest;
+    {
+        std::lock_guard lock(impl.mutex);
+        output_pending = !impl.output_queue.empty() || impl.output_draining;
+        if (impl.progress_active) {
+            if (!earliest || impl.progress_next_keepalive < *earliest) {
+                earliest = impl.progress_next_keepalive;
+            }
+        }
+        const auto resize_watchdog = impl.last_resize_check + kResizeWatchdogInterval;
+        if (!earliest || resize_watchdog < *earliest) earliest = resize_watchdog;
+    }
+    if (state.appearance_deadline != std::chrono::steady_clock::time_point::max()) {
+        if (!earliest || state.appearance_deadline < *earliest) earliest = state.appearance_deadline;
+    }
+    if (state.negotiation_deadline != std::chrono::steady_clock::time_point::max()) {
+        if (!earliest || state.negotiation_deadline < *earliest) earliest = state.negotiation_deadline;
+    }
+
+    std::array<pollfd, 3> items{};
+    std::size_t count = 0;
+    items[count++] = pollfd{.fd = impl.options.input_fd, .events = POLLIN, .revents = 0};
+    items[count++] = pollfd{.fd = impl.wakeup_read.get(), .events = POLLIN, .revents = 0};
+    if (output_pending) {
+        items[count++] = pollfd{.fd = impl.options.output_fd, .events = POLLOUT, .revents = 0};
+    }
+
+    int timeout_ms = -1;
+    if (earliest) {
+        const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+            *earliest - std::chrono::steady_clock::now());
+        timeout_ms = std::max<int>(0, static_cast<int>(remaining.count()));
+    }
+    if (stopping &&
+        (timeout_ms < 0 || timeout_ms > kStopDrainTimeout.count())) {
+        timeout_ms = static_cast<int>(kStopDrainTimeout.count());
+    }
+
+    const auto ready = ::poll(items.data(), static_cast<nfds_t>(count), timeout_ms);
+    if (ready < 0) {
+        if (errno == EINTR) return wake; // signal interrupted the wait; retry.
+        wake.error = process_error("Process Terminal input wait failed", "poll", errno);
+        return wake;
+    }
+    if (ready == 0) {
+        wake.timed_out = true;
+        return wake;
+    }
+
+    if ((items[1].revents & POLLIN) != 0) {
+        std::array<char, 64> buffer{};
+        while (::read(impl.wakeup_read.get(), buffer.data(), buffer.size()) > 0) {}
+    }
+    if (count > 2 && (items[2].revents & POLLOUT) != 0) {
+        wake.output_writable = true;
+    }
+    if ((items[0].revents & POLLIN) != 0) {
+        std::array<char, 4096> buffer{};
+        const auto read_count = ::read(impl.options.input_fd, buffer.data(), buffer.size());
+        if (read_count > 0) {
+            wake.input.assign(buffer.data(), static_cast<std::size_t>(read_count));
+        } else if (read_count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            // O_NONBLOCK is shared between input and output when they are the
+            // same descriptor; another wake consumed the readable data.
+        } else if (read_count < 0 && errno != EINTR) {
+            wake.error = process_error("Process Terminal input read failed", "read", errno);
+        } else if (read_count == 0) {
+            wake.input_closed = true;
+        }
+    } else if ((items[0].revents & (POLLHUP | POLLERR)) != 0) {
+        // The terminal side went away without readable data (hangup): treat
+        // it as EOF so the worker stops cleanly instead of spinning.
+        wake.input_closed = true;
+    }
+    return wake;
+}
 
 template <typename T>
 void apply_detected_appearance(T& impl, const AppearanceInputState& appearance) {
@@ -808,7 +1026,7 @@ void handle_forwarded_input(
         std::move(state.keyboard_pending),
         cell_size.forwarded_input);
     state.keyboard_pending = std::move(parsed.pending);
-    state.negotiation_idle_polls = 0;
+    state.negotiation_deadline = std::chrono::steady_clock::now() + kNegotiationTimeout;
     for (const auto& response : parsed.responses) apply_keyboard_response(impl, response);
     if (!parsed.forwarded_input.empty()) {
         invoke_input(impl, std::move(parsed.forwarded_input));
@@ -821,7 +1039,6 @@ template <typename T>
     T& impl,
     WorkerInputState& state,
     WorkerEvent event) {
-    constexpr int kNegotiationTimeoutPolls = 15;
     if (event.kind == WorkerEventKind::Closed) return false;
     if (event.kind == WorkerEventKind::Error) {
         record_worker_error(impl, std::move(*event.error));
@@ -833,15 +1050,17 @@ template <typename T>
             impl.drain_last_activity = std::chrono::steady_clock::now();
             return true;
         }
-        state.appearance_idle_polls = 0;
+        state.appearance_deadline = std::chrono::steady_clock::now() + kNegotiationTimeout;
         auto forwarded = consume_appearance_input(state.appearance, event.input);
         apply_detected_appearance(impl, state.appearance);
         if (!forwarded.empty()) handle_forwarded_input(impl, state, std::move(forwarded));
         return true;
     }
 
-    ++state.appearance_idle_polls;
-    if (state.appearance_idle_polls >= kNegotiationTimeoutPolls) {
+    // A timeout wake means one armed deadline passed; fire the ones that are
+    // due. Both deadlines are armed on input and fire once, mirroring the old
+    // 15-poll (150 ms) idle windows.
+    if (deadline_fired(state.appearance_deadline)) {
         const bool terminal_response_pending =
             state.appearance.discard != AppearanceDiscardKind::None ||
             state.appearance.pending.starts_with(kColorSchemeResponsePrefix) ||
@@ -853,24 +1072,24 @@ template <typename T>
             handle_forwarded_input(impl, state, std::move(state.appearance.pending));
             state.appearance.pending.clear();
         }
-        state.appearance_idle_polls = 0;
+        state.appearance_deadline = std::chrono::steady_clock::time_point::max();
     }
-    ++state.negotiation_idle_polls;
-    if (!state.keyboard_pending.empty() &&
-        state.negotiation_idle_polls >= kNegotiationTimeoutPolls) {
-        invoke_input(impl, std::move(state.keyboard_pending));
-        state.keyboard_pending.clear();
-        state.needs_input_flush = true;
-    }
-    if (!state.cell_size_pending.empty() &&
-        state.negotiation_idle_polls >= kNegotiationTimeoutPolls) {
-        invoke_input(impl, std::move(state.cell_size_pending));
-        state.cell_size_pending.clear();
-        state.needs_input_flush = true;
-    }
-    if (state.needs_input_flush && state.keyboard_pending.empty()) {
-        invoke_input(impl, {});
-        state.needs_input_flush = false;
+    if (deadline_fired(state.negotiation_deadline)) {
+        if (!state.keyboard_pending.empty()) {
+            invoke_input(impl, std::move(state.keyboard_pending));
+            state.keyboard_pending.clear();
+            state.needs_input_flush = true;
+        }
+        if (!state.cell_size_pending.empty()) {
+            invoke_input(impl, std::move(state.cell_size_pending));
+            state.cell_size_pending.clear();
+            state.needs_input_flush = true;
+        }
+        if (state.needs_input_flush && state.keyboard_pending.empty()) {
+            invoke_input(impl, {});
+            state.needs_input_flush = false;
+        }
+        state.negotiation_deadline = std::chrono::steady_clock::time_point::max();
     }
     return true;
 }
@@ -887,21 +1106,80 @@ void run_terminal_worker(T& impl, std::stop_token stop_token) {
     if (!startup_input.empty()) {
         handle_forwarded_input(impl, input_state, std::move(startup_input));
     }
-    while (!stop_token.stop_requested()) {
-        if (!handle_worker_event(
-                impl,
-                input_state,
-                wait_for_terminal_input(impl.options.input_fd))) {
-            return;
+    auto stop_drain_deadline = std::chrono::steady_clock::time_point::max();
+    while (true) {
+        const bool stopping = stop_token.stop_requested();
+        if (stopping &&
+            stop_drain_deadline == std::chrono::steady_clock::time_point::max()) {
+            stop_drain_deadline = std::chrono::steady_clock::now() + kStopDrainTimeout;
         }
-        if (!stop_token.stop_requested()) deliver_resize_if_changed(impl);
-        if (!stop_token.stop_requested()) emit_progress_keepalive(impl);
+        auto wake = wait_for_worker_events(impl, input_state, stopping);
+        if (wake.error) {
+            record_worker_error(impl, std::move(*wake.error));
+            break;
+        }
+        if (wake.input_closed) break;
+        if (!wake.input.empty()) {
+            if (!handle_worker_event(
+                    impl,
+                    input_state,
+                    WorkerEvent{
+                        .kind = WorkerEventKind::Input,
+                        .input = std::move(wake.input),
+                        .error = std::nullopt,
+                    })) {
+                break;
+            }
+        } else if (wake.timed_out) {
+            if (!handle_worker_event(
+                    impl,
+                    input_state,
+                    WorkerEvent{
+                        .kind = WorkerEventKind::Timeout,
+                        .input = {},
+                        .error = std::nullopt,
+                    })) {
+                break;
+            }
+        }
+        if (!stopping) {
+            deliver_resize_if_changed(impl);
+            emit_progress_keepalive(impl);
+        }
+        drain_output(impl, wake.output_writable);
+        if (stopping) {
+            // Cancellation is prompt: the wakeup pipe wakes the blocking wait
+            // immediately. The worker then keeps draining ordered output until
+            // the queue is empty or the bounded cap elapses, so a healthy
+            // terminal receives its complete final bytes before stop()
+            // restores termios and descriptor state; a stuck output
+            // descriptor cannot hang the join beyond the cap.
+            if (!output_pending(impl)) break;
+            if (std::chrono::steady_clock::now() >= stop_drain_deadline) break;
+            continue;
+        }
     }
 }
 
 template <typename T>
 [[nodiscard]] util::ExpectedVoid restore_terminal_modes(T& impl) {
     util::ExpectedVoid first_error;
+
+    // Restore the output descriptor to its original flags first so the
+    // restoration writes below run on a blocking descriptor (the worker has
+    // already drained the ordered output queue before stop() restores).
+    if (impl.output_nonblock && impl.original_fd_flags >= 0) {
+        if (::fcntl(impl.options.output_fd, F_SETFL, impl.original_fd_flags) != 0) {
+            retain_error(
+                first_error,
+                std::unexpected(process_error(
+                    "Process Terminal could not restore output descriptor flags",
+                    "fcntl(F_SETFL)",
+                    errno)));
+        } else {
+            impl.output_nonblock = false;
+        }
+    }
 
     if (impl.progress_active) {
         auto cleared = write_all(impl.options.output_fd, kProgressClearSequence);
@@ -1027,6 +1305,13 @@ util::ExpectedVoid ProcessTerminal::start(
     };
     auto owned_input_sink = std::make_shared<TerminalInputSink>(std::move(input_sink));
     auto owned_resize_sink = std::make_shared<TerminalResizeSink>(std::move(resize_sink));
+    // One startup-failure path: roll back acquired terminal state and combine
+    // the acquisition error with any incomplete rollback (issue #462).
+    const auto fail_startup = [this](util::Error acquisition_error) -> util::ExpectedVoid {
+        auto rollback = restore_terminal_modes(*impl_);
+        return std::unexpected(
+            startup_failure(std::move(acquisition_error), rollback));
+    };
 
     auto raw = original;
     ::cfmakeraw(&raw);
@@ -1042,8 +1327,7 @@ util::ExpectedVoid ProcessTerminal::start(
 
     auto paste_attempt = attempt_write_all(impl_->options.output_fd, kBracketedPasteEnable);
     if (!paste_attempt.result) {
-        auto rollback = restore_terminal_modes(*impl_);
-        return std::unexpected(startup_failure(paste_attempt.result.error(), rollback));
+        return fail_startup(paste_attempt.result.error());
     }
     impl_->modes.bracketed_paste = true;
 
@@ -1051,8 +1335,7 @@ util::ExpectedVoid ProcessTerminal::start(
         impl_->options.output_fd,
         std::string(kColorSchemeQuery) + std::string(kBackgroundColorQuery));
     if (!appearance_query.result) {
-        auto rollback = restore_terminal_modes(*impl_);
-        return std::unexpected(startup_failure(appearance_query.result.error(), rollback));
+        return fail_startup(appearance_query.result.error());
     }
     auto appearance = probe_terminal_appearance(impl_->options.input_fd);
     impl_->capabilities.appearance = appearance.state.color_scheme.value_or(
@@ -1062,15 +1345,13 @@ util::ExpectedVoid ProcessTerminal::start(
 
     auto keyboard_push = attempt_write_all(impl_->options.output_fd, kKeyboardProtocolPush);
     if (!keyboard_push.result) {
-        auto rollback = restore_terminal_modes(*impl_);
-        return std::unexpected(startup_failure(keyboard_push.result.error(), rollback));
+        return fail_startup(keyboard_push.result.error());
     }
     impl_->keyboard_protocol_pushed = true;
 
     auto keyboard_query = attempt_write_all(impl_->options.output_fd, kKeyboardProtocolQuery);
     if (!keyboard_query.result) {
-        auto rollback = restore_terminal_modes(*impl_);
-        return std::unexpected(startup_failure(keyboard_query.result.error(), rollback));
+        return fail_startup(keyboard_query.result.error());
     }
 
     if (detected_images.images != InlineImageProtocol::None) {
@@ -1079,10 +1360,65 @@ util::ExpectedVoid ProcessTerminal::start(
         // capabilities().cell_pixels and triggers a re-render.
         auto cell_size_query = attempt_write_all(impl_->options.output_fd, detail::kCellSizeQuery);
         if (!cell_size_query.result) {
-            auto rollback = restore_terminal_modes(*impl_);
-            return std::unexpected(startup_failure(cell_size_query.result.error(), rollback));
+            return fail_startup(cell_size_query.result.error());
         }
     }
+
+    // Readiness-driven wakeup (issue #462): a pipe the delivery worker polls
+    // alongside the input descriptor. stop() and output enqueue write one byte
+    // so the blocking readiness wait returns immediately; a fresh pipe per
+    // start session avoids stale wakeup bytes across restarts.
+    {
+        int wakeup_pipe[2]{-1, -1};
+        if (::pipe(wakeup_pipe) != 0) {
+            return fail_startup(process_error(
+                "Process Terminal could not create its wakeup pipe",
+                "pipe",
+                errno));
+        }
+        // Both ends run non-blocking: the worker's drain loop must not block
+        // when the pipe is empty after consuming the wake bytes, and a full
+        // pipe must never block a wake_worker() write. UniqueFd owns the raw
+        // descriptors from here on, so every failure path cleans them up.
+        cch::util::UniqueFd read_end(wakeup_pipe[0]);
+        cch::util::UniqueFd write_end(wakeup_pipe[1]);
+        const int read_flags = ::fcntl(read_end.get(), F_GETFL);
+        const int write_flags = ::fcntl(write_end.get(), F_GETFL);
+        if (read_flags < 0 || write_flags < 0 ||
+            ::fcntl(read_end.get(), F_SETFL, read_flags | O_NONBLOCK) != 0 ||
+            ::fcntl(write_end.get(), F_SETFL, write_flags | O_NONBLOCK) != 0) {
+            return fail_startup(process_error(
+                "Process Terminal could not configure its wakeup pipe",
+                "fcntl(F_SETFL)",
+                errno));
+        }
+        impl_->wakeup_read = std::move(read_end);
+        impl_->wakeup_write = std::move(write_end);
+    }
+    const int original_flags = ::fcntl(impl_->options.output_fd, F_GETFL);
+    if (original_flags < 0) {
+        return fail_startup(process_error(
+            "Process Terminal could not read output descriptor flags",
+            "fcntl(F_GETFL)",
+            errno));
+    }
+    impl_->original_fd_flags = original_flags;
+    // The output descriptor runs non-blocking so render-path writes never
+    // block the caller; partial writes and backpressure fall into the bounded
+    // ordered queue the delivery worker drains (issue #462). O_NONBLOCK is
+    // shared when input and output are the same descriptor, so the input read
+    // path tolerates EAGAIN.
+    if (::fcntl(impl_->options.output_fd, F_SETFL, original_flags | O_NONBLOCK) != 0) {
+        return fail_startup(process_error(
+            "Process Terminal could not set non-blocking output",
+            "fcntl(F_SETFL)",
+            errno));
+    }
+    impl_->output_nonblock = true;
+    impl_->output_queue.clear();
+    impl_->output_queued_bytes = 0;
+    impl_->output_draining = false;
+    impl_->last_resize_check = std::chrono::steady_clock::now();
 
     impl_->input_sink = std::move(owned_input_sink);
     impl_->resize_sink = std::move(owned_resize_sink);
@@ -1099,12 +1435,29 @@ util::ExpectedVoid ProcessTerminal::start(
         impl_->modes.started = false;
         impl_->input_sink.reset();
         impl_->resize_sink.reset();
-        auto rollback = restore_terminal_modes(*impl_);
-        auto acquisition_error = util::make_error(
+        return fail_startup(util::make_error(
             util::ErrorCode::Process,
             "Process Terminal could not start input and resize delivery",
-            std::format("thread creation failed (code {})", error.code().value()));
-        return std::unexpected(startup_failure(std::move(acquisition_error), rollback));
+            std::format("thread creation failed (code {})", error.code().value())));
+    } catch (const std::exception& error) {
+        // Any other throw after O_NONBLOCK was set (e.g. bad_alloc from thread
+        // creation) must still restore termios and descriptor state (issue
+        // #462 criterion 4: restoration after exceptions).
+        impl_->modes.started = false;
+        impl_->input_sink.reset();
+        impl_->resize_sink.reset();
+        return fail_startup(util::make_error(
+            util::ErrorCode::Process,
+            "Process Terminal could not start input and resize delivery",
+            std::format("startup failed ({})", error.what())));
+    } catch (...) {
+        impl_->modes.started = false;
+        impl_->input_sink.reset();
+        impl_->resize_sink.reset();
+        return fail_startup(util::make_error(
+            util::ErrorCode::Process,
+            "Process Terminal could not start input and resize delivery",
+            "startup failed with an unknown exception"));
     }
     return {};
 #endif
@@ -1131,6 +1484,9 @@ util::ExpectedVoid ProcessTerminal::stop() {
         impl_->resize_sink.reset();
         impl_->modes.started = false;
         if (impl_->worker.joinable()) impl_->worker.request_stop();
+        // Wake the worker's blocking readiness wait so cancellation is prompt
+        // even while the worker is parked with no armed deadlines.
+        wake_worker(*impl_);
     }
     if (impl_->worker.joinable() && !called_from_worker) impl_->worker.join();
 
@@ -1141,6 +1497,12 @@ util::ExpectedVoid ProcessTerminal::stop() {
             result = std::unexpected(std::move(*impl_->worker_error));
             impl_->worker_error.reset();
         }
+        // The worker drained ordered output before exiting; anything still
+        // queued (e.g. after an input error or EOF) cannot be delivered and is
+        // dropped before restoration writes replace it.
+        impl_->output_queue.clear();
+        impl_->output_queued_bytes = 0;
+        impl_->output_draining = false;
         retain_error(result, restore_terminal_modes(*impl_));
     }
 
@@ -1174,7 +1536,7 @@ util::ExpectedVoid ProcessTerminal::clear_screen() {
     // scroll history and the mirrored viewport top both reset.
     impl_->viewport_top = 0;
 #if defined(__linux__) || defined(__APPLE__)
-    return write_all(impl_->options.output_fd, kClearScreen);
+    return enqueue_output(*impl_, kClearScreen);
 #else
     return {};
 #endif
@@ -1184,7 +1546,7 @@ util::ExpectedVoid ProcessTerminal::write(std::string_view output) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
 #if defined(__linux__) || defined(__APPLE__)
-    return write_all(impl_->options.output_fd, output);
+    return enqueue_output(*impl_, output);
 #else
     return {};
 #endif
@@ -1220,7 +1582,7 @@ util::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
         impl_->cursor.row = bottom;
         impl_->cursor.column = position.column;
 #if defined(__linux__) || defined(__APPLE__)
-        return write_all(impl_->options.output_fd, sequence);
+        return enqueue_output(*impl_, sequence);
 #else
         return {};
 #endif
@@ -1233,7 +1595,7 @@ util::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
     impl_->cursor.column = position.column;
     sequence += std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1);
 #if defined(__linux__) || defined(__APPLE__)
-    return write_all(impl_->options.output_fd, sequence);
+    return enqueue_output(*impl_, sequence);
 #else
     return {};
 #endif
@@ -1244,11 +1606,9 @@ util::ExpectedVoid ProcessTerminal::set_cursor_visible(bool visible) {
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
     if (impl_->modes.cursor_visible == visible) return {};
 #if defined(__linux__) || defined(__APPLE__)
-    auto attempt = attempt_write_all(
-        impl_->options.output_fd,
-        visible ? kCursorShow : kCursorHide);
-    if (attempt.result) impl_->modes.cursor_visible = visible;
-    return attempt.result;
+    auto result = enqueue_output(*impl_, visible ? kCursorShow : kCursorHide);
+    if (result) impl_->modes.cursor_visible = visible;
+    return result;
 #else
     impl_->modes.cursor_visible = visible;
     return {};
@@ -1292,12 +1652,15 @@ util::Expected<TerminalImageHandle> ProcessTerminal::place_image(const TerminalI
     }
     // Both protocols anchor the image's top-left at the cursor, so position
     // the cursor at the region origin before emitting the sequence.
-    auto positioned = write_all(
-        impl_->options.output_fd,
-        std::format("\x1b[{};{}H", screen_row + 1, image.region.column + 1));
-    if (!positioned) return std::unexpected(positioned.error());
-    auto written = write_all(impl_->options.output_fd, *encoded);
-    if (!written) return std::unexpected(written.error());
+    if (auto positioned = enqueue_output(
+            *impl_,
+            std::format("\x1b[{};{}H", screen_row + 1, image.region.column + 1));
+        !positioned) {
+        return std::unexpected(positioned.error());
+    }
+    if (auto written = enqueue_output(*impl_, *encoded); !written) {
+        return std::unexpected(written.error());
+    }
     if (!image.preferred_handle) ++impl_->next_image_handle;
     return handle;
 #else
@@ -1335,20 +1698,23 @@ util::ExpectedVoid ProcessTerminal::remove_image(
             impl_->capabilities.inline_images,
             handle);
         if (!removal) return std::unexpected(removal.error());
-        auto written = write_all(impl_->options.output_fd, *removal);
-        if (!written) return std::unexpected(written.error());
+        if (auto written = enqueue_output(*impl_, *removal); !written) {
+            return std::unexpected(written.error());
+        }
         // iTerm2 has no addressable deletion: blank the owned cells. Kitty's
         // delete restores the blanked cells the TUI placed the image over, and
         // the blanking is idempotent with it (matching the VirtualTerminal
         // recorded removal semantics).
-        auto cleared = write_all(
-            impl_->options.output_fd,
-            std::format(
-                "\x1b[{};{}H{}",
-                screen_row + 1,
-                region.column + 1,
-                std::string(columns * rows, ' ')));
-        if (!cleared) return std::unexpected(cleared.error());
+        if (auto cleared = enqueue_output(
+                *impl_,
+                std::format(
+                    "\x1b[{};{}H{}",
+                    screen_row + 1,
+                    region.column + 1,
+                    std::string(columns * rows, ' ')));
+            !cleared) {
+            return std::unexpected(cleared.error());
+        }
     }
     return {};
 #else
@@ -1366,9 +1732,9 @@ util::ExpectedVoid ProcessTerminal::begin_synchronized_update() {
         return {};
     }
 #if defined(__linux__) || defined(__APPLE__)
-    auto attempt = attempt_write_all(impl_->options.output_fd, kBeginSynchronizedUpdate);
-    if (attempt.result) impl_->synchronized_update_depth = 1;
-    return attempt.result;
+    auto result = enqueue_output(*impl_, kBeginSynchronizedUpdate);
+    if (result) impl_->synchronized_update_depth = 1;
+    return result;
 #else
     impl_->synchronized_update_depth = 1;
     return {};
@@ -1388,7 +1754,7 @@ util::ExpectedVoid ProcessTerminal::end_synchronized_update() {
         return {};
     }
 #if defined(__linux__) || defined(__APPLE__)
-    auto ended = write_all(impl_->options.output_fd, kEndSynchronizedUpdate);
+    auto ended = enqueue_output(*impl_, kEndSynchronizedUpdate);
     if (ended) impl_->synchronized_update_depth = 0;
     return ended;
 #else
@@ -1401,7 +1767,7 @@ util::ExpectedVoid ProcessTerminal::set_title(std::string_view title) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
 #if defined(__linux__) || defined(__APPLE__)
-    return write_all(impl_->options.output_fd, std::format("\x1b]0;{}\x07", title));
+    return enqueue_output(*impl_, std::format("\x1b]0;{}\x07", title));
 #else
     return {};
 #endif
@@ -1411,10 +1777,10 @@ util::ExpectedVoid ProcessTerminal::set_progress(bool active) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
 #if defined(__linux__) || defined(__APPLE__)
-    auto attempt = attempt_write_all(
-        impl_->options.output_fd,
+    auto result = enqueue_output(
+        *impl_,
         active ? kProgressActiveSequence : kProgressClearSequence);
-    if (!attempt.result) return attempt.result;
+    if (!result) return result;
     if (active) {
         if (!impl_->progress_active) {
             impl_->progress_active = true;
@@ -1442,15 +1808,19 @@ util::ExpectedVoid ProcessTerminal::drain_input(
 #else
     // Disable the keyboard protocols first so late key releases cannot
     // generate new escape sequences while the buffer drains (pi drainInput).
+    // The disables go through the ordered bounded queue so they cannot jump
+    // ahead of render output still being flushed.
     if (impl_->keyboard_protocol_pushed) {
-        auto popped = write_all(impl_->options.output_fd, kKeyboardProtocolPop);
-        if (!popped) return popped;
+        if (auto popped = enqueue_output(*impl_, kKeyboardProtocolPop); !popped) {
+            return popped;
+        }
         impl_->keyboard_protocol_pushed = false;
         impl_->capabilities.keyboard_protocol = KeyboardProtocol::Legacy;
     }
     if (impl_->modify_other_keys_active) {
-        auto disabled = write_all(impl_->options.output_fd, kModifyOtherKeysDisable);
-        if (!disabled) return disabled;
+        if (auto disabled = enqueue_output(*impl_, kModifyOtherKeysDisable); !disabled) {
+            return disabled;
+        }
         impl_->modify_other_keys_active = false;
     }
 
@@ -1463,6 +1833,18 @@ util::ExpectedVoid ProcessTerminal::drain_input(
     impl_->drain_last_activity = std::chrono::steady_clock::now();
     auto last_activity = impl_->drain_last_activity;
     lock.unlock();
+    // The protocol disables must reach the terminal before the drain completes
+    // (late key releases must not leak); wait, bounded by the drain window,
+    // for the delivery worker to flush the ordered queue.
+    const auto output_deadline = last_activity + max_ms;
+    while (true) {
+        {
+            std::lock_guard guard(impl_->mutex);
+            if (impl_->output_queue.empty() && !impl_->output_draining) break;
+        }
+        if (std::chrono::steady_clock::now() >= output_deadline) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
     const auto deadline = last_activity + max_ms;
     while (true) {
         const auto now = std::chrono::steady_clock::now();

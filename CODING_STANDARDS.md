@@ -110,7 +110,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 7.7. Allocate with `std::make_unique` / `std::make_shared`; no owning raw `new`/`delete`.
 
-7.8. POSIX file descriptors are owned by `UniqueFd` (`src/harness/UniqueFd.hpp`) — never `unique_ptr<int>` guards or manual `::close` cleanup paths.
+7.8. POSIX file descriptors are owned by `UniqueFd` (`src/util/UniqueFd.hpp`) — never `unique_ptr<int>` guards or manual `::close` cleanup paths.
 
 ## 8. Owner Interface headers
 
