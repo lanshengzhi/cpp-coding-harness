@@ -18,7 +18,10 @@ struct OpenSession {
     std::filesystem::path workspace;
     harness::session::SessionMetadata metadata;
     std::vector<ai::MessageVariant> history;
-    std::unique_ptr<harness::session::SessionStore> store;
+    /// The closed Session Store facade (ADR 0040). Shared ownership: the
+    /// Session Event Commitment channel keeps the store alive while admitted
+    /// off-loop persistence work is still in flight.
+    std::shared_ptr<harness::session::SessionStore> store;
     /// Provider stored in session metadata (populated on resume).
     std::optional<std::string> stored_provider;
     /// Model stored in session metadata (populated on resume).

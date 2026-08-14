@@ -73,6 +73,7 @@ struct TestPaths {
     request.no_prompt_templates = true;
     request.workspace = paths.workspace.path();
     request.session_target = coding_agent::ExplicitResumeSessionTarget{paths.session_file};
+    request.execution_runtime_target = tests::detail::fixture_runtime_target();
     return coding_agent::create_agent_session_for_testing(
         std::move(request), ai::providers::make_scripted_fake_models());
 }

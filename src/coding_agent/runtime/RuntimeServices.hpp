@@ -12,6 +12,10 @@
 #include <optional>
 #include <string>
 
+namespace cch::harness {
+class RuntimeTarget;
+} // namespace cch::harness
+
 namespace cch::coding_agent::runtime {
 
 /// Passive bundle of runtime capabilities assembled by SessionFactory.
@@ -33,6 +37,12 @@ struct RuntimeServices {
     /// state as creation. Empty when assembly had no settings surface.
     std::optional<coding_agent::SettingsManager> settings_manager;
     std::shared_ptr<harness::AsyncExecutionEnv> env;
+    /// The session's serialized Runtime mailbox target (ADR 0040): the
+    /// Session Event Commitment channel admits persistence work through it
+    /// so journal I/O runs off the interaction loop and outcomes return in
+    /// FIFO admission order. Null only for sessions assembled without a
+    /// Runtime root.
+    std::shared_ptr<harness::RuntimeTarget> runtime_target;
     /// True when the factory created the execution environment and must clean
     /// it up on session close. Host-provided environments are never owned.
     bool env_owned{true};

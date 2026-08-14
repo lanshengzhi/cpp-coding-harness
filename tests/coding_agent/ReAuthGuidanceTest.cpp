@@ -97,6 +97,7 @@ constexpr std::string_view kKeylessAlphaKeyedBeta = R"({
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
+    request.execution_runtime_target = tests::detail::fixture_runtime_target();
     request.workspace = fixture.workspace.path();
     return request;
 }

@@ -7,12 +7,15 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <fstream>
 #include <mutex>
 #include <optional>
 #include <sstream>
 #include <system_error>
+#include <thread>
+#include <vector>
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <fcntl.h>
@@ -231,6 +234,46 @@ struct InjectedAppendFailure {
 std::mutex injected_append_failure_mutex;
 std::optional<InjectedAppendFailure> injected_append_failure;
 
+struct InjectedAppendDelay {
+    std::filesystem::path path;
+    std::chrono::milliseconds delay;
+};
+
+std::mutex injected_append_delay_mutex;
+std::optional<InjectedAppendDelay> injected_append_delay;
+
+struct RecordedAppendThreads {
+    std::filesystem::path path;
+    std::vector<std::thread::id> threads;
+};
+
+std::mutex recorded_append_threads_mutex;
+std::optional<RecordedAppendThreads> recorded_append_threads;
+
+/// Test-only append instrumentation (SessionJournalTestHooks.hpp): record
+/// the executing thread, then simulate slow persistence. Runs from Runtime
+/// worker threads, so all shared state is mutex-protected.
+void apply_append_test_hooks(const std::filesystem::path& path) {
+    {
+        std::scoped_lock lock{recorded_append_threads_mutex};
+        if (recorded_append_threads &&
+            recorded_append_threads->path == path.lexically_normal()) {
+            recorded_append_threads->threads.push_back(std::this_thread::get_id());
+        }
+    }
+    std::optional<std::chrono::milliseconds> delay;
+    {
+        std::scoped_lock lock{injected_append_delay_mutex};
+        if (injected_append_delay &&
+            injected_append_delay->path == path.lexically_normal()) {
+            delay = injected_append_delay->delay;
+        }
+    }
+    if (delay) {
+        std::this_thread::sleep_for(*delay);
+    }
+}
+
 [[nodiscard]] bool consume_injected_append_failure(const std::filesystem::path& path) {
     std::scoped_lock lock{injected_append_failure_mutex};
     if (!injected_append_failure ||
@@ -254,6 +297,44 @@ void fail_nth_append_for_test(const std::filesystem::path& path, std::size_t att
         .path = path.lexically_normal(),
         .attempts_remaining = attempt == 0 ? 1 : attempt,
     };
+}
+
+void delay_appends_for_test(
+    const std::filesystem::path& path,
+    std::chrono::milliseconds delay) {
+    std::scoped_lock lock{injected_append_delay_mutex};
+    injected_append_delay = InjectedAppendDelay{
+        .path = path.lexically_normal(),
+        .delay = delay,
+    };
+}
+
+void clear_append_delay_for_test(const std::filesystem::path& path) {
+    std::scoped_lock lock{injected_append_delay_mutex};
+    if (injected_append_delay &&
+        injected_append_delay->path == path.lexically_normal()) {
+        injected_append_delay.reset();
+    }
+}
+
+void record_append_threads_for_test(const std::filesystem::path& path) {
+    std::scoped_lock lock{recorded_append_threads_mutex};
+    recorded_append_threads = RecordedAppendThreads{
+        .path = path.lexically_normal(),
+        .threads = {},
+    };
+}
+
+std::vector<std::thread::id> recorded_append_threads_for_test(
+    const std::filesystem::path& path) {
+    std::scoped_lock lock{recorded_append_threads_mutex};
+    if (!recorded_append_threads ||
+        recorded_append_threads->path != path.lexically_normal()) {
+        return {};
+    }
+    auto threads = std::move(recorded_append_threads->threads);
+    recorded_append_threads.reset();
+    return threads;
 }
 
 } // namespace testing
@@ -346,6 +427,7 @@ util::Expected<SessionJournal> SessionJournal::open_existing(const std::filesyst
 }
 
 util::ExpectedVoid SessionJournal::append_line(std::string_view line) const {
+    apply_append_test_hooks(path_);
     if (consume_injected_append_failure(path_)) {
         return std::unexpected(session_error(
             "could not persist session entry", "injected append failure"));

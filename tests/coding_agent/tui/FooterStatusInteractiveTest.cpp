@@ -92,6 +92,7 @@ struct ResumedSessionFixture {
         coding_agent::runtime::AgentSessionCreationRequest request;
         request.session_target =
             coding_agent::ExplicitResumeSessionTarget{session_file};
+        request.execution_runtime_target = tests::detail::fixture_runtime_target();
         request.workspace = workspace.path();
         request.no_skills = true;
         request.no_prompt_templates = true;
@@ -231,6 +232,7 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target =
         coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
+    request.execution_runtime_target = tests::detail::fixture_runtime_target();
     request.workspace = fixture.workspace.path();
     request.no_skills = true;
     request.no_prompt_templates = true;
@@ -359,6 +361,7 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target =
         coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
+    request.execution_runtime_target = tests::detail::fixture_runtime_target();
     request.workspace = fixture.workspace.path();
     request.no_skills = true;
     request.no_prompt_templates = true;
@@ -439,6 +442,7 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target =
         coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
+    request.execution_runtime_target = tests::detail::fixture_runtime_target();
     request.workspace = fixture.workspace.path();
     request.no_skills = true;
     request.no_prompt_templates = true;
@@ -518,6 +522,7 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target =
         coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
+    request.execution_runtime_target = tests::detail::fixture_runtime_target();
     request.workspace = fixture.workspace.path();
     request.no_skills = true;
     request.no_prompt_templates = true;
@@ -713,6 +718,7 @@ TEST_CASE(
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target =
         coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
+    request.execution_runtime_target = tests::detail::fixture_runtime_target();
     request.workspace = fixture.workspace.path();
     request.no_skills = true;
     request.no_prompt_templates = true;

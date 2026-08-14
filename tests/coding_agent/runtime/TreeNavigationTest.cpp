@@ -162,6 +162,7 @@ public:
     request.workspace = fixture.workspace.path();
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
+    request.execution_runtime_target = tests::detail::fixture_runtime_target();
     request.request_model = tests::scripted_request_model("fake", "fake-model");
     auto created = models
         ? coding_agent::create_agent_session_for_testing(std::move(request), std::move(models))
@@ -508,6 +509,7 @@ TEST_CASE(
     request.workspace = fixture.workspace.path();
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
+    request.execution_runtime_target = tests::detail::fixture_runtime_target();
     request.request_model = tests::scripted_request_model("fake", "fake-model");
     auto created = coding_agent::create_agent_session_for_testing(
         std::move(request), std::move(models));

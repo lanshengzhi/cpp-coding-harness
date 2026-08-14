@@ -8,7 +8,6 @@
 #include "harness/session/EntrySerializer.hpp"
 #include "harness/session/SessionJournal.hpp"
 #include "util/UniqueFd.hpp"
-#include "harness/session/InMemorySessionStore.hpp"
 
 #include <cerrno>
 #include <algorithm>
@@ -277,7 +276,7 @@ bool same_workspace(const std::filesystem::path& first, const std::filesystem::p
     if (!created) {
         return std::unexpected(publication_error(session_path, created.error()));
     }
-    session.store = std::make_unique<harness::session::JsonlSessionStore>(std::move(*created));
+    session.store = std::make_shared<harness::session::SessionStore>(std::move(*created));
     return session;
 }
 
@@ -337,7 +336,8 @@ util::Expected<OpenSession> publish_session(
             identity,
             std::move(provider),
             std::move(model));
-        session.store = std::make_unique<harness::session::InMemorySessionStore>();
+        session.store = std::make_shared<harness::session::SessionStore>(
+            harness::session::SessionStore::in_memory());
         return session;
     }
 
@@ -468,7 +468,7 @@ util::Expected<OpenSession> publish_resume_session(
     if (!opened) {
         return std::unexpected(opened.error());
     }
-    session.store = std::make_unique<harness::session::JsonlSessionStore>(std::move(*opened));
+    session.store = std::make_shared<harness::session::SessionStore>(std::move(*opened));
     return session;
 }
 

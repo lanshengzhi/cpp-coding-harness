@@ -1,5 +1,7 @@
 #include "SessionEventCommitment.hpp"
 
+#include "SessionPersistence.hpp"
+
 #include <variant>
 
 namespace cch::coding_agent::runtime {
@@ -14,35 +16,36 @@ namespace {
 } // namespace
 
 SessionEventCommitment::SessionEventCommitment(
-    harness::session::SessionStore& store)
-    : store_(store) {}
+    std::shared_ptr<SessionPersistence> persistence)
+    : persistence_(std::move(persistence)) {}
 
 agent::AgentEventCommitter SessionEventCommitment::sink() {
     return [this](const agent::AgentLifecycleEvent& event) -> util::ExpectedVoid {
+        if (!persistence_) {
+            return {};
+        }
         const auto* end = std::get_if<agent::MessageEndEvent>(&event);
         if (end == nullptr || !is_incrementally_persisted_message(end->message)) {
             return {};
         }
-
-        auto appended = store_.append(end->message);
-        if (!appended && !failure_) {
-            failure_ = appended.error();
-        }
-        return appended;
+        return persistence_->submit_message_append(end->message);
     };
 }
 
-util::ExpectedVoid SessionEventCommitment::conclude(
-    std::optional<util::ExpectedVoid> agent_result) const {
-    if (failure_) {
-        return std::unexpected(*failure_);
+boost::asio::awaitable<util::ExpectedVoid> SessionEventCommitment::conclude(
+    std::optional<util::ExpectedVoid> agent_result) {
+    if (persistence_) {
+        co_await persistence_->drain();
+        if (auto failure = persistence_->failure()) {
+            co_return std::unexpected(std::move(*failure));
+        }
     }
     if (!agent_result) {
-        return std::unexpected(util::make_error(
+        co_return std::unexpected(util::make_error(
             util::ErrorCode::Unknown,
             "stateful Agent prompt did not finish"));
     }
-    return *agent_result;
+    co_return *agent_result;
 }
 
 } // namespace cch::coding_agent::runtime

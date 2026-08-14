@@ -204,6 +204,7 @@ struct PipelineSession {
     coding_agent::runtime::AgentSessionCreationRequest resume;
     resume.session_target =
         coding_agent::ExplicitResumeSessionTarget{session_file};
+    resume.execution_runtime_target = tests::detail::fixture_runtime_target();
     resume.workspace = fixture->workspace;
     resume.no_skills = true;
     resume.no_prompt_templates = true;
@@ -314,6 +315,7 @@ struct InterruptSession {
 
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
+    request.execution_runtime_target = tests::detail::fixture_runtime_target();
     request.workspace = fixture->workspace;
     request.no_skills = true;
     request.no_prompt_templates = true;

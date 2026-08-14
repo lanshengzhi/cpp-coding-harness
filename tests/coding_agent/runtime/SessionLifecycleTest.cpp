@@ -4,6 +4,7 @@
 
 #include <cch/agent/harness/session/JsonlSessionStore.hpp>
 #include "harness/session/SessionJournalTestHooks.hpp"
+#include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -40,13 +41,6 @@ std::string user_text_at(const std::vector<ai::MessageVariant>& messages, std::s
     const auto* user = std::get_if<ai::UserMessage>(&messages[index]);
     REQUIRE(user != nullptr);
     return ai::text_from_user_message(*user);
-}
-
-std::string assistant_text_at(const std::vector<ai::MessageVariant>& messages, std::size_t index) {
-    REQUIRE(index < messages.size());
-    const auto* assistant = std::get_if<ai::AssistantMessage>(&messages[index]);
-    REQUIRE(assistant != nullptr);
-    return ai::text_from_assistant_content(assistant->content);
 }
 
 util::Expected<runtime::OpenSession> open_resumed_session(
@@ -160,6 +154,7 @@ TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point",
     request.no_prompt_templates = true;
     request.workspace = workspace.path();
     request.session_target = coding_agent::ExplicitResumeSessionTarget{path};
+    request.execution_runtime_target = tests::detail::fixture_runtime_target();
 
     auto session_result = coding_agent::create_agent_session_for_testing(
         std::move(request), ai::providers::make_scripted_fake_models());
@@ -204,6 +199,7 @@ TEST_CASE(
     request.no_prompt_templates = true;
     request.workspace = workspace.path();
     request.session_target = coding_agent::ExplicitResumeSessionTarget{path};
+    request.execution_runtime_target = tests::detail::fixture_runtime_target();
 
     auto session_result = coding_agent::create_agent_session_for_testing(
         std::move(request), ai::providers::make_scripted_fake_models());
@@ -211,37 +207,42 @@ TEST_CASE(
     auto& session = session_result->session;
 
     // A resumed branch message append writes the message and then its active
-    // leaf marker. Fail only the second physical write.
+    // leaf marker. Fail only the second physical write: the user message
+    // lands but its leaf marker does not, so the append reports a persistence
+    // failure after the message was already admitted.
     harness::session::testing::fail_nth_append_for_test(path, 2);
     auto failed = session->prompt_blocking("continue after partial write");
     REQUIRE_FALSE(failed);
     CHECK(failed.error().code == util::ErrorCode::Session);
     CHECK(failed.error().message == "could not persist session entry");
     CHECK(session->is_open());
-    CHECK(session->message_count() == 2);
+    // No rollback theatre: the admitted user and assistant messages stay in
+    // live Session state (admission is asynchronous; there is no mid-flight
+    // veto).
+    CHECK(session->message_count() == 3);
 
-    // Reopening immediately follows the durable message even though its leaf
-    // marker was the failed physical write.
+    // Reopening follows the durable message even though its leaf marker was
+    // the failed physical write. Whether the assistant reply settled before
+    // the failure latched is timing-dependent, so the durable history is the
+    // user message plus at most the assistant reply.
     auto after_failure = open_resumed_session(path, workspace);
     REQUIRE(after_failure);
-    REQUIRE(after_failure->history.size() == 2);
+    REQUIRE(after_failure->history.size() >= 2);
+    REQUIRE(after_failure->history.size() <= 3);
     CHECK(user_text_at(after_failure->history, 0) == "first");
     CHECK(user_text_at(after_failure->history, 1) == "continue after partial write");
 
-    // The live store advances to the successfully written message, so a later
-    // prompt extends it instead of retrying or abandoning it.
+    // The recorded failure is session-scoped sticky state (ADR 0040): a later
+    // prompt is rejected with the typed persistence failure instead of
+    // recovering.
     auto recovered = session->prompt_blocking("recover branch");
-    REQUIRE(recovered);
-    CHECK(session->message_count() == 4);
+    REQUIRE_FALSE(recovered);
+    CHECK(recovered.error().code == util::ErrorCode::Session);
+    CHECK(
+        recovered.error().message ==
+        "session persistence failed; rejecting new prompt");
+    CHECK(session->message_count() == 3);
     session->close();
-
-    auto reopened = open_resumed_session(path, workspace);
-    REQUIRE(reopened);
-    REQUIRE(reopened->history.size() == 4);
-    CHECK(user_text_at(reopened->history, 0) == "first");
-    CHECK(user_text_at(reopened->history, 1) == "continue after partial write");
-    CHECK(user_text_at(reopened->history, 2) == "recover branch");
-    CHECK(assistant_text_at(reopened->history, 3) == "fake: recover branch");
 }
 
 TEST_CASE("resumed session ignores invalid leaf target", "[coding-agent][runtime][session]") {

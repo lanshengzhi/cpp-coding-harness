@@ -20,6 +20,7 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelFixture.hpp"
+#include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "util/Json.hpp"
 
@@ -451,8 +452,12 @@ TEST_CASE(
     "CLI model resolution: nothing configured keeps kDefaultModel and fails through provider lookup",
     "[coding_agent][model-resolution][issue353])") {
     Fixture fixture;
-    // Empty Agent Config Directory: no providers, no models, no auth.
-    auto result = coding_agent::create_agent_session(cli_request(fixture));
+    // Empty Agent Config Directory: no providers, no models, no auth. The
+    // persistent store needs a Runtime channel so the prompt below can admit
+    // its session entries.
+    auto request = cli_request(fixture);
+    request.execution_runtime_target = tests::detail::fixture_runtime_target();
+    auto result = coding_agent::create_agent_session(std::move(request));
     REQUIRE(result.has_value());
     // The concrete unknown kDefaultModel is the resolved identity, with no
     // construction-time default silently winning.

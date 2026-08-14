@@ -244,6 +244,7 @@ cch_parity_declare_target(
         src/harness/session/EntrySerializer.cpp
         src/harness/session/InMemorySessionStore.cpp
         src/harness/session/JsonlSessionStore.cpp
+        src/harness/session/SessionStore.cpp
         src/harness/session/SessionResume.cpp
         src/harness/session/SessionTree.cpp
         src/tools/AsyncToolFactories.cpp
@@ -286,6 +287,7 @@ cch_parity_declare_target(
         src/coding_agent/runtime/AuthGuidanceStream.cpp
         src/coding_agent/runtime/LocalUserShell.cpp
         src/coding_agent/runtime/SessionEventCommitment.cpp
+        src/coding_agent/runtime/SessionPersistence.cpp
         src/coding_agent/runtime/UserBashOutputAccumulator.cpp
         src/cli/PrintMode.cpp
         src/cli/SessionFamily.cpp
@@ -645,6 +647,7 @@ if(CCH_BUILD_TESTS)
         tests/harness/session/InMemorySessionStoreTest.cpp
         tests/harness/session/JsonlSessionStoreTest.cpp
         tests/harness/session/SessionRoundTripGoldenTest.cpp
+        tests/harness/session/SessionStoreTest.cpp
         tests/harness/session/SessionTreeTest.cpp
         tests/tools/AsyncToolsTest.cpp
 )
@@ -698,6 +701,7 @@ if(CCH_BUILD_TESTS)
         tests/coding_agent/TurnAutoRetryTest.cpp
         tests/coding_agent/runtime/LocalUserShellTest.cpp
         tests/coding_agent/runtime/ResourceReloadTest.cpp
+        tests/coding_agent/runtime/SessionCommitmentAsyncTest.cpp
         tests/coding_agent/runtime/SessionEventCommitmentTest.cpp
         tests/coding_agent/runtime/SessionFactoryUserShellTest.cpp
         tests/coding_agent/runtime/SessionForkTest.cpp

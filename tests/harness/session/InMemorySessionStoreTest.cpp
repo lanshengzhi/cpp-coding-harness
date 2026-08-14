@@ -1,6 +1,4 @@
-#include "harness/session/InMemorySessionStore.hpp"
-
-#include "../../../include/cch/ai/Content.hpp"
+#include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/agent/harness/session/SessionStore.hpp>
 
@@ -15,8 +13,7 @@ using namespace cch;
 TEST_CASE(
     "in-memory Session Store accepts Runtime appends and has no path",
     "[harness][session][in-memory]") {
-    harness::session::InMemorySessionStore concrete;
-    harness::session::SessionStore& store = concrete;
+    auto store = harness::session::SessionStore::in_memory();
 
     CHECK_FALSE(store.path().has_value());
     CHECK(store.append(ai::MessageVariant{ai::user_text_message("hello")}).has_value());

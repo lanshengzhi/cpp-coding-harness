@@ -828,6 +828,8 @@ TEST_CASE("Runtime session persistence stays behind the narrow SessionStore capa
         source_root / "src" / "coding_agent" / "runtime" / "SessionLifecycle.cpp");
     const auto store_header = read_text(
         source_root / "include" / "cch" / "agent" / "harness" / "session" / "SessionStore.hpp");
+    const auto store_source = read_text(
+        source_root / "src" / "harness" / "session" / "SessionStore.cpp");
     const auto in_memory_store_header = read_text(
         source_root / "src" / "harness" / "session" / "InMemorySessionStore.hpp");
 
@@ -838,8 +840,12 @@ TEST_CASE("Runtime session persistence stays behind the narrow SessionStore capa
     CHECK(lifecycle_header.find(concrete_store) == std::string::npos);
     CHECK(lifecycle_header.find(in_memory_store) == std::string::npos);
     CHECK(lifecycle_header.find("SessionStore") != std::string::npos);
+    // Only the closed facade implementation and the lifecycle creation seam
+    // name the concrete alternatives.
+    CHECK(store_source.find(concrete_store) != std::string::npos);
+    CHECK(store_source.find(in_memory_store) != std::string::npos);
     CHECK(lifecycle_source.find(concrete_store) != std::string::npos);
-    CHECK(lifecycle_source.find(in_memory_store) != std::string::npos);
+    CHECK(lifecycle_source.find(in_memory_store) == std::string::npos);
     CHECK_FALSE(std::filesystem::exists(
         source_root / "include" / "cch" / "harness" / "session" /
         "InMemorySessionStore.hpp"));
@@ -848,11 +854,15 @@ TEST_CASE("Runtime session persistence stays behind the narrow SessionStore capa
 
     CHECK(store_header.find("append(const ai::MessageVariant&") != std::string::npos);
     CHECK(store_header.find("optional<std::filesystem::path> path() const") != std::string::npos);
+    // The facade is closed: typed appends only, no virtual extension point,
+    // no generic serialization machinery.
+    CHECK(store_header.find("virtual") == std::string::npos);
+    CHECK(store_header.find("append_model_change") != std::string::npos);
+    CHECK(store_header.find("append_compaction") != std::string::npos);
     CHECK(store_header.find("SessionMetadata") == std::string::npos);
     CHECK(store_header.find("SessionTree") == std::string::npos);
     CHECK(store_header.find("SessionJournal") == std::string::npos);
     CHECK(store_header.find("open_as_tree") == std::string::npos);
-    CHECK(store_header.find("append_model_change") == std::string::npos);
 }
 
 TEST_CASE("AgentSessionRuntime is constructed only by the session factory", "[architecture][session]") {

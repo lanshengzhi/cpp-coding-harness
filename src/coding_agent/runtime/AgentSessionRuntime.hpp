@@ -11,6 +11,7 @@
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionEventCommitment.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
+#include "coding_agent/runtime/SessionPersistence.hpp"
 #include "coding_agent/runtime/SessionStats.hpp"
 #include "coding_agent/runtime/UserBash.hpp"
 #include "harness/compaction/Compaction.hpp"
@@ -537,6 +538,11 @@ private:
 
     RuntimeServices services_;
     OpenSession session_;
+    /// The session's off-loop Session Event Commitment channel (ADR 0040):
+    /// admitted message appends persist on Runtime workers and their outcomes
+    /// return through the session's serialized mailbox in FIFO order. Null
+    /// for in-memory sessions and sessions without a persistent store.
+    std::shared_ptr<SessionPersistence> persistence_;
     /// Immutable skill/template snapshots loaded at session creation (pi
     /// `_resourceLoader` results the session was assembled under). The
     /// System Prompt is built from the skills at construction; `/skill:`

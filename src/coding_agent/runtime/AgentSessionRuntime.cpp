@@ -182,6 +182,13 @@ AgentSessionRuntime::AgentSessionRuntime(
       skills_(std::move(skills)),
       templates_(std::move(templates)),
       config_(std::move(config)) {
+    // The Session Event Commitment channel exists only for persistent
+    // sessions with a Runtime mailbox; in-memory sessions need no channel
+    // and their sink stays a successful no-op (ADR 0040).
+    if (session_.store && session_.store->path() && services_.runtime_target) {
+        persistence_ = std::make_shared<SessionPersistence>(
+            session_.store, services_.runtime_target);
+    }
     // Seed the session's scoped-model set (pi `scopedModels: config.scopedModels`).
     scoped_models_ = config_.scoped_models;
     agent::AsyncAgentOptions options;
@@ -548,6 +555,21 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_prompt(
     if (auto rejected = reject_if_busy(); !rejected) {
         co_return std::unexpected(rejected.error());
     }
+    // ADR 0040: a recorded persistence failure is session-scoped sticky
+    // state; live state is never rolled back and later prompts are rejected
+    // with the typed failure.
+    if (persistence_) {
+        if (auto failure = persistence_->failure()) {
+            co_return std::unexpected(util::make_error(
+                util::ErrorCode::Session,
+                "session persistence failed; rejecting new prompt",
+                failure->detail.empty() ? failure->message : failure->detail));
+        }
+    } else if (session_.store && session_.store->path()) {
+        co_return std::unexpected(util::make_error(
+            util::ErrorCode::Session,
+            "session persistence is unavailable; rejecting new prompt"));
+    }
 
     prompt_active_ = true;
     active_stop_source_.emplace();
@@ -823,7 +845,7 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
             "session Agent is unavailable"));
     }
 
-    SessionEventCommitment commitment{*session_.store};
+    SessionEventCommitment commitment{persistence_};
     // The commitment sink also observes assistant message endings so the turn
     // auto-retry success event fires at the first non-error assistant message
     // (pi `_handleAgentEvent` message_end handler resets `_retryAttempt` and
@@ -862,7 +884,7 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
             make_retry_observing_sink(),
             stop_source));
     if (!result) {
-        co_return commitment.conclude(std::move(result));
+        co_return co_await commitment.conclude(std::move(result));
     }
 
     // Post-run loop in pi `_handlePostAgentRun` order: turn auto-retry (T12)
@@ -910,7 +932,7 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
             // persisted through the commitment; the prompt fails with pi's
             // verbatim recovery message (the failure the `compaction_end`
             // event carries in pi).
-            co_return commitment.conclude(std::optional<util::ExpectedVoid>{
+            co_return co_await commitment.conclude(std::optional<util::ExpectedVoid>{
                 std::unexpected(util::make_error(
                     util::ErrorCode::Stream,
                     std::string{kOverflowRecoveryFailedMessage}))});
@@ -925,7 +947,7 @@ boost::asio::awaitable<util::ExpectedVoid> AgentSessionRuntime::run_agent_loop(
             break;
         }
     }
-    co_return commitment.conclude(std::move(result));
+    co_return co_await commitment.conclude(std::move(result));
 }
 
 util::Expected<agent::AgentEventSubscription> AgentSessionRuntime::subscribe(
@@ -1167,15 +1189,12 @@ util::Expected<std::string> AgentSessionRuntime::set_thinking_level(
 
     // Persist the `thinking_level_change` session entry (pi
     // `appendThinkingLevelChange`). In-memory sessions have no v3 tree entry
-    // surface and are not resumable, so the entry is skipped there exactly
-    // like the creation-time `model_change` entry.
-    if (auto* jsonl_store =
-            dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get())) {
-        if (auto appended = jsonl_store->append_thinking_level_change(
-                std::nullopt, *effective);
-            !appended) {
-            return std::unexpected(std::move(appended.error()));
-        }
+    // surface and are not resumable, so the facade drops the entry there
+    // exactly like the creation-time `model_change` entry.
+    if (auto appended = session_.store->append_thinking_level_change(
+            std::nullopt, *effective);
+        !appended) {
+        return std::unexpected(std::move(appended.error()));
     }
 
     // Persist the settings default unless the active model supports no
@@ -1253,14 +1272,12 @@ AgentSessionRuntime::apply_model_switch(
 
     // Persist the `model_change` session entry (pi `appendModelChange`).
     // In-memory sessions have no v3 tree entry surface and are not resumable,
-    // so the entry is skipped there exactly like the creation-time entry.
-    if (auto* jsonl_store =
-            dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get())) {
-        if (auto appended = jsonl_store->append_model_change(
-                std::nullopt, active_model.provider, active_model.id);
-            !appended) {
-            co_return std::unexpected(std::move(appended.error()));
-        }
+    // so the facade drops the entry there exactly like the creation-time
+    // entry.
+    if (auto appended = session_.store->append_model_change(
+            std::nullopt, active_model.provider, active_model.id);
+        !appended) {
+        co_return std::unexpected(std::move(appended.error()));
     }
 
     // pi `settingsManager.setDefaultModelAndProvider` (global scope).
@@ -1493,7 +1510,7 @@ struct TreeLeafDecision {
 
 /// pi `setLeafId(null)` root leaf marker: `targetId: null` on the wire.
 [[nodiscard]] util::ExpectedVoid persist_leaf_marker(
-    harness::session::JsonlSessionStore& store,
+    harness::session::SessionStore& store,
     const std::optional<std::string>& new_leaf_id) {
     return store.append_leaf(std::nullopt, new_leaf_id);
 }
@@ -1631,11 +1648,9 @@ AgentSessionRuntime::session_tree() const {
     if (auto rejected = reject_if_closed(); !rejected) {
         return std::unexpected(rejected.error());
     }
-    auto* jsonl_store =
-        dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get());
-    if (jsonl_store != nullptr && jsonl_store->path()) {
-        auto tree = harness::session::JsonlSessionStore::open_as_tree(
-            *jsonl_store->path());
+    const auto store_path = session_.store ? session_.store->path() : std::nullopt;
+    if (store_path) {
+        auto tree = harness::session::JsonlSessionStore::open_as_tree(*store_path);
         if (!tree) {
             return std::unexpected(tree.error());
         }
@@ -1677,11 +1692,9 @@ AgentSessionRuntime::navigate_tree(std::string_view target_id) {
             util::ErrorCode::Validation, "session is closed"));
     }
 
-    auto* jsonl_store =
-        dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get());
-    if (jsonl_store != nullptr && jsonl_store->path()) {
-        auto tree = harness::session::JsonlSessionStore::open_as_tree(
-            *jsonl_store->path());
+    const auto store_path = session_.store ? session_.store->path() : std::nullopt;
+    if (store_path) {
+        auto tree = harness::session::JsonlSessionStore::open_as_tree(*store_path);
         if (!tree) {
             return std::unexpected(tree.error());
         }
@@ -1712,7 +1725,7 @@ AgentSessionRuntime::navigate_tree(std::string_view target_id) {
         // and the live context keeps the old path (Session Event Commitment
         // ordering: the durable mutation precedes the live-state advance).
         if (auto persisted =
-                persist_leaf_marker(*jsonl_store, decision.new_leaf_id);
+                persist_leaf_marker(*session_.store, decision.new_leaf_id);
             !persisted) {
             return std::unexpected(persisted.error());
         }
@@ -1796,16 +1809,14 @@ util::ExpectedVoid AgentSessionRuntime::set_entry_label(
     if (auto rejected = reject_if_closed(); !rejected) {
         return std::unexpected(rejected.error());
     }
-    auto* jsonl_store =
-        dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get());
-    if (jsonl_store == nullptr || !jsonl_store->path()) {
+    const auto store_path = session_.store ? session_.store->path() : std::nullopt;
+    if (!store_path) {
         // In-memory sessions keep no entry surface; the change is dropped
         // like every in-memory store write (the tree's own display keeps it
         // for the session's lifetime).
         return {};
     }
-    auto tree = harness::session::JsonlSessionStore::open_as_tree(
-        *jsonl_store->path());
+    auto tree = harness::session::JsonlSessionStore::open_as_tree(*store_path);
     if (!tree) {
         return std::unexpected(tree.error());
     }
@@ -1820,7 +1831,7 @@ util::ExpectedVoid AgentSessionRuntime::set_entry_label(
     if (!tree->leaf_id().empty()) {
         parent_id = tree->leaf_id();
     }
-    return jsonl_store->append_label_change(
+    return session_.store->append_label_change(
         std::move(parent_id), std::string{entry_id}, std::move(label));
 }
 
@@ -1897,16 +1908,15 @@ AgentSessionRuntime::compact_impl(std::string custom_instructions) {
     if (model.id == agent::detail::kDefaultModel.id) {
         co_return std::unexpected(no_model_selected_error());
     }
-    auto* jsonl_store =
-        dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get());
-    if (jsonl_store == nullptr || !jsonl_store->path()) {
+    const auto store_path = session_.store ? session_.store->path() : std::nullopt;
+    if (!store_path) {
         // In-memory sessions have no tree/entry surface: there is no session
         // file to persist a CompactionEntry into or to rebuild context from.
         co_return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "compaction requires a persisted session file"));
     }
-    const auto session_path = *jsonl_store->path();
+    const auto session_path = *store_path;
 
     const auto settings = effective_compaction_settings();
     auto tree = harness::session::JsonlSessionStore::open_as_tree(session_path);
@@ -1956,16 +1966,15 @@ AgentSessionRuntime::execute_compaction(
             util::ErrorCode::Validation,
             "session Agent is unavailable"));
     }
-    auto* jsonl_store =
-        dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get());
-    if (jsonl_store == nullptr || !jsonl_store->path()) {
+    const auto store_path = session_.store->path();
+    if (!store_path) {
         // In-memory sessions have no tree/entry surface: there is no session
         // file to persist a CompactionEntry into or to rebuild context from.
         co_return std::unexpected(util::make_error(
             util::ErrorCode::Validation,
             "compaction requires a persisted session file"));
     }
-    const auto session_path = *jsonl_store->path();
+    const auto session_path = *store_path;
     const auto model = agent_->state().model;
 
     harness::session::SummarizationStreamFn summarization_stream =
@@ -1996,7 +2005,12 @@ AgentSessionRuntime::execute_compaction(
     // Persist the CompactionEntry with pi's full field set (summary,
     // firstKeptEntryId, tokensBefore, retainedTail, details, usage; fromHook
     // false for machinery-generated compactions).
-    if (auto appended = jsonl_store->append_compaction(
+    // The CompactionEntry must land after the run's message entries: drain
+    // the persistence channel before this mid-run typed append (ADR 0040).
+    if (persistence_) {
+        co_await persistence_->drain();
+    }
+    if (auto appended = session_.store->append_compaction(
             std::nullopt,
             result->summary,
             result->first_kept_entry_id,
@@ -2049,14 +2063,13 @@ boost::asio::awaitable<bool> AgentSessionRuntime::run_auto_compaction(
     if (model.id == agent::detail::kDefaultModel.id) {
         co_return false;
     }
-    auto* jsonl_store =
-        dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get());
-    if (jsonl_store == nullptr || !jsonl_store->path()) {
+    const auto store_path = session_.store->path();
+    if (!store_path) {
         // In-memory sessions have no tree/entry surface (same confinement as
         // the manual trigger): auto-compaction is skipped silently.
         co_return false;
     }
-    const auto session_path = *jsonl_store->path();
+    const auto session_path = *store_path;
 
     auto tree = harness::session::JsonlSessionStore::open_as_tree(session_path);
     if (!tree) {
@@ -2356,13 +2369,11 @@ boost::asio::awaitable<bool> AgentSessionRuntime::prepare_retry(
 
 std::optional<ai::TimestampMs>
 AgentSessionRuntime::latest_compaction_timestamp() const {
-    auto* jsonl_store =
-        dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get());
-    if (jsonl_store == nullptr || !jsonl_store->path()) {
+    const auto store_path = session_.store ? session_.store->path() : std::nullopt;
+    if (!store_path) {
         return std::nullopt;
     }
-    auto tree =
-        harness::session::JsonlSessionStore::open_as_tree(*jsonl_store->path());
+    auto tree = harness::session::JsonlSessionStore::open_as_tree(*store_path);
     if (!tree) {
         return std::nullopt;
     }
@@ -2397,14 +2408,12 @@ std::optional<std::string> AgentSessionRuntime::last_assistant_text() const {
 
 util::Expected<std::optional<harness::session::SessionTree>>
 AgentSessionRuntime::open_session_tree() const {
-    auto* jsonl_store =
-        dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get());
-    if (jsonl_store == nullptr || !jsonl_store->path()) {
+    const auto store_path = session_.store ? session_.store->path() : std::nullopt;
+    if (!store_path) {
         // In-memory sessions keep no entry surface.
         return std::optional<harness::session::SessionTree>{};
     }
-    auto tree = harness::session::JsonlSessionStore::open_as_tree(
-        *jsonl_store->path());
+    auto tree = harness::session::JsonlSessionStore::open_as_tree(*store_path);
     if (!tree) {
         return std::unexpected(tree.error());
     }
@@ -2436,13 +2445,11 @@ AgentSessionRuntime::set_session_name(std::string name) {
         // change is dropped like every in-memory store write.
         return std::nullopt;
     }
-    auto* jsonl_store =
-        dynamic_cast<harness::session::JsonlSessionStore*>(session_.store.get());
     std::optional<std::string> parent_id;
     if (!(*tree)->leaf_id().empty()) {
         parent_id = (*tree)->leaf_id();
     }
-    if (auto appended = jsonl_store->append_session_info(
+    if (auto appended = session_.store->append_session_info(
             std::move(parent_id), sanitized);
         !appended) {
         return std::unexpected(appended.error());

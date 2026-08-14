@@ -135,7 +135,12 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_same_v<
                   agent::ToolExecuteResult,
                   cch::support::AsyncResult<agent::AsyncToolExecutionResult>>);
-    static_assert(std::is_abstract_v<harness::session::SessionStore>);
+    // ADR 0040: the Session Store is a closed concrete facade (no virtual
+    // extension point) with value semantics between the two alternatives.
+    static_assert(!std::is_abstract_v<harness::session::SessionStore>);
+    static_assert(std::is_final_v<harness::session::SessionStore>);
+    static_assert(std::is_move_constructible_v<harness::session::SessionStore>);
+    static_assert(!std::is_copy_constructible_v<harness::session::SessionStore>);
     static_assert(std::is_abstract_v<tui::Component>);
     static_assert(std::is_aggregate_v<tui::RenderResult>);
     static_assert(std::is_aggregate_v<tui::InlineImageRenderRegion>);
@@ -255,7 +260,7 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(!std::is_copy_constructible_v<harness::AsyncLocalExecutionEnv>);
     static_assert(!std::is_copy_assignable_v<harness::AsyncLocalExecutionEnv>);
     static_assert(std::is_move_constructible_v<harness::AsyncLocalExecutionEnv>);
-    static_assert(std::is_base_of_v<
+    static_assert(!std::is_base_of_v<
                   harness::session::SessionStore,
                   harness::session::JsonlSessionStore>);
     static_assert(std::is_same_v<

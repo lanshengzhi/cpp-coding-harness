@@ -16,12 +16,12 @@ namespace cch::harness::session {
 
 class SessionTree;
 
-class JsonlSessionStore final : public SessionStore {
+class JsonlSessionStore final {
 public:
     struct Impl;
 public:
     JsonlSessionStore() = default;
-    ~JsonlSessionStore() override;
+    ~JsonlSessionStore();
     JsonlSessionStore(JsonlSessionStore&&);
     JsonlSessionStore& operator=(JsonlSessionStore&&);
 
@@ -32,7 +32,7 @@ public:
     /// Load a session and construct a SessionTree for navigation.
     static support::Expected<SessionTree> open_as_tree(const std::filesystem::path& path);
 
-    [[nodiscard]] support::ExpectedVoid append(const ai::MessageVariant& message) override;
+    [[nodiscard]] support::ExpectedVoid append(const ai::MessageVariant& message);
 
     // --- v3 tree entry append methods ---
     [[nodiscard]] support::ExpectedVoid append_model_change(std::optional<std::string> parent_id,
@@ -76,7 +76,7 @@ public:
     [[nodiscard]] support::ExpectedVoid append_leaf(std::optional<std::string> parent_id,
                                                   std::optional<std::string> target_id);
 
-    [[nodiscard]] std::optional<std::filesystem::path> path() const override;
+    [[nodiscard]] std::optional<std::filesystem::path> path() const;
     [[nodiscard]] const SessionMetadata& metadata() const;
 
 private:

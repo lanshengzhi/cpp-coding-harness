@@ -1414,14 +1414,11 @@ struct SessionTargetNormalizationOptions {
         // entry gets the restored level appended so a later resume restores
         // it; a session that already carries the entry stays untouched.
         if (!prepared_resume.resume.has_thinking_level_entry) {
-            if (auto* jsonl_store =
-                    dynamic_cast<harness::session::JsonlSessionStore*>(open.store.get())) {
-                if (auto appended = jsonl_store->append_thinking_level_change(
-                        std::nullopt, effective_thinking_level);
-                    !appended) {
-                    cleanup_on_failure();
-                    return std::unexpected(appended.error());
-                }
+            if (auto appended = open.store->append_thinking_level_change(
+                    std::nullopt, effective_thinking_level);
+                !appended) {
+                cleanup_on_failure();
+                return std::unexpected(appended.error());
             }
         }
     } else {
@@ -1461,24 +1458,22 @@ struct SessionTargetNormalizationOptions {
         const bool placeholder_model =
             resolved_provider == agent::detail::kDefaultModel.provider &&
             resolved_model == agent::detail::kDefaultModel.id;
-        if (auto* jsonl_store =
-                dynamic_cast<harness::session::JsonlSessionStore*>(open.store.get())) {
-            if (!placeholder_model) {
-                if (auto appended = jsonl_store->append_model_change(
-                        std::nullopt, resolved_provider, resolved_model);
-                    !appended) {
-                    cleanup_on_failure();
-                    return std::unexpected(appended.error());
-                }
-            }
-            // pi sdk.ts: new sessions persist the initial thinking level as
-            // the second entry so a later resume restores it.
-            if (auto appended = jsonl_store->append_thinking_level_change(
-                    std::nullopt, effective_thinking_level);
+        if (!placeholder_model) {
+            if (auto appended = open.store->append_model_change(
+                    std::nullopt, resolved_provider, resolved_model);
                 !appended) {
                 cleanup_on_failure();
                 return std::unexpected(appended.error());
             }
+        }
+        // pi sdk.ts: new sessions persist the initial thinking level as
+        // the second entry so a later resume restores it. The facade drops
+        // both entries for in-memory sessions (no resumable entry surface).
+        if (auto appended = open.store->append_thinking_level_change(
+                std::nullopt, effective_thinking_level);
+            !appended) {
+            cleanup_on_failure();
+            return std::unexpected(appended.error());
         }
     }
 
@@ -1487,14 +1482,11 @@ struct SessionTargetNormalizationOptions {
     // then trimmed); in-memory sessions have no session_info surface.
     if (plan.session_name) {
         auto sanitized = sanitize_session_name(*plan.session_name);
-        if (auto* jsonl_store =
-                dynamic_cast<harness::session::JsonlSessionStore*>(open.store.get())) {
-            if (auto appended = jsonl_store->append_session_info(
-                    std::nullopt, std::move(sanitized));
-                !appended) {
-                cleanup_on_failure();
-                return std::unexpected(appended.error());
-            }
+        if (auto appended = open.store->append_session_info(
+                std::nullopt, std::move(sanitized));
+            !appended) {
+            cleanup_on_failure();
+            return std::unexpected(appended.error());
         }
     }
 
@@ -1540,6 +1532,7 @@ struct SessionTargetNormalizationOptions {
     services.settings_manager = std::move(snapshot.manager);
     services.env = std::move(exec_env);
     services.env_owned = true;
+    services.runtime_target = plan.execution_runtime_target;
     services.user_shell = std::move(user_shell);
     if (!services.user_shell && plan.provide_user_shell) {
         services.user_shell = std::make_unique<LocalUserShell>(

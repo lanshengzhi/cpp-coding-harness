@@ -123,6 +123,7 @@ struct RichThinkingSession {
     [[nodiscard]] auto resume() const {
         coding_agent::runtime::AgentSessionCreationRequest request;
         request.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
+        request.execution_runtime_target = tests::detail::fixture_runtime_target();
         request.workspace = workspace.path();
         request.no_skills = true;
         request.no_prompt_templates = true;
@@ -1593,6 +1594,7 @@ TEST_CASE(
 
     coding_agent::runtime::AgentSessionCreationRequest resume;
     resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
+    resume.execution_runtime_target = tests::detail::fixture_runtime_target();
     resume.workspace = workspace.path();
     resume.no_skills = true;
     resume.no_prompt_templates = true;
@@ -2136,12 +2138,22 @@ TEST_CASE(
     CHECK(screen.find("could not persist session entry") != std::string::npos);
     CHECK(screen.find("fail persistence") != std::string::npos);
 
+    // ADR 0040: the recorded persistence failure is sticky, so the next
+    // prompt is rejected with the typed session failure instead of
+    // recovering. Live state keeps the failed prompt's two messages.
     REQUIRE(terminal.inject_input("\x03recover persistence\r"));
     drain_ready(io);
-    CHECK(created->session->message_count() == 4);
-    CHECK(visible_screen(terminal).find("fake: recover persistence") !=
+    CHECK(created->session->message_count() == 2);
+    CHECK(visible_screen(terminal).find(
+              "session persistence failed; rejecting new prompt") !=
+        std::string::npos);
+    CHECK(visible_screen(terminal).find("fake: recover persistence") ==
         std::string::npos);
 
+    // The rejected prompt restores the submitted text so the editor stays
+    // usable; clear it (ctrl+c) before exiting (ctrl+d exits only on an
+    // empty editor).
+    REQUIRE(terminal.inject_input("\x03"));
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
     REQUIRE(run_result);
