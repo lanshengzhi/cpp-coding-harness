@@ -4,6 +4,7 @@
 #include <cch/tools/ToolFactories.hpp>
 #include "agent/ToolArgumentPreparation.hpp"
 #include "ai/AsyncResultBridge.hpp"
+#include "harness/RuntimeRoot.hpp"
 #include "util/Json.hpp"
 #include "util/OutputLimiter.hpp"
 
@@ -11,6 +12,7 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/executor_work_guard.hpp>
 
 #include <chrono>
 #include <filesystem>
@@ -19,120 +21,56 @@
 #include <optional>
 #include <stop_token>
 #include <utility>
+#include <thread>
 
 using namespace cch;
 
 namespace {
 
+template <typename T>
+[[nodiscard]] support::AsyncResult<T, harness::FileError> ready_file(T value) {
+    return support::AsyncResult<T, harness::FileError>{
+        std::expected<T, harness::FileError>{std::move(value)}};
+}
+
+[[nodiscard]] inline support::AsyncResult<void, harness::FileError> ready_file() {
+    return support::AsyncResult<void, harness::FileError>{
+        std::expected<void, harness::FileError>{}};
+}
+
 class CapturingEnv final : public harness::AsyncExecutionEnv {
 public:
     explicit CapturingEnv(std::filesystem::path workspace_path) : workspace_path_(std::move(workspace_path)) {}
-
     const std::filesystem::path& workspace() const override { return workspace_path_; }
-
-    boost::asio::awaitable<std::expected<std::string, harness::FileError>> absolutePath(
-        std::string path,
-        std::stop_token) override {
-        co_return path;
-    }
-    boost::asio::awaitable<std::expected<std::string, harness::FileError>> joinPath(
-        std::vector<std::string>,
-        std::stop_token) override {
-        co_return std::string{};
-    }
-    boost::asio::awaitable<std::expected<std::string, harness::FileError>> readTextFile(
-        std::string,
-        std::stop_token stop_token) override {
-        last_stop_token = stop_token;
-        co_return std::string{};
-    }
-    boost::asio::awaitable<std::expected<std::vector<std::string>, harness::FileError>> readTextLines(
-        std::string,
-        std::optional<int>,
-        std::stop_token stop_token) override {
-        last_stop_token = stop_token;
-        co_return std::vector<std::string>{};
-    }
-    boost::asio::awaitable<std::expected<harness::BinaryData, harness::FileError>> readBinaryFile(
-        std::string,
-        std::stop_token) override {
-        co_return harness::BinaryData{};
-    }
-    boost::asio::awaitable<std::expected<void, harness::FileError>> writeFile(
-        std::string path,
-        harness::WriteContent content,
-        std::stop_token stop_token) override {
+    support::AsyncResult<std::string, harness::FileError> absolutePath(std::string path, std::stop_token) override { return ready_file(std::move(path)); }
+    support::AsyncResult<std::string, harness::FileError> joinPath(std::vector<std::string>, std::stop_token) override { return ready_file(std::string{}); }
+    support::AsyncResult<std::string, harness::FileError> readTextFile(std::string, std::stop_token stop_token) override { last_stop_token = stop_token; return ready_file(std::string{}); }
+    support::AsyncResult<std::vector<std::string>, harness::FileError> readTextLines(std::string, std::optional<int>, std::stop_token stop_token) override { last_stop_token = stop_token; return ready_file(std::vector<std::string>{}); }
+    support::AsyncResult<harness::BinaryData, harness::FileError> readBinaryFile(std::string, std::stop_token) override { return ready_file(harness::BinaryData{}); }
+    support::AsyncResult<void, harness::FileError> writeFile(std::string path, harness::WriteContent content, std::stop_token stop_token) override {
         last_stop_token = stop_token;
         last_write_path = std::move(path);
-        if (const auto* text = std::get_if<std::string>(&content)) {
-            last_write_content = *text;
-        }
-        co_return std::expected<void, harness::FileError>{};
+        if (const auto* text = std::get_if<std::string>(&content)) last_write_content = *text;
+        return ready_file();
     }
-    boost::asio::awaitable<std::expected<void, harness::FileError>> appendFile(
-        std::string,
-        harness::WriteContent,
-        std::stop_token) override {
-        co_return std::expected<void, harness::FileError>{};
-    }
-    boost::asio::awaitable<std::expected<harness::FileInfo, harness::FileError>> fileInfo(
-        std::string,
-        std::stop_token) override {
-        co_return harness::FileInfo{};
-    }
-    boost::asio::awaitable<std::expected<std::vector<harness::FileInfo>, harness::FileError>> listDir(
-        std::string,
-        std::stop_token) override {
-        co_return std::vector<harness::FileInfo>{};
-    }
-    boost::asio::awaitable<std::expected<std::string, harness::FileError>> canonicalPath(
-        std::string path,
-        std::stop_token) override {
-        co_return path;
-    }
-    boost::asio::awaitable<std::expected<bool, harness::FileError>> exists(
-        std::string,
-        std::stop_token) override {
-        co_return true;
-    }
-    boost::asio::awaitable<std::expected<void, harness::FileError>> createDir(
-        std::string,
-        bool,
-        std::stop_token) override {
-        co_return std::expected<void, harness::FileError>{};
-    }
-    boost::asio::awaitable<std::expected<void, harness::FileError>> remove(
-        std::string,
-        bool,
-        std::stop_token) override {
-        co_return std::expected<void, harness::FileError>{};
-    }
-    boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempDir(
-        std::optional<std::string>,
-        std::stop_token) override {
-        co_return std::string{};
-    }
-    boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempFile(
-        std::optional<std::string>,
-        std::optional<std::string>,
-        std::stop_token) override {
-        co_return std::string{};
-    }
-
-    boost::asio::awaitable<std::expected<harness::ShellExecResult, harness::ExecutionError>> exec(
-        std::string command,
-        harness::ExecOptions options) override {
+    support::AsyncResult<void, harness::FileError> appendFile(std::string, harness::WriteContent, std::stop_token) override { return ready_file(); }
+    support::AsyncResult<harness::FileInfo, harness::FileError> fileInfo(std::string, std::stop_token) override { return ready_file(harness::FileInfo{}); }
+    support::AsyncResult<std::vector<harness::FileInfo>, harness::FileError> listDir(std::string, std::stop_token) override { return ready_file(std::vector<harness::FileInfo>{}); }
+    support::AsyncResult<std::string, harness::FileError> canonicalPath(std::string path, std::stop_token) override { return ready_file(std::move(path)); }
+    support::AsyncResult<bool, harness::FileError> exists(std::string, std::stop_token) override { return ready_file(true); }
+    support::AsyncResult<void, harness::FileError> createDir(std::string, bool, std::stop_token) override { return ready_file(); }
+    support::AsyncResult<void, harness::FileError> remove(std::string, bool, std::stop_token) override { return ready_file(); }
+    support::AsyncResult<std::string, harness::FileError> createTempDir(std::optional<std::string>, std::stop_token) override { return ready_file(std::string{}); }
+    support::AsyncResult<std::string, harness::FileError> createTempFile(std::optional<std::string>, std::optional<std::string>, std::stop_token) override { return ready_file(std::string{}); }
+    support::AsyncResult<harness::ShellExecResult, harness::ExecutionError> exec(std::string command, harness::ExecOptions options) override {
         last_command = std::move(command);
         last_timeout = options.timeout.value_or(std::chrono::milliseconds{0});
         last_stop_token = options.stop_token;
         last_env = options.env;
-        if (options.onStdout && !streamed_stdout.empty()) {
-            (*options.onStdout)(streamed_stdout);
-        }
-        if (options.onStderr && !streamed_stderr.empty()) {
-            (*options.onStderr)(streamed_stderr);
-        }
-        co_return next_shell_result;
+        if (options.onStdout && !streamed_stdout.empty()) (*options.onStdout)(streamed_stdout);
+        if (options.onStderr && !streamed_stderr.empty()) (*options.onStderr)(streamed_stderr);
+        return support::AsyncResult<harness::ShellExecResult, harness::ExecutionError>{
+            std::expected<harness::ShellExecResult, harness::ExecutionError>{next_shell_result}};
     }
 
     std::string last_command;
@@ -141,31 +79,56 @@ public:
     std::optional<std::map<std::string, std::string>> last_env;
     std::string streamed_stdout;
     std::string streamed_stderr;
-    harness::ShellExecResult next_shell_result{
-        .stdout_output = "ok",
-        .stderr_output = "",
-        .exitCode = 0,
-    };
+    harness::ShellExecResult next_shell_result{.stdout_output = "ok", .stderr_output = "", .exitCode = 0};
     std::string last_write_path;
     std::string last_write_content;
-
 private:
     std::filesystem::path workspace_path_;
 };
 
+class TestRuntime final {
+public:
+    TestRuntime()
+        : loop_(std::make_shared<boost::asio::io_context>()),
+          work_guard_(boost::asio::make_work_guard(*loop_)),
+          root_(loop_, 2, 32, 1024 * 1024) {}
+
+    [[nodiscard]] std::shared_ptr<harness::RuntimeTarget> make_target() {
+        return root_.make_target();
+    }
+
+    boost::asio::io_context& loop() noexcept { return *loop_; }
+
+private:
+    std::shared_ptr<boost::asio::io_context> loop_;
+    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_guard_;
+    harness::RuntimeRoot root_;
+};
+
+TestRuntime& test_runtime() {
+    static TestRuntime runtime;
+    return runtime;
+}
+
+[[nodiscard]] std::shared_ptr<harness::RuntimeTarget> test_runtime_target() {
+    return test_runtime().make_target();
+}
+
 template <typename Start>
 util::Expected<agent::AsyncToolExecutionResult> run_tool(Start start) {
-    boost::asio::io_context io;
+    auto& loop = test_runtime().loop();
+    loop.restart();
     std::optional<util::Expected<agent::AsyncToolExecutionResult>> result;
     boost::asio::co_spawn(
-        io,
+        loop,
         [&]() -> boost::asio::awaitable<void> {
             result = co_await ai::detail::await_async_result(start());
             co_return;
         },
         boost::asio::detached);
-    io.run();
-    REQUIRE(result.has_value());
+    while (!result) {
+        loop.run_one();
+    }
     return std::move(*result);
 }
 
@@ -195,7 +158,7 @@ TEST_CASE("built-in tools default to exclusive execution", "[tools][async]") {
 TEST_CASE("async read_file tool uses Glaze typed args and workspace guard", "[tools][async][u6]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "line1\nline2\n");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_read_file_tool(env);
 
     auto result = run_tool([&]() {
@@ -212,7 +175,7 @@ TEST_CASE("async read_file tool uses Glaze typed args and workspace guard", "[to
 TEST_CASE("async edit tool applies disjoint edits and returns pi-shaped diff details", "[tools][async][issue354]") {
     tests::TempWorkspace workspace;
     workspace.write("edit.txt", "alpha\nbeta\ngamma\ndelta\n");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
@@ -259,7 +222,7 @@ TEST_CASE("async edit tool applies disjoint edits and returns pi-shaped diff det
 TEST_CASE("async edit tool matches every edit against the original and rejects overlaps", "[tools][async][issue354]") {
     tests::TempWorkspace workspace;
     workspace.write("edit.txt", "one\ntwo\nthree\n");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
@@ -280,7 +243,7 @@ TEST_CASE("async edit tool matches every edit against the original and rejects o
 TEST_CASE("async edit tool rejects missing and duplicate target text with pi messages", "[tools][async][issue354]") {
     tests::TempWorkspace workspace;
     workspace.write("edit.txt", "foo foo foo");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_edit_tool(env);
 
     auto missing = run_tool([&]() {
@@ -306,7 +269,7 @@ TEST_CASE("async edit tool rejects missing and duplicate target text with pi mes
 TEST_CASE("async edit tool preserves BOM and CRLF line endings", "[tools][async][issue354]") {
     tests::TempWorkspace workspace;
     workspace.write("edit.txt", "\xef\xbb\xbf" "one\r\ntwo\r\n");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
@@ -325,7 +288,7 @@ TEST_CASE("async edit tool fuzzy-matches smart-quote and dash variants", "[tools
     // whitespace; the edit uses ASCII forms without the trailing space,
     // matching pi's fuzzy normalization.
     workspace.write("note.txt", "say \xe2\x80\x9chello\xe2\x80\x9d world\xe2\x80\x94today   \n");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
@@ -344,7 +307,7 @@ TEST_CASE("async edit tool fuzzy-matches smart-quote and dash variants", "[tools
 TEST_CASE("async edit tool rejects empty oldText with pi's message", "[tools][async][issue354]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "content\n");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
@@ -362,7 +325,7 @@ TEST_CASE("async edit tool rejects empty oldText with pi's message", "[tools][as
 TEST_CASE("async edit tool rejects no-change edits with pi's message", "[tools][async][issue354]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "same\n");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_edit_tool(env);
 
     auto result = run_tool([&]() {
@@ -380,7 +343,7 @@ TEST_CASE("async edit tool rejects no-change edits with pi's message", "[tools][
 TEST_CASE("edit declared contract validation and execution acceptance agree", "[tools][async][issue77][issue354]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "hello world\n");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_edit_tool(env);
 
     // The agent loop validates every call with prepare_tool_arguments before
@@ -436,7 +399,7 @@ TEST_CASE("async tools prefer structured arguments over raw provider text", "[to
     tests::TempWorkspace workspace;
     workspace.write("structured.txt", "from-structured");
     workspace.write("raw.txt", "from-raw");
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path());
+    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_read_file_tool(env);
 
     auto structured = util::read_json(R"({"path":"structured.txt"})");
@@ -620,7 +583,7 @@ TEST_CASE("async bash tool strips ANSI escape sequences", "[tools][async]") {
 
 TEST_CASE("async bash tool is disabled unless env explicitly enables it", "[tools][async]") {
     tests::TempWorkspace workspace;
-    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(workspace.path(), false);
+    auto env = std::make_shared<harness::AsyncLocalExecutionEnv>(test_runtime_target(), workspace.path(), false);
     auto tool = tools::make_async_bash_tool(env);
 
     auto result = run_tool([&]() {

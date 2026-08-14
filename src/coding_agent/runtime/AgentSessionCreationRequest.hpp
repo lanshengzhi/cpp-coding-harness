@@ -15,6 +15,10 @@
 #include <string>
 #include <vector>
 
+namespace cch::harness {
+class RuntimeTarget;
+}
+
 namespace cch::coding_agent::runtime {
 
 /// pi in-memory `createBranchedSession`: the derived branch facts seeded into
@@ -43,6 +47,10 @@ struct AgentSessionCreationRequest {
     /// never registers or authorizes the model Bash Tool, and the one-shot
     /// print path never gains a User Shell.
     bool provide_user_shell{false};
+    /// Target-bound admission and mailbox handle created by the one CLI Runtime
+    /// root. Empty only in focused construction tests that do not execute
+    /// filesystem or model Shell work.
+    std::shared_ptr<harness::RuntimeTarget> execution_runtime_target;
     std::optional<bool> project_trust_override;
     /// pi `--no-skills`: drops user and project skill discovery (explicit
     /// `--skill` paths stay).

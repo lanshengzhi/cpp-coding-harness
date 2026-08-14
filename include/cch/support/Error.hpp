@@ -16,6 +16,7 @@ enum class ErrorCode {
     JsonSerialize,
     Network,
     Timeout,
+    Busy,
     Cancelled,
     ModelSource,
     ModelValidation,
@@ -58,6 +59,8 @@ using ExpectedVoid = std::expected<void, Error>;
         return "network";
     case ErrorCode::Timeout:
         return "timeout";
+    case ErrorCode::Busy:
+        return "busy";
     case ErrorCode::Cancelled:
         return "cancelled";
     case ErrorCode::ModelSource:

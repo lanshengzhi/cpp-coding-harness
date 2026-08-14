@@ -153,6 +153,9 @@ struct AssemblyPlan {
     /// Shell (ADR 0026). Set only by CLI normalization for the interactive
     /// frontend.
     bool provide_user_shell{false};
+    /// One target of the CLI-owned Runtime root. It is shared by the Session's
+    /// filesystem and Shell capabilities and survives Session replacement.
+    std::shared_ptr<harness::RuntimeTarget> execution_runtime_target;
     /// pi `switchSession` cwdOverride (in-session resume only): bind the
     /// resumed session's runtime to this cwd even when the header stores a
     /// different (missing) cwd.
@@ -350,9 +353,8 @@ void add_project_resource_loading_diagnostics(
 
 void cleanup_factory_env(harness::AsyncExecutionEnv* env) {
     if (env) {
-        boost::asio::io_context io;
-        boost::asio::co_spawn(io, env->cleanup(), boost::asio::detached);
-        io.run();
+        std::move(env->cleanup()).start(
+            [](std::expected<void, harness::FileError>) noexcept {});
     }
 }
 
@@ -764,6 +766,7 @@ struct SessionTargetNormalizationOptions {
     plan.max_queued_messages = request.max_queued_messages;
     plan.max_queued_bytes = request.max_queued_bytes;
     plan.provide_user_shell = request.provide_user_shell;
+    plan.execution_runtime_target = std::move(request.execution_runtime_target);
     plan.session_name = std::move(request.session_name);
     plan.resume_cwd_override = std::move(request.resume_cwd_override);
     plan.in_memory_branch_seed = std::move(request.in_memory_branch_seed);
@@ -1317,6 +1320,7 @@ struct SessionTargetNormalizationOptions {
     // host-provided environment injection is gone.
     std::vector<std::string> secret_environment_names = runtime->configured_api_key_env_names();
     auto exec_env = std::make_shared<harness::AsyncLocalExecutionEnv>(
+        plan.execution_runtime_target,
         workspace,
         /* bash_available */ true,
         std::move(secret_environment_names),

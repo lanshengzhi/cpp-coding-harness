@@ -37,6 +37,7 @@
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -45,6 +46,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 using namespace cch;
@@ -166,6 +168,7 @@ struct E2eSession {
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
     request.workspace = fixture->workspace;
+    request.execution_runtime_target = tests::detail::fixture_runtime_target();
     request.no_skills = true;
     request.no_prompt_templates = true;
     request.model_runtime = fixture->runtime;
@@ -274,7 +277,10 @@ TEST_CASE(
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("continue the work\r"));
-    drain_ready(io);
+    for (int attempt = 0; attempt < 100 && runtime->calls.size() != 2; ++attempt) {
+        drain_ready(io);
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
 
     REQUIRE(runtime->calls.size() == 2);
     const auto screen = visible_screen(terminal);

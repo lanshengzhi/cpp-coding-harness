@@ -27,6 +27,7 @@ namespace {
     bool provide_user_shell) {
     runtime::AgentSessionCreationRequest request;
     request.provide_user_shell = provide_user_shell;
+    request.execution_runtime_target = tests::detail::fixture_runtime_target();
     request.no_skills = true;
     request.no_prompt_templates = true;
     request.workspace = workspace.path();

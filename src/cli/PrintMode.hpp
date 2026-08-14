@@ -2,6 +2,8 @@
 
 #include "coding_agent/AgentSession.hpp"
 
+#include <boost/asio/io_context.hpp>
+
 #include <iosfwd>
 #include <string>
 #include <vector>
@@ -34,8 +36,9 @@ struct PrintModePlan {
 /// prints nothing and exits 0.
 ///
 /// The session and the configured streams are borrowed and must outlive the
-/// call; the run is driven synchronously on a private executor.
+/// call; the run is driven synchronously on the CLI Runtime loop.
 [[nodiscard]] int run_print_mode(
+    boost::asio::io_context& io,
     coding_agent::AgentSession& session,
     PrintModeConfig config,
     PrintModePlan plan);

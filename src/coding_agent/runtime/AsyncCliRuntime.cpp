@@ -8,6 +8,7 @@
 #include "cli/StartupTui.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/SessionCwd.hpp"
+#include "harness/RuntimeRoot.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/ThemeController.hpp"
 #include <cch/coding_agent/AgentConfigDir.hpp>
@@ -19,6 +20,7 @@
 #include <boost/asio/use_future.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cctype>
 #include <exception>
 #include <filesystem>
@@ -32,6 +34,10 @@
 
 namespace cch::cli {
 namespace {
+
+constexpr std::size_t kRuntimeWorkerCount{2};
+constexpr std::size_t kRuntimeMaxAdmittedOperations{32};
+constexpr std::size_t kRuntimeMaxAdmittedBytes{1024 * 1024};
 
 /// pi `readPipedStdin`: read all of piped stdin and trim it; empty (or
 /// whitespace-only) content is absent and contributes nothing to the initial
@@ -135,7 +141,12 @@ void print_session_diagnostics(
     CliStreams streams,
     coding_agent::runtime::AgentSessionCreationRequest request) {
     cch::tui::ProcessTerminal terminal;
-    boost::asio::io_context io;
+    auto io = std::make_shared<boost::asio::io_context>();
+    auto runtime_root = std::make_shared<harness::RuntimeRoot>(
+        io,
+        kRuntimeWorkerCount,
+        kRuntimeMaxAdmittedOperations,
+        kRuntimeMaxAdmittedBytes);
     // pi `createAgentSessionRuntime`: the in-session session flows reuse the
     // CLI-owned facts (model selection, resource flags); the factory applies
     // them to each replacement request, and the state keeps the same facts
@@ -156,9 +167,10 @@ void print_session_diagnostics(
     facts.models = config.models;
     facts.api_key = config.api_key;
     coding_agent::tui::SessionFactorySink session_factory =
-        [facts, models](coding_agent::runtime::AgentSessionCreationRequest request)
+        [facts, models, runtime_root](coding_agent::runtime::AgentSessionCreationRequest request)
         -> util::Expected<coding_agent::CreateAgentSessionResult> {
             request.provide_user_shell = true;
+            request.execution_runtime_target = runtime_root->make_target();
             request.project_trust_override = facts.project_trust_override;
             request.no_skills = facts.no_skills;
             request.no_prompt_templates = facts.no_prompt_templates;
@@ -187,7 +199,7 @@ void print_session_diagnostics(
     // future completes and read after io.run(), so the future synchronizes.
     bool creation_failure_reported = false;
     auto future = boost::asio::co_spawn(
-        io,
+        *io,
         coding_agent::tui::run_interactive_mode_boot(
             terminal,
             coding_agent::tui::InteractiveModeConfig{
@@ -213,7 +225,9 @@ void print_session_diagnostics(
                     },
             }),
         boost::asio::use_future);
-    io.run();
+    while (future.wait_for(std::chrono::milliseconds{0}) != std::future_status::ready) {
+        (void)io->run_one();
+    }
 
     try {
         if (auto result = future.get(); !result) {
@@ -471,6 +485,14 @@ void print_session_diagnostics(
             std::move(request));
     }
 
+    auto runtime_io = std::make_shared<boost::asio::io_context>();
+    auto runtime_root = std::make_shared<harness::RuntimeRoot>(
+        runtime_io,
+        kRuntimeWorkerCount,
+        kRuntimeMaxAdmittedOperations,
+        kRuntimeMaxAdmittedBytes);
+    request.execution_runtime_target = runtime_root->make_target();
+
     auto created = create_session();
     if (!created) {
         return print_creation_failure(created.error());
@@ -478,6 +500,7 @@ void print_session_diagnostics(
     print_session_diagnostics(streams.error, created->diagnostics);
 
     return run_print_mode(
+        *runtime_io,
         *created->session,
         PrintModeConfig{
             .output = streams.output,

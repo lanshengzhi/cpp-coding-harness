@@ -1,5 +1,6 @@
 #include "coding_agent/runtime/LocalUserShell.hpp"
 
+#include "ai/AsyncResultBridge.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -53,7 +54,7 @@ struct ShellRun {
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            run.result = co_await shell.execute(
+            run.result = co_await ai::detail::await_async_result(shell.execute(
                 std::move(command),
                 [&](std::string_view update) -> util::ExpectedVoid {
                     if (fail_updates) {
@@ -64,7 +65,7 @@ struct ShellRun {
                     run.updates.append(update);
                     return {};
                 },
-                stop_source.get_token());
+                stop_source.get_token()));
             co_return;
         },
         boost::asio::detached);

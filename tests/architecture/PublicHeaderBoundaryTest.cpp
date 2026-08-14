@@ -115,9 +115,10 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_abstract_v<ai::Provider>);
     static_assert(std::is_abstract_v<ai::providers::StreamTransport>);
     static_assert(std::is_abstract_v<harness::AsyncExecutionEnv>);
-    using ReadTextFileMethod = boost::asio::awaitable<std::expected<std::string, harness::FileError>>
+    using ReadTextFileMethod = support::AsyncResult<std::string, harness::FileError>
         (harness::AsyncExecutionEnv::*)(std::string, std::stop_token);
-    using CleanupMethod = boost::asio::awaitable<void> (harness::AsyncExecutionEnv::*)();
+    using CleanupMethod = support::AsyncResult<void, harness::FileError>
+        (harness::AsyncExecutionEnv::*)();
     static_assert(std::is_same_v<
                   decltype(&harness::AsyncExecutionEnv::readTextFile),
                   ReadTextFileMethod>);

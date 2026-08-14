@@ -9,6 +9,7 @@
 #include "support/TempWorkspace.hpp"
 #include "support/TextHelpers.hpp"
 
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
@@ -203,7 +204,9 @@ int run_print(
     std::ostringstream& output,
     std::ostringstream& error,
     cli::PrintModePlan plan) {
+    boost::asio::io_context io;
     return cli::run_print_mode(
+        io,
         session,
         cli::PrintModeConfig{.output = output, .error = error},
         std::move(plan));
@@ -463,7 +466,9 @@ TEST_CASE(
     FailingStreambuf failing;
     std::ostream broken_output{&failing};
     std::ostringstream error;
+    boost::asio::io_context io;
     const auto exit_code = cli::run_print_mode(
+        io,
         *session.created.session,
         cli::PrintModeConfig{.output = broken_output, .error = error},
         cli::PrintModePlan{.initial_message = "hello"});

@@ -162,7 +162,7 @@ template <typename Body>
 // ---------------------------------------------------------------------------
 
 boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> read_file_execute(
-    const std::shared_ptr<harness::AsyncExecutionEnv>& env,
+    std::shared_ptr<harness::AsyncExecutionEnv> env,
     agent::ToolInvocation invocation,
     std::stop_token stop_token) {
     auto parsed = parse_invocation_args<ReadFileArgs>(invocation);
@@ -172,7 +172,8 @@ boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> read_fil
     if (!env) {
         co_return std::unexpected(missing_env_error());
     }
-    auto lines = co_await env->readTextLines(parsed->path, std::nullopt, stop_token);
+    auto lines = co_await ai::detail::await_async_result(
+        env->readTextLines(parsed->path, std::nullopt, stop_token));
     if (!lines) {
         co_return error_result_from(lines.error());
     }
@@ -217,7 +218,7 @@ boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> read_fil
 }
 
 boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> write_file_execute(
-    const std::shared_ptr<harness::AsyncExecutionEnv>& env,
+    std::shared_ptr<harness::AsyncExecutionEnv> env,
     agent::ToolInvocation invocation,
     std::stop_token stop_token) {
     auto parsed = parse_invocation_args<WriteFileArgs>(invocation);
@@ -227,7 +228,8 @@ boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> write_fi
     if (!env) {
         co_return std::unexpected(missing_env_error());
     }
-    auto written = co_await env->writeFile(parsed->path, parsed->content, stop_token);
+    auto written = co_await ai::detail::await_async_result(
+        env->writeFile(parsed->path, parsed->content, stop_token));
     if (!written) {
         co_return error_result_from(written.error());
     }
@@ -239,7 +241,7 @@ boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> write_fi
 }
 
 boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> edit_execute(
-    const std::shared_ptr<harness::AsyncExecutionEnv>& env,
+    std::shared_ptr<harness::AsyncExecutionEnv> env,
     agent::ToolInvocation invocation,
     std::stop_token stop_token) {
     auto parsed = parse_invocation_args<EditArgs>(invocation);
@@ -255,7 +257,8 @@ boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> edit_exe
 
     // pi edit.ts: strip the BOM, detect and preserve the dominant line
     // ending, then apply every edit against the LF-normalized content.
-    auto read = co_await env->readTextFile(parsed->path, stop_token);
+    auto read = co_await ai::detail::await_async_result(
+        env->readTextFile(parsed->path, stop_token));
     if (!read) {
         co_return error_result_from(read.error());
     }
@@ -278,7 +281,8 @@ boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> edit_exe
 
     const std::string final_content =
         bom + tools::restore_line_endings(applied->new_content, original_ending);
-    auto written = co_await env->writeFile(parsed->path, final_content, stop_token);
+    auto written = co_await ai::detail::await_async_result(
+        env->writeFile(parsed->path, final_content, stop_token));
     if (!written) {
         co_return error_result_from(written.error());
     }
@@ -307,8 +311,8 @@ boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> edit_exe
 }
 
 boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> bash_execute(
-    const std::shared_ptr<harness::AsyncExecutionEnv>& env,
-    const std::shared_ptr<BashSessionEnvironment>& session_environment,
+    std::shared_ptr<harness::AsyncExecutionEnv> env,
+    std::shared_ptr<BashSessionEnvironment> session_environment,
     agent::ToolInvocation invocation,
     std::stop_token stop_token) {
     auto parsed = parse_invocation_args<BashArgs>(invocation);
@@ -353,7 +357,8 @@ boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> bash_exe
         received_stderr = true;
         full_stderr.append(chunk);
     };
-    auto shell = co_await env->exec(parsed->command, std::move(exec_options));
+    auto shell = co_await ai::detail::await_async_result(
+        env->exec(parsed->command, std::move(exec_options)));
     if (!shell) {
         co_return error_result_from(shell.error());
     }
@@ -376,7 +381,8 @@ boost::asio::awaitable<util::Expected<agent::AsyncToolExecutionResult>> bash_exe
         std::string full_output_path;
         auto ts = std::chrono::system_clock::now().time_since_epoch().count();
         full_output_path = "bash-output-" + std::to_string(ts) + ".txt";
-        if (auto write = co_await env->writeFile(full_output_path, redacted_full, stop_token); !write) {
+        if (auto write = co_await ai::detail::await_async_result(
+                env->writeFile(full_output_path, redacted_full, stop_token)); !write) {
             full_output_path.clear();
         }
         output = "[output truncated, showing last " +

@@ -1,8 +1,7 @@
 #pragma once
 
+#include <cch/support/AsyncResult.hpp>
 #include <cch/util/Error.hpp>
-
-#include <boost/asio/awaitable.hpp>
 
 #include <functional>
 #include <optional>
@@ -31,7 +30,7 @@ class AsyncUserShell {
 public:
     virtual ~AsyncUserShell() = default;
 
-    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<UserShellResult>> execute(
+    [[nodiscard]] virtual support::AsyncResult<UserShellResult> execute(
         std::string command,
         UserShellUpdateSink update_sink,
         std::stop_token stop_token) = 0;

@@ -4,17 +4,21 @@
 #include <cch/harness/LocalExecutionEnv.hpp>
 #include "harness/ShellResolver.hpp"
 #include "harness/SyncLocalExecutionEnv.hpp"
+#include "harness/RuntimeRoot.hpp"
+#include "ai/AsyncResultBridge.hpp"
 #include "util/Process.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
 #include <charconv>
 #include <chrono>
+#include <atomic>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -23,6 +27,7 @@
 #include <string>
 #include <type_traits>
 #include <vector>
+#include <thread>
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <cerrno>
@@ -69,20 +74,66 @@ util::Expected<T> run_awaitable(Start start) {
 
 /// Like run_awaitable but for pi-shaped methods that return std::expected<T, E>
 /// (not util::Expected<T>). Returns the raw std::expected<T, E>.
-template <typename T>
-T run_awaitable_pi(boost::asio::awaitable<T> start) {
+class TestRuntime final {
+public:
+    TestRuntime()
+        : loop_(std::make_shared<boost::asio::io_context>()),
+          work_guard_(boost::asio::make_work_guard(*loop_)),
+          root_(loop_, 2, 32, 1024 * 1024),
+          loop_thread_([this] { loop_->run(); }) {}
+
+    ~TestRuntime() {
+        work_guard_.reset();
+        loop_->stop();
+    }
+
+    [[nodiscard]] std::shared_ptr<harness::RuntimeTarget> make_target() {
+        return root_.make_target();
+    }
+
+private:
+    std::shared_ptr<boost::asio::io_context> loop_;
+    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_guard_;
+    harness::RuntimeRoot root_;
+    std::jthread loop_thread_;
+};
+
+[[nodiscard]] std::shared_ptr<harness::RuntimeTarget> test_runtime_target() {
+    static TestRuntime runtime;
+    return runtime.make_target();
+}
+
+template <typename T, typename E>
+std::expected<T, E> run_awaitable_pi(support::AsyncResult<T, E> operation) {
     boost::asio::io_context io;
-    std::optional<T> result;
+    std::optional<std::expected<T, E>> result;
     boost::asio::co_spawn(
         io,
-        [&]() -> boost::asio::awaitable<void> {
-            result = co_await std::move(start);
+        [operation = std::move(operation), &result]() mutable -> boost::asio::awaitable<void> {
+            result = co_await ai::detail::await_async_result(std::move(operation));
             co_return;
         },
         boost::asio::detached);
     io.run();
     REQUIRE(result.has_value());
     return std::move(*result);
+}
+
+template <typename T>
+[[nodiscard]] support::AsyncResult<T, harness::FileError> ready_file(T value) {
+    return support::AsyncResult<T, harness::FileError>{
+        std::expected<T, harness::FileError>{std::move(value)}};
+}
+
+[[nodiscard]] inline support::AsyncResult<void, harness::FileError> ready_file() {
+    return support::AsyncResult<void, harness::FileError>{
+        std::expected<void, harness::FileError>{}};
+}
+
+template <typename T>
+[[nodiscard]] support::AsyncResult<T, harness::ExecutionError> ready_execution(T value) {
+    return support::AsyncResult<T, harness::ExecutionError>{
+        std::expected<T, harness::ExecutionError>{std::move(value)}};
 }
 
 template <typename T>
@@ -110,7 +161,7 @@ TEST_CASE("process runner capability follows async naming and ownership rules", 
 TEST_CASE("every async filesystem operation observes a pre-requested cancellation", "[harness][async][issue40]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "unchanged");
-    harness::AsyncLocalExecutionEnv env(workspace.path());
+    harness::AsyncLocalExecutionEnv env(test_runtime_target(), workspace.path());
     std::stop_source stop_source;
     stop_source.request_stop();
     const auto stop_token = stop_source.get_token();
@@ -139,7 +190,7 @@ TEST_CASE("every async filesystem operation observes a pre-requested cancellatio
 
 TEST_CASE("async local execution env preserves file read and write safety", "[harness][async][u6]") {
     tests::TempWorkspace workspace;
-    harness::AsyncLocalExecutionEnv env(workspace.path());
+    harness::AsyncLocalExecutionEnv env(test_runtime_target(), workspace.path());
 
     auto written = run_awaitable_pi(env.writeFile(
         "nested/note.txt", std::string{"hello"}, std::stop_token{}));
@@ -156,7 +207,7 @@ TEST_CASE("async local execution env preserves file read and write safety", "[ha
 
 TEST_CASE("async local execution env runs shell commands concurrently", "[harness][async][u6]") {
     tests::TempWorkspace workspace;
-    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+    harness::AsyncLocalExecutionEnv env(test_runtime_target(), workspace.path(), true);
 
     boost::asio::io_context io;
     std::optional<std::expected<harness::ShellExecResult, harness::ExecutionError>> first;
@@ -166,14 +217,14 @@ TEST_CASE("async local execution env runs shell commands concurrently", "[harnes
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            first = co_await env.exec("sleep 0.6; echo first");
+            first = co_await ai::detail::await_async_result(env.exec("sleep 0.6; echo first"));
             co_return;
         },
         boost::asio::detached);
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            second = co_await env.exec("sleep 0.6; echo second");
+            second = co_await ai::detail::await_async_result(env.exec("sleep 0.6; echo second"));
             co_return;
         },
         boost::asio::detached);
@@ -337,7 +388,7 @@ TEST_CASE("a stale configured Shell path fails only attempted execution", "[harn
         .shell_path = (workspace.path() / "stale-shell").string(),
         .command_prefix = "prefix-must-not-appear-in-diagnostics",
     };
-    harness::AsyncLocalExecutionEnv env(workspace.path(), true, {}, std::move(shell_config));
+    harness::AsyncLocalExecutionEnv env(test_runtime_target(), workspace.path(), true, {}, std::move(shell_config));
 
     auto read = run_awaitable_pi(env.absolutePath("ordinary.txt", std::stop_token{}));
     REQUIRE(read);
@@ -392,7 +443,7 @@ TEST_CASE("async local execution env sanitizes shell environment through process
 
 TEST_CASE("pi-shaped exec rejects a pre-cancelled request before spawning", "[harness][async][issue40]") {
     tests::TempWorkspace workspace;
-    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+    harness::AsyncLocalExecutionEnv env(test_runtime_target(), workspace.path(), true);
     std::stop_source stop_source;
     stop_source.request_stop();
     harness::ExecOptions options;
@@ -408,7 +459,7 @@ TEST_CASE("pi-shaped exec rejects a pre-cancelled request before spawning", "[ha
 TEST_CASE("cancelling exec terminates the process group and reaps the shell", "[harness][async][process][issue40]") {
 #if defined(__unix__) || defined(__APPLE__)
     tests::TempWorkspace workspace;
-    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+    harness::AsyncLocalExecutionEnv env(test_runtime_target(), workspace.path(), true);
     std::stop_source stop_source;
     harness::ExecOptions options;
     options.stop_token = stop_source.get_token();
@@ -419,9 +470,9 @@ TEST_CASE("cancelling exec terminates the process group and reaps the shell", "[
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
-            result = co_await env.exec(
+            result = co_await ai::detail::await_async_result(env.exec(
                 "echo $$ > shell.pid; sleep 30 & echo $! > descendant.pid; wait",
-                std::move(options));
+                std::move(options)));
             co_return;
         },
         boost::asio::detached);
@@ -444,6 +495,7 @@ TEST_CASE("cancelling exec terminates the process group and reaps the shell", "[
     REQUIRE(result.has_value());
     REQUIRE_FALSE(*result);
     CHECK(result->error().code == harness::ExecutionErrorCode::Aborted);
+    CHECK(result->error().message.find("side effects may remain") != std::string::npos);
     CHECK(elapsed < std::chrono::seconds{2});
 
     auto check_process_absent = [&](const std::string& pid_file) {
@@ -461,6 +513,135 @@ TEST_CASE("cancelling exec terminates the process group and reaps the shell", "[
     check_process_absent("descendant.pid");
 #else
     SUCCEED("process-group cancellation is covered on supported POSIX platforms");
+#endif
+}
+
+TEST_CASE(
+    "async filesystem submission returns typed Busy when the runtime is saturated",
+    "[harness][async][issue459]") {
+    tests::TempWorkspace workspace;
+    workspace.write("note.txt", "original");
+    auto io = std::make_shared<boost::asio::io_context>();
+    harness::RuntimeRoot root(io, 1, 1, 1024 * 1024);
+    auto target = root.make_target();
+    harness::AsyncLocalExecutionEnv env(target, workspace.path());
+
+    std::atomic<bool> release_worker{false};
+    auto gate = target->try_admit(4);
+    REQUIRE(gate.has_value());
+    REQUIRE(gate->post_worker([&]() noexcept {
+        while (!release_worker.load(std::memory_order_acquire)) {
+            std::this_thread::sleep_for(std::chrono::microseconds{100});
+        }
+    }));
+
+    // The single admission is occupied; the read is rejected as typed Busy
+    // before any worker runs it, and the file is untouched (no inline
+    // fallback, no silent drop).
+    auto result = run_awaitable_pi(env.readTextFile("note.txt", std::stop_token{}));
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == harness::FileErrorCode::Busy);
+    CHECK(workspace.read("note.txt") == "original");
+
+    release_worker.store(true, std::memory_order_release);
+    root.close();
+}
+
+TEST_CASE(
+    "queued filesystem work cancelled before start performs no side effects",
+    "[harness][async][issue459]") {
+    tests::TempWorkspace workspace;
+    auto io = std::make_shared<boost::asio::io_context>();
+    harness::RuntimeRoot root(io, 1, 8, 1024 * 1024);
+    auto target = root.make_target();
+    harness::AsyncLocalExecutionEnv env(target, workspace.path());
+
+    // Occupy the single worker so the write below stays queued (not started).
+    std::atomic<bool> release_gate{false};
+    auto gate = target->try_admit(4);
+    REQUIRE(gate.has_value());
+    REQUIRE(gate->post_worker([&]() noexcept {
+        while (!release_gate.load(std::memory_order_acquire)) {
+            std::this_thread::sleep_for(std::chrono::microseconds{100});
+        }
+    }));
+    // The gate holds mailbox sequence 0; complete it with a no-op terminal so
+    // the admission-order mailbox does not hold back the write's outcome.
+    std::move(*gate).complete([]() noexcept {});
+
+    std::stop_source stop_source;
+    std::optional<std::expected<void, harness::FileError>> outcome;
+    auto pending = env.writeFile(
+        "note.txt", std::string{"changed"}, stop_source.get_token());
+    std::move(pending).start(
+        [&](std::expected<void, harness::FileError> result) noexcept {
+            outcome.emplace(std::move(result));
+        });
+    // Cancel before the queued write reaches a worker, then release the gate.
+    stop_source.request_stop();
+    release_gate.store(true, std::memory_order_release);
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{2};
+    while (!outcome.has_value() && std::chrono::steady_clock::now() < deadline) {
+        if (io->stopped()) {
+            io->restart();
+        }
+        (void)io->poll();
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+    REQUIRE(outcome.has_value());
+    REQUIRE_FALSE(*outcome);
+    CHECK(outcome->error().code == harness::FileErrorCode::Aborted);
+    CHECK_FALSE(path_exists(workspace.path() / "note.txt"));
+    root.close();
+}
+
+TEST_CASE(
+    "input and timer callbacks progress while a long shell command runs on the runtime",
+    "[harness][async][issue459]") {
+#if defined(__unix__) || defined(__APPLE__)
+    tests::TempWorkspace workspace;
+    auto io = std::make_shared<boost::asio::io_context>();
+    harness::RuntimeRoot root(io, 2, 8, 1024 * 1024);
+    auto target = root.make_target();
+    harness::AsyncLocalExecutionEnv env(target, workspace.path(), true);
+
+    std::optional<std::expected<harness::ShellExecResult, harness::ExecutionError>> shell_result;
+    std::atomic<bool> input_fired{false};
+    std::atomic<bool> timer_fired{false};
+    boost::asio::co_spawn(
+        *io,
+        [&]() -> boost::asio::awaitable<void> {
+            shell_result = co_await ai::detail::await_async_result(
+                env.exec("sleep 1; echo done"));
+            co_return;
+        },
+        boost::asio::detached);
+    boost::asio::post(*io, [&]() noexcept { input_fired.store(true, std::memory_order_release); });
+    boost::asio::steady_timer timer(*io, std::chrono::milliseconds{50});
+    timer.async_wait([&](const boost::system::error_code&) {
+        timer_fired.store(true, std::memory_order_release);
+    });
+
+    // The shell process runs through the shared Runtime loop; input posts and
+    // timers still make progress while it is in flight.
+    const auto started = std::chrono::steady_clock::now();
+    while (!shell_result.has_value() &&
+           std::chrono::steady_clock::now() - started < std::chrono::seconds{5}) {
+        if (io->stopped()) {
+            io->restart();
+        }
+        (void)io->poll();
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+    REQUIRE(shell_result.has_value());
+    REQUIRE(*shell_result);
+    CHECK((*shell_result)->stdout_output.find("done") != std::string::npos);
+    CHECK(input_fired.load());
+    CHECK(timer_fired.load());
+    root.close();
+#else
+    SUCCEED("Shell progress on the shared runtime is covered on supported POSIX platforms");
 #endif
 }
 
@@ -608,240 +789,40 @@ TEST_CASE("pi-shaped error conversion helpers map to util::Error", "[harness][u1
     }
 }
 
-TEST_CASE("focused fake implements the complete pi-shaped surface", "[harness][u1][issue69]") {
-    // ADR 0006: the contract has no tool-shaped methods and no default
-    // NotSupported bodies, so a fake must satisfy the full pi-shaped
-    // capability set at compile time.
-    struct FocusedFake : harness::AsyncExecutionEnv {
+TEST_CASE("ready fakes implement the complete pi-shaped AsyncResult surface", "[harness][u1][issue69]") {
+    struct CompleteFake final : harness::AsyncExecutionEnv {
         std::filesystem::path ws{"/tmp/ws"};
         const std::filesystem::path& workspace() const override { return ws; }
-
-        boost::asio::awaitable<std::expected<std::string, harness::FileError>> absolutePath(
-            std::string path,
-            std::stop_token) override {
-            co_return path;
-        }
-        boost::asio::awaitable<std::expected<std::string, harness::FileError>> joinPath(
-            std::vector<std::string>,
-            std::stop_token) override {
-            co_return std::string{"/joined"};
-        }
-        boost::asio::awaitable<std::expected<std::string, harness::FileError>> readTextFile(
-            std::string,
-            std::stop_token) override {
-            co_return std::string{"fake"};
-        }
-        boost::asio::awaitable<std::expected<std::vector<std::string>, harness::FileError>> readTextLines(
-            std::string,
-            std::optional<int>,
-            std::stop_token) override {
-            co_return std::vector<std::string>{"fake"};
-        }
-        boost::asio::awaitable<std::expected<harness::BinaryData, harness::FileError>> readBinaryFile(
-            std::string,
-            std::stop_token) override {
-            co_return harness::BinaryData{};
-        }
-        boost::asio::awaitable<std::expected<void, harness::FileError>> writeFile(
-            std::string,
-            harness::WriteContent,
-            std::stop_token) override {
-            co_return std::expected<void, harness::FileError>{};
-        }
-        boost::asio::awaitable<std::expected<void, harness::FileError>> appendFile(
-            std::string,
-            harness::WriteContent,
-            std::stop_token) override {
-            co_return std::expected<void, harness::FileError>{};
-        }
-        boost::asio::awaitable<std::expected<harness::FileInfo, harness::FileError>> fileInfo(
-            std::string path,
-            std::stop_token) override {
-            co_return harness::FileInfo{.name = path, .path = "/tmp/ws/" + path};
-        }
-        boost::asio::awaitable<std::expected<std::vector<harness::FileInfo>, harness::FileError>> listDir(
-            std::string,
-            std::stop_token) override {
-            co_return std::vector<harness::FileInfo>{};
-        }
-        boost::asio::awaitable<std::expected<std::string, harness::FileError>> canonicalPath(
-            std::string path,
-            std::stop_token) override {
-            co_return path;
-        }
-        boost::asio::awaitable<std::expected<bool, harness::FileError>> exists(
-            std::string,
-            std::stop_token) override {
-            co_return true;
-        }
-        boost::asio::awaitable<std::expected<void, harness::FileError>> createDir(
-            std::string,
-            bool,
-            std::stop_token) override {
-            co_return std::expected<void, harness::FileError>{};
-        }
-        boost::asio::awaitable<std::expected<void, harness::FileError>> remove(
-            std::string,
-            bool,
-            std::stop_token) override {
-            co_return std::expected<void, harness::FileError>{};
-        }
-        boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempDir(
-            std::optional<std::string>,
-            std::stop_token) override {
-            co_return std::string{"/tmp/ws/tmp"};
-        }
-        boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempFile(
-            std::optional<std::string>,
-            std::optional<std::string>,
-            std::stop_token) override {
-            co_return std::string{"/tmp/ws/tmp-file"};
-        }
-
-        boost::asio::awaitable<std::expected<harness::ShellExecResult, harness::ExecutionError>> exec(
-            std::string command, harness::ExecOptions) override {
-            co_return harness::ShellExecResult{.stdout_output = command, .stderr_output = "", .exitCode = 0};
-        }
-    };
-
-    FocusedFake fake;
-    CHECK(fake.workspace() == "/tmp/ws");
-
-    auto read = run_awaitable_pi(fake.readTextFile("x", std::stop_token{}));
-    REQUIRE(read);
-    CHECK(*read == "fake");
-
-    auto info = run_awaitable_pi(fake.fileInfo("x", std::stop_token{}));
-    REQUIRE(info);
-    CHECK(info->name == "x");
-
-    auto exec_result = run_awaitable_pi(fake.exec("ls", harness::ExecOptions{}));
-    REQUIRE(exec_result);
-    CHECK(exec_result->stdout_output == "ls");
-
-    // cleanup() keeps its best-effort default body.
-    boost::asio::io_context io;
-    bool cleaned = false;
-    boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            co_await fake.cleanup();
-            cleaned = true;
-            co_return;
-        },
-        boost::asio::detached);
-    io.run();
-    CHECK(cleaned);
-}
-
-TEST_CASE("complete fake can override full pi-shaped capability surface", "[harness][u1]") {
-    struct CompleteFake : harness::AsyncExecutionEnv {
-        std::filesystem::path ws{"/ws"};
-        const std::filesystem::path& workspace() const override { return ws; }
-
-        boost::asio::awaitable<std::expected<std::string, harness::FileError>> absolutePath(
-            std::string path,
-            std::stop_token) override {
-            co_return path;
-        }
-        boost::asio::awaitable<std::expected<std::string, harness::FileError>> joinPath(
-            std::vector<std::string>,
-            std::stop_token) override {
-            co_return std::string{"/joined"};
-        }
-        boost::asio::awaitable<std::expected<std::string, harness::FileError>> readTextFile(
-            std::string path,
-            std::stop_token) override {
-            co_return path + "-content";
-        }
-        boost::asio::awaitable<std::expected<std::vector<std::string>, harness::FileError>> readTextLines(
-            std::string,
-            std::optional<int>,
-            std::stop_token) override {
-            co_return std::vector<std::string>{};
-        }
-        boost::asio::awaitable<std::expected<harness::BinaryData, harness::FileError>> readBinaryFile(
-            std::string,
-            std::stop_token) override {
-            co_return harness::BinaryData{};
-        }
-        boost::asio::awaitable<std::expected<void, harness::FileError>> writeFile(
-            std::string,
-            harness::WriteContent,
-            std::stop_token) override {
-            co_return std::expected<void, harness::FileError>{};
-        }
-        boost::asio::awaitable<std::expected<void, harness::FileError>> appendFile(
-            std::string,
-            harness::WriteContent,
-            std::stop_token) override {
-            co_return std::expected<void, harness::FileError>{};
-        }
-        boost::asio::awaitable<std::expected<harness::FileInfo, harness::FileError>> fileInfo(
-            std::string path,
-            std::stop_token) override {
-            co_return harness::FileInfo{.name = path, .path = "/ws/" + path, .kind = harness::FileKind::File};
-        }
-        boost::asio::awaitable<std::expected<std::vector<harness::FileInfo>, harness::FileError>> listDir(
-            std::string,
-            std::stop_token) override {
-            co_return std::vector<harness::FileInfo>{};
-        }
-        boost::asio::awaitable<std::expected<std::string, harness::FileError>> canonicalPath(
-            std::string path,
-            std::stop_token) override {
-            co_return path;
-        }
-        boost::asio::awaitable<std::expected<bool, harness::FileError>> exists(
-            std::string,
-            std::stop_token) override {
-            co_return true;
-        }
-        boost::asio::awaitable<std::expected<void, harness::FileError>> createDir(
-            std::string,
-            bool,
-            std::stop_token) override {
-            co_return std::expected<void, harness::FileError>{};
-        }
-        boost::asio::awaitable<std::expected<void, harness::FileError>> remove(
-            std::string,
-            bool,
-            std::stop_token) override {
-            co_return std::expected<void, harness::FileError>{};
-        }
-        boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempDir(
-            std::optional<std::string>,
-            std::stop_token) override {
-            co_return std::string{"/ws/tmp"};
-        }
-        boost::asio::awaitable<std::expected<std::string, harness::FileError>> createTempFile(
-            std::optional<std::string>,
-            std::optional<std::string>,
-            std::stop_token) override {
-            co_return std::string{"/ws/tmp-file"};
-        }
-
-        boost::asio::awaitable<std::expected<harness::ShellExecResult, harness::ExecutionError>> exec(
-            std::string cmd, harness::ExecOptions) override {
-            co_return harness::ShellExecResult{.stdout_output = cmd, .stderr_output = "", .exitCode = 0};
-        }
+        support::AsyncResult<std::string, harness::FileError> absolutePath(std::string path, std::stop_token) override { return ready_file(std::move(path)); }
+        support::AsyncResult<std::string, harness::FileError> joinPath(std::vector<std::string>, std::stop_token) override { return ready_file(std::string{"/joined"}); }
+        support::AsyncResult<std::string, harness::FileError> readTextFile(std::string path, std::stop_token) override { return ready_file(std::move(path)); }
+        support::AsyncResult<std::vector<std::string>, harness::FileError> readTextLines(std::string, std::optional<int>, std::stop_token) override { return ready_file(std::vector<std::string>{}); }
+        support::AsyncResult<harness::BinaryData, harness::FileError> readBinaryFile(std::string, std::stop_token) override { return ready_file(harness::BinaryData{}); }
+        support::AsyncResult<void, harness::FileError> writeFile(std::string, harness::WriteContent, std::stop_token) override { return ready_file(); }
+        support::AsyncResult<void, harness::FileError> appendFile(std::string, harness::WriteContent, std::stop_token) override { return ready_file(); }
+        support::AsyncResult<harness::FileInfo, harness::FileError> fileInfo(std::string path, std::stop_token) override { return ready_file(harness::FileInfo{.name = path, .path = "/tmp/ws/" + path, .kind = harness::FileKind::File}); }
+        support::AsyncResult<std::vector<harness::FileInfo>, harness::FileError> listDir(std::string, std::stop_token) override { return ready_file(std::vector<harness::FileInfo>{}); }
+        support::AsyncResult<std::string, harness::FileError> canonicalPath(std::string path, std::stop_token) override { return ready_file(std::move(path)); }
+        support::AsyncResult<bool, harness::FileError> exists(std::string, std::stop_token) override { return ready_file(true); }
+        support::AsyncResult<void, harness::FileError> createDir(std::string, bool, std::stop_token) override { return ready_file(); }
+        support::AsyncResult<void, harness::FileError> remove(std::string, bool, std::stop_token) override { return ready_file(); }
+        support::AsyncResult<std::string, harness::FileError> createTempDir(std::optional<std::string>, std::stop_token) override { return ready_file(std::string{"/tmp/ws/tmp"}); }
+        support::AsyncResult<std::string, harness::FileError> createTempFile(std::optional<std::string>, std::optional<std::string>, std::stop_token) override { return ready_file(std::string{"/tmp/ws/tmp-file"}); }
+        support::AsyncResult<harness::ShellExecResult, harness::ExecutionError> exec(std::string command, harness::ExecOptions) override { return ready_execution(harness::ShellExecResult{.stdout_output = std::move(command), .stderr_output = "", .exitCode = 0}); }
     };
 
     CompleteFake fake;
-
-    auto info = run_awaitable_pi(fake.fileInfo("readme.md", std::stop_token{}));
+    auto read = run_awaitable_pi(fake.readTextFile("fake", {}));
+    REQUIRE(read);
+    CHECK(*read == "fake");
+    auto info = run_awaitable_pi(fake.fileInfo("note.txt", {}));
     REQUIRE(info);
-    CHECK(info->name == "readme.md");
-    CHECK(info->kind == harness::FileKind::File);
-
-    auto text = run_awaitable_pi(fake.readTextFile("f", std::stop_token{}));
-    REQUIRE(text);
-    CHECK(*text == "f-content");
-
-    auto sh = run_awaitable_pi(fake.exec("pwd", harness::ExecOptions{}));
-    REQUIRE(sh);
-    CHECK(sh->stdout_output == "pwd");
-    CHECK(sh->exitCode == 0);
+    CHECK(info->name == "note.txt");
+    auto result = run_awaitable_pi(fake.exec("pwd", {}));
+    REQUIRE(result);
+    CHECK(result->stdout_output == "pwd");
+    auto cleanup = run_awaitable_pi(fake.cleanup());
+    CHECK(cleanup);
 }
 
 // ---------------------------------------------------------------------------
@@ -850,7 +831,7 @@ TEST_CASE("complete fake can override full pi-shaped capability surface", "[harn
 
 TEST_CASE("pi-shaped exec returns split stdout and stderr streams", "[harness][u3]") {
     tests::TempWorkspace workspace;
-    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+    harness::AsyncLocalExecutionEnv env(test_runtime_target(), workspace.path(), true);
 
     auto result = run_awaitable_pi(env.exec("echo hello && echo error >&2"));
     REQUIRE(result);
@@ -861,7 +842,7 @@ TEST_CASE("pi-shaped exec returns split stdout and stderr streams", "[harness][u
 
 TEST_CASE("pi-shaped exec stdout-only and stderr-only preserve empty unused stream", "[harness][u3]") {
     tests::TempWorkspace workspace;
-    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+    harness::AsyncLocalExecutionEnv env(test_runtime_target(), workspace.path(), true);
 
     auto stdout_only = run_awaitable_pi(env.exec("echo only"));
     REQUIRE(stdout_only);
@@ -877,7 +858,7 @@ TEST_CASE("pi-shaped exec stdout-only and stderr-only preserve empty unused stre
 TEST_CASE("pi-shaped exec honors cwd override", "[harness][u3]") {
     tests::TempWorkspace workspace;
     workspace.write("sub/note.txt", "hello");
-    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+    harness::AsyncLocalExecutionEnv env(test_runtime_target(), workspace.path(), true);
 
     harness::ExecOptions opts;
     opts.cwd = "sub";
@@ -889,7 +870,7 @@ TEST_CASE("pi-shaped exec honors cwd override", "[harness][u3]") {
 
 TEST_CASE("pi-shaped exec rejects cwd that escapes workspace", "[harness][u3]") {
     tests::TempWorkspace workspace;
-    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+    harness::AsyncLocalExecutionEnv env(test_runtime_target(), workspace.path(), true);
 
     harness::ExecOptions opts;
     opts.cwd = "../outside";
@@ -900,7 +881,7 @@ TEST_CASE("pi-shaped exec rejects cwd that escapes workspace", "[harness][u3]") 
 
 TEST_CASE("pi-shaped exec returns shell_unavailable when bash is disabled", "[harness][u3]") {
     tests::TempWorkspace workspace;
-    harness::AsyncLocalExecutionEnv env(workspace.path(), false);
+    harness::AsyncLocalExecutionEnv env(test_runtime_target(), workspace.path(), false);
 
     auto result = run_awaitable_pi(env.exec("echo nope"));
     REQUIRE_FALSE(result);
@@ -909,7 +890,7 @@ TEST_CASE("pi-shaped exec returns shell_unavailable when bash is disabled", "[ha
 
 TEST_CASE("pi-shaped exec times out without blocking io context", "[harness][u3]") {
     tests::TempWorkspace workspace;
-    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+    harness::AsyncLocalExecutionEnv env(test_runtime_target(), workspace.path(), true);
     const auto started = std::chrono::steady_clock::now();
 
     harness::ExecOptions opts;
@@ -924,7 +905,7 @@ TEST_CASE("pi-shaped exec times out without blocking io context", "[harness][u3]
 
 TEST_CASE("pi-shaped exec preserves nonzero exit codes", "[harness][u3]") {
     tests::TempWorkspace workspace;
-    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+    harness::AsyncLocalExecutionEnv env(test_runtime_target(), workspace.path(), true);
 
     auto result = run_awaitable_pi(env.exec("exit 42"));
     REQUIRE(result);
@@ -935,7 +916,7 @@ TEST_CASE("separate Shell executions restart from the canonical workspace", "[ha
 #if defined(__unix__) || defined(__APPLE__)
     tests::TempWorkspace workspace;
     std::filesystem::create_directory(workspace.path() / "nested");
-    harness::AsyncLocalExecutionEnv env(workspace.path(), true);
+    harness::AsyncLocalExecutionEnv env(test_runtime_target(), workspace.path(), true);
 
     const auto changed = run_awaitable_pi(env.exec("cd nested && pwd"));
     const auto restarted = run_awaitable_pi(env.exec("pwd"));

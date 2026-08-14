@@ -243,6 +243,7 @@ cch_parity_declare_target(
     OWNER cch_agent_core
     SOURCES
         src/harness/AsyncLocalExecutionEnv.cpp
+        src/harness/RuntimeRoot.cpp
         src/harness/ShellResolver.cpp
         src/harness/SyncLocalExecutionEnv.cpp
         src/harness/WorkspaceFileSystemFdWalk.cpp
@@ -670,6 +671,7 @@ if(CCH_BUILD_TESTS)
     add_executable(cch_tests_harness_tools
         tests/Catch2Main.cpp
         tests/harness/AsyncLocalExecutionEnvTest.cpp
+        tests/harness/RuntimeRootTest.cpp
         tests/harness/WorkspaceFileSystemTest.cpp
         tests/harness/compaction/CompactionTest.cpp
         tests/harness/session/InMemorySessionStoreTest.cpp

@@ -24,7 +24,7 @@ public:
         std::vector<std::string> secret_environment_names,
         harness::ShellConfig shell_config = {});
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<UserShellResult>> execute(
+    [[nodiscard]] support::AsyncResult<UserShellResult> execute(
         std::string command,
         UserShellUpdateSink update_sink,
         std::stop_token stop_token) override;

@@ -158,15 +158,17 @@ namespace {
 } // namespace
 
 int run_print_mode(
+    boost::asio::io_context& io,
     coding_agent::AgentSession& session,
     PrintModeConfig config,
     PrintModePlan plan) {
-    boost::asio::io_context io;
     auto future = boost::asio::co_spawn(
         io,
         run_print_mode_coro(session, config, std::move(plan)),
         boost::asio::use_future);
-    io.run();
+    while (future.wait_for(std::chrono::milliseconds{0}) != std::future_status::ready) {
+        (void)io.run_one();
+    }
     try {
         return future.get();
     } catch (const std::exception& error) {

@@ -1,8 +1,7 @@
 #pragma once
 
+#include <cch/support/AsyncResult.hpp>
 #include <cch/util/Error.hpp>
-
-#include <boost/asio/awaitable.hpp>
 
 #include <chrono>
 #include <cstddef>
@@ -33,6 +32,7 @@ enum class FileKind {
 /// Stable, backend-independent file error codes.
 enum class FileErrorCode {
     Aborted,
+    Busy,
     NotFound,
     PermissionDenied,
     NotDirectory,
@@ -52,6 +52,7 @@ struct FileError {
 /// Stable, backend-independent execution error codes.
 enum class ExecutionErrorCode {
     Aborted,
+    Busy,
     Timeout,
     ShellUnavailable,
     SpawnError,
@@ -126,6 +127,9 @@ struct ShellExecResult {
     case FileErrorCode::Aborted:
         code = util::ErrorCode::Cancelled;
         break;
+    case FileErrorCode::Busy:
+        code = util::ErrorCode::Busy;
+        break;
     case FileErrorCode::NotFound:
         code = util::ErrorCode::Validation;
         break;
@@ -152,6 +156,9 @@ struct ShellExecResult {
     switch (e.code) {
     case ExecutionErrorCode::Aborted:
         code = util::ErrorCode::Cancelled;
+        break;
+    case ExecutionErrorCode::Busy:
+        code = util::ErrorCode::Busy;
         break;
     case ExecutionErrorCode::Timeout:
         code = util::ErrorCode::Timeout;
@@ -192,95 +199,95 @@ public:
     // -- pi-shaped filesystem methods -----------------------------------------
 
     /// Return an absolute addressed path without requiring it to exist and without following symlinks.
-    [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::string, FileError>> absolutePath(
+    [[nodiscard]] virtual support::AsyncResult<std::string, FileError> absolutePath(
         std::string path,
         std::stop_token stop_token) = 0;
 
     /// Join path segments without requiring the result to exist.
-    [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::string, FileError>> joinPath(
+    [[nodiscard]] virtual support::AsyncResult<std::string, FileError> joinPath(
         std::vector<std::string> parts,
         std::stop_token stop_token) = 0;
 
     /// Read entire UTF-8 text file.
-    [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::string, FileError>> readTextFile(
+    [[nodiscard]] virtual support::AsyncResult<std::string, FileError> readTextFile(
         std::string path,
         std::stop_token stop_token) = 0;
 
     /// Read UTF-8 text lines. Stops after maxLines if set.
-    [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::vector<std::string>, FileError>> readTextLines(
+    [[nodiscard]] virtual support::AsyncResult<std::vector<std::string>, FileError> readTextLines(
         std::string path,
         std::optional<int> maxLines,
         std::stop_token stop_token) = 0;
 
     /// Read entire binary file.
-    [[nodiscard]] virtual boost::asio::awaitable<std::expected<BinaryData, FileError>> readBinaryFile(
+    [[nodiscard]] virtual support::AsyncResult<BinaryData, FileError> readBinaryFile(
         std::string path,
         std::stop_token stop_token) = 0;
 
     /// Create or overwrite a file, creating parent directories.
-    [[nodiscard]] virtual boost::asio::awaitable<std::expected<void, FileError>> writeFile(
+    [[nodiscard]] virtual support::AsyncResult<void, FileError> writeFile(
         std::string path,
         WriteContent content,
         std::stop_token stop_token) = 0;
 
     /// Create or append to a file, creating parent directories.
-    [[nodiscard]] virtual boost::asio::awaitable<std::expected<void, FileError>> appendFile(
+    [[nodiscard]] virtual support::AsyncResult<void, FileError> appendFile(
         std::string path,
         WriteContent content,
         std::stop_token stop_token) = 0;
 
     /// Return metadata for the addressed path without following symlinks.
-    [[nodiscard]] virtual boost::asio::awaitable<std::expected<FileInfo, FileError>> fileInfo(
+    [[nodiscard]] virtual support::AsyncResult<FileInfo, FileError> fileInfo(
         std::string path,
         std::stop_token stop_token) = 0;
 
     /// List direct children of a directory without following symlinks.
-    [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::vector<FileInfo>, FileError>> listDir(
+    [[nodiscard]] virtual support::AsyncResult<std::vector<FileInfo>, FileError> listDir(
         std::string path,
         std::stop_token stop_token) = 0;
 
     /// Return canonical path for an existing path, resolving symlinks.
-    [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::string, FileError>> canonicalPath(
+    [[nodiscard]] virtual support::AsyncResult<std::string, FileError> canonicalPath(
         std::string path,
         std::stop_token stop_token) = 0;
 
     /// Return false for missing paths. Other errors return FileError.
-    [[nodiscard]] virtual boost::asio::awaitable<std::expected<bool, FileError>> exists(
+    [[nodiscard]] virtual support::AsyncResult<bool, FileError> exists(
         std::string path,
         std::stop_token stop_token) = 0;
 
     /// Create a directory, recursively when requested.
-    [[nodiscard]] virtual boost::asio::awaitable<std::expected<void, FileError>> createDir(
+    [[nodiscard]] virtual support::AsyncResult<void, FileError> createDir(
         std::string path,
         bool recursive,
         std::stop_token stop_token) = 0;
 
     /// Remove a file or directory, recursively when requested.
-    [[nodiscard]] virtual boost::asio::awaitable<std::expected<void, FileError>> remove(
+    [[nodiscard]] virtual support::AsyncResult<void, FileError> remove(
         std::string path,
         bool recursive,
         std::stop_token stop_token) = 0;
 
     /// Create a workspace-contained temporary directory and return its addressed path.
-    [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::string, FileError>> createTempDir(
+    [[nodiscard]] virtual support::AsyncResult<std::string, FileError> createTempDir(
         std::optional<std::string> prefix,
         std::stop_token stop_token) = 0;
 
     /// Create a workspace-contained temporary file and return its addressed path.
-    [[nodiscard]] virtual boost::asio::awaitable<std::expected<std::string, FileError>> createTempFile(
+    [[nodiscard]] virtual support::AsyncResult<std::string, FileError> createTempFile(
         std::optional<std::string> prefix,
         std::optional<std::string> suffix,
         std::stop_token stop_token) = 0;
 
     /// Release owned resources. Must be best-effort and must not throw.
-    virtual boost::asio::awaitable<void> cleanup() {
-        co_return;
+    [[nodiscard]] virtual support::AsyncResult<void, FileError> cleanup() {
+        return support::AsyncResult<void, FileError>{std::expected<void, FileError>{}};
     }
 
     // -- pi-shaped shell method ------------------------------------------------
 
     /// Execute a shell command with split streams.
-    [[nodiscard]] virtual boost::asio::awaitable<std::expected<ShellExecResult, ExecutionError>> exec(
+    [[nodiscard]] virtual support::AsyncResult<ShellExecResult, ExecutionError> exec(
         std::string command,
         ExecOptions options = {}) = 0;
 };

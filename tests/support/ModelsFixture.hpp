@@ -4,19 +4,52 @@
 #include <cch/ai/Provider.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "harness/RuntimeRoot.hpp"
 #include "util/ExpectedMacros.hpp"
 
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/executor_work_guard.hpp>
+#include <boost/asio/io_context.hpp>
 
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
 namespace cch::tests {
 namespace detail {
+
+class FixtureRuntime final {
+public:
+    FixtureRuntime()
+        : loop_(std::make_shared<boost::asio::io_context>()),
+          work_guard_(boost::asio::make_work_guard(*loop_)),
+          root_(loop_, 2, 32, 1024 * 1024),
+          loop_thread_([this] { loop_->run(); }) {}
+
+    ~FixtureRuntime() {
+        work_guard_.reset();
+        loop_->stop();
+    }
+
+    [[nodiscard]] std::shared_ptr<harness::RuntimeTarget> make_target() {
+        return root_.make_target();
+    }
+
+private:
+    std::shared_ptr<boost::asio::io_context> loop_;
+    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_guard_;
+    harness::RuntimeRoot root_;
+    std::jthread loop_thread_;
+};
+
+[[nodiscard]] inline std::shared_ptr<harness::RuntimeTarget> fixture_runtime_target() {
+    static FixtureRuntime runtime;
+    return runtime.make_target();
+}
 
 class FixtureCredentialStore final : public ai::CredentialStore {
 public:
@@ -207,6 +240,9 @@ inline util::Expected<coding_agent::CreateAgentSessionResult> create_agent_sessi
     ModelsSessionOptions options) {
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    if (!request.execution_runtime_target) {
+        request.execution_runtime_target = detail::fixture_runtime_target();
+    }
     if (models) {
         return coding_agent::create_agent_session_for_testing(
             std::move(request), std::move(models));
@@ -219,6 +255,9 @@ inline util::Expected<coding_agent::CreateAgentSessionResult> create_agent_sessi
     std::unique_ptr<coding_agent::runtime::AsyncUserShell> user_shell) {
     auto models = std::move(options.models);
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    if (!request.execution_runtime_target) {
+        request.execution_runtime_target = detail::fixture_runtime_target();
+    }
     return coding_agent::create_agent_session_for_testing(
         std::move(request), std::move(models), std::move(user_shell));
 }

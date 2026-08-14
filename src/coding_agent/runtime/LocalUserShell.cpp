@@ -1,5 +1,6 @@
 #include "LocalUserShell.hpp"
 
+#include "ai/AsyncResultBridge.hpp"
 #include "harness/ShellEnvironment.hpp"
 #include "harness/ShellResolver.hpp"
 #include "util/Process.hpp"
@@ -12,31 +13,27 @@
 #include <utility>
 
 namespace cch::coding_agent::runtime {
+namespace {
 
-LocalUserShell::LocalUserShell(
+[[nodiscard]] boost::asio::awaitable<util::Expected<UserShellResult>> run_local_user_shell(
     std::filesystem::path workspace,
     std::vector<std::string> secret_environment_names,
-    harness::ShellConfig shell_config)
-    : workspace_(std::move(workspace)),
-      secret_environment_names_(std::move(secret_environment_names)),
-      shell_config_(std::move(shell_config)) {}
-
-boost::asio::awaitable<util::Expected<UserShellResult>> LocalUserShell::execute(
+    harness::ShellConfig shell_config,
     std::string command,
     UserShellUpdateSink update_sink,
     std::stop_token stop_token) {
-    auto environment = harness::sanitized_environment(secret_environment_names_);
+    auto environment = harness::sanitized_environment(secret_environment_names);
     auto shell = harness::resolve_shell_executable(
-        shell_config_.shell_path,
-        workspace_,
+        shell_config.shell_path,
+        workspace,
         environment);
     if (!shell) {
         co_return std::unexpected(harness::to_util_error(std::move(shell.error())));
     }
 
     std::string script = std::move(command);
-    if (shell_config_.command_prefix && !shell_config_.command_prefix->empty()) {
-        script = *shell_config_.command_prefix + "\n" + script;
+    if (shell_config.command_prefix && !shell_config.command_prefix->empty()) {
+        script = *shell_config.command_prefix + "\n" + script;
     }
 
     // An update-sink failure is an infrastructure failure: stop the process
@@ -50,7 +47,7 @@ boost::asio::awaitable<util::Expected<UserShellResult>> LocalUserShell::execute(
     util::ProcessRequest request;
     request.executable = std::move(*shell);
     request.arguments = {"-c", std::move(script)};
-    request.working_directory = workspace_;
+    request.working_directory = std::move(workspace);
     // User Bash has no default timeout; zero disables the runner deadline.
     request.timeout = std::chrono::milliseconds{0};
     request.environment = std::move(environment);
@@ -90,6 +87,37 @@ boost::asio::awaitable<util::Expected<UserShellResult>> LocalUserShell::execute(
         co_return std::unexpected(std::move(process.error()));
     }
     co_return UserShellResult{.exit_code = process->exit_code};
+}
+
+} // namespace
+
+LocalUserShell::LocalUserShell(
+    std::filesystem::path workspace,
+    std::vector<std::string> secret_environment_names,
+    harness::ShellConfig shell_config)
+    : workspace_(std::move(workspace)),
+      secret_environment_names_(std::move(secret_environment_names)),
+      shell_config_(std::move(shell_config)) {}
+
+support::AsyncResult<UserShellResult> LocalUserShell::execute(
+    std::string command,
+    UserShellUpdateSink update_sink,
+    std::stop_token stop_token) {
+    return ai::detail::make_async_result(
+        [workspace = workspace_,
+         secret_environment_names = secret_environment_names_,
+         shell_config = shell_config_,
+         command = std::move(command),
+         update_sink = std::move(update_sink),
+         stop_token]() mutable {
+            return run_local_user_shell(
+                std::move(workspace),
+                std::move(secret_environment_names),
+                std::move(shell_config),
+                std::move(command),
+                std::move(update_sink),
+                stop_token);
+        });
 }
 
 } // namespace cch::coding_agent::runtime

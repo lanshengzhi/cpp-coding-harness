@@ -20,8 +20,10 @@
 #include <chrono>
 #include <cstddef>
 #include <format>
+#include <chrono>
 #include <optional>
 #include <string>
+#include <thread>
 #include <string_view>
 #include <utility>
 #include <variant>
@@ -397,7 +399,12 @@ TEST_CASE(
     boost::asio::io_context io;
     PromptResult first_prompt;
     spawn_prompt(io, session, "read the note", first_prompt);
-    drain_ready(io);
+    // Filesystem completion is worker-backed, so drive the session loop until
+    // its tool result advances the provider to the gated second request.
+    for (int attempt = 0; attempt < 100 && client_pointer->requests.size() != 2; ++attempt) {
+        drain_ready(io);
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
     // Turn 1 produced the tool call; the run is held on the post-tool turn.
     REQUIRE(client_pointer->requests.size() == 2);
 

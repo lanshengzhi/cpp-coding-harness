@@ -686,8 +686,9 @@ AgentSessionRuntime::run_user_bash(
     }
     UserBashOutputAccumulator output;
     try {
-        shell_result = co_await services_.user_shell->execute(
-            std::move(command),
+        shell_result = co_await ai::detail::await_async_result(
+            services_.user_shell->execute(
+                std::move(command),
             [recorded_command, exclude_from_context, &output, &progress_sink](
                 std::string_view update) -> util::ExpectedVoid {
                 output.append(update);
@@ -709,7 +710,7 @@ AgentSessionRuntime::run_user_bash(
                         "User Bash progress callback failed"));
                 }
             },
-            active_user_bash_stop_source_->get_token());
+                active_user_bash_stop_source_->get_token()));
         if (shell_result) {
             output.finish();
         }
@@ -2549,7 +2550,7 @@ boost::asio::awaitable<void> AgentSessionRuntime::finalize_close_after_active_wo
     auto owned_env = release_close_resources();
     if (owned_env) {
         try {
-            co_await owned_env->cleanup();
+            (void)co_await ai::detail::await_async_result(owned_env->cleanup());
         } catch (...) {
             // cleanup() is best-effort and must not make close fallible.
         }
@@ -2579,7 +2580,7 @@ void AgentSessionRuntime::finalize_close() noexcept {
                             boost::asio::system_executor{},
                             [env = std::move(env)]() -> boost::asio::awaitable<void> {
                                 try {
-                                    co_await env->cleanup();
+                                    (void)co_await ai::detail::await_async_result(env->cleanup());
                                 } catch (...) {
                                     // cleanup() is best-effort and must not make close fallible.
                                 }
