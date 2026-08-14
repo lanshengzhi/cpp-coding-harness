@@ -46,6 +46,20 @@ endif()
 
 set(CCH_WARNING_OPTIONS -Wall -Wextra -Wpedantic)
 
+# Central Parity Architecture constructors (ADR 0039). Every production target
+# is declared through cch_parity_declare_target so its role, Owner, source
+# ownership, direct dependencies, interface visibility, and external-family
+# classification are recorded as configured evidence and emitted as the
+# resolved ownership index. The manifest is the strict policy authority the
+# Gate validates that evidence against.
+include(cmake/ParityArchitecture.cmake)
+cch_parity_set_manifest("${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/manifest.json")
+
+# Canonical repository-internal include surface: the global include root is
+# published to dependents, the private src root stays private. Applied after
+# each central declaration because the constructor creates the target but does
+# not guess the include surface (Owner-local roots replace this in the
+# contraction tickets).
 function(cch_target_defaults target_name)
     target_include_directories(${target_name}
         PUBLIC
@@ -53,7 +67,6 @@ function(cch_target_defaults target_name)
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
-    target_compile_options(${target_name} PRIVATE ${CCH_WARNING_OPTIONS})
 endfunction()
 
 # Pi-neutral C++ Support Package (ADR 0039). Owns passive Error/Expected,
@@ -61,208 +74,269 @@ endfunction()
 # has no compiled source of its own. The historical cch_util target below links
 # it and remains the temporary legacy alias until the support contraction
 # ticket #469 deletes it.
-add_library(cch_support INTERFACE)
+cch_parity_declare_target(
+    TARGET cch_support
+    ROLE support
+    OWNER cch_support
+    KIND interface
+)
 target_include_directories(cch_support INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-add_library(cch_util
-    src/util/Json.cpp
-    src/util/Process.cpp
+cch_parity_declare_target(
+    TARGET cch_util
+    ROLE support
+    OWNER cch_support
+    SOURCES
+        src/util/Json.cpp
+        src/util/Process.cpp
+    DEPENDS
+        cch_support
+        Boost::filesystem@boost
+        Threads::Threads@threads
+    INTERFACE_DEPENDS
+        cch_support
+        Boost::filesystem@boost
+        Threads::Threads@threads
 )
 cch_target_defaults(cch_util)
-target_link_libraries(cch_util
-    PUBLIC
-        cch_support
-        Boost::filesystem
-        Threads::Threads
-)
 
-add_library(cch_tui
-    src/tui/Autocomplete.cpp
-    src/tui/CancellableLoader.cpp
-    src/tui/Container.cpp
-    src/tui/Editor.cpp
-    src/tui/Fuzzy.cpp
-    src/tui/Image.cpp
-    src/tui/Input.cpp
-    src/tui/InputDecoder.cpp
-    src/tui/Keybindings.cpp
-    src/tui/KeyboardProtocol.cpp
-    src/tui/Keys.cpp
-    src/tui/Loader.cpp
-    src/tui/Markdown.cpp
-    src/tui/Overlay.cpp
-    src/tui/ProcessTerminal.cpp
-    src/tui/SelectList.cpp
-    src/tui/SettingsList.cpp
-    src/tui/TerminalImage.cpp
-    src/tui/Text.cpp
-    src/tui/TruncatedText.cpp
-    src/tui/Tui.cpp
-    src/tui/UnicodeWidth.cpp
-    src/tui/Utils.cpp
-    src/tui/VirtualTerminal.cpp
+cch_parity_declare_target(
+    TARGET cch_tui
+    ROLE owner
+    OWNER cch_tui
+    SOURCES
+        src/tui/Autocomplete.cpp
+        src/tui/CancellableLoader.cpp
+        src/tui/Container.cpp
+        src/tui/Editor.cpp
+        src/tui/Fuzzy.cpp
+        src/tui/Image.cpp
+        src/tui/Input.cpp
+        src/tui/InputDecoder.cpp
+        src/tui/Keybindings.cpp
+        src/tui/KeyboardProtocol.cpp
+        src/tui/Keys.cpp
+        src/tui/Loader.cpp
+        src/tui/Markdown.cpp
+        src/tui/Overlay.cpp
+        src/tui/ProcessTerminal.cpp
+        src/tui/SelectList.cpp
+        src/tui/SettingsList.cpp
+        src/tui/TerminalImage.cpp
+        src/tui/Text.cpp
+        src/tui/TruncatedText.cpp
+        src/tui/Tui.cpp
+        src/tui/UnicodeWidth.cpp
+        src/tui/Utils.cpp
+        src/tui/VirtualTerminal.cpp
+    DEPENDS
+        cch_util
+        md4c::md4c@md4c
+        utf8proc::utf8proc@utf8proc
 )
 cch_target_defaults(cch_tui)
-target_link_libraries(cch_tui
-    PRIVATE
-        cch_util
-        md4c::md4c
-        utf8proc::utf8proc
-)
 
-add_library(cch_coding_agent_tui
-    src/coding_agent/tui/KeybindingsManager.cpp
-    src/coding_agent/tui/Theme.cpp
-    src/coding_agent/tui/ThemeController.cpp
-)
-cch_target_defaults(cch_coding_agent_tui)
-target_link_libraries(cch_coding_agent_tui
-    PRIVATE
+cch_parity_declare_target(
+    TARGET cch_coding_agent_tui
+    ROLE implementation
+    OWNER cch_coding_agent
+    SOURCES
+        src/coding_agent/tui/KeybindingsManager.cpp
+        src/coding_agent/tui/Theme.cpp
+        src/coding_agent/tui/ThemeController.cpp
+    DEPENDS
         cch_tui
         cch_util
 )
+cch_target_defaults(cch_coding_agent_tui)
 
-add_library(cch_ai
-    src/ai/ContentUtil.cpp
-    src/ai/Model.cpp
-    src/ai/Models.cpp
-    src/ai/ModelStream.cpp
-    src/ai/SimpleOptions.cpp
-    src/ai/Usage.cpp
-    src/ai/api/AnthropicMessagesAdapter.cpp
-    src/ai/api/MessageConversion.cpp
-    src/ai/api/OpenAICodexResponsesAdapter.cpp
-    src/ai/api/OpenAIResponsesAdapter.cpp
-    src/ai/api/Termination.cpp
-    src/ai/api/UsageNormalization.cpp
-    src/ai/auth/OAuthCallbackServer.cpp
-    src/ai/auth/OAuthHttpClient.cpp
-    src/ai/auth/OpenAICodexOAuth.cpp
-    src/ai/auth/KimiCodingOAuth.cpp
-    src/ai/auth/OauthPage.cpp
-    src/ai/auth/Pkce.cpp
-    src/ai/providers/BoostBeastStreamTransport.cpp
-    src/ai/providers/BoostBeastWebSocketTransport.cpp
-    src/ai/providers/CodexCatalog.cpp
-    src/ai/providers/EnvApiKeyAuth.cpp
-    src/ai/providers/FakeProvider.cpp
-    src/ai/providers/KimiCatalog.cpp
-    src/ai/providers/KimiProvider.cpp
-    src/ai/providers/RetryPolicy.cpp
-    src/ai/providers/SseParser.cpp
-    src/ai/utils/RetryClassifier.cpp
+cch_parity_declare_target(
+    TARGET cch_ai
+    ROLE owner
+    OWNER cch_ai
+    SOURCES
+        src/ai/ContentUtil.cpp
+        src/ai/Model.cpp
+        src/ai/Models.cpp
+        src/ai/ModelStream.cpp
+        src/ai/SimpleOptions.cpp
+        src/ai/Usage.cpp
+        src/ai/api/AnthropicMessagesAdapter.cpp
+        src/ai/api/MessageConversion.cpp
+        src/ai/api/OpenAICodexResponsesAdapter.cpp
+        src/ai/api/OpenAIResponsesAdapter.cpp
+        src/ai/api/Termination.cpp
+        src/ai/api/UsageNormalization.cpp
+        src/ai/auth/OAuthCallbackServer.cpp
+        src/ai/auth/OAuthHttpClient.cpp
+        src/ai/auth/OpenAICodexOAuth.cpp
+        src/ai/auth/KimiCodingOAuth.cpp
+        src/ai/auth/OauthPage.cpp
+        src/ai/auth/Pkce.cpp
+        src/ai/providers/BoostBeastStreamTransport.cpp
+        src/ai/providers/BoostBeastWebSocketTransport.cpp
+        src/ai/providers/CodexCatalog.cpp
+        src/ai/providers/EnvApiKeyAuth.cpp
+        src/ai/providers/FakeProvider.cpp
+        src/ai/providers/KimiCatalog.cpp
+        src/ai/providers/KimiProvider.cpp
+        src/ai/providers/RetryPolicy.cpp
+        src/ai/providers/SseParser.cpp
+        src/ai/utils/RetryClassifier.cpp
+    DEPENDS
+        cch_util
+        OpenSSL::SSL@openssl
+        OpenSSL::Crypto@openssl
+    INTERFACE_DEPENDS
+        cch_util
 )
 cch_target_defaults(cch_ai)
-target_link_libraries(cch_ai
-    PUBLIC
-        cch_util
-    PRIVATE
-        OpenSSL::SSL
-        OpenSSL::Crypto
-)
-target_compile_options(cch_ai PRIVATE -Wall -Wextra -Wpedantic)
 
 # ModelRuntime closure (Model/Models composition + Agent Config Directory + auth
 # storage). Lives below cch_agent so the stateful Agent can be constructed on
 # the sole injectable ModelRuntime seam (#326/#331) without a dependency cycle.
-add_library(cch_coding_agent_core
-    src/coding_agent/ModelRuntime.cpp
-    src/coding_agent/ModelResolver.cpp
-    src/coding_agent/ModelConfig.cpp
-    src/coding_agent/ProviderComposer.cpp
-    src/coding_agent/AgentConfigDir.cpp
-    src/coding_agent/AuthStorage.cpp
-    src/coding_agent/RuntimeApiKeyOverlay.cpp
-)
-cch_target_defaults(cch_coding_agent_core)
-target_link_libraries(cch_coding_agent_core
-    PUBLIC
+# NOTE: this is a known migration violation — cch_agent (Owner cch_agent_core)
+# depending on a cch_coding_agent implementation target reverses the Owner DAG
+# and is reported (non-blocking) by the production audit until #456/#460.
+cch_parity_declare_target(
+    TARGET cch_coding_agent_core
+    ROLE implementation
+    OWNER cch_coding_agent
+    SOURCES
+        src/coding_agent/ModelRuntime.cpp
+        src/coding_agent/ModelResolver.cpp
+        src/coding_agent/ModelConfig.cpp
+        src/coding_agent/ProviderComposer.cpp
+        src/coding_agent/AgentConfigDir.cpp
+        src/coding_agent/AuthStorage.cpp
+        src/coding_agent/RuntimeApiKeyOverlay.cpp
+    DEPENDS
+        cch_ai
+        cch_util
+    INTERFACE_DEPENDS
         cch_ai
         cch_util
 )
+cch_target_defaults(cch_coding_agent_core)
 
-add_library(cch_agent
-    src/agent/Agent.cpp
-    src/agent/AgentLoop.cpp
-    src/agent/AgentPolicyAdapters.cpp
-    src/agent/ToolArgumentPreparation.cpp
-    src/agent/ToolCallExecutor.cpp
-)
-cch_target_defaults(cch_agent)
-target_link_libraries(cch_agent
-    PUBLIC
+cch_parity_declare_target(
+    TARGET cch_agent
+    ROLE owner
+    OWNER cch_agent_core
+    SOURCES
+        src/agent/Agent.cpp
+        src/agent/AgentLoop.cpp
+        src/agent/AgentPolicyAdapters.cpp
+        src/agent/ToolArgumentPreparation.cpp
+        src/agent/ToolCallExecutor.cpp
+    DEPENDS
+        cch_coding_agent_core
+        cch_ai
+        cch_util
+    INTERFACE_DEPENDS
         cch_coding_agent_core
         cch_ai
         cch_util
 )
+cch_target_defaults(cch_agent)
 
-add_library(cch_harness
-    src/harness/AsyncLocalExecutionEnv.cpp
-    src/harness/ShellResolver.cpp
-    src/harness/SyncLocalExecutionEnv.cpp
-    src/harness/WorkspaceFileSystemFdWalk.cpp
-    src/harness/WorkspaceFileSystemLegacy.cpp
-    src/harness/WorkspaceFileSystemPi.cpp
-    src/harness/WorkspaceFileSystemTemp.cpp
-    src/harness/compaction/Compaction.cpp
-    src/harness/session/SessionJournal.cpp
-    src/harness/session/EntrySerializer.cpp
-    src/harness/session/InMemorySessionStore.cpp
-    src/harness/session/JsonlSessionStore.cpp
-    src/harness/session/SessionResume.cpp
-    src/harness/session/SessionTree.cpp
-)
-cch_target_defaults(cch_harness)
-target_link_libraries(cch_harness
-    PUBLIC
+cch_parity_declare_target(
+    TARGET cch_harness
+    ROLE implementation
+    OWNER cch_agent_core
+    SOURCES
+        src/harness/AsyncLocalExecutionEnv.cpp
+        src/harness/ShellResolver.cpp
+        src/harness/SyncLocalExecutionEnv.cpp
+        src/harness/WorkspaceFileSystemFdWalk.cpp
+        src/harness/WorkspaceFileSystemLegacy.cpp
+        src/harness/WorkspaceFileSystemPi.cpp
+        src/harness/WorkspaceFileSystemTemp.cpp
+        src/harness/compaction/Compaction.cpp
+        src/harness/session/SessionJournal.cpp
+        src/harness/session/EntrySerializer.cpp
+        src/harness/session/InMemorySessionStore.cpp
+        src/harness/session/JsonlSessionStore.cpp
+        src/harness/session/SessionResume.cpp
+        src/harness/session/SessionTree.cpp
+    DEPENDS
+        cch_ai
+        cch_util
+    INTERFACE_DEPENDS
         cch_ai
         cch_util
 )
+cch_target_defaults(cch_harness)
 
-add_library(cch_tools
-    src/tools/AsyncToolFactories.cpp
-    src/tools/EditDiff.cpp
-)
-cch_target_defaults(cch_tools)
-target_link_libraries(cch_tools
-    PUBLIC
+cch_parity_declare_target(
+    TARGET cch_tools
+    ROLE implementation
+    OWNER cch_agent_core
+    SOURCES
+        src/tools/AsyncToolFactories.cpp
+        src/tools/EditDiff.cpp
+    DEPENDS
         cch_agent
         cch_harness
         cch_ai
         cch_util
-    PRIVATE
-        utf8proc::utf8proc
+        utf8proc::utf8proc@utf8proc
+    INTERFACE_DEPENDS
+        cch_agent
+        cch_harness
+        cch_ai
+        cch_util
 )
+cch_target_defaults(cch_tools)
 
-add_library(cch_coding_agent_runtime
-    src/coding_agent/ImageInput.cpp
-    src/cli/InitialPrompt.cpp
-    src/coding_agent/SessionDiscovery.cpp
-    src/coding_agent/SessionPathPolicy.cpp
-    src/coding_agent/SettingsManager.cpp
-    src/coding_agent/ProjectResourceLoader.cpp
-    src/coding_agent/ProjectResources.cpp
-    src/coding_agent/ProjectTrust.cpp
-    src/coding_agent/prompt/SystemPromptBuilder.cpp
-    src/coding_agent/prompt/PromptExpansion.cpp
-    src/coding_agent/prompt/PromptTemplateExpander.cpp
-    src/coding_agent/prompt/BuiltinSlashCommands.cpp
-    src/coding_agent/AgentSession.cpp
-    src/coding_agent/SkillFrontmatterParser.cpp
-    src/coding_agent/SkillLoader.cpp
-    src/coding_agent/GitIgnoreMatcher.cpp
-    src/coding_agent/PromptTemplateLoader.cpp
-    src/coding_agent/SkillFormatting.cpp
-    src/coding_agent/runtime/AgentSessionRuntime.cpp
-    src/coding_agent/runtime/AuthGuidanceStream.cpp
-    src/coding_agent/runtime/LocalUserShell.cpp
-    src/coding_agent/runtime/SessionEventCommitment.cpp
-    src/coding_agent/runtime/UserBashOutputAccumulator.cpp
-    src/cli/PrintMode.cpp
-    src/cli/SessionFamily.cpp
-    src/coding_agent/runtime/SessionFactory.cpp
-    src/coding_agent/runtime/SessionFork.cpp
-    src/coding_agent/runtime/SessionLifecycle.cpp
+cch_parity_declare_target(
+    TARGET cch_coding_agent_runtime
+    ROLE composition
+    OWNER cch_coding_agent
+    SOURCES
+        src/coding_agent/ImageInput.cpp
+        src/cli/InitialPrompt.cpp
+        src/coding_agent/SessionDiscovery.cpp
+        src/coding_agent/SessionPathPolicy.cpp
+        src/coding_agent/SettingsManager.cpp
+        src/coding_agent/ProjectResourceLoader.cpp
+        src/coding_agent/ProjectResources.cpp
+        src/coding_agent/ProjectTrust.cpp
+        src/coding_agent/prompt/SystemPromptBuilder.cpp
+        src/coding_agent/prompt/PromptExpansion.cpp
+        src/coding_agent/prompt/PromptTemplateExpander.cpp
+        src/coding_agent/prompt/BuiltinSlashCommands.cpp
+        src/coding_agent/AgentSession.cpp
+        src/coding_agent/SkillFrontmatterParser.cpp
+        src/coding_agent/SkillLoader.cpp
+        src/coding_agent/GitIgnoreMatcher.cpp
+        src/coding_agent/PromptTemplateLoader.cpp
+        src/coding_agent/SkillFormatting.cpp
+        src/coding_agent/runtime/AgentSessionRuntime.cpp
+        src/coding_agent/runtime/AuthGuidanceStream.cpp
+        src/coding_agent/runtime/LocalUserShell.cpp
+        src/coding_agent/runtime/SessionEventCommitment.cpp
+        src/coding_agent/runtime/UserBashOutputAccumulator.cpp
+        src/cli/PrintMode.cpp
+        src/cli/SessionFamily.cpp
+        src/coding_agent/runtime/SessionFactory.cpp
+        src/coding_agent/runtime/SessionFork.cpp
+        src/coding_agent/runtime/SessionLifecycle.cpp
+    DEPENDS
+        cch_agent
+        cch_harness
+        cch_tools
+        cch_coding_agent_core
+        cch_ai
+        cch_util
+        WebP::webpdecoder@webp
+    INTERFACE_DEPENDS
+        cch_agent
+        cch_harness
+        cch_tools
+        cch_coding_agent_core
+        cch_ai
+        cch_util
 )
 cch_target_defaults(cch_coding_agent_runtime)
 target_include_directories(cch_coding_agent_runtime
@@ -276,90 +350,99 @@ target_include_directories(cch_coding_agent_runtime
 target_compile_definitions(cch_coding_agent_runtime PRIVATE
     CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
-target_link_libraries(cch_coding_agent_runtime
-    PUBLIC
-        cch_agent
-        cch_harness
-        cch_tools
-        cch_coding_agent_core
-        cch_ai
-        cch_util
-    PRIVATE
-        WebP::webpdecoder
-)
 
-add_library(cch_coding_agent_interactive
-    src/coding_agent/tui/InteractiveMode.cpp
-    src/coding_agent/tui/AssistantMessageComponent.cpp
-    src/coding_agent/tui/BashExecutionComponent.cpp
-    src/coding_agent/tui/ChatContainer.cpp
-    src/coding_agent/tui/ClipboardWrite.cpp
-    src/coding_agent/tui/DiffRenderer.cpp
-    src/coding_agent/tui/ExternalEditor.cpp
-    src/coding_agent/tui/Footer.cpp
-    src/coding_agent/tui/FooterDataProvider.cpp
-    src/coding_agent/tui/KeybindingHints.cpp
-    src/coding_agent/tui/LoadedResources.cpp
-    src/coding_agent/tui/LoginDialog.cpp
-    src/coding_agent/tui/ReloadBox.cpp
-    src/coding_agent/tui/LoginPresentation.cpp
-    src/coding_agent/tui/ModelSelector.cpp
-    src/coding_agent/tui/OAuthSelector.cpp
-    src/coding_agent/tui/OpenBrowser.cpp
-    src/coding_agent/tui/ScopedModelsSelector.cpp
-    src/coding_agent/tui/SettingsSelector.cpp
-    src/coding_agent/tui/SessionSelector.cpp
-    src/coding_agent/tui/SessionSelectorSearch.cpp
-    src/coding_agent/tui/StatusIndicator.cpp
-    src/coding_agent/tui/StringListSelector.cpp
-    src/coding_agent/tui/ToolExecutionComponent.cpp
-    src/coding_agent/tui/TreeSelector.cpp
-    src/coding_agent/tui/UserMessageComponent.cpp
-    src/coding_agent/tui/UserMessageSelector.cpp
-)
-cch_target_defaults(cch_coding_agent_interactive)
-target_link_libraries(cch_coding_agent_interactive
-    PRIVATE
+cch_parity_declare_target(
+    TARGET cch_coding_agent_interactive
+    ROLE implementation
+    OWNER cch_coding_agent
+    SOURCES
+        src/coding_agent/tui/InteractiveMode.cpp
+        src/coding_agent/tui/AssistantMessageComponent.cpp
+        src/coding_agent/tui/BashExecutionComponent.cpp
+        src/coding_agent/tui/ChatContainer.cpp
+        src/coding_agent/tui/ClipboardWrite.cpp
+        src/coding_agent/tui/DiffRenderer.cpp
+        src/coding_agent/tui/ExternalEditor.cpp
+        src/coding_agent/tui/Footer.cpp
+        src/coding_agent/tui/FooterDataProvider.cpp
+        src/coding_agent/tui/KeybindingHints.cpp
+        src/coding_agent/tui/LoadedResources.cpp
+        src/coding_agent/tui/LoginDialog.cpp
+        src/coding_agent/tui/ReloadBox.cpp
+        src/coding_agent/tui/LoginPresentation.cpp
+        src/coding_agent/tui/ModelSelector.cpp
+        src/coding_agent/tui/OAuthSelector.cpp
+        src/coding_agent/tui/OpenBrowser.cpp
+        src/coding_agent/tui/ScopedModelsSelector.cpp
+        src/coding_agent/tui/SettingsSelector.cpp
+        src/coding_agent/tui/SessionSelector.cpp
+        src/coding_agent/tui/SessionSelectorSearch.cpp
+        src/coding_agent/tui/StatusIndicator.cpp
+        src/coding_agent/tui/StringListSelector.cpp
+        src/coding_agent/tui/ToolExecutionComponent.cpp
+        src/coding_agent/tui/TreeSelector.cpp
+        src/coding_agent/tui/UserMessageComponent.cpp
+        src/coding_agent/tui/UserMessageSelector.cpp
+    DEPENDS
         cch_coding_agent_runtime
         cch_coding_agent_tui
         cch_tui
         cch_util
 )
+cch_target_defaults(cch_coding_agent_interactive)
 
 # One authoritative CMake owner for the CLI/runtime composition shared by the
 # executable and the tests (build-performance-plan Stage 3, item 2). Sits above
 # the private interactive composition so the non-interactive runtime target
 # keeps no TUI dependency.
-add_library(cch_cli
-    src/cli/CliParse.cpp
-    src/cli/FrontendSelection.cpp
-    src/cli/ListModels.cpp
-    src/cli/StartupTui.cpp
-    src/coding_agent/runtime/AsyncCliRuntime.cpp
+cch_parity_declare_target(
+    TARGET cch_cli
+    ROLE composition
+    OWNER cch_coding_agent
+    SOURCES
+        src/cli/CliParse.cpp
+        src/cli/FrontendSelection.cpp
+        src/cli/ListModels.cpp
+        src/cli/StartupTui.cpp
+        src/coding_agent/runtime/AsyncCliRuntime.cpp
+    DEPENDS
+        cch_coding_agent_interactive
+        CLI11::CLI11@cli11
 )
 cch_target_defaults(cch_cli)
 target_compile_definitions(cch_cli PRIVATE CCH_PROJECT_VERSION="${PROJECT_VERSION}")
-target_link_libraries(cch_cli
-    PRIVATE
-        cch_coding_agent_interactive
-        CLI11::CLI11
-)
 
 # Transitional aggregate target for the executable/tests while the runtime is being split.
-add_library(cpp_harness_lib INTERFACE)
-target_link_libraries(cpp_harness_lib INTERFACE cch_coding_agent_runtime)
-
-add_executable(cpp_harness
-    src/main.cpp
+cch_parity_declare_target(
+    TARGET cpp_harness_lib
+    ROLE composition
+    OWNER cch_coding_agent
+    KIND interface
+    DEPENDS
+        cch_coding_agent_runtime
 )
-target_link_libraries(
-    cpp_harness
-    PRIVATE
+
+cch_parity_declare_target(
+    TARGET cpp_harness
+    ROLE composition
+    OWNER cch_coding_agent
+    KIND executable
+    SOURCES
+        src/main.cpp
+    DEPENDS
         cpp_harness_lib
         cch_cli
 )
 target_include_directories(cpp_harness PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_compile_options(cpp_harness PRIVATE ${CCH_WARNING_OPTIONS})
+
+# TEMPORARY non-blocking production audit (see #450; mandatory enforcement and
+# deletion land in #470). Reports the current migration violations with stable
+# rule IDs without failing configure, so the per-Owner contraction tickets can
+# resolve them while the build stays green.
+cch_parity_run_gate_report(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/manifest.json"
+    PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}"
+)
 
 if(CCH_BUILD_TESTS)
     # Suite-wide default hard timeout (ADR 0039; issue #447). CTest kills any

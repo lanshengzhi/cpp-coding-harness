@@ -41,6 +41,7 @@ cch_parity_declare_target(
     OWNER cch_ai
     SOURCES ${CCH_PARITY_POISON_SRC}
     DEPENDS cch_support
+    INTERFACE_DEPENDS cch_support
 )
 
 cch_parity_declare_target(

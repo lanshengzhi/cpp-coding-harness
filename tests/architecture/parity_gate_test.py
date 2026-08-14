@@ -280,6 +280,24 @@ class IndexSchemaTest(unittest.TestCase):
             pg.parse_index(data)
         self.assertEqual(raised.exception.rule_id, pg.RULE_INVALID_INDEX_VALUE)
 
+    def test_dependency_visibility_defaults_to_private(self):
+        index = valid_index()
+        for dependency in index.targets[1].dependencies:
+            self.assertEqual(dependency["visibility"], "private")
+
+    def test_dependency_visibility_is_recorded(self):
+        data = deep_copy(VALID_INDEX)
+        data["targets"][1]["dependencies"][0]["visibility"] = "public"
+        index = pg.parse_index(data)
+        self.assertEqual(index.targets[1].dependencies[0]["visibility"], "public")
+
+    def test_unknown_dependency_visibility_fails_closed(self):
+        data = deep_copy(VALID_INDEX)
+        data["targets"][1]["dependencies"][0]["visibility"] = "exported"
+        with self.assertRaises(pg.SchemaViolation) as raised:
+            pg.parse_index(data)
+        self.assertEqual(raised.exception.rule_id, pg.RULE_INVALID_INDEX_VALUE)
+
 
 class GatePolicyTest(unittest.TestCase):
     def test_legal_graph_passes(self):

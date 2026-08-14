@@ -42,6 +42,7 @@
     "md4c": { "description": "md4c Markdown parsing" },
     "webp": { "description": "libwebp image decoding" },
     "utf8proc": { "description": "utf8proc Unicode processing" },
+    "threads": { "description": "POSIX threads (pthread) system library" },
     "catch2": { "description": "Catch2 test framework" }
   },
   "evidence": [

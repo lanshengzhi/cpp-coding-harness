@@ -144,6 +144,19 @@ cch_parity_configure_case(
 # Post-generation Gate phase for the legal fixture: the generated compile
 # commands must validate cleanly against the index and direct-include evidence.
 set(legal_build_dir "${CCH_SOURCE_DIR}/build/parity-gate-fixtures/legal")
+
+# The legal fixture declares cch_ai -> cch_support as interface-visible
+# (INTERFACE_DEPENDS), so the emitted ownership index must record that
+# dependency's visibility as "public" (the constructor's other dependencies
+# default to "private").
+file(READ "${legal_build_dir}/parity-ownership-index.json" legal_index_text)
+string(FIND "${legal_index_text}"
+    "\"name\":\"cch_support\",\"family\":null,\"visibility\":\"public\""
+    public_visibility_position)
+if(public_visibility_position EQUAL -1)
+    message(FATAL_ERROR
+        "legal fixture index did not record cch_ai -> cch_support as interface-visible (public)")
+endif()
 execute_process(
     COMMAND
         "${Python3_EXECUTABLE}" "${CCH_PARITY_GATE_SCRIPT}"

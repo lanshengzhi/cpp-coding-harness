@@ -20,6 +20,12 @@ set(CCH_PARITY_INDEX_SCHEMA_VERSION "1")
 # Gate runs.
 set(CCH_PARITY_ROLES owner implementation support composition external)
 
+# Closed target-kind vocabulary for the constructor: a compiled static library
+# (default), a header-only interface library, or the final composition
+# executable. The kind only changes how the real target is created; the
+# ownership index records role/Owner/sources/dependencies identically.
+set(CCH_PARITY_TARGET_KINDS static interface executable)
+
 # Project warning defaults applied to every compiled target (CODING_STANDARDS
 # section 12.4). Kept local to the constructor so fixtures do not depend on the
 # main project's CCH_WARNING_OPTIONS variable.
@@ -37,27 +43,48 @@ function(_cch_parity_json_escape input output_variable)
     set(${output_variable} "${escaped}" PARENT_SCOPE)
 endfunction()
 
+# Splits a dependency token into its bare link-target name and optional
+# external family. A bare token `name` yields an empty family; `name@family`
+# yields the family after the `@`.
+function(_cch_parity_split_dependency token name_var family_var)
+    string(FIND "${token}" "@" at_position)
+    if(at_position EQUAL -1)
+        set(name "${token}")
+        set(family "")
+    else()
+        string(SUBSTRING "${token}" 0 ${at_position} name)
+        math(EXPR family_start "${at_position} + 1")
+        string(SUBSTRING "${token}" ${family_start} -1 family)
+    endif()
+    set(${name_var} "${name}" PARENT_SCOPE)
+    set(${family_var} "${family}" PARENT_SCOPE)
+endfunction()
+
 # cch_parity_declare_target(
 #     TARGET <name>
 #     ROLE <owner|implementation|support|composition>
 #     OWNER <package-name>            # required for every role except `external`
+#     KIND <static|interface|executable>  # default `static`
 #     SOURCES <path> [<path> ...]
 #     DEPENDS <target>|<name@family> [...]
+#     INTERFACE_DEPENDS <target>|<name@family> [...]  # PUBLIC (interface-visible) subset of DEPENDS
 #     FORCED_INCLUDES <path> [<path> ...]   # declared, scanned forced includes
 #     PCH_INPUT <path>                       # declared, scanned PCH input source
 # )
 #
 # Declares one production target, records its role/Owner/sources/dependencies
-# and declared compile context for the ownership index, and creates the
-# authoritative compiled static library. A dependency token of the form
-# `name@family` names a classified external imported target; a bare token
-# names a project target. Forced includes and the PCH input are declared and
+# (including interface visibility) and declared compile context for the
+# ownership index, and creates the real compiled target. A dependency token of
+# the form `name@family` names a classified external imported target; a bare
+# token names a project target. INTERFACE_DEPENDS names the DEPENDS subset
+# linked PUBLIC (recorded as `visibility: "public"`); every other dependency
+# is linked PRIVATE. Forced includes and the PCH input are declared and
 # scanned by the direct-include lexer; opaque `.gch`/`.pch` artifacts are
 # never declared here.
 function(cch_parity_declare_target)
     set(options "")
-    set(one_value_keywords TARGET ROLE OWNER PCH_INPUT)
-    set(multi_value_keywords SOURCES DEPENDS FORCED_INCLUDES)
+    set(one_value_keywords TARGET ROLE OWNER KIND PCH_INPUT)
+    set(multi_value_keywords SOURCES DEPENDS INTERFACE_DEPENDS FORCED_INCLUDES)
     cmake_parse_arguments(arg "${options}" "${one_value_keywords}" "${multi_value_keywords}" ${ARGN})
 
     if(arg_UNPARSED_ARGUMENTS)
@@ -86,16 +113,88 @@ function(cch_parity_declare_target)
             "cch_parity_declare_target: OWNER is required for '${arg_TARGET}' (role '${arg_ROLE}')")
     endif()
 
+    # Target kind: a compiled static library (default), a header-only interface
+    # library, or the final composition executable. The kind only changes how
+    # the real target is created; role, Owner, sources, and dependencies are
+    # recorded identically in the ownership index.
+    if(NOT DEFINED arg_KIND OR "${arg_KIND}" STREQUAL "")
+        set(kind "static")
+    else()
+        set(kind "${arg_KIND}")
+    endif()
+    if(NOT kind IN_LIST CCH_PARITY_TARGET_KINDS)
+        message(FATAL_ERROR
+            "cch_parity_declare_target: '${arg_TARGET}' has unknown KIND '${kind}'; "
+            "supported kinds: ${CCH_PARITY_TARGET_KINDS}")
+    endif()
+    if(kind STREQUAL "interface" AND arg_SOURCES)
+        message(FATAL_ERROR
+            "cch_parity_declare_target: interface target '${arg_TARGET}' must not declare SOURCES")
+    endif()
+
+    # Canonicalize declared paths to absolute form so the ownership index, the
+    # direct-include scan, and the generated compile commands share one
+    # spelling (the build-phase Gate compares them by absolute path).
+    set(abs_sources "")
+    foreach(source IN LISTS arg_SOURCES)
+        if(IS_ABSOLUTE "${source}")
+            list(APPEND abs_sources "${source}")
+        else()
+            list(APPEND abs_sources "${CMAKE_CURRENT_SOURCE_DIR}/${source}")
+        endif()
+    endforeach()
+    set(abs_forced_includes "")
+    foreach(forced IN LISTS arg_FORCED_INCLUDES)
+        if(IS_ABSOLUTE "${forced}")
+            list(APPEND abs_forced_includes "${forced}")
+        else()
+            list(APPEND abs_forced_includes "${CMAKE_CURRENT_SOURCE_DIR}/${forced}")
+        endif()
+    endforeach()
+    if(DEFINED arg_PCH_INPUT AND NOT "${arg_PCH_INPUT}" STREQUAL "")
+        if(IS_ABSOLUTE "${arg_PCH_INPUT}")
+            set(abs_pch_input "${arg_PCH_INPUT}")
+        else()
+            set(abs_pch_input "${CMAKE_CURRENT_SOURCE_DIR}/${arg_PCH_INPUT}")
+        endif()
+    else()
+        set(abs_pch_input "")
+    endif()
+
     get_property(declared GLOBAL PROPERTY CCH_PARITY_DECLARED_TARGETS)
     if(arg_TARGET IN_LIST declared)
         message(FATAL_ERROR
             "cch_parity_declare_target: target '${arg_TARGET}' is declared more than once")
     endif()
 
+    # A dependency token is either a bare project-target name or `name@family`
+    # naming a classified external imported target. The bare/external name is
+    # the real link target; `family` is only classification metadata for the
+    # Gate. INTERFACE_DEPENDS names the subset of DEPENDS that is interface-
+    # visible (linked PUBLIC); every other dependency is linked PRIVATE.
+    # Visibility is recorded in the index so the Gate can audit interface
+    # leakage without re-reading CMake source text.
+    set(depends_names "")
+    foreach(dependency IN LISTS arg_DEPENDS)
+        _cch_parity_split_dependency("${dependency}" dependency_name dependency_family)
+        list(APPEND depends_names "${dependency_name}")
+    endforeach()
+
+    set(interface_names "")
+    foreach(interface_dep IN LISTS arg_INTERFACE_DEPENDS)
+        _cch_parity_split_dependency("${interface_dep}" interface_name interface_family)
+        if(NOT interface_name IN_LIST depends_names)
+            message(FATAL_ERROR
+                "cch_parity_declare_target: '${arg_TARGET}' marks '${interface_name}' as "
+                "interface-visible but it is not listed in DEPENDS")
+        endif()
+        list(APPEND interface_names "${interface_name}")
+    endforeach()
+
     set(json "{\"name\":\"${arg_TARGET}\",\"role\":\"${arg_ROLE}\",\"owner\":\"${arg_OWNER}\"")
     string(APPEND json ",\"sources\":[")
     set(first TRUE)
-    foreach(source IN LISTS arg_SOURCES)
+    foreach(source IN LISTS abs_sources)
         _cch_parity_json_escape("${source}" escaped_source)
         if(NOT first)
             string(APPEND json ",")
@@ -104,36 +203,36 @@ function(cch_parity_declare_target)
         set(first FALSE)
     endforeach()
     string(APPEND json "]")
-
-    # A dependency token is either a bare project-target name or `name@family`
-    # naming a classified external imported target. The bare/external name is
-    # the real link target; `family` is only classification metadata for the
-    # Gate. Both are recorded in the index and linked into the configured graph.
     string(APPEND json ",\"dependencies\":[")
     set(first TRUE)
     set(link_dependencies "")
+    set(interface_link_dependencies "")
+    set(private_link_dependencies "")
     foreach(dependency IN LISTS arg_DEPENDS)
-        string(FIND "${dependency}" "@" at_position)
-        if(at_position EQUAL -1)
-            set(dependency_name "${dependency}")
-            set(dependency_family "")
-        else()
-            string(SUBSTRING "${dependency}" 0 ${at_position} dependency_name)
-            math(EXPR family_start "${at_position} + 1")
-            string(SUBSTRING "${dependency}" ${family_start} -1 dependency_family)
-        endif()
+        _cch_parity_split_dependency("${dependency}" dependency_name dependency_family)
         _cch_parity_json_escape("${dependency_name}" escaped_name)
-        _cch_parity_json_escape("${dependency_family}" escaped_family)
+        if(dependency_family STREQUAL "")
+            set(family_json "null")
+        else()
+            _cch_parity_json_escape("${dependency_family}" escaped_family)
+            set(family_json "\"${escaped_family}\"")
+        endif()
+        if(kind STREQUAL "interface" OR dependency_name IN_LIST interface_names)
+            set(visibility "\"public\"")
+        else()
+            set(visibility "\"private\"")
+        endif()
         if(NOT first)
             string(APPEND json ",")
         endif()
-        if(dependency_family STREQUAL "")
-            string(APPEND json "{\"name\":\"${escaped_name}\",\"family\":null}")
-        else()
-            string(APPEND json "{\"name\":\"${escaped_name}\",\"family\":\"${escaped_family}\"}")
-        endif()
+        string(APPEND json "{\"name\":\"${escaped_name}\",\"family\":${family_json},\"visibility\":${visibility}}")
         set(first FALSE)
         list(APPEND link_dependencies "${dependency_name}")
+        if(kind STREQUAL "interface" OR dependency_name IN_LIST interface_names)
+            list(APPEND interface_link_dependencies "${dependency_name}")
+        else()
+            list(APPEND private_link_dependencies "${dependency_name}")
+        endif()
     endforeach()
     # Declared compile context: forced includes and the PCH input source are
     # recorded in the index so the Gate can validate that every forced include
@@ -142,7 +241,7 @@ function(cch_parity_declare_target)
     string(APPEND json "]")
     string(APPEND json ",\"forced_includes\":[")
     set(first TRUE)
-    foreach(forced IN LISTS arg_FORCED_INCLUDES)
+    foreach(forced IN LISTS abs_forced_includes)
         _cch_parity_json_escape("${forced}" escaped_forced)
         if(NOT first)
             string(APPEND json ",")
@@ -151,8 +250,8 @@ function(cch_parity_declare_target)
         set(first FALSE)
     endforeach()
     string(APPEND json "]")
-    if(DEFINED arg_PCH_INPUT AND NOT "${arg_PCH_INPUT}" STREQUAL "")
-        _cch_parity_json_escape("${arg_PCH_INPUT}" escaped_pch)
+    if(NOT "${abs_pch_input}" STREQUAL "")
+        _cch_parity_json_escape("${abs_pch_input}" escaped_pch)
         string(APPEND json ",\"pch_input\":\"${escaped_pch}\"")
     else()
         string(APPEND json ",\"pch_input\":null")
@@ -161,28 +260,45 @@ function(cch_parity_declare_target)
     string(APPEND json "}")
     set_property(GLOBAL APPEND PROPERTY CCH_PARITY_DECLARATIONS "${json}")
     set_property(GLOBAL APPEND PROPERTY CCH_PARITY_DECLARED_TARGETS "${arg_TARGET}")
-    set_property(GLOBAL APPEND PROPERTY CCH_PARITY_SOURCES ${arg_SOURCES})
-    set_property(GLOBAL APPEND PROPERTY CCH_PARITY_FORCED_INCLUDES ${arg_FORCED_INCLUDES})
-    if(DEFINED arg_PCH_INPUT AND NOT "${arg_PCH_INPUT}" STREQUAL "")
-        set_property(GLOBAL APPEND PROPERTY CCH_PARITY_PCH_INPUTS "${arg_PCH_INPUT}")
+    set_property(GLOBAL APPEND PROPERTY CCH_PARITY_SOURCES ${abs_sources})
+    set_property(GLOBAL APPEND PROPERTY CCH_PARITY_FORCED_INCLUDES ${abs_forced_includes})
+    if(NOT "${abs_pch_input}" STREQUAL "")
+        set_property(GLOBAL APPEND PROPERTY CCH_PARITY_PCH_INPUTS "${abs_pch_input}")
     endif()
 
-    # The declaration is real configured evidence: the authoritative compiled
-    # static library carries the project warning defaults and the declared
-    # unconditional direct dependencies become actual link edges, so the Gate
-    # validates the configured graph rather than source formatting. Forced
-    # includes and the PCH input become real compile context so the generated
-    # compile commands carry the same declared context the Gate validates.
-    add_library(${arg_TARGET} STATIC ${arg_SOURCES})
-    target_compile_options(${arg_TARGET} PRIVATE ${CCH_PARITY_WARNING_OPTIONS})
-    foreach(forced IN LISTS arg_FORCED_INCLUDES)
-        target_compile_options(${arg_TARGET} PRIVATE -include "${forced}")
-    endforeach()
-    if(DEFINED arg_PCH_INPUT AND NOT "${arg_PCH_INPUT}" STREQUAL "")
-        target_compile_options(${arg_TARGET} PRIVATE -include "${arg_PCH_INPUT}")
+    # The declaration is real configured evidence: the target carries the
+    # project warning defaults, interface-visible dependencies become PUBLIC
+    # link edges, private dependencies stay PRIVATE, and declared forced
+    # includes/PCH input become real compile context the Gate validates.
+    if(kind STREQUAL "interface")
+        add_library(${arg_TARGET} INTERFACE)
+    elseif(kind STREQUAL "executable")
+        add_executable(${arg_TARGET} ${abs_sources})
+        target_compile_options(${arg_TARGET} PRIVATE ${CCH_PARITY_WARNING_OPTIONS})
+    else()
+        add_library(${arg_TARGET} STATIC ${abs_sources})
+        target_compile_options(${arg_TARGET} PRIVATE ${CCH_PARITY_WARNING_OPTIONS})
+    endif()
+    if(NOT kind STREQUAL "interface")
+        foreach(forced IN LISTS abs_forced_includes)
+            target_compile_options(${arg_TARGET} PRIVATE -include "${forced}")
+        endforeach()
+        if(NOT "${abs_pch_input}" STREQUAL "")
+            target_compile_options(${arg_TARGET} PRIVATE -include "${abs_pch_input}")
+        endif()
     endif()
     if(link_dependencies)
-        target_link_libraries(${arg_TARGET} PRIVATE ${link_dependencies})
+        if(kind STREQUAL "interface")
+            target_link_libraries(${arg_TARGET} INTERFACE ${link_dependencies})
+        elseif(interface_link_dependencies AND private_link_dependencies)
+            target_link_libraries(${arg_TARGET}
+                PUBLIC ${interface_link_dependencies}
+                PRIVATE ${private_link_dependencies})
+        elseif(interface_link_dependencies)
+            target_link_libraries(${arg_TARGET} PUBLIC ${interface_link_dependencies})
+        else()
+            target_link_libraries(${arg_TARGET} PRIVATE ${private_link_dependencies})
+        endif()
     endif()
 endfunction()
 
@@ -289,4 +405,109 @@ function(cch_parity_run_gate manifest_path)
             "Parity Architecture Gate rejected the configured graph:\n${gate_output}${gate_error}")
     endif()
     message(STATUS "${gate_output}")
+endfunction()
+
+# ---------------------------------------------------------------------------
+# TEMPORARY non-blocking production audit — DELETE when mandatory production
+# enforcement lands (#470).
+#
+# Production configure runs the same fail-closed Gate validator as the
+# fixtures (emit the ownership index, scan direct includes, validate against
+# the strict manifest) but reports policy violations instead of failing
+# configuration. The current production graph still carries the known
+# migration violations that the per-Owner contraction tickets resolve:
+#
+#   * the legacy `cch_util` target and `cch/util` header root (#469);
+#   * the `cch/harness` and `cch/tools` interface roots (#460);
+#   * the reverse `cch_agent_core -> cch_coding_agent` ModelRuntime edge
+#     (`cch_agent` -> `cch_coding_agent_core`, #456/#460);
+#   * the non-authoritative `cch_coding_agent -> cch_harness/cch_tools` edges
+#     (`cch_coding_agent_runtime` -> `cch_harness`/`cch_tools`, #460).
+#
+# Reporting keeps those violations visible under their stable rule IDs without
+# blocking the build, while incomplete or missing evidence still fails loudly
+# so no violation can disappear through a skipped declaration. Do not extend
+# this function or depend on its non-blocking behavior: #470 replaces it with
+# mandatory enforcement and deletes it.
+# ---------------------------------------------------------------------------
+function(cch_parity_run_gate_report manifest_path)
+    set(options "")
+    set(one_value_keywords PROJECT_ROOT)
+    set(multi_value_keywords "")
+    cmake_parse_arguments(gate "${options}" "${one_value_keywords}" "${multi_value_keywords}" ${ARGN})
+
+    if(NOT EXISTS "${CCH_PARITY_GATE_SCRIPT}")
+        message(FATAL_ERROR "Parity Architecture Gate validator not found: '${CCH_PARITY_GATE_SCRIPT}'")
+    endif()
+
+    set(index_path "${CMAKE_BINARY_DIR}/parity-ownership-index.json")
+    cch_parity_emit_index("${index_path}")
+
+    find_package(Python3 3.12 COMPONENTS Interpreter REQUIRED)
+
+    # Scan every declared source, forced include, and PCH input in all source
+    # text branches, producing the direct-include evidence the Gate resolves.
+    # A scan failure means the evidence is incomplete, which must fail loudly
+    # rather than disappear as a clean report.
+    get_property(scan_sources GLOBAL PROPERTY CCH_PARITY_SOURCES)
+    get_property(scan_forced GLOBAL PROPERTY CCH_PARITY_FORCED_INCLUDES)
+    get_property(scan_pch GLOBAL PROPERTY CCH_PARITY_PCH_INPUTS)
+    set(direct_includes_path "${CMAKE_BINARY_DIR}/parity-direct-includes.json")
+    execute_process(
+        COMMAND
+            "${Python3_EXECUTABLE}" "${CCH_PARITY_GATE_SCRIPT}"
+            --out "${direct_includes_path}"
+            --sources ${scan_sources} ${scan_forced} ${scan_pch}
+        RESULT_VARIABLE scan_result
+        OUTPUT_VARIABLE scan_output
+        ERROR_VARIABLE scan_error
+    )
+    if(NOT scan_result EQUAL 0)
+        message(FATAL_ERROR
+            "Parity Architecture Gate could not scan direct includes:\n${scan_output}${scan_error}")
+    endif()
+
+    set(gate_base_command
+        "${Python3_EXECUTABLE}" "${CCH_PARITY_GATE_SCRIPT}"
+        --manifest "${manifest_path}"
+        --index "${index_path}"
+        --direct-includes "${direct_includes_path}"
+    )
+    if(DEFINED gate_PROJECT_ROOT AND NOT "${gate_PROJECT_ROOT}" STREQUAL "")
+        list(APPEND gate_base_command --project-root "${gate_PROJECT_ROOT}")
+    endif()
+
+    # Deterministic JSON report for automation, then the human report for the
+    # configure log. The validator always writes its report to stdout and uses
+    # exit code 1 to signal found violations, so the report is written
+    # regardless of the exit code; only an empty report is a hard failure.
+    set(json_command ${gate_base_command} --format json)
+    execute_process(
+        COMMAND ${json_command}
+        RESULT_VARIABLE json_result
+        OUTPUT_VARIABLE json_output
+        ERROR_VARIABLE json_error
+    )
+    if(json_output STREQUAL "")
+        message(FATAL_ERROR
+            "Parity Architecture Gate produced no machine-readable report:\n${json_error}")
+    endif()
+    file(WRITE "${CMAKE_BINARY_DIR}/parity-production-audit.json" "${json_output}")
+
+    set(human_command ${gate_base_command} --format human)
+    execute_process(
+        COMMAND ${human_command}
+        RESULT_VARIABLE gate_result
+        OUTPUT_VARIABLE gate_output
+        ERROR_VARIABLE gate_error
+    )
+    if(gate_result EQUAL 0)
+        message(STATUS "Parity Architecture Gate (production audit): PASS")
+    else()
+        message(WARNING
+            "Parity Architecture Gate: TEMPORARY non-blocking production audit reports "
+            "migration violations (mandatory enforcement lands in #470); see "
+            "${CMAKE_BINARY_DIR}/parity-production-audit.json")
+        message(STATUS "${gate_output}${gate_error}")
+    endif()
 endfunction()

@@ -612,7 +612,7 @@ def parse_index(data: Any) -> Index:
             dep_context = f"{target_context}.dependencies[{dep_position}]"
             _require_object(dep, dep_context, RULE_INVALID_INDEX_VALUE)
             _check_unknown_keys(
-                dep, frozenset({"name", "family"}), dep_context, RULE_UNKNOWN_INDEX_FIELD
+                dep, frozenset({"name", "family", "visibility"}), dep_context, RULE_UNKNOWN_INDEX_FIELD
             )
             dep_name = _require_string(
                 _require_member(dep, "name", dep_context, RULE_MISSING_INDEX_FIELD),
@@ -626,7 +626,17 @@ def parse_index(data: Any) -> Index:
                     RULE_INVALID_INDEX_VALUE,
                     f"field 'family' at {dep_context} must be a string or null",
                 )
-            dependencies.append({"name": dep_name, "family": dep_family})
+            # ``visibility`` records whether the dependency is interface-visible
+            # (PUBLIC link, ``"public"``) or private (``"private"``). It is
+            # optional in the index schema (older producers omit it) and
+            # defaults to private; a present value must be one of the two.
+            dep_visibility = dep.get("visibility", "private")
+            if dep_visibility not in ("public", "private"):
+                _fail(
+                    RULE_INVALID_INDEX_VALUE,
+                    f"field 'visibility' at {dep_context} must be 'public' or 'private'",
+                )
+            dependencies.append({"name": dep_name, "family": dep_family, "visibility": dep_visibility})
 
         forced_includes_value = entry.get("forced_includes", [])
         if not isinstance(forced_includes_value, list) or any(
