@@ -532,6 +532,7 @@ if(CCH_BUILD_TESTS)
         tests/util/ExpectedMacrosTest.cpp
         tests/util/JsonValueIoTest.cpp
         tests/util/OutputLimiterTest.cpp
+        tests/util/ProcessTest.cpp
         tests/util/RedactorTest.cpp
         tests/util/TestRunnerIsolationTest.cpp
 )

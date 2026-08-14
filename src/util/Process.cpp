@@ -5,7 +5,6 @@
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/co_spawn.hpp>
-#include <boost/asio/deferred.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
@@ -32,6 +31,7 @@ struct OutputCapture {
     std::size_t bytes{0};
     std::size_t lines{0};
     bool truncated{false};
+    bool callback_failed{false};
 };
 
 void append_limited(
@@ -53,10 +53,17 @@ void append_limited(
             }
         }
     }
-    // Invoke callback with the chunk we read (before truncation). A throwing
-    // callback propagates and becomes an execution error at the caller level.
+    // Invoke the callback with the full chunk so live consumers keep observing
+    // the stream even after retained output stops growing. A throwing callback
+    // is contained: it deactivates itself and is recorded, but the pipe keeps
+    // draining to EOF so a full pipe can never strand the child process.
     if (callback) {
-        (*callback)(std::string_view(data, size));
+        try {
+            (*callback)(std::string_view(data, size));
+        } catch (...) {
+            callback.reset();
+            capture.callback_failed = true;
+        }
     }
     if (offset < size) {
         capture.truncated = true;
@@ -214,20 +221,38 @@ boost::asio::awaitable<Expected<ProcessResult>> DefaultAsyncProcessRunner::run(P
 
         ChildGuard guard(child, process_group);
 
-        // Move callbacks into the drain coroutines.
-        auto stdout_drain = boost::asio::co_spawn(
-            executor,
-            drain_pipe(stdout_pipe, request.output_limit, std::move(request.on_stdout)),
-            boost::asio::deferred);
+        // Spawn the drains with completion handlers so they start immediately
+        // and run concurrently with the child-wait loop below. A child that
+        // writes more than the kernel pipe buffer would otherwise block forever
+        // on a full pipe and never reach EOF, deadlocking until timeout or
+        // cancellation. The handlers capture these locals by reference; the
+        // drain-completion wait below guarantees the captures outlive them.
+        OutputCapture stdout_capture;
+        OutputCapture stderr_capture;
+        bool stdout_done = false;
         // A merged stderr shares the stdout pipe, so it never gets a separate
         // drain (its pipe has no writer and would block a reader forever).
-        using DrainAwaitable = decltype(stdout_drain);
-        std::optional<DrainAwaitable> stderr_drain;
+        bool stderr_done = stderr_merged;
+        std::exception_ptr stdout_exception;
+        std::exception_ptr stderr_exception;
+
+        boost::asio::co_spawn(
+            executor,
+            drain_pipe(stdout_pipe, request.output_limit, std::move(request.on_stdout)),
+            [&](std::exception_ptr e, OutputCapture capture) {
+                stdout_capture = std::move(capture);
+                stdout_exception = e;
+                stdout_done = true;
+            });
         if (!stderr_merged) {
-            stderr_drain.emplace(boost::asio::co_spawn(
+            boost::asio::co_spawn(
                 executor,
                 drain_pipe(stderr_pipe, request.output_limit, std::move(request.on_stderr)),
-                boost::asio::deferred));
+                [&](std::exception_ptr e, OutputCapture capture) {
+                    stderr_capture = std::move(capture);
+                    stderr_exception = e;
+                    stderr_done = true;
+                });
         }
 
         ProcessResult result;
@@ -261,6 +286,11 @@ boost::asio::awaitable<Expected<ProcessResult>> DefaultAsyncProcessRunner::run(P
             timer.expires_after(sleep_ms);
             auto [ec] = co_await timer.async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
             if (ec && ec != boost::asio::error::operation_aborted) {
+                // An unrecoverable timer error: stop the child so the
+                // drain-completion wait below cannot strand on a live child.
+                stdout_pipe.cancel();
+                stderr_pipe.cancel();
+                request_supported_termination(child, process_group);
                 break;
             }
         }
@@ -287,22 +317,22 @@ boost::asio::awaitable<Expected<ProcessResult>> DefaultAsyncProcessRunner::run(P
             }
         }
 
-        OutputCapture stdout_capture;
-        OutputCapture stderr_capture;
-        bool callback_error = false;
+        // Wait for both drains to finish: EOF after a normal child exit, or
+        // the operation_aborted delivered by the cancel calls above.
+        while (!(stdout_done && stderr_done)) {
+            timer.expires_after(poll_interval);
+            auto [ec] = co_await timer.async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
+            (void)ec;
+        }
 
-        try {
-            stdout_capture = co_await std::move(stdout_drain);
-        } catch (...) {
-            callback_error = true;
+        if (stdout_exception) {
+            std::rethrow_exception(stdout_exception);
         }
-        if (stderr_drain) {
-            try {
-                stderr_capture = co_await std::move(*stderr_drain);
-            } catch (...) {
-                callback_error = true;
-            }
+        if (stderr_exception) {
+            std::rethrow_exception(stderr_exception);
         }
+        const bool callback_error =
+            stdout_capture.callback_failed || stderr_capture.callback_failed;
 
         if (child.joinable()) {
             if (result.timed_out) {

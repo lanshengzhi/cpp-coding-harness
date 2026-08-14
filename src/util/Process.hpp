@@ -26,9 +26,12 @@ struct ProcessRequest {
     OutputLimit output_limit;
     std::stop_token stop_token;
 
-    /// Called with stdout chunks as they are produced.
+    /// Called with stdout chunks as they are produced. A throwing callback is
+    /// contained: it is deactivated after its first exception and the failure
+    /// surfaces as a Process error result, while the pipe keeps draining.
     std::optional<std::move_only_function<void(std::string_view)>> on_stdout;
-    /// Called with stderr chunks as they are produced.
+    /// Called with stderr chunks as they are produced. Failure containment is
+    /// the same as on_stdout.
     std::optional<std::move_only_function<void(std::string_view)>> on_stderr;
     /// Redirect stderr into the stdout pipe at spawn so one consumer observes
     /// both streams in process emission order. Honored only on Linux/macOS;
