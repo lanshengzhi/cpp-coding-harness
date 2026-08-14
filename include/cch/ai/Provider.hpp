@@ -7,7 +7,7 @@
 #include <cch/ai/ModelStream.hpp>
 #include <cch/ai/RequestOptions.hpp>
 #include <cch/ai/StreamEvent.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstdint>
 #include <optional>

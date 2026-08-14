@@ -2,7 +2,7 @@
 
 #include <cch/ai/Auth.hpp>
 #include <cch/ai/Model.hpp>
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstdint>
 #include <functional>
@@ -18,7 +18,7 @@ enum class CacheRetention { None, Short, Long };
 /// Request headers preserve explicit null deletion until Models completes its
 /// case-insensitive post-auth merge.
 using RequestHeaders = std::map<std::string, std::optional<std::string>, std::less<>>;
-using TransformHeadersHook = std::move_only_function<util::Expected<RequestHeaders>(RequestHeaders)>;
+using TransformHeadersHook = std::move_only_function<cch::support::Expected<RequestHeaders>(RequestHeaders)>;
 
 /// Exact caller-facing option set accepted by Models::streamSimple at the
 /// frozen pi baseline. Authentication and the transform hook are stripped

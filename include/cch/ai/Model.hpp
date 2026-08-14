@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstdint>
 #include <map>
@@ -64,7 +64,7 @@ struct Model {
     std::optional<AnthropicMessagesCompat> compat{std::nullopt};
 };
 
-[[nodiscard]] util::ExpectedVoid validate_model(const Model& model);
+[[nodiscard]] cch::support::ExpectedVoid validate_model(const Model& model);
 [[nodiscard]] std::vector<ModelThinkingLevel> get_supported_thinking_levels(const Model& model);
 [[nodiscard]] ModelThinkingLevel clamp_thinking_level(
     const Model& model,

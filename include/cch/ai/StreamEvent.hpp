@@ -4,7 +4,7 @@
 #include "Message.hpp"
 #include "Usage.hpp"
 
-#include <cch/util/Error.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstddef>
 #include <functional>
@@ -79,7 +79,7 @@ struct AssistantErrorEvent {
     AssistantMessage error{};
     /// Models-category enrichment for request/runtime failures. Provider
     /// terminal events may omit it when no Models category applies.
-    std::optional<util::Error> failure{std::nullopt};
+    std::optional<cch::support::Error> failure{std::nullopt};
 };
 
 using AssistantStreamEvent = std::variant<
@@ -96,6 +96,6 @@ using AssistantStreamEvent = std::variant<
     AssistantDoneEvent,
     AssistantErrorEvent>;
 
-using AssistantEventSink = std::move_only_function<util::ExpectedVoid(const AssistantStreamEvent&)>;
+using AssistantEventSink = std::move_only_function<cch::support::ExpectedVoid(const AssistantStreamEvent&)>;
 
 } // namespace cch::ai

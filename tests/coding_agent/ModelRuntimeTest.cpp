@@ -106,27 +106,36 @@ public:
         ai::ApiKeyAuth api_key;
         api_key.name = "scripted";
         api_key.login = [](ai::AuthInteraction)
-            -> boost::asio::awaitable<util::Expected<ai::ApiKeyCredential>> {
+            -> cch::support::AsyncResult<ai::ApiKeyCredential> {
             ai::ApiKeyCredential credential;
             credential.key = "dummy-login-key";
-            co_return credential;
+            return cch::support::AsyncResult<ai::ApiKeyCredential>(
+                std::expected<ai::ApiKeyCredential, cch::support::Error>{credential});
         };
         api_key.check = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential> credential)
-            -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>> {
+            -> cch::support::AsyncResult<std::optional<ai::AuthCheck>> {
             if (credential && credential->key) {
-                co_return ai::AuthCheck{.source = "stored credential", .type = ai::AuthType::ApiKey};
+                return cch::support::AsyncResult<std::optional<ai::AuthCheck>>(
+                    std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{
+                        ai::AuthCheck{.source = "stored credential", .type = ai::AuthType::ApiKey}});
             }
-            co_return std::optional<ai::AuthCheck>{};
+            return cch::support::AsyncResult<std::optional<ai::AuthCheck>>(
+                std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{
+                    std::optional<ai::AuthCheck>{}});
         };
         api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential> credential)
-            -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> {
+            -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
             if (credential && credential->key) {
-                co_return ai::AuthResult{
-                    .auth = ai::ModelAuth{.api_key = *credential->key},
-                    .source = "stored credential",
-                };
+                return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
+                    std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
+                        ai::AuthResult{
+                            .auth = ai::ModelAuth{.api_key = *credential->key},
+                            .source = "stored credential",
+                        }});
             }
-            co_return std::optional<ai::AuthResult>{};
+            return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
+                std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
+                    std::optional<ai::AuthResult>{}});
         };
         auth_.api_key = std::move(api_key);
     }
@@ -308,11 +317,11 @@ TEST_CASE("ModelRuntime config-only provider streams the frozen deepseek wire pa
     options.timeout_ms = 4321;
 
     std::vector<ai::AssistantStreamEvent> events;
-    auto result = run_awaitable(ai::consume(
+    auto result = run_async_result(
         (*runtime)->ai_models()->stream(
             *model,
             request_context(),
-            std::move(options)),
+            std::move(options)).run(
         [&events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
             events.push_back(event);
             return {};
@@ -494,9 +503,9 @@ TEST_CASE("ModelRuntime env-template apiKey resolves at request time", "[coding_
 
     ai::SimpleStreamOptions options;
     options.max_tokens = 16;
-    auto result = run_awaitable(ai::consume(
+    auto result = run_async_result(
         (*runtime)->ai_models()->stream(
-            *model, {}, std::move(options)),
+            *model, {}, std::move(options)).run(
         [](const ai::AssistantStreamEvent&) { return util::ExpectedVoid{}; }));
     REQUIRE(result);
     REQUIRE(transport->requests.size() == 1);
@@ -536,10 +545,11 @@ TEST_CASE("ModelRuntime resolves the pi 4-level auth precedence chain", "[coding
         auto stored = run_async_result(storage->modify(
             std::move(provider_id),
             [key = std::move(key)](std::optional<ai::Credential>)
-                -> boost::asio::awaitable<
-                    util::Expected<std::optional<ai::Credential>>> {
-                co_return std::optional<ai::Credential>{
-                    ai::ApiKeyCredential{.key = key}};
+                -> cch::support::AsyncResult<std::optional<ai::Credential>> {
+                return cch::support::AsyncResult<std::optional<ai::Credential>>(
+                    std::expected<std::optional<ai::Credential>, cch::support::Error>{
+                        std::optional<ai::Credential>{
+                            ai::ApiKeyCredential{.key = key}}});
             }));
         REQUIRE(stored);
     };
@@ -637,9 +647,9 @@ TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a proces
 
     ai::SimpleStreamOptions options;
     options.max_tokens = 16;
-    auto result = run_awaitable(ai::consume(
+    auto result = run_async_result(
         (*runtime)->ai_models()->stream(
-            *model, {}, std::move(options)),
+            *model, {}, std::move(options)).run(
         [](const ai::AssistantStreamEvent&) { return util::ExpectedVoid{}; }));
     REQUIRE(result);
     REQUIRE(transport->requests.size() == 1);

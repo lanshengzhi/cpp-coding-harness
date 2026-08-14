@@ -1,5 +1,7 @@
 #include <cch/ai/Model.hpp>
 
+#include <cch/util/Error.hpp>
+
 #include "ai/ModelThinkingLevel.hpp"
 
 #include <cmath>

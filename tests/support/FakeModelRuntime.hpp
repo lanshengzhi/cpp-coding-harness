@@ -130,15 +130,19 @@ inline ScriptedRuntimeProvider::ScriptedRuntimeProvider(FakeModelRuntime* owner)
     ai::ApiKeyAuth api_key;
     api_key.name = "scripted fake runtime";
     api_key.check = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
-        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>> {
-        co_return ai::AuthCheck{
-            .source = "scripted fake runtime",
-            .type = ai::AuthType::ApiKey,
-        };
+        -> cch::support::AsyncResult<std::optional<ai::AuthCheck>> {
+        return cch::support::AsyncResult<std::optional<ai::AuthCheck>>(
+            std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{
+                ai::AuthCheck{
+                    .source = "scripted fake runtime",
+                    .type = ai::AuthType::ApiKey,
+                }});
     };
     api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
-        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> {
-        co_return ai::AuthResult{.source = "scripted fake runtime"};
+        -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
+        return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
+            std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
+                ai::AuthResult{.source = "scripted fake runtime"}});
     };
     auth_ = ai::ProviderAuth{.api_key = std::move(api_key)};
 }

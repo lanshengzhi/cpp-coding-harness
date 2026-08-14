@@ -5,9 +5,8 @@
 #include <cch/ai/ModelStream.hpp>
 #include <cch/ai/Provider.hpp>
 #include <cch/ai/RequestOptions.hpp>
-#include <cch/util/Error.hpp>
-
-#include <boost/asio/awaitable.hpp>
+#include <cch/support/AsyncResult.hpp>
+#include <cch/support/Error.hpp>
 
 #include <expected>
 #include <functional>
@@ -40,7 +39,7 @@ public:
     Models(const Models&) = delete;
     Models& operator=(const Models&) = delete;
 
-    [[nodiscard]] util::ExpectedVoid set_provider(std::shared_ptr<Provider> provider);
+    [[nodiscard]] cch::support::ExpectedVoid set_provider(std::shared_ptr<Provider> provider);
     void delete_provider(std::string_view provider_id);
     void clear_providers();
 
@@ -53,27 +52,27 @@ public:
 
     /// Side-effect-free authentication status. OAuth credentials are never
     /// refreshed by this operation.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<AuthCheck>>> check_auth(
+    [[nodiscard]] cch::support::AsyncResult<std::optional<AuthCheck>> check_auth(
         std::string provider_id);
 
     /// Live authentication resolution. OAuth refresh is double-checked and
     /// persisted through CredentialStore::modify immediately before use.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<AuthResult>>> get_auth(
+    [[nodiscard]] cch::support::AsyncResult<std::optional<AuthResult>> get_auth(
         std::string provider_id,
         std::optional<std::string> explicit_api_key = std::nullopt);
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<AuthResult>>> get_auth(
+    [[nodiscard]] cch::support::AsyncResult<std::optional<AuthResult>> get_auth(
         Model model,
         std::optional<std::string> explicit_api_key = std::nullopt);
 
     /// Remove a locally stored credential. No remote revocation is attempted.
-    [[nodiscard]] boost::asio::awaitable<util::ExpectedVoid> logout(
+    [[nodiscard]] cch::support::AsyncResult<void> logout(
         std::string provider_id);
 
     /// Run a provider-owned login flow and persist its returned credential via
     /// CredentialStore::modify, the only write path. Login-flow failures
     /// propagate unwrapped to the host; only CredentialStore failures wrap as
     /// the `auth` category. Login errors never enter the stream error channel.
-    [[nodiscard]] boost::asio::awaitable<util::Expected<Credential>> login(
+    [[nodiscard]] cch::support::AsyncResult<Credential> login(
         std::string provider_id,
         AuthType type,
         AuthInteraction interaction);
@@ -96,14 +95,6 @@ public:
 private:
     std::unique_ptr<Impl> impl_;
 };
-
-/// Boost.Asio bridge for consuming a `ModelStream` from within an asio
-/// coroutine (the Agent's serialized domain). Events flow through `sink` in
-/// order before exactly one terminal `std::expected<AssistantMessage, Error>`.
-/// The `ModelStream` value itself never names a third-party execution type;
-/// this bridge is the one place the private executor association lives.
-[[nodiscard]] boost::asio::awaitable<std::expected<AssistantMessage, cch::support::Error>>
-consume(ModelStream stream, AssistantEventSink sink);
 
 /// Produces one move-only `ModelStream` per call. The closure deliberately
 /// shares the Models Runtime lifetime (ADR 0040). The executor capture stays

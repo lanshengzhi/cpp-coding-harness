@@ -184,20 +184,19 @@ cch_parity_declare_target(
         src/ai/providers/SseParser.cpp
         src/ai/utils/RetryClassifier.cpp
     DEPENDS
+        cch_support
         cch_util
         OpenSSL::SSL@openssl
         OpenSSL::Crypto@openssl
     INTERFACE_DEPENDS
-        cch_util
+        cch_support
 )
 cch_target_defaults(cch_ai)
 
 # ModelRuntime closure (Model/Models composition + Agent Config Directory + auth
-# storage). Lives below cch_agent so the stateful Agent can be constructed on
-# the sole injectable ModelRuntime seam (#326/#331) without a dependency cycle.
-# NOTE: this is a known migration violation — cch_agent (Owner cch_agent_core)
-# depending on a cch_coding_agent implementation target reverses the Owner DAG
-# and is reported (non-blocking) by the production audit until #456/#460.
+# storage). The stateful Agent no longer depends on the coding-agent ModelRuntime
+# seam: it consumes the AI-owned move-only ModelStream (ADR 0040 / #453), so the
+# former reverse-DAG edge cch_agent -> cch_coding_agent_core is removed (#456).
 cch_parity_declare_target(
     TARGET cch_coding_agent_core
     ROLE implementation
@@ -230,11 +229,9 @@ cch_parity_declare_target(
         src/agent/ToolArgumentPreparation.cpp
         src/agent/ToolCallExecutor.cpp
     DEPENDS
-        cch_coding_agent_core
         cch_ai
         cch_util
     INTERFACE_DEPENDS
-        cch_coding_agent_core
         cch_ai
         cch_util
 )

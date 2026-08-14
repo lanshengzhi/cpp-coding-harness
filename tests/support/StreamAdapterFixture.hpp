@@ -62,23 +62,11 @@ template <typename T, typename E>
 }
 
 /// Run a `CredentialModifyHook` to completion on a throwaway io_context. Test
-/// fakes use this to consume an asio-awaitable modifier inside a plain
-/// `AsyncResult`-returning method; real hooks used by fakes are deterministic
-/// and never perform blocking I/O.
+/// fakes use this to consume a modifier hook inside a plain `AsyncResult`-returning
+/// method; real hooks used by fakes are deterministic and never perform blocking I/O.
 template <typename T>
-[[nodiscard]] util::Expected<T> run_hook(boost::asio::awaitable<util::Expected<T>> hook) {
-    boost::asio::io_context io;
-    auto future = boost::asio::co_spawn(io, std::move(hook), boost::asio::use_future);
-    io.run();
-    try {
-        return future.get();
-    } catch (const std::exception&) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown, "modifier hook failed"));
-    } catch (...) {
-        return std::unexpected(util::make_error(
-            util::ErrorCode::Unknown, "modifier hook failed"));
-    }
+[[nodiscard]] util::Expected<T> run_hook(cch::support::AsyncResult<T> hook) {
+    return run_async_result(std::move(hook));
 }
 
 class EmptyCredentialStore final : public ai::CredentialStore {
@@ -112,14 +100,17 @@ public:
 
 class EmptyAuthContext final : public ai::AuthContext {
 public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<std::string>>> environment(
+    [[nodiscard]] cch::support::AsyncResult<std::optional<std::string>> environment(
         std::string) const override {
-        co_return std::optional<std::string>{};
+        return cch::support::AsyncResult<std::optional<std::string>>(
+            std::expected<std::optional<std::string>, cch::support::Error>{
+                std::optional<std::string>{}});
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<bool>> file_exists(
+    [[nodiscard]] cch::support::AsyncResult<bool> file_exists(
         std::string) const override {
-        co_return false;
+        return cch::support::AsyncResult<bool>(
+            std::expected<bool, cch::support::Error>{false});
     }
 };
 

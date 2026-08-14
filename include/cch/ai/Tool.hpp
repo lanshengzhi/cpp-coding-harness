@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../util/JsonValue.hpp"
+#include <cch/support/JsonValue.hpp>
 
 #include <string>
 
@@ -9,7 +9,7 @@ namespace cch::ai {
 struct Tool {
     std::string name{};
     std::string description{};
-    util::JsonValue parameters{};
+    cch::support::JsonValue parameters{};
 };
 
 } // namespace cch::ai

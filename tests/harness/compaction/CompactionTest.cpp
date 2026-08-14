@@ -625,7 +625,7 @@ TEST_CASE(
             ai::SimpleStreamOptions options)
             -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         auto stream = runtime->factory()(model, std::move(context), std::move(options));
-        co_return co_await ai::consume(std::move(stream), noop_sink());
+        co_return co_await ai::detail::await_async_result(std::move(stream).run(noop_sink()));
     };
 
     harness::session::CompactionRunOptions run_options;
@@ -697,7 +697,7 @@ TEST_CASE(
             ai::SimpleStreamOptions options)
             -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         auto stream = runtime->factory()(model, std::move(context), std::move(options));
-        co_return co_await ai::consume(std::move(stream), noop_sink());
+        co_return co_await ai::detail::await_async_result(std::move(stream).run(noop_sink()));
     };
     harness::session::CompactionRunOptions run_options;
     run_options.summarization_stream = std::move(stream_fn);
@@ -743,7 +743,7 @@ TEST_CASE(
                    ai::SimpleStreamOptions options)
             -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
             auto stream = runtime->factory()(tests::make_model("gpt-test"), std::move(context), std::move(options));
-            co_return co_await ai::consume(std::move(stream), noop_sink());
+            co_return co_await ai::detail::await_async_result(std::move(stream).run(noop_sink()));
         };
     };
 
@@ -837,7 +837,7 @@ TEST_CASE(
             ai::SimpleStreamOptions options)
             -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         auto stream = runtime->factory()(model, std::move(context), std::move(options));
-        co_return co_await ai::consume(std::move(stream), noop_sink());
+        co_return co_await ai::detail::await_async_result(std::move(stream).run(noop_sink()));
     };
     harness::session::CompactionRunOptions run_options;
     run_options.summarization_stream = std::move(stream_fn);
@@ -905,7 +905,7 @@ TEST_CASE(
             ai::SimpleStreamOptions options)
             -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         auto stream = runtime->factory()(model, std::move(context), std::move(options));
-        co_return co_await ai::consume(std::move(stream), noop_sink());
+        co_return co_await ai::detail::await_async_result(std::move(stream).run(noop_sink()));
     };
     harness::session::CompactionRunOptions run_options;
     run_options.thinking_level = "medium";

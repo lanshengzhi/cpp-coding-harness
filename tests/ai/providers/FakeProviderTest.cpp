@@ -2,6 +2,8 @@
 #include <cch/ai/Models.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/util/Error.hpp>
+#include <cch/util/JsonValue.hpp>
+#include "ai/AsyncResultBridge.hpp"
 #include "ai/providers/FakeProvider.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/UsageAssertions.hpp"
@@ -54,18 +56,18 @@ RunResult run_fake(
                 std::move(request.model),
                 std::move(request.context),
                 std::move(request.options));
-            result = co_await ai::consume(
-                std::move(stream),
-                [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
-                    events.push_back(event);
-                    if (fail_at_event && events.size() - 1 == *fail_at_event) {
-                        return std::unexpected(util::make_error(
-                            util::ErrorCode::Unknown,
-                            "fake sink rejected event",
-                            std::to_string(*fail_at_event)));
-                    }
-                    return {};
-                });
+            result = co_await ai::detail::await_async_result(
+                std::move(stream).run(
+                    [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
+                        events.push_back(event);
+                        if (fail_at_event && events.size() - 1 == *fail_at_event) {
+                            return std::unexpected(util::make_error(
+                                util::ErrorCode::Unknown,
+                                "fake sink rejected event",
+                                std::to_string(*fail_at_event)));
+                        }
+                        return {};
+                    }));
             co_return;
         },
         boost::asio::detached);

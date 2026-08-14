@@ -38,6 +38,19 @@ T run_awaitable(boost::asio::awaitable<T> operation) {
     return result.get();
 }
 
+template <typename T, typename E>
+std::expected<T, E> run_async_result(cch::support::AsyncResult<T, E> result) {
+    boost::asio::io_context io;
+    auto future = boost::asio::co_spawn(
+        io,
+        [](cch::support::AsyncResult<T, E> op) -> boost::asio::awaitable<std::expected<T, E>> {
+            co_return co_await cch::ai::detail::await_async_result(std::move(op));
+        }(std::move(result)),
+        boost::asio::use_future);
+    io.run();
+    return future.get();
+}
+
 class MemoryCredentialStore final : public ai::CredentialStore {
 public:
     [[nodiscard]] cch::support::AsyncResult<std::optional<ai::Credential>> read(
@@ -112,18 +125,23 @@ public:
 
 class FakeAuthContext final : public ai::AuthContext {
 public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<std::string>>> environment(
+    [[nodiscard]] cch::support::AsyncResult<std::optional<std::string>> environment(
         std::string name) const override {
         const auto found = environment_values.find(name);
         if (found == environment_values.end()) {
-            co_return std::optional<std::string>{};
+            return cch::support::AsyncResult<std::optional<std::string>>(
+                std::expected<std::optional<std::string>, cch::support::Error>{
+                    std::optional<std::string>{}});
         }
-        co_return std::optional<std::string>{found->second};
+        return cch::support::AsyncResult<std::optional<std::string>>(
+            std::expected<std::optional<std::string>, cch::support::Error>{
+                std::optional<std::string>{found->second}});
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<bool>> file_exists(
+    [[nodiscard]] cch::support::AsyncResult<bool> file_exists(
         std::string) const override {
-        co_return false;
+        return cch::support::AsyncResult<bool>(
+            std::expected<bool, cch::support::Error>{false});
     }
 
     std::map<std::string, std::string, std::less<>> environment_values;
@@ -133,12 +151,16 @@ ai::ProviderAuth keyless_auth() {
     ai::ApiKeyAuth api_key;
     api_key.name = "keyless";
     api_key.check = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
-        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>> {
-        co_return ai::AuthCheck{.source = "keyless", .type = ai::AuthType::ApiKey};
+        -> cch::support::AsyncResult<std::optional<ai::AuthCheck>> {
+        return cch::support::AsyncResult<std::optional<ai::AuthCheck>>(
+            std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{
+                ai::AuthCheck{.source = "keyless", .type = ai::AuthType::ApiKey}});
     };
     api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
-        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> {
-        co_return ai::AuthResult{.auth = {}, .env = {}, .source = "keyless"};
+        -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
+        return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
+            std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
+                ai::AuthResult{.auth = {}, .env = {}, .source = "keyless"}});
     };
     return ai::ProviderAuth{.api_key = std::move(api_key)};
 }
@@ -316,8 +338,8 @@ RunResult run_models(
     std::vector<ai::AssistantStreamEvent> events;
     auto stream = models->stream(
         std::move(model), std::move(context), std::move(options));
-    auto result = run_awaitable(ai::consume(
-        std::move(stream),
+    auto result = run_async_result(
+        std::move(stream).run(
         [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
             events.push_back(event);
             if (fail_sink) {
@@ -446,31 +468,40 @@ TEST_CASE("Models applies explicit stored and ambient API key precedence", "[ai]
     ai::ApiKeyAuth api_key;
     api_key.name = "key";
     api_key.check = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential> credential)
-        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>> {
+        -> cch::support::AsyncResult<std::optional<ai::AuthCheck>> {
         if (!credential || !credential->key) {
-            co_return std::optional<ai::AuthCheck>{};
+            return cch::support::AsyncResult<std::optional<ai::AuthCheck>>(
+                std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{
+                    std::optional<ai::AuthCheck>{}});
         }
-        co_return ai::AuthCheck{.source = "stored", .type = ai::AuthType::ApiKey};
+        return cch::support::AsyncResult<std::optional<ai::AuthCheck>>(
+            std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{
+                ai::AuthCheck{.source = "stored", .type = ai::AuthType::ApiKey}});
     };
     api_key.resolve = [&resolved_keys](
                           const ai::AuthContext& context,
                           std::optional<ai::ApiKeyCredential> credential)
-        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> {
-        std::optional<std::string> key = credential ? credential->key : std::nullopt;
-        std::string source = credential ? "credential" : "ambient";
-        if (!key) {
-            CCH_TRY(ambient, co_await context.environment("API_KEY"));
-            key = std::move(ambient);
-        }
-        if (!key) {
-            co_return std::optional<ai::AuthResult>{};
-        }
-        resolved_keys.push_back(*key);
-        co_return ai::AuthResult{
-            .auth = ai::ModelAuth{.api_key = *key},
-            .env = {},
-            .source = source,
-        };
+        -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
+        return cch::ai::detail::make_async_result(
+            [&resolved_keys, &context, credential = std::move(credential)]() mutable
+                -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> {
+                std::optional<std::string> key = credential ? credential->key : std::nullopt;
+                std::string source = credential ? "credential" : "ambient";
+                if (!key) {
+                    CCH_TRY(ambient, co_await cch::ai::detail::await_async_result(
+                        context.environment("API_KEY")));
+                    key = std::move(ambient);
+                }
+                if (!key) {
+                    co_return std::optional<ai::AuthResult>{};
+                }
+                resolved_keys.push_back(*key);
+                co_return ai::AuthResult{
+                    .auth = ai::ModelAuth{.api_key = *key},
+                    .env = {},
+                    .source = source,
+                };
+            });
     };
 
     auto models = make_models(credentials, auth_context);
@@ -480,11 +511,11 @@ TEST_CASE("Models applies explicit stored and ambient API key precedence", "[ai]
 
     ai::Model explicit_request = tests::make_model("model", "provider", "api");
     std::vector<ai::AssistantStreamEvent> explicit_events;
-    auto explicit_result = run_awaitable(ai::consume(
+    auto explicit_result = run_async_result(
         models->stream(
             explicit_request,
             {},
-            ai::SimpleStreamOptions{.api_key = "explicit-key"}),
+            ai::SimpleStreamOptions{.api_key = "explicit-key"}).run(
         [&explicit_events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
             explicit_events.push_back(event);
             return {};
@@ -514,9 +545,11 @@ TEST_CASE("Models never falls back after a stored credential type mismatch", "[a
     ai::ApiKeyAuth api_key;
     api_key.name = "key";
     api_key.resolve = [&resolve_count](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
-        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> {
+        -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
         ++resolve_count;
-        co_return ai::AuthResult{};
+        return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
+            std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
+                ai::AuthResult{}});
     };
     auto models = make_models(credentials, auth_context);
     REQUIRE(models->set_provider(std::make_shared<RecordingProvider>(
@@ -548,17 +581,20 @@ TEST_CASE("Models refreshes OAuth under the store mutation and checkAuth never r
     ai::OAuthAuth oauth;
     oauth.name = "oauth";
     oauth.refresh = [&refresh_count](ai::OAuthCredential credential)
-        -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+        -> cch::support::AsyncResult<ai::OAuthCredential> {
         ++refresh_count;
         credential.access = "new-access";
         credential.expires += 60 * 60 * 1000;
-        co_return credential;
+        return cch::support::AsyncResult<ai::OAuthCredential>(
+            std::expected<ai::OAuthCredential, cch::support::Error>{credential});
     };
     oauth.to_auth = [](const ai::OAuthCredential& credential)
-        -> boost::asio::awaitable<util::Expected<ai::ModelAuth>> {
-        co_return ai::ModelAuth{
-            .headers = {{"Authorization", "Bearer " + credential.access}},
-        };
+        -> cch::support::AsyncResult<ai::ModelAuth> {
+        return cch::support::AsyncResult<ai::ModelAuth>(
+            std::expected<ai::ModelAuth, cch::support::Error>{
+                ai::ModelAuth{
+                    .headers = {{"Authorization", "Bearer " + credential.access}},
+                }});
     };
 
     auto models = make_models(credentials, auth_context);
@@ -566,7 +602,7 @@ TEST_CASE("Models refreshes OAuth under the store mutation and checkAuth never r
         "provider", ai::ProviderAuth{.oauth = std::move(oauth)});
     REQUIRE(models->set_provider(provider));
 
-    auto checked = run_awaitable(models->check_auth("provider"));
+    auto checked = run_async_result(models->check_auth("provider"));
     REQUIRE(checked);
     REQUIRE(*checked);
     CHECK((**checked).type == ai::AuthType::OAuth);
@@ -596,14 +632,16 @@ TEST_CASE("Models preserves stored OAuth when refresh fails", "[ai][models][auth
     ai::OAuthAuth oauth;
     oauth.name = "oauth";
     oauth.refresh = [](ai::OAuthCredential)
-        -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
-        co_return std::unexpected(util::make_error(
-            util::ErrorCode::Network,
-            "refresh rejected"));
+        -> cch::support::AsyncResult<ai::OAuthCredential> {
+        return cch::support::AsyncResult<ai::OAuthCredential>(
+            std::unexpected(util::make_error(
+                util::ErrorCode::Network,
+                "refresh rejected")));
     };
     oauth.to_auth = [](const ai::OAuthCredential&)
-        -> boost::asio::awaitable<util::Expected<ai::ModelAuth>> {
-        co_return ai::ModelAuth{};
+        -> cch::support::AsyncResult<ai::ModelAuth> {
+        return cch::support::AsyncResult<ai::ModelAuth>(
+            std::expected<ai::ModelAuth, cch::support::Error>{ai::ModelAuth{}});
     };
     auto models = make_models(credentials, auth_context);
     REQUIRE(models->set_provider(std::make_shared<RecordingProvider>(
@@ -625,17 +663,19 @@ TEST_CASE("Models merges Model headers after resolved auth headers case insensit
     ai::ApiKeyAuth api_key;
     api_key.name = "headers";
     api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
-        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> {
-        co_return ai::AuthResult{
-            .auth = ai::ModelAuth{
-                .headers = {
-                    {"X-Test", "auth"},
-                    {"x-TEST", "duplicate auth"},
-                    {"Authorization", "Bearer dummy"},
-                },
-            },
-            .source = "headers",
-        };
+        -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
+        return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
+            std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
+                ai::AuthResult{
+                    .auth = ai::ModelAuth{
+                        .headers = {
+                            {"X-Test", "auth"},
+                            {"x-TEST", "duplicate auth"},
+                            {"Authorization", "Bearer dummy"},
+                        },
+                    },
+                    .source = "headers",
+                }});
     };
     auto models = make_models(credentials, auth_context);
     auto provider = std::make_shared<RecordingProvider>(
@@ -659,15 +699,17 @@ TEST_CASE("Models prepares the complete streamSimple request before Provider dis
     ai::ApiKeyAuth api_key;
     api_key.name = "prepared";
     api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
-        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> {
-        co_return ai::AuthResult{
-            .auth = ai::ModelAuth{
-                .api_key = "dummy-key",
-                .headers = {{"X-Auth", "auth"}, {"X-Delete", "remove"}},
-            },
-            .env = {{"A", "auth"}, {"PI_CACHE_RETENTION", "short"}},
-            .source = "prepared",
-        };
+        -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
+        return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
+            std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
+                ai::AuthResult{
+                    .auth = ai::ModelAuth{
+                        .api_key = "dummy-key",
+                        .headers = {{"X-Auth", "auth"}, {"X-Delete", "remove"}},
+                    },
+                    .env = {{"A", "auth"}, {"PI_CACHE_RETENTION", "short"}},
+                    .source = "prepared",
+                }});
     };
     auto models = make_models(credentials, auth_context);
     auto provider = std::make_shared<RecordingProvider>(
@@ -704,11 +746,11 @@ TEST_CASE("Models prepares the complete streamSimple request before Provider dis
     options.max_retry_delay_ms = 12345;
 
     std::vector<ai::AssistantStreamEvent> events;
-    auto result = run_awaitable(ai::consume(
+    auto result = run_async_result(
         models->stream(
             std::move(model),
             std::move(context),
-            std::move(options)),
+            std::move(options)).run(
         [&events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
             events.push_back(event);
             return {};
@@ -740,11 +782,13 @@ TEST_CASE("Models prepares Codex session affinity headers", "[ai][models][issue3
     ai::ApiKeyAuth api_key;
     api_key.name = "codex";
     api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
-        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> {
-        co_return ai::AuthResult{
-            .auth = ai::ModelAuth{.api_key = "dummy-codex"},
-            .source = "codex",
-        };
+        -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
+        return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
+            std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
+                ai::AuthResult{
+                    .auth = ai::ModelAuth{.api_key = "dummy-codex"},
+                    .source = "codex",
+                }});
     };
     auto models = make_models(credentials, auth_context);
     auto provider = std::make_shared<RecordingProvider>(
@@ -756,11 +800,11 @@ TEST_CASE("Models prepares Codex session affinity headers", "[ai][models][issue3
     options.session_id = std::string(65, 's');
     std::vector<ai::AssistantStreamEvent> events;
 
-    auto result = run_awaitable(ai::consume(
+    auto result = run_async_result(
         models->stream(
             std::move(model),
             ai::AiContext{},
-            std::move(options)),
+            std::move(options)).run(
         [&events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
             events.push_back(event);
             return {};
@@ -782,13 +826,15 @@ TEST_CASE(
     ai::ApiKeyAuth api_key;
     api_key.name = "header auth";
     api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
-        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> {
-        co_return ai::AuthResult{
-            .auth = ai::ModelAuth{
-                .headers = {{"Authorization", "Bearer dummy-oauth"}},
-            },
-            .source = "OAuth",
-        };
+        -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
+        return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
+            std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
+                ai::AuthResult{
+                    .auth = ai::ModelAuth{
+                        .headers = {{"Authorization", "Bearer dummy-oauth"}},
+                    },
+                    .source = "OAuth",
+                }});
     };
     auto models = make_models(credentials, auth_context);
     auto provider = std::make_shared<RecordingProvider>(
@@ -801,11 +847,11 @@ TEST_CASE(
     options.cache_retention = ai::CacheRetention::None;
     std::vector<ai::AssistantStreamEvent> events;
 
-    auto result = run_awaitable(ai::consume(
+    auto result = run_async_result(
         models->stream(
             std::move(model),
             ai::AiContext{},
-            std::move(options)),
+            std::move(options)).run(
         [&events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
             events.push_back(event);
             return {};
@@ -827,7 +873,7 @@ TEST_CASE("Env-chain API key auth labels explicit credentials as stored credenti
         "provider",
         ai::providers::make_env_api_key_auth("API key", {"API_KEY"}))));
 
-    auto resolved = run_awaitable(models->get_auth("provider", "explicit-key"));
+    auto resolved = run_async_result(models->get_auth("provider", "explicit-key"));
 
     REQUIRE(resolved);
     REQUIRE(*resolved);
@@ -843,9 +889,8 @@ TEST_CASE("Models converts throwing callbacks into its single error channel", "[
     throwing_auth.resolve = [](
         const ai::AuthContext&,
         std::optional<ai::ApiKeyCredential>)
-        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> {
+        -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
         throw std::runtime_error{"auth callback threw"};
-        co_return std::optional<ai::AuthResult>{};
     };
     auto auth_models = make_models(credentials, auth_context);
     REQUIRE(auth_models->set_provider(std::make_shared<RecordingProvider>(
@@ -876,11 +921,11 @@ TEST_CASE("Models converts throwing callbacks into its single error channel", "[
     auto sink_models = make_models(credentials, auth_context);
     REQUIRE(sink_models->set_provider(std::make_shared<RecordingProvider>("sink-provider")));
     ai::Model sink_request = tests::make_model("model", "sink-provider", "api");
-    auto sink_result = run_awaitable(ai::consume(
+    auto sink_result = run_async_result(
         sink_models->stream(
             std::move(sink_request),
             {},
-            {}),
+            {}).run(
         [](const ai::AssistantStreamEvent&) -> util::ExpectedVoid {
             throw std::runtime_error{"sink callback threw"};
         }));
@@ -913,13 +958,13 @@ TEST_CASE("Models categorizes throwing credential store and OAuth callbacks", "[
     ai::OAuthAuth refresh_auth;
     refresh_auth.name = "throwing refresh";
     refresh_auth.refresh = [](ai::OAuthCredential)
-        -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+        -> cch::support::AsyncResult<ai::OAuthCredential> {
         throw std::runtime_error{"OAuth refresh callback threw"};
-        co_return ai::OAuthCredential{};
+        return cch::support::AsyncResult<ai::OAuthCredential>(std::expected<ai::OAuthCredential, cch::support::Error>{ai::OAuthCredential{}});
     };
     refresh_auth.to_auth = [](const ai::OAuthCredential&)
-        -> boost::asio::awaitable<util::Expected<ai::ModelAuth>> {
-        co_return ai::ModelAuth{};
+        -> cch::support::AsyncResult<ai::ModelAuth> {
+        return cch::support::AsyncResult<ai::ModelAuth>(std::expected<ai::ModelAuth, cch::support::Error>{ai::ModelAuth{}});
     };
     auto refresh_models = make_models(refresh_credentials, auth_context);
     REQUIRE(refresh_models->set_provider(std::make_shared<RecordingProvider>(
@@ -941,9 +986,9 @@ TEST_CASE("Models categorizes throwing credential store and OAuth callbacks", "[
     ai::OAuthAuth derivation_auth;
     derivation_auth.name = "throwing derivation";
     derivation_auth.to_auth = [](const ai::OAuthCredential&)
-        -> boost::asio::awaitable<util::Expected<ai::ModelAuth>> {
+        -> cch::support::AsyncResult<ai::ModelAuth> {
         throw std::runtime_error{"OAuth derivation callback threw"};
-        co_return ai::ModelAuth{};
+        return cch::support::AsyncResult<ai::ModelAuth>(std::expected<ai::ModelAuth, cch::support::Error>{ai::ModelAuth{}});
     };
     auto derivation_models = make_models(derivation_credentials, auth_context);
     REQUIRE(derivation_models->set_provider(std::make_shared<RecordingProvider>(
@@ -1020,14 +1065,16 @@ TEST_CASE("Models checkAuth falls back to API key resolution when no check hook 
     ai::ApiKeyAuth api_key;
     api_key.name = "fallback";
     api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
-        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> {
-        co_return ai::AuthResult{.source = "resolved fallback"};
+        -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
+        return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
+            std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
+                ai::AuthResult{.source = "resolved fallback"}});
     };
     auto models = make_models(credentials, auth_context);
     REQUIRE(models->set_provider(std::make_shared<RecordingProvider>(
         "provider", ai::ProviderAuth{.api_key = std::move(api_key)})));
 
-    auto checked = run_awaitable(models->check_auth("provider"));
+    auto checked = run_async_result(models->check_auth("provider"));
     REQUIRE(checked);
     REQUIRE(*checked);
     CHECK((**checked).source == "resolved fallback");
@@ -1082,10 +1129,10 @@ TEST_CASE("Models live lookup and logout use owned Provider and CredentialStore 
 
     REQUIRE(models->model("provider", "catalog-model"));
     CHECK(models->model("provider", "missing") == std::nullopt);
-    auto unknown_auth = run_awaitable(models->get_auth("unknown"));
+    auto unknown_auth = run_async_result(models->get_auth("unknown"));
     REQUIRE(unknown_auth);
     CHECK_FALSE(*unknown_auth);
-    REQUIRE(run_awaitable(models->logout("provider")));
+    REQUIRE(run_async_result(models->logout("provider")));
     CHECK(credentials->remove_count == 1);
     CHECK_FALSE(credentials->records.contains("provider"));
 }
@@ -1097,17 +1144,19 @@ TEST_CASE("Models login persists the provider OAuth credential via CredentialSto
     auto provider = std::make_shared<RecordingProvider>(
         "login-provider",
         oauth_login_auth(
-            [](ai::AuthInteraction) -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
-                co_return ai::OAuthCredential{
-                    .refresh = "dummy-refresh",
-                    .access = "dummy-access",
-                    .expires = 123,
-                    .account_id = "account-xyz",
-                };
+            [](ai::AuthInteraction) -> cch::support::AsyncResult<ai::OAuthCredential> {
+                return cch::support::AsyncResult<ai::OAuthCredential>(
+                    std::expected<ai::OAuthCredential, cch::support::Error>{
+                        ai::OAuthCredential{
+                            .refresh = "dummy-refresh",
+                            .access = "dummy-access",
+                            .expires = 123,
+                            .account_id = "account-xyz",
+                        }});
             }));
     REQUIRE(models->set_provider(provider));
 
-    auto result = run_awaitable(models->login(
+    auto result = run_async_result(models->login(
         "login-provider", ai::AuthType::OAuth, empty_interaction()));
 
     REQUIRE(result);
@@ -1129,15 +1178,16 @@ TEST_CASE("Models login flow failure propagates unwrapped to the host", "[ai][mo
     auto provider = std::make_shared<RecordingProvider>(
         "login-provider",
         oauth_login_auth(
-            [](ai::AuthInteraction) -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
-                co_return std::unexpected(util::make_error(
-                    util::ErrorCode::Network,
-                    "provider flow failed",
-                    "detail"));
+            [](ai::AuthInteraction) -> cch::support::AsyncResult<ai::OAuthCredential> {
+                return cch::support::AsyncResult<ai::OAuthCredential>(
+                    std::unexpected(util::make_error(
+                        util::ErrorCode::Network,
+                        "provider flow failed",
+                        "detail")));
             }));
     REQUIRE(models->set_provider(provider));
 
-    auto result = run_awaitable(models->login(
+    auto result = run_async_result(models->login(
         "login-provider", ai::AuthType::OAuth, empty_interaction()));
 
     REQUIRE_FALSE(result);
@@ -1156,13 +1206,15 @@ TEST_CASE("Models login wraps CredentialStore modify failures as the auth catego
     auto provider = std::make_shared<RecordingProvider>(
         "login-provider",
         oauth_login_auth(
-            [](ai::AuthInteraction) -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
-                co_return ai::OAuthCredential{
-                    .refresh = "r", .access = "a", .expires = 1, .account_id = "acct"};
+            [](ai::AuthInteraction) -> cch::support::AsyncResult<ai::OAuthCredential> {
+                return cch::support::AsyncResult<ai::OAuthCredential>(
+                    std::expected<ai::OAuthCredential, cch::support::Error>{
+                        ai::OAuthCredential{
+                            .refresh = "r", .access = "a", .expires = 1, .account_id = "acct"}});
             }));
     REQUIRE(models->set_provider(provider));
 
-    auto result = run_awaitable(models->login(
+    auto result = run_async_result(models->login(
         "login-provider", ai::AuthType::OAuth, empty_interaction()));
 
     REQUIRE_FALSE(result);
@@ -1175,7 +1227,7 @@ TEST_CASE("Models login rejects unknown providers as a provider error", "[ai][mo
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
 
-    auto result = run_awaitable(models->login(
+    auto result = run_async_result(models->login(
         "missing", ai::AuthType::OAuth, empty_interaction()));
 
     REQUIRE_FALSE(result);
@@ -1190,7 +1242,7 @@ TEST_CASE("Models login rejects a provider without OAuth login support", "[ai][m
     auto provider = std::make_shared<RecordingProvider>("key-only", keyless_auth());
     REQUIRE(models->set_provider(provider));
 
-    auto result = run_awaitable(models->login(
+    auto result = run_async_result(models->login(
         "key-only", ai::AuthType::OAuth, empty_interaction()));
 
     REQUIRE_FALSE(result);
@@ -1206,14 +1258,15 @@ TEST_CASE("Models login persists an api-key credential through modify", "[ai][mo
     auto provider = std::make_shared<RecordingProvider>(
         "api-provider",
         api_key_login_auth(
-            [](ai::AuthInteraction) -> boost::asio::awaitable<util::Expected<ai::ApiKeyCredential>> {
+            [](ai::AuthInteraction) -> cch::support::AsyncResult<ai::ApiKeyCredential> {
                 ai::ApiKeyCredential credential;
                 credential.key = "dummy-api-key";
-                co_return credential;
+                return cch::support::AsyncResult<ai::ApiKeyCredential>(
+                    std::expected<ai::ApiKeyCredential, cch::support::Error>{credential});
             }));
     REQUIRE(models->set_provider(provider));
 
-    auto result = run_awaitable(models->login(
+    auto result = run_async_result(models->login(
         "api-provider", ai::AuthType::ApiKey, empty_interaction()));
 
     REQUIRE(result);
@@ -1234,12 +1287,14 @@ TEST_CASE("Models login rejects a provider without api-key login support", "[ai]
     auto provider = std::make_shared<RecordingProvider>(
         "oauth-only",
         oauth_login_auth(
-            [](ai::AuthInteraction) -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
-                co_return ai::OAuthCredential{};
+            [](ai::AuthInteraction) -> cch::support::AsyncResult<ai::OAuthCredential> {
+                return cch::support::AsyncResult<ai::OAuthCredential>(
+                    std::expected<ai::OAuthCredential, cch::support::Error>{
+                        ai::OAuthCredential{}});
             }));
     REQUIRE(models->set_provider(provider));
 
-    auto result = run_awaitable(models->login(
+    auto result = run_async_result(models->login(
         "oauth-only", ai::AuthType::ApiKey, empty_interaction()));
 
     REQUIRE_FALSE(result);

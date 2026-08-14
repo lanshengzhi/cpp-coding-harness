@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../util/JsonValue.hpp"
+#include <cch/support/JsonValue.hpp>
 
 #include <optional>
 #include <string>
@@ -28,7 +28,7 @@ struct ImageContent {
 struct ToolCallContent {
     std::string id{};
     std::string name{};
-    std::optional<util::JsonValue> arguments{};
+    std::optional<cch::support::JsonValue> arguments{};
     std::string raw_arguments{};
     std::optional<std::string> thought_signature{};
     bool arguments_valid{true};
@@ -62,7 +62,7 @@ using AssistantContent = std::variant<TextContent, ThinkingContent, ToolCallCont
     std::string id,
     std::string name,
     std::string raw_arguments,
-    std::optional<util::JsonValue> arguments = std::nullopt) {
+    std::optional<cch::support::JsonValue> arguments = std::nullopt) {
     return ToolCallContent{
         .id = std::move(id),
         .name = std::move(name),

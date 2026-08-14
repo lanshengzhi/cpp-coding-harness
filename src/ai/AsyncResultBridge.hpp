@@ -5,15 +5,27 @@
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/bind_executor.hpp>
+#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
 #include <expected>
+#include <exception>
 #include <memory>
+#include <type_traits>
 #include <utility>
 
 namespace cch::ai::detail {
+
+template <typename T>
+struct AwaitableTerminal;
+
+template <typename T, typename Executor>
+struct AwaitableTerminal<boost::asio::awaitable<T, Executor>> {
+    using type = T;
+};
 
 /// The executor of the coroutine currently consuming an `AsyncResult`. Set
 /// during producer initiation so implementation producers that must run
@@ -49,6 +61,48 @@ template <typename T, typename E>
     co_return co_await boost::asio::async_initiate<
         void(std::expected<T, E>)>(
         initiate, boost::asio::use_awaitable, std::move(result));
+}
+
+/// Wrap a one-shot `boost::asio::awaitable` producer into a move-only
+/// `AsyncResult` (ADR 0040). `make_awaitable` is invoked exactly once at
+/// consumption and must return a fresh awaitable whose terminal value is
+/// `std::expected<T, cch::support::Error>` (or `std::expected<void, ...>`).
+/// The producer reads the initiating executor captured by `await_async_result`
+/// (or the ModelStream `consume` bridge) so the wrapped coroutine runs in the
+/// consuming serialized domain; the terminal outcome is delivered exactly once.
+template <typename AwaitableFactory>
+[[nodiscard]] auto make_async_result(AwaitableFactory make_awaitable) {
+    using Awaitable = std::invoke_result_t<AwaitableFactory&>;
+    using Terminal = typename AwaitableTerminal<Awaitable>::type;
+    using Value = typename Terminal::value_type;
+
+    auto shared = std::make_shared<AwaitableFactory>(std::move(make_awaitable));
+    return cch::support::AsyncResult<Value, cch::support::Error>{
+        cch::support::AsyncProducer<Value, cch::support::Error>{
+            [shared](cch::support::AsyncCompletion<Value, cch::support::Error> completion) mutable noexcept {
+            const auto executor = t_initiating_executor;
+            try {
+                boost::asio::co_spawn(
+                    executor,
+                    (*shared)(),
+                    boost::asio::bind_executor(
+                        executor,
+                        [shared, completion = std::move(completion)](
+                            std::exception_ptr exception, Terminal result) mutable noexcept {
+                            if (exception) {
+                                completion(std::unexpected(cch::support::make_error(
+                                    cch::support::ErrorCode::Unknown,
+                                    "async operation failed")));
+                            } else {
+                                completion(std::move(result));
+                            }
+                        }));
+            } catch (...) {
+                completion(std::unexpected(cch::support::make_error(
+                    cch::support::ErrorCode::Unknown,
+                    "async operation initiation failed")));
+            }
+        }}};
 }
 
 } // namespace cch::ai::detail

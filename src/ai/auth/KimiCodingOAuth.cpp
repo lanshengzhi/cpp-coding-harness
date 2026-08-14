@@ -2,6 +2,7 @@
 
 #include "DevicePoll.hpp"
 #include "Pkce.hpp"
+#include "ai/AsyncResultBridge.hpp"
 #include "util/ExpectedMacros.hpp"
 #include "util/Json.hpp"
 
@@ -592,18 +593,30 @@ ai::OAuthAuth make_kimi_coding_oauth_auth(
     ai::OAuthAuth auth;
     auth.name = "Kimi Code (subscription)";
     auth.login = [impl](ai::AuthInteraction interaction)
-        -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
-        co_return co_await impl->login(std::move(interaction));
+        -> cch::support::AsyncResult<ai::OAuthCredential> {
+        return cch::ai::detail::make_async_result(
+            [impl, interaction = std::move(interaction)]() mutable
+                -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+                co_return co_await impl->login(std::move(interaction));
+            });
     };
     // The request-path refresh is uncancellable: no stop token is passed,
     // reproducing pi's frozen Kimi refresh-signal defect as no-divergence.
     auth.refresh = [impl](ai::OAuthCredential credential)
-        -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
-        co_return co_await impl->refresh(std::move(credential));
+        -> cch::support::AsyncResult<ai::OAuthCredential> {
+        return cch::ai::detail::make_async_result(
+            [impl, credential = std::move(credential)]()
+                -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+                co_return co_await impl->refresh(std::move(credential));
+            });
     };
     auth.to_auth = [impl](const ai::OAuthCredential& credential)
-        -> boost::asio::awaitable<util::Expected<ai::ModelAuth>> {
-        co_return co_await impl->to_auth(credential);
+        -> cch::support::AsyncResult<ai::ModelAuth> {
+        return cch::ai::detail::make_async_result(
+            [impl, credential = std::move(credential)]()
+                -> boost::asio::awaitable<util::Expected<ai::ModelAuth>> {
+                co_return co_await impl->to_auth(credential);
+            });
     };
     return auth;
 }

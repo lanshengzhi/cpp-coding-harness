@@ -1,9 +1,7 @@
 #pragma once
 
 #include <cch/support/AsyncResult.hpp>
-#include <cch/util/Error.hpp>
-
-#include <boost/asio/awaitable.hpp>
+#include <cch/support/Error.hpp>
 
 #include <cstdint>
 #include <functional>
@@ -52,10 +50,10 @@ struct CredentialInfo {
 
 /// A serialized credential update. Returning `std::nullopt` leaves the current
 /// entry unchanged; failures propagate without writing the backing store. The
-/// hook owns its inputs and its returned awaitable; the backing store drives
+/// hook owns its inputs and its returned operation; the backing store drives
 /// it on its own execution context while the whole-file mutation lock is held.
 using CredentialModifyHook = std::move_only_function<
-    boost::asio::awaitable<util::Expected<std::optional<Credential>>>(
+    cch::support::AsyncResult<std::optional<Credential>>(
         std::optional<Credential>)>;
 
 /// App-owned credential persistence keyed by Provider id. Trusted callers may

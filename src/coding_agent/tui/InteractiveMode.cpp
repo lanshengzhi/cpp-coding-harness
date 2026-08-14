@@ -5,6 +5,7 @@
 #include <cch/ai/Auth.hpp>
 #include <cch/ai/Content.hpp>
 #include "coding_agent/AgentSession.hpp"
+#include "ai/AsyncResultBridge.hpp"
 #include "ai/ModelThinkingLevel.hpp"
 #include <cch/ai/Model.hpp>
 #include <cch/coding_agent/Settings.hpp>
@@ -3034,10 +3035,18 @@ private:
         std::move_only_function<boost::asio::awaitable<void>()> start,
         std::string failure_label) {
         const auto weak = weak_from_this();
+        // The coroutine lambda's frame may reference its closure (the
+        // `start` move_only_function), so keep the closure alive until the
+        // spawned coroutine reaches its terminal completion (same pattern as
+        // make_model_stream / ADR 0040 §Behavior mechanisms).
+        auto start_owner =
+            std::make_shared<std::move_only_function<boost::asio::awaitable<void>()>>(
+                std::move(start));
         boost::asio::co_spawn(
             executor_,
-            start(),
-            [weak, failure_label = std::move(failure_label)](std::exception_ptr exception) {
+            (*start_owner)(),
+            [weak, start_owner, failure_label = std::move(failure_label)](
+                std::exception_ptr exception) {
                 if (!exception) return;
                 if (const auto self = weak.lock();
                     self && self->running_ && self->view_ != nullptr) {
@@ -4630,8 +4639,12 @@ private:
         interaction.stop_token = dialog->stop_token();
         const auto self = shared_from_this();
         interaction.prompt = [self, dialog](ai::AuthPrompt prompt)
-            -> boost::asio::awaitable<util::Expected<std::string>> {
-            co_return co_await self->show_auth_prompt(dialog, std::move(prompt));
+            -> cch::support::AsyncResult<std::string> {
+            return cch::ai::detail::make_async_result(
+                [self, dialog, prompt = std::move(prompt)]() mutable
+                    -> boost::asio::awaitable<util::Expected<std::string>> {
+                    co_return co_await self->show_auth_prompt(dialog, std::move(prompt));
+                });
         };
         interaction.notify = [self, dialog](const ai::AuthEvent& event) {
             self->notify_auth_dialog(*dialog, event);

@@ -2,6 +2,7 @@
 
 #include "ExecutionShared.hpp"
 #include "ToolCallExecutor.hpp"
+#include "ai/AsyncResultBridge.hpp"
 #include "util/ExpectedMacros.hpp"
 #include "util/Json.hpp"
 #include <cch/ai/Content.hpp>
@@ -345,8 +346,8 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
             options_.model,
             std::move(request_context),
             std::move(stream_options));
-        auto assistant = co_await ai::consume(
-            std::move(stream),
+        auto assistant = co_await ai::detail::await_async_result(
+            std::move(stream).run(
             [&](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
                 if (const auto* start = std::get_if<ai::AssistantStartEvent>(&event)) {
                     if (assistant_start_emitted) {
@@ -404,7 +405,7 @@ boost::asio::awaitable<util::Expected<AsyncAgentRunResult>> AsyncAgentLoop::cont
                     return {};
                 }
                 return {};
-            });
+            }));
 
         if (!assistant) {
             CCH_TRY_VOID(emit_agent_end());

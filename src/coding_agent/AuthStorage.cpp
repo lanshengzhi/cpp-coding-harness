@@ -1,6 +1,7 @@
 #include <cch/coding_agent/AuthStorage.hpp>
 
 #include <cch/util/JsonValue.hpp>
+#include "ai/AsyncResultBridge.hpp"
 #include "util/ExpectedMacros.hpp"
 #include "util/Json.hpp"
 
@@ -657,7 +658,7 @@ struct AuthStorage::Impl {
 
         util::Expected<std::optional<ai::Credential>> next_result;
         try {
-            next_result = co_await modifier(current);
+            next_result = co_await cch::ai::detail::await_async_result(modifier(current));
         } catch (const boost::system::system_error& exception) {
             if (exception.code() == boost::asio::error::operation_aborted) {
                 co_return std::unexpected(util::make_error(

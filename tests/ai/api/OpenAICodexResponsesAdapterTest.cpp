@@ -30,6 +30,7 @@ namespace {
 using tests::EmptyAuthContext;
 using tests::EmptyCredentialStore;
 using tests::partial_stop_reasons;
+using tests::run_async_result;
 using tests::run_awaitable;
 using tests::ScriptedTransport;
 using tests::ScriptedWebSocket;
@@ -127,8 +128,8 @@ struct CodexHarness {
     ai::SimpleStreamOptions options) {
     std::vector<ai::AssistantStreamEvent> events;
     auto stream = models.stream(model, std::move(context), std::move(options));
-    auto result = run_awaitable(ai::consume(
-        std::move(stream),
+    auto result = run_async_result(
+        std::move(stream).run(
         [&events](const ai::AssistantStreamEvent& event) -> util::ExpectedVoid {
             events.push_back(event);
             return {};

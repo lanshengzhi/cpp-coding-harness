@@ -2,7 +2,7 @@
 
 #include "Content.hpp"
 #include "Usage.hpp"
-#include "../util/JsonValue.hpp"
+#include <cch/support/JsonValue.hpp>
 
 #include <cstdint>
 #include <optional>
@@ -25,7 +25,7 @@ struct DiagnosticEntry {
     std::string type{};
     TimestampMs timestamp{};
     std::optional<DiagnosticErrorInfo> error{};
-    std::optional<util::JsonValue> details{};
+    std::optional<cch::support::JsonValue> details{};
 };
 
 struct SystemMessage {
@@ -61,7 +61,7 @@ struct ToolResultMessage {
     std::string tool_call_id{};
     std::string tool_name{};
     std::vector<Content> content{};
-    std::optional<util::JsonValue> details{};
+    std::optional<cch::support::JsonValue> details{};
     bool is_error{false};
     TimestampMs timestamp{};
 };
@@ -83,7 +83,7 @@ struct CustomMessage {
     std::string custom_type{};
     std::vector<Content> content{};
     bool display{true};
-    std::optional<util::JsonValue> details{};
+    std::optional<cch::support::JsonValue> details{};
     TimestampMs timestamp{};
 };
 

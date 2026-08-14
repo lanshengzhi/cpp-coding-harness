@@ -1,5 +1,8 @@
 #include "EnvApiKeyAuth.hpp"
 
+#include <cch/util/Error.hpp>
+
+#include "ai/AsyncResultBridge.hpp"
 #include "util/ExpectedMacros.hpp"
 
 #include <boost/asio/awaitable.hpp>
@@ -25,7 +28,7 @@ namespace {
         };
     }
     for (const auto& name : environment_names) {
-        CCH_TRY(value, co_await context.environment(name));
+        CCH_TRY(value, co_await detail::await_async_result(context.environment(name)));
         if (value && !value->empty()) {
             co_return AuthResult{
                 .auth = ModelAuth{.api_key = *value},
@@ -47,24 +50,32 @@ namespace {
     api_key.check = [environment_names](
                         const AuthContext& context,
                         std::optional<ApiKeyCredential> credential)
-        -> boost::asio::awaitable<util::Expected<std::optional<AuthCheck>>> {
-        CCH_TRY(resolved, co_await resolve_api_key(
-            context, std::move(credential), environment_names));
-        if (!resolved) {
-            co_return std::optional<AuthCheck>{};
-        }
-        co_return AuthCheck{
-            .source = resolved->source,
-            .type = AuthType::ApiKey,
-        };
+        -> cch::support::AsyncResult<std::optional<AuthCheck>> {
+        return detail::make_async_result(
+            [&context, credential = std::move(credential), environment_names]()
+                -> boost::asio::awaitable<util::Expected<std::optional<AuthCheck>>> {
+                CCH_TRY(resolved, co_await resolve_api_key(
+                    context, std::move(credential), environment_names));
+                if (!resolved) {
+                    co_return std::optional<AuthCheck>{};
+                }
+                co_return AuthCheck{
+                    .source = resolved->source,
+                    .type = AuthType::ApiKey,
+                };
+            });
     };
     api_key.resolve = [environment_names = std::move(environment_names)](
                           const AuthContext& context,
                           std::optional<ApiKeyCredential> credential)
-        -> boost::asio::awaitable<util::Expected<std::optional<AuthResult>>> {
-        CCH_TRY(resolved, co_await resolve_api_key(
-            context, std::move(credential), environment_names));
-        co_return resolved;
+        -> cch::support::AsyncResult<std::optional<AuthResult>> {
+        return detail::make_async_result(
+            [&context, credential = std::move(credential), environment_names]()
+                -> boost::asio::awaitable<util::Expected<std::optional<AuthResult>>> {
+                CCH_TRY(resolved, co_await resolve_api_key(
+                    context, std::move(credential), environment_names));
+                co_return resolved;
+            });
     };
     return ProviderAuth{.api_key = std::move(api_key)};
 }

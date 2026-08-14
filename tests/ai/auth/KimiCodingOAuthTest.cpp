@@ -3,6 +3,7 @@
 #include "ai/auth/OAuthHttpClient.hpp"
 #include "ai/auth/Pkce.hpp"
 #include "support/EnvVarGuard.hpp"
+#include "ai/AsyncResultBridge.hpp"
 #include "util/ExpectedMacros.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -35,6 +36,19 @@ T run_awaitable(boost::asio::awaitable<T> operation) {
     auto result = boost::asio::co_spawn(io, std::move(operation), boost::asio::use_future);
     io.run();
     return result.get();
+}
+
+template <typename T, typename E>
+std::expected<T, E> run_async_result(cch::support::AsyncResult<T, E> result) {
+    boost::asio::io_context io;
+    auto future = boost::asio::co_spawn(
+        io,
+        [](cch::support::AsyncResult<T, E> op) -> boost::asio::awaitable<std::expected<T, E>> {
+            co_return co_await cch::ai::detail::await_async_result(std::move(op));
+        }(std::move(result)),
+        boost::asio::use_future);
+    io.run();
+    return future.get();
 }
 
 std::string query_param(const std::string& text, const std::string& key) {
@@ -165,7 +179,7 @@ TEST_CASE("Kimi login runs the RFC 8628 device flow with the frozen notify conte
 
     std::vector<ai::AuthEvent> events;
     auto auth = make_auth(http);
-    auto result = run_awaitable(auth.login(make_interaction(&events)));
+    auto result = run_async_result(auth.login(make_interaction(&events)));
 
     REQUIRE(result);
     CHECK(result->access == "dummy-access-token");
@@ -216,7 +230,7 @@ TEST_CASE("Kimi login waits for the interval before the first poll", "[ai][auth]
     auto auth = make_auth(http);
 
     auto started = std::chrono::steady_clock::now();
-    auto result = run_awaitable(auth.login(make_interaction(nullptr)));
+    auto result = run_async_result(auth.login(make_interaction(nullptr)));
     REQUIRE(result);
 
     // wait_before_first_poll: the first poll arrives only after the 1s
@@ -239,7 +253,7 @@ TEST_CASE("Kimi login applies interval and expires defaults of 5s and 15min", "[
 
     std::vector<ai::AuthEvent> events;
     auto auth = make_auth(http);
-    auto result = run_awaitable(auth.login(make_interaction(&events)));
+    auto result = run_async_result(auth.login(make_interaction(&events)));
     REQUIRE(result);
 
     REQUIRE(events.size() == 1);
@@ -258,7 +272,7 @@ TEST_CASE("Kimi login rejects a non-http(s) verification_uri_complete", "[ai][au
     };
     auto auth = make_auth(http);
 
-    auto result = run_awaitable(auth.login(make_interaction(nullptr)));
+    auto result = run_async_result(auth.login(make_interaction(nullptr)));
 
     REQUIRE(!result);
     CHECK(result.error().code == util::ErrorCode::OAuth);
@@ -277,7 +291,7 @@ TEST_CASE("Kimi login fails when the device code expires and when denied", "[ai]
         {400, R"({"error":"expired_token"})"},
     };
     auto expired_auth = make_auth(expired_http);
-    auto expired = run_awaitable(expired_auth.login(make_interaction(nullptr)));
+    auto expired = run_async_result(expired_auth.login(make_interaction(nullptr)));
     REQUIRE(!expired);
     CHECK(expired.error().message ==
           "Kimi Code device authorization expired. Please restart login.");
@@ -290,7 +304,7 @@ TEST_CASE("Kimi login fails when the device code expires and when denied", "[ai]
         {400, R"({"error":"access_denied"})"},
     };
     auto denied_auth = make_auth(denied_http);
-    auto denied = run_awaitable(denied_auth.login(make_interaction(nullptr)));
+    auto denied = run_async_result(denied_auth.login(make_interaction(nullptr)));
     REQUIRE(!denied);
     CHECK(denied.error().message == "Kimi Code login was denied.");
 }
@@ -306,7 +320,7 @@ TEST_CASE("Kimi login honors the KIMI_CODE_OAUTH_HOST override with trailing sla
     };
     auto auth = make_auth(http);
 
-    auto result = run_awaitable(auth.login(make_interaction(nullptr)));
+    auto result = run_async_result(auth.login(make_interaction(nullptr)));
     REQUIRE(result);
     CHECK(http->requests.front().url ==
           "https://auth.example.com/api/oauth/device_authorization");
@@ -318,7 +332,7 @@ TEST_CASE("Kimi login cancellation normalizes to Login cancelled", "[ai][auth][i
     auto http = std::make_shared<FakeOAuthHttpClient>();
     auto auth = make_auth(http);
 
-    auto result = run_awaitable(
+    auto result = run_async_result(
         auth.login(make_interaction(nullptr, login_stop.get_token())));
 
     REQUIRE(!result);
@@ -337,7 +351,7 @@ TEST_CASE("Kimi login honors a slow_down server interval and then completes", "[
     };
     auto auth = make_auth(http);
 
-    auto result = run_awaitable(auth.login(make_interaction(nullptr)));
+    auto result = run_async_result(auth.login(make_interaction(nullptr)));
 
     REQUIRE(result);
     CHECK(result->access == "dummy-access-token");
@@ -381,7 +395,7 @@ TEST_CASE("Kimi per-request timeout composes with the login cancellation token",
             .request_timeout = std::chrono::milliseconds{40},
         });
 
-    auto result = run_awaitable(auth.login(make_interaction(nullptr)));
+    auto result = run_async_result(auth.login(make_interaction(nullptr)));
 
     REQUIRE(!result);
     CHECK(result.error().code == util::ErrorCode::Timeout);
@@ -397,7 +411,7 @@ TEST_CASE("Kimi refresh rotates the credential and toAuth derives the Bearer hea
 
     const auto before = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
-    auto result = run_awaitable(auth.refresh(ai::OAuthCredential{
+    auto result = run_async_result(auth.refresh(ai::OAuthCredential{
         .refresh = "old-refresh",
         .access = "old-access",
         .expires = 0,
@@ -415,7 +429,7 @@ TEST_CASE("Kimi refresh rotates the credential and toAuth derives the Bearer hea
     CHECK(query_param(request.body, "client_id") ==
           "17e5f671-d194-4dfb-9706-5516cb48c098");
 
-    auto request_auth = run_awaitable(auth.to_auth(*result));
+    auto request_auth = run_async_result(auth.to_auth(*result));
     REQUIRE(request_auth);
     REQUIRE(request_auth->headers.size() == 1);
     CHECK(request_auth->headers.at("Authorization") == "Bearer new-access");
@@ -434,7 +448,7 @@ TEST_CASE("Kimi refresh retries 429 with exponential backoff and succeeds", "[ai
         });
 
     const auto started = std::chrono::steady_clock::now();
-    auto result = run_awaitable(auth.refresh(ai::OAuthCredential{
+    auto result = run_async_result(auth.refresh(ai::OAuthCredential{
         .refresh = "old",
         .access = "old",
         .expires = 0,
@@ -452,7 +466,7 @@ TEST_CASE("Kimi refresh fails unauthorized immediately on invalid_grant", "[ai][
     };
     auto auth = make_auth(http);
 
-    auto result = run_awaitable(auth.refresh(ai::OAuthCredential{
+    auto result = run_async_result(auth.refresh(ai::OAuthCredential{
         .refresh = "old",
         .access = "old",
         .expires = 0,
@@ -472,7 +486,7 @@ TEST_CASE("Kimi refresh fails unauthorized immediately on 401 and 403", "[ai][au
             {status, R"({"error":"unauthorized"})"},
         };
         auto auth = make_auth(http);
-        auto result = run_awaitable(auth.refresh(ai::OAuthCredential{
+        auto result = run_async_result(auth.refresh(ai::OAuthCredential{
             .refresh = "old",
             .access = "old",
             .expires = 0,
@@ -500,7 +514,7 @@ TEST_CASE("Kimi refresh gives up after the retry ceiling on persistent 5xx", "[a
             .refresh_backoff_base = std::chrono::milliseconds{2},
         });
 
-    auto result = run_awaitable(auth.refresh(ai::OAuthCredential{
+    auto result = run_async_result(auth.refresh(ai::OAuthCredential{
         .refresh = "old",
         .access = "old",
         .expires = 0,
@@ -528,7 +542,7 @@ TEST_CASE("Kimi refresh retries transport failures up to the retry ceiling", "[a
             .refresh_backoff_base = std::chrono::milliseconds{2},
         });
 
-    auto result = run_awaitable(auth.refresh(ai::OAuthCredential{
+    auto result = run_async_result(auth.refresh(ai::OAuthCredential{
         .refresh = "old",
         .access = "old",
         .expires = 0,

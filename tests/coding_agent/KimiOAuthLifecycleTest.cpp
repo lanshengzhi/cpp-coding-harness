@@ -143,14 +143,17 @@ public:
 
 class FakeAuthContext final : public ai::AuthContext {
 public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<std::string>>> environment(
+    [[nodiscard]] cch::support::AsyncResult<std::optional<std::string>> environment(
         std::string) const override {
-        co_return std::optional<std::string>{};
+        return cch::support::AsyncResult<std::optional<std::string>>(
+            std::expected<std::optional<std::string>, cch::support::Error>{
+                std::optional<std::string>{}});
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<bool>> file_exists(
+    [[nodiscard]] cch::support::AsyncResult<bool> file_exists(
         std::string) const override {
-        co_return false;
+        return cch::support::AsyncResult<bool>(
+            std::expected<bool, cch::support::Error>{false});
     }
 };
 
@@ -202,13 +205,15 @@ struct LoginHarness {
             "kimi-coding",
             [access = std::move(access), refresh = std::move(refresh), expires](
                 std::optional<ai::Credential>)
-                -> boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> {
-                co_return std::optional<ai::Credential>{ai::Credential{
-                    ai::OAuthCredential{
-                        .refresh = refresh,
-                        .access = access,
-                        .expires = expires,
-                    }}};
+                -> cch::support::AsyncResult<std::optional<ai::Credential>> {
+                return cch::support::AsyncResult<std::optional<ai::Credential>>(
+                    std::expected<std::optional<ai::Credential>, cch::support::Error>{
+                        std::optional<ai::Credential>{ai::Credential{
+                            ai::OAuthCredential{
+                                .refresh = refresh,
+                                .access = access,
+                                .expires = expires,
+                            }}}});
             }));
         REQUIRE(modified);
     }
@@ -219,12 +224,14 @@ struct LoginHarness {
         auto modified = run_async_result(storage->modify(
             "kimi-coding",
             [](std::optional<ai::Credential> current)
-                -> boost::asio::awaitable<util::Expected<std::optional<ai::Credential>>> {
+                -> cch::support::AsyncResult<std::optional<ai::Credential>> {
                 REQUIRE(current.has_value());
                 auto oauth = std::get<ai::OAuthCredential>(std::move(*current));
                 oauth.expires = now_ms() + 60'000;
-                co_return std::optional<ai::Credential>{
-                    ai::Credential{std::move(oauth)}};
+                return cch::support::AsyncResult<std::optional<ai::Credential>>(
+                    std::expected<std::optional<ai::Credential>, cch::support::Error>{
+                        std::optional<ai::Credential>{
+                            ai::Credential{std::move(oauth)}}});
             }));
         REQUIRE(modified);
     }
@@ -246,7 +253,7 @@ TEST_CASE("Kimi OAuth lifecycle persists login, refresh rotation, then logout", 
     };
 
     // Login persists the oauth record through CredentialStore::modify.
-    auto credential = run_awaitable(harness.models->login(
+    auto credential = run_async_result(harness.models->login(
         "kimi-coding", ai::AuthType::OAuth, harness.interaction()));
     REQUIRE(credential);
     CHECK(normalize_expires(read_text(harness.auth_path)) ==
@@ -255,7 +262,7 @@ TEST_CASE("Kimi OAuth lifecycle persists login, refresh rotation, then logout", 
     // A stored credential that is about to expire refreshes under the store
     // lock and rotates the persisted record before release.
     harness.expire_stored_credential();
-    auto resolved = run_awaitable(harness.models->get_auth("kimi-coding"));
+    auto resolved = run_async_result(harness.models->get_auth("kimi-coding"));
     REQUIRE(resolved);
     REQUIRE(*resolved);
     CHECK((**resolved).auth.headers.at("Authorization") ==
@@ -274,7 +281,7 @@ TEST_CASE("Kimi OAuth lifecycle persists login, refresh rotation, then logout", 
 
     // Logout removes the stored record locally only; ambient/environment and
     // config-based auth is never stored, so it is untouched by this removal.
-    auto removed = run_awaitable(harness.models->logout("kimi-coding"));
+    auto removed = run_async_result(harness.models->logout("kimi-coding"));
     REQUIRE(removed);
     auto listed = run_async_result(harness.storage->list());
     REQUIRE(listed);
@@ -287,7 +294,7 @@ TEST_CASE("Kimi login cancellation persists nothing", "[coding_agent][auth][issu
     std::stop_source cancel;
     cancel.request_stop();
 
-    auto credential = run_awaitable(harness.models->login(
+    auto credential = run_async_result(harness.models->login(
         "kimi-coding",
         ai::AuthType::OAuth,
         harness.interaction(cancel.get_token())));
@@ -306,7 +313,7 @@ TEST_CASE("Kimi dead credentials stay in auth.json", "[coding_agent][auth][issue
         {400, R"({"error":"invalid_grant","error_description":"dead token"})"},
     };
 
-    auto resolved = run_awaitable(harness.models->get_auth("kimi-coding"));
+    auto resolved = run_async_result(harness.models->get_auth("kimi-coding"));
 
     REQUIRE(!resolved);
     CHECK(resolved.error().code == util::ErrorCode::OAuth);
@@ -322,7 +329,7 @@ TEST_CASE("Kimi dead credentials stay in auth.json", "[coding_agent][auth][issue
     CHECK(oauth.refresh == "dummy-refresh-token");
 
     // A second request fails the same way (the dead credential is not removed).
-    auto again = run_awaitable(harness.models->get_auth("kimi-coding"));
+    auto again = run_async_result(harness.models->get_auth("kimi-coding"));
     REQUIRE(!again);
     CHECK(again.error().code == util::ErrorCode::OAuth);
     CHECK(read_text(harness.auth_path).find("dummy-refresh-token") !=
@@ -339,11 +346,11 @@ TEST_CASE("Kimi getAuth applies the OAuth Bearer header before streaming", "[cod
          R"({"access_token":"dummy-access-token","refresh_token":"dummy-refresh-token","expires_in":3600})"},
     };
 
-    auto credential = run_awaitable(harness.models->login(
+    auto credential = run_async_result(harness.models->login(
         "kimi-coding", ai::AuthType::OAuth, harness.interaction()));
     REQUIRE(credential);
 
-    auto checked = run_awaitable(harness.models->check_auth("kimi-coding"));
+    auto checked = run_async_result(harness.models->check_auth("kimi-coding"));
     REQUIRE(checked);
     REQUIRE(checked->has_value());
     CHECK((**checked).type == ai::AuthType::OAuth);

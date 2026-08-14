@@ -10,6 +10,7 @@
 
 #include "agent/AgentMessageAccess.hpp"
 #include "agent/AgentPromptAccess.hpp"
+#include "ai/AsyncResultBridge.hpp"
 #include "ai/ModelThinkingLevel.hpp"
 #include "ai/utils/RetryClassifier.hpp"
 #include "coding_agent/BoundedText.hpp"
@@ -1972,7 +1973,8 @@ AgentSessionRuntime::execute_compaction(
             -> boost::asio::awaitable<util::Expected<ai::AssistantMessage>> {
         auto stream = factory(
             model, std::move(context), std::move(options));
-        co_return co_await ai::consume(std::move(stream), {});
+        co_return co_await cch::ai::detail::await_async_result(
+            std::move(stream).run({}));
     };
 
     harness::session::CompactionRunOptions run_options;

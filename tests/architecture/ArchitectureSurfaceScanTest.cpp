@@ -146,7 +146,7 @@ TEST_CASE("tool argument contracts stay passive and dependency-free", "[architec
     const auto tool_factories = read_text(source_root / "src" / "tools" / "AsyncToolFactories.cpp");
     const auto removed_recursive_type = std::string{"Json"} + "Schema";
 
-    CHECK(tool_header.find("util::JsonValue parameters") != std::string::npos);
+    CHECK(tool_header.find("cch::support::JsonValue parameters") != std::string::npos);
     CHECK(tool_header.find(removed_recursive_type) == std::string::npos);
     CHECK(tool_header.find("glaze/glaze.hpp") == std::string::npos);
     CHECK(tool_header.find("glz::") == std::string::npos);

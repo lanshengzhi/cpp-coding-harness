@@ -217,7 +217,7 @@ TEST_CASE("CMake target links follow the package dependency direction", "[archit
     CHECK_FALSE(block_mentions(ai_links, "cch_coding_agent_runtime"));
 
     const auto agent_links = depends_section(cmake, "cch_agent");
-    CHECK(block_mentions(agent_links, "cch_coding_agent_core"));
+    CHECK_FALSE(block_mentions(agent_links, "cch_coding_agent_core"));
     CHECK(block_mentions(agent_links, "cch_ai"));
     CHECK(block_mentions(agent_links, "cch_util"));
     CHECK_FALSE(block_mentions(agent_links, "cch_harness"));

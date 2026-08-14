@@ -338,7 +338,8 @@ ModelRuntime::get_available(std::optional<std::string_view> provider_id) {
     std::optional<std::string> failure;
     for (const auto& provider_value : impl_->models->providers()) {
         const std::string provider_id{provider_value->id()};
-        auto checked = co_await impl_->models->check_auth(provider_id);
+        auto checked = co_await ai::detail::await_async_result(
+            impl_->models->check_auth(provider_id));
         if (!checked) {
             failure = checked.error().message;
             continue;
@@ -369,23 +370,26 @@ std::vector<ai::Model> ModelRuntime::get_available_snapshot() const {
 
 boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>>
 ModelRuntime::check_auth(std::string provider_id) {
-    co_return co_await impl_->models->check_auth(std::move(provider_id));
+    co_return co_await ai::detail::await_async_result(
+        impl_->models->check_auth(std::move(provider_id)));
 }
 
 boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>>
 ModelRuntime::get_auth(
     std::string provider_id,
     std::optional<std::string> explicit_api_key) {
-    co_return co_await impl_->models->get_auth(
-        std::move(provider_id), std::move(explicit_api_key));
+    co_return co_await ai::detail::await_async_result(
+        impl_->models->get_auth(
+            std::move(provider_id), std::move(explicit_api_key)));
 }
 
 boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>>
 ModelRuntime::get_auth(
     ai::Model model,
     std::optional<std::string> explicit_api_key) {
-    co_return co_await impl_->models->get_auth(
-        std::move(model), std::move(explicit_api_key));
+    co_return co_await ai::detail::await_async_result(
+        impl_->models->get_auth(
+            std::move(model), std::move(explicit_api_key)));
 }
 
 bool ModelRuntime::has_configured_auth(std::string_view provider_id) const {
@@ -486,8 +490,8 @@ boost::asio::awaitable<util::Expected<ai::Credential>> ModelRuntime::login(
     std::string provider_id,
     ai::AuthType type,
     ai::AuthInteraction interaction) {
-    auto credential = co_await impl_->models->login(
-        provider_id, type, std::move(interaction));
+    auto credential = co_await ai::detail::await_async_result(impl_->models->login(
+        provider_id, type, std::move(interaction)));
     if (credential) {
         // Post-login refresh failures are recorded in the composition-errors
         // map and never fail the login call (ADR 0032).
@@ -498,7 +502,8 @@ boost::asio::awaitable<util::Expected<ai::Credential>> ModelRuntime::login(
 
 boost::asio::awaitable<util::ExpectedVoid> ModelRuntime::logout(
     std::string provider_id) {
-    CCH_TRY_VOID(co_await impl_->models->logout(provider_id));
+    CCH_TRY_VOID(co_await ai::detail::await_async_result(
+        impl_->models->logout(provider_id)));
     // Credential-dependent composition is reset before the unconfigured
     // provider is recomposed by refresh (pi: logout → recomposeProvider →
     // refresh; order preserved).

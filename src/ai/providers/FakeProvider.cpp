@@ -208,14 +208,17 @@ public:
 
 class EmptyAuthContext final : public ai::AuthContext {
 public:
-    [[nodiscard]] boost::asio::awaitable<util::Expected<std::optional<std::string>>> environment(
+    [[nodiscard]] cch::support::AsyncResult<std::optional<std::string>> environment(
         std::string) const override {
-        co_return std::optional<std::string>{};
+        return cch::support::AsyncResult<std::optional<std::string>>(
+            std::expected<std::optional<std::string>, cch::support::Error>{
+                std::optional<std::string>{}});
     }
 
-    [[nodiscard]] boost::asio::awaitable<util::Expected<bool>> file_exists(
+    [[nodiscard]] cch::support::AsyncResult<bool> file_exists(
         std::string) const override {
-        co_return false;
+        return cch::support::AsyncResult<bool>(
+            std::expected<bool, cch::support::Error>{false});
     }
 };
 
@@ -223,12 +226,16 @@ ai::ProviderAuth fake_auth() {
     ai::ApiKeyAuth api_key;
     api_key.name = "scripted fake";
     api_key.check = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
-        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>> {
-        co_return ai::AuthCheck{.source = "scripted fake", .type = ai::AuthType::ApiKey};
+        -> cch::support::AsyncResult<std::optional<ai::AuthCheck>> {
+        return cch::support::AsyncResult<std::optional<ai::AuthCheck>>(
+            std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{
+                ai::AuthCheck{.source = "scripted fake", .type = ai::AuthType::ApiKey}});
     };
     api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
-        -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> {
-        co_return ai::AuthResult{.source = "scripted fake"};
+        -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
+        return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
+            std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
+                ai::AuthResult{.source = "scripted fake"}});
     };
     return ai::ProviderAuth{.api_key = std::move(api_key)};
 }

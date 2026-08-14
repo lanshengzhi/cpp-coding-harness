@@ -1,9 +1,8 @@
 #pragma once
 
 #include <cch/ai/CredentialStore.hpp>
-#include <cch/util/Error.hpp>
-
-#include <boost/asio/awaitable.hpp>
+#include <cch/support/AsyncResult.hpp>
+#include <cch/support/Error.hpp>
 
 #include <functional>
 #include <map>
@@ -46,9 +45,9 @@ class AuthContext {
 public:
     virtual ~AuthContext() = default;
 
-    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<std::optional<std::string>>> environment(
+    [[nodiscard]] virtual cch::support::AsyncResult<std::optional<std::string>> environment(
         std::string name) const = 0;
-    [[nodiscard]] virtual boost::asio::awaitable<util::Expected<bool>> file_exists(
+    [[nodiscard]] virtual cch::support::AsyncResult<bool> file_exists(
         std::string path) const = 0;
 };
 
@@ -142,7 +141,7 @@ struct AuthEvent {
 /// interaction's `std::stop_token` aborts the whole flow; per-prompt
 /// cancellation uses AuthPrompt::stop_token.
 using AuthPromptHook = std::move_only_function<
-    boost::asio::awaitable<util::Expected<std::string>>(AuthPrompt)>;
+    cch::support::AsyncResult<std::string>(AuthPrompt)>;
 
 /// Best-effort display callback. Never throws; secrets never appear here.
 using AuthNotifyHook = std::move_only_function<void(const AuthEvent&)>;
@@ -156,26 +155,26 @@ struct AuthInteraction {
     AuthNotifyHook notify{};
 };
 
-/// Borrowed hook inputs remain valid until each returned awaitable completes.
+/// Borrowed hook inputs remain valid until each returned operation completes.
 using ApiKeyCheckHook = std::move_only_function<
-    boost::asio::awaitable<util::Expected<std::optional<AuthCheck>>>(
+    cch::support::AsyncResult<std::optional<AuthCheck>>(
         const AuthContext&,
         std::optional<ApiKeyCredential>)>;
 using ApiKeyResolveHook = std::move_only_function<
-    boost::asio::awaitable<util::Expected<std::optional<AuthResult>>>(
+    cch::support::AsyncResult<std::optional<AuthResult>>(
         const AuthContext&,
         std::optional<ApiKeyCredential>)>;
 using ApiKeyLoginHook = std::move_only_function<
-    boost::asio::awaitable<util::Expected<ApiKeyCredential>>(
+    cch::support::AsyncResult<ApiKeyCredential>(
         AuthInteraction)>;
 using OAuthRefreshHook = std::move_only_function<
-    boost::asio::awaitable<util::Expected<OAuthCredential>>(
+    cch::support::AsyncResult<OAuthCredential>(
         OAuthCredential)>;
 using OAuthToAuthHook = std::move_only_function<
-    boost::asio::awaitable<util::Expected<ModelAuth>>(
+    cch::support::AsyncResult<ModelAuth>(
         const OAuthCredential&)>;
 using OAuthLoginHook = std::move_only_function<
-    boost::asio::awaitable<util::Expected<OAuthCredential>>(
+    cch::support::AsyncResult<OAuthCredential>(
         AuthInteraction)>;
 
 struct ApiKeyAuth {

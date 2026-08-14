@@ -93,24 +93,35 @@ public:
         oauth.name = provider_name_ + " OAuth";
         oauth.login = [script = std::make_shared<LoginScript>(std::move(login_script))](
                           ai::AuthInteraction interaction)
-            -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
-            co_return co_await (*script)(std::move(interaction));
+            -> cch::support::AsyncResult<ai::OAuthCredential> {
+            return cch::ai::detail::make_async_result(
+                [script, interaction = std::move(interaction)]() mutable
+                    -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+                    co_return co_await (*script)(std::move(interaction));
+                });
         };
         if (refresh_script) {
             oauth.refresh = [script = std::make_shared<RefreshScript>(std::move(refresh_script))](
                                 ai::OAuthCredential credential)
-                -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
-                co_return co_await (*script)(std::move(credential));
+                -> cch::support::AsyncResult<ai::OAuthCredential> {
+                return cch::ai::detail::make_async_result(
+                    [script, credential = std::move(credential)]() mutable
+                        -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
+                        co_return co_await (*script)(std::move(credential));
+                    });
             };
         } else {
             oauth.refresh = [](ai::OAuthCredential credential)
-                -> boost::asio::awaitable<util::Expected<ai::OAuthCredential>> {
-                co_return credential;
+                -> cch::support::AsyncResult<ai::OAuthCredential> {
+                return cch::support::AsyncResult<ai::OAuthCredential>(
+                    std::expected<ai::OAuthCredential, cch::support::Error>{credential});
             };
         }
         oauth.to_auth = [](const ai::OAuthCredential& credential)
-            -> boost::asio::awaitable<util::Expected<ai::ModelAuth>> {
-            co_return ai::ModelAuth{.api_key = credential.access};
+            -> cch::support::AsyncResult<ai::ModelAuth> {
+            return cch::support::AsyncResult<ai::ModelAuth>(
+                std::expected<ai::ModelAuth, cch::support::Error>{
+                    ai::ModelAuth{.api_key = credential.access}});
         };
         auth_.oauth = std::move(oauth);
     }
@@ -121,12 +132,16 @@ public:
         ai::ApiKeyAuth api_key;
         api_key.name = std::move(method_name);
         api_key.check = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
-            -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthCheck>>> {
-            co_return std::optional<ai::AuthCheck>{};
+            -> cch::support::AsyncResult<std::optional<ai::AuthCheck>> {
+            return cch::support::AsyncResult<std::optional<ai::AuthCheck>>(
+                std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{
+                    std::optional<ai::AuthCheck>{}});
         };
         api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
-            -> boost::asio::awaitable<util::Expected<std::optional<ai::AuthResult>>> {
-            co_return std::optional<ai::AuthResult>{};
+            -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
+            return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
+                std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
+                    std::optional<ai::AuthResult>{}});
         };
         auth_.api_key = std::move(api_key);
     }
@@ -279,10 +294,10 @@ struct InteractiveRun {
             .url = "https://auth.openai.example/authorize?client=abc",
             .instructions = "Complete sign-in in your browser.",
         }});
-        auto code = co_await interaction.prompt(ai::AuthPrompt{
+        auto code = co_await cch::ai::detail::await_async_result(interaction.prompt(ai::AuthPrompt{
             .kind = ai::AuthPromptManualCode{.message = "Paste the authorization code"},
             .stop_token = std::nullopt,
-        });
+        }));
         if (!code) co_return std::unexpected(std::move(code.error()));
         *submitted_code = *code;
         co_return dummy_oauth_credential();
@@ -387,10 +402,10 @@ TEST_CASE(
                 .user_code = "ABCD-EFGH",
                 .verification_uri = "https://kimi.example/device",
             }});
-            auto acknowledged = co_await interaction.prompt(ai::AuthPrompt{
+            auto acknowledged = co_await cch::ai::detail::await_async_result(interaction.prompt(ai::AuthPrompt{
                 .kind = ai::AuthPromptText{.message = "Press enter after approving"},
                 .stop_token = std::nullopt,
-            });
+            }));
             if (!acknowledged) co_return std::unexpected(std::move(acknowledged.error()));
             co_return dummy_oauth_credential();
         });
@@ -596,10 +611,10 @@ TEST_CASE(
                 {.id = "account", .label = "Work account"},
                 {.id = "device", .label = "Device code"},
             };
-            auto selected = co_await interaction.prompt(ai::AuthPrompt{
+            auto selected = co_await cch::ai::detail::await_async_result(interaction.prompt(ai::AuthPrompt{
                 .kind = std::move(select),
                 .stop_token = std::nullopt,
-            });
+            }));
             if (!selected) co_return std::unexpected(std::move(selected.error()));
             *selected_id = *selected;
             co_return dummy_oauth_credential();
